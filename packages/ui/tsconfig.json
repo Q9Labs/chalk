@@ -1,21 +1,21 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@chalk/core": ["../sdk-core/src/index.ts"],
-      "@chalk/react": ["../sdk-react/src/index.ts"],
-      "@chalk/react-native": ["../sdk-react-native/src/index.ts"],
-      "@chalk/ui": ["./src/index.ts"]
-    },
-    "noEmit": false,
-    "declaration": true,
-    "declarationMap": true,
-    "emitDeclarationOnly": true,
-    "outDir": "./dist",
-    "rootDir": "./src"
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+			"@chalk/core": ["../sdk-core/src/index.ts"],
+			"@chalk/react": ["../sdk-react/src/index.ts"],
+			"@chalk/react-native": ["../sdk-react-native/src/index.ts"],
+			"@chalk/ui": ["./src/index.ts"]
+		},
+		"noEmit": false,
+		"declaration": true,
+		"declarationMap": true,
+		"emitDeclarationOnly": true,
+		"outDir": "./dist",
+		"rootDir": "./src"
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

@@ -1,36 +1,36 @@
 {
-  "name": "@chalk/core",
-  "version": "0.0.1",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
-    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
-    "test": "bun test",
-    "check-types": "tsc --noEmit",
-    "lint": "echo 'No linter configured yet'",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@cloudflare/realtimekit": "^0.63.0"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "typescript": "^5.7.2"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  }
+	"name": "@chalk/core",
+	"version": "0.0.1",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
+		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+		"dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
+		"test": "bun test",
+		"check-types": "tsc --noEmit",
+		"lint": "echo 'No linter configured yet'",
+		"clean": "rm -rf dist"
+	},
+	"dependencies": {
+		"@cloudflare/realtimekit": "^1.2.2"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"typescript": "^5.7.2"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
 }

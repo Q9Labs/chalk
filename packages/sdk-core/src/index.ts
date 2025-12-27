@@ -20,64 +20,50 @@
  */
 
 // Main client
-export { ChalkClient } from './client.ts';
-
+export { ChalkClient } from "./client.ts";
+// Event emitter (for advanced use cases)
+export { EventEmitter } from "./events.ts";
 // Room
-export { Room } from './room.ts';
-
+export { Room } from "./room.ts";
 // Types
 export type {
-  // Result types for error handling
-  Result,
-  Ok,
-  Err,
-
-  // Client config
-  ChalkClientConfig,
-
-  // Room types
-  RoomConfig,
-  RoomInfo,
-  RoomStatus,
-
-  // Participant types
-  Participant,
-  ParticipantRole,
-
-  // Media types
-  Track,
-  TrackKind,
-  MediaDevice,
-  MediaDeviceKind,
-  MediaDeviceInfo, // deprecated alias
-  MediaConstraints,
-
-  // Chat types
-  ChatMessage,
-
-  // Recording types
-  Recording,
-  RecordingStatus,
-
-  // Event types
-  ChalkEventType,
-  ChalkError,
-
-  // Screen share
-  ScreenShareOptions,
-
-  // Reactions
-  Reaction,
-  ReactionEmoji,
-
-  // API types
-  ApiResponse,
-  CreateRoomResponse,
-  JoinRoomResponse,
-} from './types.ts';
-
+	// API types
+	ApiResponse,
+	// Client config
+	ChalkClientConfig,
+	ChalkError,
+	// Event types
+	ChalkEventType,
+	// Chat types
+	ChatMessage,
+	CreateRoomResponse,
+	Err,
+	JoinRoomResponse,
+	MediaConstraints,
+	MediaDevice,
+	MediaDeviceInfo, // deprecated alias
+	MediaDeviceKind,
+	Ok,
+	// Participant types
+	Participant,
+	ParticipantRole,
+	// Reactions
+	Reaction,
+	ReactionEmoji,
+	// Recording types
+	Recording,
+	RecordingStatus,
+	// Result types for error handling
+	Result,
+	// Room types
+	RoomConfig,
+	RoomInfo,
+	RoomStatus,
+	// Screen share
+	ScreenShareOptions,
+	// Media types
+	Track,
+	TrackKind,
+} from "./types.ts";
 // Export error code constants
-export { ChalkErrorCode, ok, err } from './types.ts';
-
-// Event emitter (for advanced use cases)
-export { EventEmitter } from './events.ts';
+export { ChalkErrorCode, err, ok } from "./types.ts";

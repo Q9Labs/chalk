@@ -11,27 +11,38 @@ import {
 	FieldLabel,
 	Input,
 } from "@chalk/ui";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Copy, Mic, Monitor, Video } from "lucide-react";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
+import { ArrowLeft, Copy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ConferenceRoom } from "../components/conference";
 
-export const Route = createFileRoute("/demo")({ component: DemoPage });
+interface ConferenceSearchParams {
+	room?: string;
+}
 
-function DemoPage() {
+export const Route = createFileRoute("/conference")({
+	component: ConferencePage,
+	validateSearch: (search: Record<string, unknown>) =>
+		({
+			room: (search.room as string) || "demo-room-001",
+		}) as ConferenceSearchParams,
+});
+
+function ConferencePage() {
 	return (
 		<ChalkProvider debug>
 			<div className="min-h-screen bg-background text-foreground font-sans">
-				<DemoContent />
+				<ConferenceContent />
 			</div>
 		</ChalkProvider>
 	);
 }
 
-function DemoContent() {
+function ConferenceContent() {
+	const search = useSearch({ from: Route.id });
 	const { room, isConnected, joinRoom, leaveRoom } = useChalk();
 	const [displayName, setDisplayName] = useState("");
-	const [roomId, setRoomId] = useState("demo-room-001");
+	const [roomId, setRoomId] = useState(search.room || "demo-room-001");
 	const [isJoining, setIsJoining] = useState(false);
 
 	useEffect(() => {
@@ -81,37 +92,17 @@ function DemoContent() {
 				<div className="grid w-full max-w-5xl gap-12 lg:grid-cols-2 lg:items-center">
 					<div className="space-y-6 max-w-md mx-auto lg:mx-0">
 						<h1 className="text-4xl font-bold tracking-tight">
-							Start your instant meeting
+							Join a conference
 						</h1>
 						<p className="text-lg text-muted-foreground">
-							Experience ultra low-latency video calls. No sign-up required.
-							Just enter a name and a room ID.
+							Experience ultra low-latency video conferences. Just enter your
+							name and a room ID.
 						</p>
-						<div className="flex gap-4 text-sm text-muted-foreground">
-							<div className="flex items-center gap-2">
-								<div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-									<Video className="h-4 w-4" />
-								</div>
-								HD Video
-							</div>
-							<div className="flex items-center gap-2">
-								<div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-									<Mic className="h-4 w-4" />
-								</div>
-								Clear Audio
-							</div>
-							<div className="flex items-center gap-2">
-								<div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-									<Monitor className="h-4 w-4" />
-								</div>
-								Screen Share
-							</div>
-						</div>
 					</div>
 
 					<Card className="w-full max-w-md mx-auto border-muted shadow-xl">
 						<CardHeader>
-							<CardTitle className="text-xl">Join Meeting</CardTitle>
+							<CardTitle className="text-xl">Join Conference</CardTitle>
 							<CardDescription>
 								Configure your session settings below
 							</CardDescription>
@@ -166,7 +157,7 @@ function DemoContent() {
 										className="w-full text-base"
 										disabled={isJoining}
 									>
-										{isJoining ? "Joining Room..." : "Join Room"}
+										{isJoining ? "Joining Room..." : "Join Conference"}
 									</Button>
 								</div>
 							</form>

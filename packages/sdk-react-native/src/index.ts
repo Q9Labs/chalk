@@ -12,24 +12,24 @@
 
 // Re-export core types for convenience
 export type {
-  ChalkClientConfig,
-  RoomConfig,
-  RoomInfo,
-  RoomStatus,
-  Participant,
-  ChatMessage,
-  Recording,
-  ReactionEmoji,
-  Reaction,
-} from '@chalk/core';
+	ChalkClientConfig,
+	ChatMessage,
+	Participant,
+	Reaction,
+	ReactionEmoji,
+	Recording,
+	RoomConfig,
+	RoomInfo,
+	RoomStatus,
+} from "@chalk/core";
 
 // Placeholder exports - to be implemented
 export const ChalkReactNative = {
-  version: '0.0.1',
-  isSupported: () => {
-    console.warn('@chalk/react-native is not yet fully implemented');
-    return false;
-  },
+	version: "0.0.1",
+	isSupported: () => {
+		console.warn("@chalk/react-native is not yet fully implemented");
+		return false;
+	},
 };
 
 // TODO: Implement native components

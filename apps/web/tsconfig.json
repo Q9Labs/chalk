@@ -1,25 +1,25 @@
 {
-  "extends": "../../tsconfig.json",
-  "include": ["**/*.ts", "**/*.tsx"],
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+	"extends": "../../tsconfig.json",
+	"include": ["**/*.ts", "**/*.tsx"],
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"types": ["vite/client"],
 
-    /* Bundler mode */
-    "verbatimModuleSyntax": false,
+		/* Bundler mode */
+		"verbatimModuleSyntax": false,
 
-    /* Linting */
-    "noUncheckedSideEffectImports": true,
+		/* Linting */
+		"noUncheckedSideEffectImports": true,
 
-    /* Path aliases - must redeclare since paths don't merge */
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@chalk/core": ["../../packages/sdk-core/src/index.ts"],
-      "@chalk/react": ["../../packages/sdk-react/src/index.ts"],
-      "@chalk/react-native": ["../../packages/sdk-react-native/src/index.ts"],
-      "@chalk/ui": ["../../packages/ui/src/index.ts"]
-    }
-  }
+		/* Path aliases - must redeclare since paths don't merge */
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+			"@chalk/core": ["../../packages/sdk-core/src/index.ts"],
+			"@chalk/react": ["../../packages/sdk-react/src/index.ts"],
+			"@chalk/react-native": ["../../packages/sdk-react-native/src/index.ts"],
+			"@chalk/ui": ["../../packages/ui/src/index.ts"]
+		}
+	}
 }

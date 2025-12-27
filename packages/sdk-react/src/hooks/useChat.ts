@@ -2,46 +2,46 @@
  * useChat hook - Chat functionality
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useChalk } from '../context.tsx';
-import type { ChatMessage } from '@chalk/core';
+import type { ChatMessage } from "@chalk/core";
+import { useCallback, useEffect, useState } from "react";
+import { useChalk } from "../context.tsx";
 
 export interface UseChatResult {
-  messages: ChatMessage[];
-  sendMessage: (content: string) => void;
+	messages: ChatMessage[];
+	sendMessage: (content: string) => void;
 }
 
 export function useChat(): UseChatResult {
-  const { room } = useChalk();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+	const { room } = useChalk();
+	const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  useEffect(() => {
-    if (!room) {
-      setMessages([]);
-      return;
-    }
+	useEffect(() => {
+		if (!room) {
+			setMessages([]);
+			return;
+		}
 
-    // Initialize with existing messages
-    setMessages(room.messages);
+		// Initialize with existing messages
+		setMessages(room.messages);
 
-    const unsub = room.on('chat-message', (message) => {
-      setMessages((prev) => [...prev, message]);
-    });
+		const unsub = room.on("chat-message", (message) => {
+			setMessages((prev) => [...prev, message]);
+		});
 
-    return unsub;
-  }, [room]);
+		return unsub;
+	}, [room]);
 
-  const sendMessage = useCallback(
-    (content: string) => {
-      if (room) {
-        room.sendMessage(content);
-      }
-    },
-    [room]
-  );
+	const sendMessage = useCallback(
+		(content: string) => {
+			if (room) {
+				room.sendMessage(content);
+			}
+		},
+		[room],
+	);
 
-  return {
-    messages,
-    sendMessage,
-  };
+	return {
+		messages,
+		sendMessage,
+	};
 }

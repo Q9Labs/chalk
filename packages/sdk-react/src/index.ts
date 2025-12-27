@@ -27,50 +27,51 @@
  * ```
  */
 
-// Context and Provider
-export { ChalkProvider, useChalk, type ChalkProviderProps } from './context.tsx';
-
-// Hooks
-export {
-  useRoom,
-  useParticipants,
-  useMedia,
-  useChat,
-  useRecording,
-  useDevices,
-  type UseRoomResult,
-  type UseParticipantsResult,
-  type UseMediaResult,
-  type UseChatResult,
-  type UseRecordingResult,
-  type UseDevicesResult,
-} from './hooks/index.ts';
+// Re-export useful types from core
+export type {
+	ChalkError,
+	ChatMessage,
+	MediaDevice,
+	Participant,
+	Reaction,
+	ReactionEmoji,
+	Recording,
+	Room,
+	RoomConfig,
+	RoomInfo,
+	RoomStatus,
+	ScreenShareOptions,
+} from "@chalk/core";
+// Re-export error codes
+export { ChalkErrorCode } from "@chalk/core";
 
 // Components
 export {
-  VideoGrid,
-  VideoTile,
-  Controls,
-  type VideoGridProps,
-  type VideoTileProps,
-  type ControlsProps,
-} from './components/index.ts';
-
-// Re-export useful types from core
-export type {
-  Room,
-  Participant,
-  ChatMessage,
-  RoomConfig,
-  RoomStatus,
-  RoomInfo,
-  ScreenShareOptions,
-  ReactionEmoji,
-  Reaction,
-  Recording,
-  MediaDevice,
-  ChalkError,
-} from '@chalk/core';
-
-// Re-export error codes
-export { ChalkErrorCode } from '@chalk/core';
+	Controls,
+	type ControlsProps,
+	VideoGrid,
+	type VideoGridProps,
+	VideoTile,
+	type VideoTileProps,
+} from "./components/index.ts";
+// Context and Provider
+export {
+	ChalkProvider,
+	type ChalkProviderProps,
+	useChalk,
+} from "./context.tsx";
+// Hooks
+export {
+	type UseChatResult,
+	type UseDevicesResult,
+	type UseMediaResult,
+	type UseParticipantsResult,
+	type UseRecordingResult,
+	type UseRoomResult,
+	useChat,
+	useDevices,
+	useMedia,
+	useParticipants,
+	useRecording,
+	useRoom,
+} from "./hooks/index.ts";
