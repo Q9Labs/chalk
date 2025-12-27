@@ -73,9 +73,25 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 	}
 	defer resp.Body.Close()
 
+	// Read raw body first for debugging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	// Log response for debugging
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var result Response[Meeting]
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	// Check both Data and Result fields
+	if result.Result != nil {
+		return result.Result, nil
 	}
 
 	if !result.Success {
@@ -138,9 +154,25 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 	}
 	defer resp.Body.Close()
 
+	// Read raw body first for debugging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	// Log response for debugging
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var result Response[Participant]
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	// Check both Data and Result fields
+	if result.Result != nil {
+		return result.Result, nil
 	}
 
 	if !result.Success {

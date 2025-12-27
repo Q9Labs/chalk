@@ -11,7 +11,7 @@ import type {
   RoomInfo,
 } from './types.ts';
 
-const DEFAULT_API_URL = 'https://api.chalk.dev';
+const DEFAULT_API_URL = 'http://localhost:8080';
 
 export class APIClient {
   private readonly apiUrl: string;
@@ -115,6 +115,44 @@ export class APIClient {
       role,
       metadata,
     });
+  }
+
+  // Demo endpoint (no auth required)
+  async demoJoin(
+    roomId: string,
+    displayName: string
+  ): Promise<ApiResponse<JoinRoomResponse>> {
+    const response = await this.request<{
+      success: boolean;
+      room_id: string;
+      participant_id: string;
+      token: string;
+      auth_token: string;
+      room: { id: string; name: string };
+    }>('POST', '/api/v1/demo/join', {
+      room_id: roomId,
+      display_name: displayName,
+    });
+
+    if (!response.success || !response.data) {
+      return response as ApiResponse<JoinRoomResponse>;
+    }
+
+    // Transform to JoinRoomResponse format
+    return {
+      success: true,
+      data: {
+        participantId: response.data.participant_id,
+        token: response.data.auth_token,
+        room: {
+          id: response.data.room.id,
+          name: response.data.room.name,
+          status: 'active',
+          participantCount: 1,
+          createdAt: new Date().toISOString(),
+        },
+      },
+    };
   }
 
   async removeParticipant(roomId: string, participantId: string): Promise<ApiResponse<void>> {

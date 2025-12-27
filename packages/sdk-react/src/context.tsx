@@ -59,11 +59,6 @@ export function ChalkProvider({
 
   // Initialize client
   useEffect(() => {
-    if (!apiKey && !token) {
-      console.warn('ChalkProvider: apiKey or token is required');
-      return;
-    }
-
     const config: ChalkClientConfig = {
       apiKey,
       token,
@@ -74,6 +69,10 @@ export function ChalkProvider({
 
     const chalkClient = new ChalkClient(config);
     setClient(chalkClient);
+
+    if (debug && !apiKey && !token) {
+      console.info('[Chalk] Running in demo mode without credentials');
+    }
 
     return () => {
       chalkClient.disconnect();

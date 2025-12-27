@@ -15,13 +15,16 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target browser && bun run build:types",
+    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --watch",
+    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
     "test": "bun test",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",
     "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@cloudflare/realtimekit": "^0.63.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

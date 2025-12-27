@@ -5,7 +5,7 @@
 import { EventEmitter } from './events.ts';
 import type { ChatMessage, ChalkError, Participant, Reaction } from './types.ts';
 
-const DEFAULT_WS_URL = 'wss://api.chalk.dev/ws';
+const DEFAULT_WS_URL = 'ws://localhost:8080/ws';
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000]; // Exponential backoff
 const HEARTBEAT_INTERVAL = 30000;
 

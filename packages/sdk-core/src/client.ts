@@ -19,11 +19,12 @@ export class ChalkClient {
   private currentRoom: Room | null = null;
 
   constructor(config: ChalkClientConfig) {
-    if (!config.apiKey && !config.token) {
+    this.debug = config.debug ?? false;
+
+    if (!config.apiKey && !config.token && !this.debug) {
       throw new Error('ChalkClient requires either apiKey or token');
     }
 
-    this.debug = config.debug ?? false;
     this.apiClient = new APIClient(config);
     this.wsClient = new WSClient(config.wsUrl, this.debug);
   }
@@ -48,13 +49,10 @@ export class ChalkClient {
 
     this.log('Joining room:', roomId);
 
-    // Add participant via API
-    const response = await this.apiClient.addParticipant(
-      roomId,
-      config.displayName,
-      undefined,
-      config.metadata
-    );
+    // Use demo endpoint in debug mode, otherwise use authenticated endpoint
+    const response = this.debug
+      ? await this.apiClient.demoJoin(roomId, config.displayName)
+      : await this.apiClient.addParticipant(roomId, config.displayName, undefined, config.metadata);
 
     if (!response.success || !response.data) {
       throw new Error(response.error?.message ?? 'Failed to join room');
@@ -85,10 +83,16 @@ export class ChalkClient {
     };
 
     room._setLocalParticipant(localParticipant);
-    room._setStatus('connecting');
 
-    // Connect WebSocket
-    this.wsClient.connect(token, roomId);
+    // In debug mode, skip WebSocket (Cloudflare Calls uses WebRTC directly)
+    if (this.debug) {
+      this.log('Debug mode: skipping WebSocket connection');
+      room._setStatus('connected');
+    } else {
+      room._setStatus('connecting');
+      // Connect WebSocket for signaling
+      this.wsClient.connect(token, roomId);
+    }
 
     // Initialize media if requested
     if (config.audio) {

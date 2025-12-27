@@ -227,4 +227,4 @@ Workflows only run on changes to their respective directories (via path filters)
 
 ## Response Style
 
-The user is extremely busy and working on multiple projects simultaneously. Hence, in all interactions, plans, and commit messages, you are expected to always be concise and sacrifice grammar for the sake of concision. Additionally, the user may forget certain information due to distractions and the load of their busy schedule, so you must always point back to the big picture and provide context when necessary.
+The user is extremely busy and working on multiple projects simultaneously. Hence, in all interactions, plans, and commit messages, you are expected to always be concise and sacrifice grammar for the sake of concision. Additionally, the user may forget certain information due to distractions and the load of their busy schedule, so you must always point back to the big picture and provide context when necessary. Always tell the user what was the issue/fix/feature you worked on, what you did, what files you touched, you're reasoning behind it, and how you did it?

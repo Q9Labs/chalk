@@ -26,6 +26,10 @@ type RouterConfig struct {
 
 func NewRouter(cfg RouterConfig) *Router {
 	engine := gin.Default()
+
+	// Add CORS middleware
+	engine.Use(middleware.CORS())
+
 	queries := db.New(cfg.Pool)
 
 	// Initialize auth services
@@ -61,6 +65,10 @@ func (r *Router) setupRoutes() {
 		authHandler := handlers.NewAuthHandler(r.queries, r.jwtService, r.apiKeyService)
 		v1.POST("/auth/token", authHandler.Token)
 		v1.POST("/auth/refresh", authHandler.Refresh)
+
+		// Demo routes (no auth required - for testing only)
+		demoHandler := handlers.NewDemoHandler(r.queries, r.cfClient, authHandler)
+		v1.POST("/demo/join", demoHandler.Join)
 
 		// Tenant routes - requires API key auth
 		tenants := handlers.NewTenantHandler(r.queries, r.apiKeyService)
