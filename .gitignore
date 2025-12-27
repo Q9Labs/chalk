@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+
+# Build output
+out
+dist
+*.tgz
+
+# Code coverage
+coverage
+*.lcov
+
+# Logs
+logs
+*.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# Environment files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# Caches
+.eslintcache
+.cache
+*.tsbuildinfo
+.turbo
+
+# IDEs
+.idea
+.vscode
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Terraform (handled in infrastructure/.gitignore)
+# *.tfstate
+# .terraform/

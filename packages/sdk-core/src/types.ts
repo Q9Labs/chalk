@@ -1,0 +1,525 @@
+/**
+ * Core types for Chalk SDK
+ *
+ * @packageDocumentation
+ * @module @chalk/core
+ */
+
+// ============================================================================
+// Result Types - For type-safe error handling
+// ============================================================================
+
+/**
+ * Represents a successful result
+ * @typeParam T - The success value type
+ */
+export interface Ok<T> {
+  readonly ok: true;
+  readonly value: T;
+}
+
+/**
+ * Represents a failed result
+ * @typeParam E - The error type
+ */
+export interface Err<E> {
+  readonly ok: false;
+  readonly error: E;
+}
+
+/**
+ * A Result type for operations that can fail
+ * Use pattern matching with `if (result.ok)` for type-safe access
+ *
+ * @example
+ * ```ts
+ * const result = await client.joinRoom(roomId, config);
+ * if (result.ok) {
+ *   console.log('Joined room:', result.value.id);
+ * } else {
+ *   console.error('Failed:', result.error.message);
+ * }
+ * ```
+ */
+export type Result<T, E = ChalkError> = Ok<T> | Err<E>;
+
+/** Create a successful result */
+export const ok = <T>(value: T): Ok<T> => ({ ok: true, value });
+
+/** Create a failed result */
+export const err = <E>(error: E): Err<E> => ({ ok: false, error });
+
+// ============================================================================
+// Client Configuration
+// ============================================================================
+
+/**
+ * Configuration options for ChalkClient
+ *
+ * @example
+ * ```ts
+ * // Using API key (client-side)
+ * const client = new ChalkClient({ apiKey: 'ck_live_xxx' });
+ *
+ * // Using pre-fetched token (server-to-server)
+ * const client = new ChalkClient({ token: 'jwt_xxx' });
+ * ```
+ */
+export interface ChalkClientConfig {
+  /**
+   * API key for authentication
+   * Use this for client-side applications where the key is public
+   * @example 'ck_live_xxxxx'
+   */
+  apiKey?: string;
+
+  /**
+   * JWT token from your server
+   * Use this for server-to-server auth where you've already obtained a token
+   * @example 'eyJhbGciOiJIUzI1NiIs...'
+   */
+  token?: string;
+
+  /**
+   * API base URL
+   * @default 'https://api.chalk.dev'
+   */
+  apiUrl?: string;
+
+  /**
+   * WebSocket URL for real-time events
+   * @default 'wss://api.chalk.dev/ws'
+   */
+  wsUrl?: string;
+
+  /**
+   * Enable debug logging to console
+   * @default false
+   */
+  debug?: boolean;
+}
+
+// ============================================================================
+// Room Types
+// ============================================================================
+
+/**
+ * Connection status of a room
+ * - `connecting`: Initial connection in progress
+ * - `connected`: Successfully connected
+ * - `reconnecting`: Temporarily disconnected, attempting to reconnect
+ * - `disconnected`: Cleanly disconnected
+ * - `failed`: Connection failed permanently
+ */
+export type RoomStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
+
+/**
+ * Configuration for joining a room
+ *
+ * @example
+ * ```ts
+ * await client.joinRoom('room_123', {
+ *   displayName: 'John Doe',
+ *   audio: true,
+ *   video: true,
+ *   metadata: { role: 'teacher' }
+ * });
+ * ```
+ */
+export interface RoomConfig {
+  /**
+   * Display name shown to other participants
+   * @example 'John Doe'
+   */
+  displayName: string;
+
+  /**
+   * Enable microphone on join
+   * @default false
+   */
+  audio?: boolean;
+
+  /**
+   * Enable camera on join
+   * @default false
+   */
+  video?: boolean;
+
+  /**
+   * Custom metadata attached to your participant
+   * Visible to all participants in the room
+   */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Information about a room
+ */
+export interface RoomInfo {
+  /** Unique room identifier */
+  id: string;
+  /** Human-readable room name */
+  name?: string;
+  /** Current connection status */
+  status: RoomStatus;
+  /** Number of participants currently in the room */
+  participantCount: number;
+  /** Room configuration */
+  config: Record<string, unknown>;
+  /** When the room was created */
+  createdAt: Date;
+}
+
+// ============================================================================
+// Participant Types
+// ============================================================================
+
+/**
+ * Role of a participant in the room
+ * - `host`: Can manage the room, mute others, start recordings
+ * - `participant`: Standard participant with media controls
+ */
+export type ParticipantRole = 'host' | 'participant';
+
+/**
+ * Represents a participant in a room
+ *
+ * @example
+ * ```ts
+ * room.on('participant-joined', (participant) => {
+ *   console.log(`${participant.displayName} joined`);
+ *   if (participant.videoTrack) {
+ *     attachVideoToElement(participant.videoTrack, videoElement);
+ *   }
+ * });
+ * ```
+ */
+export interface Participant {
+  /** Unique participant identifier */
+  id: string;
+  /** Display name visible to others */
+  displayName: string;
+  /** Role in the room */
+  role: ParticipantRole;
+  /** Whether this is the local (your) participant */
+  isLocal: boolean;
+  /**
+   * Video MediaStreamTrack if publishing
+   * Use with HTMLVideoElement.srcObject = new MediaStream([track])
+   */
+  videoTrack?: MediaStreamTrack;
+  /**
+   * Audio MediaStreamTrack if publishing
+   * Usually handled automatically, but available for custom audio processing
+   */
+  audioTrack?: MediaStreamTrack;
+  /** Camera is enabled and publishing */
+  videoEnabled: boolean;
+  /** Microphone is enabled (not muted) */
+  audioEnabled: boolean;
+  /** Currently speaking (voice activity detected) */
+  isSpeaking: boolean;
+  /** Currently sharing screen */
+  isScreenSharing: boolean;
+  /** Has raised hand to speak */
+  handRaised: boolean;
+  /**
+   * Connection quality score
+   * @min 0
+   * @max 100
+   */
+  connectionQuality: number;
+  /** Custom metadata set when joining */
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// Media Types
+// ============================================================================
+
+/** Type of media track */
+export type TrackKind = 'audio' | 'video';
+
+/**
+ * Represents a media track (audio or video)
+ */
+export interface Track {
+  /** Unique track identifier */
+  id: string;
+  /** Type of track */
+  kind: TrackKind;
+  /** Whether the track is currently enabled */
+  enabled: boolean;
+  /** Underlying browser MediaStreamTrack */
+  mediaStreamTrack?: MediaStreamTrack;
+}
+
+/** Type of media device */
+export type MediaDeviceKind = 'audioinput' | 'audiooutput' | 'videoinput';
+
+/**
+ * Information about an available media device
+ *
+ * @example
+ * ```ts
+ * const devices = await room.getDevices();
+ * const cameras = devices.filter(d => d.kind === 'videoinput');
+ * await room.selectDevice(cameras[0].deviceId, 'video');
+ * ```
+ */
+export interface MediaDevice {
+  /** Unique device identifier for selection */
+  deviceId: string;
+  /** Human-readable device name */
+  label: string;
+  /** Type of device */
+  kind: MediaDeviceKind;
+  /** Whether this is the currently selected device */
+  isActive?: boolean;
+}
+
+/**
+ * Constraints for media capture
+ * Can be a simple boolean or detailed MediaTrackConstraints
+ */
+export interface MediaConstraints {
+  /** Video constraints */
+  video?: boolean | MediaTrackConstraints;
+  /** Audio constraints */
+  audio?: boolean | MediaTrackConstraints;
+}
+
+// ============================================================================
+// Chat Types
+// ============================================================================
+
+/**
+ * A chat message in the room
+ */
+export interface ChatMessage {
+  /** Unique message identifier */
+  id: string;
+  /** Participant ID of the sender */
+  senderId: string;
+  /** Display name of the sender */
+  senderName: string;
+  /** Message content */
+  content: string;
+  /** When the message was sent */
+  timestamp: Date;
+}
+
+// ============================================================================
+// Recording Types
+// ============================================================================
+
+/**
+ * Status of a recording
+ * - `pending`: Recording requested but not started
+ * - `recording`: Currently recording
+ * - `processing`: Recording stopped, being processed
+ * - `ready`: Recording available for download
+ * - `archived`: Recording moved to long-term storage
+ * - `failed`: Recording failed
+ * - `deleted`: Recording has been deleted
+ */
+export type RecordingStatus = 'pending' | 'recording' | 'processing' | 'ready' | 'archived' | 'failed' | 'deleted';
+
+/**
+ * A room recording
+ */
+export interface Recording {
+  /** Unique recording identifier */
+  id: string;
+  /** Room that was recorded */
+  roomId: string;
+  /** Current status */
+  status: RecordingStatus;
+  /** Duration in seconds (available after processing) */
+  durationSeconds?: number;
+  /** File size in bytes (available after processing) */
+  sizeBytes?: number;
+  /** Pre-signed download URL (available when ready) */
+  downloadUrl?: string;
+  /** When recording started */
+  startedAt?: Date;
+  /** When recording stopped */
+  endedAt?: Date;
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/**
+ * Error codes for Chalk SDK operations
+ */
+export const ChalkErrorCode = {
+  // Network errors
+  NETWORK_ERROR: 'NETWORK_ERROR',
+  CONNECTION_FAILED: 'CONNECTION_FAILED',
+  CONNECTION_LOST: 'CONNECTION_LOST',
+  MAX_RECONNECT_ATTEMPTS: 'MAX_RECONNECT_ATTEMPTS',
+  WS_ERROR: 'WS_ERROR',
+
+  // Auth errors
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  INVALID_API_KEY: 'INVALID_API_KEY',
+
+  // Room errors
+  ROOM_NOT_FOUND: 'ROOM_NOT_FOUND',
+  ROOM_FULL: 'ROOM_FULL',
+  ROOM_ENDED: 'ROOM_ENDED',
+  NOT_IN_ROOM: 'NOT_IN_ROOM',
+
+  // Media errors
+  MEDIA_ERROR: 'MEDIA_ERROR',
+  CAMERA_ACCESS_DENIED: 'CAMERA_ACCESS_DENIED',
+  MICROPHONE_ACCESS_DENIED: 'MICROPHONE_ACCESS_DENIED',
+  DEVICE_NOT_FOUND: 'DEVICE_NOT_FOUND',
+  SCREEN_SHARE_ERROR: 'SCREEN_SHARE_ERROR',
+  SCREEN_SHARE_CANCELLED: 'SCREEN_SHARE_CANCELLED',
+
+  // Recording errors
+  RECORDING_FAILED: 'RECORDING_FAILED',
+  RECORDING_NOT_FOUND: 'RECORDING_NOT_FOUND',
+
+  // General errors
+  UNKNOWN_ERROR: 'UNKNOWN_ERROR',
+  INVALID_REQUEST: 'INVALID_REQUEST',
+  RATE_LIMITED: 'RATE_LIMITED',
+} as const;
+
+export type ChalkErrorCode = typeof ChalkErrorCode[keyof typeof ChalkErrorCode];
+
+/**
+ * Error object returned by Chalk SDK operations
+ *
+ * @example
+ * ```ts
+ * room.on('error', (error) => {
+ *   if (error.code === ChalkErrorCode.CAMERA_ACCESS_DENIED) {
+ *     showPermissionDialog();
+ *   }
+ * });
+ * ```
+ */
+export interface ChalkError {
+  /** Error code for programmatic handling */
+  code: ChalkErrorCode | string;
+  /** Human-readable error message */
+  message: string;
+  /** Additional error details */
+  details?: Record<string, unknown>;
+}
+
+// ============================================================================
+// Event Types
+// ============================================================================
+
+/**
+ * All event types emitted by Chalk SDK
+ */
+export type ChalkEventType =
+  | 'connected'
+  | 'disconnected'
+  | 'reconnecting'
+  | 'error'
+  | 'participant.joined'
+  | 'participant.left'
+  | 'participant.updated'
+  | 'track.subscribed'
+  | 'track.unsubscribed'
+  | 'active-speaker-changed'
+  | 'chat.message'
+  | 'reaction'
+  | 'hand.raised'
+  | 'hand.lowered'
+  | 'recording.started'
+  | 'recording.stopped'
+  | 'room.updated';
+
+// ============================================================================
+// Screen Share Types
+// ============================================================================
+
+/**
+ * Options for screen sharing
+ */
+export interface ScreenShareOptions {
+  /**
+   * Enable collaborative annotations on the shared screen
+   * @default false
+   */
+  withAnnotations?: boolean;
+  /**
+   * Include system audio in the share (browser support varies)
+   * @default false
+   */
+  withAudio?: boolean;
+}
+
+// ============================================================================
+// Reaction Types
+// ============================================================================
+
+/** Available reaction emojis */
+export type ReactionEmoji = '👍' | '👎' | '❤️' | '🎉' | '😂' | '😮' | '😢' | '🤔';
+
+/**
+ * A reaction sent by a participant
+ */
+export interface Reaction {
+  /** Who sent the reaction */
+  participantId: string;
+  /** Display name of sender */
+  participantName: string;
+  /** The emoji */
+  emoji: ReactionEmoji;
+  /** When it was sent */
+  timestamp: Date;
+}
+
+// ============================================================================
+// API Response Types
+// ============================================================================
+
+/**
+ * Standard API response wrapper
+ * @internal
+ */
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: ChalkError;
+}
+
+/**
+ * Response from creating a room
+ * @internal
+ */
+export interface CreateRoomResponse {
+  roomId: string;
+  name?: string;
+}
+
+/**
+ * Response from joining a room
+ * @internal
+ */
+export interface JoinRoomResponse {
+  participantId: string;
+  token: string;
+  room: RoomInfo;
+}
+
+// ============================================================================
+// Deprecated / Legacy Types (for backwards compatibility)
+// ============================================================================
+
+/**
+ * @deprecated Use MediaDevice instead
+ */
+export type MediaDeviceInfo = MediaDevice;
