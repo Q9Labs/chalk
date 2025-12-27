@@ -45,12 +45,13 @@ export function ParticipantTile({
 
 	const getAvatarColor = (name: string) => {
 		const colors = [
-			"from-cyan-500 to-teal-600",
-			"from-violet-500 to-purple-600",
-			"from-amber-500 to-orange-600",
-			"from-emerald-500 to-green-600",
-			"from-rose-500 to-pink-600",
-			"from-blue-500 to-indigo-600",
+			"bg-blue-600",
+			"bg-purple-600",
+			"bg-orange-600",
+			"bg-emerald-600",
+			"bg-pink-600",
+			"bg-indigo-600",
+			"bg-cyan-600",
 		];
 		const index = name
 			.split("")
@@ -61,24 +62,14 @@ export function ParticipantTile({
 	return (
 		<div
 			className={`
-        relative overflow-hidden rounded-2xl
-        bg-gradient-to-br from-slate-800/90 to-slate-900/90
-        border border-white/5
+        relative overflow-hidden rounded-xl
+        bg-[#3c4043]
         transition-all duration-300 ease-out
-        ${participant.isSpeaking ? "ring-2 ring-cyan-400/60 ring-offset-2 ring-offset-slate-950" : ""}
-        ${isSpotlight ? "shadow-2xl shadow-black/50" : "shadow-lg shadow-black/30"}
+        ${participant.isSpeaking ? "ring-2 ring-blue-500" : ""}
         group
       `}
 			style={{ aspectRatio: isSpotlight ? "auto" : "16/9" }}
 		>
-			{/* Subtle noise texture overlay */}
-			<div
-				className="absolute inset-0 opacity-[0.015] pointer-events-none"
-				style={{
-					backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-				}}
-			/>
-
 			{/* Video element */}
 			{participant.videoEnabled && participant.videoTrack ? (
 				<video
@@ -93,10 +84,9 @@ export function ParticipantTile({
 				<div className="absolute inset-0 flex items-center justify-center">
 					<div
 						className={`
-            w-20 h-20 rounded-full bg-gradient-to-br ${getAvatarColor(participant.displayName)}
-            flex items-center justify-center text-2xl font-semibold text-white
-            shadow-lg shadow-black/30
-            transition-transform duration-300 group-hover:scale-105
+            w-24 h-24 rounded-full ${getAvatarColor(participant.displayName)}
+            flex items-center justify-center text-3xl font-medium text-white
+            shadow-sm
           `}
 					>
 						{getInitials(participant.displayName)}
@@ -104,41 +94,29 @@ export function ParticipantTile({
 				</div>
 			)}
 
-			{/* Bottom gradient overlay */}
-			<div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
+			{/* Mute indicator (Top Right) */}
+			{!participant.audioEnabled && (
+				<div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-md">
+					<MicIcon muted />
+				</div>
+			)}
 
-			{/* Name and status bar */}
-			<div className="absolute bottom-0 inset-x-0 p-3 flex items-center justify-between">
-				<div className="flex items-center gap-2">
-					<span className="text-sm font-medium text-white/90 drop-shadow-sm">
+			{/* Screen Share indicator (Top Left) */}
+			{participant.isScreenSharing && (
+				<div className="absolute top-3 left-3 w-8 h-8 rounded-full bg-blue-600/90 flex items-center justify-center backdrop-blur-md text-white">
+					<ScreenShareIcon active />
+				</div>
+			)}
+
+			{/* Name Tag (Bottom Left) */}
+			<div className="absolute bottom-3 left-3 flex items-center gap-2 max-w-[calc(100%-24px)]">
+				<div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md flex items-center gap-2">
+					<span className="text-sm font-medium text-white truncate max-w-[160px]">
 						{participant.displayName}
-						{participant.isLocal && (
-							<span className="ml-1.5 text-xs text-cyan-400/90">(You)</span>
-						)}
+						{participant.isLocal && " (You)"}
 					</span>
 				</div>
-
-				<div className="flex items-center gap-1.5">
-					{!participant.audioEnabled && (
-						<div className="w-6 h-6 rounded-full bg-red-500/80 flex items-center justify-center backdrop-blur-sm">
-							<MicIcon muted />
-						</div>
-					)}
-					{participant.isScreenSharing && (
-						<div className="w-6 h-6 rounded-full bg-cyan-500/80 flex items-center justify-center backdrop-blur-sm">
-							<ScreenShareIcon active />
-						</div>
-					)}
-				</div>
 			</div>
-
-			{/* Speaking indicator glow */}
-			{participant.isSpeaking && (
-				<div
-					className="absolute inset-0 rounded-2xl animate-pulse pointer-events-none"
-					style={{ boxShadow: "inset 0 0 30px rgba(34, 211, 238, 0.15)" }}
-				/>
-			)}
 		</div>
 	);
 }

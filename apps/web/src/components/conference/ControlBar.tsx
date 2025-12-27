@@ -4,6 +4,7 @@ import {
 	PhoneOffIcon,
 	RecordIcon,
 	ScreenShareIcon,
+	SettingsIcon,
 	VideoIcon,
 } from "./icons";
 
@@ -17,6 +18,8 @@ export interface ControlBarProps {
 	onToggleScreenShare: () => void;
 	onToggleRecording: () => void;
 	onLeave: () => void;
+	onToggleSettings?: () => void;
+	roomId?: string;
 }
 
 export function ControlBar({
@@ -29,22 +32,31 @@ export function ControlBar({
 	onToggleScreenShare,
 	onToggleRecording,
 	onLeave,
+	onToggleSettings,
+	roomId,
 }: ControlBarProps) {
+	const currentTime = new Date().toLocaleTimeString([], {
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+
 	return (
-		<div className="absolute bottom-6 left-1/2 -translate-x-1/2">
-			<div
-				className="
-        flex items-center gap-2 px-4 py-3
-        bg-slate-900/80 backdrop-blur-xl
-        border border-white/10
-        rounded-2xl
-        shadow-2xl shadow-black/40
-      "
-			>
+		<div className="h-20 bg-[#202124] flex items-center justify-between px-6 shrink-0 z-50">
+			{/* Left: Time and Room ID */}
+			<div className="flex items-center gap-4 min-w-[200px]">
+				<span className="text-white text-base font-medium">{currentTime}</span>
+				<div className="w-px h-6 bg-white/20" />
+				<span className="text-white/90 text-sm font-medium">
+					{roomId || "Meeting"}
+				</span>
+			</div>
+
+			{/* Center: Controls */}
+			<div className="flex items-center gap-3">
 				<ControlButton
 					onClick={onToggleAudio}
 					active={isAudioEnabled}
-					label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
+					label={isAudioEnabled ? "Turn off microphone" : "Turn on microphone"}
 				>
 					<MicIcon muted={!isAudioEnabled} />
 				</ControlButton>
@@ -57,33 +69,40 @@ export function ControlBar({
 					<VideoIcon off={!isVideoEnabled} />
 				</ControlButton>
 
-				<div className="w-px h-8 bg-slate-700/50 mx-1" />
-
 				<ControlButton
-					onClick={() =>
-						isScreenSharing ? onToggleScreenShare() : onToggleScreenShare()
-					}
+					onClick={onToggleScreenShare}
 					active={!isScreenSharing}
-					label={isScreenSharing ? "Stop sharing" : "Share screen"}
+					label={isScreenSharing ? "Stop presenting" : "Present now"}
 				>
 					<ScreenShareIcon active={isScreenSharing} />
 				</ControlButton>
 
 				<ControlButton
-					onClick={() =>
-						isRecording ? onToggleRecording() : onToggleRecording()
-					}
+					onClick={onToggleRecording}
 					active={!isRecording}
-					label={isRecording ? "Stop recording" : "Start recording"}
+					label={isRecording ? "Stop recording" : "Record meeting"}
 				>
 					<RecordIcon recording={isRecording} />
 				</ControlButton>
 
-				<div className="w-px h-8 bg-slate-700/50 mx-1" />
+				<div className="ml-2">
+					<ControlButton onClick={onLeave} danger label="Leave call">
+						<PhoneOffIcon />
+					</ControlButton>
+				</div>
+			</div>
 
-				<ControlButton onClick={onLeave} danger label="Leave call">
-					<PhoneOffIcon />
-				</ControlButton>
+			{/* Right: Info/More */}
+			<div className="flex items-center justify-end gap-3 min-w-[200px]">
+				{onToggleSettings && (
+					<button
+						onClick={onToggleSettings}
+						className="p-2.5 rounded-full text-white hover:bg-[#3c4043] transition-colors"
+						title="Settings"
+					>
+						<SettingsIcon />
+					</button>
+				)}
 			</div>
 		</div>
 	);

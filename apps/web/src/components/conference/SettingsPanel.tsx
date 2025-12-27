@@ -39,8 +39,8 @@ export function SettingsPanel({
           p-2.5 rounded-xl transition-all duration-200
           ${
 						isOpen
-							? "bg-slate-700/80 text-white"
-							: "text-slate-400 hover:text-white hover:bg-slate-800/60"
+							? "bg-accent text-accent-foreground"
+							: "text-muted-foreground hover:text-foreground hover:bg-accent/60"
 					}
         `}
 				aria-label="Settings"
@@ -52,8 +52,8 @@ export function SettingsPanel({
 			<aside
 				className={`
         absolute top-0 right-0 h-full w-80
-        bg-slate-900/95 backdrop-blur-xl
-        border-l border-white/5
+        bg-card/95 backdrop-blur-xl
+        border-l border-border
         transform transition-transform duration-300 ease-out
         ${isOpen ? "translate-x-0" : "translate-x-full"}
         z-30 overflow-y-auto
@@ -62,10 +62,10 @@ export function SettingsPanel({
 				<div className="p-5 space-y-6">
 					{/* Header */}
 					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-semibold text-slate-100">Settings</h2>
+						<h2 className="text-lg font-semibold text-foreground">Settings</h2>
 						<button
 							onClick={onClose}
-							className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors"
+							className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
 						>
 							<X className="w-5 h-5" />
 						</button>
@@ -74,7 +74,7 @@ export function SettingsPanel({
 					{/* Device Selection */}
 					<div className="space-y-5">
 						<div className="space-y-2">
-							<label className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
+							<label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider">
 								Camera
 							</label>
 							<select
@@ -82,9 +82,9 @@ export function SettingsPanel({
 								onChange={(e) => onSelectCamera(e.target.value)}
 								className="
                   w-full px-3 py-2.5 rounded-xl
-                  bg-slate-800/60 border border-white/5
-                  text-sm text-slate-200
-                  focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/30
+                  bg-muted/60 border border-border
+                  text-sm text-foreground
+                  focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/30
                   transition-all
                 "
 							>
@@ -97,7 +97,7 @@ export function SettingsPanel({
 						</div>
 
 						<div className="space-y-2">
-							<label className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
+							<label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider">
 								Microphone
 							</label>
 							<select
@@ -105,9 +105,9 @@ export function SettingsPanel({
 								onChange={(e) => onSelectMicrophone(e.target.value)}
 								className="
                   w-full px-3 py-2.5 rounded-xl
-                  bg-slate-800/60 border border-white/5
-                  text-sm text-slate-200
-                  focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/30
+                  bg-muted/60 border border-border
+                  text-sm text-foreground
+                  focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/30
                   transition-all
                 "
 							>
@@ -121,31 +121,31 @@ export function SettingsPanel({
 					</div>
 
 					{/* Status Section */}
-					<div className="space-y-3 pt-4 border-t border-slate-800">
-						<h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+					<div className="space-y-3 pt-4 border-t border-border">
+						<h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
 							Your Status
 						</h3>
 						<div className="space-y-2">
-							<div className="flex items-center justify-between p-3 rounded-xl bg-slate-800/40">
-								<span className="text-sm text-slate-300">Camera</span>
+							<div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
+								<span className="text-sm text-muted-foreground">Camera</span>
 								<span
-									className={`text-sm font-medium ${isVideoEnabled ? "text-emerald-400" : "text-red-400"}`}
+									className={`text-sm font-medium ${isVideoEnabled ? "text-emerald-400" : "text-destructive"}`}
 								>
 									{isVideoEnabled ? "On" : "Off"}
 								</span>
 							</div>
-							<div className="flex items-center justify-between p-3 rounded-xl bg-slate-800/40">
-								<span className="text-sm text-slate-300">Microphone</span>
+							<div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
+								<span className="text-sm text-muted-foreground">Microphone</span>
 								<span
-									className={`text-sm font-medium ${isAudioEnabled ? "text-emerald-400" : "text-red-400"}`}
+									className={`text-sm font-medium ${isAudioEnabled ? "text-emerald-400" : "text-destructive"}`}
 								>
 									{isAudioEnabled ? "On" : "Off"}
 								</span>
 							</div>
 							{isScreenSharing && (
-								<div className="flex items-center justify-between p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
-									<span className="text-sm text-cyan-300">Screen Share</span>
-									<span className="text-sm font-medium text-cyan-400">
+								<div className="flex items-center justify-between p-3 rounded-xl bg-primary/10 border border-primary/20">
+									<span className="text-sm text-primary/80">Screen Share</span>
+									<span className="text-sm font-medium text-primary">
 										Active
 									</span>
 								</div>
