@@ -1,0 +1,1 @@
+- [] Migrate all AWS terraform modules to use v6 of aws: (https://registry.tf-registry-prod-use1.terraform.io/providers/hashicorp/aws/latest/docs)

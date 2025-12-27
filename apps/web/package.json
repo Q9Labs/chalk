@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev --port 3000",
+    "dev": "vite dev --port 3070",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
+    "@chalk/core": "workspace:*",
+    "@chalk/react": "workspace:*",
     "@base-ui/react": "^1.0.0",
     "@fontsource-variable/figtree": "^5.2.10",
     "@hugeicons/core-free-icons": "^3.1.0",

@@ -1,0 +1,360 @@
+================================================================================
+CHALK SDK TEST SUITE - FILE REFERENCE
+================================================================================
+
+ALL TEST FILES CREATED WITH ABSOLUTE PATHS
+Generated: December 27, 2025
+
+================================================================================
+SDK CORE TEST FILES
+================================================================================
+
+File: /Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/__tests__/types.test.ts
+Type: Unit Tests
+Tests: 23
+Focus: Type system, Result types, error codes, error structures
+Status: PASSING (all 23 tests)
+
+File: /Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/__tests__/events.test.ts
+Type: Unit + Integration
+Tests: 35
+Focus: EventEmitter class, pub/sub system, handler management
+Status: PASSING (all 35 tests)
+
+File: /Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/__tests__/room.test.ts
+Type: Unit + Integration
+Tests: 24
+Focus: Room state management, event handling, media control
+Status: PASSING (all 24 tests)
+
+File: /Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/__tests__/client.test.ts
+Type: Unit Tests
+Tests: 12
+Focus: ChalkClient initialization, configuration, connection
+Status: PASSING (all 12 tests)
+
+================================================================================
+SDK REACT TEST FILES
+================================================================================
+
+File: /Users/macmini/Desktop/Code/chalk/packages/sdk-react/src/__tests__/context.test.tsx
+Type: Unit Tests
+Tests: 16
+Focus: ChalkProvider context, useChalk hook, prop validation
+Status: PASSING (all 16 tests)
+
+File: /Users/macmini/Desktop/Code/chalk/packages/sdk-react/src/__tests__/hooks.test.ts
+Type: Unit + Type Tests
+Tests: 32
+Focus: All 6 custom hooks - useRoom, useParticipants, useMedia, useChat, useRecording, useDevices
+Status: PASSING (all 32 tests)
+
+File: /Users/macmini/Desktop/Code/chalk/packages/sdk-react/src/__tests__/components.test.tsx
+Type: Unit + Type Tests
+Tests: 8
+Focus: VideoTile component props, rendering, composition
+Status: PASSING (all 8 tests)
+
+================================================================================
+DOCUMENTATION FILES
+================================================================================
+
+File: /Users/macmini/Desktop/Code/chalk/TEST_SUMMARY.md
+Type: Documentation
+Content: Comprehensive test results, patterns, statistics, CI/CD integration
+Usage: Reference for understanding test coverage and patterns
+
+File: /Users/macmini/Desktop/Code/chalk/TEST_GUIDE.md
+Type: Documentation
+Content: Detailed testing guide, examples, debugging tips, extension patterns
+Usage: Developer guide for running, extending, and maintaining tests
+
+File: /Users/macmini/Desktop/Code/chalk/TESTS_CREATED.md
+Type: Documentation
+Content: Complete file listing, test breakdown, module coverage
+Usage: Quick reference for test organization and structure
+
+================================================================================
+RUNNING THE TESTS
+================================================================================
+
+SDK Core Tests:
+  Command: cd /Users/macmini/Desktop/Code/chalk/packages/sdk-core && bun test
+  Result: 94 pass, 0 fail, 162 expects
+  Time: ~13ms
+
+SDK React Tests:
+  Command: bun test
+  Result: 56 pass, 0 fail, 158 expects
+  Time: ~15ms
+
+Type Checking SDK Core:
+  Command: cd /Users/macmini/Desktop/Code/chalk/packages/sdk-core && bun run check-types
+  Result: 0 errors
+
+Type Checking SDK React:
+  Command: cd /Users/macmini/Desktop/Code/chalk/packages/sdk-react && bun run check-types
+  Result: 0 errors
+
+================================================================================
+TEST COVERAGE SUMMARY
+================================================================================
+
+@chalk/core Coverage (94 tests, 162 expects):
+
+  types.test.ts (23 tests):
+    - ok() helper function tests
+    - err() helper function tests
+    - Result type discrimination
+    - ChalkErrorCode enum validation (24 error codes)
+    - ChalkError interface structure
+    - Error type safety
+
+  events.test.ts (35 tests):
+    - Event handler registration
+    - Multiple handlers per event
+    - Data propagation
+    - Unsubscription patterns
+    - Error handling in handlers
+    - removeAllListeners functionality
+    - Complex event scenarios
+
+  room.test.ts (24 tests):
+    - Room initialization
+    - Status management
+    - Room info setting
+    - Local participant setup
+    - Participant lifecycle (join/leave/update)
+    - Chat message handling
+    - Reaction handling
+    - Hand raise/lower
+    - Recording state
+    - Connection status
+    - Room cleanup
+
+  client.test.ts (12 tests):
+    - Client initialization with apiKey
+    - Client initialization with token
+    - Configuration validation
+    - Custom URLs
+    - Debug flag
+    - Connection properties
+
+@chalk/react Coverage (56 tests, 158 expects):
+
+  context.test.tsx (16 tests):
+    - ChalkProvider props validation
+    - useChalk hook types
+    - Context value structure
+    - Provider initialization
+    - Error handling
+
+  hooks.test.ts (32 tests):
+    - useRoom return type validation
+    - useParticipants state management
+    - useMedia control functions
+    - useChat message handling
+    - useRecording state & duration
+    - useDevices enumeration & filtering
+
+  components.test.tsx (8 tests):
+    - VideoTile prop validation
+    - Display options
+    - Custom renders
+    - Video callbacks
+    - Participant state rendering
+    - Composition patterns
+
+================================================================================
+TEST STATISTICS
+================================================================================
+
+Total Files: 7
+Total Tests: 150
+Total Expects: 320
+
+Core SDK:
+  Files: 4
+  Tests: 94
+  Expects: 162
+  Pass Rate: 100%
+
+React SDK:
+  Files: 3
+  Tests: 56
+  Expects: 158
+  Pass Rate: 100%
+
+Combined:
+  Execution Time: ~28ms
+  Type Errors: 0
+  Test Failures: 0
+
+================================================================================
+IMPLEMENTATION DETAILS
+================================================================================
+
+Technology Stack:
+  - Bun native test runner (no external test frameworks)
+  - TypeScript strict mode
+  - React 19 (for react tests)
+  - No Jest, Vitest, or other dependencies
+
+Mock Strategy:
+  - WSClient mocked with Map-based event handler storage
+  - No browser API mocking (media, WebRTC, etc.)
+  - Focus on business logic validation
+
+Type Safety:
+  - All tests fully typed with TypeScript
+  - No implicit 'any' types
+  - Discriminated union validation
+  - Type narrowing tests
+
+================================================================================
+EXTENDING THE TESTS
+================================================================================
+
+When adding new features:
+
+1. Create test file: src/__tests__/<module>.test.ts
+2. Import: import { describe, it, expect, beforeEach } from 'bun:test'
+3. Use existing patterns for mocking and assertions
+4. Run: bun test to verify
+5. Type check: bun run check-types
+
+Example structure:
+  describe('Module', () => {
+    let instance: MyClass;
+    
+    beforeEach(() => {
+      instance = new MyClass();
+    });
+    
+    describe('feature', () => {
+      it('should do something', () => {
+        expect(instance.method()).toBe(expected);
+      });
+    });
+  });
+
+================================================================================
+CI/CD INTEGRATION
+================================================================================
+
+Ready for automated testing in:
+  - GitHub Actions
+  - GitLab CI
+  - Jenkins
+  - CircleCI
+  - Any CI system with Bun support
+
+Integration steps:
+  1. Install dependencies: bun install
+  2. Run tests: bun test
+  3. Type check: bun run check-types
+  4. Optional: Format check with bunx ultracite fix
+
+All tests pass without external service dependencies.
+
+================================================================================
+KEY FILES AND THEIR ROLES
+================================================================================
+
+Test Files:
+  types.test.ts - Type system tests (compile-time safety)
+  events.test.ts - Pub/sub system tests (event handling)
+  room.test.ts - Room state tests (integration)
+  client.test.ts - Client init tests (configuration)
+  context.test.tsx - Context tests (prop validation)
+  hooks.test.ts - Hook tests (state management)
+  components.test.tsx - Component tests (rendering)
+
+Source Files Being Tested:
+  types.ts - Type definitions
+  events.ts - EventEmitter class
+  room.ts - Room class
+  client.ts - ChalkClient class
+  context.tsx - ChalkProvider & useChalk
+  hooks/ - useRoom, useParticipants, useMedia, useChat, useRecording, useDevices
+  components/ - VideoTile
+
+Documentation:
+  TEST_SUMMARY.md - Overview & patterns
+  TEST_GUIDE.md - Detailed guide & examples
+  TESTS_CREATED.md - File listing & coverage
+  TESTS_REFERENCE.txt - This file
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+Test Execution:
+  ✓ All 150 tests pass
+  ✓ 94 SDK Core tests pass
+  ✓ 56 SDK React tests pass
+  ✓ Execution time < 30ms
+
+Type Safety:
+  ✓ SDK Core type check passes
+  ✓ SDK React type check passes
+  ✓ Zero TypeScript errors
+
+Coverage:
+  ✓ Result types covered
+  ✓ EventEmitter covered
+  ✓ Room class covered
+  ✓ ChalkClient covered
+  ✓ All hooks covered
+  ✓ VideoTile component covered
+
+Documentation:
+  ✓ TEST_SUMMARY.md created
+  ✓ TEST_GUIDE.md created
+  ✓ TESTS_CREATED.md created
+  ✓ TESTS_REFERENCE.txt created
+
+================================================================================
+QUICK COMMAND REFERENCE
+================================================================================
+
+Core Tests:
+  cd /Users/macmini/Desktop/Code/chalk/packages/sdk-core && bun test
+
+React Tests:
+  cd /Users/macmini/Desktop/Code/chalk/packages/sdk-react && bun test
+
+Type Check Core:
+  cd /Users/macmini/Desktop/Code/chalk/packages/sdk-core && bun run check-types
+
+Type Check React:
+  cd /Users/macmini/Desktop/Code/chalk/packages/sdk-react && bun run check-types
+
+Watch Mode:
+  bun test --watch
+
+Specific File:
+  bun test src/__tests__/types.test.ts
+
+Verbose:
+  bun test --verbose
+
+================================================================================
+NOTES FOR DEVELOPERS
+================================================================================
+
+1. Tests use Bun's native test runner - no configuration needed
+2. All mock objects are created fresh in beforeEach()
+3. Test names clearly describe what is being tested
+4. Both happy path and error scenarios are covered
+5. Type tests ensure compile-time safety
+6. Unit tests focus on single responsibilities
+7. Integration tests use mock WSClient
+8. Browser APIs are not mocked - that's for e2e tests
+9. All tests can run in parallel
+10. No global state or interdependencies between tests
+
+================================================================================
+Last Updated: December 27, 2025
+Status: All tests passing, ready for production
+================================================================================

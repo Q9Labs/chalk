@@ -1,0 +1,97 @@
+name: SDK CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/sdk-*/**'
+      - 'package.json'
+      - 'bun.lock'
+  pull_request:
+    paths:
+      - 'packages/sdk-*/**'
+      - 'package.json'
+      - 'bun.lock'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bun run check-types
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-dist
+          path: |
+            packages/sdk-core/dist
+            packages/sdk-react/dist
+            packages/sdk-react-native/dist
+          retention-days: 7
+
+  # publish:
+  #   name: Publish to npm
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup Bun
+  #       uses: oven-sh/setup-bun@v2
+  #
+  #     - name: Install dependencies
+  #       run: bun install --frozen-lockfile
+  #
+  #     - name: Build
+  #       run: bun run build
+  #
+  #     - name: Publish
+  #       run: |
+  #         echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+  #         # Use changesets or semantic-release for versioning
+  #         # npm publish --workspace=@chalk/core --access public
+  #         # npm publish --workspace=@chalk/react --access public

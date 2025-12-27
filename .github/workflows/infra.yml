@@ -1,0 +1,285 @@
+name: Infrastructure CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infrastructure/terraform/**'
+  pull_request:
+    paths:
+      - 'infrastructure/terraform/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: '1.9'
+  AWS_REGION: us-east-1
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Validate VPC Module
+        working-directory: infrastructure/terraform/modules/vpc
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate ECS Module
+        working-directory: infrastructure/terraform/modules/ecs
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Aurora Module
+        working-directory: infrastructure/terraform/modules/aurora
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate ElastiCache Module
+        working-directory: infrastructure/terraform/modules/elasticache
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate API Gateway Module
+        working-directory: infrastructure/terraform/modules/api-gateway
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Secrets Module
+        working-directory: infrastructure/terraform/modules/secrets
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate WAF Module
+        working-directory: infrastructure/terraform/modules/waf
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Monitoring Module
+        working-directory: infrastructure/terraform/modules/monitoring
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate ECR Module
+        working-directory: infrastructure/terraform/modules/ecr
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+  plan-dev:
+    name: Plan (Dev)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+    environment: dev
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/dev
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -input=false
+        continue-on-error: true
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-dev
+          path: infrastructure/terraform/environments/dev/tfplan
+
+  apply-dev:
+    name: Apply (Dev)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: dev
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/dev
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+  plan-staging:
+    name: Plan (Staging)
+    runs-on: ubuntu-latest
+    needs: apply-dev
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/staging
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -input=false
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-staging
+          path: infrastructure/terraform/environments/staging/tfplan
+
+  apply-staging:
+    name: Apply (Staging)
+    runs-on: ubuntu-latest
+    needs: plan-staging
+    environment: staging-approval
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/staging
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+  plan-prod:
+    name: Plan (Prod)
+    runs-on: ubuntu-latest
+    needs: apply-staging
+    environment: prod
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/prod
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_app_id: ${{ secrets.CLOUDFLARE_APP_ID }}
+      TF_VAR_cloudflare_app_secret: ${{ secrets.CLOUDFLARE_APP_SECRET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -input=false
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-prod
+          path: infrastructure/terraform/environments/prod/tfplan
+
+  apply-prod:
+    name: Apply (Prod)
+    runs-on: ubuntu-latest
+    needs: plan-prod
+    environment: prod-approval
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/prod
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_app_id: ${{ secrets.CLOUDFLARE_APP_ID }}
+      TF_VAR_cloudflare_app_secret: ${{ secrets.CLOUDFLARE_APP_SECRET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
