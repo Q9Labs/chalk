@@ -14,6 +14,7 @@ on:
       - 'packages/**'
       - 'package.json'
       - 'bun.lock'
+  workflow_dispatch: # Manual trigger for CI validation
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
