@@ -2,7 +2,7 @@
  * useParticipants hook - Access participant list and local participant
  */
 
-import type { Participant } from "@chalk/core";
+import type { Participant } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
 

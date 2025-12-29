@@ -133,7 +133,7 @@ describe("RTCManager RealtimeKit integration", () => {
 	});
 });
 
-describe("@chalk/react-native hooks exports", () => {
+describe("@q9labs/chalk-react-native hooks exports", () => {
 	it("exports all expected hook types", () => {
 		const expectedHooks = [
 			"useAudioRouting",

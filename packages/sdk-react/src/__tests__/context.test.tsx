@@ -1,6 +1,6 @@
 /**
  * Tests for Chalk React Context
- * @module @chalk/react/__tests__/context
+ * @module @q9labs/chalk-react/__tests__/context
  */
 
 import { describe, expect, it } from "bun:test";

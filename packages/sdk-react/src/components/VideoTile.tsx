@@ -2,7 +2,7 @@
  * VideoTile component - Displays a single participant's video
  */
 
-import type { Participant } from "@chalk/core";
+import type { Participant } from "@q9labs/chalk-core";
 import React, { type CSSProperties, useEffect, useRef } from "react";
 
 export interface VideoTileProps {

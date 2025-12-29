@@ -1,12 +1,12 @@
 /**
- * @chalk/core - Core SDK for Chalk video conferencing
+ * @q9labs/chalk-core - Core SDK for Chalk video conferencing
  *
  * @packageDocumentation
- * @module @chalk/core
+ * @module @q9labs/chalk-core
  *
  * @example
  * ```ts
- * import { ChalkClient } from '@chalk/core';
+ * import { ChalkClient } from '@q9labs/chalk-core';
  *
  * const client = new ChalkClient({ token: 'jwt_xxx' });
  * const room = await client.joinRoom('room_123', {

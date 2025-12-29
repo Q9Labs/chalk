@@ -1,12 +1,12 @@
 /**
- * @chalk/react - React SDK for Chalk video conferencing
+ * @q9labs/chalk-react - React SDK for Chalk video conferencing
  *
  * @packageDocumentation
- * @module @chalk/react
+ * @module @q9labs/chalk-react
  *
  * @example
  * ```tsx
- * import { ChalkProvider, useRoom, useParticipants, VideoGrid } from '@chalk/react';
+ * import { ChalkProvider, useRoom, useParticipants, VideoGrid } from '@q9labs/chalk-react';
  *
  * function App() {
  *   return (
@@ -41,9 +41,9 @@ export type {
 	RoomInfo,
 	RoomStatus,
 	ScreenShareOptions,
-} from "@chalk/core";
+} from "@q9labs/chalk-core";
 // Re-export error codes
-export { ChalkErrorCode } from "@chalk/core";
+export { ChalkErrorCode } from "@q9labs/chalk-core";
 
 // Components
 export {

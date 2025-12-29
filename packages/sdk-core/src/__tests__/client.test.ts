@@ -1,6 +1,6 @@
 /**
  * Tests for ChalkClient
- * @module @chalk/core/__tests__/client
+ * @module @q9labs/chalk-core/__tests__/client
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";

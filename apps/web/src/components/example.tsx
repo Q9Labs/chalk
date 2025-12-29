@@ -1,4 +1,4 @@
-import { cn } from "@chalk/ui";
+import { cn } from "@q9labs/chalk-ui";
 
 function ExampleWrapper({ className, ...props }: React.ComponentProps<"div">) {
 	return (

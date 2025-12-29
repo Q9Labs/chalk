@@ -4,7 +4,7 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@chalk/ui";
+} from "@q9labs/chalk-ui";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	ArrowRight,
@@ -203,7 +203,7 @@ function App() {
 									<div className="h-3 w-3 rounded-full bg-green-500/20 ring-1 ring-green-500/50" />
 								</div>
 								<pre className="overflow-x-auto text-sm text-zinc-300 font-mono leading-relaxed">
-									<code>{`import { useChalk } from '@chalk/react';
+									<code>{`import { useChalk } from '@q9labs/chalk-react';
 
 function VideoRoom() {
   const { joinRoom, isConnected } = useChalk();

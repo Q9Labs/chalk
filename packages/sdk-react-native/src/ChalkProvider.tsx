@@ -9,7 +9,7 @@ import {
 	type Room,
 	type RoomConfig,
 	type RoomStatus,
-} from "@chalk/core";
+} from "@q9labs/chalk-core";
 import {
 	createContext,
 	type ReactNode,

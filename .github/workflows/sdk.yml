@@ -2,14 +2,16 @@ name: SDK CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [master]
+    tags:
+      - 'v*'
     paths:
-      - 'packages/sdk-*/**'
+      - 'packages/**'
       - 'package.json'
       - 'bun.lock'
   pull_request:
     paths:
-      - 'packages/sdk-*/**'
+      - 'packages/**'
       - 'package.json'
       - 'bun.lock'
 
@@ -69,29 +71,49 @@ jobs:
             packages/sdk-core/dist
             packages/sdk-react/dist
             packages/sdk-react-native/dist
+            packages/ui/dist
           retention-days: 7
 
-  # publish:
-  #   name: Publish to npm
-  #   runs-on: ubuntu-latest
-  #   needs: build
-  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Setup Bun
-  #       uses: oven-sh/setup-bun@v2
-  #
-  #     - name: Install dependencies
-  #       run: bun install --frozen-lockfile
-  #
-  #     - name: Build
-  #       run: bun run build
-  #
-  #     - name: Publish
-  #       run: |
-  #         echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-  #         # Use changesets or semantic-release for versioning
-  #         # npm publish --workspace=@chalk/core --access public
-  #         # npm publish --workspace=@chalk/react --access public
+  publish:
+    name: Publish to GitHub Packages
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@q9labs:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+
+      - name: Publish @q9labs/chalk-core
+        run: cd packages/sdk-core && bun publish --access public
+        continue-on-error: true
+
+      - name: Publish @q9labs/chalk-react
+        run: cd packages/sdk-react && bun publish --access public
+        continue-on-error: true
+
+      - name: Publish @q9labs/chalk-react-native
+        run: cd packages/sdk-react-native && bun publish --access public
+        continue-on-error: true
+
+      - name: Publish @q9labs/chalk-ui
+        run: cd packages/ui && bun publish --access public
+        continue-on-error: true

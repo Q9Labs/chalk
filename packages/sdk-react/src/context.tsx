@@ -8,7 +8,7 @@ import {
 	type Room,
 	type RoomConfig,
 	type RoomStatus,
-} from "@chalk/core";
+} from "@q9labs/chalk-core";
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import {

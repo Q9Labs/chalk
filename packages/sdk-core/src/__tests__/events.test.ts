@@ -1,6 +1,6 @@
 /**
  * Tests for EventEmitter class
- * @module @chalk/core/__tests__/events
+ * @module @q9labs/chalk-core/__tests__/events
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";

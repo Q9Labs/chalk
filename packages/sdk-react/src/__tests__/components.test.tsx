@@ -1,10 +1,10 @@
 /**
  * Tests for React components
- * @module @chalk/react/__tests__/components
+ * @module @q9labs/chalk-react/__tests__/components
  */
 
 import { describe, expect, it } from "bun:test";
-import type { Participant } from "@chalk/core";
+import type { Participant } from "@q9labs/chalk-core";
 import type { VideoTileProps } from "../components/VideoTile.tsx";
 
 describe("Component props and types", () => {

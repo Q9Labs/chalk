@@ -2,7 +2,7 @@
  * useDevices hook - List and select media devices
  */
 
-import type { MediaDevice } from "@chalk/core";
+import type { MediaDevice } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../context.tsx";
 

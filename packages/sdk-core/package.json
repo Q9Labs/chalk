@@ -1,10 +1,13 @@
 {
-	"name": "@chalk/core",
+	"name": "@q9labs/chalk-core",
 	"version": "0.0.1",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
+ "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
 	"exports": {
 		".": {
 			"import": "./dist/index.js",

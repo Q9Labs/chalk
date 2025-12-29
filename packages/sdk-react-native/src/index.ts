@@ -1,16 +1,16 @@
 /**
- * @chalk/react-native - React Native SDK for Chalk video conferencing
+ * @q9labs/chalk-react-native - React Native SDK for Chalk video conferencing
  *
  * This package provides React Native bindings for the Chalk video conferencing platform,
  * built on Cloudflare RealtimeKit and react-native-webrtc.
  *
  * @packageDocumentation
- * @module @chalk/react-native
+ * @module @q9labs/chalk-react-native
  *
  * @example
  * ```tsx
- * import { ChalkProvider, useRoom, useParticipants, useMedia } from '@chalk/react-native';
- * import { VideoView, AudioSession } from '@chalk/react-native/components';
+ * import { ChalkProvider, useRoom, useParticipants, useMedia } from '@q9labs/chalk-react-native';
+ * import { VideoView, AudioSession } from '@q9labs/chalk-react-native/components';
  *
  * export default function App() {
  *   return (
@@ -59,9 +59,9 @@ export type {
 	RoomStatus,
 	ScreenShareOptions,
 	TrackKind,
-} from "@chalk/core";
+} from "@q9labs/chalk-core";
 // Re-export error codes (value export also exports the type)
-export { ChalkErrorCode } from "@chalk/core";
+export { ChalkErrorCode } from "@q9labs/chalk-core";
 // Provider and hooks
 export {
 	ChalkProvider,
@@ -79,11 +79,14 @@ export {
 // Hooks
 export {
 	type AudioRoute,
+	type PermissionsState,
+	type PermissionStatus,
 	type UseAudioRoutingResult,
 	type UseChatResult,
 	type UseDevicesResult,
 	type UseMediaResult,
 	type UseParticipantsResult,
+	type UsePermissionsResult,
 	type UseRecordingResult,
 	type UseRoomResult,
 	type UseScreenShareResult,
@@ -92,6 +95,7 @@ export {
 	useDevices,
 	useMedia,
 	useParticipants,
+	usePermissions,
 	useRecording,
 	useRoom,
 	useScreenShare,

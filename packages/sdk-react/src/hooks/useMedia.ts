@@ -3,7 +3,7 @@
  * Works with Chalk Room which wraps RealtimeKit internally
  */
 
-import type { ScreenShareOptions } from "@chalk/core";
+import type { ScreenShareOptions } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../context.tsx";
 

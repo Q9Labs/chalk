@@ -16,10 +16,10 @@
 		"baseUrl": ".",
 		"paths": {
 			"@/*": ["./src/*"],
-			"@chalk/core": ["../../packages/sdk-core/src/index.ts"],
-			"@chalk/react": ["../../packages/sdk-react/src/index.ts"],
-			"@chalk/react-native": ["../../packages/sdk-react-native/src/index.ts"],
-			"@chalk/ui": ["../../packages/ui/src/index.ts"]
+			"@q9labs/chalk-core": ["../../packages/sdk-core/src/index.ts"],
+			"@q9labs/chalk-react": ["../../packages/sdk-react/src/index.ts"],
+			"@q9labs/chalk-react-native": ["../../packages/sdk-react-native/src/index.ts"],
+			"@q9labs/chalk-ui": ["../../packages/ui/src/index.ts"]
 		}
 	}
 }

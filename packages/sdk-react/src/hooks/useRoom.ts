@@ -2,7 +2,7 @@
  * useRoom hook - Access current room state
  */
 
-import type { Room, RoomInfo, RoomStatus } from "@chalk/core";
+import type { Room, RoomInfo, RoomStatus } from "@q9labs/chalk-core";
 import { useChalk } from "../context.tsx";
 
 export interface UseRoomResult {

@@ -2,7 +2,7 @@
  * useChat hook - Chat functionality
  */
 
-import type { ChatMessage } from "@chalk/core";
+import type { ChatMessage } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../context.tsx";
 

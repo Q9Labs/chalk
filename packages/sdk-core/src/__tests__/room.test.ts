@@ -1,6 +1,6 @@
 /**
  * Tests for Room class
- * @module @chalk/core/__tests__/room
+ * @module @q9labs/chalk-core/__tests__/room
  */
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";

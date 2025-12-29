@@ -4,7 +4,7 @@ import {
 	useParticipants,
 	useRecording,
 	useRoom,
-} from "@chalk/react";
+} from "@q9labs/chalk-react";
 import { useState } from "react";
 import { ControlBar } from "./ControlBar";
 import { UsersIcon } from "./icons";

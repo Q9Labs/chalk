@@ -126,6 +126,52 @@ const {
 } = useRecording();
 ```
 
+#### usePermissions()
+Manage runtime permissions for camera and microphone.
+
+```tsx
+const {
+  permissions,           // { camera, microphone, notifications, bluetooth }
+  hasRequiredPermissions, // true if camera + mic granted
+  isChecking,
+  requestPermissions,    // Request camera + mic
+  openSettings,          // Open device settings
+  showPermissionDeniedAlert
+} = usePermissions();
+
+// Pre-call permission check
+useEffect(() => {
+  if (!hasRequiredPermissions) {
+    requestPermissions();
+  }
+}, [hasRequiredPermissions, requestPermissions]);
+```
+
+#### useScreenShare()
+Control screen sharing (requires native setup - see [SETUP.md](./SETUP.md)).
+
+```tsx
+const {
+  isScreenSharing,
+  startScreenShare,
+  stopScreenShare,
+  error
+} = useScreenShare();
+```
+
+#### useAudioRouting()
+Control audio output routing (speaker, earpiece, Bluetooth).
+
+```tsx
+const {
+  currentRoute,       // 'speaker' | 'earpiece' | 'bluetooth' | 'headphones'
+  availableRoutes,
+  setRoute,
+  isSpeakerOn,
+  toggleSpeaker
+} = useAudioRouting();
+```
+
 ### Components
 
 #### VideoView
@@ -175,26 +221,39 @@ const { isBluetoothAvailable, isBluetoothConnected } = useBluetoothAudio();
 
 ## Platform-Specific Setup
 
-### iOS
+**For complete setup instructions including background audio, screen sharing, and recording permissions, see [SETUP.md](./SETUP.md).**
 
-Requires camera and microphone permissions in `Info.plist`:
+### Quick Start - Basic Permissions
+
+#### iOS
+
+Add to `Info.plist`:
 
 ```xml
 <key>NSCameraUsageDescription</key>
-<string>We need camera access to video conference</string>
+<string>$(PRODUCT_NAME) needs camera access for video calls</string>
 <key>NSMicrophoneUsageDescription</key>
-<string>We need microphone access to video conference</string>
+<string>$(PRODUCT_NAME) needs microphone access for voice calls</string>
 ```
 
-### Android
+#### Android
 
-Requires permissions in `AndroidManifest.xml`:
+Add to `AndroidManifest.xml`:
 
 ```xml
 <uses-permission android:name="android.permission.CAMERA" />
 <uses-permission android:name="android.permission.RECORD_AUDIO" />
 <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 ```
+
+### Advanced Features
+
+See [SETUP.md](./SETUP.md) for:
+- **Background Audio**: Keep calls active when app is backgrounded
+- **Screen Sharing**: iOS Broadcast Extension + Android MediaProjection setup
+- **Recording**: Local recording permissions
+- **CallKit**: Native iOS call UI integration
+- **Foreground Service**: Android notification for ongoing calls
 
 ## Development
 

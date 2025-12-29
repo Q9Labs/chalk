@@ -2,7 +2,7 @@
  * Core types for Chalk SDK
  *
  * @packageDocumentation
- * @module @chalk/core
+ * @module @q9labs/chalk-core
  */
 
 // ============================================================================

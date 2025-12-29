@@ -1,6 +1,6 @@
 /**
  * Tests for Chalk SDK types
- * @module @chalk/core/__tests__/types
+ * @module @q9labs/chalk-core/__tests__/types
  */
 
 import { describe, expect, it } from "bun:test";

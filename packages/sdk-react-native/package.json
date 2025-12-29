@@ -1,10 +1,13 @@
 {
-	"name": "@chalk/react-native",
+	"name": "@q9labs/chalk-react-native",
 	"version": "0.0.1",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
+ "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
 	"exports": {
 		".": {
 			"import": "./dist/index.js",
@@ -24,7 +27,7 @@
 		"clean": "rm -rf dist"
 	},
 	"dependencies": {
-		"@chalk/core": "workspace:*"
+		"@q9labs/chalk-core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",

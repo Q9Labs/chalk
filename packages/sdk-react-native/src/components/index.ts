@@ -1,7 +1,7 @@
 /**
  * Components for React Native SDK
  *
- * @module @chalk/react-native/components
+ * @module @q9labs/chalk-react-native/components
  * @public
  */
 

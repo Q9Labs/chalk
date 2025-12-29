@@ -50,7 +50,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 	Textarea,
-} from "@chalk/ui";
+} from "@q9labs/chalk-ui";
 import {
 	BluetoothIcon,
 	CodeIcon,

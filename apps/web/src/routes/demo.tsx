@@ -1,4 +1,4 @@
-import { ChalkProvider, useChalk } from "@chalk/react";
+import { ChalkProvider, useChalk } from "@q9labs/chalk-react";
 import {
 	Button,
 	Card,
@@ -10,7 +10,7 @@ import {
 	FieldGroup,
 	FieldLabel,
 	Input,
-} from "@chalk/ui";
+} from "@q9labs/chalk-ui";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Copy, Mic, Monitor, Video } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";

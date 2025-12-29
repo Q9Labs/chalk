@@ -2,7 +2,7 @@
  * useRoom hook - Access current room state in React Native
  */
 
-import type { Room, RoomInfo, RoomStatus } from "@chalk/core";
+import type { Room, RoomInfo, RoomStatus } from "@q9labs/chalk-core";
 import { useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
 

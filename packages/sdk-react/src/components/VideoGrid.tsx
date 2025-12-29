@@ -2,7 +2,7 @@
  * VideoGrid component - Displays participants in an auto-layout grid
  */
 
-import type { Participant } from "@chalk/core";
+import type { Participant } from "@q9labs/chalk-core";
 import React, { type CSSProperties, useMemo } from "react";
 import { VideoTile, type VideoTileProps } from "./VideoTile.tsx";
 

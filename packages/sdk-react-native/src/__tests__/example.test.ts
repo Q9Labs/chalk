@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-describe("@chalk/react-native SDK", () => {
+describe("@q9labs/chalk-react-native SDK", () => {
 	it("module loads without errors", () => {
 		// This test verifies the module can be imported without dependency issues
 		// Full integration tests require react-native environment

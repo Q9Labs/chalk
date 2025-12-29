@@ -1,6 +1,6 @@
 /**
  * Tests for React hooks
- * @module @chalk/react/__tests__/hooks
+ * @module @q9labs/chalk-react/__tests__/hooks
  */
 
 import { describe, expect, it } from "bun:test";
@@ -9,7 +9,7 @@ import type {
 	MediaDevice,
 	Participant,
 	RoomStatus,
-} from "@chalk/core";
+} from "@q9labs/chalk-core";
 import type {
 	UseChatResult,
 	UseDevicesResult,
