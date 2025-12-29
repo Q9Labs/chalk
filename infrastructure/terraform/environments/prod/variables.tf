@@ -13,6 +13,7 @@ variable "alert_emails" {
 variable "cors_allowed_origins" {
   description = "CORS allowed origins"
   type        = list(string)
+  default     = ["https://chalk.q9labs.com", "https://app.chalk.q9labs.com"]
 }
 
 variable "api_domain_name" {
@@ -31,12 +32,14 @@ variable "cloudflare_app_id" {
   description = "Cloudflare RealtimeKit App ID"
   type        = string
   sensitive   = true
+  default     = "" # Set via -var or TF_VAR_cloudflare_app_id
 }
 
 variable "cloudflare_app_secret" {
   description = "Cloudflare RealtimeKit App Secret"
   type        = string
   sensitive   = true
+  default     = "" # Set via -var or TF_VAR_cloudflare_app_secret
 }
 
 variable "cloudflare_account_id" {
