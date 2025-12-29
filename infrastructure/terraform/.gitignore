@@ -23,4 +23,6 @@ tfplan
 Thumbs.db
 *.pem
 *.key
-secrets/
+# Note: Don't use 'secrets/' here as it would block modules/secrets/
+# Instead, just gitignore sensitive files directly:
+*.tfvars.secret

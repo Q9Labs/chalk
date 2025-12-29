@@ -48,13 +48,13 @@ func NewJWTService(config JWTConfig) *JWTService {
 // jwtClaims wraps our claims for jwt-go
 type jwtClaims struct {
 	jwt.RegisteredClaims
-	TenantID    uuid.UUID         `json:"tenant_id"`
-	RoomID      uuid.UUID         `json:"room_id,omitempty"`
-	DisplayName string            `json:"display_name,omitempty"`
-	Role        string            `json:"role,omitempty"`
-	Permissions auth.Permissions  `json:"permissions,omitempty"`
-	CFAuthToken string            `json:"cf_auth_token,omitempty"`
-	TokenType   string            `json:"type"` // access or refresh
+	TenantID    uuid.UUID        `json:"tenant_id"`
+	RoomID      uuid.UUID        `json:"room_id,omitempty"`
+	DisplayName string           `json:"display_name,omitempty"`
+	Role        string           `json:"role,omitempty"`
+	Permissions auth.Permissions `json:"permissions,omitempty"`
+	CFAuthToken string           `json:"cf_auth_token,omitempty"`
+	TokenType   string           `json:"type"` // access or refresh
 }
 
 // GenerateAccessToken creates a new access token
@@ -185,6 +185,6 @@ func (s *JWTService) ValidateRefreshToken(tokenString string) (uuid.UUID, string
 
 func generateTokenID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	_, _ = rand.Read(b) // Error extremely unlikely; ignore for token ID generation
 	return base64.RawURLEncoding.EncodeToString(b)
 }

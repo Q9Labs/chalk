@@ -41,7 +41,6 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 		return nil, fmt.Errorf("R2 bucket name is required")
 	}
 
-	// Create AWS config with static credentials
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion("auto"),
 		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
@@ -55,21 +54,11 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	// Custom endpoint for R2
-	awsCfg.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(
-		func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			if service == "s3" {
-				return aws.Endpoint{
-					URL:           fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID),
-					SigningRegion: "auto",
-				}, nil
-			}
-			return aws.Endpoint{}, fmt.Errorf("unknown service: %s", service)
-		},
-	)
-
-	// Create S3 client (R2 uses S3-compatible API)
-	client := s3.NewFromConfig(awsCfg)
+	r2Endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID)
+	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(r2Endpoint)
+		o.Region = "auto"
+	})
 
 	return &R2Client{
 		client:    client,
