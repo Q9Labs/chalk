@@ -79,7 +79,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
-  count = var.alb_arn != "" && var.enable_alb_alarms ? 1 : 0
+  count = var.enable_alb_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-alb-5xx-errors"
   comparison_operator = "GreaterThanThreshold"
@@ -102,7 +102,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_latency" {
-  count = var.alb_arn != "" && var.enable_alb_alarms ? 1 : 0
+  count = var.enable_alb_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-alb-latency-high"
   comparison_operator = "GreaterThanThreshold"
@@ -168,7 +168,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
-  count = var.redis_replication_group_id != "" && var.enable_redis_alarms ? 1 : 0
+  count = var.enable_redis_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-redis-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -190,7 +190,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_memory" {
-  count = var.redis_replication_group_id != "" && var.enable_redis_alarms ? 1 : 0
+  count = var.enable_redis_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-redis-memory-high"
   comparison_operator = "GreaterThanThreshold"
