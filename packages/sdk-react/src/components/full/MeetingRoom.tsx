@@ -178,7 +178,10 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
   const showScreenShare = !!screenSharer;
   
   const allParticipants = useMemo(() => {
-    return [localParticipant, ...participants];
+    // Filter out localParticipant from participants to avoid duplicates
+    // (useParticipants already includes local in participants array)
+    const others = participants.filter(p => p.id !== localParticipant?.id);
+    return localParticipant ? [localParticipant, ...others] : participants;
   }, [localParticipant, participants]);
 
   const handleTourComplete = () => {

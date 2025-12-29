@@ -70,9 +70,10 @@ func (h *DemoHandler) Join(c *gin.Context) {
 	}
 
 	output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
-		RoomID:      dbRoom.ID,
-		DisplayName: req.DisplayName,
-		Role:        "participant",
+		RoomID:         dbRoom.ID,
+		DisplayName:    req.DisplayName,
+		ExternalUserID: uuid.New().String(),
+		Role:           "participant",
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "failed to join room: " + err.Error()})

@@ -1,13 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { 
-  MeetingRoom, 
-  useRoom, 
-  useParticipants, 
-  useMedia, 
-  useChat, 
-  useRecording, 
-  useTranscription, 
-  useTour, 
+import {
+  useRoom,
+  useParticipants,
+  useMedia,
+  useChat,
+  useRecording,
+  useTranscription,
+  useTour,
   useSoundEffects,
   useKeyboardShortcuts,
   createMeetingShortcuts,
@@ -26,27 +25,27 @@ export const Route = createFileRoute("/room/$roomId")({
 function RoomPage() {
   const { roomId } = Route.useParams() as { roomId: string };
   const navigate = useNavigate();
-  
+
   const { client, joinRoom, leaveRoom, connectionStatus } = useChalk();
   const { isConnected } = useRoom();
   const { participants, localParticipant } = useParticipants();
-  const { 
-    isVideoEnabled, 
-    isAudioEnabled, 
-    isScreenSharing, 
-    toggleVideo, 
-    toggleAudio, 
+  const {
+    isVideoEnabled,
+    isAudioEnabled,
+    isScreenSharing,
+    toggleVideo,
+    toggleAudio,
     startScreenShare,
     stopScreenShare
   } = useMedia();
-  
+
   const { messages, sendMessage } = useChat();
   const { isRecording, durationSeconds, startRecording, stopRecording } = useRecording();
   const { isTranscribing, transcripts, setEnabled: setTranscriptionEnabled } = useTranscription({ enabled: true });
-  
+
   useSoundEffects({ enabled: true });
   useAnnouncer({});
-  
+
   const tour = useTour({
     steps: DEFAULT_MEETING_TOUR_STEPS,
     onComplete: () => console.log("Tour completed"),
@@ -62,15 +61,15 @@ function RoomPage() {
     if (!client || joinAttempted.current || isConnected || hasJoined) {
       return;
     }
-    
+
     joinAttempted.current = true;
-    
+
     const init = async () => {
       try {
-        const displayName = sessionStorage.getItem('chalk_display_name') || "Demo User"; 
+        const displayName = sessionStorage.getItem('chalk_display_name') || "Demo User";
         const videoEnabled = sessionStorage.getItem('chalk_video_enabled') !== 'false';
         const audioEnabled = sessionStorage.getItem('chalk_audio_enabled') !== 'false';
-        
+
         await joinRoom(roomId, {
           displayName,
           video: videoEnabled,
@@ -81,7 +80,7 @@ function RoomPage() {
       } catch (err) {
         console.error("Failed to join:", err);
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        
+
         // Provide helpful error messages
         if (errorMessage.includes("403") || errorMessage.includes("Forbidden")) {
           setError("API demo mode is disabled. Set CHALK_ENABLE_DEMO=true in apps/api/.env and restart the API server.");
@@ -114,9 +113,9 @@ function RoomPage() {
 
   if (showEndScreen) {
     return (
-      <EndScreen 
+      <EndScreen
         roomName={roomId}
-        duration={durationSeconds} 
+        duration={durationSeconds}
         participantCount={participants.length}
         onRejoin={() => {
             setShowEndScreen(false);
@@ -167,35 +166,9 @@ function RoomPage() {
       </div>
     );
   }
-  
+
   return (
-    <MeetingRoom
-      roomName={roomId}
-      // @ts-expect-error - Types might slightly mismatch in dev
-      localParticipant={localParticipant}
-      // @ts-expect-error - Types might slightly mismatch in dev
-      participants={participants}
-      isMuted={!isAudioEnabled}
-      isVideoEnabled={isVideoEnabled}
-      isScreenSharing={isScreenSharing}
-      isRecording={isRecording}
-      recordingDuration={durationSeconds}
-      isTranscribing={isTranscribing}
-      transcripts={transcripts}
-      chatMessages={messages}
-      onSendMessage={sendMessage}
-      onToggleMute={toggleAudio}
-      onToggleVideo={toggleVideo}
-      onToggleScreenShare={() => isScreenSharing ? stopScreenShare() : startScreenShare()}
-      onToggleRecording={isRecording ? stopRecording : startRecording}
-      onToggleTranscription={() => setTranscriptionEnabled(!isTranscribing)}
-      onLeave={handleLeave}
-      // @ts-expect-error - Connection status string vs enum mismatch
-      connectionStatus={connectionStatus}
-      onRetryConnection={() => window.location.reload()}
-      enableTour={true}
-      showTourOnFirstVisit={true}
-      onTourComplete={tour.complete}
-    />
+
+
   );
 }

@@ -80,7 +80,7 @@ function RootComponent() {
 			}}
 			debug={true}
 		>
-			<div className={`min-h-screen bg-background text-foreground ${theme}`}>
+			<div className={`h-screen overflow-hidden bg-background text-foreground ${theme}`}>
 				<div className="fixed top-4 right-4 z-50">
 					<button
 						type="button"
