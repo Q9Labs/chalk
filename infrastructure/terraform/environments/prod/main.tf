@@ -166,6 +166,10 @@ module "waf" {
   http_api_arn = module.api_gateway.http_api_arn
   rate_limit   = 5000
 
+  # Use boolean flags to avoid count depending on unknown values at plan time
+  enable_alb_association      = true
+  enable_http_api_association = true
+
   log_retention_days = 90
 }
 

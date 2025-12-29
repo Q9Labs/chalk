@@ -15,10 +15,22 @@ variable "http_api_arn" {
   default     = null
 }
 
+variable "enable_http_api_association" {
+  description = "Enable WAF association with HTTP API Gateway (use instead of checking http_api_arn != null)"
+  type        = bool
+  default     = false
+}
+
 variable "alb_arn" {
   description = "ALB ARN to associate"
   type        = string
   default     = null
+}
+
+variable "enable_alb_association" {
+  description = "Enable WAF association with ALB (use instead of checking alb_arn != null)"
+  type        = bool
+  default     = false
 }
 
 variable "log_retention_days" {

@@ -142,9 +142,10 @@ module "api_gateway" {
 module "waf" {
   source = "../../modules/waf"
 
-  environment = local.environment
-  alb_arn     = module.ecs.alb_arn
-  rate_limit  = 2000
+  environment            = local.environment
+  alb_arn                = module.ecs.alb_arn
+  enable_alb_association = true
+  rate_limit             = 2000
 
   log_retention_days = 7
 }
