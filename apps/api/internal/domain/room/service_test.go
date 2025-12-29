@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
-	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/google/uuid"
 )
 
@@ -39,9 +39,9 @@ func (m *mockCloudflareClient) EndMeeting(ctx context.Context, meetingID string)
 
 type mockRoomState struct {
 	clearRoomFn         func(ctx context.Context, roomID uuid.UUID) error
-	getParticipantsFn   func(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]redis.ParticipantMetadata, error)
+	getParticipantsFn   func(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error)
 	setRecordingStateFn func(ctx context.Context, roomID uuid.UUID, isRecording bool, recordingID *uuid.UUID) error
-	getRecordingStateFn func(ctx context.Context, roomID uuid.UUID) (*redis.RecordingState, error)
+	getRecordingStateFn func(ctx context.Context, roomID uuid.UUID) (*domain.RecordingState, error)
 }
 
 func (m *mockRoomState) ClearRoom(ctx context.Context, roomID uuid.UUID) error {
@@ -51,11 +51,11 @@ func (m *mockRoomState) ClearRoom(ctx context.Context, roomID uuid.UUID) error {
 	return nil
 }
 
-func (m *mockRoomState) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]redis.ParticipantMetadata, error) {
+func (m *mockRoomState) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error) {
 	if m.getParticipantsFn != nil {
 		return m.getParticipantsFn(ctx, roomID)
 	}
-	return make(map[uuid.UUID]redis.ParticipantMetadata), nil
+	return make(map[uuid.UUID]domain.ParticipantMetadata), nil
 }
 
 func (m *mockRoomState) SetRecordingState(ctx context.Context, roomID uuid.UUID, isRecording bool, recordingID *uuid.UUID) error {
@@ -65,11 +65,11 @@ func (m *mockRoomState) SetRecordingState(ctx context.Context, roomID uuid.UUID,
 	return nil
 }
 
-func (m *mockRoomState) GetRecordingState(ctx context.Context, roomID uuid.UUID) (*redis.RecordingState, error) {
+func (m *mockRoomState) GetRecordingState(ctx context.Context, roomID uuid.UUID) (*domain.RecordingState, error) {
 	if m.getRecordingStateFn != nil {
 		return m.getRecordingStateFn(ctx, roomID)
 	}
-	return &redis.RecordingState{IsRecording: false}, nil
+	return &domain.RecordingState{IsRecording: false}, nil
 }
 
 type mockHub struct {
@@ -193,8 +193,8 @@ func TestGetActiveParticipants_FromHub(t *testing.T) {
 func TestGetActiveParticipants_FromRoomState(t *testing.T) {
 	participantID := uuid.New()
 	roomState := &mockRoomState{
-		getParticipantsFn: func(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]redis.ParticipantMetadata, error) {
-			return map[uuid.UUID]redis.ParticipantMetadata{
+		getParticipantsFn: func(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error) {
+			return map[uuid.UUID]domain.ParticipantMetadata{
 				participantID: {DisplayName: "Test"},
 			}, nil
 		},

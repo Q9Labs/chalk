@@ -3,6 +3,9 @@ package http
 import (
 	"context"
 
+	"github.com/Q9Labs/chalk/internal/domain/participant"
+	"github.com/Q9Labs/chalk/internal/domain/recording"
+	"github.com/Q9Labs/chalk/internal/domain/room"
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
@@ -23,48 +26,58 @@ type Router struct {
 	apiKeyService *auth.APIKeyService
 	cfClient      *cloudflare.Client
 	redisClient   *redis.Client
+	roomState     *redis.RoomState
 	wsHub         *websocket.Hub
 	storageR2     storage.StorageClient
 	storageS3     storage.StorageClient
+
+	roomService        *room.Service
+	participantService *participant.Service
+	recordingService   *recording.Service
 }
 
 type RouterConfig struct {
-	Pool       *postgres.Pool
-	CFClient   *cloudflare.Client
+	Pool        *postgres.Pool
+	CFClient    *cloudflare.Client
 	RedisClient *redis.Client
-	StorageR2  storage.StorageClient
-	StorageS3  storage.StorageClient
+	StorageR2   storage.StorageClient
+	StorageS3   storage.StorageClient
 }
 
 func NewRouter(cfg RouterConfig) *Router {
 	engine := gin.Default()
 
-	// Add CORS middleware
 	engine.Use(middleware.CORS())
 
 	queries := db.New(cfg.Pool)
 
-	// Initialize auth services
 	jwtService := auth.NewJWTService(auth.DefaultJWTConfig())
 	apiKeyService := auth.NewAPIKeyService()
 
-	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(cfg.RedisClient)
-
-	// Start hub in background
 	go wsHub.Run(context.Background())
 
+	roomState := redis.NewRoomState(cfg.RedisClient)
+
+	roomService := room.NewService(queries, cfg.CFClient, roomState, wsHub)
+	participantService := participant.NewService(queries, cfg.CFClient, roomState, jwtService, wsHub)
+	recordingService := recording.NewService(queries, cfg.CFClient, cfg.StorageR2, cfg.StorageS3, roomState, wsHub)
+
 	r := &Router{
-		engine:        engine,
-		pool:          cfg.Pool,
-		queries:       queries,
-		jwtService:    jwtService,
-		apiKeyService: apiKeyService,
-		cfClient:      cfg.CFClient,
-		redisClient:   cfg.RedisClient,
-		wsHub:         wsHub,
-		storageR2:     cfg.StorageR2,
-		storageS3:     cfg.StorageS3,
+		engine:             engine,
+		pool:               cfg.Pool,
+		queries:            queries,
+		jwtService:         jwtService,
+		apiKeyService:      apiKeyService,
+		cfClient:           cfg.CFClient,
+		redisClient:        cfg.RedisClient,
+		roomState:          roomState,
+		wsHub:              wsHub,
+		storageR2:          cfg.StorageR2,
+		storageS3:          cfg.StorageS3,
+		roomService:        roomService,
+		participantService: participantService,
+		recordingService:   recordingService,
 	}
 
 	r.setupRoutes()
@@ -72,38 +85,29 @@ func NewRouter(cfg RouterConfig) *Router {
 }
 
 func (r *Router) setupRoutes() {
-	// Health check (no auth)
 	health := handlers.NewHealthHandler(r.pool)
 	r.engine.GET("/health", health.Check)
 
-	// WebSocket upgrade route (JWT required)
 	wsHandler := handlers.NewWebSocketHandler(r.jwtService, r.wsHub)
 	r.engine.GET("/ws", wsHandler.HandleWebSocket)
 
-	// Initialize middleware
 	authMw := middleware.NewAuthMiddleware(r.jwtService)
 	apiKeyMw := middleware.NewAPIKeyMiddleware(r.apiKeyService, r.queries)
 
-	// API v1 routes
 	v1 := r.engine.Group("/api/v1")
 	{
-		// Auth routes (no auth required)
 		authHandler := handlers.NewAuthHandler(r.queries, r.jwtService, r.apiKeyService)
 		v1.POST("/auth/token", authHandler.Token)
 		v1.POST("/auth/refresh", authHandler.Refresh)
 
-		// Demo routes (no auth required - for testing only)
-		demoHandler := handlers.NewDemoHandler(r.queries, r.cfClient, authHandler)
+		demoHandler := handlers.NewDemoHandler(r.queries, r.roomService, r.participantService)
 		v1.POST("/demo/join", demoHandler.Join)
 
-		// Tenant routes - requires API key auth
 		tenants := handlers.NewTenantHandler(r.queries, r.apiKeyService)
 		tenantsGroup := v1.Group("/tenants")
 		{
-			// Public route to create tenant (returns API key)
 			tenantsGroup.POST("", tenants.Create)
 
-			// Protected routes
 			tenantsGroup.Use(apiKeyMw.RequireAPIKey())
 			tenantsGroup.GET("/:id", tenants.Get)
 			tenantsGroup.PATCH("/:id", tenants.Update)
@@ -111,8 +115,7 @@ func (r *Router) setupRoutes() {
 			tenantsGroup.POST("/:id/rotate-key", tenants.RotateAPIKey)
 		}
 
-		// Room routes - requires JWT auth
-		rooms := handlers.NewRoomHandler(r.queries, r.cfClient)
+		rooms := handlers.NewRoomHandler(r.roomService)
 		roomsGroup := v1.Group("/rooms")
 		roomsGroup.Use(authMw.RequireJWT())
 		{
@@ -123,25 +126,22 @@ func (r *Router) setupRoutes() {
 			roomsGroup.DELETE("/:id", rooms.Delete)
 			roomsGroup.POST("/:id/end", rooms.End)
 
-			// Participant routes
-			participants := handlers.NewParticipantHandler(r.queries, r.cfClient, authHandler)
+			participants := handlers.NewParticipantHandler(r.participantService)
 			roomsGroup.POST("/:id/participants", participants.Add)
 			roomsGroup.GET("/:id/participants", participants.List)
 			roomsGroup.DELETE("/:id/participants/:pid", participants.Remove)
 			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
 
-			// Recording routes
-			recordings := handlers.NewRecordingHandler(r.queries, r.cfClient, r.storageR2, r.storageS3)
+			recordings := handlers.NewRecordingHandler(r.recordingService)
 			roomsGroup.POST("/:id/recordings/start", recordings.Start)
 			roomsGroup.POST("/:id/recordings/stop", recordings.Stop)
 			roomsGroup.POST("/:id/recordings/:rid/archive", recordings.Archive)
 		}
 
-		// Recording list/get routes
 		recordingsGroup := v1.Group("/recordings")
 		recordingsGroup.Use(authMw.RequireJWT())
 		{
-			recordings := handlers.NewRecordingHandler(r.queries, r.cfClient, r.storageR2, r.storageS3)
+			recordings := handlers.NewRecordingHandler(r.recordingService)
 			recordingsGroup.GET("", recordings.List)
 			recordingsGroup.GET("/:id", recordings.Get)
 			recordingsGroup.GET("/:id/download", recordings.Download)
@@ -149,8 +149,7 @@ func (r *Router) setupRoutes() {
 			recordingsGroup.DELETE("/:id", recordings.Delete)
 		}
 
-		// Webhook routes (no auth required)
-		webhooks := handlers.NewWebhookHandler(r.queries, r.storageR2)
+		webhooks := handlers.NewWebhookHandler(r.recordingService)
 		v1.POST("/webhooks/cloudflare/recording", webhooks.HandleRecordingReady)
 	}
 }

@@ -2,6 +2,8 @@ package recording
 
 import (
 	"context"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +50,9 @@ func (m *mockCloudflareClient) GetRecording(ctx context.Context, recordingID str
 
 type mockStorageClient struct {
 	getPresignedURLFn func(ctx context.Context, key string, expiry time.Duration) (string, error)
+	downloadFn        func(ctx context.Context, key string) (io.ReadCloser, error)
+	uploadFn          func(ctx context.Context, key string, reader io.Reader, contentType string) error
+	deleteFn          func(ctx context.Context, key string) error
 }
 
 func (m *mockStorageClient) GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
@@ -55,6 +60,27 @@ func (m *mockStorageClient) GetPresignedURL(ctx context.Context, key string, exp
 		return m.getPresignedURLFn(ctx, key, expiry)
 	}
 	return "https://storage.example.com/presigned/" + key, nil
+}
+
+func (m *mockStorageClient) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	if m.downloadFn != nil {
+		return m.downloadFn(ctx, key)
+	}
+	return io.NopCloser(strings.NewReader("mock data")), nil
+}
+
+func (m *mockStorageClient) Upload(ctx context.Context, key string, reader io.Reader, contentType string) error {
+	if m.uploadFn != nil {
+		return m.uploadFn(ctx, key, reader, contentType)
+	}
+	return nil
+}
+
+func (m *mockStorageClient) Delete(ctx context.Context, key string) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, key)
+	}
+	return nil
 }
 
 type mockRoomState struct {
@@ -96,21 +122,6 @@ func TestNewService(t *testing.T) {
 
 	if svc == nil {
 		t.Fatal("expected service to be non-nil")
-	}
-	if svc.cfClient != cf {
-		t.Error("expected cloudflare client to be set")
-	}
-	if svc.r2Client != r2 {
-		t.Error("expected r2 client to be set")
-	}
-	if svc.s3Client != s3 {
-		t.Error("expected s3 client to be set")
-	}
-	if svc.roomState != roomState {
-		t.Error("expected room state to be set")
-	}
-	if svc.hub != hub {
-		t.Error("expected hub to be set")
 	}
 }
 

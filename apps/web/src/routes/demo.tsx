@@ -14,7 +14,6 @@ import {
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Copy, Mic, Monitor, Video } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { ConferenceRoom } from "../components/conference";
 
 export const Route = createFileRoute("/demo")({ component: DemoPage });
 
@@ -29,7 +28,7 @@ function DemoPage() {
 }
 
 function DemoContent() {
-	const { room, isConnected, joinRoom, leaveRoom } = useChalk();
+	const { joinRoom, } = useChalk();
 	const [displayName, setDisplayName] = useState("");
 	const [roomId, setRoomId] = useState("demo-room-001");
 	const [isJoining, setIsJoining] = useState(false);
@@ -57,13 +56,6 @@ function DemoContent() {
 		}
 	}, [displayName, roomId, joinRoom]);
 
-	const handleLeave = useCallback(() => {
-		leaveRoom();
-	}, [leaveRoom]);
-
-	if (isConnected && room) {
-		return <ConferenceRoom onLeave={handleLeave} roomId={roomId} />;
-	}
 
 	return (
 		<div className="flex min-h-screen flex-col bg-muted/30">

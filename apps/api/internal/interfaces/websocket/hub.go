@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/google/uuid"
 	redislib "github.com/redis/go-redis/v9"
 )
 
-// RedisInterface defines the interface for Redis operations
 type RedisInterface interface {
 	Close() error
 	Publish(ctx context.Context, channel string, message []byte) error
@@ -22,18 +22,10 @@ type RedisInterface interface {
 	Exists(ctx context.Context, keys ...string) (int64, error)
 }
 
-// ParticipantMetadata contains display and role information for a participant
-type ParticipantMetadata struct {
-	DisplayName string    `json:"display_name"`
-	Role        string    `json:"role"`
-	JoinedAt    time.Time `json:"joined_at"`
-}
-
-// Hub manages all WebSocket connections
 type Hub struct {
 	clients         map[uuid.UUID]*Client
 	rooms           map[uuid.UUID]map[uuid.UUID]*Client
-	participantMeta map[uuid.UUID]ParticipantMetadata
+	participantMeta map[uuid.UUID]domain.ParticipantMetadata
 	roomRecording   map[uuid.UUID]*RoomRecordingState
 
 	register   chan *Client
@@ -54,12 +46,11 @@ type RoomRecordingState struct {
 	RecordingID *uuid.UUID
 }
 
-// NewHub creates a new WebSocket hub
 func NewHub(redisClient RedisInterface) *Hub {
 	return &Hub{
 		clients:         make(map[uuid.UUID]*Client),
 		rooms:           make(map[uuid.UUID]map[uuid.UUID]*Client),
-		participantMeta: make(map[uuid.UUID]ParticipantMetadata),
+		participantMeta: make(map[uuid.UUID]domain.ParticipantMetadata),
 		roomRecording:   make(map[uuid.UUID]*RoomRecordingState),
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
@@ -204,21 +195,18 @@ func (h *Hub) GetParticipantsInRoom(roomID uuid.UUID) []uuid.UUID {
 	return participants
 }
 
-// SetParticipantMetadata stores metadata for a participant
-func (h *Hub) SetParticipantMetadata(participantID uuid.UUID, meta ParticipantMetadata) {
+func (h *Hub) SetParticipantMetadata(participantID uuid.UUID, meta domain.ParticipantMetadata) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.participantMeta[participantID] = meta
 }
 
-// GetParticipantMetadata retrieves metadata for a participant
-func (h *Hub) GetParticipantMetadata(participantID uuid.UUID) ParticipantMetadata {
+func (h *Hub) GetParticipantMetadata(participantID uuid.UUID) domain.ParticipantMetadata {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.participantMeta[participantID]
 }
 
-// RemoveParticipantMetadata removes metadata for a participant
 func (h *Hub) RemoveParticipantMetadata(participantID uuid.UUID) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

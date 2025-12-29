@@ -1,32 +1,29 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
-	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
+	"github.com/Q9Labs/chalk/internal/domain/participant"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type ParticipantHandler struct {
-	queries     *db.Queries
-	cfClient    *cloudflare.Client
-	authHandler *AuthHandler
+	participantService *participant.Service
 }
 
-func NewParticipantHandler(queries *db.Queries, cfClient *cloudflare.Client, authHandler *AuthHandler) *ParticipantHandler {
+func NewParticipantHandler(participantService *participant.Service) *ParticipantHandler {
 	return &ParticipantHandler{
-		queries:     queries,
-		cfClient:    cfClient,
-		authHandler: authHandler,
+		participantService: participantService,
 	}
 }
 
 type AddParticipantRequest struct {
 	ExternalUserID string `json:"external_user_id"`
 	DisplayName    string `json:"display_name" binding:"required"`
-	Role           string `json:"role"` // host or participant
+	Role           string `json:"role"`
 }
 
 type AddParticipantResponse struct {
@@ -35,10 +32,9 @@ type AddParticipantResponse struct {
 	RefreshToken string         `json:"refresh_token"`
 	TokenType    string         `json:"token_type"`
 	ExpiresIn    int            `json:"expires_in"`
-	AuthToken    string         `json:"auth_token"` // Cloudflare authToken for SDK initialization
+	AuthToken    string         `json:"auth_token"`
 }
 
-// POST /api/v1/rooms/:id/participants
 func (h *ParticipantHandler) Add(c *gin.Context) {
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -52,84 +48,33 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
-	// Get room to find tenant_id and Cloudflare meeting ID
-	room, err := h.queries.GetRoom(c.Request.Context(), roomID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
-	}
-
-	// Check room is active
-	if room.Status != "active" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "room is not active"})
-		return
-	}
-
-	// Map role to Cloudflare preset
-	role := "participant"
-	if req.Role == "host" {
-		role = "host"
-	}
-	presetName := cloudflare.RoleToPreset(role)
-
-	// Add participant to Cloudflare RealtimeKit
-	cfParticipant, err := h.cfClient.AddParticipant(c.Request.Context(), room.CloudflareMeetingID, cloudflare.AddParticipantRequest{
-		Name:             req.DisplayName,
-		PresetName:       presetName,
-		ClientSpecificID: req.ExternalUserID,
+	output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
+		RoomID:         roomID,
+		DisplayName:    req.DisplayName,
+		ExternalUserID: req.ExternalUserID,
+		Role:           req.Role,
 	})
 	if err != nil {
+		if errors.Is(err, participant.ErrRoomNotAvailable) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "room is not active"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add participant: " + err.Error()})
 		return
 	}
 
-	var externalUserID *string
-	if req.ExternalUserID != "" {
-		externalUserID = &req.ExternalUserID
-	}
-
-	var displayName *string
-	if req.DisplayName != "" {
-		displayName = &req.DisplayName
-	}
-
-	participant, err := h.queries.CreateParticipant(c.Request.Context(), db.CreateParticipantParams{
-		RoomID:                  roomID,
-		CloudflareParticipantID: cfParticipant.ID,
-		ExternalUserID:          externalUserID,
-		DisplayName:             displayName,
-		Role:                    role,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Generate JWT for participant (wraps Cloudflare auth token)
-	tokenPair, err := h.authHandler.GenerateParticipantToken(
-		room.TenantID,
-		roomID,
-		participant.ID,
-		req.DisplayName,
-		role,
-		cfParticipant.Token,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
-		return
-	}
+	p, _ := h.participantService.GetParticipant(c.Request.Context(), output.ParticipantID)
 
 	c.JSON(http.StatusCreated, AddParticipantResponse{
-		Participant:  participant,
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		TokenType:    tokenPair.TokenType,
-		ExpiresIn:    tokenPair.ExpiresIn,
-		AuthToken:    cfParticipant.Token, // Direct Cloudflare token for SDK initialization
+		Participant:  *p,
+		AccessToken:  output.TokenPair.AccessToken,
+		RefreshToken: output.TokenPair.RefreshToken,
+		TokenType:    output.TokenPair.TokenType,
+		ExpiresIn:    output.TokenPair.ExpiresIn,
+		AuthToken:    output.CFAuthToken,
 	})
 }
 
-// GET /api/v1/rooms/:id/participants
 func (h *ParticipantHandler) List(c *gin.Context) {
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -141,9 +86,9 @@ func (h *ParticipantHandler) List(c *gin.Context) {
 
 	var participants interface{}
 	if activeOnly {
-		participants, err = h.queries.ListActiveParticipantsByRoom(c.Request.Context(), roomID)
+		participants, err = h.participantService.ListActiveParticipantsByRoom(c.Request.Context(), roomID)
 	} else {
-		participants, err = h.queries.ListParticipantsByRoom(c.Request.Context(), roomID)
+		participants, err = h.participantService.ListParticipantsByRoom(c.Request.Context(), roomID)
 	}
 
 	if err != nil {
@@ -156,7 +101,6 @@ func (h *ParticipantHandler) List(c *gin.Context) {
 	})
 }
 
-// DELETE /api/v1/rooms/:id/participants/:pid
 func (h *ParticipantHandler) Remove(c *gin.Context) {
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -170,40 +114,26 @@ func (h *ParticipantHandler) Remove(c *gin.Context) {
 		return
 	}
 
-	// Get room to find Cloudflare meeting ID
-	room, err := h.queries.GetRoom(c.Request.Context(), roomID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
-	}
-
-	// Get participant to find Cloudflare participant ID
-	dbParticipant, err := h.queries.GetParticipant(c.Request.Context(), participantID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "participant not found"})
-		return
-	}
-
-	// Remove participant from Cloudflare RealtimeKit
-	err = h.cfClient.RemoveParticipant(c.Request.Context(), room.CloudflareMeetingID, dbParticipant.CloudflareParticipantID)
-	if err != nil {
+	if err := h.participantService.KickParticipant(c.Request.Context(), roomID, participantID); err != nil {
+		if errors.Is(err, participant.ErrParticipantNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "participant not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove participant: " + err.Error()})
 		return
 	}
 
-	// Mark participant as left in database
-	participant, err := h.queries.ParticipantLeave(c.Request.Context(), participantID)
+	p, err := h.participantService.GetParticipant(c.Request.Context(), participantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.Status(http.StatusNoContent)
 		return
 	}
 
-	c.JSON(http.StatusOK, participant)
+	c.JSON(http.StatusOK, p)
 }
 
-// POST /api/v1/rooms/:id/participants/:pid/token
 func (h *ParticipantHandler) RefreshToken(c *gin.Context) {
-	roomID, err := uuid.Parse(c.Param("id"))
+	_, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
 		return
@@ -215,50 +145,21 @@ func (h *ParticipantHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Get room
-	room, err := h.queries.GetRoom(c.Request.Context(), roomID)
+	output, err := h.participantService.RefreshToken(c.Request.Context(), participantID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
-	}
-
-	// Get participant
-	participant, err := h.queries.GetParticipant(c.Request.Context(), participantID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "participant not found"})
-		return
-	}
-
-	// Refresh token in Cloudflare RealtimeKit
-	cfParticipant, err := h.cfClient.RefreshParticipantToken(c.Request.Context(), room.CloudflareMeetingID, participant.CloudflareParticipantID)
-	if err != nil {
+		if errors.Is(err, participant.ErrParticipantNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "participant not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to refresh token: " + err.Error()})
 		return
 	}
 
-	displayName := ""
-	if participant.DisplayName != nil {
-		displayName = *participant.DisplayName
-	}
-
-	tokenPair, err := h.authHandler.GenerateParticipantToken(
-		room.TenantID,
-		roomID,
-		participant.ID,
-		displayName,
-		participant.Role,
-		cfParticipant.Token,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{
-		"access_token":  tokenPair.AccessToken,
-		"refresh_token": tokenPair.RefreshToken,
-		"token_type":    tokenPair.TokenType,
-		"expires_in":    tokenPair.ExpiresIn,
-		"auth_token":    cfParticipant.Token, // New Cloudflare token for SDK
+		"access_token":  output.TokenPair.AccessToken,
+		"refresh_token": output.TokenPair.RefreshToken,
+		"token_type":    output.TokenPair.TokenType,
+		"expires_in":    output.TokenPair.ExpiresIn,
+		"auth_token":    output.CFAuthToken,
 	})
 }

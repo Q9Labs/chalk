@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func TestRoomStateAddGetParticipant(t *testing.T) {
 	roomID := uuid.New()
 	participantID := uuid.New()
 
-	meta := ParticipantMetadata{
+	meta := domain.ParticipantMetadata{
 		DisplayName: "Test User",
 		Role:        "participant",
 		JoinedAt:    time.Now().Truncate(time.Millisecond),
@@ -68,7 +69,7 @@ func TestRoomStateRemoveParticipant(t *testing.T) {
 	roomID := uuid.New()
 	participantID := uuid.New()
 
-	meta := ParticipantMetadata{
+	meta := domain.ParticipantMetadata{
 		DisplayName: "Test User",
 		Role:        "participant",
 		JoinedAt:    time.Now(),
@@ -103,21 +104,21 @@ func TestRoomStateMultipleParticipants(t *testing.T) {
 	participant2 := uuid.New()
 	participant3 := uuid.New()
 
-	err = roomState.AddParticipant(ctx, roomID, participant1, ParticipantMetadata{
+	err = roomState.AddParticipant(ctx, roomID, participant1, domain.ParticipantMetadata{
 		DisplayName: "User 1",
 		Role:        "host",
 		JoinedAt:    time.Now(),
 	})
 	require.NoError(t, err)
 
-	err = roomState.AddParticipant(ctx, roomID, participant2, ParticipantMetadata{
+	err = roomState.AddParticipant(ctx, roomID, participant2, domain.ParticipantMetadata{
 		DisplayName: "User 2",
 		Role:        "participant",
 		JoinedAt:    time.Now(),
 	})
 	require.NoError(t, err)
 
-	err = roomState.AddParticipant(ctx, roomID, participant3, ParticipantMetadata{
+	err = roomState.AddParticipant(ctx, roomID, participant3, domain.ParticipantMetadata{
 		DisplayName: "User 3",
 		Role:        "participant",
 		JoinedAt:    time.Now(),
@@ -187,7 +188,7 @@ func TestRoomStateClearRoom(t *testing.T) {
 	participantID := uuid.New()
 	recordingID := uuid.New()
 
-	err = roomState.AddParticipant(ctx, roomID, participantID, ParticipantMetadata{
+	err = roomState.AddParticipant(ctx, roomID, participantID, domain.ParticipantMetadata{
 		DisplayName: "Test User",
 		Role:        "participant",
 		JoinedAt:    time.Now(),

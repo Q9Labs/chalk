@@ -18,10 +18,9 @@ func setupTestRouter() *gin.Engine {
 	return gin.New()
 }
 
-// TestRoomHandler_Create_InvalidJSON tests invalid JSON body returns 400
-func TestRoomHandler_Create_InvalidJSON(t *testing.T) {
+func TestRoomHandler_Create_WithoutClaims_ReturnsUnauthorized(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.POST("/rooms", handler.Create)
 
 	body := bytes.NewBufferString(`{invalid json}`)
@@ -30,17 +29,16 @@ func TestRoomHandler_Create_InvalidJSON(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.NotNil(t, response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
-// TestRoomHandler_Create_MissingTenantID tests missing required tenant_id returns 400
-func TestRoomHandler_Create_MissingTenantID(t *testing.T) {
+func TestRoomHandler_Create_MissingJWTClaims(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.POST("/rooms", handler.Create)
 
 	body := bytes.NewBufferString(`{"name": "Test Room"}`)
@@ -49,36 +47,37 @@ func TestRoomHandler_Create_MissingTenantID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.NotNil(t, response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
-// TestRoomHandler_Create_InvalidTenantID tests invalid UUID format for tenant_id returns 400
-func TestRoomHandler_Create_InvalidTenantID(t *testing.T) {
-	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
-	router.POST("/rooms", handler.Create)
+func TestRoomHandler_Create_RequestStructure(t *testing.T) {
+	req := CreateRoomRequest{
+		Name: "Test Room",
+		Config: CreateRoomConfig{
+			MaxParticipants:  10,
+			RecordingEnabled: true,
+			ChatEnabled:      true,
+		},
+	}
 
-	body := bytes.NewBufferString(`{"tenant_id": "not-a-uuid", "name": "Test Room"}`)
-	req := httptest.NewRequest("POST", "/rooms", body)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	data, err := json.Marshal(req)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid tenant_id", response["error"])
+
+	var parsed CreateRoomRequest
+	err = json.Unmarshal(data, &parsed)
+	require.NoError(t, err)
+	assert.Equal(t, "Test Room", parsed.Name)
+	assert.Equal(t, 10, parsed.Config.MaxParticipants)
 }
 
 // TestRoomHandler_Get_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_Get_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.GET("/rooms/:id", handler.Get)
 
 	req := httptest.NewRequest("GET", "/rooms/invalid-uuid", nil)
@@ -96,7 +95,7 @@ func TestRoomHandler_Get_InvalidRoomID(t *testing.T) {
 // TestRoomHandler_Update_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_Update_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.PATCH("/rooms/:id", handler.Update)
 
 	body := bytes.NewBufferString(`{"name": "Updated Room"}`)
@@ -115,7 +114,7 @@ func TestRoomHandler_Update_InvalidRoomID(t *testing.T) {
 // TestRoomHandler_Update_InvalidJSON tests invalid JSON body in Update returns 400
 func TestRoomHandler_Update_InvalidJSON(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.PATCH("/rooms/:id", handler.Update)
 
 	validID := uuid.New().String()
@@ -135,7 +134,7 @@ func TestRoomHandler_Update_InvalidJSON(t *testing.T) {
 // TestRoomHandler_Delete_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_Delete_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.DELETE("/rooms/:id", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/rooms/invalid-uuid", nil)
@@ -153,7 +152,7 @@ func TestRoomHandler_Delete_InvalidRoomID(t *testing.T) {
 // TestRoomHandler_End_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_End_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.POST("/rooms/:id/end", handler.End)
 
 	req := httptest.NewRequest("POST", "/rooms/invalid-uuid/end", nil)
@@ -180,7 +179,7 @@ func TestRoomHandler_Create_ValidUUIDPassesParsing(t *testing.T) {
 // TestRoomHandler_Get_ValidIDFormat tests invalid param rejection
 func TestRoomHandler_Get_InvalidParamFormat(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
+	handler := NewRoomHandler(nil)
 	router.GET("/rooms/:id", handler.Get)
 
 	// Test with UUID-like but invalid format
@@ -196,43 +195,43 @@ func TestRoomHandler_Get_InvalidParamFormat(t *testing.T) {
 	assert.Equal(t, "invalid room id", response["error"])
 }
 
-// TestRoomHandler_Create_EmptyTenantID tests empty tenant_id string returns 400
-func TestRoomHandler_Create_EmptyTenantID(t *testing.T) {
-	router := setupTestRouter()
-	handler := NewRoomHandler(nil, nil)
-	router.POST("/rooms", handler.Create)
+func TestRoomHandler_Create_ConfigOptions(t *testing.T) {
+	testCases := []struct {
+		name            string
+		maxParticipants int
+		recording       bool
+		chat            bool
+	}{
+		{"defaults", 0, false, false},
+		{"with max", 50, false, false},
+		{"all enabled", 100, true, true},
+	}
 
-	body := bytes.NewBufferString(`{"tenant_id": "", "name": "Test Room"}`)
-	req := httptest.NewRequest("POST", "/rooms", body)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	// Empty string fails validation (required tag or UUID parsing)
-	assert.NotNil(t, response["error"])
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := CreateRoomConfig{
+				MaxParticipants:  tc.maxParticipants,
+				RecordingEnabled: tc.recording,
+				ChatEnabled:      tc.chat,
+			}
+			assert.Equal(t, tc.maxParticipants, config.MaxParticipants)
+			assert.Equal(t, tc.recording, config.RecordingEnabled)
+			assert.Equal(t, tc.chat, config.ChatEnabled)
+		})
+	}
 }
 
-// TestRoomHandler_Create_ValidJSONParsing tests create with valid JSON and tenant_id
 func TestRoomHandler_Create_ValidJSONParsing(t *testing.T) {
-	// This validates JSON parsing and required field validation
-	validUUID := uuid.New().String()
 	req := CreateRoomRequest{
-		TenantID: validUUID,
-		Name:     "Test Room",
+		Name: "Test Room",
 	}
 
 	data, err := json.Marshal(req)
 	require.NoError(t, err)
 
-	// Should parse successfully
 	var parsed CreateRoomRequest
 	err = json.Unmarshal(data, &parsed)
 	require.NoError(t, err)
-	assert.Equal(t, validUUID, parsed.TenantID)
 	assert.Equal(t, "Test Room", parsed.Name)
 }
 

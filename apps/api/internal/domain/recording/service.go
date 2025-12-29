@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
@@ -26,6 +27,9 @@ type CloudflareClient interface {
 
 type StorageClient interface {
 	GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
+	Download(ctx context.Context, key string) (io.ReadCloser, error)
+	Upload(ctx context.Context, key string, reader io.Reader, contentType string) error
+	Delete(ctx context.Context, key string) error
 }
 
 type RoomStateManager interface {
@@ -121,6 +125,21 @@ func (s *Service) GetRecording(ctx context.Context, recordingID uuid.UUID) (*db.
 	return &recording, nil
 }
 
+func (s *Service) GetRecordingByCloudflareID(ctx context.Context, cloudflareRecordingID string) (*db.Recording, error) {
+	recording, err := s.db.GetRecordingByCloudflareID(ctx, &cloudflareRecordingID)
+	if err != nil {
+		return nil, ErrRecordingNotFound
+	}
+	return &recording, nil
+}
+
+func (s *Service) UploadRecording(ctx context.Context, key string, reader io.Reader, contentType string) error {
+	if s.r2Client == nil {
+		return fmt.Errorf("R2 storage client not configured")
+	}
+	return s.r2Client.Upload(ctx, key, reader, contentType)
+}
+
 func (s *Service) GetRecordingWithRoomInfo(ctx context.Context, recordingID uuid.UUID) (*db.GetRecordingWithRoomInfoRow, error) {
 	recording, err := s.db.GetRecordingWithRoomInfo(ctx, recordingID)
 	if err != nil {
@@ -204,16 +223,67 @@ func (s *Service) CompleteRecording(ctx context.Context, recordingID uuid.UUID, 
 	return &recording, nil
 }
 
+var (
+	ErrNotReadyForArchive = errors.New("recording must be ready and stored in R2")
+	ErrStoragePathMissing = errors.New("recording storage path not set")
+)
+
 func (s *Service) ArchiveRecording(ctx context.Context, recordingID uuid.UUID) (*db.Recording, error) {
-	recording, err := s.db.ArchiveRecording(ctx, recordingID)
+	recording, err := s.db.GetRecording(ctx, recordingID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to archive recording: %w", err)
+		return nil, ErrRecordingNotFound
 	}
-	return &recording, nil
+
+	if recording.Status != "ready" || recording.StorageProvider == nil || *recording.StorageProvider != "r2" {
+		return nil, ErrNotReadyForArchive
+	}
+
+	if recording.StoragePath == nil {
+		return nil, ErrStoragePathMissing
+	}
+
+	if s.r2Client == nil || s.s3Client == nil {
+		return nil, fmt.Errorf("storage clients not configured")
+	}
+
+	reader, err := s.r2Client.Download(ctx, *recording.StoragePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download recording from R2: %w", err)
+	}
+	defer reader.Close()
+
+	if err := s.s3Client.Upload(ctx, *recording.StoragePath, reader, "video/webm"); err != nil {
+		return nil, fmt.Errorf("failed to upload recording to S3: %w", err)
+	}
+
+	archived, err := s.db.ArchiveRecording(ctx, recordingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to archive recording in database: %w", err)
+	}
+
+	return &archived, nil
 }
 
 func (s *Service) DeleteRecording(ctx context.Context, recordingID uuid.UUID) error {
-	_, err := s.db.MarkRecordingDeleted(ctx, recordingID)
+	recording, err := s.db.GetRecording(ctx, recordingID)
+	if err != nil {
+		return ErrRecordingNotFound
+	}
+
+	if recording.StoragePath != nil && recording.StorageProvider != nil {
+		var storageClient StorageClient
+		switch *recording.StorageProvider {
+		case "r2":
+			storageClient = s.r2Client
+		case "s3_glacier":
+			storageClient = s.s3Client
+		}
+		if storageClient != nil {
+			_ = storageClient.Delete(ctx, *recording.StoragePath)
+		}
+	}
+
+	_, err = s.db.MarkRecordingDeleted(ctx, recordingID)
 	if err != nil {
 		return fmt.Errorf("failed to mark recording as deleted: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/google/uuid"
 )
 
@@ -15,17 +16,6 @@ const (
 	participantTTL      = 2 * time.Hour
 )
 
-type ParticipantMetadata struct {
-	DisplayName string    `json:"display_name"`
-	Role        string    `json:"role"`
-	JoinedAt    time.Time `json:"joined_at"`
-}
-
-type RecordingState struct {
-	IsRecording bool       `json:"is_recording"`
-	RecordingID *uuid.UUID `json:"recording_id,omitempty"`
-}
-
 type RoomState struct {
 	client *Client
 }
@@ -34,7 +24,7 @@ func NewRoomState(client *Client) *RoomState {
 	return &RoomState{client: client}
 }
 
-func (r *RoomState) AddParticipant(ctx context.Context, roomID, participantID uuid.UUID, meta ParticipantMetadata) error {
+func (r *RoomState) AddParticipant(ctx context.Context, roomID, participantID uuid.UUID, meta domain.ParticipantMetadata) error {
 	key := fmt.Sprintf(roomParticipantsKey, roomID.String())
 	data, err := json.Marshal(meta)
 	if err != nil {
@@ -49,20 +39,20 @@ func (r *RoomState) RemoveParticipant(ctx context.Context, roomID, participantID
 	return r.client.GetClient().HDel(ctx, key, participantID.String()).Err()
 }
 
-func (r *RoomState) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]ParticipantMetadata, error) {
+func (r *RoomState) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error) {
 	key := fmt.Sprintf(roomParticipantsKey, roomID.String())
 	result, err := r.client.GetClient().HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get participants: %w", err)
 	}
 
-	participants := make(map[uuid.UUID]ParticipantMetadata, len(result))
+	participants := make(map[uuid.UUID]domain.ParticipantMetadata, len(result))
 	for pidStr, data := range result {
 		pid, err := uuid.Parse(pidStr)
 		if err != nil {
 			continue
 		}
-		var meta ParticipantMetadata
+		var meta domain.ParticipantMetadata
 		if err := json.Unmarshal([]byte(data), &meta); err != nil {
 			continue
 		}
@@ -74,7 +64,7 @@ func (r *RoomState) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[
 
 func (r *RoomState) SetRecordingState(ctx context.Context, roomID uuid.UUID, isRecording bool, recordingID *uuid.UUID) error {
 	key := fmt.Sprintf(roomRecordingKey, roomID.String())
-	state := RecordingState{
+	state := domain.RecordingState{
 		IsRecording: isRecording,
 		RecordingID: recordingID,
 	}
@@ -87,14 +77,14 @@ func (r *RoomState) SetRecordingState(ctx context.Context, roomID uuid.UUID, isR
 	return r.client.Set(ctx, key, data, participantTTL)
 }
 
-func (r *RoomState) GetRecordingState(ctx context.Context, roomID uuid.UUID) (*RecordingState, error) {
+func (r *RoomState) GetRecordingState(ctx context.Context, roomID uuid.UUID) (*domain.RecordingState, error) {
 	key := fmt.Sprintf(roomRecordingKey, roomID.String())
 	data, err := r.client.Get(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 
-	var state RecordingState
+	var state domain.RecordingState
 	if err := json.Unmarshal([]byte(data), &state); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal recording state: %w", err)
 	}

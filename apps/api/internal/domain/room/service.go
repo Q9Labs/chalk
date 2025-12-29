@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
-	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/google/uuid"
 )
 
@@ -18,9 +18,9 @@ type CloudflareClient interface {
 
 type RoomStateManager interface {
 	ClearRoom(ctx context.Context, roomID uuid.UUID) error
-	GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]redis.ParticipantMetadata, error)
+	GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error)
 	SetRecordingState(ctx context.Context, roomID uuid.UUID, isRecording bool, recordingID *uuid.UUID) error
-	GetRecordingState(ctx context.Context, roomID uuid.UUID) (*redis.RecordingState, error)
+	GetRecordingState(ctx context.Context, roomID uuid.UUID) (*domain.RecordingState, error)
 }
 
 type WebSocketHub interface {

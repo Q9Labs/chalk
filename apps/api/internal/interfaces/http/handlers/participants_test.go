@@ -15,7 +15,7 @@ import (
 // TestParticipantHandler_Add_InvalidRoomID tests invalid UUID param returns 400
 func TestParticipantHandler_Add_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
 	body := bytes.NewBufferString(`{"display_name": "Test"}`)
@@ -34,7 +34,7 @@ func TestParticipantHandler_Add_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_Add_InvalidJSON tests invalid JSON body returns 400
 func TestParticipantHandler_Add_InvalidJSON(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
 	validID := uuid.New().String()
@@ -54,7 +54,7 @@ func TestParticipantHandler_Add_InvalidJSON(t *testing.T) {
 // TestParticipantHandler_Add_MissingDisplayName tests missing required display_name returns 400
 func TestParticipantHandler_Add_MissingDisplayName(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
 	validID := uuid.New().String()
@@ -74,7 +74,7 @@ func TestParticipantHandler_Add_MissingDisplayName(t *testing.T) {
 // TestParticipantHandler_Add_EmptyDisplayName tests empty display_name string returns 400
 func TestParticipantHandler_Add_EmptyDisplayName(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
 	validID := uuid.New().String()
@@ -114,7 +114,7 @@ func TestParticipantHandler_Add_ValidRequest(t *testing.T) {
 // TestParticipantHandler_List_InvalidRoomID tests invalid UUID param returns 400
 func TestParticipantHandler_List_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.GET("/rooms/:id/participants", handler.List)
 
 	req := httptest.NewRequest("GET", "/rooms/not-a-uuid/participants", nil)
@@ -132,7 +132,7 @@ func TestParticipantHandler_List_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_Remove_InvalidRoomID tests invalid room UUID param returns 400
 func TestParticipantHandler_Remove_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.DELETE("/rooms/:id/participants/:pid", handler.Remove)
 
 	validPID := uuid.New().String()
@@ -151,7 +151,7 @@ func TestParticipantHandler_Remove_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_Remove_InvalidParticipantID tests invalid UUID param returns 400
 func TestParticipantHandler_Remove_InvalidParticipantID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.DELETE("/rooms/:id/participants/:pid", handler.Remove)
 
 	validRoomID := uuid.New().String()
@@ -170,7 +170,7 @@ func TestParticipantHandler_Remove_InvalidParticipantID(t *testing.T) {
 // TestParticipantHandler_RefreshToken_InvalidRoomID tests invalid room UUID param returns 400
 func TestParticipantHandler_RefreshToken_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.POST("/rooms/:id/participants/:pid/token", handler.RefreshToken)
 
 	validPID := uuid.New().String()
@@ -189,7 +189,7 @@ func TestParticipantHandler_RefreshToken_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_RefreshToken_InvalidParticipantID tests invalid participant UUID param returns 400
 func TestParticipantHandler_RefreshToken_InvalidParticipantID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewParticipantHandler(nil, nil, nil)
+	handler := NewParticipantHandler(nil)
 	router.POST("/rooms/:id/participants/:pid/token", handler.RefreshToken)
 
 	validRoomID := uuid.New().String()

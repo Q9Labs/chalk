@@ -6,35 +6,30 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
-	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
+	"github.com/Q9Labs/chalk/internal/domain/recording"
 	"github.com/gin-gonic/gin"
 )
 
 type WebhookHandler struct {
-	queries   *db.Queries
-	storageR2 storage.StorageClient
+	recordingService *recording.Service
 }
 
-func NewWebhookHandler(queries *db.Queries, storageR2 storage.StorageClient) *WebhookHandler {
+func NewWebhookHandler(recordingService *recording.Service) *WebhookHandler {
 	return &WebhookHandler{
-		queries:   queries,
-		storageR2: storageR2,
+		recordingService: recordingService,
 	}
 }
 
-// RecordingReadyWebhook represents a Cloudflare webhook for recording completion
 type RecordingReadyWebhook struct {
-	Type        string `json:"type"` // recording.ready
+	Type        string `json:"type"`
 	RecordingID string `json:"recording_id"`
 	MeetingID   string `json:"meeting_id"`
-	URL         string `json:"url"` // Cloudflare-hosted URL
+	URL         string `json:"url"`
 	Duration    int    `json:"duration_seconds"`
 	Size        int64  `json:"size_bytes"`
-	ContentType string `json:"content_type"` // e.g., "video/webm"
+	ContentType string `json:"content_type"`
 }
 
-// POST /webhooks/cloudflare/recording
 func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	var webhook RecordingReadyWebhook
 	if err := c.ShouldBindJSON(&webhook); err != nil {
@@ -47,8 +42,7 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		return
 	}
 
-	// Find recording by Cloudflare recording ID
-	recording, err := h.queries.GetRecordingByCloudflareID(c.Request.Context(), &webhook.RecordingID)
+	rec, err := h.recordingService.GetRecordingByCloudflareID(c.Request.Context(), webhook.RecordingID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
@@ -64,26 +58,14 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	storageKey := fmt.Sprintf("recordings/%s/%s.webm", recording.RoomID, recording.ID)
+	storageKey := fmt.Sprintf("recordings/%s/%s.webm", rec.RoomID, rec.ID)
 
-	if err := h.storageR2.Upload(ctx, storageKey, resp.Body, "video/webm"); err != nil {
+	if err := h.recordingService.UploadRecording(ctx, storageKey, resp.Body, "video/webm"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to R2: " + err.Error()})
 		return
 	}
 
-	// Update recording in database
-	duration := int32(webhook.Duration)
-	sizeBytes := webhook.Size
-	provider := "r2"
-	path := storageKey
-
-	completed, err := h.queries.CompleteRecording(ctx, db.CompleteRecordingParams{
-		ID:              recording.ID,
-		StorageProvider: &provider,
-		StoragePath:     &path,
-		SizeBytes:       &sizeBytes,
-		DurationSeconds: &duration,
-	})
+	completed, err := h.recordingService.CompleteRecording(ctx, rec.ID, "r2", storageKey, webhook.Size, int32(webhook.Duration))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update recording status: " + err.Error()})
 		return
@@ -94,8 +76,8 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"id":          completed.ID,
 		"status":      completed.Status,
 		"storage_key": storageKey,
-		"size_bytes":  sizeBytes,
-		"duration":    duration,
+		"size_bytes":  webhook.Size,
+		"duration":    webhook.Duration,
 	})
 }
 

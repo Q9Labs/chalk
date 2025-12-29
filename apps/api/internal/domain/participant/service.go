@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/domain/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
-	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/google/uuid"
 )
 
@@ -26,42 +26,36 @@ type CloudflareClient interface {
 }
 
 type RoomStateManager interface {
-	AddParticipant(ctx context.Context, roomID, participantID uuid.UUID, meta redis.ParticipantMetadata) error
+	AddParticipant(ctx context.Context, roomID, participantID uuid.UUID, meta domain.ParticipantMetadata) error
 	RemoveParticipant(ctx context.Context, roomID, participantID uuid.UUID) error
-	GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]redis.ParticipantMetadata, error)
+	GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error)
 }
 
 type WebSocketHub interface {
-	SetParticipantMetadata(participantID uuid.UUID, meta ParticipantMetadata)
+	SetParticipantMetadata(participantID uuid.UUID, meta domain.ParticipantMetadata)
 	RemoveParticipantMetadata(participantID uuid.UUID)
 	GetParticipantsInRoom(roomID uuid.UUID) []uuid.UUID
 }
 
-type ParticipantMetadata struct {
-	DisplayName string
-	Role        string
-	JoinedAt    time.Time
-}
-
-type JWTService interface {
-	GenerateAccessToken(claims auth.Claims) (string, error)
+type TokenIssuer interface {
+	GenerateTokenPair(claims auth.Claims) (*auth.TokenPair, error)
 }
 
 type Service struct {
-	db         *db.Queries
-	cfClient   CloudflareClient
-	roomState  RoomStateManager
-	jwtService JWTService
-	hub        WebSocketHub
+	db          *db.Queries
+	cfClient    CloudflareClient
+	roomState   RoomStateManager
+	tokenIssuer TokenIssuer
+	hub         WebSocketHub
 }
 
-func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateManager, jwt JWTService, hub WebSocketHub) *Service {
+func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateManager, tokenIssuer TokenIssuer, hub WebSocketHub) *Service {
 	return &Service{
-		db:         queries,
-		cfClient:   cf,
-		roomState:  roomState,
-		jwtService: jwt,
-		hub:        hub,
+		db:          queries,
+		cfClient:    cf,
+		roomState:   roomState,
+		tokenIssuer: tokenIssuer,
+		hub:         hub,
 	}
 }
 
@@ -74,7 +68,7 @@ type JoinRoomInput struct {
 
 type JoinRoomOutput struct {
 	ParticipantID uuid.UUID
-	Token         string
+	TokenPair     *auth.TokenPair
 	CFAuthToken   string
 	Room          *db.Room
 }
@@ -115,23 +109,21 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		return nil, fmt.Errorf("database insert failed: %w", err)
 	}
 
+	meta := domain.ParticipantMetadata{
+		DisplayName: input.DisplayName,
+		Role:        role,
+		JoinedAt:    time.Now(),
+	}
+
 	if s.roomState != nil {
-		_ = s.roomState.AddParticipant(ctx, input.RoomID, participant.ID, redis.ParticipantMetadata{
-			DisplayName: input.DisplayName,
-			Role:        role,
-			JoinedAt:    time.Now(),
-		})
+		_ = s.roomState.AddParticipant(ctx, input.RoomID, participant.ID, meta)
 	}
 
 	if s.hub != nil {
-		s.hub.SetParticipantMetadata(participant.ID, ParticipantMetadata{
-			DisplayName: input.DisplayName,
-			Role:        role,
-			JoinedAt:    time.Now(),
-		})
+		s.hub.SetParticipantMetadata(participant.ID, meta)
 	}
 
-	token, err := s.jwtService.GenerateAccessToken(auth.Claims{
+	tokenPair, err := s.tokenIssuer.GenerateTokenPair(auth.Claims{
 		Subject:     participant.ID.String(),
 		RoomID:      input.RoomID,
 		TenantID:    room.TenantID,
@@ -145,7 +137,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 
 	return &JoinRoomOutput{
 		ParticipantID: participant.ID,
-		Token:         token,
+		TokenPair:     tokenPair,
 		CFAuthToken:   cfParticipant.Token,
 		Room:          &room,
 	}, nil
@@ -265,7 +257,7 @@ func (s *Service) RefreshToken(ctx context.Context, participantID uuid.UUID) (*J
 		displayName = *participant.DisplayName
 	}
 
-	token, err := s.jwtService.GenerateAccessToken(auth.Claims{
+	tokenPair, err := s.tokenIssuer.GenerateTokenPair(auth.Claims{
 		Subject:     participant.ID.String(),
 		RoomID:      participant.RoomID,
 		TenantID:    room.TenantID,
@@ -279,7 +271,7 @@ func (s *Service) RefreshToken(ctx context.Context, participantID uuid.UUID) (*J
 
 	return &JoinRoomOutput{
 		ParticipantID: participant.ID,
-		Token:         token,
+		TokenPair:     tokenPair,
 		CFAuthToken:   cfParticipant.Token,
 		Room:          &room,
 	}, nil

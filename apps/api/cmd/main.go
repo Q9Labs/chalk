@@ -14,10 +14,16 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
 	"github.com/Q9Labs/chalk/internal/interfaces/http"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	ctx := context.Background()
+
+	// Load .env file (ignore error if not found - production uses real env vars)
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using environment variables")
+	}
 
 	// Load configuration
 	cfg, err := config.Load()

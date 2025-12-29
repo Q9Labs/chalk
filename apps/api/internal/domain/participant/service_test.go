@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/domain/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
-	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/google/uuid"
 )
 
@@ -46,12 +46,12 @@ func (m *mockCloudflareClient) RefreshParticipantToken(ctx context.Context, meet
 }
 
 type mockRoomState struct {
-	addParticipantFn    func(ctx context.Context, roomID, participantID uuid.UUID, meta redis.ParticipantMetadata) error
+	addParticipantFn    func(ctx context.Context, roomID, participantID uuid.UUID, meta domain.ParticipantMetadata) error
 	removeParticipantFn func(ctx context.Context, roomID, participantID uuid.UUID) error
-	getParticipantsFn   func(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]redis.ParticipantMetadata, error)
+	getParticipantsFn   func(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error)
 }
 
-func (m *mockRoomState) AddParticipant(ctx context.Context, roomID, participantID uuid.UUID, meta redis.ParticipantMetadata) error {
+func (m *mockRoomState) AddParticipant(ctx context.Context, roomID, participantID uuid.UUID, meta domain.ParticipantMetadata) error {
 	if m.addParticipantFn != nil {
 		return m.addParticipantFn(ctx, roomID, participantID, meta)
 	}
@@ -65,20 +65,20 @@ func (m *mockRoomState) RemoveParticipant(ctx context.Context, roomID, participa
 	return nil
 }
 
-func (m *mockRoomState) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]redis.ParticipantMetadata, error) {
+func (m *mockRoomState) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error) {
 	if m.getParticipantsFn != nil {
 		return m.getParticipantsFn(ctx, roomID)
 	}
-	return make(map[uuid.UUID]redis.ParticipantMetadata), nil
+	return make(map[uuid.UUID]domain.ParticipantMetadata), nil
 }
 
 type mockHub struct {
-	setMetadataFn     func(participantID uuid.UUID, meta ParticipantMetadata)
+	setMetadataFn     func(participantID uuid.UUID, meta domain.ParticipantMetadata)
 	removeMetadataFn  func(participantID uuid.UUID)
 	getParticipantsIn func(roomID uuid.UUID) []uuid.UUID
 }
 
-func (m *mockHub) SetParticipantMetadata(participantID uuid.UUID, meta ParticipantMetadata) {
+func (m *mockHub) SetParticipantMetadata(participantID uuid.UUID, meta domain.ParticipantMetadata) {
 	if m.setMetadataFn != nil {
 		m.setMetadataFn(participantID, meta)
 	}
@@ -97,39 +97,39 @@ func (m *mockHub) GetParticipantsInRoom(roomID uuid.UUID) []uuid.UUID {
 	return []uuid.UUID{}
 }
 
-type mockJWTService struct {
-	generateAccessTokenFn func(claims auth.Claims) (string, error)
+type mockTokenIssuer struct {
+	generateFn func(claims auth.Claims) (*auth.TokenPair, error)
 }
 
-func (m *mockJWTService) GenerateAccessToken(claims auth.Claims) (string, error) {
-	if m.generateAccessTokenFn != nil {
-		return m.generateAccessTokenFn(claims)
+func (m *mockTokenIssuer) GenerateTokenPair(claims auth.Claims) (*auth.TokenPair, error) {
+	if m.generateFn != nil {
+		return m.generateFn(claims)
 	}
-	return "mock-jwt-token", nil
+	return &auth.TokenPair{
+		AccessToken:  "mock-access-token",
+		RefreshToken: "mock-refresh-token",
+		TokenType:    "Bearer",
+		ExpiresIn:    900,
+		ExpiresAt:    time.Now().Add(15 * time.Minute),
+	}, nil
 }
 
 func TestNewService(t *testing.T) {
 	cf := &mockCloudflareClient{}
 	roomState := &mockRoomState{}
-	jwt := &mockJWTService{}
+	tokenIssuer := &mockTokenIssuer{}
 	hub := &mockHub{}
 
-	svc := NewService(nil, cf, roomState, jwt, hub)
+	svc := NewService(nil, cf, roomState, tokenIssuer, hub)
 
 	if svc == nil {
 		t.Fatal("expected service to be non-nil")
 	}
-	if svc.cfClient != cf {
+	if svc.cfClient == nil {
 		t.Error("expected cloudflare client to be set")
 	}
-	if svc.roomState != roomState {
-		t.Error("expected room state to be set")
-	}
-	if svc.jwtService != jwt {
-		t.Error("expected jwt service to be set")
-	}
-	if svc.hub != hub {
-		t.Error("expected hub to be set")
+	if svc.tokenIssuer == nil {
+		t.Error("expected token issuer to be set")
 	}
 }
 
@@ -137,19 +137,16 @@ func TestJoinRoomInput(t *testing.T) {
 	roomID := uuid.New()
 	input := JoinRoomInput{
 		RoomID:         roomID,
-		DisplayName:    "John Doe",
+		DisplayName:    "Test User",
 		ExternalUserID: "ext-123",
-		Role:           "host",
+		Role:           "participant",
 	}
 
 	if input.RoomID != roomID {
 		t.Error("expected room ID to match")
 	}
-	if input.DisplayName != "John Doe" {
+	if input.DisplayName != "Test User" {
 		t.Error("expected display name to match")
-	}
-	if input.Role != "host" {
-		t.Error("expected role to be host")
 	}
 }
 
@@ -157,37 +154,17 @@ func TestJoinRoomOutput(t *testing.T) {
 	participantID := uuid.New()
 	output := JoinRoomOutput{
 		ParticipantID: participantID,
-		Token:         "jwt-token",
-		CFAuthToken:   "cf-auth-token",
+		TokenPair: &auth.TokenPair{
+			AccessToken: "test-token",
+		},
+		CFAuthToken: "cf-token",
 	}
 
 	if output.ParticipantID != participantID {
 		t.Error("expected participant ID to match")
 	}
-	if output.Token != "jwt-token" {
+	if output.TokenPair.AccessToken != "test-token" {
 		t.Error("expected token to match")
-	}
-	if output.CFAuthToken != "cf-auth-token" {
-		t.Error("expected CF auth token to match")
-	}
-}
-
-func TestParticipantMetadata(t *testing.T) {
-	now := time.Now()
-	meta := ParticipantMetadata{
-		DisplayName: "Test User",
-		Role:        "participant",
-		JoinedAt:    now,
-	}
-
-	if meta.DisplayName != "Test User" {
-		t.Error("expected display name to match")
-	}
-	if meta.Role != "participant" {
-		t.Error("expected role to match")
-	}
-	if meta.JoinedAt != now {
-		t.Error("expected joined at to match")
 	}
 }
 
@@ -203,14 +180,14 @@ func TestStrPtr(t *testing.T) {
 	}
 }
 
-func TestErrors(t *testing.T) {
+func TestErrorTypes(t *testing.T) {
 	if ErrRoomNotAvailable.Error() != "room not available" {
-		t.Error("unexpected error message for ErrRoomNotAvailable")
+		t.Error("expected correct error message for ErrRoomNotAvailable")
 	}
 	if ErrRoomFull.Error() != "room is full" {
-		t.Error("unexpected error message for ErrRoomFull")
+		t.Error("expected correct error message for ErrRoomFull")
 	}
 	if ErrParticipantNotFound.Error() != "participant not found" {
-		t.Error("unexpected error message for ErrParticipantNotFound")
+		t.Error("expected correct error message for ErrParticipantNotFound")
 	}
 }

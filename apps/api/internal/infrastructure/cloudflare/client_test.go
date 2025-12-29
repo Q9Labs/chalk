@@ -186,7 +186,7 @@ func TestCreateMeeting_APIError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, meeting)
-	assert.Contains(t, err.Error(), "cloudflare error")
+	assert.Contains(t, err.Error(), "cloudflare API error")
 }
 
 func TestCreateMeeting_MalformedJSON(t *testing.T) {

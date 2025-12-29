@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -234,7 +235,7 @@ func TestHubSetGetParticipantMetadata(t *testing.T) {
 	defer hub.Close()
 
 	participantID := uuid.New()
-	meta := ParticipantMetadata{
+	meta := domain.ParticipantMetadata{
 		DisplayName: "Test User",
 		Role:        "host",
 		JoinedAt:    time.Now(),
@@ -253,7 +254,7 @@ func TestHubRemoveParticipantMetadata(t *testing.T) {
 	defer hub.Close()
 
 	participantID := uuid.New()
-	meta := ParticipantMetadata{
+	meta := domain.ParticipantMetadata{
 		DisplayName: "Test User",
 		Role:        "participant",
 		JoinedAt:    time.Now(),
@@ -294,12 +295,12 @@ func TestHubGetRoomSnapshot(t *testing.T) {
 	participant2 := uuid.New()
 	recordingID := uuid.New()
 
-	hub.SetParticipantMetadata(participant1, ParticipantMetadata{
+	hub.SetParticipantMetadata(participant1, domain.ParticipantMetadata{
 		DisplayName: "User 1",
 		Role:        "host",
 		JoinedAt:    time.Now(),
 	})
-	hub.SetParticipantMetadata(participant2, ParticipantMetadata{
+	hub.SetParticipantMetadata(participant2, domain.ParticipantMetadata{
 		DisplayName: "User 2",
 		Role:        "participant",
 		JoinedAt:    time.Now(),
