@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface TourHighlightProps {
   targetSelector: string;
@@ -16,6 +17,7 @@ export const TourHighlight = React.memo<TourHighlightProps>(({
   onClickOutside,
   className,
 }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [rect, setRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
@@ -67,7 +69,8 @@ export const TourHighlight = React.memo<TourHighlightProps>(({
   return (
     <div
       className={cn(
-        'fixed transition-all duration-300 ease-out chalk-animate-highlight pointer-events-none',
+        'fixed ease-out pointer-events-none',
+        !prefersReducedMotion && 'transition-all duration-300 chalk-animate-highlight',
         'border-2 border-[var(--chalk-accent)]',
         className
       )}

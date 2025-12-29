@@ -1,6 +1,7 @@
 import React from 'react';
 import { Hand } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 interface HandRaiseIndicatorProps {
   raised: boolean;
@@ -30,6 +31,8 @@ export const HandRaiseIndicator = React.memo(({
   size = 'md',
   className,
 }: HandRaiseIndicatorProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
+
   if (!raised) return null;
 
   return (
@@ -37,8 +40,8 @@ export const HandRaiseIndicator = React.memo(({
       className={cn(
         'absolute z-10 flex items-center justify-center rounded-full bg-[var(--chalk-warning)] p-1.5 text-white shadow-md',
         positionMap[position],
-        'chalk-animate-scale-in',
-        animated && 'chalk-animate-hand-bounce',
+        !prefersReducedMotion && 'chalk-animate-scale-in',
+        animated && !prefersReducedMotion && 'chalk-animate-hand-bounce',
         className
       )}
       role="status"

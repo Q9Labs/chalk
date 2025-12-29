@@ -1,5 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 import { 
   Input, 
   Spinner, 
@@ -73,6 +74,7 @@ function PreJoinLobbyBase({
   error,
   className,
 }: PreJoinLobbyProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [displayName, setDisplayName] = useState(userName);
   const [isVideoEnabled, setIsVideoEnabled] = useState(initialVideoEnabled);
   const [isAudioEnabled, setIsAudioEnabled] = useState(initialAudioEnabled);
@@ -103,7 +105,10 @@ function PreJoinLobbyBase({
       "flex flex-col items-center justify-center min-h-screen bg-[var(--chalk-bg-primary)] p-4 font-sans text-[var(--chalk-text-primary)]", 
       className
     )}>
-      <div className="w-full max-w-lg animate-in fade-in zoom-in-95 duration-300 space-y-8">
+      <div className={cn(
+        "w-full max-w-lg space-y-8",
+        !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-300"
+      )}>
         
         <div className="text-center space-y-2">
           {roomName && (

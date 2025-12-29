@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface SkeletonProps {
   width?: string | number;
@@ -16,6 +17,7 @@ export const Skeleton = React.memo<SkeletonProps>(({
   animation = 'pulse',
   className,
 }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const variantClasses = {
     text: 'rounded-[var(--chalk-border-radius-sm)]',
     circular: 'rounded-full',
@@ -24,8 +26,8 @@ export const Skeleton = React.memo<SkeletonProps>(({
   };
 
   const animationClasses = {
-    pulse: 'chalk-animate-pulse',
-    wave: 'chalk-animate-pulse',
+    pulse: !prefersReducedMotion ? 'chalk-animate-pulse' : '',
+    wave: !prefersReducedMotion ? 'chalk-animate-pulse' : '',
     none: '',
   };
 

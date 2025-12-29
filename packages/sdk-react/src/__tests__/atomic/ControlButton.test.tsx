@@ -1,0 +1,50 @@
+import { describe, it, expect, vi } from 'bun:test';
+import { render, fireEvent } from '@testing-library/react';
+import { ControlButton } from '../../components/atomic/ControlButton';
+
+describe('ControlButton', () => {
+  const icon = <span>Icon</span>;
+  const label = 'Toggle Video';
+
+  it('renders correctly', () => {
+    const { getByRole, getByText } = render(<ControlButton icon={icon} label={label} />);
+    const button = getByRole('button', { name: label });
+    expect(button).toBeDefined();
+    expect(getByText('Icon')).toBeDefined();
+  });
+
+  it('handles click events', () => {
+    const onClick = vi.fn();
+    const { getByRole } = render(<ControlButton icon={icon} label={label} onClick={onClick} />);
+    const button = getByRole('button', { name: label });
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders label text when showLabel is true', () => {
+    const { getByText } = render(<ControlButton icon={icon} label={label} showLabel />);
+    expect(getByText(label)).toBeDefined();
+  });
+
+  it('applies active styles and aria-pressed', () => {
+    const { getByRole } = render(<ControlButton icon={icon} label={label} active />);
+    const button = getByRole('button', { name: label });
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).toHaveClass('bg-[var(--chalk-accent)]');
+  });
+
+  it('applies danger styles', () => {
+    const { getByRole } = render(<ControlButton icon={icon} label={label} danger />);
+    const button = getByRole('button', { name: label });
+    expect(button).toHaveClass('bg-[var(--chalk-danger)]');
+  });
+
+  it('can be disabled', () => {
+    const onClick = vi.fn();
+    const { getByRole } = render(<ControlButton icon={icon} label={label} disabled onClick={onClick} />);
+    const button = getByRole('button', { name: label });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Send } from 'lucide-react';
 import { IconButton, Textarea } from '../atomic';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface ChatMessage {
   id: string;
@@ -29,6 +30,7 @@ export const ChatPanel = React.memo(({
   placeholder = "Type a message...",
   className
 }: ChatPanelProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +63,8 @@ export const ChatPanel = React.memo(({
   return (
     <div 
       className={cn(
-        "flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl chalk-animate-slide-right",
+        "flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl",
+        !prefersReducedMotion && "chalk-animate-slide-right",
         className
       )}
       data-tour="chat-panel"

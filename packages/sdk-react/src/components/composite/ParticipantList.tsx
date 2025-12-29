@@ -9,6 +9,7 @@ import {
   Badge
 } from '../atomic';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface Participant {
   id: string;
@@ -42,6 +43,7 @@ export const ParticipantList = React.memo(({
   onClose,
   className
 }: ParticipantListProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
@@ -70,7 +72,8 @@ export const ParticipantList = React.memo(({
   return (
     <div 
       className={cn(
-        "flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl chalk-animate-slide-right",
+        "flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl",
+        !prefersReducedMotion && "chalk-animate-slide-right",
         className
       )}
       data-tour="participants-panel"

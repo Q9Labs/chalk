@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Volume2 } from 'lucide-react';
 import { Select, AudioIndicator, Thumbnail, IconButton } from '../atomic';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface DeviceSelectorProps {
   type: 'audioinput' | 'audiooutput' | 'videoinput';
@@ -26,6 +27,7 @@ export const DeviceSelector = React.memo(({
   disabled = false,
   className
 }: DeviceSelectorProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -89,9 +91,10 @@ export const DeviceSelector = React.memo(({
         {type === 'audiooutput' && (
           <div className="shrink-0">
              <audio ref={audioRef} className="hidden" />
-             <IconButton
-               icon={<Volume2 className={cn("w-4 h-4", isPlayingTestSound && "text-chalk-accent animate-pulse")} />}
-               onClick={playTestSound}
+              <IconButton
+                icon={<Volume2 className={cn("w-4 h-4", isPlayingTestSound && "text-chalk-accent", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />}
+                onClick={playTestSound}
+
                disabled={disabled}
                variant="outline"
                size="md"

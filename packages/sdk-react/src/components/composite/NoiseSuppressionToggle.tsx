@@ -1,6 +1,7 @@
 import React from 'react';
 import { Toggle, Select } from '../atomic';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface NoiseSuppressionToggleProps {
   enabled: boolean;
@@ -19,6 +20,7 @@ export const NoiseSuppressionToggle = React.memo(({
   disabled = false,
   className
 }: NoiseSuppressionToggleProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onLevelChange?.(e.target.value as 'low' | 'medium' | 'high');
   };
@@ -39,7 +41,7 @@ export const NoiseSuppressionToggle = React.memo(({
       </div>
 
       {enabled && onLevelChange && (
-        <div className="mt-1 chalk-animate-fade-in">
+        <div className={cn("mt-1", !prefersReducedMotion && "chalk-animate-fade-in")}>
           <Select
             options={[
               { label: 'Low', value: 'low' },

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Info, CheckCircle, AlertTriangle, XCircle, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface ToastProps {
   message: string;
@@ -22,6 +23,8 @@ export const Toast = React.memo<ToastProps>(({
   action,
   className,
 }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
+
   useEffect(() => {
     if (duration > 0 && onDismiss) {
       const timer = setTimeout(onDismiss, duration);
@@ -46,7 +49,8 @@ export const Toast = React.memo<ToastProps>(({
   return (
     <div
       className={cn(
-        'flex items-start gap-3 p-4 rounded-[var(--chalk-border-radius-md)] shadow-[var(--chalk-shadow-lg)] min-w-[300px] max-w-md chalk-animate-toast-in border border-[var(--chalk-border-color)]',
+        'flex items-start gap-3 p-4 rounded-[var(--chalk-border-radius-md)] shadow-[var(--chalk-shadow-lg)] min-w-[300px] max-w-md border border-[var(--chalk-border-color)]',
+        !prefersReducedMotion && 'chalk-animate-toast-in',
         bgColors[type],
         className
       )}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -13,6 +14,7 @@ export const Spinner = React.memo<SpinnerProps>(({
   color = 'var(--chalk-accent)',
   className,
 }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const sizeClasses = {
     sm: 'w-4 h-4',
     md: 'w-6 h-6',
@@ -22,7 +24,7 @@ export const Spinner = React.memo<SpinnerProps>(({
 
   return (
     <Loader2
-      className={cn('animate-spin', sizeClasses[size], className)}
+      className={cn(!prefersReducedMotion && 'animate-spin', sizeClasses[size], className)}
       style={{ color }}
       role="status"
       aria-label="Loading"

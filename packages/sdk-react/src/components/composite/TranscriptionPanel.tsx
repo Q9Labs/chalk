@@ -8,6 +8,7 @@ import {
   Select 
 } from '../atomic';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface TranscriptEntry {
   id: string;
@@ -44,6 +45,7 @@ export const TranscriptionPanel = React.memo(({
   position = 'right',
   className
 }: TranscriptionPanelProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [searchQuery, setSearchQuery] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,7 +102,7 @@ export const TranscriptionPanel = React.memo(({
     <div 
       className={cn(
         "flex flex-col bg-chalk-bg-surface border-chalk-border-subtle shadow-xl",
-        position === 'right' ? "h-full w-80 border-l chalk-animate-slide-right" : "w-full h-64 border-t chalk-animate-slide-up",
+        position === 'right' ? cn("h-full w-80 border-l", !prefersReducedMotion && "chalk-animate-slide-right") : cn("w-full h-64 border-t", !prefersReducedMotion && "chalk-animate-slide-up"),
         className
       )}
       data-tour="transcription-panel"

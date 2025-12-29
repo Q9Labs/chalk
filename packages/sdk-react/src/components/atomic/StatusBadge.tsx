@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
 import { Circle, Radio, Type, AlertCircle } from 'lucide-react';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface StatusBadgeProps {
   status: 'recording' | 'live' | 'transcribing' | 'connecting' | 'reconnecting';
@@ -43,6 +44,7 @@ const config = {
 };
 
 export const StatusBadge = React.memo(({ status, pulse = false, size = 'md', className }: StatusBadgeProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const { icon: Icon, text, color, bg } = config[status];
 
   return (
@@ -50,7 +52,7 @@ export const StatusBadge = React.memo(({ status, pulse = false, size = 'md', cla
       className={cn(
         'inline-flex items-center gap-1.5 rounded-[var(--chalk-border-radius-sm)] font-medium',
         size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs',
-        pulse && 'chalk-animate-pulse',
+        pulse && !prefersReducedMotion && 'chalk-animate-pulse',
         className
       )}
       style={{

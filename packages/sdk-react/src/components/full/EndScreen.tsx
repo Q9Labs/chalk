@@ -8,6 +8,7 @@ import {
   IconButton
 } from '../atomic';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface EndScreenProps {
   roomName?: string;
@@ -59,6 +60,7 @@ function EndScreenBase({
   onGoHome,
   className,
 }: EndScreenProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -83,7 +85,10 @@ function EndScreenBase({
       "flex flex-col items-center justify-center min-h-screen bg-[var(--chalk-bg-primary)] p-4 font-sans text-[var(--chalk-text-primary)]",
       className
     )}>
-      <div className="w-full max-w-lg bg-[var(--chalk-bg-secondary)] rounded-[var(--chalk-border-radius-lg)] border border-[var(--chalk-border-color)] shadow-[var(--chalk-shadow-lg)] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+      <div className={cn(
+        "w-full max-w-lg bg-[var(--chalk-bg-secondary)] rounded-[var(--chalk-border-radius-lg)] border border-[var(--chalk-border-color)] shadow-[var(--chalk-shadow-lg)] overflow-hidden",
+        !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-300"
+      )}>
         
         <div className="p-8 text-center space-y-6">
           <div className="flex flex-col items-center gap-4">
@@ -139,7 +144,7 @@ function EndScreenBase({
                 </div>
                 
                 {rating > 0 && (
-                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                  <div className={cn("space-y-3", !prefersReducedMotion && "animate-in fade-in slide-in-from-top-2")}>
                     <Textarea
                       placeholder="Any comments or issues?"
                       value={comment}
@@ -158,7 +163,7 @@ function EndScreenBase({
                 )}
               </>
             ) : (
-              <div className="text-center py-4 text-[var(--chalk-success)] animate-in zoom-in">
+              <div className={cn("text-center py-4 text-[var(--chalk-success)]", !prefersReducedMotion && "animate-in zoom-in")}>
                 <p className="font-medium">Thank you for your feedback!</p>
               </div>
             )}

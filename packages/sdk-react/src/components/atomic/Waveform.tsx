@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 interface WaveformProps {
   levels: number[];
@@ -16,6 +17,7 @@ export const Waveform = React.memo(({
   barCount = 5,
   className,
 }: WaveformProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const displayLevels = React.useMemo(() => {
     if (levels.length === barCount) return levels;
     
@@ -39,7 +41,7 @@ export const Waveform = React.memo(({
           key={i}
           className={cn(
             'w-1 rounded-full bg-current transition-all',
-            animated ? 'duration-150 ease-out' : 'duration-0'
+            (animated && !prefersReducedMotion) ? 'duration-150 ease-out' : 'duration-0'
           )}
           style={{
             height: `${Math.max(10, level)}%`,

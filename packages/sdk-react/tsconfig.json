@@ -11,6 +11,6 @@
 		"jsx": "react-jsx"
 	},
 	"include": ["src/**/*"],
-	"exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
+	"exclude": ["node_modules", "dist", "src/stories", "**/*.test.ts", "**/*.test.tsx"],
 	"references": [{ "path": "../sdk-core" }]
 }

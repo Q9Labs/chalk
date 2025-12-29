@@ -46,3 +46,6 @@ Thumbs.db
 # Terraform (handled in infrastructure/.gitignore)
 # *.tfstate
 # .terraform/
+
+*storybook.log
+storybook-static

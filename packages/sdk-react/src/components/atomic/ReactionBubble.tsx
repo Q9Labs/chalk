@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 interface ReactionBubbleProps {
   emoji: string;
@@ -15,6 +16,7 @@ export const ReactionBubble = React.memo(({
   className,
 }: ReactionBubbleProps) => {
   const [isVisible, setIsVisible] = useState(true);
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -31,7 +33,7 @@ export const ReactionBubble = React.memo(({
     <div
       className={cn(
         'pointer-events-none absolute bottom-4 right-4 z-50 text-4xl',
-        'chalk-animate-float-up',
+        !prefersReducedMotion && 'chalk-animate-float-up',
         className
       )}
       role="presentation"

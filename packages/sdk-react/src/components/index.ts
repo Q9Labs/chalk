@@ -73,3 +73,6 @@ export type {
 
 // Full integration components
 export * from './full';
+
+// Lazy loaded components
+export * from './lazy';

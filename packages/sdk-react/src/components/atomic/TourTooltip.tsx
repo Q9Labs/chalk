@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface TourTooltipProps {
   title: string;
@@ -29,6 +30,7 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
   showProgress = true,
   className,
 }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,7 +67,8 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
         'relative z-50 min-w-[320px] max-w-sm rounded-[var(--chalk-border-radius-lg)]',
         'bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-color)]',
         'shadow-[var(--chalk-shadow-lg)] p-[var(--chalk-spacing-lg)]',
-        'text-[var(--chalk-text-primary)] chalk-animate-scale-in',
+        'text-[var(--chalk-text-primary)]',
+        !prefersReducedMotion && 'chalk-animate-scale-in',
         className
       )}
     >

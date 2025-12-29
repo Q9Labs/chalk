@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 interface TooltipProps {
   content: React.ReactNode;
@@ -16,6 +17,7 @@ export const Tooltip = React.memo(({
   delay = 200,
   className,
 }: TooltipProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [isVisible, setIsVisible] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,7 +59,7 @@ export const Tooltip = React.memo(({
         <div
           className={cn(
             'absolute z-50 whitespace-nowrap rounded-[var(--chalk-border-radius-sm)] bg-[var(--chalk-bg-primary)] px-2 py-1 text-[var(--chalk-font-size-xs)] text-[var(--chalk-text-primary)] shadow-md ring-1 ring-[var(--chalk-border-color)]',
-            'chalk-animate-scale-in origin-center',
+            !prefersReducedMotion && 'chalk-animate-scale-in origin-center',
             positionClasses[position],
             className
           )}

@@ -3,6 +3,7 @@ import { X, Copy, Mail, Calendar, Link as LinkIcon } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { Input } from '../atomic/Input';
 import { IconButton } from '../atomic/IconButton';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface InviteModalProps {
   isOpen: boolean;
@@ -24,8 +25,10 @@ export const InviteModal = React.memo<InviteModalProps>(({
   onShareEmail,
   onShareCalendar,
   className,
-}) => {
+}: InviteModalProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -51,7 +54,10 @@ export const InviteModal = React.memo<InviteModalProps>(({
     >
       <div 
         ref={modalRef}
-        className="w-full max-w-md bg-[var(--chalk-bg-primary)] rounded-[var(--chalk-border-radius-lg)] shadow-[var(--chalk-shadow-xl)] border border-[var(--chalk-border-color)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className={cn(
+          "w-full max-w-md bg-[var(--chalk-bg-primary)] rounded-[var(--chalk-border-radius-lg)] shadow-[var(--chalk-shadow-xl)] border border-[var(--chalk-border-color)] overflow-hidden",
+          !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200"
+        )}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--chalk-border-color)]">
           <h2 id="invite-modal-title" className="text-lg font-semibold text-[var(--chalk-text-primary)]">

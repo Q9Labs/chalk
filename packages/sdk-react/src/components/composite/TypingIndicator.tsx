@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface TypingIndicatorProps {
   typingUsers: string[];
@@ -10,6 +11,7 @@ export const TypingIndicator = React.memo<TypingIndicatorProps>(({
   typingUsers,
   className,
 }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   if (typingUsers.length === 0) return null;
 
   let text = '';
@@ -33,9 +35,9 @@ export const TypingIndicator = React.memo<TypingIndicatorProps>(({
     >
       <span className="font-medium">{text}</span>
       <div className="flex gap-1">
-        <div className="w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-        <div className="w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-        <div className="w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        <div className={cn("w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '0ms' }} />
+        <div className={cn("w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '150ms' }} />
+        <div className={cn("w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '300ms' }} />
       </div>
     </div>
   );

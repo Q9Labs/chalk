@@ -5,6 +5,7 @@ import { DeviceSelector } from './DeviceSelector';
 import { NoiseSuppressionToggle } from './NoiseSuppressionToggle';
 import { VolumeSlider } from '../atomic';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface SettingsPanelProps {
   audioInputDevices: MediaDeviceInfo[];
@@ -44,13 +45,15 @@ export const SettingsPanel = React.memo(({
   onClose,
   className
 }: SettingsPanelProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [activeTab, setActiveTab] = useState<'audio' | 'video' | 'general'>('audio');
   const [speakerVolume, setSpeakerVolume] = useState(100);
 
   return (
     <div 
       className={cn(
-        "flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl chalk-animate-slide-right",
+        "flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl",
+        !prefersReducedMotion && "chalk-animate-slide-right",
         className
       )}
       data-tour="settings-panel"
@@ -106,7 +109,7 @@ export const SettingsPanel = React.memo(({
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {activeTab === 'audio' && (
-          <div className="space-y-6 chalk-animate-fade-in">
+          <div className={cn("space-y-6", !prefersReducedMotion && "chalk-animate-fade-in")}>
             <div className="space-y-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-chalk-text-secondary">Microphone</h3>
               <DeviceSelector
@@ -151,7 +154,7 @@ export const SettingsPanel = React.memo(({
         )}
 
         {activeTab === 'video' && (
-          <div className="space-y-6 chalk-animate-fade-in">
+          <div className={cn("space-y-6", !prefersReducedMotion && "chalk-animate-fade-in")}>
             <div className="space-y-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-chalk-text-secondary">Camera</h3>
               <DeviceSelector

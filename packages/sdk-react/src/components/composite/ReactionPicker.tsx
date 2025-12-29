@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface ReactionPickerProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const ReactionPicker = React.memo(({
   position = 'top',
   className,
 }: ReactionPickerProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   if (!isOpen) return null;
 
   return (
@@ -31,7 +33,8 @@ export const ReactionPicker = React.memo(({
       />
       <div 
         className={cn(
-          "absolute z-50 p-2 bg-background-primary rounded-lg shadow-xl border border-border animate-in fade-in zoom-in-95 duration-200",
+          "absolute z-50 p-2 bg-background-primary rounded-lg shadow-xl border border-border",
+          !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200",
           position === 'top' ? "bottom-full mb-2" : "top-full mt-2",
           "left-1/2 -translate-x-1/2 w-64",
           className

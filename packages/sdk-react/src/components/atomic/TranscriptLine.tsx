@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface TranscriptLineProps {
   speaker: string;
@@ -26,6 +27,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(({
   speakerColor,
   className,
 }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const timeString = new Intl.DateTimeFormat('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -39,7 +41,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(({
       className={cn(
         'py-1 px-2 mb-1 rounded-[var(--chalk-border-radius-sm)]',
         'text-[var(--chalk-font-size-md)] leading-relaxed',
-        'chalk-animate-transcript-in transition-all duration-200',
+        !prefersReducedMotion && 'chalk-animate-transcript-in transition-all duration-200',
         isInterim ? 'italic text-[var(--chalk-text-muted)]' : 'text-[var(--chalk-text-secondary)]',
         className
       )}

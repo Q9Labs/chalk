@@ -4,6 +4,7 @@ import { MicOff, Monitor, Hand, Pin } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { ConnectionQuality } from './ConnectionQuality';
 import { NameTag } from './NameTag';
+import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface VideoTileProps {
   participant: {
@@ -47,6 +48,7 @@ export const VideoTile = React.memo(({
   pinned,
   className,
 }: VideoTileProps) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -70,7 +72,8 @@ export const VideoTile = React.memo(({
       className={cn(
         'relative overflow-hidden rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-secondary)] shadow-sm transition-all',
         aspectRatioClasses[aspectRatio],
-        participant.isSpeaking && 'chalk-animate-speaking ring-2 ring-[var(--chalk-accent)]',
+        participant.isSpeaking && !prefersReducedMotion && 'chalk-animate-speaking ring-2 ring-[var(--chalk-accent)]',
+        participant.isSpeaking && prefersReducedMotion && 'ring-2 ring-[var(--chalk-accent)]',
         pinned && 'ring-2 ring-[var(--chalk-accent)]',
         onClick && 'cursor-pointer hover:opacity-95',
         className
@@ -112,7 +115,10 @@ export const VideoTile = React.memo(({
                 </div>
               )}
               {participant.isHandRaised && (
-                <div className="rounded-full bg-[var(--chalk-accent)] p-1.5 text-white backdrop-blur-sm chalk-animate-hand-bounce">
+                <div className={cn(
+                  "rounded-full bg-[var(--chalk-accent)] p-1.5 text-white backdrop-blur-sm",
+                  !prefersReducedMotion && "chalk-animate-hand-bounce"
+                )}>
                   <Hand size={16} />
                 </div>
               )}
