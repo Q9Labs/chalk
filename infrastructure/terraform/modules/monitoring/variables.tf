@@ -57,6 +57,30 @@ variable "api_gateway_id" {
   default     = null
 }
 
+variable "enable_ecs_alarms" {
+  description = "Enable ECS CloudWatch alarms"
+  type        = bool
+  default     = true
+}
+
+variable "enable_alb_alarms" {
+  description = "Enable ALB CloudWatch alarms"
+  type        = bool
+  default     = true
+}
+
+variable "enable_aurora_alarms" {
+  description = "Enable Aurora CloudWatch alarms"
+  type        = bool
+  default     = true
+}
+
+variable "enable_redis_alarms" {
+  description = "Enable Redis CloudWatch alarms"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)
