@@ -17,11 +17,11 @@ terraform {
   }
 
   backend "s3" {
-    # bucket         = "chalk-terraform-state-<account-id>"
-    # key            = "prod/terraform.tfstate"
-    # region         = "us-east-1"
-    # encrypt        = true
-    # dynamodb_table = "chalk-terraform-locks"
+    bucket         = "chalk-terraform-state-688819141892"
+    key            = "prod/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "chalk-terraform-locks"
   }
 }
 

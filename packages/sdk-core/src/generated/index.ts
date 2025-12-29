@@ -19,7 +19,7 @@ export type ApiToken = components["schemas"]["Token"];
 // Enum type aliases
 export type ParticipantRole = ApiParticipant["role"];
 export type RecordingStatus = ApiRecording["status"];
-export type MessageType = ApiChatMessage["type"];
+export type MessageType = ApiChatMessage["message_type"];
 
 // Utility types
 export type ApiSchemas = components["schemas"];

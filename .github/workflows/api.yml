@@ -5,9 +5,30 @@ on:
     branches: [master]
     paths:
       - 'apps/api/**'
+      - '.github/workflows/api.yml'
   pull_request:
     paths:
       - 'apps/api/**'
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        type: boolean
+        default: false
+      force_deploy:
+        description: 'Force deploy even without changes'
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'Target environment'
+        required: false
+        type: choice
+        options:
+          - prod
+          - dev
+        default: prod
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,13 +36,18 @@ concurrency:
 
 env:
   GO_VERSION: '1.22'
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/api
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: chalk-api
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   lint-and-test:
     name: Lint & Test
     runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
     defaults:
       run:
         working-directory: apps/api
@@ -43,6 +69,7 @@ jobs:
         with:
           version: latest
           working-directory: apps/api
+          args: --timeout=5m
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
@@ -58,6 +85,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     needs: lint-and-test
+    if: always() && (needs.lint-and-test.result == 'success' || needs.lint-and-test.result == 'skipped')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,37 +112,41 @@ jobs:
           retention-days: 7
 
   docker:
-    name: Build Docker Image
+    name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    permissions:
-      contents: read
-      packages: write
+    if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || inputs.force_deploy
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_uri: ${{ steps.build.outputs.image_uri }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: apps/api
@@ -123,16 +155,112 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
 
-  # deploy:
-  #   name: Deploy to ECS
-  #   runs-on: ubuntu-latest
-  #   needs: docker
-  #   if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-  #   environment: production
-  #   steps:
-  #     - name: Deploy to ECS
-  #       run: |
-  #         # Use AWS CLI or Terraform to update ECS service
-  #         echo "Deploying to ECS..."
+      - name: Output image URI
+        id: output
+        run: |
+          echo "image_uri=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: docker
+    if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || inputs.force_deploy
+    environment: ${{ inputs.environment || 'prod' }}
+    env:
+      ECS_CLUSTER: chalk-${{ inputs.environment || 'prod' }}
+      ECS_SERVICE: chalk-${{ inputs.environment || 'prod' }}-api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Download task definition
+        id: download-task-def
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_SERVICE }} \
+            --query taskDefinition > task-definition.json
+          
+          # Check if task definition exists
+          if [ ! -s task-definition.json ] || [ "$(cat task-definition.json)" == "null" ]; then
+            echo "::warning::Task definition not found. Infrastructure may not be deployed yet."
+            echo "skip_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update task definition with new image
+        if: steps.download-task-def.outputs.skip_deploy != 'true'
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: api
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Deploy to ECS
+        if: steps.download-task-def.outputs.skip_deploy != 'true'
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Deployment skipped notice
+        if: steps.download-task-def.outputs.skip_deploy == 'true'
+        run: |
+          echo "⚠️ ECS deployment skipped - task definition does not exist yet."
+          echo "Run infrastructure deployment first via infra.yml workflow."
+
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Wait for service stability
+        run: |
+          echo "Waiting 30s for deployment to stabilize..."
+          sleep 30
+
+      - name: Check ECS service status
+        run: |
+          CLUSTER="chalk-${{ inputs.environment || 'prod' }}"
+          SERVICE="chalk-${{ inputs.environment || 'prod' }}-api"
+          
+          STATUS=$(aws ecs describe-services \
+            --cluster $CLUSTER \
+            --services $SERVICE \
+            --query 'services[0].deployments[0].rolloutState' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          echo "Deployment status: $STATUS"
+          
+          if [ "$STATUS" == "COMPLETED" ]; then
+            echo "✅ Deployment completed successfully"
+          elif [ "$STATUS" == "IN_PROGRESS" ]; then
+            echo "⏳ Deployment still in progress"
+          elif [ "$STATUS" == "NOT_FOUND" ]; then
+            echo "⚠️ Service not found - infrastructure may not be deployed"
+          else
+            echo "❌ Deployment status: $STATUS"
+            exit 1
+          fi

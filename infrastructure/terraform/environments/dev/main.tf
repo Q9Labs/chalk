@@ -17,12 +17,11 @@ terraform {
   }
 
   backend "s3" {
-    # Configure after running bootstrap
-    # bucket         = "chalk-terraform-state-<account-id>"
-    # key            = "dev/terraform.tfstate"
-    # region         = "us-east-1"
-    # encrypt        = true
-    # dynamodb_table = "chalk-terraform-locks"
+    bucket         = "chalk-terraform-state-688819141892"
+    key            = "dev/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "chalk-terraform-locks"
   }
 }
 

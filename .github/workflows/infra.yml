@@ -5,25 +5,54 @@ on:
     branches: [master]
     paths:
       - 'infrastructure/terraform/**'
+      - '.github/workflows/infra.yml'
   pull_request:
     paths:
       - 'infrastructure/terraform/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - prod
+          - dev
+        default: prod
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+      auto_approve:
+        description: 'Auto-approve apply (dev only)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: terraform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel terraform runs
 
 env:
   TF_VERSION: '1.9'
   AWS_REGION: us-east-1
+  TF_INPUT: 'false'
+  TF_IN_AUTOMATION: 'true'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
 
 jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infrastructure/terraform
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,78 +64,112 @@ jobs:
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
+        working-directory: infrastructure/terraform
 
-      - name: Validate VPC Module
-        working-directory: infrastructure/terraform/modules/vpc
+      - name: Validate Modules
         run: |
-          terraform init -backend=false
-          terraform validate
+          for module in vpc ecs aurora elasticache api-gateway waf monitoring ecr cloudflare; do
+            echo "Validating module: $module"
+            cd infrastructure/terraform/modules/$module
+            terraform init -backend=false
+            terraform validate
+            cd -
+          done
 
-      - name: Validate ECS Module
-        working-directory: infrastructure/terraform/modules/ecs
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-      - name: Validate Aurora Module
-        working-directory: infrastructure/terraform/modules/aurora
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-      - name: Validate ElastiCache Module
-        working-directory: infrastructure/terraform/modules/elasticache
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-      - name: Validate API Gateway Module
-        working-directory: infrastructure/terraform/modules/api-gateway
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-      - name: Validate Secrets Module
-        working-directory: infrastructure/terraform/modules/secrets
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-      - name: Validate WAF Module
-        working-directory: infrastructure/terraform/modules/waf
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-      - name: Validate Monitoring Module
-        working-directory: infrastructure/terraform/modules/monitoring
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-      - name: Validate ECR Module
-        working-directory: infrastructure/terraform/modules/ecr
-        run: |
-          terraform init -backend=false
-          terraform validate
-
-  plan-dev:
-    name: Plan (Dev)
+  # Production deployment
+  plan-prod:
+    name: Plan (Prod)
     runs-on: ubuntu-latest
     needs: validate
-    if: github.event_name == 'pull_request'
-    environment: dev
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
+    environment: prod
     defaults:
       run:
-        working-directory: infrastructure/terraform/environments/dev
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: infrastructure/terraform/environments/prod
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+        continue-on-error: true
+
+      - name: Init failed - backend not configured
+        if: steps.init.outcome == 'failure'
+        run: |
+          echo "::error::Terraform init failed. The S3 backend may not be bootstrapped yet."
+          echo "Run the bootstrap manually first:"
+          echo "  cd infrastructure/terraform/bootstrap"
+          echo "  terraform init && terraform apply"
+          echo "Then update the backend config in environments/prod/main.tf"
+          exit 1
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -out=tfplan \
+            -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-prod
+          path: infrastructure/terraform/environments/prod/tfplan
+          retention-days: 7
+        if: always()
+
+      - name: Plan Status
+        run: |
+          if [ "${{ steps.plan.outputs.exitcode }}" == "2" ]; then
+            echo "::notice::Terraform plan has changes to apply"
+          elif [ "${{ steps.plan.outputs.exitcode }}" == "1" ]; then
+            echo "::error::Terraform plan failed"
+            exit 1
+          else
+            echo "::notice::No changes to apply"
+          fi
+
+  apply-prod:
+    name: Apply (Prod)
+    runs-on: ubuntu-latest
+    needs: plan-prod
+    if: |
+      (github.ref == 'refs/heads/master' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.action == 'apply')
+    environment: prod-approval
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -116,8 +179,68 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Download Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-prod
+          path: infrastructure/terraform/environments/prod
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Output Infrastructure Details
+        id: outputs
+        run: |
+          echo "## Infrastructure Outputs" >> $GITHUB_STEP_SUMMARY
+          terraform output -json | jq -r 'to_entries[] | "- **\(.key)**: \(.value.value)"' >> $GITHUB_STEP_SUMMARY
+
+  # Development deployment
+  plan-dev:
+    name: Plan (Dev)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
+    environment: dev
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/dev
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+        continue-on-error: true
+
+      - name: Init failed - backend not configured
+        if: steps.init.outcome == 'failure'
+        run: |
+          echo "::error::Terraform init failed. Run bootstrap first."
+          exit 1
+
       - name: Terraform Plan
-        run: terraform plan -out=tfplan -input=false
+        id: plan
+        run: |
+          terraform plan \
+            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -out=tfplan \
+            -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Upload Plan
@@ -125,24 +248,27 @@ jobs:
         with:
           name: tfplan-dev
           path: infrastructure/terraform/environments/dev/tfplan
+          retention-days: 7
 
   apply-dev:
     name: Apply (Dev)
     runs-on: ubuntu-latest
-    needs: validate
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    environment: dev
+    needs: plan-dev
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.environment == 'dev' && inputs.action == 'apply'
+    environment: ${{ inputs.auto_approve && 'dev' || 'dev-approval' }}
     defaults:
       run:
         working-directory: infrastructure/terraform/environments/dev
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -151,135 +277,12 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+
+      - name: Download Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-dev
+          path: infrastructure/terraform/environments/dev
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve
-
-  plan-staging:
-    name: Plan (Staging)
-    runs-on: ubuntu-latest
-    needs: apply-dev
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    environment: staging
-    defaults:
-      run:
-        working-directory: infrastructure/terraform/environments/staging
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Plan
-        run: terraform plan -out=tfplan -input=false
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-staging
-          path: infrastructure/terraform/environments/staging/tfplan
-
-  apply-staging:
-    name: Apply (Staging)
-    runs-on: ubuntu-latest
-    needs: plan-staging
-    environment: staging-approval
-    defaults:
-      run:
-        working-directory: infrastructure/terraform/environments/staging
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
-
-  plan-prod:
-    name: Plan (Prod)
-    runs-on: ubuntu-latest
-    needs: apply-staging
-    environment: prod
-    defaults:
-      run:
-        working-directory: infrastructure/terraform/environments/prod
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      TF_VAR_cloudflare_app_id: ${{ secrets.CLOUDFLARE_APP_ID }}
-      TF_VAR_cloudflare_app_secret: ${{ secrets.CLOUDFLARE_APP_SECRET }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Plan
-        run: terraform plan -out=tfplan -input=false
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-prod
-          path: infrastructure/terraform/environments/prod/tfplan
-
-  apply-prod:
-    name: Apply (Prod)
-    runs-on: ubuntu-latest
-    needs: plan-prod
-    environment: prod-approval
-    defaults:
-      run:
-        working-directory: infrastructure/terraform/environments/prod
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      TF_VAR_cloudflare_app_id: ${{ secrets.CLOUDFLARE_APP_ID }}
-      TF_VAR_cloudflare_app_secret: ${{ secrets.CLOUDFLARE_APP_SECRET }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve tfplan
