@@ -21,25 +21,25 @@ This document outlines the implementation plan for the Chalk React SDK UI compon
 ```css
 :root {
   /* Colors */
-  --chalk-bg-primary: theme('colors.gray.900');
-  --chalk-bg-secondary: theme('colors.gray.800');
-  --chalk-bg-tertiary: theme('colors.gray.700');
-  --chalk-text-primary: theme('colors.white');
-  --chalk-text-secondary: theme('colors.gray.300');
-  --chalk-text-muted: theme('colors.gray.500');
-  --chalk-accent: theme('colors.blue.500');
-  --chalk-accent-hover: theme('colors.blue.400');
-  --chalk-danger: theme('colors.red.500');
-  --chalk-success: theme('colors.green.500');
-  --chalk-warning: theme('colors.yellow.500');
-  
+  --chalk-bg-primary: theme("colors.gray.900");
+  --chalk-bg-secondary: theme("colors.gray.800");
+  --chalk-bg-tertiary: theme("colors.gray.700");
+  --chalk-text-primary: theme("colors.white");
+  --chalk-text-secondary: theme("colors.gray.300");
+  --chalk-text-muted: theme("colors.gray.500");
+  --chalk-accent: theme("colors.blue.500");
+  --chalk-accent-hover: theme("colors.blue.400");
+  --chalk-danger: theme("colors.red.500");
+  --chalk-success: theme("colors.green.500");
+  --chalk-warning: theme("colors.yellow.500");
+
   /* Spacing */
   --chalk-spacing-xs: 0.25rem;
   --chalk-spacing-sm: 0.5rem;
   --chalk-spacing-md: 1rem;
   --chalk-spacing-lg: 1.5rem;
   --chalk-spacing-xl: 2rem;
-  
+
   /* Typography */
   --chalk-font-family: system-ui, -apple-system, sans-serif;
   --chalk-font-size-xs: 0.75rem;
@@ -50,21 +50,21 @@ This document outlines the implementation plan for the Chalk React SDK UI compon
   --chalk-font-weight-normal: 400;
   --chalk-font-weight-medium: 500;
   --chalk-font-weight-semibold: 600;
-  
+
   /* Borders & Radius */
   --chalk-border-radius-sm: 0.25rem;
   --chalk-border-radius-md: 0.5rem;
   --chalk-border-radius-lg: 0.75rem;
   --chalk-border-radius-xl: 1rem;
   --chalk-border-radius-full: 9999px;
-  --chalk-border-color: theme('colors.gray.700');
-  
+  --chalk-border-color: theme("colors.gray.700");
+
   /* Shadows */
   --chalk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --chalk-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
   --chalk-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
   --chalk-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
-  
+
   /* Transitions */
   --chalk-transition-fast: 150ms ease;
   --chalk-transition-normal: 250ms ease;
@@ -73,13 +73,13 @@ This document outlines the implementation plan for the Chalk React SDK UI compon
 
 /* Light Mode Override */
 [data-chalk-theme="light"] {
-  --chalk-bg-primary: theme('colors.white');
-  --chalk-bg-secondary: theme('colors.gray.50');
-  --chalk-bg-tertiary: theme('colors.gray.100');
-  --chalk-text-primary: theme('colors.gray.900');
-  --chalk-text-secondary: theme('colors.gray.600');
-  --chalk-text-muted: theme('colors.gray.400');
-  --chalk-border-color: theme('colors.gray.200');
+  --chalk-bg-primary: theme("colors.white");
+  --chalk-bg-secondary: theme("colors.gray.50");
+  --chalk-bg-tertiary: theme("colors.gray.100");
+  --chalk-text-primary: theme("colors.gray.900");
+  --chalk-text-secondary: theme("colors.gray.600");
+  --chalk-text-muted: theme("colors.gray.400");
+  --chalk-border-color: theme("colors.gray.200");
   --chalk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --chalk-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
@@ -88,6 +88,7 @@ This document outlines the implementation plan for the Chalk React SDK UI compon
 ### Tailwind Integration
 
 Components use CSS variables with Tailwind fallbacks:
+
 ```tsx
 <div className="bg-[var(--chalk-bg-primary)] text-[var(--chalk-text-primary)]">
 ```
@@ -102,65 +103,65 @@ Individual building blocks with single responsibilities.
 
 #### Core Display Components
 
-| Component | Purpose | Props |
-|-----------|---------|-------|
-| `VideoTile` | Single participant video display | `participant`, `mirror`, `showName`, `showStatus`, `aspectRatio` |
-| `Avatar` | Fallback when video off | `name`, `src`, `size`, `status` |
-| `NameTag` | Participant name + role badge | `name`, `role`, `isLocal`, `size` |
-| `StatusBadge` | Recording/Live/Transcribing indicator | `status`, `pulse`, `size` |
-| `ConnectionQuality` | Signal strength bars (1-4) | `quality`, `showLabel` |
-| `Thumbnail` | Smaller video preview | `track`, `muted`, `size` |
+| Component           | Purpose                               | Props                                                            |
+| ------------------- | ------------------------------------- | ---------------------------------------------------------------- |
+| `VideoTile`         | Single participant video display      | `participant`, `mirror`, `showName`, `showStatus`, `aspectRatio` |
+| `Avatar`            | Fallback when video off               | `name`, `src`, `size`, `status`                                  |
+| `NameTag`           | Participant name + role badge         | `name`, `role`, `isLocal`, `size`                                |
+| `StatusBadge`       | Recording/Live/Transcribing indicator | `status`, `pulse`, `size`                                        |
+| `ConnectionQuality` | Signal strength bars (1-4)            | `quality`, `showLabel`                                           |
+| `Thumbnail`         | Smaller video preview                 | `track`, `muted`, `size`                                         |
 
 #### Audio & Visual Indicators
 
-| Component | Purpose | Props |
-|-----------|---------|-------|
-| `AudioIndicator` | Mic level visualization / muted state | `level`, `muted`, `size`, `variant` |
-| `Waveform` | Audio visualization bars | `levels`, `color`, `animated` |
-| `HandRaiseIndicator` | Raised hand with animation | `raised`, `animated`, `position` |
-| `ReactionBubble` | Floating emoji reaction | `emoji`, `onComplete`, `duration` |
+| Component            | Purpose                               | Props                               |
+| -------------------- | ------------------------------------- | ----------------------------------- |
+| `AudioIndicator`     | Mic level visualization / muted state | `level`, `muted`, `size`, `variant` |
+| `Waveform`           | Audio visualization bars              | `levels`, `color`, `animated`       |
+| `HandRaiseIndicator` | Raised hand with animation            | `raised`, `animated`, `position`    |
+| `ReactionBubble`     | Floating emoji reaction               | `emoji`, `onComplete`, `duration`   |
 
 #### Interactive Elements
 
-| Component | Purpose | Props |
-|-----------|---------|-------|
-| `ControlButton` | Icon button with tooltip | `icon`, `label`, `active`, `danger`, `disabled`, `size` |
-| `IconButton` | Simple icon-only button | `icon`, `size`, `variant`, `onClick` |
-| `Toggle` | On/off switch | `checked`, `onChange`, `label`, `disabled` |
-| `Tooltip` | Accessible tooltip wrapper | `content`, `position`, `delay` |
+| Component       | Purpose                    | Props                                                   |
+| --------------- | -------------------------- | ------------------------------------------------------- |
+| `ControlButton` | Icon button with tooltip   | `icon`, `label`, `active`, `danger`, `disabled`, `size` |
+| `IconButton`    | Simple icon-only button    | `icon`, `size`, `variant`, `onClick`                    |
+| `Toggle`        | On/off switch              | `checked`, `onChange`, `label`, `disabled`              |
+| `Tooltip`       | Accessible tooltip wrapper | `content`, `position`, `delay`                          |
 
 #### Form Elements
 
-| Component | Purpose | Props |
-|-----------|---------|-------|
-| `Input` | Styled text input | `value`, `onChange`, `placeholder`, `error`, `icon` |
-| `Textarea` | Multiline text input | `value`, `onChange`, `placeholder`, `rows`, `maxLength` |
-| `Select` | Dropdown selection | `options`, `value`, `onChange`, `placeholder` |
-| `VolumeSlider` | Audio level control | `value`, `onChange`, `muted`, `onMuteToggle` |
+| Component      | Purpose              | Props                                                   |
+| -------------- | -------------------- | ------------------------------------------------------- |
+| `Input`        | Styled text input    | `value`, `onChange`, `placeholder`, `error`, `icon`     |
+| `Textarea`     | Multiline text input | `value`, `onChange`, `placeholder`, `rows`, `maxLength` |
+| `Select`       | Dropdown selection   | `options`, `value`, `onChange`, `placeholder`           |
+| `VolumeSlider` | Audio level control  | `value`, `onChange`, `muted`, `onMuteToggle`            |
 
 #### Feedback & Loading
 
-| Component | Purpose | Props |
-|-----------|---------|-------|
-| `Spinner` | Loading indicator | `size`, `color` |
-| `Skeleton` | Content placeholder | `width`, `height`, `variant` |
-| `ProgressBar` | Progress indicator | `value`, `max`, `showLabel`, `variant` |
-| `Toast` | Notification message | `message`, `type`, `duration`, `onDismiss` |
-| `Badge` | Count or status badge | `count`, `variant`, `max` |
+| Component     | Purpose               | Props                                      |
+| ------------- | --------------------- | ------------------------------------------ |
+| `Spinner`     | Loading indicator     | `size`, `color`                            |
+| `Skeleton`    | Content placeholder   | `width`, `height`, `variant`               |
+| `ProgressBar` | Progress indicator    | `value`, `max`, `showLabel`, `variant`     |
+| `Toast`       | Notification message  | `message`, `type`, `duration`, `onDismiss` |
+| `Badge`       | Count or status badge | `count`, `variant`, `max`                  |
 
 #### Tour & Guidance
 
-| Component | Purpose | Props |
-|-----------|---------|-------|
-| `TourTooltip` | Tour step tooltip with arrow | `title`, `description`, `step`, `totalSteps`, `onNext`, `onPrev`, `onSkip` |
-| `TourHighlight` | Spotlight overlay for tour target | `targetRef`, `padding`, `borderRadius` |
+| Component       | Purpose                           | Props                                                                      |
+| --------------- | --------------------------------- | -------------------------------------------------------------------------- |
+| `TourTooltip`   | Tour step tooltip with arrow      | `title`, `description`, `step`, `totalSteps`, `onNext`, `onPrev`, `onSkip` |
+| `TourHighlight` | Spotlight overlay for tour target | `targetRef`, `padding`, `borderRadius`                                     |
 
 #### Transcription
 
-| Component | Purpose | Props |
-|-----------|---------|-------|
+| Component        | Purpose                    | Props                                                     |
+| ---------------- | -------------------------- | --------------------------------------------------------- |
 | `TranscriptLine` | Single transcription entry | `speaker`, `text`, `timestamp`, `isInterim`, `confidence` |
-| `CaptionLine` | Live caption display | `text`, `speaker`, `position` |
+| `CaptionLine`    | Live caption display       | `text`, `speaker`, `position`                             |
 
 ---
 
@@ -170,66 +171,66 @@ Assembled from atomic components.
 
 #### Video & Layout
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
-| `VideoGrid` | Responsive participant grid | `VideoTile[]` with layout logic |
-| `ScreenShareView` | Screen share with thumbnails | Large view + `VideoTile[]` strip |
-| `LayoutSwitcher` | Grid/spotlight/sidebar toggle | `IconButton[]` group |
-| `MediaPreview` | Camera/mic preview | `VideoTile` + `AudioIndicator` + controls |
+| Component         | Purpose                       | Composition                               |
+| ----------------- | ----------------------------- | ----------------------------------------- |
+| `VideoGrid`       | Responsive participant grid   | `VideoTile[]` with layout logic           |
+| `ScreenShareView` | Screen share with thumbnails  | Large view + `VideoTile[]` strip          |
+| `LayoutSwitcher`  | Grid/spotlight/sidebar toggle | `IconButton[]` group                      |
+| `MediaPreview`    | Camera/mic preview            | `VideoTile` + `AudioIndicator` + controls |
 
 #### Controls & Actions
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
-| `ControlBar` | Meeting controls row | `ControlButton[]` with grouping |
-| `MobileControlSheet` | Bottom sheet for mobile | Expandable `ControlBar` variant |
-| `ReactionPicker` | Emoji reaction selector | Grid of emoji buttons + recent |
-| `RecordingControls` | Recording UI with timer | `StatusBadge` + `Timer` + controls |
+| Component            | Purpose                 | Composition                        |
+| -------------------- | ----------------------- | ---------------------------------- |
+| `ControlBar`         | Meeting controls row    | `ControlButton[]` with grouping    |
+| `MobileControlSheet` | Bottom sheet for mobile | Expandable `ControlBar` variant    |
+| `ReactionPicker`     | Emoji reaction selector | Grid of emoji buttons + recent     |
+| `RecordingControls`  | Recording UI with timer | `StatusBadge` + `Timer` + controls |
 
 #### Panels & Sidebars
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
-| `ParticipantList` | Sidebar participant list | `Avatar`, `NameTag`, `AudioIndicator` per participant |
-| `ChatPanel` | Messages + input | `MessageBubble[]` + `Textarea` + emoji picker |
-| `TranscriptionPanel` | Live transcription view | `TranscriptLine[]` + search + export |
-| `SettingsPanel` | Audio/Video settings | `DeviceSelector[]` + toggles |
-| `WaitingRoom` | Pre-admit participant list | `Avatar`, `NameTag`, admit/deny buttons |
+| Component            | Purpose                    | Composition                                           |
+| -------------------- | -------------------------- | ----------------------------------------------------- |
+| `ParticipantList`    | Sidebar participant list   | `Avatar`, `NameTag`, `AudioIndicator` per participant |
+| `ChatPanel`          | Messages + input           | `MessageBubble[]` + `Textarea` + emoji picker         |
+| `TranscriptionPanel` | Live transcription view    | `TranscriptLine[]` + search + export                  |
+| `SettingsPanel`      | Audio/Video settings       | `DeviceSelector[]` + toggles                          |
+| `WaitingRoom`        | Pre-admit participant list | `Avatar`, `NameTag`, admit/deny buttons               |
 
 #### Device & Media
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
-| `DeviceSelector` | Camera/Mic/Speaker dropdowns | `Select` + preview + level indicator |
-| `BackgroundEffectsPicker` | Virtual background selection | Thumbnail grid + upload |
-| `NoiseSuppressionToggle` | Audio enhancement controls | `Toggle` + `Select` |
+| Component                 | Purpose                      | Composition                          |
+| ------------------------- | ---------------------------- | ------------------------------------ |
+| `DeviceSelector`          | Camera/Mic/Speaker dropdowns | `Select` + preview + level indicator |
+| `BackgroundEffectsPicker` | Virtual background selection | Thumbnail grid + upload              |
+| `NoiseSuppressionToggle`  | Audio enhancement controls   | `Toggle` + `Select`                  |
 
 #### Overlays & Feedback
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
-| `NotificationStack` | Toast notifications container | `Toast[]` with stacking |
-| `ConnectionLostOverlay` | Reconnection UI | Spinner + message + retry button |
+| Component               | Purpose                       | Composition                      |
+| ----------------------- | ----------------------------- | -------------------------------- |
+| `NotificationStack`     | Toast notifications container | `Toast[]` with stacking          |
+| `ConnectionLostOverlay` | Reconnection UI               | Spinner + message + retry button |
 
 #### Headers & Info
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
+| Component       | Purpose                | Composition                                            |
+| --------------- | ---------------------- | ------------------------------------------------------ |
 | `MeetingHeader` | Top bar with room info | Room name + `Timer` + `StatusBadge` + `LayoutSwitcher` |
-| `InviteModal` | Share meeting link | Link display + copy button + share options |
+| `InviteModal`   | Share meeting link     | Link display + copy button + share options             |
 
 #### Chat Components
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
-| `MessageBubble` | Single chat message | Avatar + content + timestamp |
-| `TypingIndicator` | Who's typing | Animated dots + names |
+| Component             | Purpose                | Composition                    |
+| --------------------- | ---------------------- | ------------------------------ |
+| `MessageBubble`       | Single chat message    | Avatar + content + timestamp   |
+| `TypingIndicator`     | Who's typing           | Animated dots + names          |
 | `PinnedMessageBanner` | Pinned message display | Message preview + unpin button |
 
 #### Tour
 
-| Component | Purpose | Composition |
-|-----------|---------|-------------|
+| Component     | Purpose              | Composition                                |
+| ------------- | -------------------- | ------------------------------------------ |
 | `TourOverlay` | Full tour experience | `TourHighlight` + `TourTooltip` + backdrop |
 
 ---
@@ -238,12 +239,12 @@ Assembled from atomic components.
 
 Complete experiences, one-liner integration.
 
-| Component | Purpose | Features |
-|-----------|---------|----------|
-| `PreJoinLobby` | Device preview before joining | Camera preview, name input, device selection, A/V toggles, join button |
-| `MeetingRoom` | Complete meeting UI | VideoGrid, ControlBar, ChatPanel, ParticipantList, TranscriptionPanel, all interactions |
-| `EndScreen` | Post-meeting summary | Duration, feedback prompt, rejoin option, recording download |
-| `GuidedTour` | Interactive onboarding tour | Step-by-step UI walkthrough with `TourOverlay` |
+| Component      | Purpose                       | Features                                                                                |
+| -------------- | ----------------------------- | --------------------------------------------------------------------------------------- |
+| `PreJoinLobby` | Device preview before joining | Camera preview, name input, device selection, A/V toggles, join button                  |
+| `MeetingRoom`  | Complete meeting UI           | VideoGrid, ControlBar, ChatPanel, ParticipantList, TranscriptionPanel, all interactions |
+| `EndScreen`    | Post-meeting summary          | Duration, feedback prompt, rejoin option, recording download                            |
+| `GuidedTour`   | Interactive onboarding tour   | Step-by-step UI walkthrough with `TourOverlay`                                          |
 
 ---
 
@@ -257,7 +258,7 @@ interface VideoTileProps {
   mirror?: boolean;
   showName?: boolean;
   showStatus?: boolean;
-  aspectRatio?: '16:9' | '4:3' | '1:1';
+  aspectRatio?: "16:9" | "4:3" | "1:1";
   onClick?: () => void;
   onDoubleClick?: () => void;
   pinned?: boolean;
@@ -277,9 +278,9 @@ interface TranscriptionPanelProps {
   showTimestamps?: boolean;
   showConfidence?: boolean;
   searchable?: boolean;
-  onExport?: (format: 'txt' | 'srt' | 'vtt') => void;
+  onExport?: (format: "txt" | "srt" | "vtt") => void;
   onClose?: () => void;
-  position?: 'right' | 'bottom';
+  position?: "right" | "bottom";
   className?: string;
 }
 
@@ -296,6 +297,7 @@ interface TranscriptEntry {
 ```
 
 **Features**:
+
 - Real-time transcript updates with interim results
 - Speaker identification with colors
 - Search/filter functionality
@@ -319,18 +321,19 @@ interface GuidedTourProps {
 }
 
 interface TourStep {
-  target: string;           // CSS selector or ref
+  target: string; // CSS selector or ref
   title: string;
   description: string;
-  placement?: 'top' | 'bottom' | 'left' | 'right';
-  action?: 'click' | 'hover' | 'focus';
-  nextTrigger?: 'button' | 'action' | 'auto';
+  placement?: "top" | "bottom" | "left" | "right";
+  action?: "click" | "hover" | "focus";
+  nextTrigger?: "button" | "action" | "auto";
   delay?: number;
   spotlight?: boolean;
 }
 ```
 
 **Default Tour Steps for MeetingRoom**:
+
 1. **Video Grid**: "This is where you'll see all participants"
 2. **Your Video**: "Your camera preview. Click to pin yourself"
 3. **Mute Button**: "Press M or click to mute/unmute"
@@ -345,8 +348,8 @@ interface TourStep {
 
 ```tsx
 interface ControlBarProps {
-  position?: 'bottom' | 'top';
-  variant?: 'floating' | 'fixed' | 'minimal';
+  position?: "bottom" | "top";
+  variant?: "floating" | "fixed" | "minimal";
   showLabels?: boolean;
   buttons?: ControlBarButton[];
   moreMenuItems?: MenuItem[];
@@ -354,16 +357,25 @@ interface ControlBarProps {
   className?: string;
 }
 
-type ControlBarButton = 
-  | 'mic' | 'video' | 'screenshare' | 'record' 
-  | 'chat' | 'participants' | 'transcription'
-  | 'handraise' | 'reactions' | 'settings' 
-  | 'more' | 'leave';
+type ControlBarButton =
+  | "mic"
+  | "video"
+  | "screenshare"
+  | "record"
+  | "chat"
+  | "participants"
+  | "transcription"
+  | "handraise"
+  | "reactions"
+  | "settings"
+  | "more"
+  | "leave";
 ```
 
 **Default Buttons** (left to right):
+
 1. Microphone toggle
-2. Video toggle  
+2. Video toggle
 3. Screen share
 4. Record (if enabled)
 5. **Transcription toggle** ← NEW
@@ -381,33 +393,33 @@ interface MeetingRoomProps {
   roomId: string;
   token: string;
   displayName: string;
-  
+
   // Feature flags
   enableChat?: boolean;
   enableRecording?: boolean;
   enableScreenShare?: boolean;
   enableHandRaise?: boolean;
   enableReactions?: boolean;
-  enableTranscription?: boolean;      // NEW
-  enableTour?: boolean;               // NEW
-  
+  enableTranscription?: boolean; // NEW
+  enableTour?: boolean; // NEW
+
   // Layout
-  defaultLayout?: 'grid' | 'spotlight' | 'sidebar';
+  defaultLayout?: "grid" | "spotlight" | "sidebar";
   defaultChatOpen?: boolean;
   defaultParticipantsOpen?: boolean;
   defaultTranscriptionOpen?: boolean; // NEW
-  
+
   // Tour
-  showTourOnFirstVisit?: boolean;     // NEW
-  tourSteps?: TourStep[];             // NEW (custom steps)
-  
+  showTourOnFirstVisit?: boolean; // NEW
+  tourSteps?: TourStep[]; // NEW (custom steps)
+
   // Callbacks
   onLeave?: () => void;
   onError?: (error: ChalkError) => void;
-  onTourComplete?: () => void;        // NEW
-  
+  onTourComplete?: () => void; // NEW
+
   // Customization
-  theme?: 'light' | 'dark' | 'system';
+  theme?: "light" | "dark" | "system";
   className?: string;
 }
 ```
@@ -418,18 +430,18 @@ interface MeetingRoomProps {
 
 ### Sound Assets (✅ Ready)
 
-| Sound | Trigger | File |
-|-------|---------|------|
-| `join.mp3` | Participant joins | Soft chime |
-| `leave.mp3` | Participant leaves | Subtle exit tone |
-| `message.mp3` | Chat message received | Notification pop |
-| `hand-raise.mp3` | Hand raised | Attention sound |
-| `recording-start.mp3` | Recording begins | Confirmation beep |
-| `recording-stop.mp3` | Recording ends | Completion tone |
-| `click.mp3` | Button press | Subtle click |
-| `error.mp3` | Error occurs | Warning tone |
+| Sound                     | Trigger                 | File                |
+| ------------------------- | ----------------------- | ------------------- |
+| `join.mp3`                | Participant joins       | Soft chime          |
+| `leave.mp3`               | Participant leaves      | Subtle exit tone    |
+| `message.mp3`             | Chat message received   | Notification pop    |
+| `hand-raise.mp3`          | Hand raised             | Attention sound     |
+| `recording-start.mp3`     | Recording begins        | Confirmation beep   |
+| `recording-stop.mp3`      | Recording ends          | Completion tone     |
+| `click.mp3`               | Button press            | Subtle click        |
+| `error.mp3`               | Error occurs            | Warning tone        |
 | `transcription-ready.mp3` | Transcription available | Subtle notification |
-| `tour-step.mp3` | Tour step advance | Soft pop |
+| `tour-step.mp3`           | Tour step advance       | Soft pop            |
 
 ### useSoundEffects Hook
 
@@ -448,11 +460,11 @@ function useSoundEffects(options?: UseSoundEffectsOptions): {
   playRecordingStop: () => void;
   playClick: () => void;
   playError: () => void;
-  playTranscriptionReady: () => void;  // NEW
-  playTourStep: () => void;            // NEW
+  playTranscriptionReady: () => void; // NEW
+  playTourStep: () => void; // NEW
   setEnabled: (enabled: boolean) => void;
   setVolume: (volume: number) => void;
-}
+};
 ```
 
 ---
@@ -461,22 +473,22 @@ function useSoundEffects(options?: UseSoundEffectsOptions): {
 
 ### Animation Triggers
 
-| Element | Animation | Trigger |
-|---------|-----------|---------|
-| VideoTile | Scale in | Participant joins |
-| VideoTile | Fade out | Participant leaves |
-| VideoTile border | Pulse glow | Speaking |
-| ControlButton | Scale bounce | Click |
-| ChatPanel | Slide right | Toggle open/close |
-| TranscriptionPanel | Slide right | Toggle open/close |
-| ReactionBubble | Float up + fade | Reaction sent |
-| HandRaiseIndicator | Bounce | Hand raised |
-| StatusBadge | Pulse | Recording/transcribing active |
-| Tooltip | Fade + slight scale | Hover |
-| TourHighlight | Fade in + pulse | Tour step |
-| TourTooltip | Scale in from target | Tour step |
-| TranscriptLine | Fade in + slide | New transcript |
-| Toast | Slide in from edge | Notification |
+| Element            | Animation            | Trigger                       |
+| ------------------ | -------------------- | ----------------------------- |
+| VideoTile          | Scale in             | Participant joins             |
+| VideoTile          | Fade out             | Participant leaves            |
+| VideoTile border   | Pulse glow           | Speaking                      |
+| ControlButton      | Scale bounce         | Click                         |
+| ChatPanel          | Slide right          | Toggle open/close             |
+| TranscriptionPanel | Slide right          | Toggle open/close             |
+| ReactionBubble     | Float up + fade      | Reaction sent                 |
+| HandRaiseIndicator | Bounce               | Hand raised                   |
+| StatusBadge        | Pulse                | Recording/transcribing active |
+| Tooltip            | Fade + slight scale  | Hover                         |
+| TourHighlight      | Fade in + pulse      | Tour step                     |
+| TourTooltip        | Scale in from target | Tour step                     |
+| TranscriptLine     | Fade in + slide      | New transcript                |
+| Toast              | Slide in from edge   | Notification                  |
 
 ---
 
@@ -484,22 +496,22 @@ function useSoundEffects(options?: UseSoundEffectsOptions): {
 
 ### Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `M` | Toggle mute |
-| `V` | Toggle video |
-| `S` | Toggle screen share |
-| `H` | Raise/lower hand |
-| `C` | Toggle chat |
-| `P` | Toggle participants |
-| `T` | Toggle transcription |
-| `?` | Show keyboard shortcuts |
-| `Esc` | Close panels/modals, exit tour |
-| `Tab` | Navigate controls |
-| `Arrow keys` | Navigate video grid |
-| `Enter/Space` | Activate focused element |
-| `N` | Next tour step (during tour) |
-| `B` | Previous tour step (during tour) |
+| Key           | Action                           |
+| ------------- | -------------------------------- |
+| `M`           | Toggle mute                      |
+| `V`           | Toggle video                     |
+| `S`           | Toggle screen share              |
+| `H`           | Raise/lower hand                 |
+| `C`           | Toggle chat                      |
+| `P`           | Toggle participants              |
+| `T`           | Toggle transcription             |
+| `?`           | Show keyboard shortcuts          |
+| `Esc`         | Close panels/modals, exit tour   |
+| `Tab`         | Navigate controls                |
+| `Arrow keys`  | Navigate video grid              |
+| `Enter/Space` | Activate focused element         |
+| `N`           | Next tour step (during tour)     |
+| `B`           | Previous tour step (during tour) |
 
 ### ARIA Labels
 
