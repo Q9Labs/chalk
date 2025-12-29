@@ -54,31 +54,70 @@ export const err = <E>(error: E): Err<E> => ({ ok: false, error });
 // ============================================================================
 
 /**
- * Configuration options for ChalkClient
+ * Function that provides a fresh JWT token
+ * Called before each API request when using tokenProvider
  *
  * @example
  * ```ts
- * // Using API key (client-side)
- * const client = new ChalkClient({ apiKey: 'ck_live_xxx' });
+ * const tokenProvider = async () => {
+ *   const response = await fetch('/api/chalk-token');
+ *   const { token } = await response.json();
+ *   return token;
+ * };
+ * ```
+ */
+export type TokenProvider = () => Promise<string>;
+
+/**
+ * Configuration options for ChalkClient
  *
- * // Using pre-fetched token (server-to-server)
+ * Authentication is required - provide either:
+ * - `token`: Static JWT token (simplest option)
+ * - `tokenProvider`: Function that returns a fresh JWT (recommended for browser)
+ * - `apiKey`: DEPRECATED - Will be removed in v2.0
+ *
+ * @example
+ * ```ts
+ * // Option 1: Static token (simplest)
  * const client = new ChalkClient({ token: 'jwt_xxx' });
+ *
+ * // Option 2: Dynamic token provider (recommended for browser apps)
+ * const client = new ChalkClient({
+ *   tokenProvider: async () => {
+ *     const res = await fetch('/api/chalk-token');
+ *     const { token } = await res.json();
+ *     return token;
+ *   }
+ * });
+ *
+ * // Option 3: API key (DEPRECATED - security risk in browser)
+ * const client = new ChalkClient({ apiKey: 'ck_live_xxx' });
  * ```
  */
 export interface ChalkClientConfig {
 	/**
-	 * API key for authentication
-	 * Use this for client-side applications where the key is public
-	 * @example 'ck_live_xxxxx'
-	 */
-	apiKey?: string;
-
-	/**
-	 * JWT token from your server
-	 * Use this for server-to-server auth where you've already obtained a token
+	 * Static JWT token for authentication
+	 * Use this when you have a pre-fetched token from your server
 	 * @example 'eyJhbGciOiJIUzI1NiIs...'
 	 */
 	token?: string;
+
+	/**
+	 * Dynamic token provider function (recommended for browser apps)
+	 * Called before each API request to get a fresh token
+	 * Enables automatic token refresh on 401 errors
+	 */
+	tokenProvider?: TokenProvider;
+
+	/**
+	 * @deprecated Use `token` or `tokenProvider` instead.
+	 * API keys should not be exposed in client-side applications.
+	 * This option will be removed in v2.0.
+	 *
+	 * API key for authentication (server-side only)
+	 * @example 'ck_live_xxxxx'
+	 */
+	apiKey?: string;
 
 	/**
 	 * API base URL
@@ -504,6 +543,68 @@ export interface Reaction {
 }
 
 // ============================================================================
+// Token Types
+// ============================================================================
+
+/**
+ * Set of tokens returned when joining a room
+ *
+ * The SDK uses three different tokens for different purposes:
+ * - `accessToken`: JWT for authenticating with Chalk REST API
+ * - `refreshToken`: Used to obtain new tokens when accessToken expires
+ * - `rtcToken`: Cloudflare RealtimeKit token for WebRTC connections
+ *
+ * @example
+ * ```ts
+ * const result = await client.joinRoom('room_123', { displayName: 'John' });
+ * // result.tokens.accessToken - Use for API calls
+ * // result.tokens.rtcToken - Used internally for WebRTC
+ * ```
+ */
+export interface TokenSet {
+	/**
+	 * Chalk API JWT for REST API authentication
+	 * Used for all HTTP requests to Chalk backend
+	 */
+	accessToken: string;
+
+	/**
+	 * Refresh token for obtaining new access tokens
+	 * Optional - only provided when refresh flow is enabled
+	 * WARNING: Do not store in browser localStorage for security
+	 */
+	refreshToken?: string;
+
+	/**
+	 * Cloudflare RealtimeKit token for WebRTC connections
+	 * Used internally by the SDK to establish WebRTC sessions
+	 */
+	rtcToken: string;
+
+	/**
+	 * Unix timestamp (milliseconds) when tokens expire
+	 * Use this to proactively refresh tokens before expiry
+	 */
+	expiresAt?: number;
+}
+
+/**
+ * Result returned when successfully joining a room
+ *
+ * Contains room information, participant details, and authentication tokens
+ */
+export interface JoinRoomResult {
+	/** Information about the joined room */
+	room: RoomInfo;
+
+	/** The local participant (you) in the room */
+	participant: Participant;
+
+	/** Authentication tokens for API and WebRTC */
+	tokens: TokenSet;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 
@@ -527,13 +628,54 @@ export interface CreateRoomResponse {
 }
 
 /**
- * Response from joining a room
+ * Response from joining a room (internal API response format)
  * @internal
  */
 export interface JoinRoomResponse {
 	participantId: string;
-	token: string;
+	/**
+	 * Authentication tokens for the session
+	 */
+	tokens: TokenSet;
 	room: RoomInfo;
+}
+
+/**
+ * Raw API response from join room endpoint (snake_case from Go API)
+ * @internal
+ */
+export interface RawJoinRoomApiResponse {
+	success: boolean;
+	room_id: string;
+	participant_id: string;
+	access_token?: string;
+	refresh_token?: string;
+	auth_token: string;
+	token?: string;
+	expires_at?: number;
+	room: {
+		id: string;
+		name: string;
+	};
+}
+
+/**
+ * Transformed API response from join room endpoint (camelCase after transform)
+ * @internal
+ */
+export interface TransformedJoinRoomApiResponse {
+	success: boolean;
+	roomId: string;
+	participantId: string;
+	accessToken?: string;
+	refreshToken?: string;
+	authToken: string;
+	token?: string;
+	expiresAt?: number;
+	room: {
+		id: string;
+		name: string;
+	};
 }
 
 // ============================================================================

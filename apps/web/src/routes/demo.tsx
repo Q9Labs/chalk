@@ -28,7 +28,7 @@ function DemoPage() {
 }
 
 function DemoContent() {
-	const { joinRoom, } = useChalk();
+	const { joinRoom } = useChalk();
 	const [displayName, setDisplayName] = useState("");
 	const [roomId, setRoomId] = useState("demo-room-001");
 	const [isJoining, setIsJoining] = useState(false);
@@ -55,7 +55,6 @@ function DemoContent() {
 			setIsJoining(false);
 		}
 	}, [displayName, roomId, joinRoom]);
-
 
 	return (
 		<div className="flex min-h-screen flex-col bg-muted/30">

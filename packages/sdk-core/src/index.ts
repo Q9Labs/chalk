@@ -25,43 +25,41 @@ export { ChalkClient } from "./client.ts";
 export { EventEmitter } from "./events.ts";
 // Room
 export { Room } from "./room.ts";
+export {
+	camelToSnake,
+	camelToSnakeString,
+	snakeToCamel,
+	snakeToCamelString,
+} from "./transforms.ts";
 // Types
 export type {
-	// API types
 	ApiResponse,
-	// Client config
 	ChalkClientConfig,
 	ChalkError,
-	// Event types
 	ChalkEventType,
-	// Chat types
 	ChatMessage,
 	CreateRoomResponse,
 	Err,
 	JoinRoomResponse,
+	JoinRoomResult,
 	MediaConstraints,
 	MediaDevice,
-	MediaDeviceInfo, // deprecated alias
+	MediaDeviceInfo,
 	MediaDeviceKind,
 	Ok,
-	// Participant types
 	Participant,
 	ParticipantRole,
-	// Reactions
 	Reaction,
 	ReactionEmoji,
-	// Recording types
 	Recording,
 	RecordingStatus,
-	// Result types for error handling
 	Result,
-	// Room types
 	RoomConfig,
 	RoomInfo,
 	RoomStatus,
-	// Screen share
 	ScreenShareOptions,
-	// Media types
+	TokenProvider,
+	TokenSet,
 	Track,
 	TrackKind,
 } from "./types.ts";

@@ -5,30 +5,49 @@
 
 import RealtimeKitClient from "@cloudflare/realtimekit";
 import { APIClient } from "./api-client.ts";
+import { EventEmitter } from "./events.ts";
 import { Room } from "./room.ts";
 import type {
 	ChalkClientConfig,
+	ChalkError,
 	Participant,
 	RoomConfig,
 	RoomStatus,
+	TokenProvider,
 } from "./types.ts";
 import { WSClient } from "./ws-client.ts";
 
-export class ChalkClient {
+interface ChalkClientEvents {
+	"token-expired": ChalkError;
+}
+
+export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 	private readonly apiClient: APIClient;
 	private readonly wsUrl?: string;
+	private readonly tokenProvider?: TokenProvider;
 	private readonly debug: boolean;
 	private currentRoom: Room | null = null;
+	private currentWsClient: WSClient | null = null;
 
 	constructor(config: ChalkClientConfig) {
+		super();
 		this.debug = config.debug ?? false;
 		this.wsUrl = config.wsUrl;
+		this.tokenProvider = config.tokenProvider;
 
-		if (!config.apiKey && !config.token && !this.debug) {
-			throw new Error("ChalkClient requires either apiKey or token");
+		const hasAuth =
+			config.token || config.tokenProvider || config.apiKey || this.debug;
+		if (!hasAuth) {
+			throw new Error(
+				"ChalkClient requires authentication: provide token, tokenProvider, or apiKey",
+			);
 		}
 
 		this.apiClient = new APIClient(config);
+
+		this.apiClient.on("token-expired", (error) => {
+			this.emit("token-expired", error);
+		});
 	}
 
 	private log(...args: unknown[]): void {
@@ -37,12 +56,6 @@ export class ChalkClient {
 		}
 	}
 
-	/**
-	 * Join a room using Cloudflare RealtimeKit or custom WebSocket signaling
-	 * @param roomId - The room ID to join
-	 * @param config - Room configuration including display name and initial media state
-	 * @returns The Room instance
-	 */
 	async joinRoom(roomId: string, config: RoomConfig): Promise<Room> {
 		if (this.currentRoom) {
 			this.log("Leaving existing room before joining new one");
@@ -51,7 +64,6 @@ export class ChalkClient {
 
 		this.log("Joining room:", roomId);
 
-		// Get auth token from API (demo endpoint returns Cloudflare auth_token)
 		const response = this.debug
 			? await this.apiClient.demoJoin(roomId, config.displayName)
 			: await this.apiClient.addParticipant(
@@ -65,13 +77,11 @@ export class ChalkClient {
 			throw new Error(response.error?.message ?? "Failed to join room");
 		}
 
-		const { participantId, token, room: roomInfo } = response.data;
-		this.log("Got auth token");
+		const { participantId, tokens, room: roomInfo } = response.data;
+		this.log("Got auth tokens");
 
-		// Store token for future API calls
-		this.apiClient.setToken(token);
+		this.apiClient.setToken(tokens.accessToken);
 
-		// Create local participant
 		const localParticipant: Participant = {
 			id: participantId,
 			displayName: config.displayName,
@@ -86,25 +96,28 @@ export class ChalkClient {
 			metadata: config.metadata,
 		};
 
-		// Use WSClient for signaling if wsUrl is configured
 		if (this.wsUrl) {
 			this.log("Initializing WebSocket signaling");
-			const wsClient = new WSClient(this.wsUrl, this.debug);
+			const wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
 			const room = new Room(roomId, wsClient, this.debug);
 			room._setLocalParticipant(localParticipant);
 			room._setInfo(roomInfo);
+			room._setTokens(tokens);
 
-			// Connect WebSocket
-			wsClient.connect(token, roomId);
+			wsClient.on("token-expired", (error) => {
+				this.emit("token-expired", error);
+			});
 
+			wsClient.connect(tokens.rtcToken, roomId);
+
+			this.currentWsClient = wsClient;
 			this.currentRoom = room;
 			return room;
 		}
 
-		// Otherwise use RealtimeKit for WebRTC
 		this.log("Initializing RealtimeKit");
 		const rtkClient = await RealtimeKitClient.init({
-			authToken: token,
+			authToken: tokens.rtcToken,
 			defaults: {
 				audio: config.audio ?? false,
 				video: config.video ?? false,
@@ -113,12 +126,11 @@ export class ChalkClient {
 
 		this.log("RealtimeKit initialized, creating Room");
 
-		// Create Room instance wrapping RealtimeKit
 		const room = new Room(roomId, rtkClient, this.debug);
 		room._setLocalParticipant(localParticipant);
 		room._setInfo(roomInfo);
+		room._setTokens(tokens);
 
-		// Join the RealtimeKit room
 		this.log("Joining RealtimeKit room");
 		await rtkClient.join();
 
@@ -215,14 +227,15 @@ export class ChalkClient {
 		return this.currentRoom?.status ?? "disconnected";
 	}
 
-	/**
-	 * Disconnect from the current room
-	 */
 	disconnect(): void {
 		if (this.currentRoom) {
 			this.log("Disconnecting");
 			this.currentRoom.leave();
 			this.currentRoom = null;
+		}
+		if (this.currentWsClient) {
+			this.currentWsClient.disconnect();
+			this.currentWsClient = null;
 		}
 	}
 }

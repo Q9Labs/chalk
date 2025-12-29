@@ -12,12 +12,14 @@
 		"test": "turbo test",
 		"lint": "turbo lint",
 		"check-types": "turbo check-types",
-		"clean": "turbo clean && rm -rf node_modules"
+		"clean": "turbo clean && rm -rf node_modules",
+		"generate": "turbo run generate:types"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
 		"turbo": "^2.7.2",
-		"typescript": "^5.7.2"
+		"typescript": "^5.7.2",
+		"yaml": "^2.8.2"
 	},
 	"engines": {
 		"node": ">=20"

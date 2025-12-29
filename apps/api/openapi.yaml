@@ -1,0 +1,2175 @@
+openapi: 3.0.3
+info:
+  title: Chalk API
+  description: |
+    Ultra low-latency, low-bandwidth optimized, real-time video conferencing platform
+    built on Cloudflare RealtimeKit.
+    
+    **Primary Use Case:** Education (virtual classrooms, tutoring, lectures)
+  version: 1.0.0
+  contact:
+    name: Chalk Support
+    email: support@chalk.io
+  license:
+    name: Private
+    url: https://chalk.io/terms
+
+servers:
+  - url: https://api.chalk.io
+    description: Production
+  - url: https://api.staging.chalk.io
+    description: Staging
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Authentication and token management
+  - name: Tenants
+    description: Tenant (organization) management
+  - name: Rooms
+    description: Video conferencing room management
+  - name: Participants
+    description: Room participant management
+  - name: Recordings
+    description: Recording management and storage
+  - name: Demo
+    description: Demo mode endpoints (development only)
+  - name: Webhooks
+    description: Webhook handlers for external services
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns the health status of the API
+      operationId: healthCheck
+      tags: []
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  database:
+                    type: string
+                    example: connected
+
+  # ============================================================================
+  # AUTH ENDPOINTS
+  # ============================================================================
+  /api/v1/auth/token:
+    post:
+      summary: Exchange API key for JWT
+      description: |
+        Exchange a tenant API key for a JWT token pair (access + refresh).
+        The access token is used for subsequent API calls.
+      operationId: getToken
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Token pair generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh JWT token
+      description: Exchange a refresh token for a new token pair
+      operationId: refreshToken
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New token pair generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # TENANT ENDPOINTS
+  # ============================================================================
+  /api/v1/tenants:
+    post:
+      summary: Create a new tenant
+      description: |
+        Create a new tenant (organization). Returns the tenant with a one-time
+        visible API key. Store this key securely - it cannot be retrieved again.
+      operationId: createTenant
+      tags:
+        - Tenants
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+      responses:
+        '201':
+          description: Tenant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTenantResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/tenants/{id}:
+    get:
+      summary: Get tenant details
+      description: Retrieve tenant information by ID
+      operationId: getTenant
+      tags:
+        - Tenants
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '200':
+          description: Tenant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Invalid tenant ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      summary: Update tenant
+      description: Update tenant settings and limits
+      operationId: updateTenant
+      tags:
+        - Tenants
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+      responses:
+        '200':
+          description: Tenant updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete tenant
+      description: Delete a tenant and all associated data
+      operationId: deleteTenant
+      tags:
+        - Tenants
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '204':
+          description: Tenant deleted successfully
+        '400':
+          description: Invalid tenant ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/tenants/{id}/rotate-key:
+    post:
+      summary: Rotate API key
+      description: |
+        Generate a new API key for the tenant. The old key is immediately
+        invalidated. Store the new key securely.
+      operationId: rotateTenantApiKey
+      tags:
+        - Tenants
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '200':
+          description: API key rotated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateApiKeyResponse'
+        '400':
+          description: Invalid tenant ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # ROOM ENDPOINTS
+  # ============================================================================
+  /api/v1/rooms:
+    post:
+      summary: Create a new room
+      description: |
+        Create a new video conferencing room. A Cloudflare RealtimeKit meeting
+        is automatically provisioned.
+      operationId: createRoom
+      tags:
+        - Rooms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Room created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: List rooms
+      description: List all active rooms for the authenticated tenant
+      operationId: listRooms
+      tags:
+        - Rooms
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of rooms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRoomsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms/{id}:
+    get:
+      summary: Get room details
+      description: Retrieve room information including participant count
+      operationId: getRoom
+      tags:
+        - Rooms
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: Room details with participant count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomWithParticipantCount'
+        '400':
+          description: Invalid room ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      summary: Update room
+      description: Update room name or configuration
+      operationId: updateRoom
+      tags:
+        - Rooms
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+      responses:
+        '200':
+          description: Room updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete room
+      description: End and delete a room (also removes from Cloudflare)
+      operationId: deleteRoom
+      tags:
+        - Rooms
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '204':
+          description: Room deleted successfully
+        '400':
+          description: Invalid room ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms/{id}/end:
+    post:
+      summary: End room
+      description: |
+        End an active room session. All participants are disconnected and
+        the room status is set to 'ended'. The room can be reactivated later.
+      operationId: endRoom
+      tags:
+        - Rooms
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: Room ended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid room ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # PARTICIPANT ENDPOINTS
+  # ============================================================================
+  /api/v1/rooms/{id}/participants:
+    post:
+      summary: Add participant to room
+      description: |
+        Add a new participant to a room. Returns participant info along with
+        JWT tokens and Cloudflare auth token for SDK connection.
+      operationId: addParticipant
+      tags:
+        - Participants
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddParticipantRequest'
+      responses:
+        '201':
+          description: Participant added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddParticipantResponse'
+        '400':
+          description: Invalid request or room not active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: List participants
+      description: List all participants in a room
+      operationId: listParticipants
+      tags:
+        - Participants
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+        - name: active
+          in: query
+          description: Filter for active participants only
+          schema:
+            type: string
+            enum: ['true', 'false']
+      responses:
+        '200':
+          description: List of participants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListParticipantsResponse'
+        '400':
+          description: Invalid room ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms/{id}/participants/{pid}:
+    delete:
+      summary: Remove participant
+      description: Remove (kick) a participant from the room
+      operationId: removeParticipant
+      tags:
+        - Participants
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+        - $ref: '#/components/parameters/ParticipantId'
+      responses:
+        '200':
+          description: Participant removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+        '204':
+          description: Participant removed (no content returned)
+        '400':
+          description: Invalid room or participant ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms/{id}/participants/{pid}/token:
+    post:
+      summary: Refresh participant token
+      description: |
+        Generate a new token pair and Cloudflare auth token for a participant.
+        Use this when the current token is about to expire.
+      operationId: refreshParticipantToken
+      tags:
+        - Participants
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+        - $ref: '#/components/parameters/ParticipantId'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshParticipantTokenResponse'
+        '400':
+          description: Invalid room or participant ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # ROOM RECORDING ENDPOINTS
+  # ============================================================================
+  /api/v1/rooms/{id}/recordings/start:
+    post:
+      summary: Start recording
+      description: Start recording a room session via Cloudflare
+      operationId: startRecording
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '201':
+          description: Recording started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+        '400':
+          description: Invalid room ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Recording already in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms/{id}/recordings/stop:
+    post:
+      summary: Stop recording
+      description: Stop the active recording for a room
+      operationId: stopRecording
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: Recording stopped successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+        '400':
+          description: Invalid room ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No active recording found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms/{id}/recordings/{rid}/archive:
+    post:
+      summary: Archive room recording
+      description: Move a recording from R2 to S3 Glacier for long-term storage
+      operationId: archiveRoomRecording
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+        - $ref: '#/components/parameters/RecordingId'
+      responses:
+        '200':
+          description: Recording archived successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchiveRecordingResponse'
+        '400':
+          description: Invalid ID or recording not ready for archive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recording not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # STANDALONE RECORDING ENDPOINTS
+  # ============================================================================
+  /api/v1/recordings:
+    get:
+      summary: List recordings
+      description: List all recordings for the authenticated tenant
+      operationId: listRecordings
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of recordings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRecordingsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/recordings/{id}:
+    get:
+      summary: Get recording details
+      description: Retrieve recording information including room details
+      operationId: getRecording
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/RecordingIdPath'
+      responses:
+        '200':
+          description: Recording details with room info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingWithRoomInfo'
+        '400':
+          description: Invalid recording ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recording not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete recording
+      description: Delete a recording and its stored file
+      operationId: deleteRecording
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/RecordingIdPath'
+      responses:
+        '200':
+          description: Recording deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteRecordingResponse'
+        '400':
+          description: Invalid recording ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recording not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/recordings/{id}/download:
+    get:
+      summary: Get download URL
+      description: |
+        Get a presigned download URL for a recording. The URL is valid for 1 hour.
+        If the recording is still processing, returns the current status.
+      operationId: getRecordingDownloadUrl
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/RecordingIdPath'
+      responses:
+        '200':
+          description: Download URL or processing status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadRecordingResponse'
+        '400':
+          description: Invalid recording ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recording not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/recordings/{id}/archive:
+    post:
+      summary: Archive recording
+      description: Move a recording from R2 to S3 Glacier for long-term storage
+      operationId: archiveRecording
+      tags:
+        - Recordings
+      parameters:
+        - $ref: '#/components/parameters/RecordingIdPath'
+      responses:
+        '200':
+          description: Recording archived successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchiveRecordingResponse'
+        '400':
+          description: Invalid ID or recording not ready for archive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recording not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # DEMO ENDPOINTS
+  # ============================================================================
+  /api/v1/demo/join:
+    post:
+      summary: Demo join room
+      description: |
+        Join a demo room without authentication. Only available when
+        CHALK_ENABLE_DEMO=true is set. Creates tenant and room if needed.
+      operationId: demoJoin
+      tags:
+        - Demo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoJoinRequest'
+      responses:
+        '200':
+          description: Successfully joined demo room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoJoinResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoErrorResponse'
+        '403':
+          description: Demo mode is disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoErrorResponse'
+
+  # ============================================================================
+  # WEBHOOK ENDPOINTS
+  # ============================================================================
+  /api/v1/webhooks/cloudflare/recording:
+    post:
+      summary: Handle recording ready webhook
+      description: |
+        Webhook endpoint for Cloudflare to notify when a recording is ready.
+        Downloads the recording and uploads it to R2 storage.
+      operationId: handleRecordingReadyWebhook
+      tags:
+        - Webhooks
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordingReadyWebhook'
+      responses:
+        '200':
+          description: Recording processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookRecordingResponse'
+        '400':
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recording not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /api/v1/auth/token
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Tenant API key (format ck_live_xxx or ck_test_xxx)
+
+  parameters:
+    TenantId:
+      name: id
+      in: path
+      required: true
+      description: Tenant UUID
+      schema:
+        type: string
+        format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440000
+
+    RoomId:
+      name: id
+      in: path
+      required: true
+      description: Room UUID
+      schema:
+        type: string
+        format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440001
+
+    ParticipantId:
+      name: pid
+      in: path
+      required: true
+      description: Participant UUID
+      schema:
+        type: string
+        format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440002
+
+    RecordingId:
+      name: rid
+      in: path
+      required: true
+      description: Recording UUID (nested under room)
+      schema:
+        type: string
+        format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440003
+
+    RecordingIdPath:
+      name: id
+      in: path
+      required: true
+      description: Recording UUID
+      schema:
+        type: string
+        format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440003
+
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+    Offset:
+      name: offset
+      in: query
+      description: Number of items to skip
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+
+  schemas:
+    # =========================================================================
+    # ERROR SCHEMAS
+    # =========================================================================
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: invalid request body
+
+    # =========================================================================
+    # AUTH SCHEMAS
+    # =========================================================================
+    TokenRequest:
+      type: object
+      required:
+        - api_key
+      properties:
+        api_key:
+          type: string
+          description: Tenant API key
+          example: ck_live_abc123xyz
+
+    TokenResponse:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          description: JWT access token for API calls
+          example: eyJhbGciOiJIUzI1NiIs...
+        refresh_token:
+          type: string
+          description: Token to obtain new access token
+          example: eyJhbGciOiJIUzI1NiIs...
+        token_type:
+          type: string
+          description: Token type (always 'Bearer')
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Access token validity in seconds
+          example: 3600
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token from previous authentication
+          example: eyJhbGciOiJIUzI1NiIs...
+
+    # =========================================================================
+    # TENANT SCHEMAS
+    # =========================================================================
+    Tenant:
+      type: object
+      required:
+        - id
+        - name
+        - api_key_hash
+        - config
+        - max_concurrent_rooms
+        - max_participants_per_room
+        - max_recording_duration_minutes
+        - is_active
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Tenant unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440000
+        name:
+          type: string
+          description: Tenant name
+          example: Acme Education
+        api_key_hash:
+          type: string
+          description: Hashed API key (not the actual key)
+          example: $argon2id$v=19$m=65536...
+        config:
+          type: object
+          description: Custom tenant configuration
+          additionalProperties: true
+        max_concurrent_rooms:
+          type: integer
+          description: Maximum number of concurrent rooms allowed
+          example: 100
+        max_participants_per_room:
+          type: integer
+          description: Maximum participants per room
+          example: 10
+        max_recording_duration_minutes:
+          type: integer
+          description: Maximum recording duration in minutes
+          example: 120
+        is_active:
+          type: boolean
+          description: Whether the tenant is active
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: '2024-01-15T10:30:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: '2024-01-15T10:30:00Z'
+
+    CreateTenantRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Tenant name
+          example: Acme Education
+        max_concurrent_rooms:
+          type: integer
+          description: Maximum concurrent rooms (default 100)
+          example: 100
+        max_participants_per_room:
+          type: integer
+          description: Maximum participants per room (default 10)
+          example: 10
+        max_recording_duration_minutes:
+          type: integer
+          description: Maximum recording duration in minutes (default 120)
+          example: 120
+
+    CreateTenantResponse:
+      type: object
+      required:
+        - tenant
+        - api_key
+      properties:
+        tenant:
+          $ref: '#/components/schemas/Tenant'
+        api_key:
+          type: string
+          description: |
+            API key for the tenant. This is only shown once!
+            Store it securely.
+          example: ck_live_abc123xyz
+
+    UpdateTenantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: New tenant name
+          example: Acme Education Updated
+        max_concurrent_rooms:
+          type: integer
+          description: New maximum concurrent rooms
+          example: 200
+        max_participants_per_room:
+          type: integer
+          description: New maximum participants per room
+          example: 20
+        max_recording_duration_minutes:
+          type: integer
+          description: New maximum recording duration
+          example: 180
+
+    RotateApiKeyResponse:
+      type: object
+      required:
+        - api_key
+      properties:
+        api_key:
+          type: string
+          description: New API key (shown only once!)
+          example: ck_live_newkey123
+
+    # =========================================================================
+    # ROOM SCHEMAS
+    # =========================================================================
+    Room:
+      type: object
+      required:
+        - id
+        - tenant_id
+        - cloudflare_meeting_id
+        - config
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Room unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440001
+        tenant_id:
+          type: string
+          format: uuid
+          description: Owning tenant ID
+          example: 550e8400-e29b-41d4-a716-446655440000
+        cloudflare_meeting_id:
+          type: string
+          description: Cloudflare RealtimeKit meeting ID
+          example: cf_mtg_abc123
+        name:
+          type: string
+          nullable: true
+          description: Room name
+          example: Math 101 - Session 3
+        config:
+          type: object
+          description: Room configuration
+          properties:
+            max_participants:
+              type: integer
+              description: Maximum participants allowed
+              example: 10
+            recording_enabled:
+              type: boolean
+              description: Whether recording is enabled
+              example: true
+            chat_enabled:
+              type: boolean
+              description: Whether chat is enabled
+              example: true
+          additionalProperties: true
+        status:
+          type: string
+          description: Room status
+          enum:
+            - active
+            - ended
+          example: active
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the room was started
+          example: '2024-01-15T10:30:00Z'
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the room was ended
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: '2024-01-15T10:30:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: '2024-01-15T10:30:00Z'
+
+    RoomWithParticipantCount:
+      allOf:
+        - $ref: '#/components/schemas/Room'
+        - type: object
+          properties:
+            participant_count:
+              type: integer
+              description: Number of active participants
+              example: 5
+
+    CreateRoomRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Room name
+          example: Math 101 - Session 3
+        config:
+          type: object
+          properties:
+            max_participants:
+              type: integer
+              description: Maximum participants (default from tenant)
+              example: 10
+            recording_enabled:
+              type: boolean
+              description: Enable recording
+              example: true
+            chat_enabled:
+              type: boolean
+              description: Enable chat
+              example: true
+
+    UpdateRoomRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: New room name
+          example: Math 101 - Updated Name
+        config:
+          type: object
+          description: New room configuration
+          additionalProperties: true
+
+    ListRoomsResponse:
+      type: object
+      required:
+        - rooms
+        - total
+        - limit
+        - offset
+      properties:
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomWithParticipantCount'
+        total:
+          type: integer
+          description: Total number of rooms
+          example: 42
+        limit:
+          type: integer
+          description: Requested limit
+          example: 20
+        offset:
+          type: integer
+          description: Requested offset
+          example: 0
+
+    # =========================================================================
+    # PARTICIPANT SCHEMAS
+    # =========================================================================
+    Participant:
+      type: object
+      required:
+        - id
+        - room_id
+        - cloudflare_participant_id
+        - role
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Participant unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440002
+        room_id:
+          type: string
+          format: uuid
+          description: Room ID the participant belongs to
+          example: 550e8400-e29b-41d4-a716-446655440001
+        cloudflare_participant_id:
+          type: string
+          description: Cloudflare RealtimeKit participant ID
+          example: cf_part_abc123
+        external_user_id:
+          type: string
+          nullable: true
+          description: External user identifier from your system
+          example: user_12345
+        display_name:
+          type: string
+          nullable: true
+          description: Display name shown in the room
+          example: John Doe
+        role:
+          type: string
+          description: Participant role
+          enum:
+            - host
+            - participant
+          example: participant
+        joined_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the participant joined
+          example: '2024-01-15T10:30:00Z'
+        left_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the participant left
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: '2024-01-15T10:30:00Z'
+
+    AddParticipantRequest:
+      type: object
+      required:
+        - display_name
+      properties:
+        external_user_id:
+          type: string
+          description: Your system's user ID
+          example: user_12345
+        display_name:
+          type: string
+          description: Name shown in the room
+          example: John Doe
+        role:
+          type: string
+          description: Participant role (default participant)
+          enum:
+            - host
+            - participant
+          example: participant
+
+    AddParticipantResponse:
+      type: object
+      required:
+        - participant
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - auth_token
+      properties:
+        participant:
+          $ref: '#/components/schemas/Participant'
+        access_token:
+          type: string
+          description: JWT access token for API calls
+          example: eyJhbGciOiJIUzI1NiIs...
+        refresh_token:
+          type: string
+          description: Token to obtain new access token
+          example: eyJhbGciOiJIUzI1NiIs...
+        token_type:
+          type: string
+          description: Token type
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token validity in seconds
+          example: 3600
+        auth_token:
+          type: string
+          description: Cloudflare RealtimeKit token for SDK connection
+          example: cf_auth_token_xyz
+
+    ListParticipantsResponse:
+      type: object
+      required:
+        - participants
+      properties:
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+
+    RefreshParticipantTokenResponse:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - auth_token
+      properties:
+        access_token:
+          type: string
+          description: New JWT access token
+          example: eyJhbGciOiJIUzI1NiIs...
+        refresh_token:
+          type: string
+          description: New refresh token
+          example: eyJhbGciOiJIUzI1NiIs...
+        token_type:
+          type: string
+          description: Token type
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token validity in seconds
+          example: 3600
+        auth_token:
+          type: string
+          description: New Cloudflare RealtimeKit token
+          example: cf_auth_token_new
+
+    # =========================================================================
+    # RECORDING SCHEMAS
+    # =========================================================================
+    Recording:
+      type: object
+      required:
+        - id
+        - room_id
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Recording unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440003
+        room_id:
+          type: string
+          format: uuid
+          description: Room ID the recording belongs to
+          example: 550e8400-e29b-41d4-a716-446655440001
+        cloudflare_recording_id:
+          type: string
+          nullable: true
+          description: Cloudflare recording ID
+          example: cf_rec_abc123
+        storage_provider:
+          type: string
+          nullable: true
+          description: Storage provider
+          enum:
+            - r2
+            - s3_glacier
+          example: r2
+        storage_path:
+          type: string
+          nullable: true
+          description: Path to stored recording file
+          example: recordings/room_id/recording_id.webm
+        size_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: Recording file size in bytes
+          example: 104857600
+        duration_seconds:
+          type: integer
+          nullable: true
+          description: Recording duration in seconds
+          example: 3600
+        status:
+          type: string
+          description: Recording status
+          enum:
+            - recording
+            - processing
+            - ready
+            - archived
+            - deleted
+          example: ready
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When recording started
+          example: '2024-01-15T10:30:00Z'
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When recording ended
+          example: '2024-01-15T11:30:00Z'
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When recording was archived
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: '2024-01-15T10:30:00Z'
+
+    RecordingWithRoomInfo:
+      allOf:
+        - $ref: '#/components/schemas/Recording'
+        - type: object
+          properties:
+            room_name:
+              type: string
+              nullable: true
+              description: Name of the room
+              example: Math 101 - Session 3
+            tenant_id:
+              type: string
+              format: uuid
+              description: Tenant ID
+              example: 550e8400-e29b-41d4-a716-446655440000
+
+    ListRecordingsResponse:
+      type: object
+      required:
+        - recordings
+        - limit
+        - offset
+      properties:
+        recordings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recording'
+        limit:
+          type: integer
+          description: Requested limit
+          example: 20
+        offset:
+          type: integer
+          description: Requested offset
+          example: 0
+
+    DownloadRecordingResponse:
+      type: object
+      required:
+        - recording_id
+        - status
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+          description: Recording ID
+          example: 550e8400-e29b-41d4-a716-446655440003
+        download_url:
+          type: string
+          format: uri
+          description: Presigned download URL (if ready)
+          example: https://storage.example.com/recordings/...?sig=...
+        status:
+          type: string
+          description: Recording status
+          enum:
+            - ready
+            - processing
+            - recording
+          example: ready
+        message:
+          type: string
+          description: Status message (if processing)
+          example: recording is still processing
+        duration:
+          type: integer
+          nullable: true
+          description: Recording duration in seconds
+          example: 3600
+        file_size:
+          type: integer
+          format: int64
+          nullable: true
+          description: File size in bytes
+          example: 104857600
+        provider:
+          type: string
+          nullable: true
+          description: Storage provider
+          example: r2
+
+    ArchiveRecordingResponse:
+      type: object
+      required:
+        - message
+        - id
+        - status
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: recording archived successfully
+        id:
+          type: string
+          format: uuid
+          description: Recording ID
+          example: 550e8400-e29b-41d4-a716-446655440003
+        status:
+          type: string
+          description: New status
+          example: archived
+
+    DeleteRecordingResponse:
+      type: object
+      required:
+        - message
+        - id
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: recording deleted
+        id:
+          type: string
+          format: uuid
+          description: Recording ID
+          example: 550e8400-e29b-41d4-a716-446655440003
+
+    # =========================================================================
+    # DEMO SCHEMAS
+    # =========================================================================
+    DemoJoinRequest:
+      type: object
+      required:
+        - room_id
+        - display_name
+      properties:
+        room_id:
+          type: string
+          description: Room name/ID to join (created if not exists)
+          example: demo-room-1
+        display_name:
+          type: string
+          description: Display name in the room
+          example: Demo User
+
+    DemoJoinResponse:
+      type: object
+      required:
+        - success
+        - room_id
+        - participant_id
+        - token
+        - auth_token
+        - room
+      properties:
+        success:
+          type: boolean
+          description: Whether join was successful
+          example: true
+        room_id:
+          type: string
+          description: Room UUID
+          example: 550e8400-e29b-41d4-a716-446655440001
+        participant_id:
+          type: string
+          description: Participant UUID
+          example: 550e8400-e29b-41d4-a716-446655440002
+        token:
+          type: string
+          description: JWT access token
+          example: eyJhbGciOiJIUzI1NiIs...
+        auth_token:
+          type: string
+          description: Cloudflare RealtimeKit token for SDK
+          example: cf_auth_token_xyz
+        room:
+          type: object
+          required:
+            - id
+            - name
+          properties:
+            id:
+              type: string
+              description: Room UUID
+              example: 550e8400-e29b-41d4-a716-446655440001
+            name:
+              type: string
+              description: Room name
+              example: demo-room-1
+
+    DemoErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Error message
+          example: demo mode is disabled
+
+    # =========================================================================
+    # WEBHOOK SCHEMAS
+    # =========================================================================
+    RecordingReadyWebhook:
+      type: object
+      required:
+        - type
+        - recording_id
+        - meeting_id
+        - url
+        - duration_seconds
+        - size_bytes
+        - content_type
+      properties:
+        type:
+          type: string
+          description: Webhook event type
+          enum:
+            - recording.ready
+          example: recording.ready
+        recording_id:
+          type: string
+          description: Cloudflare recording ID
+          example: cf_rec_abc123
+        meeting_id:
+          type: string
+          description: Cloudflare meeting ID
+          example: cf_mtg_abc123
+        url:
+          type: string
+          format: uri
+          description: URL to download the recording
+          example: https://cloudflare.com/recordings/...
+        duration_seconds:
+          type: integer
+          description: Recording duration in seconds
+          example: 3600
+        size_bytes:
+          type: integer
+          format: int64
+          description: Recording file size in bytes
+          example: 104857600
+        content_type:
+          type: string
+          description: Content type of the recording
+          example: video/webm
+
+    WebhookRecordingResponse:
+      type: object
+      required:
+        - message
+        - id
+        - status
+        - storage_key
+        - size_bytes
+        - duration
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: recording processed successfully
+        id:
+          type: string
+          format: uuid
+          description: Recording ID
+          example: 550e8400-e29b-41d4-a716-446655440003
+        status:
+          type: string
+          description: Recording status
+          example: ready
+        storage_key:
+          type: string
+          description: Storage path in R2
+          example: recordings/room_id/recording_id.webm
+        size_bytes:
+          type: integer
+          format: int64
+          description: File size in bytes
+          example: 104857600
+        duration:
+          type: integer
+          description: Duration in seconds
+          example: 3600
+
+    # =========================================================================
+    # CHAT SCHEMAS
+    # =========================================================================
+    ChatMessage:
+      type: object
+      description: A chat message sent within a room
+      required:
+        - id
+        - room_id
+        - participant_id
+        - content
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Chat message unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440010
+        room_id:
+          type: string
+          format: uuid
+          description: Room ID the message belongs to
+          example: 550e8400-e29b-41d4-a716-446655440001
+        participant_id:
+          type: string
+          format: uuid
+          description: Participant ID who sent the message
+          example: 550e8400-e29b-41d4-a716-446655440002
+        sender_name:
+          type: string
+          description: Display name of the sender
+          example: John Doe
+        content:
+          type: string
+          description: Message content
+          example: Hello, everyone!
+        message_type:
+          type: string
+          description: Type of message
+          enum:
+            - text
+            - system
+            - reaction
+          default: text
+          example: text
+        created_at:
+          type: string
+          format: date-time
+          description: When the message was created
+          example: '2024-01-15T10:30:00Z'
+
+    # =========================================================================
+    # TOKEN SCHEMAS
+    # =========================================================================
+    Token:
+      type: object
+      description: Token response for authentication and WebRTC connection
+      required:
+        - access_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          description: JWT access token for API authentication
+          example: eyJhbGciOiJIUzI1NiIs...
+        refresh_token:
+          type: string
+          description: Token for obtaining new access tokens
+          example: eyJhbGciOiJIUzI1NiIs...
+        token_type:
+          type: string
+          description: Token type
+          default: Bearer
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds
+          example: 3600
+        auth_token:
+          type: string
+          description: Cloudflare RealtimeKit token for WebRTC
+          example: cf_auth_token_xyz

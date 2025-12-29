@@ -8,8 +8,8 @@ export { type UseDevicesResult, useDevices } from "./useDevices";
 export { type UseMediaResult, useMedia } from "./useMedia";
 export { type UseParticipantsResult, useParticipants } from "./useParticipants";
 export {
-	type PermissionsState,
 	type PermissionStatus,
+	type PermissionsState,
 	type UsePermissionsResult,
 	usePermissions,
 } from "./usePermissions";

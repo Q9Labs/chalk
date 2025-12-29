@@ -2,32 +2,59 @@
  * HTTP API client for Chalk backend
  */
 
+import { EventEmitter } from "./events.ts";
+import { camelToSnake, snakeToCamel } from "./transforms.ts";
 import type {
 	ApiResponse,
 	ChalkClientConfig,
+	ChalkError,
 	CreateRoomResponse,
 	JoinRoomResponse,
 	Recording,
 	RoomInfo,
+	TokenProvider,
+	TransformedJoinRoomApiResponse,
 } from "./types.ts";
 
 const DEFAULT_API_URL = "http://localhost:8080";
 
-export class APIClient {
+interface APIClientEvents {
+	"token-expired": ChalkError;
+}
+
+export class APIClient extends EventEmitter<APIClientEvents> {
 	private readonly apiUrl: string;
 	private readonly apiKey?: string;
+	private readonly tokenProvider?: TokenProvider;
 	private token?: string;
 	private readonly debug: boolean;
+	private isRefreshingToken = false;
 
 	constructor(config: ChalkClientConfig) {
+		super();
 		this.apiUrl = config.apiUrl ?? DEFAULT_API_URL;
 		this.apiKey = config.apiKey;
+		this.tokenProvider = config.tokenProvider;
 		this.token = config.token;
 		this.debug = config.debug ?? false;
+
+		if (config.apiKey) {
+			console.warn(
+				"[Chalk] DEPRECATION WARNING: Using apiKey is deprecated and will be removed in v2.0. " +
+					"Use `token` or `tokenProvider` instead for improved security.",
+			);
+		}
 	}
 
 	setToken(token: string): void {
 		this.token = token;
+	}
+
+	async getToken(): Promise<string | undefined> {
+		if (this.tokenProvider) {
+			this.token = await this.tokenProvider();
+		}
+		return this.token;
 	}
 
 	private log(...args: unknown[]): void {
@@ -40,10 +67,29 @@ export class APIClient {
 		method: string,
 		path: string,
 		body?: unknown,
+		isRetry = false,
 	): Promise<ApiResponse<T>> {
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 		};
+
+		if (this.tokenProvider && !isRetry) {
+			try {
+				this.token = await this.tokenProvider();
+			} catch (error) {
+				this.log("Token provider failed:", error);
+				return {
+					success: false,
+					error: {
+						code: "TOKEN_EXPIRED",
+						message:
+							error instanceof Error
+								? error.message
+								: "Failed to get authentication token",
+					},
+				};
+			}
+		}
 
 		if (this.token) {
 			headers["Authorization"] = `Bearer ${this.token}`;
@@ -55,28 +101,40 @@ export class APIClient {
 		this.log(`${method} ${url}`);
 
 		try {
+			const transformedBody = body ? camelToSnake(body) : undefined;
+
 			const response = await fetch(url, {
 				method,
 				headers,
-				body: body ? JSON.stringify(body) : undefined,
+				body: transformedBody ? JSON.stringify(transformedBody) : undefined,
 			});
 
-			const data = await response.json();
+			if (response.status === 401 && !isRetry) {
+				return this.handle401<T>(method, path, body);
+			}
+
+			const rawData = await response.json();
+			const data = snakeToCamel<T>(rawData);
 
 			if (!response.ok) {
+				const errorData = rawData as {
+					code?: string;
+					message?: string;
+					details?: Record<string, unknown>;
+				};
 				return {
 					success: false,
 					error: {
-						code: data.code ?? "UNKNOWN_ERROR",
-						message: data.message ?? "An unknown error occurred",
-						details: data.details,
+						code: errorData.code ?? "UNKNOWN_ERROR",
+						message: errorData.message ?? "An unknown error occurred",
+						details: errorData.details,
 					},
 				};
 			}
 
 			return {
 				success: true,
-				data: data as T,
+				data,
 			};
 		} catch (error) {
 			this.log("Request failed:", error);
@@ -87,6 +145,54 @@ export class APIClient {
 					message: error instanceof Error ? error.message : "Network error",
 				},
 			};
+		}
+	}
+
+	private async handle401<T>(
+		method: string,
+		path: string,
+		body?: unknown,
+	): Promise<ApiResponse<T>> {
+		this.log("Received 401, attempting token refresh");
+
+		if (!this.tokenProvider) {
+			const error: ChalkError = {
+				code: "TOKEN_EXPIRED",
+				message: "Authentication token expired. No tokenProvider configured.",
+			};
+			this.emit("token-expired", error);
+			return { success: false, error };
+		}
+
+		if (this.isRefreshingToken) {
+			return {
+				success: false,
+				error: {
+					code: "TOKEN_EXPIRED",
+					message: "Token refresh already in progress",
+				},
+			};
+		}
+
+		this.isRefreshingToken = true;
+
+		try {
+			this.token = await this.tokenProvider();
+			this.log("Token refreshed successfully");
+			return this.request<T>(method, path, body, true);
+		} catch (error) {
+			this.log("Token refresh failed:", error);
+			const chalkError: ChalkError = {
+				code: "TOKEN_EXPIRED",
+				message:
+					error instanceof Error
+						? error.message
+						: "Failed to refresh authentication token",
+			};
+			this.emit("token-expired", chalkError);
+			return { success: false, error: chalkError };
+		} finally {
+			this.isRefreshingToken = false;
 		}
 	}
 
@@ -109,14 +215,13 @@ export class APIClient {
 		return this.request<void>("POST", `/api/v1/rooms/${roomId}/end`);
 	}
 
-	// Participant endpoints
 	async addParticipant(
 		roomId: string,
 		displayName: string,
 		role?: "host" | "participant",
 		metadata?: Record<string, unknown>,
 	): Promise<ApiResponse<JoinRoomResponse>> {
-		return this.request<JoinRoomResponse>(
+		const response = await this.request<TransformedJoinRoomApiResponse>(
 			"POST",
 			`/api/v1/rooms/${roomId}/participants`,
 			{
@@ -125,43 +230,58 @@ export class APIClient {
 				metadata,
 			},
 		);
-	}
-
-	// Demo endpoint (no auth required)
-	async demoJoin(
-		roomId: string,
-		displayName: string,
-	): Promise<ApiResponse<JoinRoomResponse>> {
-		const response = await this.request<{
-			success: boolean;
-			room_id: string;
-			participant_id: string;
-			token: string;
-			auth_token: string;
-			room: { id: string; name: string };
-		}>("POST", "/api/v1/demo/join", {
-			room_id: roomId,
-			display_name: displayName,
-		});
 
 		if (!response.success || !response.data) {
 			return response as unknown as ApiResponse<JoinRoomResponse>;
 		}
 
-		// Transform to JoinRoomResponse format
 		return {
 			success: true,
-			data: {
-				participantId: response.data.participant_id,
-				token: response.data.auth_token,
-				room: {
-					id: response.data.room.id,
-					name: response.data.room.name,
-					status: "connected" as const,
-					participantCount: 1,
-					config: {},
-					createdAt: new Date(),
-				},
+			data: this.transformJoinResponse(response.data),
+		};
+	}
+
+	async demoJoin(
+		roomId: string,
+		displayName: string,
+	): Promise<ApiResponse<JoinRoomResponse>> {
+		const response = await this.request<TransformedJoinRoomApiResponse>(
+			"POST",
+			"/api/v1/demo/join",
+			{
+				roomId,
+				displayName,
+			},
+		);
+
+		if (!response.success || !response.data) {
+			return response as unknown as ApiResponse<JoinRoomResponse>;
+		}
+
+		return {
+			success: true,
+			data: this.transformJoinResponse(response.data),
+		};
+	}
+
+	private transformJoinResponse(
+		data: TransformedJoinRoomApiResponse,
+	): JoinRoomResponse {
+		return {
+			participantId: data.participantId,
+			tokens: {
+				accessToken: data.accessToken ?? data.authToken,
+				refreshToken: data.refreshToken,
+				rtcToken: data.authToken,
+				expiresAt: data.expiresAt,
+			},
+			room: {
+				id: data.room.id,
+				name: data.room.name,
+				status: "connected" as const,
+				participantCount: 1,
+				config: {},
+				createdAt: new Date(),
 			},
 		};
 	}

@@ -1,5 +1,5 @@
-import { useCallback, useState, useEffect } from "react";
-import { Platform, PermissionsAndroid, Linking, Alert } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
 
 /**
  * Permission status for each permission type

@@ -79,8 +79,8 @@ export {
 // Hooks
 export {
 	type AudioRoute,
-	type PermissionsState,
 	type PermissionStatus,
+	type PermissionsState,
 	type UseAudioRoutingResult,
 	type UseChatResult,
 	type UseDevicesResult,

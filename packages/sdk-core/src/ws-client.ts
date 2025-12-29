@@ -1,18 +1,16 @@
-/**
- * WebSocket client for real-time events
- */
-
 import { EventEmitter } from "./events.ts";
+import { camelToSnake, snakeToCamel } from "./transforms.ts";
 import type {
 	ChalkError,
 	ChatMessage,
 	Participant,
 	Reaction,
 	RoomSnapshot,
+	TokenProvider,
 } from "./types.ts";
 
 const DEFAULT_WS_URL = "ws://localhost:8080/ws";
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000]; // Exponential backoff
+const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 const HEARTBEAT_INTERVAL = 30000;
 
 type ConnectionState =
@@ -27,6 +25,7 @@ interface WSEvents {
 	disconnected: { reason?: string };
 	reconnecting: { attempt: number };
 	error: ChalkError;
+	"token-expired": ChalkError;
 	"participant.joined": Participant;
 	"participant.left": { participantId: string };
 	"participant.updated": {
@@ -41,22 +40,31 @@ interface WSEvents {
 	"recording.stopped": { recordingId: string; duration: number };
 	"room.updated": { roomId: string; changes: Record<string, unknown> };
 	"room.snapshot": RoomSnapshot;
+	registered: {
+		participantId: string;
+		roomId: string;
+		tenantId: string;
+	};
+	"room-sync": RoomSnapshot;
 }
 
 export class WSClient extends EventEmitter<WSEvents> {
 	private ws: WebSocket | null = null;
 	private readonly wsUrl: string;
+	private readonly tokenProvider?: TokenProvider;
 	private token: string | null = null;
 	private roomId: string | null = null;
 	private state: ConnectionState = "disconnected";
 	private reconnectAttempt = 0;
 	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+	private lastPongTime: number = Date.now();
 	private readonly debug: boolean;
 
-	constructor(wsUrl?: string, debug = false) {
+	constructor(wsUrl?: string, debug = false, tokenProvider?: TokenProvider) {
 		super();
 		this.wsUrl = wsUrl ?? DEFAULT_WS_URL;
 		this.debug = debug;
+		this.tokenProvider = tokenProvider;
 	}
 
 	private log(...args: unknown[]): void {
@@ -67,6 +75,10 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	get connectionState(): ConnectionState {
 		return this.state;
+	}
+
+	get lastPongReceived(): number {
+		return this.lastPongTime;
 	}
 
 	connect(token: string, roomId: string): void {
@@ -135,87 +147,134 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	private handleMessage(data: string): void {
 		try {
-			const message = JSON.parse(data);
-			this.log("Received:", message.type);
+			const rawMessage = JSON.parse(data);
+			this.log("Received:", rawMessage.type);
 
-			switch (message.type) {
+			const payload = rawMessage.payload
+				? snakeToCamel<Record<string, unknown>>(rawMessage.payload)
+				: undefined;
+
+			switch (rawMessage.type) {
 				case "participant.joined":
-					this.emit("participant.joined", message.payload);
+					this.emit(
+						"participant.joined",
+						this.transformParticipant(payload as Record<string, unknown>),
+					);
 					break;
 				case "participant.left":
-					this.emit("participant.left", message.payload);
+					this.emit("participant.left", payload as { participantId: string });
 					break;
 				case "participant.updated":
-					this.emit("participant.updated", message.payload);
+					this.emit(
+						"participant.updated",
+						payload as {
+							participantId: string;
+							changes: Partial<Participant>;
+						},
+					);
 					break;
-				case "chat.message":
+				case "chat.message": {
+					const chatPayload = payload as unknown as ChatMessage;
 					this.emit("chat.message", {
-						...message.payload,
-						timestamp: new Date(message.payload.timestamp),
+						...chatPayload,
+						timestamp: new Date(chatPayload.timestamp as unknown as string),
 					});
 					break;
-				case "reaction":
+				}
+				case "reaction": {
+					const reactionPayload = payload as unknown as Reaction;
 					this.emit("reaction", {
-						...message.payload,
-						timestamp: new Date(message.payload.timestamp),
+						...reactionPayload,
+						timestamp: new Date(reactionPayload.timestamp as unknown as string),
 					});
 					break;
+				}
 				case "hand.raised":
-					this.emit("hand.raised", message.payload);
+					this.emit("hand.raised", payload as { participantId: string });
 					break;
 				case "hand.lowered":
-					this.emit("hand.lowered", message.payload);
+					this.emit("hand.lowered", payload as { participantId: string });
 					break;
 				case "recording.started":
-					this.emit("recording.started", message.payload);
+					this.emit("recording.started", payload as { recordingId: string });
 					break;
 				case "recording.stopped":
-					this.emit("recording.stopped", message.payload);
+					this.emit(
+						"recording.stopped",
+						payload as { recordingId: string; duration: number },
+					);
 					break;
 				case "room.updated":
-					this.emit("room.updated", message.payload);
+					this.emit(
+						"room.updated",
+						payload as { roomId: string; changes: Record<string, unknown> },
+					);
 					break;
 				case "room.snapshot":
-					this.emit("room.snapshot", {
-						roomId: message.payload.room_id,
-						participants: message.payload.participants.map(
-							(p: {
-								id: string;
-								display_name: string;
-								role?: string;
-								video_enabled?: boolean;
-								audio_enabled?: boolean;
-								is_screen_sharing?: boolean;
-								hand_raised?: boolean;
-							}) => ({
-								id: p.id,
-								displayName: p.display_name,
-								role: p.role ?? "participant",
-								isLocal: false,
-								videoEnabled: p.video_enabled ?? false,
-								audioEnabled: p.audio_enabled ?? false,
-								isSpeaking: false,
-								isScreenSharing: p.is_screen_sharing ?? false,
-								handRaised: p.hand_raised ?? false,
-								connectionQuality: 100,
-							}),
-						),
-						isRecording: message.payload.is_recording,
-						recordingId: message.payload.recording_id,
-						lastSeq: message.payload.last_seq,
-					});
+					this.emit("room.snapshot", this.transformSnapshot(payload));
+					break;
+				case "ping":
+					this.send({ type: "pong" });
 					break;
 				case "pong":
+					this.lastPongTime = Date.now();
+					break;
+				case "connected":
+					this.emit(
+						"registered",
+						payload as {
+							participantId: string;
+							roomId: string;
+							tenantId: string;
+						},
+					);
+					break;
+				case "room.sync":
+					this.emit("room-sync", this.transformSnapshot(payload));
 					break;
 				case "error":
-					this.emit("error", message.payload);
+					this.emit("error", payload as unknown as ChalkError);
 					break;
 				default:
-					this.log("Unknown message type:", message.type);
+					this.log("Unknown message type:", rawMessage.type);
 			}
 		} catch (error) {
 			this.log("Failed to parse message:", error);
 		}
+	}
+
+	private transformParticipant(p: Record<string, unknown>): Participant {
+		return {
+			id: p.id as string,
+			displayName: p.displayName as string,
+			role: (p.role as Participant["role"]) ?? "participant",
+			isLocal: false,
+			videoEnabled: (p.videoEnabled as boolean) ?? false,
+			audioEnabled: (p.audioEnabled as boolean) ?? false,
+			isSpeaking: false,
+			isScreenSharing: (p.isScreenSharing as boolean) ?? false,
+			handRaised: (p.handRaised as boolean) ?? false,
+			connectionQuality: 100,
+		};
+	}
+
+	private transformSnapshot(payload: unknown): RoomSnapshot {
+		const p = payload as {
+			roomId: string;
+			participants: Array<Record<string, unknown>>;
+			isRecording: boolean;
+			recordingId?: string;
+			lastSeq: number;
+		};
+		return {
+			roomId: p.roomId,
+			participants: p.participants.map((participant) =>
+				this.transformParticipant(participant),
+			),
+			isRecording: p.isRecording,
+			recordingId: p.recordingId,
+			lastSeq: p.lastSeq,
+		};
 	}
 
 	private handleConnectionFailure(): void {
@@ -240,11 +299,35 @@ export class WSClient extends EventEmitter<WSEvents> {
 		this.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
 		this.emit("reconnecting", { attempt: this.reconnectAttempt });
 
-		setTimeout(() => {
+		setTimeout(async () => {
 			if (this.state === "reconnecting") {
-				this.doConnect();
+				await this.refreshTokenAndConnect();
 			}
 		}, delay);
+	}
+
+	private async refreshTokenAndConnect(): Promise<void> {
+		if (this.tokenProvider) {
+			try {
+				this.log("Refreshing token before reconnect");
+				this.token = await this.tokenProvider();
+				this.log("Token refreshed successfully");
+			} catch (error) {
+				this.log("Token refresh failed:", error);
+				const chalkError: ChalkError = {
+					code: "TOKEN_EXPIRED",
+					message:
+						error instanceof Error
+							? error.message
+							: "Failed to refresh token for WebSocket reconnection",
+				};
+				this.emit("token-expired", chalkError);
+				this.state = "failed";
+				return;
+			}
+		}
+
+		this.doConnect();
 	}
 
 	private startHeartbeat(): void {
@@ -262,7 +345,13 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	send(message: Record<string, unknown>): void {
 		if (this.ws?.readyState === WebSocket.OPEN) {
-			this.ws.send(JSON.stringify(message));
+			const transformedMessage = {
+				type: message.type,
+				payload: message.payload
+					? camelToSnake(message.payload)
+					: message.payload,
+			};
+			this.ws.send(JSON.stringify(transformedMessage));
 		} else {
 			this.log("Cannot send message - not connected");
 		}

@@ -17,6 +17,7 @@ import type {
 	RoomInfo,
 	RoomStatus,
 	ScreenShareOptions,
+	TokenSet,
 } from "./types.ts";
 import { ChalkErrorCode } from "./types.ts";
 import type { WSClient } from "./ws-client.ts";
@@ -45,6 +46,7 @@ export class Room extends EventEmitter<RoomEvents> {
 	private _activeSpeaker: Participant | null = null;
 	private _messages: ChatMessage[] = [];
 	private _currentRecording: { id: string } | null = null;
+	private _tokens: TokenSet | null = null;
 
 	private rtkClient?: RealtimeKitClient;
 	private wsClient?: WSClient;
@@ -123,6 +125,14 @@ export class Room extends EventEmitter<RoomEvents> {
 	_setLocalParticipant(participant: Participant): void {
 		this._localParticipant = participant;
 		this._participants.set(participant.id, participant);
+	}
+
+	_setTokens(tokens: TokenSet): void {
+		this._tokens = tokens;
+	}
+
+	get tokens(): TokenSet | null {
+		return this._tokens;
 	}
 
 	private setupWSListeners(): void {

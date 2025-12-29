@@ -2,15 +2,16 @@
  * Chalk React Context with RealtimeKit integration
  */
 
+import type RealtimeKitClient from "@cloudflare/realtimekit";
+import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import {
 	ChalkClient,
 	type ChalkClientConfig,
 	type Room,
 	type RoomConfig,
 	type RoomStatus,
+	type TokenProvider,
 } from "@q9labs/chalk-core";
-import type RealtimeKitClient from "@cloudflare/realtimekit";
-import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import {
 	createContext,
 	type ReactNode,
@@ -36,10 +37,12 @@ const ChalkContext = createContext<ChalkContextValue | null>(null);
 
 export interface ChalkProviderProps {
 	children: ReactNode;
-	/** API key for Chalk (use for client-direct auth flow) */
-	apiKey?: string;
-	/** JWT token from your server (use for server-to-server auth flow) */
+	/** Static JWT token (simplest option) */
 	token?: string;
+	/** Dynamic token provider (recommended for browser apps) */
+	tokenProvider?: TokenProvider;
+	/** @deprecated Use token or tokenProvider instead */
+	apiKey?: string;
 	/** Custom API URL */
 	apiUrl?: string;
 	/** Custom WebSocket URL */
@@ -50,8 +53,9 @@ export interface ChalkProviderProps {
 
 export function ChalkProvider({
 	children,
-	apiKey,
 	token,
+	tokenProvider,
+	apiKey,
 	apiUrl,
 	wsUrl,
 	debug,
@@ -62,11 +66,11 @@ export function ChalkProvider({
 	const [connectionStatus, setConnectionStatus] =
 		useState<RoomStatus>("disconnected");
 
-	// Initialize client
 	useEffect(() => {
 		const config: ChalkClientConfig = {
-			apiKey,
 			token,
+			tokenProvider,
+			apiKey,
 			apiUrl,
 			wsUrl,
 			debug,
@@ -75,14 +79,14 @@ export function ChalkProvider({
 		const chalkClient = new ChalkClient(config);
 		setClient(chalkClient);
 
-		if (debug && !apiKey && !token) {
+		if (debug && !apiKey && !token && !tokenProvider) {
 			console.info("[Chalk] Running in demo mode without credentials");
 		}
 
 		return () => {
 			chalkClient.disconnect();
 		};
-	}, [apiKey, token, apiUrl, wsUrl, debug]);
+	}, [apiKey, token, tokenProvider, apiUrl, wsUrl, debug]);
 
 	// Join room
 	const joinRoom = useCallback(
