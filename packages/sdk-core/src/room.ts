@@ -1,6 +1,6 @@
 /**
  * Room class - main interface for interacting with a video room
- * Wraps Cloudflare RealtimeKit for WebRTC functionality
+ * Wraps Cloudflare RealtimeKit for WebRTC and WSClient for signaling
  */
 
 import type RealtimeKitClient from "@cloudflare/realtimekit";
@@ -19,6 +19,7 @@ import type {
 	ScreenShareOptions,
 } from "./types.ts";
 import { ChalkErrorCode } from "./types.ts";
+import type { WSClient } from "./ws-client.ts";
 
 interface RoomEvents {
 	"status-changed": RoomStatus;
@@ -37,30 +38,39 @@ interface RoomEvents {
 
 export class Room extends EventEmitter<RoomEvents> {
 	readonly id: string;
-	private _status: RoomStatus = "connecting";
+	private _status: RoomStatus = "disconnected";
 	private _info: RoomInfo | null = null;
 	private _participants: Map<string, Participant> = new Map();
-	private _localParticipant: Participant;
+	private _localParticipant: Participant | null = null;
 	private _activeSpeaker: Participant | null = null;
 	private _messages: ChatMessage[] = [];
 	private _currentRecording: { id: string } | null = null;
 
-	private readonly rtkClient: RealtimeKitClient;
+	private rtkClient?: RealtimeKitClient;
+	private wsClient?: WSClient;
 	private readonly debug: boolean;
 
 	constructor(
 		roomId: string,
-		rtkClient: RealtimeKitClient,
-		localParticipant: Participant,
+		wsClientOrRtkClient?: WSClient | RealtimeKitClient,
 		debug = false,
 	) {
 		super();
 		this.id = roomId;
-		this.rtkClient = rtkClient;
-		this._localParticipant = localParticipant;
-		this._participants.set(localParticipant.id, localParticipant);
 		this.debug = debug;
-		this.setupRTKListeners();
+
+		// Support both WSClient and RealtimeKitClient for backwards compatibility
+		if (wsClientOrRtkClient) {
+			if ("connect" in wsClientOrRtkClient) {
+				// It's a WSClient
+				this.wsClient = wsClientOrRtkClient as WSClient;
+				this.setupWSListeners();
+			} else {
+				// It's a RealtimeKitClient
+				this.rtkClient = wsClientOrRtkClient as RealtimeKitClient;
+				this.setupRTKListeners();
+			}
+		}
 	}
 
 	private log(...args: unknown[]): void {
@@ -82,7 +92,7 @@ export class Room extends EventEmitter<RoomEvents> {
 		return new Map(this._participants);
 	}
 
-	get localParticipant(): Participant {
+	get localParticipant(): Participant | null {
 		return this._localParticipant;
 	}
 
@@ -108,6 +118,113 @@ export class Room extends EventEmitter<RoomEvents> {
 
 	_setInfo(info: RoomInfo): void {
 		this._info = info;
+	}
+
+	_setLocalParticipant(participant: Participant): void {
+		this._localParticipant = participant;
+		this._participants.set(participant.id, participant);
+	}
+
+	private setupWSListeners(): void {
+		if (!this.wsClient) return;
+
+		this.wsClient.on("connected", () => {
+			this.log("WebSocket connected");
+			this._setStatus("connected");
+		});
+
+		this.wsClient.on("disconnected", () => {
+			this.log("WebSocket disconnected");
+			this._setStatus("disconnected");
+		});
+
+		this.wsClient.on("reconnecting", () => {
+			this.log("WebSocket reconnecting");
+			this._setStatus("reconnecting");
+		});
+
+		this.wsClient.on("participant.joined", (data) => {
+			this.log("Participant joined:", data.displayName);
+			this._participants.set(data.id, data);
+			this.emit("participant-joined", data);
+		});
+
+		this.wsClient.on("participant.left", (data) => {
+			this.log("Participant left:", data.participantId);
+			const participant = this._participants.get(data.participantId);
+			this._participants.delete(data.participantId);
+			if (participant) {
+				this.emit("participant-left", data.participantId);
+			}
+		});
+
+		this.wsClient.on("participant.updated", (data) => {
+			const participant = this._participants.get(data.participantId);
+			if (participant) {
+				const updated = { ...participant, ...data.changes };
+				this._participants.set(data.participantId, updated);
+				this.emit("participant-updated", {
+					participantId: data.participantId,
+					participant: updated,
+				});
+			}
+		});
+
+		this.wsClient.on("chat.message", (data) => {
+			this._messages.push(data);
+			this.emit("chat-message", data);
+		});
+
+		this.wsClient.on("reaction", (data) => {
+			this.emit("reaction", data);
+		});
+
+		this.wsClient.on("hand.raised", (data) => {
+			const participant = this._participants.get(data.participantId);
+			if (participant) {
+				participant.handRaised = true;
+				this.emit("participant-updated", {
+					participantId: data.participantId,
+					participant,
+				});
+			}
+			this.emit("hand-raised", { participantId: data.participantId });
+		});
+
+		this.wsClient.on("hand.lowered", (data) => {
+			const participant = this._participants.get(data.participantId);
+			if (participant) {
+				participant.handRaised = false;
+				this.emit("participant-updated", {
+					participantId: data.participantId,
+					participant,
+				});
+			}
+			this.emit("hand-lowered", { participantId: data.participantId });
+		});
+
+		this.wsClient.on("recording.started", (data) => {
+			this._currentRecording = { id: data.recordingId };
+			this.emit("recording-started", { recordingId: data.recordingId });
+		});
+
+		this.wsClient.on("recording.stopped", (data) => {
+			const recording: Recording = {
+				id: this._currentRecording?.id ?? data.recordingId,
+				roomId: this.id,
+				status: "processing",
+				durationSeconds: data.duration,
+			};
+			this._currentRecording = null;
+			this.emit("recording-stopped", recording);
+		});
+
+		this.wsClient.on("error", (data) => {
+			this.emit("error", {
+				code: data.code,
+				message: data.message,
+			});
+		});
 	}
 
 	/**
@@ -141,18 +258,22 @@ export class Room extends EventEmitter<RoomEvents> {
 	}
 
 	private setupRTKListeners(): void {
+		if (!this.rtkClient) return;
+
 		// Room joined event
 		this.rtkClient.self.on("roomJoined", () => {
 			this.log("Room joined");
 			this._setStatus("connected");
 
 			// Sync local participant state with RTK
-			this._localParticipant.videoEnabled = this.rtkClient.self.videoEnabled;
-			this._localParticipant.audioEnabled = this.rtkClient.self.audioEnabled;
-			this._localParticipant.videoTrack =
-				this.rtkClient.self.videoTrack ?? undefined;
-			this._localParticipant.audioTrack =
-				this.rtkClient.self.audioTrack ?? undefined;
+			if (this._localParticipant) {
+				this._localParticipant.videoEnabled = this.rtkClient!.self.videoEnabled;
+				this._localParticipant.audioEnabled = this.rtkClient!.self.audioEnabled;
+				this._localParticipant.videoTrack =
+					this.rtkClient!.self.videoTrack ?? undefined;
+				this._localParticipant.audioTrack =
+					this.rtkClient!.self.audioTrack ?? undefined;
+			}
 		});
 
 		// Room left event
@@ -169,12 +290,14 @@ export class Room extends EventEmitter<RoomEvents> {
 				videoTrack: MediaStreamTrack | null;
 			}) => {
 				this.log("Local video update:", data.videoEnabled);
-				this._localParticipant.videoEnabled = data.videoEnabled;
-				this._localParticipant.videoTrack = data.videoTrack ?? undefined;
-				this.emit("participant-updated", {
-					participantId: this._localParticipant.id,
-					participant: this._localParticipant,
-				});
+				if (this._localParticipant) {
+					this._localParticipant.videoEnabled = data.videoEnabled;
+					this._localParticipant.videoTrack = data.videoTrack ?? undefined;
+					this.emit("participant-updated", {
+						participantId: this._localParticipant.id,
+						participant: this._localParticipant,
+					});
+				}
 			},
 		);
 
@@ -186,12 +309,14 @@ export class Room extends EventEmitter<RoomEvents> {
 				audioTrack: MediaStreamTrack | null;
 			}) => {
 				this.log("Local audio update:", data.audioEnabled);
-				this._localParticipant.audioEnabled = data.audioEnabled;
-				this._localParticipant.audioTrack = data.audioTrack ?? undefined;
-				this.emit("participant-updated", {
-					participantId: this._localParticipant.id,
-					participant: this._localParticipant,
-				});
+				if (this._localParticipant) {
+					this._localParticipant.audioEnabled = data.audioEnabled;
+					this._localParticipant.audioTrack = data.audioTrack ?? undefined;
+					this.emit("participant-updated", {
+						participantId: this._localParticipant.id,
+						participant: this._localParticipant,
+					});
+				}
 			},
 		);
 
@@ -257,6 +382,10 @@ export class Room extends EventEmitter<RoomEvents> {
 
 	// Media controls using RealtimeKit
 	async toggleVideo(): Promise<boolean> {
+		if (!this.rtkClient || !this._localParticipant) {
+			return false;
+		}
+
 		try {
 			if (this.rtkClient.self.videoEnabled) {
 				await this.rtkClient.self.disableVideo();
@@ -280,6 +409,10 @@ export class Room extends EventEmitter<RoomEvents> {
 	}
 
 	async toggleAudio(): Promise<boolean> {
+		if (!this.rtkClient || !this._localParticipant) {
+			return false;
+		}
+
 		try {
 			if (this.rtkClient.self.audioEnabled) {
 				await this.rtkClient.self.disableAudio();
@@ -303,6 +436,8 @@ export class Room extends EventEmitter<RoomEvents> {
 	}
 
 	async startScreenShare(_options?: ScreenShareOptions): Promise<boolean> {
+		if (!this._localParticipant || !this.rtkClient) return false;
+
 		if (this._localParticipant.isScreenSharing) return true;
 
 		try {
@@ -320,6 +455,8 @@ export class Room extends EventEmitter<RoomEvents> {
 	}
 
 	async stopScreenShare(): Promise<void> {
+		if (!this._localParticipant || !this.rtkClient) return;
+
 		if (!this._localParticipant.isScreenSharing) return;
 
 		try {
@@ -381,6 +518,8 @@ export class Room extends EventEmitter<RoomEvents> {
 	 * Switch to a different camera
 	 */
 	async selectCamera(deviceId: string): Promise<boolean> {
+		if (!this.rtkClient || !this._localParticipant) return false;
+
 		try {
 			// Use setDevice if available, otherwise re-enable with new device
 			const self = this.rtkClient.self as unknown as {
@@ -418,6 +557,8 @@ export class Room extends EventEmitter<RoomEvents> {
 	 * Switch to a different microphone
 	 */
 	async selectMicrophone(deviceId: string): Promise<boolean> {
+		if (!this.rtkClient || !this._localParticipant) return false;
+
 		try {
 			const self = this.rtkClient.self as unknown as {
 				setDevice?: (kind: string, deviceId: string) => Promise<void>;
@@ -449,38 +590,67 @@ export class Room extends EventEmitter<RoomEvents> {
 		}
 	}
 
-	// Chat (using RealtimeKit chat if available, fallback to noop)
+	// Chat
 	sendMessage(content: string): void {
 		if (!content.trim()) return;
-		try {
-			this.rtkClient.chat?.sendTextMessage(content.trim());
-		} catch {
-			this.log("Chat not available");
+
+		const trimmed = content.trim();
+
+		// Try WSClient first, fallback to RealtimeKit
+		if (this.wsClient) {
+			this.wsClient.sendChatMessage(trimmed);
+		} else if (this.rtkClient) {
+			try {
+				this.rtkClient.chat?.sendTextMessage(trimmed);
+			} catch {
+				this.log("Chat not available");
+			}
 		}
 	}
 
 	// Reactions
 	sendReaction(emoji: ReactionEmoji): void {
-		try {
-			// RealtimeKit may have reactions API
-			(
-				this.rtkClient as unknown as {
-					reactions?: { send: (e: string) => void };
-				}
-			).reactions?.send(emoji);
-		} catch {
-			this.log("Reactions not available");
+		// Try WSClient first, fallback to RealtimeKit
+		if (this.wsClient) {
+			this.wsClient.sendReaction(emoji);
+		} else if (this.rtkClient) {
+			try {
+				// RealtimeKit may have reactions API
+				(
+					this.rtkClient as unknown as {
+						reactions?: { send: (e: string) => void };
+					}
+				).reactions?.send(emoji);
+			} catch {
+				this.log("Reactions not available");
+			}
 		}
 	}
 
-	// Hand raise (custom implementation via metadata or API)
+	// Hand raise
 	raiseHand(): void {
+		if (!this._localParticipant) return;
+
 		this._localParticipant.handRaised = true;
+
+		// Try WSClient first
+		if (this.wsClient) {
+			this.wsClient.raiseHand();
+		}
+
 		this.emit("hand-raised", { participantId: this._localParticipant.id });
 	}
 
 	lowerHand(): void {
+		if (!this._localParticipant) return;
+
 		this._localParticipant.handRaised = false;
+
+		// Try WSClient first
+		if (this.wsClient) {
+			this.wsClient.lowerHand();
+		}
+
 		this.emit("hand-lowered", { participantId: this._localParticipant.id });
 	}
 
@@ -488,8 +658,16 @@ export class Room extends EventEmitter<RoomEvents> {
 	leave(): void {
 		this.log("Leaving room");
 
+		// Disconnect WSClient if present
+		if (this.wsClient) {
+			this.wsClient.disconnect();
+		}
+
+		// Disconnect RealtimeKit if present
 		try {
-			this.rtkClient.leave();
+			if (this.rtkClient) {
+				this.rtkClient.leave();
+			}
 		} catch {
 			// Ignore errors during leave
 		}
@@ -499,6 +677,7 @@ export class Room extends EventEmitter<RoomEvents> {
 		this._activeSpeaker = null;
 		this._messages = [];
 		this._currentRecording = null;
+		this._localParticipant = null;
 
 		this._setStatus("disconnected");
 	}
@@ -506,7 +685,7 @@ export class Room extends EventEmitter<RoomEvents> {
 	/**
 	 * Get the underlying RealtimeKit client for advanced usage
 	 */
-	get rtkMeeting(): RealtimeKitClient {
+	get rtkMeeting(): RealtimeKitClient | undefined {
 		return this.rtkClient;
 	}
 }

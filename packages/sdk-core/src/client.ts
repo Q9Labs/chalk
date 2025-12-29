@@ -12,14 +12,17 @@ import type {
 	RoomConfig,
 	RoomStatus,
 } from "./types.ts";
+import { WSClient } from "./ws-client.ts";
 
 export class ChalkClient {
 	private readonly apiClient: APIClient;
+	private readonly wsUrl?: string;
 	private readonly debug: boolean;
 	private currentRoom: Room | null = null;
 
 	constructor(config: ChalkClientConfig) {
 		this.debug = config.debug ?? false;
+		this.wsUrl = config.wsUrl;
 
 		if (!config.apiKey && !config.token && !this.debug) {
 			throw new Error("ChalkClient requires either apiKey or token");
@@ -35,7 +38,7 @@ export class ChalkClient {
 	}
 
 	/**
-	 * Join a room using Cloudflare RealtimeKit
+	 * Join a room using Cloudflare RealtimeKit or custom WebSocket signaling
 	 * @param roomId - The room ID to join
 	 * @param config - Room configuration including display name and initial media state
 	 * @returns The Room instance
@@ -43,7 +46,7 @@ export class ChalkClient {
 	async joinRoom(roomId: string, config: RoomConfig): Promise<Room> {
 		if (this.currentRoom) {
 			this.log("Leaving existing room before joining new one");
-			await this.currentRoom.leave();
+			this.currentRoom.leave();
 		}
 
 		this.log("Joining room:", roomId);
@@ -63,21 +66,10 @@ export class ChalkClient {
 		}
 
 		const { participantId, token, room: roomInfo } = response.data;
-		this.log("Got auth token, initializing RealtimeKit");
+		this.log("Got auth token");
 
 		// Store token for future API calls
 		this.apiClient.setToken(token);
-
-		// Initialize RealtimeKit with the Cloudflare auth token
-		const rtkClient = await RealtimeKitClient.init({
-			authToken: token,
-			defaults: {
-				audio: config.audio ?? false,
-				video: config.video ?? false,
-			},
-		});
-
-		this.log("RealtimeKit initialized, creating Room");
 
 		// Create local participant
 		const localParticipant: Participant = {
@@ -94,8 +86,36 @@ export class ChalkClient {
 			metadata: config.metadata,
 		};
 
+		// Use WSClient for signaling if wsUrl is configured
+		if (this.wsUrl) {
+			this.log("Initializing WebSocket signaling");
+			const wsClient = new WSClient(this.wsUrl, this.debug);
+			const room = new Room(roomId, wsClient, this.debug);
+			room._setLocalParticipant(localParticipant);
+			room._setInfo(roomInfo);
+
+			// Connect WebSocket
+			wsClient.connect(token, roomId);
+
+			this.currentRoom = room;
+			return room;
+		}
+
+		// Otherwise use RealtimeKit for WebRTC
+		this.log("Initializing RealtimeKit");
+		const rtkClient = await RealtimeKitClient.init({
+			authToken: token,
+			defaults: {
+				audio: config.audio ?? false,
+				video: config.video ?? false,
+			},
+		});
+
+		this.log("RealtimeKit initialized, creating Room");
+
 		// Create Room instance wrapping RealtimeKit
-		const room = new Room(roomId, rtkClient, localParticipant, this.debug);
+		const room = new Room(roomId, rtkClient, this.debug);
+		room._setLocalParticipant(localParticipant);
 		room._setInfo(roomInfo);
 
 		// Join the RealtimeKit room

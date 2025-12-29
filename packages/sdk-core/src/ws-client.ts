@@ -138,46 +138,46 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 			switch (message.type) {
 				case "participant.joined":
-					this.emit("participant.joined", message.data);
+					this.emit("participant.joined", message.payload);
 					break;
 				case "participant.left":
-					this.emit("participant.left", message.data);
+					this.emit("participant.left", message.payload);
 					break;
 				case "participant.updated":
-					this.emit("participant.updated", message.data);
+					this.emit("participant.updated", message.payload);
 					break;
 				case "chat.message":
 					this.emit("chat.message", {
-						...message.data,
-						timestamp: new Date(message.data.timestamp),
+						...message.payload,
+						timestamp: new Date(message.payload.timestamp),
 					});
 					break;
 				case "reaction":
 					this.emit("reaction", {
-						...message.data,
-						timestamp: new Date(message.data.timestamp),
+						...message.payload,
+						timestamp: new Date(message.payload.timestamp),
 					});
 					break;
 				case "hand.raised":
-					this.emit("hand.raised", message.data);
+					this.emit("hand.raised", message.payload);
 					break;
 				case "hand.lowered":
-					this.emit("hand.lowered", message.data);
+					this.emit("hand.lowered", message.payload);
 					break;
 				case "recording.started":
-					this.emit("recording.started", message.data);
+					this.emit("recording.started", message.payload);
 					break;
 				case "recording.stopped":
-					this.emit("recording.stopped", message.data);
+					this.emit("recording.stopped", message.payload);
 					break;
 				case "room.updated":
-					this.emit("room.updated", message.data);
+					this.emit("room.updated", message.payload);
 					break;
 				case "pong":
 					// Heartbeat response - ignore
 					break;
 				case "error":
-					this.emit("error", message.data);
+					this.emit("error", message.payload);
 					break;
 				default:
 					this.log("Unknown message type:", message.type);
@@ -239,19 +239,19 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	// Client-to-server actions
 	sendChatMessage(content: string): void {
-		this.send({ type: "chat.send", data: { content } });
+		this.send({ type: "chat.send", payload: { content } });
 	}
 
 	sendReaction(emoji: string): void {
-		this.send({ type: "reaction.send", data: { emoji } });
+		this.send({ type: "reaction.send", payload: { emoji } });
 	}
 
 	raiseHand(): void {
-		this.send({ type: "hand.raise", data: {} });
+		this.send({ type: "hand.raise", payload: {} });
 	}
 
 	lowerHand(): void {
-		this.send({ type: "hand.lower", data: {} });
+		this.send({ type: "hand.lower", payload: {} });
 	}
 
 	disconnect(): void {
