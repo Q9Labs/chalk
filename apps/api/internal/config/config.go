@@ -13,6 +13,7 @@ type Config struct {
 	Redis      RedisConfig
 	Cloudflare CloudflareConfig
 	JWT        JWTConfig
+	Storage    StorageConfig
 }
 
 // ServerConfig holds server configuration
@@ -44,6 +45,22 @@ type JWTConfig struct {
 	ExpiryMinutes int
 }
 
+// StorageConfig holds storage configuration for R2 and S3
+type StorageConfig struct {
+	// R2 (Cloudflare)
+	R2AccountID       string
+	R2AccessKeyID     string
+	R2SecretAccessKey string
+	R2BucketName      string
+	R2PublicURL       string
+
+	// S3 Glacier (AWS)
+	S3Region          string
+	S3AccessKeyID     string
+	S3SecretAccessKey string
+	S3BucketName      string
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -65,6 +82,17 @@ func Load() (*Config, error) {
 		JWT: JWTConfig{
 			SigningKey:    getEnv("JWT_SIGNING_KEY", "development-secret-key"),
 			ExpiryMinutes: getEnvInt("JWT_EXPIRY_MINUTES", 60),
+		},
+		Storage: StorageConfig{
+			R2AccountID:       getEnv("R2_ACCOUNT_ID", ""),
+			R2AccessKeyID:     getEnv("R2_ACCESS_KEY_ID", ""),
+			R2SecretAccessKey: getEnv("R2_SECRET_ACCESS_KEY", ""),
+			R2BucketName:      getEnv("R2_BUCKET_NAME", "chalk-recordings"),
+			R2PublicURL:       getEnv("R2_PUBLIC_URL", ""),
+			S3Region:          getEnv("S3_REGION", "us-east-1"),
+			S3AccessKeyID:     getEnv("S3_ACCESS_KEY_ID", ""),
+			S3SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
+			S3BucketName:      getEnv("S3_BUCKET_NAME", "chalk-recordings-archive"),
 		},
 	}
 

@@ -77,6 +77,16 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- name: ArchiveRecordingWithPath :one
+UPDATE recordings
+SET
+    status = 'archived',
+    storage_provider = 's3_glacier',
+    storage_path = $2,
+    archived_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: MarkRecordingDeleted :one
 UPDATE recordings
 SET status = 'deleted'

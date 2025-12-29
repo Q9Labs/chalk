@@ -544,3 +544,49 @@ export interface JoinRoomResponse {
  * @deprecated Use MediaDevice instead
  */
 export type MediaDeviceInfo = MediaDevice;
+
+// ============================================================================
+// Snapshot Types - For reconnect/sync state
+// ============================================================================
+
+/**
+ * Room snapshot received on connect/reconnect
+ * Contains full room state for synchronization
+ */
+export interface RoomSnapshot {
+	/** Room identifier */
+	roomId: string;
+	/** All participants currently in the room */
+	participants: Participant[];
+	/** Whether the room is currently being recorded */
+	isRecording: boolean;
+	/** Current recording ID if recording */
+	recordingId?: string;
+	/** Last sequence number for event ordering */
+	lastSeq: number;
+}
+
+/**
+ * Payload for participant update events with detailed changes
+ */
+export interface ParticipantUpdatedPayload {
+	/** ID of the participant that was updated */
+	participantId: string;
+	/** Changes that occurred */
+	changes: {
+		/** Updated display name */
+		displayName?: string;
+		/** Whether video is enabled */
+		videoEnabled?: boolean;
+		/** Whether audio is enabled */
+		audioEnabled?: boolean;
+		/** Whether participant is currently speaking */
+		isSpeaking?: boolean;
+		/** Whether participant is sharing their screen */
+		isScreenSharing?: boolean;
+		/** Whether hand is raised */
+		handRaised?: boolean;
+		/** Connection quality score (0-100) */
+		connectionQuality?: number;
+	};
+}

@@ -1,5 +1,6 @@
 /**
- * Chalk React Context with RealtimeKit integration
+ * ChalkProvider - React Native context provider for Chalk video conferencing
+ * Manages client initialization, room state, and permissions
  */
 
 import {
@@ -9,8 +10,6 @@ import {
 	type RoomConfig,
 	type RoomStatus,
 } from "@chalk/core";
-import type RealtimeKitClient from "@cloudflare/realtimekit";
-import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import {
 	createContext,
 	type ReactNode,
@@ -20,15 +19,16 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { RTCManager } from "./native/RTCManager";
 
 interface ChalkContextValue {
 	client: ChalkClient | null;
 	room: Room | null;
-	rtkMeeting: RealtimeKitClient | null;
+	rtcManager: RTCManager | null;
 	isConnected: boolean;
 	connectionStatus: RoomStatus;
 	joinRoom: (roomId: string, config: RoomConfig) => Promise<Room>;
-	leaveRoom: () => void;
+	leaveRoom: () => Promise<void>;
 	createRoom: (name?: string) => Promise<string>;
 }
 
@@ -58,11 +58,11 @@ export function ChalkProvider({
 }: ChalkProviderProps) {
 	const [client, setClient] = useState<ChalkClient | null>(null);
 	const [room, setRoom] = useState<Room | null>(null);
-	const [rtkMeeting, setRtkMeeting] = useState<RealtimeKitClient | null>(null);
+	const [rtcManager, setRtcManager] = useState<RTCManager | null>(null);
 	const [connectionStatus, setConnectionStatus] =
 		useState<RoomStatus>("disconnected");
 
-	// Initialize client
+	// Initialize client and RTC manager
 	useEffect(() => {
 		const config: ChalkClientConfig = {
 			apiKey,
@@ -75,68 +75,75 @@ export function ChalkProvider({
 		const chalkClient = new ChalkClient(config);
 		setClient(chalkClient);
 
+		const manager = new RTCManager();
+		setRtcManager(manager);
+
 		if (debug && !apiKey && !token) {
 			console.info("[Chalk] Running in demo mode without credentials");
 		}
 
 		return () => {
-			chalkClient.disconnect();
+			// Cleanup
+			manager.cleanup();
 		};
 	}, [apiKey, token, apiUrl, wsUrl, debug]);
 
-	// Join room
 	const joinRoom = useCallback(
 		async (roomId: string, config: RoomConfig): Promise<Room> => {
-			if (!client) {
-				throw new Error("ChalkClient not initialized");
+			if (!client || !rtcManager) {
+				throw new Error("Client not initialized");
 			}
 
-			const newRoom = await client.joinRoom(roomId, config);
-			setRoom(newRoom);
+			// Request permissions before joining
+			const hasPermissions = await rtcManager.requestPermissions();
+			if (!hasPermissions) {
+				throw new Error("Camera/microphone permissions denied");
+			}
 
-			// Get the underlying RTK meeting for the provider
-			setRtkMeeting(newRoom?.rtkMeeting ?? null);
+			// Join room
+			const joinedRoom = await client.joinRoom(roomId, config);
+			setRoom(joinedRoom);
 
 			// Listen for status changes
-			newRoom.on("status-changed", (status) => {
+			const unsubStatus = joinedRoom.on("status-changed", (status) => {
 				setConnectionStatus(status);
 			});
 
-			// Set initial status
-			setConnectionStatus(newRoom.status);
+			// Store unsubscriber for cleanup
+			(joinedRoom as any)._unsubStatus = unsubStatus;
 
-			return newRoom;
+			return joinedRoom;
 		},
-		[client],
+		[client, rtcManager],
 	);
 
-	// Leave room
-	const leaveRoom = useCallback(() => {
+	const leaveRoom = useCallback(async () => {
 		if (room) {
-			room.leave();
+			const unsubStatus = (room as any)._unsubStatus;
+			if (unsubStatus) {
+				unsubStatus();
+			}
+			await room.leave();
 			setRoom(null);
-			setRtkMeeting(null);
 			setConnectionStatus("disconnected");
 		}
 	}, [room]);
 
-	// Create room
 	const createRoom = useCallback(
 		async (name?: string): Promise<string> => {
 			if (!client) {
-				throw new Error("ChalkClient not initialized");
+				throw new Error("Client not initialized");
 			}
-
 			return client.createRoom(name);
 		},
 		[client],
 	);
 
-	const value = useMemo(
+	const value = useMemo<ChalkContextValue>(
 		() => ({
 			client,
 			room,
-			rtkMeeting,
+			rtcManager,
 			isConnected: connectionStatus === "connected",
 			connectionStatus,
 			joinRoom,
@@ -146,7 +153,7 @@ export function ChalkProvider({
 		[
 			client,
 			room,
-			rtkMeeting,
+			rtcManager,
 			connectionStatus,
 			joinRoom,
 			leaveRoom,
@@ -154,31 +161,15 @@ export function ChalkProvider({
 		],
 	);
 
-	// Wrap children with both Chalk context and RTK provider
-	const content = (
+	return (
 		<ChalkContext.Provider value={value}>{children}</ChalkContext.Provider>
 	);
-
-	// If we have an RTK meeting, wrap with RealtimeKitProvider
-	if (rtkMeeting) {
-		return <RTKProvider value={rtkMeeting}>{content}</RTKProvider>;
-	}
-
-	return content;
 }
 
 export function useChalk(): ChalkContextValue {
 	const context = useContext(ChalkContext);
 	if (!context) {
-		throw new Error("useChalk must be used within a ChalkProvider");
+		throw new Error("useChalk must be used within ChalkProvider");
 	}
 	return context;
-}
-
-/**
- * Hook to access the underlying RealtimeKit meeting instance
- */
-export function useRtkMeeting(): RealtimeKitClient | null {
-	const { rtkMeeting } = useChalk();
-	return rtkMeeting;
 }

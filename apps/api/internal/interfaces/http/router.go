@@ -1,12 +1,17 @@
 package http
 
 import (
+	"context"
+
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
+	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/handlers"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
+	"github.com/Q9Labs/chalk/internal/interfaces/websocket"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,11 +22,18 @@ type Router struct {
 	jwtService    *auth.JWTService
 	apiKeyService *auth.APIKeyService
 	cfClient      *cloudflare.Client
+	redisClient   *redis.Client
+	wsHub         *websocket.Hub
+	storageR2     storage.StorageClient
+	storageS3     storage.StorageClient
 }
 
 type RouterConfig struct {
-	Pool     *postgres.Pool
-	CFClient *cloudflare.Client
+	Pool       *postgres.Pool
+	CFClient   *cloudflare.Client
+	RedisClient *redis.Client
+	StorageR2  storage.StorageClient
+	StorageS3  storage.StorageClient
 }
 
 func NewRouter(cfg RouterConfig) *Router {
@@ -36,6 +48,12 @@ func NewRouter(cfg RouterConfig) *Router {
 	jwtService := auth.NewJWTService(auth.DefaultJWTConfig())
 	apiKeyService := auth.NewAPIKeyService()
 
+	// Initialize WebSocket hub
+	wsHub := websocket.NewHub(cfg.RedisClient)
+
+	// Start hub in background
+	go wsHub.Run(context.Background())
+
 	r := &Router{
 		engine:        engine,
 		pool:          cfg.Pool,
@@ -43,6 +61,10 @@ func NewRouter(cfg RouterConfig) *Router {
 		jwtService:    jwtService,
 		apiKeyService: apiKeyService,
 		cfClient:      cfg.CFClient,
+		redisClient:   cfg.RedisClient,
+		wsHub:         wsHub,
+		storageR2:     cfg.StorageR2,
+		storageS3:     cfg.StorageS3,
 	}
 
 	r.setupRoutes()
@@ -53,6 +75,10 @@ func (r *Router) setupRoutes() {
 	// Health check (no auth)
 	health := handlers.NewHealthHandler(r.pool)
 	r.engine.GET("/health", health.Check)
+
+	// WebSocket upgrade route (JWT required)
+	wsHandler := handlers.NewWebSocketHandler(r.jwtService, r.wsHub)
+	r.engine.GET("/ws", wsHandler.HandleWebSocket)
 
 	// Initialize middleware
 	authMw := middleware.NewAuthMiddleware(r.jwtService)
@@ -105,26 +131,46 @@ func (r *Router) setupRoutes() {
 			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
 
 			// Recording routes
-			recordings := handlers.NewRecordingHandler(r.queries, r.cfClient)
+			recordings := handlers.NewRecordingHandler(r.queries, r.cfClient, r.storageR2, r.storageS3)
 			roomsGroup.POST("/:id/recordings/start", recordings.Start)
 			roomsGroup.POST("/:id/recordings/stop", recordings.Stop)
+			roomsGroup.POST("/:id/recordings/:rid/archive", recordings.Archive)
 		}
 
 		// Recording list/get routes
 		recordingsGroup := v1.Group("/recordings")
 		recordingsGroup.Use(authMw.RequireJWT())
 		{
-			recordings := handlers.NewRecordingHandler(r.queries, r.cfClient)
+			recordings := handlers.NewRecordingHandler(r.queries, r.cfClient, r.storageR2, r.storageS3)
 			recordingsGroup.GET("", recordings.List)
 			recordingsGroup.GET("/:id", recordings.Get)
 			recordingsGroup.GET("/:id/download", recordings.Download)
+			recordingsGroup.POST("/:id/archive", recordings.Archive)
 			recordingsGroup.DELETE("/:id", recordings.Delete)
 		}
+
+		// Webhook routes (no auth required)
+		webhooks := handlers.NewWebhookHandler(r.queries, r.storageR2)
+		v1.POST("/webhooks/cloudflare/recording", webhooks.HandleRecordingReady)
 	}
 }
 
 func (r *Router) Run(addr string) error {
 	return r.engine.Run(addr)
+}
+
+func (r *Router) Close() error {
+	// Close WebSocket hub
+	if r.wsHub != nil {
+		r.wsHub.Close()
+	}
+
+	// Close Redis connection
+	if r.redisClient != nil {
+		return r.redisClient.Close()
+	}
+
+	return nil
 }
 
 func (r *Router) Engine() *gin.Engine {

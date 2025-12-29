@@ -3,7 +3,7 @@
  * @module @chalk/core/__tests__/room
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { Room } from "../room.ts";
 import type { Participant, RoomInfo } from "../types.ts";
 import type { WSClient } from "../ws-client.ts";
@@ -530,6 +530,189 @@ describe("Room", () => {
 
 			expect(participants.get("participant_2")).toEqual(participant);
 			expect(participants).not.toBe(room._participants);
+		});
+	});
+
+	describe("Room snapshot handling", () => {
+		it("should apply snapshot on connect", () => {
+			const snapshotParticipants: Participant[] = [
+				{
+					id: "participant_2",
+					displayName: "Bob",
+					role: "participant",
+					isLocal: false,
+					videoEnabled: true,
+					audioEnabled: true,
+					isSpeaking: false,
+					isScreenSharing: false,
+					handRaised: false,
+					connectionQuality: 100,
+				},
+				{
+					id: "participant_3",
+					displayName: "Charlie",
+					role: "participant",
+					isLocal: false,
+					videoEnabled: false,
+					audioEnabled: true,
+					isSpeaking: false,
+					isScreenSharing: false,
+					handRaised: false,
+					connectionQuality: 100,
+				},
+			];
+
+			const joinedParticipants: Participant[] = [];
+			room.on("participant-joined", (p) => {
+				joinedParticipants.push(p);
+			});
+
+			mockWSClient.emit("room.snapshot", {
+				roomId: "room_123",
+				participants: snapshotParticipants,
+				isRecording: false,
+				lastSeq: 1,
+			});
+
+			expect(room.participants.size).toBe(2);
+			expect(room.participants.get("participant_2")?.displayName).toBe("Bob");
+			expect(room.participants.get("participant_3")?.displayName).toBe(
+				"Charlie",
+			);
+			expect(joinedParticipants).toHaveLength(2);
+		});
+
+		it("should not duplicate local participant from snapshot", () => {
+			const localParticipant: Participant = {
+				id: "local_1",
+				displayName: "Alice",
+				role: "host",
+				isLocal: true,
+				videoEnabled: true,
+				audioEnabled: true,
+				isSpeaking: false,
+				isScreenSharing: false,
+				handRaised: false,
+				connectionQuality: 100,
+			};
+
+			room._setLocalParticipant(localParticipant);
+
+			const snapshotParticipants: Participant[] = [
+				{
+					id: "local_1",
+					displayName: "Alice (snapshot)",
+					role: "host",
+					isLocal: false,
+					videoEnabled: false,
+					audioEnabled: false,
+					isSpeaking: false,
+					isScreenSharing: false,
+					handRaised: false,
+					connectionQuality: 100,
+				},
+				{
+					id: "participant_2",
+					displayName: "Bob",
+					role: "participant",
+					isLocal: false,
+					videoEnabled: true,
+					audioEnabled: true,
+					isSpeaking: false,
+					isScreenSharing: false,
+					handRaised: false,
+					connectionQuality: 100,
+				},
+			];
+
+			const joinedParticipants: Participant[] = [];
+			room.on("participant-joined", (p) => {
+				joinedParticipants.push(p);
+			});
+
+			mockWSClient.emit("room.snapshot", {
+				roomId: "room_123",
+				participants: snapshotParticipants,
+				isRecording: false,
+				lastSeq: 1,
+			});
+
+			expect(room.participants.size).toBe(2);
+			expect(room.localParticipant?.displayName).toBe("Alice");
+			expect(room.participants.get("local_1")?.displayName).toBe("Alice");
+			expect(joinedParticipants).toHaveLength(1);
+			expect(joinedParticipants[0]?.id).toBe("participant_2");
+		});
+
+		it("should sync recording state from snapshot", () => {
+			mockWSClient.emit("room.snapshot", {
+				roomId: "room_123",
+				participants: [],
+				isRecording: true,
+				recordingId: "rec_456",
+				lastSeq: 1,
+			});
+
+			expect(room.isRecording).toBe(true);
+		});
+
+		it("should not set recording if snapshot has isRecording false", () => {
+			mockWSClient.emit("room.snapshot", {
+				roomId: "room_123",
+				participants: [],
+				isRecording: false,
+				lastSeq: 1,
+			});
+
+			expect(room.isRecording).toBe(false);
+		});
+
+		it("should clear existing participants on snapshot", () => {
+			const existingParticipant: Participant = {
+				id: "old_participant",
+				displayName: "Old",
+				role: "participant",
+				isLocal: false,
+				videoEnabled: false,
+				audioEnabled: false,
+				isSpeaking: false,
+				isScreenSharing: false,
+				handRaised: false,
+				connectionQuality: 100,
+			};
+
+			mockWSClient.emit("participant.joined", existingParticipant);
+
+			expect(room.participants.has("old_participant")).toBe(true);
+
+			const newParticipant: Participant = {
+				id: "new_participant",
+				displayName: "New",
+				role: "participant",
+				isLocal: false,
+				videoEnabled: true,
+				audioEnabled: true,
+				isSpeaking: false,
+				isScreenSharing: false,
+				handRaised: false,
+				connectionQuality: 100,
+			};
+
+			mockWSClient.emit("room.snapshot", {
+				roomId: "room_123",
+				participants: [newParticipant],
+				isRecording: false,
+				lastSeq: 1,
+			});
+
+			expect(room.participants.has("old_participant")).toBe(false);
+			expect(room.participants.has("new_participant")).toBe(true);
+		});
+	});
+
+	describe("Active speaker", () => {
+		it("should have null active speaker initially", () => {
+			expect(room.activeSpeaker).toBeNull();
 		});
 	});
 });

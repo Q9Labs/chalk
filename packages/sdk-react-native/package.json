@@ -15,9 +15,9 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @chalk/core && bun run build:types",
+		"build": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external react-native-webrtc --external @chalk/core && bun run build:types",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-		"dev": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @chalk/core --watch",
+		"dev": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external react-native-webrtc --external @chalk/core --watch",
 		"test": "bun test",
 		"check-types": "tsc --noEmit",
 		"lint": "echo 'No linter configured yet'",
@@ -34,6 +34,7 @@
 	"peerDependencies": {
 		"react": "^18.0.0 || ^19.0.0",
 		"react-native": ">=0.70.0",
+		"react-native-webrtc": ">=118.0.0",
 		"typescript": "^5"
 	}
 }

@@ -18,16 +18,16 @@ Go backend implementation for Cloudflare RealtimeKit integration.
 
 ### Endpoint Mapping (Chalk API → RealtimeKit API)
 
-| Chalk API | RealtimeKit API | Purpose |
-|-----------|-----------------|---------|
-| `POST /rooms` | `POST /{app_id}/meetings` | Create meeting |
-| `GET /rooms/:id` | `GET /{app_id}/meetings/{meeting_id}` | Get meeting details |
-| `DELETE /rooms/:id` | `PATCH /{app_id}/meetings/{meeting_id}` (status: ENDED) | End meeting |
-| `POST /rooms/:id/participants` | `POST /{app_id}/meetings/{meeting_id}/participants` | Add participant, get authToken |
-| `DELETE /rooms/:id/participants/:pid` | `DELETE /{app_id}/meetings/{meeting_id}/participants/{participant_id}` | Remove participant |
-| `POST /rooms/:id/participants/:pid/token` | `POST /{app_id}/meetings/{meeting_id}/participants/{participant_id}/token` | Refresh token |
-| `POST /rooms/:id/recordings/start` | `POST /{app_id}/recordings` | Start recording |
-| `POST /rooms/:id/recordings/stop` | `PUT /{app_id}/recordings/{recording_id}` (action: STOP) | Stop recording |
+| Chalk API                                 | RealtimeKit API                                                            | Purpose                        |
+| ----------------------------------------- | -------------------------------------------------------------------------- | ------------------------------ |
+| `POST /rooms`                             | `POST /{app_id}/meetings`                                                  | Create meeting                 |
+| `GET /rooms/:id`                          | `GET /{app_id}/meetings/{meeting_id}`                                      | Get meeting details            |
+| `DELETE /rooms/:id`                       | `PATCH /{app_id}/meetings/{meeting_id}` (status: ENDED)                    | End meeting                    |
+| `POST /rooms/:id/participants`            | `POST /{app_id}/meetings/{meeting_id}/participants`                        | Add participant, get authToken |
+| `DELETE /rooms/:id/participants/:pid`     | `DELETE /{app_id}/meetings/{meeting_id}/participants/{participant_id}`     | Remove participant             |
+| `POST /rooms/:id/participants/:pid/token` | `POST /{app_id}/meetings/{meeting_id}/participants/{participant_id}/token` | Refresh token                  |
+| `POST /rooms/:id/recordings/start`        | `POST /{app_id}/recordings`                                                | Start recording                |
+| `POST /rooms/:id/recordings/stop`         | `PUT /{app_id}/recordings/{recording_id}` (action: STOP)                   | Stop recording                 |
 
 ### Create Meeting API
 
@@ -541,18 +541,21 @@ ENV=development
 ### Preset Mapping
 
 Map Chalk participant roles to Cloudflare RealtimeKit presets:
+
 - Chalk `host` → Cloudflare `group_call_host` preset
 - Chalk `participant` → Cloudflare `group_call_participant` preset
 
 ### Recording Storage
 
 Configure in `CreateMeeting` request:
+
 - **Hot Storage (0-7 days):** Cloudflare R2 or S3
 - **Archive (7+ days):** S3 Glacier (configure lifecycle policies)
 
 ### Error Handling
 
 All Cloudflare API responses have this structure:
+
 ```json
 {
   "success": bool,

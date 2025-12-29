@@ -3,22 +3,28 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type RecordingHandler struct {
-	queries  *db.Queries
-	cfClient *cloudflare.Client
+	queries     *db.Queries
+	cfClient    *cloudflare.Client
+	storageR2   storage.StorageClient
+	storageS3   storage.StorageClient
 }
 
-func NewRecordingHandler(queries *db.Queries, cfClient *cloudflare.Client) *RecordingHandler {
+func NewRecordingHandler(queries *db.Queries, cfClient *cloudflare.Client, storageR2, storageS3 storage.StorageClient) *RecordingHandler {
 	return &RecordingHandler{
-		queries:  queries,
-		cfClient: cfClient,
+		queries:     queries,
+		cfClient:    cfClient,
+		storageR2:   storageR2,
+		storageS3:   storageS3,
 	}
 }
 
@@ -159,7 +165,37 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 		return
 	}
 
-	// Get recording details from Cloudflare to get download URL
+	// If recording is stored in R2 or S3, generate presigned URL
+	if recording.StoragePath != nil && recording.StorageProvider != nil {
+		var storageClient storage.StorageClient
+
+		switch *recording.StorageProvider {
+		case "r2":
+			storageClient = h.storageR2
+		case "s3_glacier":
+			storageClient = h.storageS3
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "unknown storage provider"})
+			return
+		}
+
+		if storageClient != nil {
+			presignedURL, err := storageClient.GetPresignedURL(c.Request.Context(), *recording.StoragePath, 1*time.Hour)
+			if err == nil {
+				c.JSON(http.StatusOK, gin.H{
+					"recording_id":  recording.ID,
+					"download_url":  presignedURL,
+					"duration":      recording.DurationSeconds,
+					"file_size":     recording.SizeBytes,
+					"status":        recording.Status,
+					"provider":      *recording.StorageProvider,
+				})
+				return
+			}
+		}
+	}
+
+	// Fallback to Cloudflare if available
 	if recording.CloudflareRecordingID != nil {
 		cfRecording, err := h.cfClient.GetRecording(c.Request.Context(), *recording.CloudflareRecordingID)
 		if err == nil && cfRecording.DownloadURL != "" {
@@ -174,11 +210,64 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 		}
 	}
 
-	// Fallback if Cloudflare URL not available yet
+	// Fallback if no URL available yet
 	c.JSON(http.StatusOK, gin.H{
 		"recording_id": recording.ID,
 		"status":       recording.Status,
 		"message":      "recording is still processing",
+	})
+}
+
+// POST /api/v1/recordings/:id/archive
+func (h *RecordingHandler) Archive(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid recording id"})
+		return
+	}
+
+	recording, err := h.queries.GetRecording(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+
+	// Only archive ready recordings from R2
+	if recording.Status != "ready" || recording.StorageProvider == nil || *recording.StorageProvider != "r2" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recording must be ready and stored in R2"})
+		return
+	}
+
+	if recording.StoragePath == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recording storage path not set"})
+		return
+	}
+
+	// Download from R2
+	reader, err := h.storageR2.Download(c.Request.Context(), *recording.StoragePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to download recording from R2: " + err.Error()})
+		return
+	}
+	defer reader.Close()
+
+	// Upload to S3 Glacier
+	if err := h.storageS3.Upload(c.Request.Context(), *recording.StoragePath, reader, "video/webm"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload recording to S3: " + err.Error()})
+		return
+	}
+
+	// Update database to mark as archived and change provider to S3
+	archived, err := h.queries.ArchiveRecording(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update recording status: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "recording archived successfully",
+		"id":      archived.ID,
+		"status":  archived.Status,
 	})
 }
 
@@ -190,12 +279,34 @@ func (h *RecordingHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// Mark as deleted (soft delete)
-	recording, err := h.queries.MarkRecordingDeleted(c.Request.Context(), id)
+	recording, err := h.queries.GetRecording(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+
+	// Delete from storage if stored there
+	if recording.StoragePath != nil && recording.StorageProvider != nil {
+		var storageClient storage.StorageClient
+
+		switch *recording.StorageProvider {
+		case "r2":
+			storageClient = h.storageR2
+		case "s3_glacier":
+			storageClient = h.storageS3
+		}
+
+		if storageClient != nil {
+			_ = storageClient.Delete(c.Request.Context(), *recording.StoragePath)
+		}
+	}
+
+	// Mark as deleted (soft delete) in database
+	markedDeleted, err := h.queries.MarkRecordingDeleted(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, recording)
+	c.JSON(http.StatusOK, markedDeleted)
 }

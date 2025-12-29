@@ -479,7 +479,7 @@ CLIENT A         CHALK WS SERVER         REDIS PUB/SUB         CLIENT B
 Event Types:
   Server→Client: connected, participant.joined/left/updated,
                  chat.message, reaction, hand.raised/lowered, error
-  
+
   Client→Server: chat.send, reaction.send, hand.raise, hand.lower, ping
 ```
 

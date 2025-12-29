@@ -168,10 +168,10 @@ describe("ChalkClient", () => {
 
 	describe("error handling", () => {
 		it("should handle missing configuration gracefully", () => {
+			// These configs should throw (no apiKey, token, or debug mode)
 			const invalidConfigs = [
 				{},
 				{ apiUrl: "https://api.example.com" },
-				{ debug: true },
 				{ wsUrl: "wss://ws.example.com" },
 			];
 
@@ -180,6 +180,11 @@ describe("ChalkClient", () => {
 					new ChalkClient(config as ChalkClientConfig);
 				}).toThrow();
 			});
+
+			// Debug mode without credentials should NOT throw (intentional)
+			expect(() => {
+				new ChalkClient({ debug: true });
+			}).not.toThrow();
 		});
 	});
 

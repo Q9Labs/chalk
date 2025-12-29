@@ -225,6 +225,35 @@ export class Room extends EventEmitter<RoomEvents> {
 				message: data.message,
 			});
 		});
+
+		this.wsClient.on("room.snapshot", (snapshot) => {
+			this.log(
+				"Received room snapshot:",
+				snapshot.participants.length,
+				"participants",
+			);
+
+			this._participants.clear();
+
+			for (const p of snapshot.participants) {
+				if (this._localParticipant && p.id === this._localParticipant.id) {
+					continue;
+				}
+				this._participants.set(p.id, p);
+				this.emit("participant-joined", p);
+			}
+
+			if (this._localParticipant) {
+				this._participants.set(
+					this._localParticipant.id,
+					this._localParticipant,
+				);
+			}
+
+			if (snapshot.isRecording && snapshot.recordingId) {
+				this._currentRecording = { id: snapshot.recordingId };
+			}
+		});
 	}
 
 	/**
@@ -376,8 +405,33 @@ export class Room extends EventEmitter<RoomEvents> {
 			},
 		);
 
-		// Note: Active speaker detection would need to be implemented using audioUpdate events
-		// and checking for isSpeaking property or using a voice activity detection library
+		this.setupActiveSpeakerListener();
+	}
+
+	private setupActiveSpeakerListener(): void {
+		if (!this.rtkClient?.participants) return;
+
+		const participants = this.rtkClient.participants as unknown as {
+			on?: (event: string, handler: (speaker: unknown) => void) => void;
+		};
+
+		if (typeof participants.on !== "function") return;
+
+		participants.on("activeSpeakerChanged", (speaker: unknown) => {
+			if (speaker) {
+				const speakerId = (speaker as { id: string }).id;
+				const participant = this._participants.get(speakerId) ?? null;
+				if (this._activeSpeaker?.id !== participant?.id) {
+					this._activeSpeaker = participant;
+					this.emit("active-speaker-changed", participant);
+				}
+			} else {
+				if (this._activeSpeaker !== null) {
+					this._activeSpeaker = null;
+					this.emit("active-speaker-changed", null);
+				}
+			}
+		});
 	}
 
 	// Media controls using RealtimeKit

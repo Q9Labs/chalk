@@ -8,6 +8,7 @@ import type {
 	ChatMessage,
 	Participant,
 	Reaction,
+	RoomSnapshot,
 } from "./types.ts";
 
 const DEFAULT_WS_URL = "ws://localhost:8080/ws";
@@ -39,6 +40,7 @@ interface WSEvents {
 	"recording.started": { recordingId: string };
 	"recording.stopped": { recordingId: string; duration: number };
 	"room.updated": { roomId: string; changes: Record<string, unknown> };
+	"room.snapshot": RoomSnapshot;
 }
 
 export class WSClient extends EventEmitter<WSEvents> {
@@ -173,8 +175,37 @@ export class WSClient extends EventEmitter<WSEvents> {
 				case "room.updated":
 					this.emit("room.updated", message.payload);
 					break;
+				case "room.snapshot":
+					this.emit("room.snapshot", {
+						roomId: message.payload.room_id,
+						participants: message.payload.participants.map(
+							(p: {
+								id: string;
+								display_name: string;
+								role?: string;
+								video_enabled?: boolean;
+								audio_enabled?: boolean;
+								is_screen_sharing?: boolean;
+								hand_raised?: boolean;
+							}) => ({
+								id: p.id,
+								displayName: p.display_name,
+								role: p.role ?? "participant",
+								isLocal: false,
+								videoEnabled: p.video_enabled ?? false,
+								audioEnabled: p.audio_enabled ?? false,
+								isSpeaking: false,
+								isScreenSharing: p.is_screen_sharing ?? false,
+								handRaised: p.hand_raised ?? false,
+								connectionQuality: 100,
+							}),
+						),
+						isRecording: message.payload.is_recording,
+						recordingId: message.payload.recording_id,
+						lastSeq: message.payload.last_seq,
+					});
+					break;
 				case "pong":
-					// Heartbeat response - ignore
 					break;
 				case "error":
 					this.emit("error", message.payload);
