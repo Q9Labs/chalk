@@ -10,11 +10,11 @@ describe('VolumeSlider', () => {
 
   it('calls onChange when slider moves', () => {
     const onChange = vi.fn();
-    const { getByRole } = render(<VolumeSlider value={50} onChange={onChange} />);
+    const { getByRole } = render(<VolumeSlider value={50} onChange={onChange} muted={false} />);
     const slider = getByRole('slider');
     
     act(() => {
-      fireEvent.change(slider, { target: { value: '75' } });
+      fireEvent.input(slider, { target: { value: '75' } });
     });
     
     expect(onChange).toHaveBeenCalled();
