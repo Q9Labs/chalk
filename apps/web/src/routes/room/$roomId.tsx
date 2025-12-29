@@ -6,18 +6,15 @@ import {
   useChat,
   useRecording,
   useTranscription,
-  useTour,
   useSoundEffects,
   useKeyboardShortcuts,
   createMeetingShortcuts,
   useAnnouncer,
   EndScreen,
   useChalk,
-  DEFAULT_MEETING_TOUR_STEPS
 } from "@q9labs/chalk-react";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 
-// @ts-expect-error - Route type generation might lag
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
 });
@@ -26,7 +23,7 @@ function RoomPage() {
   const { roomId } = Route.useParams() as { roomId: string };
   const navigate = useNavigate();
 
-  const { client, joinRoom, leaveRoom, connectionStatus } = useChalk();
+  const { client, joinRoom, leaveRoom } = useChalk();
   const { isConnected } = useRoom();
   const { participants, localParticipant } = useParticipants();
   const {
@@ -39,17 +36,12 @@ function RoomPage() {
     stopScreenShare
   } = useMedia();
 
-  const { messages, sendMessage } = useChat();
+  const { messages } = useChat();
   const { isRecording, durationSeconds, startRecording, stopRecording } = useRecording();
-  const { isTranscribing, transcripts, setEnabled: setTranscriptionEnabled } = useTranscription({ enabled: true });
+  const { isTranscribing, transcripts } = useTranscription({ enabled: true });
 
   useSoundEffects({ enabled: true });
   useAnnouncer({});
-
-  const tour = useTour({
-    steps: DEFAULT_MEETING_TOUR_STEPS,
-    onComplete: () => console.log("Tour completed"),
-  });
 
   const [hasJoined, setHasJoined] = useState(false);
   const [showEndScreen, setShowEndScreen] = useState(false);
@@ -168,7 +160,103 @@ function RoomPage() {
   }
 
   return (
+    <div className="flex flex-col min-h-screen bg-neutral-900 text-white">
+      <header className="flex items-center justify-between p-4 bg-neutral-800">
+        <h1 className="text-lg font-semibold">Room: {roomId}</h1>
+        <div className="flex items-center gap-2">
+          {isRecording && (
+            <span className="flex items-center gap-1 text-red-500">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              Recording
+            </span>
+          )}
+          <span className="text-sm text-neutral-400">
+            {participants.length} participant{participants.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </header>
 
+      <main className="flex-1 p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {participants.map((participant) => (
+            <div
+              key={participant.id}
+              className="relative aspect-video bg-neutral-800 rounded-lg flex items-center justify-center"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 bg-neutral-700 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span className="text-2xl">{participant.displayName?.[0]?.toUpperCase() || '?'}</span>
+                </div>
+                <p className="text-sm">{participant.displayName}</p>
+                {participant.id === localParticipant?.id && (
+                  <span className="text-xs text-neutral-400">(You)</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
 
+        {messages.length > 0 && (
+          <div className="mt-4 p-4 bg-neutral-800 rounded-lg max-h-48 overflow-y-auto">
+            <h2 className="text-sm font-semibold mb-2">Chat</h2>
+            {messages.map((msg) => (
+              <div key={msg.id} className="text-sm mb-1">
+                <span className="text-primary">{msg.senderName}: </span>
+                <span>{msg.content}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isTranscribing && transcripts.length > 0 && (
+          <div className="mt-4 p-4 bg-neutral-800 rounded-lg">
+            <h2 className="text-sm font-semibold mb-2">Live Transcription</h2>
+            <p className="text-sm text-neutral-300">{transcripts[transcripts.length - 1]?.text}</p>
+          </div>
+        )}
+      </main>
+
+      <footer className="flex items-center justify-center gap-4 p-4 bg-neutral-800">
+        <button
+          type="button"
+          onClick={toggleAudio}
+          className={`p-3 rounded-full ${isAudioEnabled ? 'bg-neutral-700' : 'bg-red-600'}`}
+          title={isAudioEnabled ? 'Mute' : 'Unmute'}
+        >
+          {isAudioEnabled ? '🎤' : '🔇'}
+        </button>
+        <button
+          type="button"
+          onClick={toggleVideo}
+          className={`p-3 rounded-full ${isVideoEnabled ? 'bg-neutral-700' : 'bg-red-600'}`}
+          title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+        >
+          {isVideoEnabled ? '📹' : '📷'}
+        </button>
+        <button
+          type="button"
+          onClick={() => isScreenSharing ? stopScreenShare() : startScreenShare()}
+          className={`p-3 rounded-full ${isScreenSharing ? 'bg-primary' : 'bg-neutral-700'}`}
+          title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+        >
+          🖥️
+        </button>
+        <button
+          type="button"
+          onClick={() => isRecording ? stopRecording() : startRecording()}
+          className={`p-3 rounded-full ${isRecording ? 'bg-red-600' : 'bg-neutral-700'}`}
+          title={isRecording ? 'Stop recording' : 'Start recording'}
+        >
+          ⏺️
+        </button>
+        <button
+          type="button"
+          onClick={handleLeave}
+          className="px-4 py-2 bg-red-600 rounded-full hover:bg-red-700"
+        >
+          Leave
+        </button>
+      </footer>
+    </div>
   );
 }
