@@ -100,7 +100,7 @@ jobs:
       - name: Configure npm for GitHub Packages
         run: |
           echo "@q9labs:registry=https://npm.pkg.github.com" >> ~/.npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
 
       - name: Publish @q9labs/chalk-core
         run: cd packages/sdk-core && bun publish --access public
