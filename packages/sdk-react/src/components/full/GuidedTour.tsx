@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { TourOverlay } from '../composite/TourOverlay';
 import type { TourStep } from '../../hooks/useTour';
 
@@ -63,7 +63,7 @@ const DEFAULT_STEPS: TourStep[] = [
   }
 ];
 
-export const GuidedTour: React.FC<GuidedTourProps> = ({
+const GuidedTourBase: React.FC<GuidedTourProps> = ({
   isOpen,
   onComplete,
   onSkip,
@@ -135,3 +135,6 @@ export const GuidedTour: React.FC<GuidedTourProps> = ({
     />
   );
 };
+
+export const GuidedTour = memo(GuidedTourBase);
+GuidedTour.displayName = 'GuidedTour';

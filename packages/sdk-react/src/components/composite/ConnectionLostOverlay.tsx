@@ -12,7 +12,7 @@ export interface ConnectionLostOverlayProps {
   className?: string;
 }
 
-export const ConnectionLostOverlay: React.FC<ConnectionLostOverlayProps> = ({
+export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
   isVisible,
   status,
   onRetry,
@@ -88,4 +88,6 @@ export const ConnectionLostOverlay: React.FC<ConnectionLostOverlayProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ConnectionLostOverlay.displayName = 'ConnectionLostOverlay';

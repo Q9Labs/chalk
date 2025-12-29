@@ -6,7 +6,7 @@ export interface TypingIndicatorProps {
   className?: string;
 }
 
-export const TypingIndicator: React.FC<TypingIndicatorProps> = ({
+export const TypingIndicator = React.memo<TypingIndicatorProps>(({
   typingUsers,
   className,
 }) => {
@@ -39,4 +39,6 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({
       </div>
     </div>
   );
-};
+});
+
+TypingIndicator.displayName = 'TypingIndicator';

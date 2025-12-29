@@ -21,7 +21,7 @@ const sizeClasses = {
   lg: 'h-12 w-12 p-3',
 };
 
-export const ControlButton = React.forwardRef<HTMLButtonElement, ControlButtonProps>(
+export const ControlButton = React.memo(React.forwardRef<HTMLButtonElement, ControlButtonProps>(
   (
     {
       icon,
@@ -77,6 +77,6 @@ export const ControlButton = React.forwardRef<HTMLButtonElement, ControlButtonPr
       </Tooltip>
     );
   }
-);
+));
 
 ControlButton.displayName = 'ControlButton';

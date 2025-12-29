@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { cn } from '../../utils/cn';
 import { VideoTile } from '../atomic';
 
@@ -26,7 +26,7 @@ export interface VideoGridProps {
   className?: string;
 }
 
-export const VideoGrid = ({
+export const VideoGrid = React.memo(({
   participants,
   layout = 'grid',
   pinnedParticipantId,
@@ -62,7 +62,6 @@ export const VideoGrid = ({
 
   const mapToVideoTileParticipant = (p: Participant | undefined) => {
     if (!p) {
-      // Fallback for safety, though UI logic prevents rendering this case usually
       return {
         id: 'unknown',
         displayName: 'Unknown',
@@ -202,4 +201,6 @@ export const VideoGrid = ({
       )}
     </div>
   );
-};
+});
+
+VideoGrid.displayName = 'VideoGrid';

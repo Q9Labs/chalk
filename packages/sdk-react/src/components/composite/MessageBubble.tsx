@@ -14,7 +14,7 @@ export interface MessageBubbleProps {
   className?: string;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+export const MessageBubble = React.memo<MessageBubbleProps>(({
   content,
   senderName,
   senderAvatar,
@@ -115,4 +115,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
     </div>
   );
-};
+});
+
+MessageBubble.displayName = 'MessageBubble';

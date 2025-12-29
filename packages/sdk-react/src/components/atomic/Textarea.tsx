@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useId } from 'react';
 import { cn } from '../../utils/cn';
 
 export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -9,18 +9,24 @@ export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextArea
   resize?: 'none' | 'vertical' | 'horizontal' | 'both';
 }
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, error, maxLength, showCount, resize = 'vertical', value, onChange, ...props }, ref) => {
+export const Textarea = React.memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, label, error, maxLength, showCount, resize = 'vertical', value, onChange, id, ...props }, ref) => {
+    const generatedId = useId();
+    const textareaId = id || generatedId;
     const currentLength = typeof value === 'string' ? value.length : 0;
 
     return (
       <div className="flex flex-col gap-1.5 w-full">
         {label && (
-          <label className="text-sm font-medium text-[var(--chalk-text-secondary)]">
+          <label 
+            htmlFor={textareaId}
+            className="text-sm font-medium text-[var(--chalk-text-secondary)]"
+          >
             {label}
           </label>
         )}
         <textarea
+          id={textareaId}
           ref={ref}
           value={value}
           maxLength={maxLength}
@@ -37,10 +43,16 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             error && 'border-[var(--chalk-danger)] focus:ring-[var(--chalk-danger)]',
             className
           )}
+          aria-invalid={!!error}
+          aria-errormessage={error ? `${textareaId}-error` : undefined}
           {...props}
         />
         <div className="flex justify-between items-center text-xs text-[var(--chalk-text-muted)]">
-          {error && <span className="text-[var(--chalk-danger)]">{error}</span>}
+          {error && (
+            <span id={`${textareaId}-error`} className="text-[var(--chalk-danger)]">
+              {error}
+            </span>
+          )}
           {!error && <span />}
           {showCount && maxLength && (
             <span>
@@ -51,6 +63,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       </div>
     );
   }
-);
+));
 
 Textarea.displayName = 'Textarea';

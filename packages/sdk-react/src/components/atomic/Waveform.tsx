@@ -2,25 +2,23 @@ import React from 'react';
 import { cn } from '../../utils/cn';
 
 interface WaveformProps {
-  levels: number[]; // Array of 0-100 values
+  levels: number[];
   color?: string;
   animated?: boolean;
   barCount?: number;
   className?: string;
 }
 
-export const Waveform = ({
+export const Waveform = React.memo(({
   levels,
   color = 'var(--chalk-accent)',
   animated = true,
   barCount = 5,
   className,
 }: WaveformProps) => {
-  // Normalize levels to fit barCount
   const displayLevels = React.useMemo(() => {
     if (levels.length === barCount) return levels;
     
-    // Simple resampling if length doesn't match
     const result = [];
     const step = levels.length / barCount;
     for (let i = 0; i < barCount; i++) {
@@ -52,4 +50,6 @@ export const Waveform = ({
       ))}
     </div>
   );
-};
+});
+
+Waveform.displayName = 'Waveform';

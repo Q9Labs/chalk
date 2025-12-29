@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
 
 interface ReactionBubbleProps {
@@ -8,7 +8,7 @@ interface ReactionBubbleProps {
   className?: string;
 }
 
-export const ReactionBubble = ({
+export const ReactionBubble = React.memo(({
   emoji,
   onComplete,
   duration = 2000,
@@ -40,4 +40,6 @@ export const ReactionBubble = ({
       {emoji}
     </div>
   );
-};
+});
+
+ReactionBubble.displayName = 'ReactionBubble';

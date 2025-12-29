@@ -16,7 +16,7 @@ export interface TourTooltipProps {
   className?: string;
 }
 
-export const TourTooltip: React.FC<TourTooltipProps> = ({
+export const TourTooltip = React.memo<TourTooltipProps>(({
   title,
   description,
   step,
@@ -150,4 +150,6 @@ export const TourTooltip: React.FC<TourTooltipProps> = ({
       </div>
     </div>
   );
-};
+});
+
+TourTooltip.displayName = 'TourTooltip';

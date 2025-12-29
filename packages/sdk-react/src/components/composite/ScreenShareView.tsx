@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { VideoTile } from '../atomic';
 import type { Participant } from './VideoGrid';
@@ -13,7 +13,7 @@ export interface ScreenShareViewProps {
   className?: string;
 }
 
-export const ScreenShareView = ({
+export const ScreenShareView = React.memo(({
   screenShareTrack,
   sharedByName,
   participants,
@@ -107,4 +107,6 @@ export const ScreenShareView = ({
       )}
     </div>
   );
-};
+});
+
+ScreenShareView.displayName = 'ScreenShareView';

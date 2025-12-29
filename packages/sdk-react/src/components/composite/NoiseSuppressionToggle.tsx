@@ -11,14 +11,14 @@ export interface NoiseSuppressionToggleProps {
   className?: string;
 }
 
-export function NoiseSuppressionToggle({
+export const NoiseSuppressionToggle = React.memo(({
   enabled,
   onChange,
   level = 'medium',
   onLevelChange,
   disabled = false,
   className
-}: NoiseSuppressionToggleProps) {
+}: NoiseSuppressionToggleProps) => {
   const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onLevelChange?.(e.target.value as 'low' | 'medium' | 'high');
   };
@@ -57,4 +57,6 @@ export function NoiseSuppressionToggle({
       )}
     </div>
   );
-}
+});
+
+NoiseSuppressionToggle.displayName = 'NoiseSuppressionToggle';

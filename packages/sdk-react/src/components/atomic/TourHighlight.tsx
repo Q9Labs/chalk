@@ -9,7 +9,7 @@ export interface TourHighlightProps {
   className?: string;
 }
 
-export const TourHighlight: React.FC<TourHighlightProps> = ({
+export const TourHighlight = React.memo<TourHighlightProps>(({
   targetSelector,
   padding = 4,
   borderRadius = 8,
@@ -80,6 +80,9 @@ export const TourHighlight: React.FC<TourHighlightProps> = ({
         boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.7)',
         zIndex: 9999
       }}
+      aria-hidden="true"
     />
   );
-};
+});
+
+TourHighlight.displayName = 'TourHighlight';

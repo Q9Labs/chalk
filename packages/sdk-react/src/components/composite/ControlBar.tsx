@@ -1,3 +1,4 @@
+import React from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, 
   Circle, MessageSquare, Users, FileText, Hand, Smile, 
@@ -47,7 +48,7 @@ const DEFAULT_BUTTONS: ControlBarButton[] = [
   'handraise', 'reactions', 'chat', 'participants', 'more', 'leave'
 ];
 
-export const ControlBar = ({
+export const ControlBar = React.memo(({
   position = 'bottom',
   variant = 'floating',
   showLabels = false,
@@ -236,4 +237,6 @@ export const ControlBar = ({
       {buttons.map(renderButton)}
     </div>
   );
-};
+});
+
+ControlBar.displayName = 'ControlBar';

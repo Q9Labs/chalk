@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { 
   CheckCircle, Star, Clock, Users, Download, 
   FileText, RotateCcw, Plus, Home, Video 
@@ -43,7 +43,7 @@ const formatDuration = (seconds: number): string => {
   return `${minutes} min`;
 };
 
-export function EndScreen({
+function EndScreenBase({
   roomName,
   duration = 0,
   participantCount = 0,
@@ -254,3 +254,6 @@ export function EndScreen({
     </div>
   );
 }
+
+export const EndScreen = memo(EndScreenBase);
+EndScreen.displayName = 'EndScreen';

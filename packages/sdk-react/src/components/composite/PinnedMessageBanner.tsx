@@ -14,7 +14,7 @@ export interface PinnedMessageBannerProps {
   className?: string;
 }
 
-export const PinnedMessageBanner: React.FC<PinnedMessageBannerProps> = ({
+export const PinnedMessageBanner = React.memo<PinnedMessageBannerProps>(({
   message,
   onUnpin,
   onJumpToMessage,
@@ -73,4 +73,6 @@ export const PinnedMessageBanner: React.FC<PinnedMessageBannerProps> = ({
       </div>
     </div>
   );
-};
+});
+
+PinnedMessageBanner.displayName = 'PinnedMessageBanner';

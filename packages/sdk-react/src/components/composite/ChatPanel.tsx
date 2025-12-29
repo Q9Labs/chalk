@@ -21,14 +21,14 @@ export interface ChatPanelProps {
   className?: string;
 }
 
-export function ChatPanel({
+export const ChatPanel = React.memo(({
   messages,
   onSendMessage,
   onClose,
   disabled = false,
   placeholder = "Type a message...",
   className
-}: ChatPanelProps) {
+}: ChatPanelProps) => {
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -154,4 +154,6 @@ export function ChatPanel({
       </div>
     </div>
   );
-}
+});
+
+ChatPanel.displayName = 'ChatPanel';

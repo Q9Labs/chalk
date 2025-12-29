@@ -9,7 +9,7 @@ interface TooltipProps {
   className?: string;
 }
 
-export const Tooltip = ({
+export const Tooltip = React.memo(({
   content,
   children,
   position = 'top',
@@ -77,4 +77,6 @@ export const Tooltip = ({
       )}
     </div>
   );
-};
+});
+
+Tooltip.displayName = 'Tooltip';

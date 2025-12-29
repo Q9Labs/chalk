@@ -13,7 +13,7 @@ export interface VolumeSliderProps {
   className?: string;
 }
 
-export const VolumeSlider: React.FC<VolumeSliderProps> = ({
+export const VolumeSlider = React.memo<VolumeSliderProps>(({
   value,
   onChange,
   muted = false,
@@ -97,4 +97,6 @@ export const VolumeSlider: React.FC<VolumeSliderProps> = ({
       )}
     </div>
   );
-};
+});
+
+VolumeSlider.displayName = 'VolumeSlider';

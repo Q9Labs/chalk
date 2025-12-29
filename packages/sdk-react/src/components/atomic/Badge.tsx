@@ -11,7 +11,7 @@ export interface BadgeProps {
   children?: React.ReactNode;
 }
 
-export const Badge: React.FC<BadgeProps> = ({
+export const Badge = React.memo<BadgeProps>(({
   count,
   max = 99,
   variant = 'default',
@@ -60,4 +60,6 @@ export const Badge: React.FC<BadgeProps> = ({
       {badgeElement}
     </div>
   );
-};
+});
+
+Badge.displayName = 'Badge';

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { cn } from '../../utils/cn';
 
 export interface AvatarProps {
@@ -24,7 +24,7 @@ const statusColorMap = {
   offline: 'var(--chalk-text-muted)',
 };
 
-export const Avatar = ({ name, src, size = 'md', status, className }: AvatarProps) => {
+export const Avatar = React.memo(({ name, src, size = 'md', status, className }: AvatarProps) => {
   const initials = useMemo(() => {
     return name
       .split(' ')
@@ -69,4 +69,6 @@ export const Avatar = ({ name, src, size = 'md', status, className }: AvatarProp
       )}
     </div>
   );
-};
+});
+
+Avatar.displayName = 'Avatar';

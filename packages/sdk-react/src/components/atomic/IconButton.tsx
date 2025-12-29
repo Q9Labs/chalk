@@ -23,7 +23,7 @@ const variantClasses = {
   outline: 'border border-[var(--chalk-border-color)] bg-transparent text-[var(--chalk-text-primary)] hover:bg-[var(--chalk-bg-tertiary)]',
 };
 
-export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
+export const IconButton = React.memo(React.forwardRef<HTMLButtonElement, IconButtonProps>(
   (
     {
       icon,
@@ -55,6 +55,6 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       </button>
     );
   }
-);
+));
 
 IconButton.displayName = 'IconButton';

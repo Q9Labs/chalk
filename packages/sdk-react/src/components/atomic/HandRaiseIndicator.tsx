@@ -1,3 +1,4 @@
+import React from 'react';
 import { Hand } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -22,7 +23,7 @@ const sizeMap = {
   lg: 32,
 };
 
-export const HandRaiseIndicator = ({
+export const HandRaiseIndicator = React.memo(({
   raised,
   animated = true,
   position = 'top-right',
@@ -46,4 +47,6 @@ export const HandRaiseIndicator = ({
       <Hand size={sizeMap[size]} fill="currentColor" />
     </div>
   );
-};
+});
+
+HandRaiseIndicator.displayName = 'HandRaiseIndicator';

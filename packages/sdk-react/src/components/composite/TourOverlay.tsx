@@ -24,7 +24,7 @@ export interface TourOverlayProps {
   className?: string;
 }
 
-export const TourOverlay: React.FC<TourOverlayProps> = ({
+export const TourOverlay = React.memo<TourOverlayProps>(({
   steps,
   currentStep,
   isOpen,
@@ -150,4 +150,6 @@ export const TourOverlay: React.FC<TourOverlayProps> = ({
       )}
     </div>
   );
-};
+});
+
+TourOverlay.displayName = 'TourOverlay';

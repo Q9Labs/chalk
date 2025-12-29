@@ -15,7 +15,7 @@ export interface InviteModalProps {
   className?: string;
 }
 
-export const InviteModal: React.FC<InviteModalProps> = ({
+export const InviteModal = React.memo<InviteModalProps>(({
   isOpen,
   onClose,
   meetingLink,
@@ -120,4 +120,6 @@ export const InviteModal: React.FC<InviteModalProps> = ({
       </div>
     </div>
   );
-};
+});
+
+InviteModal.displayName = 'InviteModal';

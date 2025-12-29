@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { cn } from '../../utils/cn';
 import { MicOff, Monitor, Hand, Pin } from 'lucide-react';
 import { Avatar } from './Avatar';
@@ -35,7 +35,7 @@ const aspectRatioClasses = {
   '1:1': 'aspect-square',
 };
 
-export const VideoTile = ({
+export const VideoTile = React.memo(({
   participant,
   videoTrack,
   mirror,
@@ -151,4 +151,6 @@ export const VideoTile = ({
       </div>
     </div>
   );
-};
+});
+
+VideoTile.displayName = 'VideoTile';

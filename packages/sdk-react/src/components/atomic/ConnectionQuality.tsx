@@ -1,3 +1,4 @@
+import React from 'react';
 import { cn } from '../../utils/cn';
 
 export interface ConnectionQualityProps {
@@ -21,7 +22,7 @@ const colors = {
   4: 'var(--chalk-success)',
 };
 
-export const ConnectionQuality = ({ quality, showLabel = false, size = 'md', className }: ConnectionQualityProps) => {
+export const ConnectionQuality = React.memo(({ quality, showLabel = false, size = 'md', className }: ConnectionQualityProps) => {
   const barHeight = size === 'sm' ? 10 : 14;
   const barWidth = size === 'sm' ? 3 : 4;
 
@@ -53,4 +54,6 @@ export const ConnectionQuality = ({ quality, showLabel = false, size = 'md', cla
       )}
     </div>
   );
-};
+});
+
+ConnectionQuality.displayName = 'ConnectionQuality';

@@ -14,7 +14,7 @@ export interface ToastProps {
   className?: string;
 }
 
-export const Toast: React.FC<ToastProps> = ({
+export const Toast = React.memo<ToastProps>(({
   message,
   type = 'info',
   duration = 0,
@@ -75,4 +75,6 @@ export const Toast: React.FC<ToastProps> = ({
       )}
     </div>
   );
-};
+});
+
+Toast.displayName = 'Toast';

@@ -21,7 +21,7 @@ export interface NotificationStackProps {
   className?: string;
 }
 
-export const NotificationStack: React.FC<NotificationStackProps> = ({
+export const NotificationStack = React.memo<NotificationStackProps>(({
   notifications,
   onDismiss,
   position = 'top-right',
@@ -60,4 +60,6 @@ export const NotificationStack: React.FC<NotificationStackProps> = ({
       ))}
     </div>
   );
-};
+});
+
+NotificationStack.displayName = 'NotificationStack';

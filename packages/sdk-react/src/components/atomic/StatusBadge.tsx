@@ -1,3 +1,4 @@
+import React from 'react';
 import { cn } from '../../utils/cn';
 import { Circle, Radio, Type, AlertCircle } from 'lucide-react';
 
@@ -41,7 +42,7 @@ const config = {
   },
 };
 
-export const StatusBadge = ({ status, pulse = false, size = 'md', className }: StatusBadgeProps) => {
+export const StatusBadge = React.memo(({ status, pulse = false, size = 'md', className }: StatusBadgeProps) => {
   const { icon: Icon, text, color, bg } = config[status];
 
   return (
@@ -66,4 +67,6 @@ export const StatusBadge = ({ status, pulse = false, size = 'md', className }: S
       <span>{text}</span>
     </div>
   );
-};
+});
+
+StatusBadge.displayName = 'StatusBadge';

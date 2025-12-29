@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, MoreVertical, Search, Mic, MicOff, UserX, Crown } from 'lucide-react';
 import { 
   Avatar, 
@@ -32,7 +32,7 @@ export interface ParticipantListProps {
   className?: string;
 }
 
-export function ParticipantList({
+export const ParticipantList = React.memo(({
   participants,
   onMuteParticipant,
   onRemoveParticipant,
@@ -41,7 +41,7 @@ export function ParticipantList({
   searchable = true,
   onClose,
   className
-}: ParticipantListProps) {
+}: ParticipantListProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
@@ -227,4 +227,6 @@ export function ParticipantList({
       </div>
     </div>
   );
-}
+});
+
+ParticipantList.displayName = 'ParticipantList';

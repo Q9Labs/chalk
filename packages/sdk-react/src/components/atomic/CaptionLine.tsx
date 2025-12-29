@@ -9,7 +9,7 @@ export interface CaptionLineProps {
   className?: string;
 }
 
-export const CaptionLine: React.FC<CaptionLineProps> = ({
+export const CaptionLine = React.memo<CaptionLineProps>(({
   text,
   speaker,
   position = 'bottom',
@@ -59,4 +59,6 @@ export const CaptionLine: React.FC<CaptionLineProps> = ({
       </div>
     </div>
   );
-};
+});
+
+CaptionLine.displayName = 'CaptionLine';

@@ -15,7 +15,7 @@ export interface DeviceSelectorProps {
   className?: string;
 }
 
-export function DeviceSelector({
+export const DeviceSelector = React.memo(({
   type,
   devices,
   selectedDeviceId,
@@ -25,7 +25,7 @@ export function DeviceSelector({
   audioLevel,
   disabled = false,
   className
-}: DeviceSelectorProps) {
+}: DeviceSelectorProps) => {
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -112,4 +112,6 @@ export function DeviceSelector({
       )}
     </div>
   );
-}
+});
+
+DeviceSelector.displayName = 'DeviceSelector';

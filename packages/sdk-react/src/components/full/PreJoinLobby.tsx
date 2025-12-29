@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { 
   Input, 
@@ -50,7 +50,7 @@ export interface PreJoinLobbyProps {
   className?: string;
 }
 
-export function PreJoinLobby({
+function PreJoinLobbyBase({
   roomName,
   userName = '',
   onJoin,
@@ -230,3 +230,6 @@ export function PreJoinLobby({
     </div>
   );
 }
+
+export const PreJoinLobby = memo(PreJoinLobbyBase);
+PreJoinLobby.displayName = 'PreJoinLobby';

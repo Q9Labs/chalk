@@ -32,7 +32,7 @@ export interface TranscriptionPanelProps {
   className?: string;
 }
 
-export function TranscriptionPanel({
+export const TranscriptionPanel = React.memo(({
   transcripts,
   isLive = true,
   showSpeakerNames = true,
@@ -43,7 +43,7 @@ export function TranscriptionPanel({
   onClose,
   position = 'right',
   className
-}: TranscriptionPanelProps) {
+}: TranscriptionPanelProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -198,4 +198,6 @@ export function TranscriptionPanel({
       </div>
     </div>
   );
-}
+});
+
+TranscriptionPanel.displayName = 'TranscriptionPanel';

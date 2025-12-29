@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { X, Mic, Video, Settings } from 'lucide-react';
 import { IconButton } from '../atomic';
 import { DeviceSelector } from './DeviceSelector';
@@ -27,7 +27,7 @@ export interface SettingsPanelProps {
   className?: string;
 }
 
-export function SettingsPanel({
+export const SettingsPanel = React.memo(({
   audioInputDevices,
   audioOutputDevices,
   selectedAudioInput,
@@ -43,7 +43,7 @@ export function SettingsPanel({
   onNoiseSuppressionChange,
   onClose,
   className
-}: SettingsPanelProps) {
+}: SettingsPanelProps) => {
   const [activeTab, setActiveTab] = useState<'audio' | 'video' | 'general'>('audio');
   const [speakerVolume, setSpeakerVolume] = useState(100);
 
@@ -168,4 +168,6 @@ export function SettingsPanel({
       </div>
     </div>
   );
-}
+});
+
+SettingsPanel.displayName = 'SettingsPanel';

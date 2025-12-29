@@ -19,14 +19,14 @@ export interface BackgroundEffectsPickerProps {
   className?: string;
 }
 
-export function BackgroundEffectsPicker({
+export const BackgroundEffectsPicker = React.memo(({
   effects,
   selectedEffectId,
   onSelect,
   onCustomUpload,
   disabled = false,
   className
-}: BackgroundEffectsPickerProps) {
+}: BackgroundEffectsPickerProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUploadClick = () => {
@@ -132,4 +132,6 @@ export function BackgroundEffectsPicker({
       </div>
     </div>
   );
-}
+});
+
+BackgroundEffectsPicker.displayName = 'BackgroundEffectsPicker';

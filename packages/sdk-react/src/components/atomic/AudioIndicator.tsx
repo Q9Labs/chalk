@@ -1,3 +1,4 @@
+import React from 'react';
 import { Mic, MicOff } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -15,7 +16,7 @@ const sizeMap = {
   lg: { width: 24, height: 24 },
 };
 
-export const AudioIndicator = ({
+export const AudioIndicator = React.memo(({
   level = 0,
   muted = false,
   size = 'md',
@@ -96,4 +97,6 @@ export const AudioIndicator = ({
       )}
     </div>
   );
-};
+});
+
+AudioIndicator.displayName = 'AudioIndicator';

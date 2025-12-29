@@ -10,7 +10,7 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   fullWidth?: boolean;
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(
+export const Input = React.memo(forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, icon, iconPosition = 'left', size = 'md', fullWidth = false, ...props }, ref) => {
     const sizeClasses = {
       sm: 'h-8 text-sm px-2',
@@ -64,6 +64,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       </div>
     );
   }
-);
+));
 
 Input.displayName = 'Input';

@@ -14,7 +14,7 @@ export interface TranscriptLineProps {
   className?: string;
 }
 
-export const TranscriptLine: React.FC<TranscriptLineProps> = ({
+export const TranscriptLine = React.memo<TranscriptLineProps>(({
   speaker,
   speakerId,
   text,
@@ -68,4 +68,6 @@ export const TranscriptLine: React.FC<TranscriptLineProps> = ({
       </span>
     </div>
   );
-};
+});
+
+TranscriptLine.displayName = 'TranscriptLine';

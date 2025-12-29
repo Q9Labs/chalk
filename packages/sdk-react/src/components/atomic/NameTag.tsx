@@ -1,3 +1,4 @@
+import React from 'react';
 import { cn } from '../../utils/cn';
 
 export interface NameTagProps {
@@ -20,7 +21,7 @@ const sizeClasses = {
   lg: 'text-base px-3 py-1.5',
 };
 
-export const NameTag = ({ name, role = 'participant', isLocal, size = 'md', className }: NameTagProps) => {
+export const NameTag = React.memo(({ name, role = 'participant', isLocal, size = 'md', className }: NameTagProps) => {
   return (
     <div
       className={cn(
@@ -42,4 +43,6 @@ export const NameTag = ({ name, role = 'participant', isLocal, size = 'md', clas
       )}
     </div>
   );
-};
+});
+
+NameTag.displayName = 'NameTag';

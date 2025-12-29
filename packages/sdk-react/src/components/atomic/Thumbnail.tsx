@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { cn } from '../../utils/cn';
 import { MicOff } from 'lucide-react';
 
@@ -17,7 +17,7 @@ const sizeClasses = {
   lg: 'w-[160px] h-[90px]',
 };
 
-export const Thumbnail = ({
+export const Thumbnail = React.memo(({
   videoTrack,
   muted,
   size = 'md',
@@ -74,4 +74,6 @@ export const Thumbnail = ({
       )}
     </div>
   );
-};
+});
+
+Thumbnail.displayName = 'Thumbnail';

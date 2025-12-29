@@ -10,7 +10,7 @@ interface ToggleProps {
   className?: string;
 }
 
-export const Toggle = React.forwardRef<HTMLButtonElement, ToggleProps>(
+export const Toggle = React.memo(React.forwardRef<HTMLButtonElement, ToggleProps>(
   ({ checked, onChange, label, disabled = false, size = 'md', className }, ref) => {
     const handleKeyDown = (e: React.KeyboardEvent) => {
       if (e.key === ' ' || e.key === 'Enter') {
@@ -57,6 +57,6 @@ export const Toggle = React.forwardRef<HTMLButtonElement, ToggleProps>(
       </label>
     );
   }
-);
+));
 
 Toggle.displayName = 'Toggle';

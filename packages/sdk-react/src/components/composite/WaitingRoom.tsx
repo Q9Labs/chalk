@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { Avatar, IconButton, Badge } from '../atomic';
 import { cn } from '../../utils/cn';
@@ -19,14 +19,14 @@ export interface WaitingRoomProps {
   className?: string;
 }
 
-export function WaitingRoom({
+export const WaitingRoom = React.memo(({
   participants,
   onAdmit,
   onDeny,
   onAdmitAll,
   onDenyAll,
   className
-}: WaitingRoomProps) {
+}: WaitingRoomProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -128,4 +128,6 @@ export function WaitingRoom({
       </div>
     </div>
   );
-}
+});
+
+WaitingRoom.displayName = 'WaitingRoom';

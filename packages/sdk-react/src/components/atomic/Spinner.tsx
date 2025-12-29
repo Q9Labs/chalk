@@ -8,7 +8,7 @@ export interface SpinnerProps {
   className?: string;
 }
 
-export const Spinner: React.FC<SpinnerProps> = ({
+export const Spinner = React.memo<SpinnerProps>(({
   size = 'md',
   color = 'var(--chalk-accent)',
   className,
@@ -28,4 +28,6 @@ export const Spinner: React.FC<SpinnerProps> = ({
       aria-label="Loading"
     />
   );
-};
+});
+
+Spinner.displayName = 'Spinner';

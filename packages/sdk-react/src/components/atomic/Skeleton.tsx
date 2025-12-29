@@ -9,7 +9,7 @@ export interface SkeletonProps {
   className?: string;
 }
 
-export const Skeleton: React.FC<SkeletonProps> = ({
+export const Skeleton = React.memo<SkeletonProps>(({
   width,
   height,
   variant = 'text',
@@ -44,4 +44,6 @@ export const Skeleton: React.FC<SkeletonProps> = ({
       aria-hidden="true"
     />
   );
-};
+});
+
+Skeleton.displayName = 'Skeleton';

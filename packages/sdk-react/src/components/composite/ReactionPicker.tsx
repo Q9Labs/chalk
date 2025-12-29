@@ -1,3 +1,4 @@
+import React from 'react';
 import { cn } from '../../utils/cn';
 
 export interface ReactionPickerProps {
@@ -11,7 +12,7 @@ export interface ReactionPickerProps {
 
 const DEFAULT_REACTIONS = ['👍', '👎', '😀', '😂', '❤️', '🎉', '👏', '🔥', '😮', '😢'];
 
-export const ReactionPicker = ({
+export const ReactionPicker = React.memo(({
   isOpen,
   onClose,
   onSelect,
@@ -26,6 +27,7 @@ export const ReactionPicker = ({
       <div 
         className="fixed inset-0 z-40" 
         onClick={onClose} 
+        aria-hidden="true"
       />
       <div 
         className={cn(
@@ -34,6 +36,8 @@ export const ReactionPicker = ({
           "left-1/2 -translate-x-1/2 w-64",
           className
         )}
+        role="dialog"
+        aria-label="Reaction picker"
       >
         {recentReactions.length > 0 && (
           <div className="mb-2 pb-2 border-b border-border">
@@ -44,6 +48,7 @@ export const ReactionPicker = ({
                   key={`recent-${i}`}
                   onClick={() => { onSelect(emoji); onClose(); }}
                   className="w-8 h-8 flex items-center justify-center rounded hover:bg-background-tertiary transition-colors text-xl"
+                  aria-label={`React with ${emoji}`}
                 >
                   {emoji}
                 </button>
@@ -58,6 +63,7 @@ export const ReactionPicker = ({
               key={emoji}
               onClick={() => { onSelect(emoji); onClose(); }}
               className="w-8 h-8 flex items-center justify-center rounded hover:bg-background-tertiary transition-colors text-xl"
+              aria-label={`React with ${emoji}`}
             >
               {emoji}
             </button>
@@ -66,4 +72,6 @@ export const ReactionPicker = ({
       </div>
     </>
   );
-};
+});
+
+ReactionPicker.displayName = 'ReactionPicker';

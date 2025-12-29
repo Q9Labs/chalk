@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import { 
   VideoGrid, 
   ScreenShareView, 
@@ -90,7 +90,7 @@ export interface MeetingRoomProps {
   className?: string;
 }
 
-export const MeetingRoom: React.FC<MeetingRoomProps> = ({
+const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
   roomName,
   localParticipant,
   participants,
@@ -319,5 +319,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     </div>
   );
 };
+
+export const MeetingRoom = memo(MeetingRoomBase);
+MeetingRoom.displayName = 'MeetingRoom';
 
 export default MeetingRoom;

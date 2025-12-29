@@ -1,3 +1,4 @@
+import React from 'react';
 import { Grid3X3, Square, LayoutTemplate } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { IconButton, Tooltip } from '../atomic';
@@ -9,7 +10,7 @@ export interface LayoutSwitcherProps {
   className?: string;
 }
 
-export const LayoutSwitcher = ({
+export const LayoutSwitcher = React.memo(({
   layout,
   onChange,
   disabled,
@@ -51,4 +52,6 @@ export const LayoutSwitcher = ({
       </Tooltip>
     </div>
   );
-};
+});
+
+LayoutSwitcher.displayName = 'LayoutSwitcher';

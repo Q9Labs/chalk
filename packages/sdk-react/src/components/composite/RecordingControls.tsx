@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
 import { StatusBadge, IconButton } from '../atomic';
 import { Play, Pause, Square, Circle } from 'lucide-react';
@@ -14,7 +14,7 @@ export interface RecordingControlsProps {
   className?: string;
 }
 
-export const RecordingControls = ({
+export const RecordingControls = React.memo(({
   isRecording,
   duration = 0,
   onStart,
@@ -116,4 +116,6 @@ export const RecordingControls = ({
       )}
     </div>
   );
-};
+});
+
+RecordingControls.displayName = 'RecordingControls';

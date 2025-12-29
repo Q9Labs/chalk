@@ -1,3 +1,4 @@
+import React from 'react';
 import { cn } from '../../utils/cn';
 import { ControlBar } from './ControlBar';
 import type { ControlBarButton } from './ControlBar';
@@ -33,7 +34,7 @@ export interface MobileControlSheetProps {
   className?: string;
 }
 
-export const MobileControlSheet = ({
+export const MobileControlSheet = React.memo(({
   isOpen,
   onClose,
   className,
@@ -52,6 +53,7 @@ export const MobileControlSheet = ({
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onClick={onClose}
+        aria-hidden="true"
       />
       
       <div 
@@ -60,6 +62,8 @@ export const MobileControlSheet = ({
           isOpen ? "translate-y-0" : "translate-y-full",
           className
         )}
+        role="dialog"
+        aria-label="Mobile controls"
       >
         <div className="w-12 h-1.5 bg-border rounded-full mx-auto mb-4" />
         
@@ -77,4 +81,6 @@ export const MobileControlSheet = ({
       </div>
     </>
   );
-};
+});
+
+MobileControlSheet.displayName = 'MobileControlSheet';

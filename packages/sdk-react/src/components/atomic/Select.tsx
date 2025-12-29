@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -17,8 +17,11 @@ export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectE
   placeholder?: string;
 }
 
-export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, options, label, error, size = 'md', fullWidth = false, placeholder, disabled, ...props }, ref) => {
+export const Select = React.memo(React.forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, options, label, error, size = 'md', fullWidth = false, placeholder, disabled, id, ...props }, ref) => {
+    const generatedId = useId();
+    const selectId = id || generatedId;
+
     const sizeClasses = {
       sm: 'h-8 text-sm pl-2 pr-8',
       md: 'h-10 text-base pl-3 pr-10',
@@ -28,12 +31,16 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className={cn('flex flex-col gap-1.5', fullWidth && 'w-full')}>
         {label && (
-          <label className="text-sm font-medium text-[var(--chalk-text-secondary)]">
+          <label 
+            htmlFor={selectId}
+            className="text-sm font-medium text-[var(--chalk-text-secondary)]"
+          >
             {label}
           </label>
         )}
         <div className="relative">
           <select
+            id={selectId}
             ref={ref}
             disabled={disabled}
             className={cn(
@@ -45,6 +52,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               error && 'border-[var(--chalk-danger)] focus:ring-[var(--chalk-danger)]',
               className
             )}
+            aria-invalid={!!error}
+            aria-errormessage={error ? `${selectId}-error` : undefined}
             {...props}
           >
             {placeholder && (
@@ -63,11 +72,16 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           </div>
         </div>
         {error && (
-          <span className="text-sm text-[var(--chalk-danger)]">{error}</span>
+          <span 
+            id={`${selectId}-error`} 
+            className="text-sm text-[var(--chalk-danger)]"
+          >
+            {error}
+          </span>
         )}
       </div>
     );
   }
-);
+));
 
 Select.displayName = 'Select';

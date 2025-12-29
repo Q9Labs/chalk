@@ -1,3 +1,4 @@
+import React from 'react';
 import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { VideoTile, AudioIndicator, ControlButton } from '../atomic';
@@ -14,7 +15,7 @@ export interface MediaPreviewProps {
   className?: string;
 }
 
-export const MediaPreview = ({
+export const MediaPreview = React.memo(({
   videoTrack,
   audioLevel = 0,
   isVideoEnabled = true,
@@ -80,4 +81,6 @@ export const MediaPreview = ({
       </div>
     </div>
   );
-};
+});
+
+MediaPreview.displayName = 'MediaPreview';
