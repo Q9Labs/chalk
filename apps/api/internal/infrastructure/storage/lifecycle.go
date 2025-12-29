@@ -9,10 +9,15 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 )
 
+type RecordingArchiver interface {
+	ListRecordingsReadyForArchive(ctx context.Context, limit int32) ([]db.Recording, error)
+	ArchiveRecordingWithPath(ctx context.Context, arg db.ArchiveRecordingWithPathParams) (db.Recording, error)
+}
+
 type RecordingLifecycleManager struct {
 	r2         StorageClient
 	s3         StorageClient
-	db         *db.Queries
+	db         RecordingArchiver
 	interval   time.Duration
 	archiveAge time.Duration
 	batchSize  int32
@@ -32,7 +37,7 @@ func DefaultLifecycleConfig() LifecycleConfig {
 	}
 }
 
-func NewRecordingLifecycleManager(r2, s3 StorageClient, database *db.Queries, cfg LifecycleConfig) *RecordingLifecycleManager {
+func NewRecordingLifecycleManager(r2, s3 StorageClient, database RecordingArchiver, cfg LifecycleConfig) *RecordingLifecycleManager {
 	if cfg.Interval == 0 {
 		cfg = DefaultLifecycleConfig()
 	}

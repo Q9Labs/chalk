@@ -22,5 +22,11 @@
 	"engines": {
 		"node": ">=20"
 	},
-	"packageManager": "bun@1.1.42"
+	"packageManager": "bun@1.1.42",
+	"dependencies": {
+		"@excalidraw/excalidraw": "^0.18.0",
+		"clsx": "^2.1.1",
+		"framer-motion": "^12.23.26",
+		"tailwind-merge": "^3.4.0"
+	}
 }

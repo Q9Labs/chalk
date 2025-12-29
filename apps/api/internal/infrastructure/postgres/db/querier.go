@@ -15,6 +15,7 @@ import (
 type Querier interface {
 	ActivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	ArchiveRecording(ctx context.Context, id uuid.UUID) (Recording, error)
+	ArchiveRecordingWithPath(ctx context.Context, arg ArchiveRecordingWithPathParams) (Recording, error)
 	CompleteRecording(ctx context.Context, arg CompleteRecordingParams) (Recording, error)
 	CountActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	CountActiveRoomsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)

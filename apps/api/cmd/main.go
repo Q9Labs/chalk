@@ -10,6 +10,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/config"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
+	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
 	"github.com/Q9Labs/chalk/internal/interfaces/http"
@@ -91,12 +92,24 @@ func main() {
 
 	// Create router
 	router := http.NewRouter(http.RouterConfig{
-		Pool:         pool,
-		CFClient:     cfClient,
-		RedisClient:  redisClient,
-		StorageR2:    storageR2,
-		StorageS3:    storageS3,
+		Pool:        pool,
+		CFClient:    cfClient,
+		RedisClient: redisClient,
+		StorageR2:   storageR2,
+		StorageS3:   storageS3,
 	})
+
+	if storageR2 != nil && storageS3 != nil {
+		queries := db.New(pool)
+		lifecycleMgr := storage.NewRecordingLifecycleManager(
+			storageR2,
+			storageS3,
+			queries,
+			storage.DefaultLifecycleConfig(),
+		)
+		go lifecycleMgr.Start(ctx)
+		log.Println("Started recording lifecycle manager")
+	}
 
 	// Graceful shutdown
 	go func() {

@@ -43,6 +43,42 @@ func (q *Queries) ArchiveRecording(ctx context.Context, id uuid.UUID) (Recording
 	return i, err
 }
 
+const archiveRecordingWithPath = `-- name: ArchiveRecordingWithPath :one
+UPDATE recordings
+SET
+    status = 'archived',
+    storage_provider = 's3_glacier',
+    storage_path = $2,
+    archived_at = NOW()
+WHERE id = $1
+RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at
+`
+
+type ArchiveRecordingWithPathParams struct {
+	ID          uuid.UUID `db:"id" json:"id"`
+	StoragePath *string   `db:"storage_path" json:"storage_path"`
+}
+
+func (q *Queries) ArchiveRecordingWithPath(ctx context.Context, arg ArchiveRecordingWithPathParams) (Recording, error) {
+	row := q.db.QueryRow(ctx, archiveRecordingWithPath, arg.ID, arg.StoragePath)
+	var i Recording
+	err := row.Scan(
+		&i.ID,
+		&i.RoomID,
+		&i.CloudflareRecordingID,
+		&i.StorageProvider,
+		&i.StoragePath,
+		&i.SizeBytes,
+		&i.DurationSeconds,
+		&i.Status,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const completeRecording = `-- name: CompleteRecording :one
 UPDATE recordings
 SET

@@ -2,7 +2,7 @@ name: Infrastructure CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'infrastructure/terraform/**'
   pull_request:
@@ -130,7 +130,7 @@ jobs:
     name: Apply (Dev)
     runs-on: ubuntu-latest
     needs: validate
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment: dev
     defaults:
       run:
@@ -159,7 +159,7 @@ jobs:
     name: Plan (Staging)
     runs-on: ubuntu-latest
     needs: apply-dev
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment: staging
     defaults:
       run:

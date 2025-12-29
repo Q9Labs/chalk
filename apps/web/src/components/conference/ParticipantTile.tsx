@@ -77,7 +77,7 @@ export function ParticipantTile({
 					autoPlay
 					playsInline
 					muted={participant.isLocal}
-					className={`w-full h-full object-cover ${participant.isLocal ? "scale-x-[-1]" : ""}`}
+					className={`w-full h-full object-cover ${participant.isLocal && !participant.isScreenSharing ? "scale-x-[-1]" : ""}`}
 				/>
 			) : (
 				/* Avatar fallback */
