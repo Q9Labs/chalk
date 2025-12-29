@@ -24,7 +24,7 @@ terraform.rc
 .DS_Store
 Thumbs.db
 
-# Secrets
+# Secrets (actual secret files, not terraform module)
 *.pem
 *.key
-secrets/
+*.tfvars.secret
