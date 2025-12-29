@@ -97,32 +97,42 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Configure npm for GitHub Packages
-        run: |
-          echo "@q9labs:registry=https://npm.pkg.github.com" > ~/.npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
-          cat ~/.npmrc
-
       - name: Publish @q9labs/chalk-core
-        run: cd packages/sdk-core && npm publish --access public
+        run: |
+          cd packages/sdk-core
+          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
+          npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @q9labs/chalk-react
-        run: cd packages/sdk-react && npm publish --access public
+        run: |
+          cd packages/sdk-react
+          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
+          npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @q9labs/chalk-react-native
-        run: cd packages/sdk-react-native && npm publish --access public
+        run: |
+          cd packages/sdk-react-native
+          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
+          npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @q9labs/chalk-ui
-        run: cd packages/ui && npm publish --access public
+        run: |
+          cd packages/ui
+          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
+          npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
