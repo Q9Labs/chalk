@@ -33,7 +33,7 @@ resource "aws_sns_topic_subscription" "email" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
-  count = var.ecs_cluster_name != null ? 1 : 0
+  count = var.ecs_cluster_name != "" && var.enable_ecs_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-ecs-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -56,7 +56,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
-  count = var.ecs_cluster_name != null ? 1 : 0
+  count = var.ecs_cluster_name != "" && var.enable_ecs_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-ecs-memory-high"
   comparison_operator = "GreaterThanThreshold"
@@ -79,7 +79,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
-  count = var.alb_arn != null ? 1 : 0
+  count = var.alb_arn != "" && var.enable_alb_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-alb-5xx-errors"
   comparison_operator = "GreaterThanThreshold"
@@ -102,7 +102,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_latency" {
-  count = var.alb_arn != null ? 1 : 0
+  count = var.alb_arn != "" && var.enable_alb_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-alb-latency-high"
   comparison_operator = "GreaterThanThreshold"
@@ -124,7 +124,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_latency" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
-  count = var.aurora_cluster_id != null ? 1 : 0
+  count = var.aurora_cluster_id != "" && var.enable_aurora_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-aurora-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -146,7 +146,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
-  count = var.aurora_cluster_id != null ? 1 : 0
+  count = var.aurora_cluster_id != "" && var.enable_aurora_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-aurora-connections-high"
   comparison_operator = "GreaterThanThreshold"
@@ -168,7 +168,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
-  count = var.redis_replication_group_id != null ? 1 : 0
+  count = var.redis_replication_group_id != "" && var.enable_redis_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-redis-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -190,7 +190,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_memory" {
-  count = var.redis_replication_group_id != null ? 1 : 0
+  count = var.redis_replication_group_id != "" && var.enable_redis_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-redis-memory-high"
   comparison_operator = "GreaterThanThreshold"
@@ -235,7 +235,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "ECS CPU/Memory"
           region = data.aws_region.current.name
-          metrics = var.ecs_cluster_name != null ? [
+          metrics = var.ecs_cluster_name != "" ? [
             ["AWS/ECS", "CPUUtilization", "ClusterName", var.ecs_cluster_name, { label = "CPU" }],
             [".", "MemoryUtilization", ".", ".", { label = "Memory" }]
           ] : []
@@ -252,7 +252,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "ALB Request Count & Latency"
           region = data.aws_region.current.name
-          metrics = var.alb_arn_suffix != null ? [
+          metrics = var.alb_arn_suffix != "" ? [
             ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", var.alb_arn_suffix, { label = "Requests" }],
             [".", "TargetResponseTime", ".", ".", { label = "Latency", stat = "p99" }]
           ] : []
@@ -268,7 +268,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "ALB HTTP Errors"
           region = data.aws_region.current.name
-          metrics = var.alb_arn_suffix != null ? [
+          metrics = var.alb_arn_suffix != "" ? [
             ["AWS/ApplicationELB", "HTTPCode_ELB_4XX_Count", "LoadBalancer", var.alb_arn_suffix, { label = "4XX", color = "#ff7f0e" }],
             [".", "HTTPCode_ELB_5XX_Count", ".", ".", { label = "5XX", color = "#d62728" }]
           ] : []
@@ -285,7 +285,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "Aurora Metrics"
           region = data.aws_region.current.name
-          metrics = var.aurora_cluster_id != null ? [
+          metrics = var.aurora_cluster_id != "" ? [
             ["AWS/RDS", "CPUUtilization", "DBClusterIdentifier", var.aurora_cluster_id, { label = "CPU" }],
             [".", "DatabaseConnections", ".", ".", { label = "Connections", yAxis = "right" }]
           ] : []
@@ -301,7 +301,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "Redis Metrics"
           region = data.aws_region.current.name
-          metrics = var.redis_replication_group_id != null ? [
+          metrics = var.redis_replication_group_id != "" ? [
             ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", var.redis_replication_group_id, { label = "CPU" }],
             [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "Memory" }]
           ] : []
@@ -317,7 +317,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "API Gateway"
           region = data.aws_region.current.name
-          metrics = var.api_gateway_id != null ? [
+          metrics = var.api_gateway_id != "" ? [
             ["AWS/ApiGateway", "Count", "ApiId", var.api_gateway_id, { label = "Requests" }],
             [".", "Latency", ".", ".", { label = "Latency", stat = "p99" }]
           ] : []
