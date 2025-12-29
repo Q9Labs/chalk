@@ -1,0 +1,91 @@
+/* VideoTile animations */
+@keyframes chalk-scale-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes chalk-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes chalk-speaking-glow {
+  0%, 100% { box-shadow: 0 0 0 2px var(--chalk-accent); }
+  50% { box-shadow: 0 0 0 4px var(--chalk-accent); }
+}
+
+/* Control button animations */
+@keyframes chalk-bounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+}
+
+/* Panel slide animations */
+@keyframes chalk-slide-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes chalk-slide-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Reaction bubble */
+@keyframes chalk-float-up {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-50px) scale(1.2); }
+}
+
+/* Hand raise */
+@keyframes chalk-hand-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* Pulse for recording/live indicators */
+@keyframes chalk-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Toast slide in */
+@keyframes chalk-toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Tour highlight pulse */
+@keyframes chalk-highlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3); }
+}
+
+/* Transcript line fade in */
+@keyframes chalk-transcript-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Utility classes */
+.chalk-animate-scale-in { animation: chalk-scale-in var(--chalk-transition-normal) ease-out; }
+.chalk-animate-fade-out { animation: chalk-fade-out var(--chalk-transition-normal) ease-out forwards; }
+.chalk-animate-speaking { animation: chalk-speaking-glow 1.5s ease-in-out infinite; }
+.chalk-animate-bounce { animation: chalk-bounce var(--chalk-transition-fast) ease-out; }
+.chalk-animate-slide-right { animation: chalk-slide-right var(--chalk-transition-normal) ease-out; }
+.chalk-animate-slide-left { animation: chalk-slide-left var(--chalk-transition-normal) ease-out; }
+.chalk-animate-float-up { animation: chalk-float-up 2s ease-out forwards; }
+.chalk-animate-hand-bounce { animation: chalk-hand-bounce 0.6s ease-in-out infinite; }
+.chalk-animate-pulse { animation: chalk-pulse 2s ease-in-out infinite; }
+.chalk-animate-toast-in { animation: chalk-toast-in var(--chalk-transition-normal) ease-out; }
+.chalk-animate-highlight { animation: chalk-highlight-pulse 2s ease-in-out infinite; }
+.chalk-animate-transcript-in { animation: chalk-transcript-in var(--chalk-transition-fast) ease-out; }
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

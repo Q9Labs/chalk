@@ -1,9 +1,13 @@
-export { type UseChatResult, useChat } from "./useChat.ts";
-export { type UseDevicesResult, useDevices } from "./useDevices.ts";
-export { type UseMediaResult, useMedia } from "./useMedia.ts";
-export {
-	type UseParticipantsResult,
-	useParticipants,
-} from "./useParticipants.ts";
-export { type UseRecordingResult, useRecording } from "./useRecording.ts";
-export { type UseRoomResult, useRoom } from "./useRoom.ts";
+export * from './useRoom';
+export * from './useParticipants';
+export * from './useMedia';
+export * from './useChat';
+export * from './useDevices';
+export * from './useRecording';
+// New foundation hooks
+export * from './useSoundEffects';
+export * from './useKeyboardShortcuts';
+export * from './useAnnouncer';
+export * from './useMediaQuery';
+export * from './useTour';
+export * from './useTranscription';
