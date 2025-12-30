@@ -83,11 +83,19 @@ jobs:
             ls -la
           fi
 
+      - name: Prepare artifacts
+        run: |
+          # Copy output to a standard location to avoid turbo cache issues
+          mkdir -p /tmp/web-output
+          cp -r apps/web/.output/* /tmp/web-output/
+          echo "Contents of /tmp/web-output:"
+          ls -la /tmp/web-output/
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: apps/web/.output
+          path: /tmp/web-output
           retention-days: 7
 
   deploy:
