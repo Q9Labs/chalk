@@ -23,8 +23,12 @@ locals {
 }
 
 # Look up the Cloudflare zone by domain name
-data "cloudflare_zone" "main" {
+data "cloudflare_zones" "main" {
   name = var.cloudflare_zone_name
+}
+
+locals {
+  zone_id = data.cloudflare_zones.main.result[0].id
 }
 
 # ACM Certificate for API domain
@@ -51,7 +55,7 @@ resource "cloudflare_dns_record" "acm_validation" {
     }
   }
 
-  zone_id = data.cloudflare_zone.main.id
+  zone_id = local.zone_id
   name    = trimsuffix(each.value.name, ".${var.cloudflare_zone_name}.")
   content = trimsuffix(each.value.record, ".")
   type    = each.value.type
@@ -69,7 +73,7 @@ resource "aws_acm_certificate_validation" "api" {
 resource "cloudflare_dns_record" "api" {
   count = var.api_gateway_domain_target != null ? 1 : 0
 
-  zone_id = data.cloudflare_zone.main.id
+  zone_id = local.zone_id
   name    = var.api_subdomain
   content = var.api_gateway_domain_target
   type    = "CNAME"
@@ -81,7 +85,7 @@ resource "cloudflare_dns_record" "api" {
 resource "cloudflare_dns_record" "frontend" {
   count = var.frontend_target != null ? 1 : 0
 
-  zone_id = data.cloudflare_zone.main.id
+  zone_id = local.zone_id
   name    = var.frontend_subdomain
   content = var.frontend_target
   type    = "CNAME"

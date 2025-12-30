@@ -10,7 +10,7 @@ output "certificate_validated_arn" {
 
 output "cloudflare_zone_id" {
   description = "Cloudflare zone ID"
-  value       = data.cloudflare_zone.main.id
+  value       = local.zone_id
 }
 
 output "api_domain" {
