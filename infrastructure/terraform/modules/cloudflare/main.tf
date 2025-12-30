@@ -21,14 +21,14 @@ locals {
 
 # Cloudflare Realtime SFU App - WebRTC infrastructure
 resource "cloudflare_calls_sfu_app" "main" {
-  count      = var.enabled ? 1 : 0
+  count      = var.enabled && var.enable_calls ? 1 : 0
   account_id = var.cloudflare_account_id
   name       = "${local.name}-sfu"
 }
 
 # Cloudflare Realtime TURN App - NAT traversal for WebRTC
 resource "cloudflare_calls_turn_app" "main" {
-  count      = var.enabled ? 1 : 0
+  count      = var.enabled && var.enable_calls ? 1 : 0
   account_id = var.cloudflare_account_id
   name       = "${local.name}-turn"
 }

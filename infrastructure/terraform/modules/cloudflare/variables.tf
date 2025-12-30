@@ -4,6 +4,12 @@ variable "enabled" {
   default     = true
 }
 
+variable "enable_calls" {
+  description = "Enable Cloudflare Calls/Realtime resources (SFU, TURN)"
+  type        = bool
+  default     = true
+}
+
 variable "cloudflare_account_id" {
   description = "Cloudflare Account ID"
   type        = string

@@ -194,6 +194,7 @@ module "cloudflare" {
   source = "../../modules/cloudflare"
 
   enabled                  = var.enable_cloudflare
+  enable_calls             = false # Disabled until API permissions resolved
   cloudflare_account_id    = var.cloudflare_account_id
   environment              = local.environment
   r2_location              = "enam"
