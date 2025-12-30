@@ -33,8 +33,17 @@ func main() {
 
 	log.Printf("Starting server in %s mode", cfg.Server.Env)
 
-	// Database connection
-	dbCfg := postgres.DefaultConfig()
+	// Database connection using config from environment
+	dbCfg := postgres.Config{
+		Host:              cfg.Database.Host,
+		Port:              5432, // Default port, parse from cfg.Database.Port if needed
+		User:              cfg.Database.User,
+		Password:          cfg.Database.Password,
+		Database:          cfg.Database.Name,
+		SSLMode:           cfg.Database.SSLMode,
+		MaxConns:          25,
+		MinConns:          5,
+	}
 	pool, err := postgres.NewPool(ctx, dbCfg)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
