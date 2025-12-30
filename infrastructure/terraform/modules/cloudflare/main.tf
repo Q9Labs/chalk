@@ -48,6 +48,11 @@ resource "cloudflare_r2_bucket_lifecycle" "recordings" {
   account_id  = var.cloudflare_account_id
   bucket_name = cloudflare_r2_bucket.recordings[0].name
 
+  # Lifecycle rules can't be destroyed via API, only manually
+  lifecycle {
+    prevent_destroy = true
+  }
+
   rules = [
     {
       id      = "archive-after-7-days"
