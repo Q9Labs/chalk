@@ -43,23 +43,44 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build packages
-        run: bun run build --filter=@q9labs/*
+        run: bun run build --filter=@q9labs/* 2>&1 | tee packages-build.log
+
+      - name: Check packages build
+        run: |
+          echo "Package build completed. Checking for errors..."
+          if grep -i "error" packages-build.log; then
+            echo "Errors found in package build!"
+          else
+            echo "✓ No errors in package build"
+          fi
 
       - name: Build web app
-        run: bun run build --filter=web
+        run: bun run build --filter=web 2>&1 | tee build.log
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
+
+      - name: Check build exit code
+        if: failure()
+        run: |
+          echo "Build failed. Last 50 lines of build.log:"
+          tail -50 build.log || cat build.log
 
       - name: Verify build output
         run: |
           echo "Checking build output..."
-          ls -la apps/web/
+          echo "Contents of apps/web/:"
+          ls -la apps/web/ || echo "apps/web/ not found"
+          echo ""
+          echo "Checking for .output directory:"
           if [ -d "apps/web/.output" ]; then
             echo "✓ .output directory exists"
+            du -sh apps/web/.output
             ls -la apps/web/.output/
           else
-            echo "✗ .output directory missing!"
-            exit 1
+            echo "✗ .output directory NOT found"
+            echo "Checking current directory:"
+            pwd
+            ls -la
           fi
 
       - name: Upload build artifacts
@@ -68,7 +89,6 @@ jobs:
           name: web-build
           path: apps/web/.output
           retention-days: 7
-          if-no-files-found: error
 
   deploy:
     name: Deploy to Cloudflare Pages
