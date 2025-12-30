@@ -162,14 +162,19 @@ func Load() (*Config, error) {
 
 // validate checks that required configuration is present
 func (c *Config) validate() error {
-	if c.Cloudflare.AccountID == "" {
-		return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID is required")
-	}
-	if c.Cloudflare.AppID == "" {
-		return fmt.Errorf("CLOUDFLARE_APP_ID is required")
-	}
-	if c.Cloudflare.APIToken == "" {
-		return fmt.Errorf("CLOUDFLARE_API_TOKEN is required")
+	// Cloudflare config is optional - API can run in limited mode without real-time features
+	// Only validate if any Cloudflare config is provided (indicates intent to use)
+	hasCloudflareConfig := c.Cloudflare.AccountID != "" || c.Cloudflare.AppID != "" || c.Cloudflare.APIToken != ""
+	if hasCloudflareConfig {
+		if c.Cloudflare.AccountID == "" {
+			return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID is required when Cloudflare is configured")
+		}
+		if c.Cloudflare.AppID == "" {
+			return fmt.Errorf("CLOUDFLARE_APP_ID is required when Cloudflare is configured")
+		}
+		if c.Cloudflare.APIToken == "" {
+			return fmt.Errorf("CLOUDFLARE_API_TOKEN is required when Cloudflare is configured")
+		}
 	}
 	return nil
 }
