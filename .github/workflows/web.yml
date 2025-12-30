@@ -50,12 +50,25 @@ jobs:
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
 
+      - name: Verify build output
+        run: |
+          echo "Checking build output..."
+          ls -la apps/web/
+          if [ -d "apps/web/.output" ]; then
+            echo "✓ .output directory exists"
+            ls -la apps/web/.output/
+          else
+            echo "✗ .output directory missing!"
+            exit 1
+          fi
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: web-build
           path: apps/web/.output
           retention-days: 7
+          if-no-files-found: error
 
   deploy:
     name: Deploy to Cloudflare Pages
