@@ -13,19 +13,25 @@ variable "alert_emails" {
 variable "cors_allowed_origins" {
   description = "CORS allowed origins"
   type        = list(string)
-  default     = ["https://chalk.q9labs.com", "https://app.chalk.q9labs.com"]
+  default     = ["https://chalk.q9labs.ai"]
 }
 
 variable "api_domain_name" {
   description = "Custom domain name for API"
   type        = string
-  default     = null
+  default     = "chalk-api.q9labs.ai"
 }
 
-variable "certificate_arn" {
-  description = "ACM certificate ARN for HTTPS"
+variable "cloudflare_zone_name" {
+  description = "Cloudflare zone name for DNS"
   type        = string
-  default     = null
+  default     = "q9labs.ai"
+}
+
+variable "frontend_target" {
+  description = "Frontend CNAME target (e.g., Cloudflare Pages URL)"
+  type        = string
+  default     = null # Set when Cloudflare Pages is deployed
 }
 
 variable "cloudflare_app_id" {
@@ -48,7 +54,7 @@ variable "cloudflare_account_id" {
 }
 
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token with R2 and Calls permissions"
+  description = "Cloudflare API token with R2, Calls, DNS permissions"
   type        = string
   sensitive   = true
 }

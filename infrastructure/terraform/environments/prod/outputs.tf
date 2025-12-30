@@ -23,14 +23,19 @@ output "websocket_api_endpoint" {
   value       = module.api_gateway.websocket_api_endpoint
 }
 
-output "custom_domain_target" {
-  description = "Custom domain target for Route53 alias"
-  value       = module.api_gateway.custom_domain_target
+output "api_domain" {
+  description = "API custom domain"
+  value       = var.api_domain_name
 }
 
-output "custom_domain_zone_id" {
-  description = "Custom domain hosted zone ID for Route53"
-  value       = module.api_gateway.custom_domain_zone_id
+output "frontend_domain" {
+  description = "Frontend domain"
+  value       = "chalk.${var.cloudflare_zone_name}"
+}
+
+output "certificate_arn" {
+  description = "ACM certificate ARN"
+  value       = module.dns.certificate_arn
 }
 
 output "aurora_endpoint" {

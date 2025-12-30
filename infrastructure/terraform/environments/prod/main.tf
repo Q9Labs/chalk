@@ -82,7 +82,7 @@ module "ecs" {
   desired_capacity = 3
 
   internal_alb       = true
-  certificate_arn    = var.certificate_arn
+  certificate_arn    = module.dns.certificate_validated_arn
   log_retention_days = 90
 }
 
@@ -136,6 +136,23 @@ module "secrets" {
   cloudflare_app_secret = var.cloudflare_app_secret
 }
 
+# DNS and SSL certificates (must come before api_gateway)
+module "dns" {
+  source = "../../modules/dns"
+
+  environment          = local.environment
+  cloudflare_zone_name = var.cloudflare_zone_name
+  api_domain           = var.api_domain_name
+  api_subdomain        = "chalk-api"
+
+  # These are set to null initially - CNAME records created separately below
+  api_gateway_domain_target = null
+  frontend_subdomain        = null
+  frontend_target           = null
+
+  cloudflare_proxy_enabled = true
+}
+
 module "api_gateway" {
   source = "../../modules/api-gateway"
 
@@ -146,7 +163,7 @@ module "api_gateway" {
   alb_dns_name       = module.ecs.alb_dns_name
 
   domain_name     = var.api_domain_name
-  certificate_arn = var.certificate_arn
+  certificate_arn = module.dns.certificate_validated_arn
 
   cors_allowed_origins = var.cors_allowed_origins
 
@@ -156,6 +173,30 @@ module "api_gateway" {
   websocket_throttling_rate_limit  = 10000
 
   log_retention_days = 90
+}
+
+# Cloudflare DNS record for API Gateway (created after api_gateway module)
+resource "cloudflare_dns_record" "api" {
+  count = module.api_gateway.custom_domain_target != null ? 1 : 0
+
+  zone_id = module.dns.cloudflare_zone_id
+  name    = "chalk-api"
+  content = module.api_gateway.custom_domain_target
+  type    = "CNAME"
+  ttl     = 1
+  proxied = true
+}
+
+# Cloudflare DNS record for frontend (Cloudflare Pages)
+resource "cloudflare_dns_record" "frontend" {
+  count = var.frontend_target != null ? 1 : 0
+
+  zone_id = module.dns.cloudflare_zone_id
+  name    = "chalk"
+  content = var.frontend_target
+  type    = "CNAME"
+  ttl     = 1
+  proxied = true
 }
 
 module "waf" {
@@ -194,7 +235,7 @@ module "cloudflare" {
   source = "../../modules/cloudflare"
 
   enabled                  = var.enable_cloudflare
-  enable_calls             = false # Disabled until API permissions resolved
+  enable_calls             = true
   cloudflare_account_id    = var.cloudflare_account_id
   environment              = local.environment
   r2_location              = "enam"
