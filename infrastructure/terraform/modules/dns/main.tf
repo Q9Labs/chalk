@@ -65,8 +65,11 @@ resource "cloudflare_dns_record" "acm_validation" {
 
 # Wait for ACM certificate validation
 resource "aws_acm_certificate_validation" "api" {
-  certificate_arn         = aws_acm_certificate.api.arn
-  validation_record_fqdns = [for record in cloudflare_dns_record.acm_validation : "${record.name}.${var.cloudflare_zone_name}"]
+  certificate_arn = aws_acm_certificate.api.arn
+  # Use the FQDNs directly from ACM certificate (trimming trailing dot)
+  validation_record_fqdns = [for dvo in aws_acm_certificate.api.domain_validation_options : trimsuffix(dvo.resource_record_name, ".")]
+
+  depends_on = [cloudflare_dns_record.acm_validation]
 }
 
 # Cloudflare DNS record for API Gateway custom domain
