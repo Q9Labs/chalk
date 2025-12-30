@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Send } from 'lucide-react';
+import { MoreVertical, Send, Plus } from 'lucide-react';
 import { IconButton, Textarea } from '../atomic';
+import { MessageBubble } from './MessageBubble';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
@@ -25,9 +26,8 @@ export interface ChatPanelProps {
 export const ChatPanel = React.memo(({
   messages,
   onSendMessage,
-  onClose,
   disabled = false,
-  placeholder = "Type a message...",
+  placeholder = "Write message...",
   className
 }: ChatPanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -56,14 +56,10 @@ export const ChatPanel = React.memo(({
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
   return (
     <div 
       className={cn(
-        "flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl",
+        "flex flex-col h-full bg-[#0D0D0D] w-full",
         !prefersReducedMotion && "chalk-animate-slide-right",
         className
       )}
@@ -71,88 +67,67 @@ export const ChatPanel = React.memo(({
       role="complementary"
       aria-label="Chat panel"
     >
-      <div className="flex items-center justify-between p-4 border-b border-chalk-border-subtle">
-        <h2 className="text-sm font-semibold text-chalk-text-primary">Chat</h2>
-        {onClose && (
-          <IconButton 
-            icon={<X className="w-4 h-4" />} 
-            size="sm" 
-            variant="ghost" 
-            onClick={onClose}
-            aria-label="Close chat"
-          />
-        )}
+      <div className="flex items-center justify-between p-6">
+        <h2 className="text-2xl font-bold text-white">Chat</h2>
+        <IconButton 
+          icon={<MoreVertical className="w-5 h-5" />} 
+          size="sm" 
+          variant="ghost" 
+          onClick={() => {}}
+          className="text-white hover:bg-white/10"
+          aria-label="Options"
+        />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 space-y-6">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-chalk-text-muted opacity-60">
+          <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 opacity-60">
             <p className="text-sm">No messages yet</p>
             <p className="text-xs mt-1">Start the conversation!</p>
           </div>
         ) : (
           messages.map((msg) => (
-            <div 
-              key={msg.id} 
-              className={cn(
-                "flex flex-col max-w-[85%]",
-                msg.isLocal ? "ml-auto items-end" : "mr-auto items-start"
-              )}
-            >
-              {!msg.isLocal && (
-                <span className="text-xs text-chalk-text-secondary mb-1 ml-1">
-                  {msg.senderName}
-                </span>
-              )}
-              
-              <div 
-                className={cn(
-                  "px-3 py-2 rounded-lg text-sm break-words shadow-sm",
-                  msg.isLocal 
-                    ? "bg-chalk-accent text-white rounded-br-none" 
-                    : "bg-chalk-bg-subtle text-chalk-text-primary rounded-bl-none"
-                )}
-              >
-                {msg.content}
-              </div>
-              
-              <span className={cn(
-                "text-[10px] text-chalk-text-muted mt-1",
-                msg.isLocal ? "mr-1" : "ml-1"
-              )}>
-                {formatTime(msg.timestamp)}
-              </span>
-            </div>
+            <MessageBubble
+                key={msg.id}
+                content={msg.content}
+                senderName={msg.senderName}
+                senderAvatar={`https://i.pravatar.cc/150?u=${msg.senderId}`}
+                timestamp={msg.timestamp}
+                isLocal={msg.isLocal}
+            />
           ))
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-chalk-border-subtle bg-chalk-bg-surface">
-        <div className="relative">
-          <Textarea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            className="pr-10 min-h-[44px] max-h-32 py-3"
-            resize="none"
-          />
-          <div className="absolute right-2 bottom-2">
+      <div className="p-6 pt-4 pb-8">
+        <div className="flex items-end gap-3">
             <IconButton
-              icon={<Send className="w-4 h-4" />}
-              size="sm"
-              variant="ghost"
-              onClick={handleSend}
-              disabled={!inputValue.trim() || disabled}
-              className={cn(
-                "text-chalk-accent hover:text-chalk-accent-hover hover:bg-chalk-accent/10",
-                (!inputValue.trim() || disabled) && "opacity-50 cursor-not-allowed"
-              )}
-              aria-label="Send message"
+                icon={<Plus className="w-5 h-5" />}
+                className="w-12 h-12 rounded-full bg-[#1A1A1A] text-purple-500 hover:bg-[#252525] flex-shrink-0 border border-white/5"
+                aria-label="Add attachment"
             />
-          </div>
+            <div className="flex-1 relative">
+                <Textarea
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={placeholder}
+                    disabled={disabled}
+                    className="w-full bg-[#1A1A1A] border-none rounded-2xl py-3 px-4 text-white placeholder:text-gray-500 min-h-[48px] max-h-32 resize-none focus:ring-1 focus:ring-purple-500/50"
+                    resize="none"
+                />
+            </div>
+            <IconButton
+                icon={<Send className="w-5 h-5 ml-0.5" />}
+                onClick={handleSend}
+                disabled={!inputValue.trim() || disabled}
+                className={cn(
+                    "w-12 h-12 rounded-full bg-[#6E00E6] text-white hover:bg-[#5a00bd] flex-shrink-0 shadow-lg shadow-purple-500/20",
+                    (!inputValue.trim() || disabled) && "opacity-50 cursor-not-allowed bg-gray-700"
+                )}
+                aria-label="Send message"
+            />
         </div>
       </div>
     </div>

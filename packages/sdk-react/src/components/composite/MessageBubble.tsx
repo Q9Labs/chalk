@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
 import { Avatar } from '../atomic/Avatar';
+import { CheckCheck } from 'lucide-react';
 
 export interface MessageBubbleProps {
   content: string;
@@ -73,46 +74,58 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
   return (
     <div
       className={cn(
-        'flex gap-3 w-full max-w-[85%]',
-        isLocal ? 'ml-auto flex-row-reverse' : 'mr-auto',
+        'flex gap-3 w-full',
+        isLocal ? 'justify-end' : 'justify-start',
         className
       )}
     >
-      {!isLocal && showSender && (
+      {!isLocal && (
         <Avatar
           name={senderName}
           src={senderAvatar}
-          size="sm"
-          className="mt-0.5"
+          size="md"
+          className="mt-1 !w-10 !h-10 border-2 border-[#0D0D0D]"
         />
       )}
       
-      {!isLocal && !showSender && <div className="w-8" />} 
-
-      <div className={cn('flex flex-col gap-1', isLocal ? 'items-end' : 'items-start')}>
+      <div className={cn('flex flex-col gap-1 max-w-[75%]', isLocal ? 'items-end' : 'items-start')}>
         {showSender && !isLocal && (
-          <span className="text-xs font-medium text-[var(--chalk-text-secondary)] ml-1">
+          <span className="sr-only">
             {senderName}
           </span>
         )}
 
         <div
           className={cn(
-            'px-3 py-2 rounded-[var(--chalk-border-radius-lg)] text-sm shadow-sm break-words whitespace-pre-wrap',
+            'px-4 py-3 rounded-2xl text-sm shadow-sm break-words whitespace-pre-wrap',
             isLocal
-              ? 'bg-[var(--chalk-primary)] text-white rounded-tr-none'
-              : 'bg-[var(--chalk-bg-secondary)] text-[var(--chalk-text-primary)] rounded-tl-none border border-[var(--chalk-border-color)]'
+              ? 'bg-[#0056D2] text-white rounded-br-none' // Blue for local
+              : 'bg-[#2A2A2A] text-white/90 rounded-bl-none' // Dark gray for remote
           )}
         >
           {renderContent(content)}
         </div>
 
         {showTimestamp && (
-          <span className={cn('text-[10px] text-[var(--chalk-text-muted)]', isLocal ? 'mr-1' : 'ml-1')}>
-            {formatTime(timestamp)}
-          </span>
+          <div className={cn('flex items-center gap-1.5 mt-0.5', isLocal ? 'justify-end' : 'justify-start')}>
+            {!isLocal && (
+                <CheckCheck className="w-3 h-3 text-[#0056D2]" />
+            )}
+            <span className="text-[10px] text-gray-400 font-medium">
+              {formatTime(timestamp)}
+            </span>
+          </div>
         )}
       </div>
+
+      {isLocal && (
+        <Avatar
+          name={senderName}
+          src={senderAvatar}
+          size="md"
+          className="mt-1 !w-10 !h-10 border-2 border-[#0D0D0D]"
+        />
+      )}
     </div>
   );
 });

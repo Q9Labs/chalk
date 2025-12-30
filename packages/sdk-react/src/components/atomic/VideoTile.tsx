@@ -28,6 +28,8 @@ export interface VideoTileProps {
   onDoubleClick?: () => void;
   pinned?: boolean;
   className?: string;
+  children?: React.ReactNode;
+  showAvatar?: boolean;
 }
 
 const aspectRatioClasses = {
@@ -42,11 +44,13 @@ export const VideoTile = React.memo(({
   mirror,
   showName = true,
   showStatus = true,
+  showAvatar = true,
   aspectRatio = '16:9',
   onClick,
   onDoubleClick,
   pinned,
   className,
+  children,
 }: VideoTileProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -95,7 +99,7 @@ export const VideoTile = React.memo(({
             mirror && 'scale-x-[-1]'
           )}
         />
-      ) : (
+      ) : showAvatar ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <Avatar
             name={participant.displayName}
@@ -103,7 +107,9 @@ export const VideoTile = React.memo(({
             size="xl"
           />
         </div>
-      )}
+      ) : null}
+
+      {children}
 
       <div className="absolute inset-0 p-3 flex flex-col justify-between pointer-events-none">
         <div className="flex justify-end gap-2">
