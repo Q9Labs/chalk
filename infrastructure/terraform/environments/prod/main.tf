@@ -81,9 +81,10 @@ module "ecs" {
   max_capacity     = 10
   desired_capacity = 3
 
-  internal_alb       = true
-  certificate_arn    = module.dns.certificate_validated_arn
-  log_retention_days = 90
+  internal_alb          = true
+  enable_https_listener = true
+  certificate_arn       = module.dns.certificate_validated_arn
+  log_retention_days    = 90
 }
 
 module "aurora" {
@@ -177,7 +178,8 @@ module "api_gateway" {
 
 # Cloudflare DNS record for API Gateway (created after api_gateway module)
 resource "cloudflare_dns_record" "api" {
-  count = module.api_gateway.custom_domain_target != null ? 1 : 0
+  # Use explicit flag - value won't be known at plan time
+  count = var.api_domain_name != null ? 1 : 0
 
   zone_id = module.dns.cloudflare_zone_id
   name    = "chalk-api"

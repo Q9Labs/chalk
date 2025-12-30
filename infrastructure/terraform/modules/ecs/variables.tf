@@ -48,6 +48,12 @@ variable "certificate_arn" {
   default     = null
 }
 
+variable "enable_https_listener" {
+  description = "Enable HTTPS listener (use instead of checking certificate_arn != null)"
+  type        = bool
+  default     = false
+}
+
 variable "internal_alb" {
   description = "Whether ALB should be internal (for API Gateway integration)"
   type        = bool
