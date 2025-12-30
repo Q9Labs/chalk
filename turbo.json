@@ -13,7 +13,7 @@
 				"!**/*.test.*",
 				"!**/*.spec.*"
 			],
-			"outputs": ["dist/**"],
+			"outputs": ["dist/**", ".output/**"],
 			"env": ["DATABASE_URL", "API_URL", "CLOUDFLARE_API_TOKEN"]
 		},
 		"dev": {

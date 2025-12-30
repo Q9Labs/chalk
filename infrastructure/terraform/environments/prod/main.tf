@@ -117,7 +117,8 @@ module "ecs" {
     { name = "CLOUDFLARE_APP_ID", valueFrom = "${module.secrets.cloudflare_secret_arn}:sfu_app_id::" },
   ]
 
-  depends_on = [module.aurora, module.elasticache, module.secrets]
+  # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets
+  # outputs handle ordering. Explicit depends_on causes cycle due to security group cross-refs.
 }
 
 module "aurora" {
