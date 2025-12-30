@@ -161,14 +161,14 @@ module "api_gateway" {
 module "waf" {
   source = "../../modules/waf"
 
-  environment    = local.environment
-  alb_arn        = module.ecs.alb_arn
-  http_stage_arn = module.api_gateway.http_stage_arn
-  rate_limit     = 5000
+  environment = local.environment
+  alb_arn     = module.ecs.alb_arn
+  rate_limit  = 5000
 
-  # Use boolean flags to avoid count depending on unknown values at plan time
+  # WAF v2 only supports REST APIs (v1), not HTTP APIs (v2)
+  # Protect via ALB association instead
   enable_alb_association      = true
-  enable_http_api_association = true
+  enable_http_api_association = false
 
   log_retention_days = 90
 }
