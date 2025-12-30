@@ -31,7 +31,7 @@ variable "cloudflare_zone_name" {
 variable "frontend_target" {
   description = "Frontend CNAME target (e.g., Cloudflare Pages URL)"
   type        = string
-  default     = null # Set when Cloudflare Pages is deployed
+  default     = "chalk-web.pages.dev"
 }
 
 variable "cloudflare_app_id" {

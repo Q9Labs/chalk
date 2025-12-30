@@ -374,7 +374,22 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:chalk/*"
+        Resource = [
+          "arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:chalk/*",
+          "arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:rds!*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "secretsmanager.${data.aws_region.current.name}.amazonaws.com"
+          }
+        }
       }
     ]
   })

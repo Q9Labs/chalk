@@ -22,16 +22,20 @@ resource "aws_ecs_task_definition" "api" {
         }
       ]
 
-      environment = [
+      environment = concat([
         {
           name  = "ENVIRONMENT"
           value = var.environment
         },
         {
+          name  = "ENV"
+          value = var.environment == "prod" ? "production" : var.environment
+        },
+        {
           name  = "PORT"
           value = tostring(local.container_port)
         }
-      ]
+      ], var.container_environment)
 
       secrets = var.container_secrets
 

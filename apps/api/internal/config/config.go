@@ -24,12 +24,22 @@ type ServerConfig struct {
 
 // DatabaseConfig holds database configuration
 type DatabaseConfig struct {
-	URL string
+	URL      string
+	Host     string
+	Port     string
+	Name     string
+	User     string
+	Password string
+	SSLMode  string
 }
 
 // RedisConfig holds Redis configuration
 type RedisConfig struct {
-	URL string
+	URL      string
+	Host     string
+	Port     string
+	Password string
+	TLS      bool
 }
 
 // CloudflareConfig holds Cloudflare RealtimeKit configuration
@@ -63,16 +73,62 @@ type StorageConfig struct {
 
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
+	// Database config - prefer URL, fallback to parts
+	dbURL := getEnv("DATABASE_URL", "")
+	dbHost := getEnv("DATABASE_HOST", "localhost")
+	dbPort := getEnv("DATABASE_PORT", "5432")
+	dbName := getEnv("DATABASE_NAME", "chalk")
+	dbUser := getEnv("DATABASE_USER", "postgres")
+	dbPassword := getEnv("DATABASE_PASSWORD", "")
+	dbSSLMode := getEnv("DATABASE_SSLMODE", "disable")
+
+	if dbURL == "" && dbPassword != "" {
+		dbURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+			dbUser, dbPassword, dbHost, dbPort, dbName, dbSSLMode)
+	} else if dbURL == "" {
+		dbURL = fmt.Sprintf("postgres://%s@%s:%s/%s?sslmode=%s",
+			dbUser, dbHost, dbPort, dbName, dbSSLMode)
+	}
+
+	// Redis config - prefer URL, fallback to parts
+	redisURL := getEnv("REDIS_URL", "")
+	redisHost := getEnv("REDIS_HOST", "localhost")
+	redisPort := getEnv("REDIS_PORT", "6379")
+	redisPassword := getEnv("REDIS_PASSWORD", "")
+	redisTLS := getEnvBool("REDIS_TLS", false)
+
+	if redisURL == "" {
+		scheme := "redis"
+		if redisTLS {
+			scheme = "rediss"
+		}
+		if redisPassword != "" {
+			redisURL = fmt.Sprintf("%s://:%s@%s:%s", scheme, redisPassword, redisHost, redisPort)
+		} else {
+			redisURL = fmt.Sprintf("%s://%s:%s", scheme, redisHost, redisPort)
+		}
+	}
+
 	cfg := &Config{
 		Server: ServerConfig{
 			Port: getEnv("PORT", "8080"),
 			Env:  getEnv("ENV", "development"),
 		},
 		Database: DatabaseConfig{
-			URL: getEnv("DATABASE_URL", "postgres://localhost:5432/chalk?sslmode=disable"),
+			URL:      dbURL,
+			Host:     dbHost,
+			Port:     dbPort,
+			Name:     dbName,
+			User:     dbUser,
+			Password: dbPassword,
+			SSLMode:  dbSSLMode,
 		},
 		Redis: RedisConfig{
-			URL: getEnv("REDIS_URL", "redis://localhost:6379"),
+			URL:      redisURL,
+			Host:     redisHost,
+			Port:     redisPort,
+			Password: redisPassword,
+			TLS:      redisTLS,
 		},
 		Cloudflare: CloudflareConfig{
 			AccountID: getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
@@ -141,6 +197,16 @@ func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if i, err := strconv.Atoi(value); err == nil {
 			return i
+		}
+	}
+	return defaultValue
+}
+
+// getEnvBool gets an environment variable as bool or returns a default value
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if b, err := strconv.ParseBool(value); err == nil {
+			return b
 		}
 	}
 	return defaultValue

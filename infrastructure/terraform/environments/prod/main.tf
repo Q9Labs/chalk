@@ -85,6 +85,39 @@ module "ecs" {
   enable_https_listener = true
   certificate_arn       = module.dns.certificate_validated_arn
   log_retention_days    = 90
+
+  # ECS Service configuration
+  create_service         = true
+  container_image        = "${module.ecr.repository_url}:latest"
+  task_cpu               = 512
+  task_memory            = 1024
+  service_desired_count  = 2
+  enable_autoscaling     = true
+  enable_execute_command = true
+
+  container_environment = [
+    { name = "DATABASE_HOST", value = module.aurora.cluster_endpoint },
+    { name = "DATABASE_PORT", value = tostring(module.aurora.cluster_port) },
+    { name = "DATABASE_NAME", value = module.aurora.database_name },
+    { name = "DATABASE_USER", value = module.aurora.master_username },
+    { name = "DATABASE_SSLMODE", value = "require" },
+    { name = "REDIS_HOST", value = module.elasticache.primary_endpoint },
+    { name = "REDIS_PORT", value = tostring(module.elasticache.port) },
+    { name = "REDIS_TLS", value = "true" },
+    { name = "CLOUDFLARE_ACCOUNT_ID", value = var.cloudflare_account_id },
+    { name = "R2_BUCKET_NAME", value = module.cloudflare.recordings_bucket_name },
+    { name = "R2_ACCOUNT_ID", value = var.cloudflare_account_id },
+  ]
+
+  container_secrets = [
+    { name = "DATABASE_PASSWORD", valueFrom = "${module.aurora.master_user_secret_arn}:password::" },
+    { name = "REDIS_PASSWORD", valueFrom = module.elasticache.auth_token_secret_arn },
+    { name = "JWT_SIGNING_KEY", valueFrom = module.secrets.jwt_secret_arn },
+    { name = "CLOUDFLARE_API_TOKEN", valueFrom = "${module.secrets.cloudflare_secret_arn}:sfu_app_secret::" },
+    { name = "CLOUDFLARE_APP_ID", valueFrom = "${module.secrets.cloudflare_secret_arn}:sfu_app_id::" },
+  ]
+
+  depends_on = [module.aurora, module.elasticache, module.secrets]
 }
 
 module "aurora" {

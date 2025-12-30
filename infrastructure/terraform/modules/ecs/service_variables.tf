@@ -31,6 +31,15 @@ variable "container_secrets" {
   default = []
 }
 
+variable "container_environment" {
+  description = "Environment variables to inject into container"
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default = []
+}
+
 variable "service_desired_count" {
   description = "Desired number of tasks"
   type        = number
