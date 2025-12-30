@@ -56,5 +56,5 @@ variable "cloudflare_api_token" {
 variable "enable_cloudflare" {
   description = "Enable Cloudflare resources (SFU, TURN, R2)"
   type        = bool
-  default     = false # Disabled until Cloudflare permissions configured
+  default     = true
 }
