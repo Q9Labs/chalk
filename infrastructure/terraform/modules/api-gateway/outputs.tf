@@ -8,6 +8,11 @@ output "http_api_arn" {
   value       = aws_apigatewayv2_api.http.arn
 }
 
+output "http_stage_arn" {
+  description = "HTTP API Stage ARN for WAF association"
+  value       = "arn:aws:apigateway:${data.aws_region.current.name}::/apis/${aws_apigatewayv2_api.http.id}/stages/${aws_apigatewayv2_stage.http.name}"
+}
+
 output "http_api_endpoint" {
   description = "HTTP API endpoint URL"
   value       = aws_apigatewayv2_api.http.api_endpoint

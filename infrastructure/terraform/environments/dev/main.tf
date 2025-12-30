@@ -169,6 +169,7 @@ module "monitoring" {
 module "cloudflare" {
   source = "../../modules/cloudflare"
 
+  enabled                  = var.enable_cloudflare
   cloudflare_account_id    = var.cloudflare_account_id
   environment              = local.environment
   r2_location              = "enam" # Eastern North America - matches us-east-1

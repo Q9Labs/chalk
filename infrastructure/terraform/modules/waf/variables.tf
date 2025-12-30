@@ -10,7 +10,13 @@ variable "rate_limit" {
 }
 
 variable "http_api_arn" {
-  description = "API Gateway HTTP API ARN to associate"
+  description = "API Gateway HTTP API ARN to associate (deprecated, use http_stage_arn)"
+  type        = string
+  default     = null
+}
+
+variable "http_stage_arn" {
+  description = "API Gateway HTTP API Stage ARN for WAF association"
   type        = string
   default     = null
 }

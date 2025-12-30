@@ -20,6 +20,55 @@ locals {
 
 data "aws_region" "current" {}
 
+# IAM role for API Gateway to write to CloudWatch Logs
+resource "aws_iam_role" "api_gateway_cloudwatch" {
+  name = "${local.name}-api-gateway-cloudwatch"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "apigateway.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy" "api_gateway_cloudwatch" {
+  name = "${local.name}-api-gateway-cloudwatch"
+  role = aws_iam_role.api_gateway_cloudwatch.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents",
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Account-level setting for API Gateway CloudWatch logging
+resource "aws_api_gateway_account" "main" {
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch.arn
+}
+
 resource "aws_security_group" "vpc_link" {
   name        = "${local.name}-vpc-link-sg"
   description = "Security group for API Gateway VPC Link"
@@ -135,15 +184,15 @@ resource "aws_apigatewayv2_api" "websocket" {
   tags = local.tags
 }
 
+# Note: WebSocket APIs don't support VPC Link V2, so we use INTERNET connection type
+# The ALB should be public or use Lambda proxy for private backends
 resource "aws_apigatewayv2_integration" "websocket_alb" {
   api_id             = aws_apigatewayv2_api.websocket.id
-  integration_type   = "HTTP_PROXY"
-  integration_method = "ANY"
-  integration_uri    = "http://${var.alb_dns_name}/ws"
+  integration_type   = "HTTP"
+  integration_method = "POST"
+  integration_uri    = "https://${var.alb_dns_name}/ws"
 
-  connection_type = "VPC_LINK"
-  connection_id   = aws_apigatewayv2_vpc_link.main.id
-
+  connection_type        = "INTERNET"
   timeout_milliseconds   = 29000
   payload_format_version = "1.0"
 }
@@ -191,6 +240,8 @@ resource "aws_apigatewayv2_stage" "websocket" {
   }
 
   tags = local.tags
+
+  depends_on = [aws_api_gateway_account.main]
 }
 
 resource "aws_cloudwatch_log_group" "websocket_api" {

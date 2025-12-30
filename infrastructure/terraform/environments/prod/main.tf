@@ -161,10 +161,10 @@ module "api_gateway" {
 module "waf" {
   source = "../../modules/waf"
 
-  environment  = local.environment
-  alb_arn      = module.ecs.alb_arn
-  http_api_arn = module.api_gateway.http_api_arn
-  rate_limit   = 5000
+  environment    = local.environment
+  alb_arn        = module.ecs.alb_arn
+  http_stage_arn = module.api_gateway.http_stage_arn
+  rate_limit     = 5000
 
   # Use boolean flags to avoid count depending on unknown values at plan time
   enable_alb_association      = true
@@ -193,6 +193,7 @@ module "monitoring" {
 module "cloudflare" {
   source = "../../modules/cloudflare"
 
+  enabled                  = var.enable_cloudflare
   cloudflare_account_id    = var.cloudflare_account_id
   environment              = local.environment
   r2_location              = "enam"

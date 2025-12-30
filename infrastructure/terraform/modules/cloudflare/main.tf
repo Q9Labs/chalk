@@ -21,18 +21,21 @@ locals {
 
 # Calls SFU App - WebRTC infrastructure for RealtimeKit
 resource "cloudflare_calls_sfu_app" "main" {
+  count      = var.enabled ? 1 : 0
   account_id = var.cloudflare_account_id
   name       = "${local.name}-sfu"
 }
 
 # Calls TURN App - NAT traversal for WebRTC
 resource "cloudflare_calls_turn_app" "main" {
+  count      = var.enabled ? 1 : 0
   account_id = var.cloudflare_account_id
   name       = "${local.name}-turn"
 }
 
 # R2 Bucket - Hot storage for recordings (0-7 days)
 resource "cloudflare_r2_bucket" "recordings" {
+  count         = var.enabled ? 1 : 0
   account_id    = var.cloudflare_account_id
   name          = "${local.name}-recordings"
   location      = var.r2_location
@@ -41,8 +44,9 @@ resource "cloudflare_r2_bucket" "recordings" {
 
 # R2 Lifecycle - Auto-transition to InfrequentAccess after 7 days
 resource "cloudflare_r2_bucket_lifecycle" "recordings" {
+  count       = var.enabled ? 1 : 0
   account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.recordings.name
+  bucket_name = cloudflare_r2_bucket.recordings[0].name
 
   rules = [
     {

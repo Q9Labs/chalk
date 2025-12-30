@@ -1,3 +1,9 @@
+variable "enabled" {
+  description = "Enable Cloudflare resources (set to false if credentials not configured)"
+  type        = bool
+  default     = true
+}
+
 variable "cloudflare_account_id" {
   description = "Cloudflare Account ID"
   type        = string
