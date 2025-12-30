@@ -120,7 +120,11 @@ jobs:
         run: ls -la web-output/
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler@3 pages deploy web-output/public --project-name=chalk-web --branch=main
+        run: |
+          # Create project if it doesn't exist (first deploy)
+          npx wrangler@3 pages project create chalk-web --production-branch=main 2>/dev/null || true
+          # Deploy
+          npx wrangler@3 pages deploy web-output/public --project-name=chalk-web --branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
