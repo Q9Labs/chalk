@@ -47,7 +47,7 @@ permissions:
 jobs:
   lint-and-test:
     name: Lint & Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ !inputs.skip_tests }}
     defaults:
       run:
@@ -84,7 +84,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: lint-and-test
     if: always() && (needs.lint-and-test.result == 'success' || needs.lint-and-test.result == 'skipped')
     steps:
@@ -114,7 +114,7 @@ jobs:
 
   docker:
     name: Build & Push to ECR
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build
     if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || inputs.force_deploy
     outputs:
@@ -134,8 +134,8 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Extract metadata
         id: meta
@@ -148,14 +148,12 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v5
+        uses: useblacksmith/build-push-action@v2
         with:
           context: apps/api
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           platforms: linux/amd64
 
       - name: Output image URI
@@ -165,7 +163,7 @@ jobs:
 
   deploy:
     name: Deploy to ECS
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: docker
     if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || inputs.force_deploy
     environment: ${{ inputs.environment || 'prod' }}
@@ -227,7 +225,7 @@ jobs:
 
   health-check:
     name: Health Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: deploy
     if: needs.deploy.result == 'success'
     steps:
