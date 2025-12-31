@@ -22,18 +22,15 @@ export type {
 } from "@q9labs/chalk-core";
 // Re-export error codes
 export { ChalkErrorCode } from "@q9labs/chalk-core";
-
-// Context
-export * from './context';
-
-// Hooks
-export * from './hooks';
-
 // Components
-export * from './components';
+export * from "./components";
+// Context
+export * from "./context";
+// Hooks
+export * from "./hooks";
 
 // Utils
-export * from './utils';
+export * from "./utils";
 
 // Styles - export path for consumers to import
-export const CHALK_STYLES_PATH = '@q9labs/chalk-react/dist/styles/base.css';
+export const CHALK_STYLES_PATH = "@q9labs/chalk-react/dist/styles/base.css";

@@ -1,6 +1,6 @@
 /**
  * React components for Chalk video conferencing
- * 
+ *
  * Components are organized in three layers:
  * - atomic: Building blocks (VideoTile, Avatar, Button, etc.)
  * - composite: Assembled components (VideoGrid, ControlBar, ChatPanel, etc.)
@@ -8,71 +8,69 @@
  */
 
 // Atomic components - all exports
-export * from './atomic';
-
+export * from "./atomic";
+export type {
+	BackgroundEffect,
+	BackgroundEffectsPickerProps,
+	ChatPanelProps,
+	ConnectionLostOverlayProps,
+	ControlBarButton,
+	ControlBarProps,
+	DeviceSelectorProps,
+	InviteModalProps,
+	LayoutSwitcherProps,
+	MediaPreviewProps,
+	MeetingHeaderProps,
+	MessageBubbleProps,
+	MobileControlSheetProps,
+	NoiseSuppressionToggleProps,
+	Notification,
+	NotificationStackProps,
+	Participant,
+	ParticipantListParticipant,
+	ParticipantListProps,
+	PinnedMessageBannerProps,
+	ReactionPickerProps,
+	RecordingControlsProps,
+	ScreenShareViewProps,
+	SettingsPanelProps,
+	TourOverlayProps,
+	TranscriptionPanelProps,
+	TypingIndicatorProps,
+	VideoGridProps,
+	WaitingParticipant,
+	WaitingRoomProps,
+} from "./composite";
 // Composite components - selective exports to avoid type collisions
 export {
-  NotificationStack,
-  ConnectionLostOverlay,
-  MeetingHeader,
-  InviteModal,
-  MessageBubble,
-  TypingIndicator,
-  PinnedMessageBanner,
-  TourOverlay,
-  ParticipantList,
-  ChatPanel,
-  TranscriptionPanel,
-  SettingsPanel,
-  WaitingRoom,
-  DeviceSelector,
-  BackgroundEffectsPicker,
-  NoiseSuppressionToggle,
-  VideoGrid,
-  ScreenShareView,
-  LayoutSwitcher,
-  MediaPreview,
-  ControlBar,
-  MobileControlSheet,
-  ReactionPicker,
-  RecordingControls,
-} from './composite';
-
-export type {
-  NotificationStackProps,
-  Notification,
-  ConnectionLostOverlayProps,
-  MeetingHeaderProps,
-  InviteModalProps,
-  MessageBubbleProps,
-  TypingIndicatorProps,
-  PinnedMessageBannerProps,
-  TourOverlayProps,
-  ParticipantListProps,
-  ParticipantListParticipant,
-  ChatPanelProps,
-  TranscriptionPanelProps,
-  SettingsPanelProps,
-  WaitingRoomProps,
-  WaitingParticipant,
-  DeviceSelectorProps,
-  BackgroundEffectsPickerProps,
-  BackgroundEffect,
-  NoiseSuppressionToggleProps,
-  VideoGridProps,
-  Participant,
-  ScreenShareViewProps,
-  LayoutSwitcherProps,
-  MediaPreviewProps,
-  ControlBarProps,
-  ControlBarButton,
-  MobileControlSheetProps,
-  ReactionPickerProps,
-  RecordingControlsProps,
-} from './composite';
+	BackgroundEffectsPicker,
+	ChatPanel,
+	ConnectionLostOverlay,
+	ControlBar,
+	DeviceSelector,
+	InviteModal,
+	LayoutSwitcher,
+	MediaPreview,
+	MeetingHeader,
+	MessageBubble,
+	MobileControlSheet,
+	NoiseSuppressionToggle,
+	NotificationStack,
+	ParticipantList,
+	PinnedMessageBanner,
+	ReactionPicker,
+	RecordingControls,
+	ScreenShareView,
+	SettingsPanel,
+	TourOverlay,
+	TranscriptionPanel,
+	TypingIndicator,
+	VideoGrid,
+	WaitingRoom,
+} from "./composite";
 
 // Full integration components
-export * from './full';
+export * from "./full";
 
 // Lazy loaded components
-export * from './lazy';
+export * from "./lazy";

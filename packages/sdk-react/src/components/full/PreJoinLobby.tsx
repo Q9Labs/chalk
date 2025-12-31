@@ -1,15 +1,15 @@
 import { useState, useEffect, memo } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
-import { 
-  Input, 
-  Spinner, 
+import {
+  Input,
+  Spinner,
   Toast,
   Badge
 } from '../atomic';
-import { 
-  MediaPreview, 
-  DeviceSelector 
+import {
+  MediaPreview,
+  DeviceSelector
 } from '../composite';
 import { cn } from '../../utils/cn';
 
@@ -27,11 +27,11 @@ export interface PreJoinLobbyProps {
   userName?: string;
   onJoin: (settings: JoinSettings) => void;
   onCancel?: () => void;
-  
+
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
   audioLevel?: number;
-  
+
   videoDevices?: MediaDeviceInfo[];
   audioInputDevices?: MediaDeviceInfo[];
   audioOutputDevices?: MediaDeviceInfo[];
@@ -41,13 +41,13 @@ export interface PreJoinLobbyProps {
   onVideoDeviceChange?: (deviceId: string) => void;
   onAudioInputChange?: (deviceId: string) => void;
   onAudioOutputChange?: (deviceId: string) => void;
-  
+
   initialVideoEnabled?: boolean;
   initialAudioEnabled?: boolean;
-  
+
   isLoading?: boolean;
   error?: string;
-  
+
   className?: string;
 }
 
@@ -85,7 +85,7 @@ function PreJoinLobbyBase({
 
   const handleJoin = () => {
     if (!displayName.trim()) return;
-    
+
     onJoin({
       displayName,
       videoEnabled: isVideoEnabled,
@@ -102,14 +102,14 @@ function PreJoinLobbyBase({
 
   return (
     <div className={cn(
-      "flex flex-col items-center justify-center min-h-screen bg-[var(--chalk-bg-primary)] p-4 font-sans text-[var(--chalk-text-primary)]", 
+      "flex flex-col items-center justify-center min-h-screen bg-[var(--chalk-bg-primary)] p-4 font-sans text-[var(--chalk-text-primary)]",
       className
     )}>
       <div className={cn(
         "w-full max-w-lg space-y-8",
         !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-300"
       )}>
-        
+
         <div className="text-center space-y-2">
           {roomName && (
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--chalk-bg-tertiary)] text-[var(--chalk-text-secondary)] text-sm font-medium mb-4">
@@ -122,7 +122,7 @@ function PreJoinLobbyBase({
         </div>
 
         <div className="space-y-6">
-          <MediaPreview 
+          <MediaPreview
             videoTrack={isVideoEnabled ? videoTrack : null}
             audioTrack={isAudioEnabled ? audioTrack : null}
             audioLevel={isAudioEnabled ? audioLevel : 0}
@@ -160,7 +160,7 @@ function PreJoinLobbyBase({
                    disabled={isLoading || !isVideoEnabled}
                  />
                )}
-               
+
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  {hasAudioInput && (
                    <DeviceSelector
@@ -173,7 +173,7 @@ function PreJoinLobbyBase({
                      disabled={isLoading || !isAudioEnabled}
                    />
                  )}
-                 
+
                  {hasAudioOutput && (
                    <DeviceSelector
                      type="audiooutput"
@@ -191,9 +191,9 @@ function PreJoinLobbyBase({
 
         {error && (
           <div className="w-full">
-            <Toast 
-              type="error" 
-              message={error} 
+            <Toast
+              type="error"
+              message={error}
               onDismiss={() => {}}
               duration={0}
             />
@@ -216,7 +216,7 @@ function PreJoinLobbyBase({
               Cancel
             </button>
           )}
-          
+
           <button
             type="button"
             onClick={handleJoin}
