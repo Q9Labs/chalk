@@ -278,6 +278,10 @@ export class Room extends EventEmitter<RoomEvents> {
 			videoTrack?: MediaStreamTrack;
 			audioTrack?: MediaStreamTrack;
 			screenShareEnabled?: boolean;
+			screenShareTracks?: {
+				audio?: MediaStreamTrack;
+				video?: MediaStreamTrack;
+			};
 		};
 
 		return {
@@ -289,6 +293,7 @@ export class Room extends EventEmitter<RoomEvents> {
 			audioEnabled: p.audioEnabled ?? false,
 			videoTrack: p.videoTrack,
 			audioTrack: p.audioTrack,
+			screenShareTrack: p.screenShareTracks?.video,
 			isSpeaking: false,
 			isScreenSharing: p.screenShareEnabled ?? false,
 			handRaised: false,
@@ -359,6 +364,29 @@ export class Room extends EventEmitter<RoomEvents> {
 			},
 		);
 
+		// Screen share update for local user
+		this.rtkClient.self.on(
+			"screenShareUpdate",
+			(data: {
+				screenShareEnabled: boolean;
+				screenShareTracks: {
+					audio?: MediaStreamTrack;
+					video?: MediaStreamTrack;
+				};
+			}) => {
+				this.log("Local screen share update:", data.screenShareEnabled);
+				if (this._localParticipant) {
+					this._localParticipant.isScreenSharing = data.screenShareEnabled;
+					this._localParticipant.screenShareTrack =
+						data.screenShareTracks?.video ?? undefined;
+					this.emit("participant-updated", {
+						participantId: this._localParticipant.id,
+						participant: this._localParticipant,
+					});
+				}
+			},
+		);
+
 		// Participant joined
 		this.rtkClient.participants.joined.on(
 			"participantJoined",
@@ -407,6 +435,23 @@ export class Room extends EventEmitter<RoomEvents> {
 				if (existing) {
 					existing.audioEnabled = participant.audioEnabled;
 					existing.audioTrack = participant.audioTrack;
+					this.emit("participant-updated", {
+						participantId: participant.id,
+						participant: existing,
+					});
+				}
+			},
+		);
+
+		// Participant screen share update
+		this.rtkClient.participants.joined.on(
+			"screenShareUpdate",
+			(rtkParticipant: unknown) => {
+				const participant = this.mapRTKParticipant(rtkParticipant);
+				const existing = this._participants.get(participant.id);
+				if (existing) {
+					existing.isScreenSharing = participant.isScreenSharing;
+					existing.screenShareTrack = participant.screenShareTrack;
 					this.emit("participant-updated", {
 						participantId: participant.id,
 						participant: existing,
@@ -526,6 +571,7 @@ export class Room extends EventEmitter<RoomEvents> {
 		try {
 			await this.rtkClient.self.disableScreenShare();
 			this._localParticipant.isScreenSharing = false;
+			this._localParticipant.screenShareTrack = undefined;
 		} catch (error) {
 			this.log("Failed to stop screen share:", error);
 		}

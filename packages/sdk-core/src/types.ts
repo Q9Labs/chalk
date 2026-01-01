@@ -257,6 +257,11 @@ export interface Participant {
 	 * Usually handled automatically, but available for custom audio processing
 	 */
 	audioTrack?: MediaStreamTrack;
+	/**
+	 * Screen share video MediaStreamTrack if sharing screen
+	 * Use with HTMLVideoElement.srcObject = new MediaStream([track])
+	 */
+	screenShareTrack?: MediaStreamTrack;
 	/** Camera is enabled and publishing */
 	videoEnabled: boolean;
 	/** Microphone is enabled (not muted) */

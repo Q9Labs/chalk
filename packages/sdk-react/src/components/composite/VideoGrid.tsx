@@ -14,6 +14,7 @@ export interface Participant {
   connectionQuality?: 0 | 1 | 2 | 3 | 4;
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
+  screenShareTrack?: MediaStreamTrack | null;
 }
 
 export interface VideoGridProps {

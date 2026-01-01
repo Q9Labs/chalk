@@ -26,6 +26,7 @@ export interface Participant {
   connectionQuality?: 1 | 2 | 3 | 4;
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
+  screenShareTrack?: MediaStreamTrack | null;
   role?: 'host' | 'co-host' | 'participant';
 }
 
@@ -216,7 +217,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
         >
           {showScreenShare ? (
             <ScreenShareView
-              screenShareTrack={screenSharer?.videoTrack || new MediaStreamTrack()}
+              screenShareTrack={screenSharer?.screenShareTrack || new MediaStreamTrack()}
               sharedByName={screenSharer?.displayName || 'Unknown'}
               participants={allParticipants}
             />

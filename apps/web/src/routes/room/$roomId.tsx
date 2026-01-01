@@ -15,13 +15,15 @@ import {
   useChat,
   useRecording,
   PreJoinLobby,
-  type JoinSettings
+  type JoinSettings,
+  ParticipantList,
+  ScreenShareView
 } from "@q9labs/chalk-react";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { 
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, 
   MoreHorizontal, PhoneOff, Hand, MessageSquare, 
-  Info, ThumbsUp, LayoutTemplate, X
+  Info, ThumbsUp, LayoutTemplate, X, Users
 } from 'lucide-react';
 
 export const Route = createFileRoute("/room/$roomId")({
@@ -60,7 +62,7 @@ function RoomPage() {
   const [isJoining, setIsJoining] = useState(false);
   
   // UI State
-  const [activePanel, setActivePanel] = useState<'chat' | 'info' | null>(null);
+  const [activePanel, setActivePanel] = useState<'chat' | 'info' | 'participants' | null>(null);
   const [layout, setLayout] = useState<'grid' | 'spotlight'>('grid');
   const [isHandRaised, setIsHandRaised] = useState(false);
   
@@ -372,6 +374,10 @@ function RoomPage() {
   const visibleParticipants = layout === 'grid' ? participants : participants.slice(0, 6);
   const mainParticipant = participants.find(p => p.id === activeSpeaker?.id) || participants[0] || localParticipant;
 
+  // Screen share detection
+  const screenSharer = participants.find(p => p.isScreenSharing);
+  const showScreenShare = !!screenSharer && screenSharer.screenShareTrack;
+
   return (
     <div className="flex flex-col h-screen bg-[#0D0D0D] font-sans text-white overflow-hidden relative">
       
@@ -384,7 +390,7 @@ function RoomPage() {
                 layout === 'spotlight' 
                   ? 'grid-cols-1' 
                   : participants.length <= 1 ? 'grid-cols-1'
-                  : participants.length <= 4 ? 'grid-cols-2'
+                  : participants.length <= 2 ? 'grid-cols-2'
                   : 'grid-cols-3'
             }`}>
                 {layout === 'spotlight' ? (
@@ -430,6 +436,24 @@ function RoomPage() {
                      <ChatPanel
                         messages={messages}
                         onSendMessage={(message) => sendMessage(message)}
+                        className="h-full border-none"
+                     />
+                  </div>
+               )}
+               {activePanel === 'participants' && (
+                  <div className="h-full rounded-[32px] overflow-hidden border border-white/10 shadow-2xl ring-1 ring-white/5">
+                     <ParticipantList
+                        participants={participants.map(p => ({
+                            id: p.id,
+                            displayName: p.displayName,
+                            isLocal: p.id === localParticipant?.id,
+                            isMuted: p.id === localParticipant?.id ? !isAudioEnabled : !(p as any).isAudioEnabled,
+                            role: p.id === localParticipant?.id ? 'host' : 'participant',
+                            avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.id}`
+                        }))}
+                        onClose={() => setActivePanel(null)}
+                        onAddPeople={() => {}}
+                        variant="sidebar"
                         className="h-full border-none"
                      />
                   </div>
@@ -534,6 +558,13 @@ function RoomPage() {
                       className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === 'info' ? 'bg-white/20' : 'bg-white/5 hover:bg-white/10'}`}
                       size="sm"
                       label="Info"
+                  />
+                  <ControlButton 
+                      icon={<Users size={20} />} 
+                      onClick={() => setActivePanel(p => p === 'participants' ? null : 'participants')}
+                      className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === 'participants' ? 'bg-white/20' : 'bg-white/5 hover:bg-white/10'}`}
+                      size="sm"
+                      label="People"
                   />
                   <ControlButton 
                       icon={<MessageSquare size={20} />} 
