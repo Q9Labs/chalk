@@ -301,7 +301,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	async startRecording(
 		roomId: string,
 	): Promise<ApiResponse<{ recordingId: string }>> {
-		this.log("startRecording - current token prefix:", this.token?.substring(0, 30) + "...");
 		return this.request<{ recordingId: string }>(
 			"POST",
 			`/api/v1/rooms/${roomId}/recordings/start`,

@@ -75,9 +75,6 @@ function RootComponent() {
 
 	return (
 		<ChalkProvider
-			tokenProvider={async () => {
-				return "demo-token";
-			}}
 			debug={true}
 		>
 			<div className={` overflow-hidden bg-background text-foreground ${theme}`}>

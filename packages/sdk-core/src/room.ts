@@ -181,7 +181,9 @@ export class Room extends EventEmitter<RoomEvents> {
 		});
 
 		this.wsClient.on("chat.message", (data) => {
+			this.log("[Chat] Room received chat.message:", JSON.stringify(data));
 			this._messages.push(data);
+			this.log("[Chat] Room emitting chat-message, total messages:", this._messages.length);
 			this.emit("chat-message", data);
 		});
 
@@ -469,6 +471,75 @@ export class Room extends EventEmitter<RoomEvents> {
 			},
 		);
 
+		// RTK Chat message handling
+		if (this.rtkClient.chat) {
+			this.log("[Chat] Setting up RTK chat listeners");
+
+			// Cast to unknown to access events that may not be in type defs
+			const chat = this.rtkClient.chat as unknown as {
+				on: (event: string, handler: (data: unknown) => void) => void;
+				messages?: unknown[];
+			};
+
+			// Log available chat properties
+			this.log("[Chat] RTK chat object keys:", Object.keys(this.rtkClient.chat));
+
+			// Helper to extract message from various payload formats
+			const extractMessage = (payload: unknown): ChatMessage | null => {
+				const rawData = payload as Record<string, unknown>;
+
+				// Skip non-add actions (like "delete", "pin", etc.)
+				if (rawData.action && rawData.action !== "add") {
+					this.log("[Chat] Skipping non-add action:", rawData.action);
+					return null;
+				}
+
+				// RTK/Dyte chatUpdate format: { action: "add", message: {...} }
+				// Extract the nested message object if present
+				const msgData = (rawData.message as Record<string, unknown>) ?? rawData;
+
+				const chatMessage: ChatMessage = {
+					id: (msgData.id as string) ?? crypto.randomUUID(),
+					senderId: (msgData.userId as string) ?? "unknown",
+					senderName: (msgData.displayName as string) ?? "Unknown",
+					content: (msgData.message as string) ?? (msgData.text as string) ?? (msgData.content as string) ?? "",
+					timestamp: new Date((msgData.time as string) ?? (msgData.timestamp as string) ?? Date.now()),
+				};
+
+				// Ensure content is a string
+				if (typeof chatMessage.content !== "string") {
+					this.log("[Chat] Warning: content is not a string, converting");
+					chatMessage.content = String(chatMessage.content);
+				}
+
+				return chatMessage;
+			};
+
+			// Handler for chat events
+			const chatEventHandler = (eventName: string) => (payload: unknown) => {
+				this.log(`[Chat] RTK ${eventName} received:`, JSON.stringify(payload));
+
+				const chatMessage = extractMessage(payload);
+				if (!chatMessage) {
+					return;
+				}
+
+				this.log("[Chat] Mapped to ChatMessage:", JSON.stringify(chatMessage));
+				this._messages.push(chatMessage);
+				this.emit("chat-message", chatMessage);
+			};
+
+			// Register handler for chatUpdate (main event used by Dyte/RTK)
+			try {
+				chat.on("chatUpdate", chatEventHandler("chatUpdate"));
+				this.log("[Chat] Registered handler for 'chatUpdate' event");
+			} catch (e) {
+				this.log("[Chat] Failed to register 'chatUpdate' event:", e);
+			}
+		} else {
+			this.log("[Chat] RTK chat module not available");
+		}
+
 		this.setupActiveSpeakerListener();
 	}
 
@@ -711,19 +782,27 @@ export class Room extends EventEmitter<RoomEvents> {
 
 	// Chat
 	sendMessage(content: string): void {
-		if (!content.trim()) return;
+		this.log("[Chat] Room.sendMessage called:", content);
+		if (!content.trim()) {
+			this.log("[Chat] Empty content, skipping");
+			return;
+		}
 
 		const trimmed = content.trim();
 
 		// Try WSClient first, fallback to RealtimeKit
 		if (this.wsClient) {
+			this.log("[Chat] Using WSClient to send");
 			this.wsClient.sendChatMessage(trimmed);
 		} else if (this.rtkClient) {
+			this.log("[Chat] Using RTK client to send");
 			try {
 				this.rtkClient.chat?.sendTextMessage(trimmed);
 			} catch {
-				this.log("Chat not available");
+				this.log("[Chat] Chat not available");
 			}
+		} else {
+			this.log("[Chat] No client available to send message!");
 		}
 	}
 

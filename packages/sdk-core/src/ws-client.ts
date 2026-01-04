@@ -148,7 +148,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private handleMessage(data: string): void {
 		try {
 			const rawMessage = JSON.parse(data);
-			this.log("Received:", rawMessage.type);
+			this.log("[WS Recv]", rawMessage.type, JSON.stringify(rawMessage.payload).substring(0, 200));
 
 			const payload = rawMessage.payload
 				? snakeToCamel<Record<string, unknown>>(rawMessage.payload)
@@ -174,11 +174,24 @@ export class WSClient extends EventEmitter<WSEvents> {
 					);
 					break;
 				case "chat.message": {
-					const chatPayload = payload as unknown as ChatMessage;
-					this.emit("chat.message", {
-						...chatPayload,
-						timestamp: new Date(chatPayload.timestamp as unknown as string),
-					});
+					// Map backend field names to frontend ChatMessage interface
+					this.log("[Chat] Received raw payload:", JSON.stringify(payload));
+					const rawPayload = payload as {
+						id: string;
+						participantId: string;
+						displayName: string;
+						content: string;
+						timestamp: string;
+					};
+					const chatMessage: ChatMessage = {
+						id: rawPayload.id,
+						senderId: rawPayload.participantId,
+						senderName: rawPayload.displayName,
+						content: rawPayload.content,
+						timestamp: new Date(rawPayload.timestamp),
+					};
+					this.log("[Chat] Emitting chat.message:", JSON.stringify(chatMessage));
+					this.emit("chat.message", chatMessage);
 					break;
 				}
 				case "reaction": {
@@ -351,14 +364,18 @@ export class WSClient extends EventEmitter<WSEvents> {
 					? camelToSnake(message.payload)
 					: message.payload,
 			};
-			this.ws.send(JSON.stringify(transformedMessage));
+			const jsonMsg = JSON.stringify(transformedMessage);
+			this.log("[WS Send]", jsonMsg);
+			this.ws.send(jsonMsg);
 		} else {
-			this.log("Cannot send message - not connected");
+			this.log("[WS Send] FAILED - not connected, state:", this.ws?.readyState);
 		}
 	}
 
 	// Client-to-server actions
 	sendChatMessage(content: string): void {
+		this.log("[Chat] Sending message:", content);
+		this.log("[Chat] WebSocket state:", this.ws?.readyState, "OPEN=", WebSocket.OPEN);
 		this.send({ type: "chat.send", payload: { content } });
 	}
 

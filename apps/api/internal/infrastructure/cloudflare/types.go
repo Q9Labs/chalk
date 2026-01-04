@@ -4,10 +4,11 @@ import "time"
 
 // Response is the generic Cloudflare API response wrapper
 type Response[T any] struct {
-	Success bool           `json:"success"`
-	Data    T              `json:"data"`
-	Errors  []APIError     `json:"errors,omitempty"`
-	Result  *T             `json:"result,omitempty"` // Some endpoints use "result" instead of "data"
+	Success  bool           `json:"success"`
+	Data     T              `json:"data"`
+	Errors   []APIError     `json:"errors,omitempty"`
+	Messages []string       `json:"messages,omitempty"`
+	Result   *T             `json:"result,omitempty"` // Some endpoints use "result" instead of "data"
 }
 
 // APIError represents a Cloudflare API error

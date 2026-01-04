@@ -235,13 +235,23 @@ func (c *Client) StartRecording(ctx context.Context, meetingID string, req Start
 	}
 	defer resp.Body.Close()
 
+	// Read raw body for better error reporting
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var result Response[Recording]
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	if !result.Success {
-		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+		return nil, fmt.Errorf("cloudflare error (errors=%v, messages=%v): raw=%s", result.Errors, result.Messages, string(bodyBytes))
 	}
 
 	return &result.Data, nil
