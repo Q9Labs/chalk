@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "tw-animate-css";
+@import "tw-animate-css"; 
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
 
@@ -55,18 +55,18 @@ code {
 }
 
 .dark {
-  --background: oklch(0.13 0.028 261.692);
+  --background: #050505;
   --foreground: oklch(0.985 0.002 247.839);
-  --card: oklch(0.21 0.034 264.665);
+  --card: #1a1a1a;
   --card-foreground: oklch(0.985 0.002 247.839);
-  --popover: oklch(0.21 0.034 264.665);
+  --popover: #1a1a1a;
   --popover-foreground: oklch(0.985 0.002 247.839);
-  --primary: oklch(0.68 0.15 237);
-  --primary-foreground: oklch(0.29 0.06 243);
+  --primary: #6E00E6;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.278 0.033 256.848);
-  --muted-foreground: oklch(0.707 0.022 261.325);
+  --muted-foreground: oklch(71.664% 0.02027 46.568);
   --accent: oklch(0.278 0.033 256.848);
   --accent-foreground: oklch(0.985 0.002 247.839);
   --destructive: oklch(0.704 0.191 22.216);

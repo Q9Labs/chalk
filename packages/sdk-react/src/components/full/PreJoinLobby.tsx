@@ -1,26 +1,26 @@
 import { useState, useEffect, memo } from 'react';
 import { 
-  ArrowLeft, 
-  Pencil, 
   Mic, 
   MicOff, 
   Video, 
   VideoOff,
-  Settings,
+  MoreVertical,
+  ChevronDown,
   X
 } from 'lucide-react';
 import { 
-  Input, 
   Spinner, 
   Toast,
   Avatar,
   VideoTile,
-  ControlButton
+  ControlButton,
+  Input
 } from '../atomic';
 import { 
   DeviceSelector 
 } from '../composite';
 import { cn } from '../../utils/cn';
+import Logo from '../../../../../apps/web/public/logo.png';
 
 export interface JoinSettings {
   displayName: string;
@@ -53,6 +53,7 @@ export interface PreJoinLobbyProps {
   
   initialVideoEnabled?: boolean;
   initialAudioEnabled?: boolean;
+  initialShowSettings?: boolean;
   
   isLoading?: boolean;
   error?: string;
@@ -62,9 +63,8 @@ export interface PreJoinLobbyProps {
 
 function PreJoinLobbyBase({
   roomName,
-  userName = '',
+  userName = 'Guest',
   onJoin,
-  onCancel,
   videoTrack,
   audioLevel = 0,
   videoDevices = [],
@@ -78,6 +78,7 @@ function PreJoinLobbyBase({
   onAudioOutputChange = () => {},
   initialVideoEnabled = true,
   initialAudioEnabled = true,
+  initialShowSettings = false,
   isLoading = false,
   error,
   className,
@@ -85,7 +86,7 @@ function PreJoinLobbyBase({
   const [displayName, setDisplayName] = useState(userName);
   const [isVideoEnabled, setIsVideoEnabled] = useState(initialVideoEnabled);
   const [isAudioEnabled, setIsAudioEnabled] = useState(initialAudioEnabled);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(initialShowSettings);
 
   useEffect(() => {
     if (userName && !displayName) setDisplayName(userName);
@@ -102,6 +103,7 @@ function PreJoinLobbyBase({
       selectedAudioInput,
       selectedAudioOutput,
     });
+    
   };
 
   const hasVideoDevices = videoDevices.length > 0;
@@ -111,24 +113,30 @@ function PreJoinLobbyBase({
   // Toggle handlers
   const toggleVideo = () => setIsVideoEnabled(!isVideoEnabled);
   const toggleAudio = () => setIsAudioEnabled(!isAudioEnabled);
+  const toggleSettings = () => setShowSettings(!showSettings);
+
+  const toggleSettingsModal = () => {
+    console.log('toggleSettings called');
+    setShowSettings(!showSettings);
+  };
 
   return (
     <div className={cn(
-      "min-h-screen bg-[#0D0D0D] text-white font-sans flex flex-col p-6 overflow-hidden", 
+      "min-h-screen bg-background text-foreground font-sans flex flex-col overflow-hidden", 
       className
     )}>
        {/* Settings Modal/Overlay */}
        {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[#1a1a1a] rounded-2xl border border-white/10 p-6 w-full max-w-md shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 p-4">
+          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 bg-background">
             <button 
               onClick={() => setShowSettings(false)}
-              className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors"
+              className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground"
             >
-              <X size={20} className="text-gray-400" />
+              <X size={20} />
             </button>
             
-            <h2 className="text-xl font-bold text-white mb-6">Media Settings</h2>
+            <h2 className="text-xl font-bold text-foreground mb-6">Media Settings</h2>
             
             <div className="space-y-4">
                {hasVideoDevices && (
@@ -169,7 +177,7 @@ function PreJoinLobbyBase({
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setShowSettings(false)}
-                className="px-4 py-2 bg-[#6E00E6] text-white rounded-lg hover:bg-[#5a00bd] transition-colors"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
               >
                 Done
               </button>
@@ -179,33 +187,28 @@ function PreJoinLobbyBase({
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center p-6 w-full max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#A020F0] rounded-[14px] flex items-center justify-center transform -rotate-3 shadow-lg">
-                  <Pencil className="text-white w-5 h-5" fill="white" />
-              </div>
-              <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">Chalk</span>
-              {roomName && (
-                <div className="ml-4 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-gray-300">
-                   {roomName}
-                </div>
-              )}
+              <img 
+                src={Logo} 
+                alt="Chalk logo" 
+                className="h-8 w-auto"
+                draggable={false}
+              />
+              <span className="text-xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent hidden sm:block">Chalk</span>
           </div>
           
-          <div className="flex items-center gap-3">
-              <Avatar name={displayName || "Guest"} size="md" className="!w-10 !h-10 border-2 border-white/10" />
-              <div className="flex flex-col">
-                  <span className="font-bold text-sm leading-none">{displayName || "Guest"}</span>
-                  <span className="text-xs text-gray-400 font-medium mt-1">Participant</span>
-              </div>
+          <div className="flex items-center gap-3 bg-muted/50 px-3 py-1.5 rounded-full border border-border hover:bg-muted transition-colors cursor-pointer">
+              <Avatar name={displayName || "Guest"} size="xs" className="!w-6 !h-6" />
+              <span className="font-medium text-sm text-foreground">{displayName || "Guest"}</span>
+              <ChevronDown size={14} className="text-muted-foreground" />
           </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center gap-20">
-          
+        <div className="flex-1 w-full max-w-5xl mx-auto flex items-center justify-center gap-12 lg:gap-24 px-6 pb-12">
           {/* Left Column: Video Preview */}
-          <div className="relative w-[640px] h-[400px] bg-[#1a1a1a] rounded-[32px] overflow-hidden border border-white/5 shadow-2xl flex flex-col group">
+          <div className="w-full max-w-xl lg:w-[640px]">
               <VideoTile 
                   participant={{
                       id: 'lobby-me',
@@ -214,52 +217,67 @@ function PreJoinLobbyBase({
                       isLocal: true,
                   }}
                   videoTrack={videoTrack}
-                  className="w-full h-full bg-[#1a1a1a]"
+                  className="w-full bg-muted/50 aspect-video rounded-2xl border border-border overflow-hidden shadow-2xl"
                   showStatus={false}
                   showName={false}
                   showAvatar={false}
                   aspectRatio="16:9"
               >
                   {/* Overlay Controls */}
-                  <div className="absolute top-6 left-6 z-10">
-                      <div className="flex items-center gap-2 bg-[#1a1a1a]/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/5">
+                  
+                  {/* Top Left: Name Badge */}
+                  <div className="absolute top-4 left-4 z-10">
+                      <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-border">
                           <div className={cn(
                             "w-2 h-2 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]",
                             isAudioEnabled ? "bg-green-500" : "bg-red-500"
                           )}></div>
-                          <span className="text-sm font-medium text-white/90">{displayName || "You"}</span>
+                          <span className="text-sm font-medium text-foreground">{displayName || "You"}</span>
                       </div>
                   </div>
 
-                  <div className="absolute top-6 right-6 z-10">
+                  {/* Top Right: Kebab Menu */}
+                  
+                  <div className="absolute top-4 right-4 z-20">
                        <ControlButton 
-                           icon={<Settings size={18} />}
-                           label="Settings"
-                           className="bg-[#1a1a1a]/60 backdrop-blur-md text-white/80 hover:bg-white/10 border border-white/5"
+                           icon={<MoreVertical size={18} />}
+                           label=""
                            size="sm"
-                           onClick={() => setShowSettings(true)}
-                       />
+                           onClick={toggleSettingsModal}
+                        />
                   </div>
+                  
 
+                  {/* Center State: Camera Off */}
                   {!isVideoEnabled && (
-                      <div className="absolute inset-0 flex items-center justify-center z-0">
-                          <span className="text-xl font-medium text-white/60">Camera Is Off</span>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-4">
+                          <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-2">
+                             <Avatar name={displayName} size="xl" className="!w-20 !h-20 text-3xl opacity-50" />
+                          </div>
+                          <span className="text-lg font-medium text-muted-foreground">Camera Is Off</span>
                       </div>
                   )}
 
+                  {/* Bottom Center: Media Controls */}
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 z-20">
                       <ControlButton 
                           icon={isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
                           label={isAudioEnabled ? "Mute" : "Unmute"}
                           onClick={toggleAudio}
-                          className={`backdrop-blur-md border border-white/5 ${!isAudioEnabled ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-[#1a1a1a]/80 text-white hover:bg-white/10'}`}
+                          className={cn(
+                            "backdrop-blur-xl border border-border w-12 h-12 rounded-full transition-all duration-300",
+                            !isAudioEnabled ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border-transparent' : 'bg-black/40 text-foreground hover:bg-black/60'
+                          )}
                           size="lg"
                       />
                       <ControlButton 
                           icon={isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
                           label={isVideoEnabled ? "Stop Video" : "Start Video"}
                           onClick={toggleVideo}
-                          className={`backdrop-blur-md border border-white/5 ${!isVideoEnabled ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-[#1a1a1a]/80 text-white hover:bg-white/10'}`}
+                          className={cn(
+                            "backdrop-blur-xl border border-border w-12 h-12 rounded-full transition-all duration-300",
+                            !isVideoEnabled ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border-transparent' : 'bg-black/40 text-foreground hover:bg-black/60'
+                          )}
                           size="lg"
                       />
                   </div>
@@ -267,10 +285,10 @@ function PreJoinLobbyBase({
           </div>
 
           {/* Right Column: Join Actions */}
-          <div className="flex flex-col items-center text-center space-y-8 max-w-sm w-full">
-              <div className="space-y-3">
-                  <h1 className="text-4xl font-semibold tracking-tight text-white">Ready To Join?</h1>
-                  <p className="text-gray-400 font-medium">You'll be in a waiting room before entering the call</p>
+          <div className="flex flex-col items-start text-left space-y-8 w-full max-w-md">
+              <div className="space-y-2 text-center">
+                  <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight text-foreground">Ready To Join?</h1>
+                  <p className="text-muted-foreground font-medium text-lg">You'll be in a waiting room before entering the call</p>
               </div>
 
               <div className="w-full space-y-4">
@@ -283,58 +301,49 @@ function PreJoinLobbyBase({
                       placeholder="Enter your name"
                       fullWidth
                       disabled={isLoading}
-                      className="h-12 text-lg text-center bg-[#1a1a1a] border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500/50"
+                      className="h-12 text-lg text-center bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-primary/50"
                     />
                   </div>
 
                   <button 
                       onClick={handleJoin}
                       disabled={!displayName.trim() || isLoading}
-                      className="w-full py-4 bg-[#6E00E6] hover:bg-[#5a00bd] text-white rounded-full font-semibold text-lg transition-all shadow-lg hover:shadow-purple-500/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      className="w-full py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full font-semibold text-lg transition-all shadow-lg hover:shadow-primary/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                       {isLoading ? <Spinner size="sm" className="mr-2" /> : null}
                       {isLoading ? "Joining..." : "Ask to join"}
                   </button>
 
-                  {onCancel && (
-                      <button 
-                          onClick={onCancel}
-                          disabled={isLoading}
-                          className="w-full py-4 bg-[#1a1a1a] hover:bg-[#252525] text-white rounded-full font-medium flex items-center justify-center gap-2 border border-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                          <ArrowLeft size={18} />
-                          Back
-                      </button>
-                  )}
+                  <button 
+                      className="w-full py-4 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-full font-medium flex items-center justify-center gap-2 transition-all active:scale-95"
+                  >
+                      Other ways to join
+                      <ChevronDown size={16} className="text-secondary-foreground/70" />
+                  </button>
               </div>
 
-              {/* Placeholder for other participants - static as per design request */}
-              <div className="flex items-center gap-4 pt-4">
+              {/* Participants Stack */}
+              {/* <div className="flex items-center gap-4 pt-2">
                    <div className="flex -space-x-3">
                        {[1, 2, 3].map(i => (
-                           <div key={i} className="rounded-full border-2 border-[#0D0D0D] bg-gray-700">
+                           <div key={i} className="rounded-full border-2 border-background bg-muted">
                                <Avatar 
                                   name={`User ${i}`}
                                   src={`https://i.pravatar.cc/100?img=${i+10}`}
                                   size="md"
-                                  className="!w-10 !h-10"
+                                  className="!w-9 !h-9"
                                />
                            </div>
                        ))}
-                       <div className="relative">
-                          <Avatar 
-                              name="More"
-                              src="https://i.pravatar.cc/100?img=15"
-                              size="md"
-                              className="!w-10 !h-10 border-2 border-[#0D0D0D] opacity-50"
-                          />
-                          <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">+3</span>
+                       <div className="relative rounded-full border-2 border-background bg-card">
+                          <div className="w-9 h-9 flex items-center justify-center rounded-full bg-card text-xs font-bold text-foreground">
+                             +3
+                          </div>
                        </div>
                    </div>
-                   <span className="text-gray-300 font-medium text-sm">6 others are already here</span>
-              </div>
+                   <span className="text-muted-foreground font-medium text-sm">6 others are already here</span>
+              </div> */}
           </div>
-
       </div>
       
       {error && (

@@ -80,7 +80,7 @@ export const DeviceSelector = React.memo(({
         </div>
 
         {type === 'audioinput' && (
-          <div className="h-10 w-10 flex items-center justify-center bg-chalk-bg-subtle rounded-md border border-chalk-border-subtle shrink-0">
+          <div className="h-10 w-10 flex items-center justify-center bg-chalk-bg-subtle rounded-md shrink-0">
             <AudioIndicator 
               level={audioLevel} 
               size="sm"
@@ -96,7 +96,6 @@ export const DeviceSelector = React.memo(({
                 onClick={playTestSound}
 
                disabled={disabled}
-               variant="outline"
                size="md"
                aria-label="Test speakers"
              />
