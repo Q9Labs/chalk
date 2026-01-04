@@ -87,7 +87,6 @@ export const ParticipantList = React.memo(({
       <div className="flex items-center gap-3 min-w-0">
         <div className="relative">
           <Avatar 
-            src={participant.avatarUrl} 
             name={participant.displayName}
             size="sm"
             className={cn(variant === 'sidebar' && "border border-white/10")}

@@ -91,7 +91,7 @@ export const ChatPanel = React.memo(({
                 key={msg.id}
                 content={msg.content}
                 senderName={msg.senderName}
-                senderAvatar={`https://i.pravatar.cc/150?u=${msg.senderId}`}
+                // senderAvatar={`https://i.pravatar.cc/150?u=${msg.senderId}`}
                 timestamp={msg.timestamp}
                 isLocal={msg.isLocal}
             />
