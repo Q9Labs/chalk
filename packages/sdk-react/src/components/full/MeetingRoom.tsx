@@ -215,10 +215,10 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
           className="flex-1 relative bg-neutral-950 flex items-center justify-center p-4"
           data-tour="video-grid"
         >
-          {showScreenShare ? (
+          {showScreenShare && screenSharer?.screenShareTrack ? (
             <ScreenShareView
-              screenShareTrack={screenSharer?.screenShareTrack || new MediaStreamTrack()}
-              sharedByName={screenSharer?.displayName || 'Unknown'}
+              screenShareTrack={screenSharer.screenShareTrack}
+              sharedByName={screenSharer.displayName || 'Unknown'}
               participants={allParticipants}
             />
           ) : (

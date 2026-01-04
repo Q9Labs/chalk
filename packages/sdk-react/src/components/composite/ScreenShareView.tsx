@@ -26,11 +26,32 @@ export const ScreenShareView = React.memo(({
 
   useEffect(() => {
     const videoEl = videoRef.current;
-    if (!videoEl) return;
+    if (!videoEl || !screenShareTrack) return;
 
-    const stream = new MediaStream([screenShareTrack]);
-    videoEl.srcObject = stream;
-    videoEl.play().catch(() => {});
+    // Validate track is active and not ended
+    if (screenShareTrack.readyState === 'ended') {
+      console.warn('[ScreenShareView] Screen share track is ended');
+      return;
+    }
+
+    try {
+      const stream = new MediaStream([screenShareTrack]);
+      videoEl.srcObject = stream;
+      videoEl.play().catch((error) => {
+        console.error('[ScreenShareView] Failed to play video:', error);
+      });
+    } catch (error) {
+      console.error('[ScreenShareView] Failed to create MediaStream:', error);
+    }
+
+    // Cleanup function
+    return () => {
+      if (videoEl.srcObject) {
+        const stream = videoEl.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoEl.srcObject = null;
+      }
+    };
   }, [screenShareTrack]);
 
   return (

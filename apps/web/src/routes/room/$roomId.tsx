@@ -20,10 +20,10 @@ import {
   ScreenShareView
 } from "@q9labs/chalk-react";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { 
-  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, 
-  MoreHorizontal, PhoneOff, Hand, MessageSquare, 
-  Info, ThumbsUp, LayoutTemplate, X, Users
+import {
+  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff,
+  MoreHorizontal, PhoneOff, Hand, MessageSquare,
+  Info, ThumbsUp, LayoutTemplate, X, Users, Circle, Square
 } from 'lucide-react';
 
 export const Route = createFileRoute("/room/$roomId")({
@@ -51,8 +51,8 @@ function RoomPage() {
   const { messages, sendMessage } = useChat();
   const { isRecording, durationSeconds: recordingDuration, startRecording, stopRecording } = useRecording();
 
-  // Effects
-  useSoundEffects({ enabled: true });
+  // Effects - auto-subscribe plays sounds on room events
+  const { playClick, playHandRaise, playRecordingStart, playRecordingStop } = useSoundEffects({ enabled: true, autoSubscribe: true });
   useAnnouncer({});
 
   // Local State
@@ -497,50 +497,65 @@ function RoomPage() {
 
               {/* Center: Main Controls */}
               <div className="flex items-center gap-2 md:gap-4 bg-white/3 backdrop-blur-3xl border border-white/10 rounded-full px-4 md:px-6 py-2 md:py-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] mx-auto ring-1 ring-white/5 transition-all hover:bg-white/10 hover:shadow-[0_8px_40px_0_rgba(0,0,0,0.45)]">
-                    <ControlButton 
+                    <ControlButton
                         icon={isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
-                        onClick={toggleAudio}
+                        onClick={() => { playClick(); toggleAudio(); }}
                         className={`transition-all duration-300 ${!isAudioEnabled ? 'bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
                         label={isAudioEnabled ? "Mute" : "Unmute"}
                     />
-                    <ControlButton 
+                    <ControlButton
                         icon={isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
-                        onClick={toggleVideo}
+                        onClick={() => { playClick(); toggleVideo(); }}
                         className={`transition-all duration-300 ${!isVideoEnabled ? 'bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
                         label={isVideoEnabled ? "Stop Video" : "Start Video"}
                     />
-                    <ControlButton 
+                    <ControlButton
                         icon={isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
-                        onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+                        onClick={() => { playClick(); isScreenSharing ? stopScreenShare() : startScreenShare(); }}
                         className={`transition-all duration-300 ${isScreenSharing ? 'bg-purple-500/80 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
                         label="Share Screen"
                     />
                     <div className="w-px h-8 bg-white/10 mx-1" />
-                    <ControlButton 
+                    <ControlButton
+                        icon={isRecording ? <Square size={18} fill="currentColor" /> : <Circle size={20} fill="currentColor" />}
+                        onClick={() => {
+                            if (isRecording) {
+                                playRecordingStop();
+                                stopRecording();
+                            } else {
+                                playRecordingStart();
+                                startRecording();
+                            }
+                        }}
+                        className={`transition-all duration-300 ${isRecording ? 'bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse' : 'bg-transparent hover:bg-white/10 text-red-400'}`}
+                        size="md"
+                        label={isRecording ? "Stop Recording" : "Record"}
+                    />
+                    <ControlButton
                         icon={<LayoutTemplate size={20} />}
-                        onClick={() => setLayout(l => l === 'grid' ? 'spotlight' : 'grid')} 
+                        onClick={() => { playClick(); setLayout(l => l === 'grid' ? 'spotlight' : 'grid'); }}
                         className={`transition-all duration-300 ${layout === 'spotlight' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'} text-white`}
                         size="md"
                         label={layout === 'grid' ? "Spotlight" : "Grid"}
                     />
-                    <ControlButton 
+                    <ControlButton
                         icon={<Hand size={20} />}
-                        onClick={() => setIsHandRaised(!isHandRaised)} 
+                        onClick={() => { playHandRaise(); setIsHandRaised(!isHandRaised); }}
                         className={`transition-all duration-300 ${isHandRaised ? 'bg-yellow-500/80 text-white shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
                         label="Raise Hand"
                     />
-                    <ControlButton 
+                    <ControlButton
                         icon={<MoreHorizontal size={20} />}
-                        onClick={() => {}} 
+                        onClick={() => { playClick(); }}
                         className="bg-transparent hover:bg-white/10 text-white transition-all duration-300"
                         size="md"
                         label="More"
                     />
-                    <ControlButton 
+                    <ControlButton
                         icon={<PhoneOff size={20} />}
                         onClick={handleLeave}
                         className="bg-red-500/90 text-white hover:bg-red-600 shadow-[0_4px_15px_rgba(239,68,68,0.4)] ml-2 backdrop-blur-md border border-red-400/20"

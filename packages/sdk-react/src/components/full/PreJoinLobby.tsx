@@ -62,7 +62,7 @@ export interface PreJoinLobbyProps {
 }
 
 function PreJoinLobbyBase({
-  roomName,
+  roomName: _roomName,
   userName = 'Guest',
   onJoin,
   videoTrack,
@@ -113,7 +113,6 @@ function PreJoinLobbyBase({
   // Toggle handlers
   const toggleVideo = () => setIsVideoEnabled(!isVideoEnabled);
   const toggleAudio = () => setIsAudioEnabled(!isAudioEnabled);
-  const toggleSettings = () => setShowSettings(!showSettings);
 
   const toggleSettingsModal = () => {
     console.log('toggleSettings called');

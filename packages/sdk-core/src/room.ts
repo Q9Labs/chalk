@@ -450,12 +450,21 @@ export class Room extends EventEmitter<RoomEvents> {
 				const participant = this.mapRTKParticipant(rtkParticipant);
 				const existing = this._participants.get(participant.id);
 				if (existing) {
+					this.log("Participant screen share update:", participant.id, participant.isScreenSharing);
 					existing.isScreenSharing = participant.isScreenSharing;
 					existing.screenShareTrack = participant.screenShareTrack;
+					
+					// Validate screen share track
+					if (participant.isScreenSharing && !participant.screenShareTrack) {
+						this.log("Warning: Screen sharing enabled but no track available for", participant.id);
+					}
+					
 					this.emit("participant-updated", {
 						participantId: participant.id,
 						participant: existing,
 					});
+				} else {
+					this.log("Warning: Screen share update for unknown participant:", participant.id);
 				}
 			},
 		);

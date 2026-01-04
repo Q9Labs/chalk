@@ -270,7 +270,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		return {
 			participantId: data.participantId,
 			tokens: {
-				accessToken: data.accessToken ?? data.authToken,
+				// Demo mode returns 'token', standard mode returns 'accessToken'
+				accessToken: data.token ?? data.accessToken ?? data.authToken,
 				refreshToken: data.refreshToken,
 				rtcToken: data.authToken,
 				expiresAt: data.expiresAt,
@@ -300,6 +301,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	async startRecording(
 		roomId: string,
 	): Promise<ApiResponse<{ recordingId: string }>> {
+		this.log("startRecording - current token prefix:", this.token?.substring(0, 30) + "...");
 		return this.request<{ recordingId: string }>(
 			"POST",
 			`/api/v1/rooms/${roomId}/recordings/start`,

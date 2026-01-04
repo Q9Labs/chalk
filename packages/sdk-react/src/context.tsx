@@ -19,6 +19,7 @@ import {
 	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 
@@ -65,6 +66,7 @@ export function ChalkProvider({
 	const [rtkMeeting, setRtkMeeting] = useState<RealtimeKitClient | null>(null);
 	const [connectionStatus, setConnectionStatus] =
 		useState<RoomStatus>("disconnected");
+	const joiningLock = useRef(false);
 
 	useEffect(() => {
 		const config: ChalkClientConfig = {
@@ -88,28 +90,38 @@ export function ChalkProvider({
 		};
 	}, [apiKey, token, tokenProvider, apiUrl, wsUrl, debug]);
 
-	// Join room
+	// Join room (with lock to prevent double joins)
 	const joinRoom = useCallback(
 		async (roomId: string, config: RoomConfig): Promise<Room> => {
 			if (!client) {
 				throw new Error("ChalkClient not initialized");
 			}
 
-			const newRoom = await client.joinRoom(roomId, config);
-			setRoom(newRoom);
+			// Prevent concurrent join attempts
+			if (joiningLock.current) {
+				throw new Error("Join already in progress");
+			}
+			joiningLock.current = true;
 
-			// Get the underlying RTK meeting for the provider
-			setRtkMeeting(newRoom?.rtkMeeting ?? null);
+			try {
+				const newRoom = await client.joinRoom(roomId, config);
+				setRoom(newRoom);
 
-			// Listen for status changes
-			newRoom.on("status-changed", (status) => {
-				setConnectionStatus(status);
-			});
+				// Get the underlying RTK meeting for the provider
+				setRtkMeeting(newRoom?.rtkMeeting ?? null);
 
-			// Set initial status
-			setConnectionStatus(newRoom.status);
+				// Listen for status changes
+				newRoom.on("status-changed", (status) => {
+					setConnectionStatus(status);
+				});
 
-			return newRoom;
+				// Set initial status
+				setConnectionStatus(newRoom.status);
+
+				return newRoom;
+			} finally {
+				joiningLock.current = false;
+			}
 		},
 		[client],
 	);

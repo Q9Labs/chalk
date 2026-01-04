@@ -99,7 +99,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 		if (this.wsUrl) {
 			this.log("Initializing WebSocket signaling");
 			const wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
-			const room = new Room(roomId, wsClient, this.debug);
+			// Use the database room ID (UUID) from response, not user-provided name
+			const room = new Room(roomInfo.id, wsClient, this.debug);
 			room._setLocalParticipant(localParticipant);
 			room._setInfo(roomInfo);
 			room._setTokens(tokens);
@@ -126,7 +127,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
 		this.log("RealtimeKit initialized, creating Room");
 
-		const room = new Room(roomId, rtkClient, this.debug);
+		// Use the database room ID (UUID) from response, not user-provided name
+		const room = new Room(roomInfo.id, rtkClient, this.debug);
 		room._setLocalParticipant(localParticipant);
 		room._setInfo(roomInfo);
 		room._setTokens(tokens);
