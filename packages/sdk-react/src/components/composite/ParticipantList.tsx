@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, MoreVertical, Search, Mic, MicOff, UserX, Crown, UserPlus, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, MoreVertical, Search, Mic, MicOff, UserX, Crown, UserPlus, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 import { 
   Avatar, 
   AudioIndicator, 
@@ -27,6 +27,7 @@ export interface ParticipantListProps {
   onMuteParticipant?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
   onMakeHost?: (id: string) => void;
+  onMakeCoHost?: (id: string) => void;
   onAddPeople?: () => void;
   canManageParticipants?: boolean;
   searchable?: boolean;
@@ -41,6 +42,7 @@ export const ParticipantList = React.memo(({
   onMuteParticipant,
   onRemoveParticipant,
   onMakeHost,
+  onMakeCoHost,
   onAddPeople,
   canManageParticipants = false,
   searchable = true,
@@ -205,6 +207,24 @@ export const ParticipantList = React.memo(({
                     >
                       <Crown className="w-4 h-4" />
                       Make Host
+                    </button>
+                  )}
+
+                  {onMakeCoHost && participant.role === 'participant' && (
+                    <button
+                      onClick={() => {
+                        onMakeCoHost(participant.id);
+                        setActiveMenuId(null);
+                      }}
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
+                        variant === 'sidebar'
+                          ? "text-gray-200 hover:bg-white/10"
+                          : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
+                      )}
+                    >
+                      <Shield className="w-4 h-4" />
+                      Make Co-Host
                     </button>
                   )}
 

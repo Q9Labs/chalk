@@ -75,10 +75,25 @@ function RoomPage() {
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState<Array<{ id: string; emoji: string; participantName: string }>>([]);
 
-  // Guided Tour State
-  const [showTour, setShowTour] = useState(() => {
-    return !localStorage.getItem('chalk_tour_completed');
-  });
+  // CRITICAL: Initialize with empty string for SSR, then hydrate from localStorage
+  const [storedUserName, setStoredUserName] = useState<string>("");
+  
+  // CRITICAL: Load from localStorage AFTER mount to prevent hydration mismatch
+  useEffect(() => {
+    // This only runs on client after hydration is complete
+    const savedName = sessionStorage.getItem('chalk_display_name');
+    if (savedName) {
+      setStoredUserName(savedName);
+    }
+  }, []);
+
+  // CRITICAL: Hydrate tour state AFTER mount (not during SSR)
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    // Only access localStorage after component is mounted (post-hydration)
+    const isCompleted = typeof window !== 'undefined' && localStorage.getItem('chalk_tour_completed');
+    setShowTour(!isCompleted);
+  }, []);
 
   // Notifications State
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -141,7 +156,9 @@ function RoomPage() {
     const currentCount = messages.length;
     const previousCount = lastMessageCountRef.current;
 
-    if (currentCount > previousCount && previousCount > 0) {
+    // Only notify for NEW messages (not initial load)
+    // First message: previousCount=0, currentCount=1 → should notify
+    if (currentCount > previousCount) {
       const newMessages = messages.slice(previousCount);
 
       for (const msg of newMessages) {
@@ -174,7 +191,8 @@ function RoomPage() {
     }
   }, [activePanel]);
 
-  const joinAttempted = useRef(false);
+  // CRITICAL: Use ref with timestamp to prevent race conditions on rapid retries
+  const joinAttempted = useRef<{ timestamp: number; attemptId: string } | null>(null);
 
   // Local Preview Tracks & Devices for Lobby
   const [previewVideoTrack, setPreviewVideoTrack] = useState<MediaStreamTrack | null>(null);
@@ -230,40 +248,65 @@ function RoomPage() {
     };
   }, [hasJoined]);
 
+  // Track refs to handle cleanup without race conditions
+  const previewStreamRef = useRef<MediaStream | null>(null);
+
   // Initialize Preview Stream for Lobby
   useEffect(() => {
+    // When joined, cleanup preview and exit early
     if (hasJoined) {
-       if (previewStream) {
-         previewStream.getTracks().forEach(t => t.stop());
-         setPreviewStream(null);
-         setPreviewVideoTrack(null);
-         setPreviewAudioTrack(null);
+       const stream = previewStreamRef.current;
+       if (stream) {
+         stream.getTracks().forEach(t => t.stop());
+         previewStreamRef.current = null;
        }
+       // Clear state synchronously
+       setPreviewStream(null);
+       setPreviewVideoTrack(null);
+       setPreviewAudioTrack(null);
        return;
     }
 
     let mounted = true;
-    
+    let currentStream: MediaStream | null = null;
+
     const startPreview = async () => {
         try {
-            if (previewStream) {
-                previewStream.getTracks().forEach(t => t.stop());
+            // Stop any existing preview before starting new one
+            const oldStream = previewStreamRef.current;
+            if (oldStream) {
+                oldStream.getTracks().forEach(t => t.stop());
+                previewStreamRef.current = null;
+                // Clear state immediately to prevent stale track usage
+                setPreviewVideoTrack(null);
+                setPreviewAudioTrack(null);
             }
 
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : true, 
-                audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true 
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : true,
+                audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true
             });
-            
+
             if (mounted) {
+                currentStream = stream;
+                previewStreamRef.current = stream;
+
+                const videoTrack = stream.getVideoTracks()[0] || null;
+                const audioTrack = stream.getAudioTracks()[0] || null;
+
                 setPreviewStream(stream);
-                setPreviewVideoTrack(stream.getVideoTracks()[0] || null);
-                setPreviewAudioTrack(stream.getAudioTracks()[0] || null);
+                setPreviewVideoTrack(videoTrack);
+                setPreviewAudioTrack(audioTrack);
             } else {
+                // Component unmounted during async operation
                 stream.getTracks().forEach(t => t.stop());
             }
         } catch (err) {
             console.error("Failed to get local stream", err);
+            if (mounted) {
+                setPreviewVideoTrack(null);
+                setPreviewAudioTrack(null);
+            }
         }
     };
 
@@ -273,6 +316,10 @@ function RoomPage() {
 
     return () => {
         mounted = false;
+        // Cleanup on unmount or dependency change
+        if (currentStream) {
+            currentStream.getTracks().forEach(t => t.stop());
+        }
     };
   }, [hasJoined, selectedVideoDevice, selectedAudioInput]);
 
@@ -285,43 +332,72 @@ function RoomPage() {
       };
   }, [previewStream]);
 
-
+  // CRITICAL: Handle join with proper sequencing and race condition prevention
   const handleJoinRoom = async (settings: JoinSettings) => {
-    if (joinAttempted.current) return;
-    joinAttempted.current = true;
+    // Generate unique attempt ID to prevent race conditions
+    const attemptId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const now = Date.now();
+
+    // Prevent rapid retries (less than 2 seconds apart)
+    if (joinAttempted.current && (now - joinAttempted.current.timestamp < 2000)) {
+      console.warn('[Chalk] Join attempt too soon after previous attempt, ignoring');
+      return;
+    }
+
+    joinAttempted.current = { timestamp: now, attemptId };
     setIsJoining(true);
+    setError(null);
 
     try {
-        sessionStorage.setItem('chalk_display_name', settings.displayName);
-        
-        // Stop preview tracks before joining so they don't conflict
-        if (previewStream) {
-            previewStream.getTracks().forEach(t => t.stop());
-            setPreviewStream(null);
+        // CRITICAL: Store in sessionStorage ONLY in browser
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('chalk_display_name', settings.displayName);
         }
 
-        // Join initially with no media to prevent default device capture if specific one needed
-        // We will enable media with specific devices after joining
+        // Stop preview tracks BEFORE joining to ensure media devices are released
+        const stream = previewStreamRef.current;
+        if (stream) {
+            console.log("Stopping preview tracks before join...");
+            stream.getTracks().forEach(t => {
+                t.stop();
+                console.log("Stopped track:", t.kind, t.id);
+            });
+            previewStreamRef.current = null;
+        }
+        
+        // Clear preview state immediately
+        setPreviewStream(null);
+        setPreviewVideoTrack(null);
+        setPreviewAudioTrack(null);
+
+        // CRITICAL: Wait for media devices to be fully released
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Join with media enabled directly to avoid multiple state changes
+        // This reduces track toggling that confuses VideoTile
         const room = await joinRoom(roomId, {
           displayName: settings.displayName,
-          video: false,
-          audio: false,
+          video: settings.videoEnabled,
+          audio: settings.audioEnabled,
         });
 
-        // Apply device selection and enable media
-        if (settings.videoEnabled) {
-            if (settings.selectedVideoDevice) {
+        // If specific devices were selected, switch to them after joining
+        // This is less disruptive than joining without media then enabling
+        if (settings.videoEnabled && settings.selectedVideoDevice) {
+            // Give RTK a moment to stabilize after join
+            await new Promise(resolve => setTimeout(resolve, 300));
+            try {
                 await room.selectCamera(settings.selectedVideoDevice);
-            } else {
-                await room.toggleVideo();
+            } catch (e) {
+                console.warn("Failed to select camera, using default:", e);
             }
         }
 
-        if (settings.audioEnabled) {
-            if (settings.selectedAudioInput) {
+        if (settings.audioEnabled && settings.selectedAudioInput) {
+            try {
                 await room.selectMicrophone(settings.selectedAudioInput);
-            } else {
-                await room.toggleAudio();
+            } catch (e) {
+                console.warn("Failed to select microphone, using default:", e);
             }
         }
 
@@ -330,14 +406,22 @@ function RoomPage() {
       } catch (err) {
         console.error("Failed to join:", err);
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (errorMessage.includes("403") || errorMessage.includes("Forbidden")) {
+        
+        // Don't reset joinAttempted on network errors - force user to retry manually
+        if (errorMessage.includes("Network error") || errorMessage.includes("connection attempt failed")) {
+          setError("Network error. Please check your connection and wait a moment before retrying.");
+        } else if (errorMessage.includes("403") || errorMessage.includes("Forbidden")) {
           setError("API demo mode is disabled. Set CHALK_ENABLE_DEMO=true in apps/api/.env and restart the API server.");
         } else if (errorMessage.includes("fetch") || errorMessage.includes("network")) {
           setError("Cannot connect to API server. Make sure the API is running on http://localhost:8080");
         } else {
           setError(errorMessage);
         }
-        joinAttempted.current = false;
+        
+        // Only allow retry after 3 seconds for network-related errors
+        setTimeout(() => {
+          joinAttempted.current = null;
+        }, 3000);
       } finally {
         setIsJoining(false);
       }
@@ -400,7 +484,9 @@ function RoomPage() {
 
   // Tour completion handler
   const handleTourComplete = useCallback(() => {
-    localStorage.setItem('chalk_tour_completed', 'true');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('chalk_tour_completed', 'true');
+    }
     setShowTour(false);
   }, []);
 
@@ -441,7 +527,8 @@ function RoomPage() {
     return (
         <PreJoinLobby 
             roomName={roomId}
-            userName={sessionStorage.getItem('chalk_display_name') || ''}
+            // CRITICAL: Use storedUserName which is empty on first render, then hydrates
+            userName={storedUserName}
             onJoin={handleJoinRoom}
             onCancel={() => navigate({ to: "/" })}
             videoTrack={previewVideoTrack}
@@ -476,7 +563,7 @@ function RoomPage() {
               type="button"
               onClick={() => {
                 setError(null);
-                joinAttempted.current = false;
+                joinAttempted.current = null;
               }}
               className="px-6 py-2 bg-primary text-white rounded-full hover:bg-primary/80 transition-all"
             >
@@ -504,7 +591,7 @@ function RoomPage() {
         onRejoin={() => {
             setShowEndScreen(false);
             setHasJoined(false);
-            joinAttempted.current = false;
+            joinAttempted.current = null;
         }}
         onGoHome={() => navigate({ to: "/" })}
       />
@@ -607,7 +694,10 @@ function RoomPage() {
                {activePanel === 'chat' && (
                   <div className="h-full rounded-[32px] overflow-hidden border border-white/10 shadow-2xl ring-1 ring-white/5">
                      <ChatPanel
-                        messages={messages}
+                        messages={messages.map(msg => ({
+                          ...msg,
+                          isLocal: msg.senderId === localParticipant?.id,
+                        }))}
                         onSendMessage={(message) => sendMessage(message)}
                         className="h-full border-none"
                      />
