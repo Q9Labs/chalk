@@ -17,13 +17,18 @@ import {
   PreJoinLobby,
   type JoinSettings,
   ParticipantList,
-  ScreenShareView
+  ReactionPicker,
+  ReactionBubble,
+  GuidedTour,
+  NotificationStack,
+  type Notification,
 } from "@q9labs/chalk-react";
+import type { Reaction } from "@q9labs/chalk-core";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff,
   MoreHorizontal, PhoneOff, Hand, MessageSquare,
-  Info, ThumbsUp, LayoutTemplate, X, Users, Circle, Square
+  Info, ThumbsUp, LayoutTemplate, X, Users, Circle, Square, HelpCircle
 } from 'lucide-react';
 
 export const Route = createFileRoute("/room/$roomId")({
@@ -35,8 +40,8 @@ function RoomPage() {
   const navigate = useNavigate();
 
   // SDK Hooks
-  const { joinRoom, leaveRoom } = useChalk();
-  const { isConnected } = useRoom();
+  const { joinRoom, leaveRoom, removeParticipant } = useChalk();
+  const { room, isConnected } = useRoom();
   const { participants, localParticipant, activeSpeaker } = useParticipants();
   const {
     isVideoEnabled,
@@ -65,6 +70,22 @@ function RoomPage() {
   const [activePanel, setActivePanel] = useState<'chat' | 'info' | 'participants' | null>(null);
   const [layout, setLayout] = useState<'grid' | 'spotlight'>('grid');
   const [isHandRaised, setIsHandRaised] = useState(false);
+
+  // Reactions State
+  const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+  const [activeReactions, setActiveReactions] = useState<Array<{ id: string; emoji: string; participantName: string }>>([]);
+
+  // Guided Tour State
+  const [showTour, setShowTour] = useState(() => {
+    return !localStorage.getItem('chalk_tour_completed');
+  });
+
+  // Notifications State
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Unread Messages State
+  const [unreadCount, setUnreadCount] = useState(0);
+  const lastMessageCountRef = useRef(0);
   
   // Session Timer
   const [sessionSeconds, setSessionSeconds] = useState(0); 
@@ -75,6 +96,83 @@ function RoomPage() {
         return () => clearInterval(timer);
     }
   }, [hasJoined]);
+
+  // Listen to reaction events from the room
+  useEffect(() => {
+    if (!room) return;
+
+    const handleReaction = (reaction: Reaction) => {
+      const id = `${reaction.participantId}-${Date.now()}`;
+      setActiveReactions(prev => [...prev, { id, emoji: reaction.emoji, participantName: reaction.participantName }]);
+
+      // Auto-remove after animation completes
+      setTimeout(() => {
+        setActiveReactions(prev => prev.filter(r => r.id !== id));
+      }, 2500);
+    };
+
+    room.on('reaction', handleReaction);
+    return () => {
+      room.off('reaction', handleReaction);
+    };
+  }, [room]);
+
+  // Listen to hand raise events
+  useEffect(() => {
+    if (!room) return;
+
+    const handleHandRaised = (data: { participantId: string }) => {
+      if (data.participantId !== localParticipant?.id) {
+        const participant = participants.find(p => p.id === data.participantId);
+        const name = participant?.displayName || 'Someone';
+        const id = `notif-${Date.now()}`;
+        setNotifications(prev => [...prev, { id, message: `${name} raised their hand`, type: 'info' as const, duration: 4000 }]);
+      }
+    };
+
+    room.on('hand-raised', handleHandRaised);
+    return () => {
+      room.off('hand-raised', handleHandRaised);
+    };
+  }, [room, localParticipant?.id, participants]);
+
+  // Track new messages for unread badge and notifications
+  useEffect(() => {
+    const currentCount = messages.length;
+    const previousCount = lastMessageCountRef.current;
+
+    if (currentCount > previousCount && previousCount > 0) {
+      const newMessages = messages.slice(previousCount);
+
+      for (const msg of newMessages) {
+        // Only notify for messages from others
+        if (msg.senderId !== localParticipant?.id) {
+          // If chat panel is closed, increment unread count
+          if (activePanel !== 'chat') {
+            setUnreadCount(prev => prev + 1);
+
+            // Show notification for new message
+            const id = `msg-${Date.now()}`;
+            setNotifications(prev => [...prev, {
+              id,
+              message: `${msg.senderName}: ${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}`,
+              type: 'info' as const,
+              duration: 4000
+            }]);
+          }
+        }
+      }
+    }
+
+    lastMessageCountRef.current = currentCount;
+  }, [messages, activePanel, localParticipant?.id]);
+
+  // Clear unread count when opening chat
+  useEffect(() => {
+    if (activePanel === 'chat') {
+      setUnreadCount(0);
+    }
+  }, [activePanel]);
 
   const joinAttempted = useRef(false);
 
@@ -250,6 +348,62 @@ function RoomPage() {
     setShowEndScreen(true);
   }, [leaveRoom]);
 
+  // Send reaction via SDK
+  const handleSendReaction = useCallback((emoji: string) => {
+    if (room) {
+      room.sendReaction(emoji as any);
+      // Show own reaction locally
+      const id = `local-${Date.now()}`;
+      setActiveReactions(prev => [...prev, { id, emoji, participantName: 'You' }]);
+      setTimeout(() => {
+        setActiveReactions(prev => prev.filter(r => r.id !== id));
+      }, 2500);
+    }
+    setIsReactionPickerOpen(false);
+  }, [room]);
+
+  // Toggle hand raise via SDK
+  const handleHandRaise = useCallback(() => {
+    if (room) {
+      if (isHandRaised) {
+        room.lowerHand();
+      } else {
+        room.raiseHand();
+        playHandRaise();
+      }
+      setIsHandRaised(!isHandRaised);
+    }
+  }, [room, isHandRaised, playHandRaise]);
+
+  // Notification helpers
+  const addNotification = useCallback((message: string, type: Notification['type'] = 'info') => {
+    const id = `notif-${Date.now()}`;
+    setNotifications(prev => [...prev, { id, message, type, duration: 4000 }]);
+  }, []);
+
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  // Participant management handlers
+  const handleRemoveParticipant = useCallback(async (participantId: string) => {
+    console.log('[Chalk] Attempting to remove participant:', participantId);
+    try {
+      await removeParticipant(participantId);
+      addNotification('Participant removed', 'success');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('[Chalk] Failed to remove participant:', { participantId, error: errorMsg, err });
+      addNotification(`Failed: ${errorMsg}`, 'error');
+    }
+  }, [removeParticipant, addNotification]);
+
+  // Tour completion handler
+  const handleTourComplete = useCallback(() => {
+    localStorage.setItem('chalk_tour_completed', 'true');
+    setShowTour(false);
+  }, []);
+
   const shortcuts = useMemo(() => createMeetingShortcuts({
     onToggleMute: toggleAudio,
     onToggleVideo: toggleVideo,
@@ -271,13 +425,11 @@ function RoomPage() {
   };
 
   const mapToVideoTileParticipant = (p: typeof participants[0]) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const remoteHandRaised = 'isHandRaised' in p ? (p as any).isHandRaised : undefined;
-    
     return {
       ...p,
       connectionQuality: (p.connectionQuality && p.connectionQuality > 0) ? (p.connectionQuality as 1 | 2 | 3 | 4) : undefined,
-      isHandRaised: p.id === localParticipant?.id ? isHandRaised : remoteHandRaised,
+      // For local participant use our local state, for remote use SDK's handRaised property (real-time from WebSocket)
+      isHandRaised: p.id === localParticipant?.id ? isHandRaised : p.handRaised,
       isSpeaking: p.id === activeSpeaker?.id || p.isSpeaking,
     };
   };
@@ -375,8 +527,8 @@ function RoomPage() {
   const mainParticipant = participants.find(p => p.id === activeSpeaker?.id) || participants[0] || localParticipant;
 
   // Screen share detection
-  const screenSharer = participants.find(p => p.isScreenSharing);
-  const showScreenShare = !!screenSharer && screenSharer.screenShareTrack;
+  const screenSharer = participants.find(p => p.isScreenSharing && p.screenShareTrack);
+  const showScreenShare = !!screenSharer;
 
   return (
     <div className="flex flex-col h-screen bg-[#0D0D0D] font-sans text-white overflow-hidden relative">
@@ -385,7 +537,7 @@ function RoomPage() {
       <div className="flex-1 flex relative min-h-0 p-4 gap-4">
          
          {/* Video Grid */}
-         <div className="flex-1 flex flex-col min-w-0 transition-all duration-500 ease-in-out">
+         <div className="flex-1 flex flex-col min-w-0 transition-all duration-500 ease-in-out" data-tour="video-grid">
             <div className={`w-full h-full grid gap-4 transition-all duration-500 ${
                 layout === 'spotlight' 
                   ? 'grid-cols-1' 
@@ -393,11 +545,30 @@ function RoomPage() {
                   : participants.length <= 2 ? 'grid-cols-2'
                   : 'grid-cols-3'
             }`}>
-                {layout === 'spotlight' ? (
+                {showScreenShare && screenSharer ? (
+                   // Screen Share View (takes priority)
+                   <div className="relative w-full h-full rounded-[32px] overflow-hidden border border-green-500/50 bg-gradient-to-b from-[#0a2e0a] to-[#0a0a0a] shadow-2xl">
+                      <VideoTile
+                          participant={mapToVideoTileParticipant(screenSharer)}
+                          videoTrack={screenSharer.screenShareTrack}
+                          mirror={false}
+                          aspectRatio="16:9"
+                          className="w-full h-full bg-transparent"
+                          showStatus={false}
+                          showName={false}
+                      />
+                      <div className="absolute bottom-8 left-8 px-5 py-3 bg-green-500/20 backdrop-blur-2xl rounded-2xl border border-green-500/30 shadow-[0_4px_30px_rgba(0,0,0,0.1)] flex items-center gap-2">
+                           <Monitor size={18} className="text-green-400" />
+                           <h3 className="text-white font-bold text-xl tracking-wide">{screenSharer.displayName}'s screen</h3>
+                      </div>
+                   </div>
+                ) : layout === 'spotlight' ? (
                    // Spotlight View
                    <div className="relative w-full h-full rounded-[32px] overflow-hidden border border-white/80 bg-gradient-to-b from-[#2e0046] to-[#0a0a0a] shadow-2xl">
-                      <VideoTile 
+                      <VideoTile
                           participant={mapToVideoTileParticipant(mainParticipant)}
+                          videoTrack={mainParticipant.videoTrack}
+                          mirror={mainParticipant.isLocal}
                           className="w-full h-full bg-transparent"
                           showStatus={false}
                           showName={false}
@@ -410,8 +581,10 @@ function RoomPage() {
                    // Grid View
                    visibleParticipants.map(p => (
                       <div key={p.id} className="relative w-full h-full rounded-[32px] overflow-hidden border border-white/10 bg-gradient-to-b from-[#2e0046] to-[#0a0a0a] shadow-xl group">
-                          <VideoTile 
+                          <VideoTile
                               participant={mapToVideoTileParticipant(p)}
+                              videoTrack={p.videoTrack}
+                              mirror={p.isLocal}
                               className="w-full h-full bg-transparent"
                               showStatus={false}
                               showName={false}
@@ -449,10 +622,11 @@ function RoomPage() {
                             isLocal: p.id === localParticipant?.id,
                             isMuted: p.id === localParticipant?.id ? !isAudioEnabled : !(p as any).isAudioEnabled,
                             role: p.id === localParticipant?.id ? 'host' : 'participant',
-                            avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.id}`
                         }))}
                         onClose={() => setActivePanel(null)}
                         onAddPeople={() => {}}
+                        onRemoveParticipant={handleRemoveParticipant}
+                        canManageParticipants={true}
                         variant="sidebar"
                         className="h-full border-none"
                      />
@@ -503,6 +677,7 @@ function RoomPage() {
                         className={`transition-all duration-300 ${!isAudioEnabled ? 'bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
                         label={isAudioEnabled ? "Mute" : "Unmute"}
+                        data-tour="controls-mic"
                     />
                     <ControlButton
                         icon={isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
@@ -510,6 +685,7 @@ function RoomPage() {
                         className={`transition-all duration-300 ${!isVideoEnabled ? 'bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
                         label={isVideoEnabled ? "Stop Video" : "Start Video"}
+                        data-tour="controls-video"
                     />
                     <ControlButton
                         icon={isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
@@ -517,6 +693,7 @@ function RoomPage() {
                         className={`transition-all duration-300 ${isScreenSharing ? 'bg-purple-500/80 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
                         label="Share Screen"
+                        data-tour="controls-screenshare"
                     />
                     <div className="w-px h-8 bg-white/10 mx-1" />
                     <ControlButton
@@ -543,10 +720,11 @@ function RoomPage() {
                     />
                     <ControlButton
                         icon={<Hand size={20} />}
-                        onClick={() => { playHandRaise(); setIsHandRaised(!isHandRaised); }}
+                        onClick={handleHandRaise}
                         className={`transition-all duration-300 ${isHandRaised ? 'bg-yellow-500/80 text-white shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-transparent hover:bg-white/10 text-white'}`}
                         size="md"
-                        label="Raise Hand"
+                        label={isHandRaised ? "Lower Hand" : "Raise Hand"}
+                        data-tour="controls-hand"
                     />
                     <ControlButton
                         icon={<MoreHorizontal size={20} />}
@@ -562,6 +740,7 @@ function RoomPage() {
                         size="md"
                         label="Leave"
                         danger
+                        data-tour="controls-leave"
                     />
               </div>
 
@@ -574,30 +753,86 @@ function RoomPage() {
                       size="sm"
                       label="Info"
                   />
-                  <ControlButton 
-                      icon={<Users size={20} />} 
+                  <ControlButton
+                      icon={<Users size={20} />}
                       onClick={() => setActivePanel(p => p === 'participants' ? null : 'participants')}
                       className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === 'participants' ? 'bg-white/20' : 'bg-white/5 hover:bg-white/10'}`}
                       size="sm"
                       label="People"
+                      data-tour="controls-participants"
                   />
-                  <ControlButton 
-                      icon={<MessageSquare size={20} />} 
-                      onClick={() => setActivePanel(p => p === 'chat' ? null : 'chat')}
-                      className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === 'chat' ? 'bg-white/20' : 'bg-white/5 hover:bg-white/10'}`}
+                  <div className="relative">
+                      <ControlButton
+                          icon={<MessageSquare size={20} />}
+                          onClick={() => setActivePanel(p => p === 'chat' ? null : 'chat')}
+                          className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === 'chat' ? 'bg-white/20' : 'bg-white/5 hover:bg-white/10'}`}
+                          size="sm"
+                          label="Chat"
+                          data-tour="controls-chat"
+                      />
+                      {unreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                              {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
+                      )}
+                  </div>
+                  <div className="relative">
+                      <ControlButton
+                          icon={<ThumbsUp size={20} />}
+                          onClick={() => setIsReactionPickerOpen(!isReactionPickerOpen)}
+                          className={`backdrop-blur-xl border border-white/10 rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${isReactionPickerOpen ? 'bg-white/20 text-yellow-400' : 'bg-white/5 hover:bg-white/10 text-yellow-500'}`}
+                          size="sm"
+                          label="Reactions"
+                          data-tour="reactions-button"
+                      />
+                      <ReactionPicker
+                          isOpen={isReactionPickerOpen}
+                          onClose={() => setIsReactionPickerOpen(false)}
+                          onSelect={handleSendReaction}
+                          position="top"
+                      />
+                  </div>
+                  {/* Help button to restart tour */}
+                  <ControlButton
+                      icon={<HelpCircle size={20} />}
+                      onClick={() => setShowTour(true)}
+                      className="bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)]"
                       size="sm"
-                      label="Chat"
-                  />
-                  <ControlButton 
-                      icon={<ThumbsUp size={20} />} 
-                      onClick={() => {}}
-                      className="bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 text-yellow-500 rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)]"
-                      size="sm"
-                      label="Reactions"
+                      label="Help"
                   />
               </div>
           </div>
       </div>
+
+      {/* Floating Reaction Bubbles */}
+      <div className="fixed bottom-32 right-8 flex flex-col-reverse gap-2 pointer-events-none z-50">
+        {activeReactions.map((reaction) => (
+          <ReactionBubble
+            key={reaction.id}
+            emoji={reaction.emoji}
+            className="relative bottom-auto right-auto"
+          />
+        ))}
+      </div>
+
+      {/* Notification Stack */}
+      <NotificationStack
+        notifications={notifications}
+        onDismiss={dismissNotification}
+        position="top-right"
+        maxVisible={3}
+      />
+
+      {/* Guided Tour */}
+      {hasJoined && (
+        <GuidedTour
+          isOpen={showTour}
+          onComplete={handleTourComplete}
+          onSkip={handleTourComplete}
+          showProgress
+          showSkip
+        />
+      )}
     </div>
   );
 };

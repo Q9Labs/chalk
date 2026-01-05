@@ -32,6 +32,7 @@ interface ChalkContextValue {
 	joinRoom: (roomId: string, config: RoomConfig) => Promise<Room>;
 	leaveRoom: () => void;
 	createRoom: (name?: string) => Promise<string>;
+	removeParticipant: (participantId: string) => Promise<void>;
 }
 
 const ChalkContext = createContext<ChalkContextValue | null>(null);
@@ -148,6 +149,18 @@ export function ChalkProvider({
 		[client],
 	);
 
+	// Remove participant (kick)
+	const removeParticipant = useCallback(
+		async (participantId: string): Promise<void> => {
+			if (!client) {
+				throw new Error("ChalkClient not initialized");
+			}
+
+			return client.removeParticipant(participantId);
+		},
+		[client],
+	);
+
 	const value = useMemo(
 		() => ({
 			client,
@@ -158,6 +171,7 @@ export function ChalkProvider({
 			joinRoom,
 			leaveRoom,
 			createRoom,
+			removeParticipant,
 		}),
 		[
 			client,
@@ -167,6 +181,7 @@ export function ChalkProvider({
 			joinRoom,
 			leaveRoom,
 			createRoom,
+			removeParticipant,
 		],
 	);
 

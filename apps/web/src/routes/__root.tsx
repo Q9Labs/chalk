@@ -73,9 +73,13 @@ function RootComponent() {
 		setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 	};
 
+	// WebSocket URL for real-time features (hand raise, reactions, chat)
+	// const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+
 	return (
 		<ChalkProvider
 			debug={true}
+			// wsUrl={wsUrl}
 		>
 			<div className={` overflow-hidden bg-background text-foreground ${theme}`}>
 				<div className="fixed top-4 right-4 z-50">

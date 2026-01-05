@@ -229,6 +229,28 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 		return this.currentRoom?.status ?? "disconnected";
 	}
 
+	/**
+	 * Remove (kick) a participant from the current room
+	 * @param participantId - The participant ID to remove
+	 */
+	async removeParticipant(participantId: string): Promise<void> {
+		if (!this.currentRoom) {
+			throw new Error("Not connected to a room");
+		}
+
+		this.log("Removing participant:", participantId, "from room:", this.currentRoom.id);
+
+		const response = await this.apiClient.removeParticipant(
+			this.currentRoom.id,
+			participantId,
+		);
+
+		if (!response.success) {
+			this.log("Remove participant failed:", response.error);
+			throw new Error(response.error?.message ?? "Failed to remove participant");
+		}
+	}
+
 	disconnect(): void {
 		if (this.currentRoom) {
 			this.log("Disconnecting");

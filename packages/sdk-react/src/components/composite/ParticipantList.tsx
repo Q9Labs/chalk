@@ -151,51 +151,75 @@ export const ParticipantList = React.memo(({
               icon={<MoreVertical className="w-4 h-4" />}
               size="sm"
               variant="ghost"
-              className="opacity-0 group-hover:opacity-100 focus:opacity-100"
+              className={cn(
+                variant === 'sidebar'
+                  ? "opacity-70 hover:opacity-100 text-gray-400 hover:text-white"
+                  : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+              )}
               onClick={() => setActiveMenuId(activeMenuId === participant.id ? null : participant.id)}
               aria-label={`Options for ${participant.displayName}`}
             />
             
             {activeMenuId === participant.id && (
               <>
-                <div 
-                  className="fixed inset-0 z-10" 
+                <div
+                  className="fixed inset-0 z-10"
                   onClick={() => setActiveMenuId(null)}
                 />
-                <div className="absolute right-0 top-full mt-1 w-48 bg-chalk-bg-surface border border-chalk-border-subtle rounded-lg shadow-lg z-20 overflow-hidden py-1">
+                <div className={cn(
+                  "absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg z-20 overflow-hidden py-1",
+                  variant === 'sidebar'
+                    ? "bg-[#2B2B2B] border border-white/10"
+                    : "bg-chalk-bg-surface border border-chalk-border-subtle"
+                )}>
                   {onMuteParticipant && (
                     <button
                       onClick={() => {
                         onMuteParticipant(participant.id);
                         setActiveMenuId(null);
                       }}
-                      className="w-full text-left px-3 py-2 text-sm text-chalk-text-primary hover:bg-chalk-bg-subtle flex items-center gap-2"
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
+                        variant === 'sidebar'
+                          ? "text-gray-200 hover:bg-white/10"
+                          : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
+                      )}
                     >
                       {participant.isMuted ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
                       {participant.isMuted ? "Unmute" : "Mute"}
                     </button>
                   )}
-                  
+
                   {onMakeHost && participant.role !== 'host' && (
                     <button
                       onClick={() => {
                         onMakeHost(participant.id);
                         setActiveMenuId(null);
                       }}
-                      className="w-full text-left px-3 py-2 text-sm text-chalk-text-primary hover:bg-chalk-bg-subtle flex items-center gap-2"
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
+                        variant === 'sidebar'
+                          ? "text-gray-200 hover:bg-white/10"
+                          : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
+                      )}
                     >
                       <Crown className="w-4 h-4" />
                       Make Host
                     </button>
                   )}
-                  
+
                   {onRemoveParticipant && (
                     <button
                       onClick={() => {
                         onRemoveParticipant(participant.id);
                         setActiveMenuId(null);
                       }}
-                      className="w-full text-left px-3 py-2 text-sm text-chalk-error-main hover:bg-chalk-error-subtle flex items-center gap-2"
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
+                        variant === 'sidebar'
+                          ? "text-red-400 hover:bg-red-500/20"
+                          : "text-chalk-error-main hover:bg-chalk-error-subtle"
+                      )}
                     >
                       <UserX className="w-4 h-4" />
                       Remove

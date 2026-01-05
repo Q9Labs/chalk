@@ -113,11 +113,7 @@ function PreJoinLobbyBase({
   // Toggle handlers
   const toggleVideo = () => setIsVideoEnabled(!isVideoEnabled);
   const toggleAudio = () => setIsAudioEnabled(!isAudioEnabled);
-
-  const toggleSettingsModal = () => {
-    console.log('toggleSettings called');
-    setShowSettings(!showSettings);
-  };
+  const toggleSettings = () => setShowSettings(!showSettings);
 
   return (
     <div className={cn(
@@ -126,7 +122,7 @@ function PreJoinLobbyBase({
     )}>
        {/* Settings Modal/Overlay */}
        {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center  p-4">
           <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 bg-background">
             <button 
               onClick={() => setShowSettings(false)}
@@ -238,11 +234,11 @@ function PreJoinLobbyBase({
                   {/* Top Right: Kebab Menu */}
                   
                   <div className="absolute top-4 right-4 z-20">
-                       <ControlButton 
+                       <ControlButton
                            icon={<MoreVertical size={18} />}
-                           label=""
+                           label="Settings"
                            size="sm"
-                           onClick={toggleSettingsModal}
+                           onClick={toggleSettings}
                         />
                   </div>
                   
