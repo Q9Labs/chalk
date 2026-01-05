@@ -693,6 +693,16 @@ function RoomPage() {
             <div className="w-80 sm:w-96 flex-shrink-0 animate-in slide-in-from-right duration-300 relative z-20">
                {activePanel === 'chat' && (
                   <div className="h-full rounded-[32px] overflow-hidden border border-white/10 shadow-2xl ring-1 ring-white/5">
+                     {/* DEBUG: Log messages and isLocal values */}
+                     {console.log('DEBUG Chat Messages:', {
+                        localParticipantId: localParticipant?.id,
+                        messages: messages.map(m => ({
+                           id: m.id,
+                           senderId: m.senderId,
+                           senderName: m.senderName,
+                           isLocal: m.senderId === localParticipant?.id,
+                        }))
+                     })}
                      <ChatPanel
                         messages={messages.map(msg => ({
                           ...msg,

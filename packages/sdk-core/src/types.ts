@@ -239,8 +239,10 @@ export type ParticipantRole = "host" | "participant";
  * ```
  */
 export interface Participant {
-	/** Unique participant identifier */
+	/** Unique participant identifier (RTK session ID) */
 	id: string;
+	/** User ID from authentication system (use this for chat message matching) */
+	userId?: string;
 	/** Display name visible to others */
 	displayName: string;
 	/** Role in the room */

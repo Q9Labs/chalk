@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { MessageSquare, Send, Smile, Paperclip, X } from 'lucide-react';
-import { IconButton, Textarea } from '../atomic';
+import { MessageSquare, Send } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
@@ -23,6 +22,58 @@ export interface ChatPanelProps {
   className?: string;
   title?: string;
 }
+
+// Inline styles matching the reference design
+const chatStyles = {
+  // Deep dark purple gradient background: #35004A at 21%, #8D00C5 at 3%
+  container: {
+    background: 'linear-gradient(180deg, rgba(141, 0, 197, 0.08) 0%, rgba(53, 0, 74, 0.36) 100%)',
+    backgroundColor: '#0D0A14',
+    color: '#FFFFFF',
+  } as React.CSSProperties,
+  header: {
+    background: 'transparent',
+    padding: '16px 20px',
+  } as React.CSSProperties,
+  title: {
+    color: '#FFFFFF',
+    fontSize: '20px',
+    fontWeight: 600,
+  } as React.CSSProperties,
+  // Muted dark grey-purple for empty state
+  emptyState: {
+    color: '#6B7280',
+  } as React.CSSProperties,
+  emptyIcon: {
+    background: 'rgba(53, 0, 74, 0.5)',
+    color: '#9CA3AF',
+  } as React.CSSProperties,
+  inputArea: {
+    background: 'transparent',
+    padding: '16px 20px',
+  } as React.CSSProperties,
+  inputField: {
+    background: 'rgba(45, 42, 62, 0.8)',
+    border: 'none',
+    color: '#FFFFFF',
+    borderRadius: '24px',
+    fontSize: '14px',
+  } as React.CSSProperties,
+  placeholder: {
+    color: '#6B7280',
+  } as React.CSSProperties,
+  // Bright saturated purple for action buttons
+  actionButton: {
+    background: '#7C3AED',
+    color: '#FFFFFF',
+    borderRadius: '50%',
+    width: '44px',
+    height: '44px',
+  } as React.CSSProperties,
+  moreButton: {
+    color: '#9CA3AF',
+  } as React.CSSProperties,
+};
 
 // Group messages by sender within a time window (2 minutes)
 const groupMessages = (messages: ChatMessage[]) => {
@@ -105,60 +156,64 @@ export const ChatPanel = React.memo(({
   return (
     <div
       className={cn(
-        "flex flex-col h-full bg-[#0D0D0D] w-full",
+        "flex flex-col h-full w-full",
         !prefersReducedMotion && "animate-in slide-in-from-right-5 duration-300",
         className
       )}
+      style={chatStyles.container}
       data-tour="chat-panel"
       role="complementary"
       aria-label="Chat panel"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-            <MessageSquare className="w-5 h-5 text-purple-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
-            <p className="text-xs text-gray-500">
-              {messages.length} {messages.length === 1 ? 'message' : 'messages'}
-            </p>
-          </div>
+      {/* Header - "Chat" with three-dot menu */}
+      <div
+        className="flex items-center justify-between"
+        style={chatStyles.header}
+      >
+        <h2 style={chatStyles.title}>{title}</h2>
+        <div className="flex items-center gap-2">
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center justify-center transition-opacity hover:opacity-70"
+              style={chatStyles.moreButton}
+              aria-label="More options"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="12" cy="19" r="2" />
+              </svg>
+            </button>
+          )}
         </div>
-        {onClose && (
-          <IconButton
-            icon={<X className="w-5 h-5" />}
-            size="sm"
-            variant="ghost"
-            onClick={onClose}
-            className="text-gray-400 hover:text-white hover:bg-white/10 rounded-xl"
-            aria-label="Close chat"
-          />
-        )}
       </div>
 
       {/* Messages area */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 scroll-smooth"
-        style={{ scrollbarWidth: 'thin', scrollbarColor: '#333 transparent' }}
+        className="flex-1 overflow-y-auto py-4"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#2D2A3E transparent' }}
       >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6">
-            <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-4">
-              <MessageSquare className="w-8 h-8 text-purple-400/60" />
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+              style={chatStyles.emptyIcon}
+            >
+              <MessageSquare className="w-8 h-8" />
             </div>
-            <h3 className="text-white font-medium mb-1">No messages yet</h3>
-            <p className="text-sm text-gray-500 max-w-[200px]">
+            <h3 style={{ color: '#FFFFFF', fontWeight: 500, marginBottom: '4px' }}>No messages yet</h3>
+            <p style={{ ...chatStyles.emptyState, fontSize: '14px', maxWidth: '200px' }}>
               Send a message to start the conversation
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div>
             {messageGroups.map((group, groupIndex) => (
-              <div key={`group-${groupIndex}`} className="space-y-0.5">
+              <div key={`group-${groupIndex}`}>
                 {group.messages.map((msg, msgIndex) => (
                   <MessageBubble
                     key={msg.id}
@@ -184,71 +239,62 @@ export const ChatPanel = React.memo(({
       {!isAtBottom && messages.length > 0 && (
         <button
           onClick={() => scrollToBottom()}
-          className="absolute bottom-28 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-purple-600 text-white text-xs font-medium shadow-lg hover:bg-purple-500 transition-all animate-in fade-in slide-in-from-bottom-2"
+          className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-medium transition-all"
+          style={{ background: '#7C3AED', color: '#FFFFFF' }}
         >
           New messages
         </button>
       )}
 
-      {/* Input area */}
-      <div className="p-4 border-t border-white/5 bg-[#0A0A0A]">
-        <div className="flex items-end gap-2">
-          {/* Attachment button */}
-          <IconButton
-            icon={<Paperclip className="w-5 h-5" />}
-            size="sm"
-            variant="ghost"
-            className="text-gray-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-xl h-10 w-10 flex-shrink-0"
+      {/* Input area - "+" button, text field, Send button */}
+      <div style={chatStyles.inputArea}>
+        <div className="flex items-center gap-3">
+          {/* Plus/Attachment button - bright purple circle */}
+          <button
+            type="button"
+            className="flex-shrink-0 flex items-center justify-center transition-opacity hover:opacity-80"
+            style={chatStyles.actionButton}
             aria-label="Add attachment"
-          />
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
 
-          {/* Input field */}
-          <div className="flex-1 relative">
-            <Textarea
+          {/* Input field - "Write message..." */}
+          <div className="flex-1">
+            <textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder}
+              placeholder={placeholder || "Write message..."}
               disabled={disabled}
-              className={cn(
-                "w-full bg-[#1A1A1A] border border-white/5 rounded-2xl py-2.5 px-4",
-                "text-white placeholder:text-gray-500 text-sm",
-                "min-h-[44px] max-h-32 resize-none",
-                "focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50",
-                "transition-all duration-200"
-              )}
-              resize="none"
+              className="w-full py-3 px-5 resize-none outline-none"
+              style={{
+                ...chatStyles.inputField,
+                minHeight: '48px',
+                maxHeight: '120px',
+              }}
+              rows={1}
             />
           </div>
 
-          {/* Emoji button */}
-          <IconButton
-            icon={<Smile className="w-5 h-5" />}
-            size="sm"
-            variant="ghost"
-            className="text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl h-10 w-10 flex-shrink-0"
-            aria-label="Add emoji"
-          />
-
-          {/* Send button */}
-          <IconButton
-            icon={<Send className="w-5 h-5" />}
+          {/* Send button - bright purple circle with paper plane */}
+          <button
+            type="button"
             onClick={handleSend}
             disabled={!inputValue.trim() || disabled}
-            className={cn(
-              "h-10 w-10 rounded-xl flex-shrink-0 transition-all duration-200",
-              inputValue.trim() && !disabled
-                ? "bg-purple-600 text-white hover:bg-purple-500 shadow-lg shadow-purple-500/25"
-                : "bg-[#1A1A1A] text-gray-600 cursor-not-allowed"
-            )}
+            className="flex-shrink-0 flex items-center justify-center transition-opacity"
+            style={{
+              ...chatStyles.actionButton,
+              opacity: inputValue.trim() && !disabled ? 1 : 0.5,
+            }}
             aria-label="Send message"
-          />
+          >
+            <Send className="w-5 h-5" />
+          </button>
         </div>
-
-        {/* Typing hint */}
-        <p className="text-[10px] text-gray-600 mt-2 text-center">
-          Press <kbd className="px-1 py-0.5 rounded bg-white/5 text-gray-500">Enter</kbd> to send, <kbd className="px-1 py-0.5 rounded bg-white/5 text-gray-500">Shift+Enter</kbd> for new line
-        </p>
       </div>
     </div>
   );

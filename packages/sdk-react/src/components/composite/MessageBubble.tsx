@@ -19,6 +19,39 @@ export interface MessageBubbleProps {
   className?: string;
 }
 
+// Inline styles matching the reference design
+const styles = {
+  // SENDER (you/local) - Royal Blue #0764BB - RIGHT SIDE
+  // Tail on TOP-RIGHT, rounded on other corners
+  senderBubble: {
+    background: '#0764BB',
+    color: '#FFFFFF',
+    borderRadius: '20px 4px 20px 20px', // top-left, TOP-RIGHT (tail), bottom-right, bottom-left
+  } as React.CSSProperties,
+
+  // RECEIVER (others/remote) - Glassmorphism #F1F1F11C with blur - LEFT SIDE
+  // Tail on TOP-LEFT, rounded on other corners
+  receiverBubble: {
+    background: 'rgba(241, 241, 241, 0.11)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    color: '#E5E5E5',
+    borderRadius: '4px 20px 20px 20px', // TOP-LEFT (tail), top-right, bottom-right, bottom-left
+  } as React.CSSProperties,
+
+  // System message
+  systemBubble: {
+    background: 'rgba(255, 255, 255, 0.08)',
+    color: '#9CA3AF',
+  } as React.CSSProperties,
+
+  // Timestamp
+  timestamp: {
+    color: '#6B7280',
+    fontSize: '11px',
+  } as React.CSSProperties,
+};
+
 export const MessageBubble = React.memo<MessageBubbleProps>(({
   content,
   senderName,
@@ -26,10 +59,10 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
   timestamp,
   isLocal = false,
   isSystem = false,
-  showSender = true,
+  showSender: _showSender = true,
   showTimestamp = true,
   showAvatar = true,
-  isFirstInGroup = true,
+  isFirstInGroup: _isFirstInGroup = true,
   isLastInGroup = true,
   status = 'delivered',
   className,
@@ -54,12 +87,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-              "underline break-all transition-colors",
-              isLocal
-                ? "text-white/90 hover:text-white"
-                : "text-purple-400 hover:text-purple-300"
-            )}
+            style={{ color: '#93C5FD', textDecoration: 'underline' }}
           >
             {part}
           </a>
@@ -69,18 +97,24 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     });
   };
 
+  // Render read receipt status (blue double-ticks like reference)
   const renderStatus = () => {
     if (!isLocal) return null;
 
     switch (status) {
       case 'sending':
-        return <div className="w-3 h-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />;
+        return (
+          <div
+            className="w-3 h-3 rounded-full animate-spin"
+            style={{ border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'transparent' }}
+          />
+        );
       case 'sent':
-        return <Check className="w-3.5 h-3.5 text-white/50" />;
+        return <Check className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />;
       case 'delivered':
-        return <CheckCheck className="w-3.5 h-3.5 text-white/50" />;
+        return <CheckCheck className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />;
       case 'read':
-        return <CheckCheck className="w-3.5 h-3.5 text-purple-400" />;
+        return <CheckCheck className="w-3.5 h-3.5" style={{ color: '#3B82F6' }} />; // Blue ticks
       default:
         return null;
     }
@@ -90,13 +124,16 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
   if (isSystem) {
     return (
       <div className={cn('flex flex-col items-center gap-1 py-3', className)}>
-        <div className="px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
-          <p className="text-xs text-gray-400 text-center">
+        <div
+          className="px-4 py-2 rounded-full"
+          style={styles.systemBubble}
+        >
+          <p style={{ fontSize: '12px', textAlign: 'center' }}>
             {renderContent(content)}
           </p>
         </div>
         {showTimestamp && (
-          <span className="text-[10px] text-gray-500">
+          <span style={styles.timestamp}>
             {formatTime(timestamp)}
           </span>
         )}
@@ -104,84 +141,82 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     );
   }
 
+  // DEBUG: Log isLocal value
+  console.log('MessageBubble DEBUG:', { senderName, isLocal, content: content.substring(0, 20) });
+
+  // SENDER (you) = isLocal=true = RIGHT side, blue, tail top-right
+  // RECEIVER (others) = isLocal=false = LEFT side, glassmorphism, tail top-left
+  const bubbleStyle: React.CSSProperties = isLocal ? styles.senderBubble : styles.receiverBubble;
+
+  // Use inline styles to guarantee positioning works regardless of Tailwind
+  const containerStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '12px',
+    width: '100%',
+    padding: '0 16px',
+    marginBottom: isLastInGroup ? '16px' : '4px',
+    // KEY: This controls LEFT vs RIGHT positioning
+    justifyContent: isLocal ? 'flex-end' : 'flex-start',
+    flexDirection: 'row',
+  };
+
+  const contentStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: isLocal ? 'flex-end' : 'flex-start',
+    maxWidth: '70%',
+  };
+
+  const timestampContainerStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    marginTop: '4px',
+    padding: '0 4px',
+    flexDirection: isLocal ? 'row-reverse' : 'row',
+  };
+
   return (
-    <div
-      className={cn(
-        'flex gap-2.5 w-full group',
-        isLocal ? 'flex-row' : 'flex-row-reverse', // Swapped: local on left, remote on right
-        !isLastInGroup && 'mb-0.5',
-        isLastInGroup && 'mb-1',
-        className
+    <div style={containerStyle} className={className}>
+      {/* Avatar for RECEIVER messages (left side) */}
+      {!isLocal && (
+        <div style={{ flexShrink: 0, width: '40px' }}>
+          {showAvatar && isLastInGroup && (
+            <Avatar
+              name={senderName}
+              src={senderAvatar}
+              size="sm"
+              className="!w-10 !h-10"
+            />
+          )}
+        </div>
       )}
-    >
-      {/* Avatar - only show for last message in group */}
-      <div className="w-8 flex-shrink-0">
-        {showAvatar && isLastInGroup && isLocal && (
-          <Avatar
-            name={senderName}
-            src={senderAvatar}
-            size="sm"
-            className="!w-8 !h-8 ring-2 ring-[#0D0D0D] shadow-lg"
-          />
-        )}
-      </div>
 
       {/* Message content */}
-      <div className={cn(
-        'flex flex-col max-w-[75%]',
-        isLocal ? 'items-start' : 'items-end' // Swapped alignment
-      )}>
-        {/* Sender name - only for first message in group from local user */}
-        {showSender && isFirstInGroup && isLocal && (
-          <span className="text-xs font-medium text-gray-400 mb-1 ml-1">
-            {senderName}
-          </span>
-        )}
-
-        {/* Message bubble */}
+      <div style={contentStyle}>
+        {/* Message bubble with asymmetric talk-bubble shape */}
         <div
-          className={cn(
-            'relative px-4 py-2.5 text-sm break-words whitespace-pre-wrap',
-            'shadow-lg transition-all duration-200',
-            // Bubble shape based on position in group - swapped colors
-            isLocal ? (
-              cn(
-                'bg-[#1E1E1E] text-gray-100 border border-white/5', // Local: dark gray (left)
-                'rounded-2xl',
-                isFirstInGroup && 'rounded-tl-2xl',
-                isLastInGroup && 'rounded-bl-md',
-                !isFirstInGroup && !isLastInGroup && 'rounded-l-md',
-                isFirstInGroup && isLastInGroup && 'rounded-bl-md'
-              )
-            ) : (
-              cn(
-                'bg-gradient-to-br from-purple-600 to-purple-700 text-white', // Remote: purple (right)
-                'rounded-2xl',
-                isFirstInGroup && 'rounded-tr-2xl',
-                isLastInGroup && 'rounded-br-md',
-                !isFirstInGroup && !isLastInGroup && 'rounded-r-md',
-                isFirstInGroup && isLastInGroup && 'rounded-br-md'
-              )
-            ),
-            // Hover effect
-            'hover:shadow-xl',
-            isLocal ? 'hover:bg-[#252525]' : 'hover:from-purple-500 hover:to-purple-600'
-          )}
+          style={{
+            ...bubbleStyle,
+            padding: '12px 16px',
+          }}
         >
-          {/* Message text */}
-          <p className="leading-relaxed">
+          <p style={{
+            color: isLocal ? '#FFFFFF' : '#E5E5E5',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            margin: 0,
+            wordBreak: 'break-word',
+          }}>
             {renderContent(content)}
           </p>
         </div>
 
-        {/* Timestamp and status - only for last message in group */}
+        {/* Timestamp and status */}
         {showTimestamp && isLastInGroup && (
-          <div className={cn(
-            'flex items-center gap-1.5 mt-1 px-1',
-            'opacity-0 group-hover:opacity-100 transition-opacity duration-200',
-            isLocal ? 'flex-row' : 'flex-row-reverse'
-          )}>
-            <span className="text-[10px] text-gray-500 font-medium">
+          <div style={timestampContainerStyle}>
+            <span style={styles.timestamp}>
               {formatTime(timestamp)}
             </span>
             {renderStatus()}
@@ -189,8 +224,19 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
         )}
       </div>
 
-      {/* Spacer for remote messages (instead of avatar) */}
-      {!isLocal && <div className="w-8 flex-shrink-0" />}
+      {/* Avatar for SENDER messages (right side) */}
+      {isLocal && (
+        <div style={{ flexShrink: 0, width: '40px' }}>
+          {showAvatar && isLastInGroup && (
+            <Avatar
+              name={senderName}
+              src={senderAvatar}
+              size="sm"
+              className="!w-10 !h-10"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 });

@@ -392,6 +392,7 @@ export class Room extends EventEmitter<RoomEvents> {
   private mapRTKParticipant(rtkParticipant: unknown): Participant {
     const p = rtkParticipant as {
       id: string;
+      userId?: string;
       name?: string;
       videoEnabled?: boolean;
       audioEnabled?: boolean;
@@ -406,6 +407,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
     return {
       id: p.id,
+      userId: p.userId, // Used for chat message matching
       displayName: p.name ?? "Unknown",
       role: "participant",
       isLocal: false,
