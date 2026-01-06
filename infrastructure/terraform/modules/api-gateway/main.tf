@@ -121,8 +121,10 @@ resource "aws_apigatewayv2_integration" "http_alb" {
   payload_format_version = "1.0"
   timeout_milliseconds   = 30000
 
+  # TLS verification must use the domain matching the ACM certificate on the ALB
+  # The ALB has cert for var.domain_name, not the internal DNS name
   tls_config {
-    server_name_to_verify = var.alb_dns_name
+    server_name_to_verify = var.domain_name
   }
 }
 
@@ -271,7 +273,7 @@ resource "aws_apigatewayv2_api_mapping" "http" {
   api_id          = aws_apigatewayv2_api.http.id
   domain_name     = aws_apigatewayv2_domain_name.main[0].id
   stage           = aws_apigatewayv2_stage.http.id
-  api_mapping_key = "api"
+  api_mapping_key = "" # Root mapping - Go API routes already have /api/v1 prefix
 }
 
 resource "aws_apigatewayv2_api_mapping" "websocket" {

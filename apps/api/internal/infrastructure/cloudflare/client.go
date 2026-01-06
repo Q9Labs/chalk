@@ -37,6 +37,11 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
+// IsConfigured returns true if the client has valid Cloudflare credentials
+func (c *Client) IsConfigured() bool {
+	return c.accountID != "" && c.appID != "" && c.apiToken != ""
+}
+
 // endpoint builds the full API endpoint URL
 func (c *Client) endpoint(path string) string {
 	return fmt.Sprintf("%s/accounts/%s/realtime/kit/%s%s",
@@ -66,7 +71,16 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 }
 
 // CreateMeeting creates a new meeting in Cloudflare RealtimeKit
+// Returns mock data if Cloudflare is not configured (for demo/testing)
 func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*Meeting, error) {
+	if !c.IsConfigured() {
+		// Return mock meeting for demo mode when Cloudflare is not configured
+		return &Meeting{
+			ID:     fmt.Sprintf("demo-%d", time.Now().UnixNano()),
+			Status: "active",
+		}, nil
+	}
+
 	resp, err := c.doRequest(ctx, "POST", "/meetings", req)
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare request failed: %w", err)
@@ -103,6 +117,10 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 
 // GetMeeting retrieves meeting details from Cloudflare RealtimeKit
 func (c *Client) GetMeeting(ctx context.Context, meetingID string) (*Meeting, error) {
+	if !c.IsConfigured() {
+		return &Meeting{ID: meetingID, Status: "active"}, nil
+	}
+
 	path := fmt.Sprintf("/meetings/%s", meetingID)
 	resp, err := c.doRequest(ctx, "GET", path, nil)
 	if err != nil {
@@ -124,6 +142,10 @@ func (c *Client) GetMeeting(ctx context.Context, meetingID string) (*Meeting, er
 
 // EndMeeting ends a meeting by updating its status to INACTIVE
 func (c *Client) EndMeeting(ctx context.Context, meetingID string) (*Meeting, error) {
+	if !c.IsConfigured() {
+		return &Meeting{ID: meetingID, Status: "inactive"}, nil
+	}
+
 	path := fmt.Sprintf("/meetings/%s", meetingID)
 	req := map[string]string{"status": "INACTIVE"}
 
@@ -147,6 +169,14 @@ func (c *Client) EndMeeting(ctx context.Context, meetingID string) (*Meeting, er
 
 // AddParticipant adds a participant to a meeting and returns their auth token
 func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddParticipantRequest) (*Participant, error) {
+	if !c.IsConfigured() {
+		// Return mock participant with demo token for testing
+		return &Participant{
+			ID:    fmt.Sprintf("demo-participant-%d", time.Now().UnixNano()),
+			Token: "demo-token-not-for-production",
+		}, nil
+	}
+
 	path := fmt.Sprintf("/meetings/%s/participants", meetingID)
 	resp, err := c.doRequest(ctx, "POST", path, req)
 	if err != nil {
