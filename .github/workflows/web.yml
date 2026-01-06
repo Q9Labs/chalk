@@ -67,37 +67,22 @@ jobs:
 
       - name: Verify build output
         run: |
-          echo "Checking build output..."
-          echo "Contents of apps/web/:"
-          ls -la apps/web/ || echo "apps/web/ not found"
-          echo ""
-          echo "Checking for dist directory (@cloudflare/vite-plugin):"
-          if [ -d "apps/web/dist" ]; then
-            echo "✓ dist directory exists"
-            du -sh apps/web/dist
-            ls -la apps/web/dist/
-            echo "Client assets:"
-            ls -la apps/web/dist/client/ || true
-            echo "Server assets:"
-            ls -la apps/web/dist/server/ || true
+          echo "Checking build output (SPA mode)..."
+          if [ -d "apps/web/dist/client" ]; then
+            echo "✓ dist/client directory exists"
+            du -sh apps/web/dist/client
+            ls -la apps/web/dist/client/
           else
-            echo "✗ dist directory NOT found"
-            ls -la apps/web/
+            echo "✗ dist/client NOT found"
+            ls -la apps/web/dist/ || ls -la apps/web/
+            exit 1
           fi
-
-      - name: Prepare artifacts
-        run: |
-          # Copy dist contents for deploy job
-          mkdir -p /tmp/web-output
-          cp -r apps/web/dist/* /tmp/web-output/
-          echo "Contents of /tmp/web-output:"
-          ls -la /tmp/web-output/
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: /tmp/web-output
+          path: apps/web/dist/client
           retention-days: 7
 
   deploy:
@@ -112,41 +97,17 @@ jobs:
       name: production
       url: https://chalk.q9labs.ai
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: web-build
-          path: apps/web/dist
+          path: deploy-dir
 
       - name: List artifacts
-        run: |
-          ls -la apps/web/dist/
-          ls -la apps/web/dist/client/ || true
-          ls -la apps/web/dist/server/ || true
+        run: ls -la deploy-dir/
 
       - name: Deploy to Cloudflare Pages
-        run: |
-          # Deploy using pages deploy
-          # Built server.js is used as _worker.js entry
-          cd apps/web
-          # Create _worker.js from server build for Pages Functions
-          mkdir -p dist/client/_worker.js
-          cp -r dist/server/* dist/client/_worker.js/
-          # Rename server.js to index.js (Pages convention)
-          mv dist/client/_worker.js/server.js dist/client/_worker.js/index.js
-          # Deploy client dir with _worker.js
-          bunx wrangler pages deploy dist/client --project-name=chalk-web --branch=main
+        run: npx wrangler pages deploy deploy-dir --project-name=chalk-web --branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

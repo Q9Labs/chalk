@@ -1,8 +1,7 @@
 name = "chalk-web"
 compatibility_date = "2024-12-01"
-compatibility_flags = ["nodejs_compat"]
 
-# For Cloudflare Pages deployment
+# TanStack Start SPA mode outputs to dist/client
 pages_build_output_dir = "dist/client"
 
 [vars]
