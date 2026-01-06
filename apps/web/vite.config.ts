@@ -6,9 +6,8 @@ import { cloudflare } from "unenv";
 import { defineConfig } from "vite";
 import viteTsConfigPaths from "vite-tsconfig-paths";
 
-// Use cloudflare_pages preset for Cloudflare Pages deployment
-// The runtime error on production is due to Nitro v3 alpha + TanStack Start SSR issues
-// TODO: Switch back to SSR once Nitro v3 stabilizes
+// Use cloudflare_pages preset with workaround for Nitro v3 SSR issues
+// noBundle: true avoids the problematic chunk bundling that breaks module resolution
 const config = defineConfig({
 	server: {
 		port: 3070,
@@ -17,12 +16,10 @@ const config = defineConfig({
 		nitro({
 			preset: "cloudflare_pages",
 			unenv: cloudflare,
-			// Disable devtools in production to reduce bundle complexity
-			rollupConfig: {
-				external: process.env.NODE_ENV === "production"
-					? ["@tanstack/react-devtools", "@tanstack/react-router-devtools"]
-					: [],
-			},
+			// Disable bundling to avoid module resolution issues
+			// Each chunk keeps its own imports intact
+			minify: false,
+			sourceMap: false,
 		}),
 		viteTsConfigPaths({
 			projects: ["./tsconfig.json", "../../packages/ui/tsconfig.json"],
