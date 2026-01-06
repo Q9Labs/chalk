@@ -56,6 +56,12 @@ func main() {
 
 	log.Println("Connected to database")
 
+	// Run database migrations
+	if err := pool.RunMigrations(ctx); err != nil {
+		log.Fatalf("Failed to run database migrations: %v", err)
+	}
+	log.Println("Database migrations completed")
+
 	// Initialize Redis client
 	redisClient, err := redis.NewClient(ctx, cfg.Redis.URL)
 	if err != nil {

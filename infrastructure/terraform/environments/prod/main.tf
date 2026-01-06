@@ -104,6 +104,7 @@ module "ecs" {
     { name = "REDIS_HOST", value = module.elasticache.primary_endpoint },
     { name = "REDIS_PORT", value = tostring(module.elasticache.port) },
     { name = "REDIS_TLS", value = "true" },
+    { name = "CHALK_ENABLE_DEMO", value = "true" },
     # Note: Cloudflare Calls not enabled yet - omit config to run in limited mode
     # { name = "CLOUDFLARE_ACCOUNT_ID", value = var.cloudflare_account_id },
     { name = "R2_BUCKET_NAME", value = module.cloudflare.recordings_bucket_name },
