@@ -84,12 +84,15 @@ function RootComponent() {
 		setTheme((prev) => (prev === "dark" ? "light" : "dark"));
 	};
 
+	// API URL for backend - use env var or default to production
+	const apiUrl = import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
 	// WebSocket URL for real-time features (hand raise, reactions, chat)
 	// const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 
 	return (
 		<ChalkProvider
 			debug={true}
+			apiUrl={apiUrl}
 			// wsUrl={wsUrl}
 		>
 			<div
