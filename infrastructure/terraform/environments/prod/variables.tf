@@ -29,9 +29,9 @@ variable "cloudflare_zone_name" {
 }
 
 variable "frontend_target" {
-  description = "Frontend CNAME target (e.g., Cloudflare Pages URL)"
+  description = "Frontend CNAME target (e.g., Cloudflare Pages URL). Set to null if managed by Cloudflare Pages directly."
   type        = string
-  default     = "chalk-web.pages.dev"
+  default     = null # Cloudflare Pages auto-creates this DNS record
 }
 
 variable "cloudflare_app_id" {
