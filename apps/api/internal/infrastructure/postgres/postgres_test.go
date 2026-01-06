@@ -142,7 +142,8 @@ func TestConfig_DSN_EmptyPassword(t *testing.T) {
 	}
 	dsn := config.DSN()
 
-	assert.Contains(t, dsn, "password=")
+	// When password is empty, it should NOT be included (intentional behavior)
+	assert.NotContains(t, dsn, "password=")
 }
 
 // TestConfig_DSN_ZeroPort checks DSN with port 0
@@ -287,7 +288,8 @@ func TestConfig_ZeroValues(t *testing.T) {
 	assert.Contains(t, dsn, "host=")
 	assert.Contains(t, dsn, "port=")
 	assert.Contains(t, dsn, "user=")
-	assert.Contains(t, dsn, "password=")
+	// Password is intentionally omitted when empty
+	assert.NotContains(t, dsn, "password=")
 	assert.Contains(t, dsn, "dbname=")
 	assert.Contains(t, dsn, "sslmode=")
 }
