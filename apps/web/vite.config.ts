@@ -10,7 +10,9 @@ const config = defineConfig({
 		port: 3070,
 	},
 	plugins: [
-		nitro(),
+		nitro({
+			preset: "cloudflare_pages",
+		}),
 		viteTsConfigPaths({
 			projects: ["./tsconfig.json", "../../packages/ui/tsconfig.json"],
 		}),

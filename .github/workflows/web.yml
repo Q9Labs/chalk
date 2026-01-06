@@ -71,23 +71,21 @@ jobs:
           echo "Contents of apps/web/:"
           ls -la apps/web/ || echo "apps/web/ not found"
           echo ""
-          echo "Checking for .output directory:"
-          if [ -d "apps/web/.output" ]; then
-            echo "✓ .output directory exists"
-            du -sh apps/web/.output
-            ls -la apps/web/.output/
+          echo "Checking for dist directory (cloudflare_pages preset):"
+          if [ -d "apps/web/dist" ]; then
+            echo "✓ dist directory exists"
+            du -sh apps/web/dist
+            ls -la apps/web/dist/
           else
-            echo "✗ .output directory NOT found"
-            echo "Checking current directory:"
-            pwd
-            ls -la
+            echo "✗ dist directory NOT found"
+            ls -la apps/web/
           fi
 
       - name: Prepare artifacts
         run: |
-          # Copy output to a standard location to avoid turbo cache issues
+          # Copy dist output (cloudflare_pages preset) to standard location
           mkdir -p /tmp/web-output
-          cp -r apps/web/.output/* /tmp/web-output/
+          cp -r apps/web/dist/* /tmp/web-output/
           echo "Contents of /tmp/web-output:"
           ls -la /tmp/web-output/
 
@@ -123,8 +121,8 @@ jobs:
         run: |
           # Create project if it doesn't exist (first deploy)
           npx wrangler@3 pages project create chalk-web --production-branch=main 2>/dev/null || true
-          # Deploy
-          npx wrangler@3 pages deploy web-output/public --project-name=chalk-web --branch=main
+          # Deploy full dist directory (includes _worker.js for SSR)
+          npx wrangler@3 pages deploy web-output --project-name=chalk-web --branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
