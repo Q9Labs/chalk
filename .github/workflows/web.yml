@@ -71,11 +71,15 @@ jobs:
           echo "Contents of apps/web/:"
           ls -la apps/web/ || echo "apps/web/ not found"
           echo ""
-          echo "Checking for dist directory (cloudflare_pages preset):"
+          echo "Checking for dist directory (@cloudflare/vite-plugin):"
           if [ -d "apps/web/dist" ]; then
             echo "✓ dist directory exists"
             du -sh apps/web/dist
             ls -la apps/web/dist/
+            echo "Client assets:"
+            ls -la apps/web/dist/client/ || true
+            echo "Server assets:"
+            ls -la apps/web/dist/server/ || true
           else
             echo "✗ dist directory NOT found"
             ls -la apps/web/
@@ -83,9 +87,11 @@ jobs:
 
       - name: Prepare artifacts
         run: |
-          # Copy dist output (cloudflare_pages preset) to standard location
+          # Copy entire web app dir for wrangler deploy (needs wrangler.toml)
           mkdir -p /tmp/web-output
-          cp -r apps/web/dist/* /tmp/web-output/
+          cp -r apps/web/dist /tmp/web-output/
+          cp apps/web/wrangler.toml /tmp/web-output/
+          cp apps/web/package.json /tmp/web-output/
           echo "Contents of /tmp/web-output:"
           ls -la /tmp/web-output/
 
@@ -97,7 +103,7 @@ jobs:
           retention-days: 7
 
   deploy:
-    name: Deploy to Cloudflare Pages
+    name: Deploy to Cloudflare Workers
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build
     if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || inputs.force_deploy
@@ -117,13 +123,12 @@ jobs:
       - name: List artifacts
         run: ls -la web-output/
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to Cloudflare Workers
         run: |
-          # Create project if it doesn't exist (first deploy)
-          npx wrangler@3 pages project create chalk-web --production-branch=main 2>/dev/null || true
-          # Deploy using --cwd flag as recommended by Nitro
-          # "." refers to current dir after --cwd changes to web-output
-          npx wrangler@3 --cwd web-output pages deploy . --project-name=chalk-web --branch=main
+          # Deploy using wrangler deploy for Workers (not Pages)
+          # @cloudflare/vite-plugin outputs to dist/client + dist/server
+          cd web-output
+          npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

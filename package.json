@@ -16,9 +16,11 @@
 		"generate": "turbo run generate:types"
 	},
 	"devDependencies": {
+		"@cloudflare/vite-plugin": "^1.17.1",
 		"@types/bun": "latest",
 		"turbo": "^2.7.2",
 		"typescript": "^5.7.2",
+		"wrangler": "^4.54.0",
 		"yaml": "^2.8.2"
 	},
 	"engines": {
