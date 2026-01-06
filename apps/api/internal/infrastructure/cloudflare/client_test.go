@@ -100,13 +100,13 @@ func TestPresetConstants(t *testing.T) {
 
 func TestMeetingStatusConstants(t *testing.T) {
 	assert.Equal(t, "ACTIVE", MeetingStatusActive)
-	assert.Equal(t, "ENDED", MeetingStatusEnded)
+	assert.Equal(t, "INACTIVE", MeetingStatusInactive)
 }
 
 func TestRecordingStatusConstants(t *testing.T) {
+	assert.Equal(t, "INVOKED", RecordingStatusInvoked)
 	assert.Equal(t, "RECORDING", RecordingStatusRecording)
-	assert.Equal(t, "STOPPED", RecordingStatusStopped)
-	assert.Equal(t, "PROCESSING", RecordingStatusProcessing)
+	assert.Equal(t, "UPLOADING", RecordingStatusUploading)
 	assert.Equal(t, "COMPLETED", RecordingStatusCompleted)
 	assert.Equal(t, "FAILED", RecordingStatusFailed)
 }
@@ -290,7 +290,7 @@ func TestEndMeeting_Success(t *testing.T) {
 			Data: Meeting{
 				ID:        "meeting-123",
 				Title:     "Test Meeting",
-				Status:    MeetingStatusEnded,
+				Status:    MeetingStatusInactive,
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
 			},
@@ -313,7 +313,7 @@ func TestEndMeeting_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotNil(t, meeting)
-	assert.Equal(t, MeetingStatusEnded, meeting.Status)
+	assert.Equal(t, MeetingStatusInactive, meeting.Status)
 }
 
 func TestEndMeeting_APIError(t *testing.T) {
@@ -550,7 +550,7 @@ func TestStartRecording_Success(t *testing.T) {
 				ID:        "recording-123",
 				MeetingID: "meeting-123",
 				Status:    RecordingStatusRecording,
-				StartedAt: func() *time.Time {
+				StartedTime: func() *time.Time {
 					t := time.Now()
 					return &t
 				}(),
@@ -571,9 +571,11 @@ func TestStartRecording_Success(t *testing.T) {
 	client.baseURL = server.URL
 
 	recording, err := client.StartRecording(context.Background(), "meeting-123", StartRecordingRequest{
-		RecordingConfig: &RecordingConfig{
-			Codec:      "H264",
-			AudioCodec: "OPUS",
+		MaxSeconds: 3600,
+		StorageConfig: &StorageConfig{
+			Type:   "aws",
+			Bucket: "my-bucket",
+			Region: "us-east-1",
 		},
 	})
 
@@ -619,18 +621,18 @@ func TestStopRecording_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "PUT", r.Method)
 
+		fileSize := int64(1024000)
 		recordingResp := Response[Recording]{
 			Success: true,
 			Data: Recording{
 				ID:        "recording-123",
 				MeetingID: "meeting-123",
-				Status:    RecordingStatusStopped,
-				StoppedAt: func() *time.Time {
+				Status:    RecordingStatusUploading,
+				StoppedTime: func() *time.Time {
 					t := time.Now()
 					return &t
 				}(),
-				Duration: 300,
-				FileSize: 1024000,
+				FileSize: &fileSize,
 			},
 		}
 
@@ -651,8 +653,7 @@ func TestStopRecording_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotNil(t, recording)
-	assert.Equal(t, RecordingStatusStopped, recording.Status)
-	assert.Equal(t, 300, recording.Duration)
+	assert.Equal(t, RecordingStatusUploading, recording.Status)
 }
 
 func TestStopRecording_MalformedResponse(t *testing.T) {
@@ -681,15 +682,16 @@ func TestGetRecording_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
 
+		downloadURL := "https://example.com/recording-123"
+		fileSize := int64(1024000)
 		recordingResp := Response[Recording]{
 			Success: true,
 			Data: Recording{
 				ID:          "recording-123",
 				MeetingID:   "meeting-123",
 				Status:      RecordingStatusCompleted,
-				Duration:    300,
-				FileSize:    1024000,
-				DownloadURL: "https://example.com/recording-123",
+				FileSize:    &fileSize,
+				DownloadURL: &downloadURL,
 			},
 		}
 
@@ -712,7 +714,7 @@ func TestGetRecording_Success(t *testing.T) {
 	assert.NotNil(t, recording)
 	assert.Equal(t, "recording-123", recording.ID)
 	assert.Equal(t, RecordingStatusCompleted, recording.Status)
-	assert.Equal(t, "https://example.com/recording-123", recording.DownloadURL)
+	assert.Equal(t, "https://example.com/recording-123", *recording.DownloadURL)
 }
 
 func TestGetRecording_NotFound(t *testing.T) {

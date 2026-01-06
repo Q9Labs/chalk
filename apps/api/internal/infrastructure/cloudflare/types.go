@@ -1,14 +1,16 @@
 package cloudflare
 
-import "time"
+import (
+	"time"
+)
 
 // Response is the generic Cloudflare API response wrapper
 type Response[T any] struct {
-	Success  bool           `json:"success"`
-	Data     T              `json:"data"`
-	Errors   []APIError     `json:"errors,omitempty"`
-	Messages []string       `json:"messages,omitempty"`
-	Result   *T             `json:"result,omitempty"` // Some endpoints use "result" instead of "data"
+	Success  bool       `json:"success"`
+	Data     T          `json:"data"`
+	Errors   []APIError `json:"errors,omitempty"`
+	Messages []string   `json:"messages,omitempty"`
+	Result   *T         `json:"result,omitempty"` // Some endpoints use "result" instead of "data"
 }
 
 // APIError represents a Cloudflare API error
@@ -19,50 +21,74 @@ type APIError struct {
 
 // CreateMeetingRequest is the request body for creating a meeting
 type CreateMeetingRequest struct {
-	Title           string           `json:"title"`
-	RecordOnStart   bool             `json:"record_on_start"`
-	PersistChat     bool             `json:"persist_chat"`
-	RecordingConfig *RecordingConfig `json:"recording_config,omitempty"`
+	Title                    string    `json:"title,omitempty"`
+	PreferredRegion          string    `json:"preferred_region,omitempty"` // nearest, eu, asia, na
+	RecordOnStart            bool      `json:"record_on_start,omitempty"`
+	WaitingRoom              bool      `json:"waiting_room,omitempty"`
+	LiveStreamOnStart        bool      `json:"live_stream_on_start,omitempty"`
+	PersistChat              bool      `json:"persist_chat,omitempty"`
+	SummarizeOnEnd           bool      `json:"summarize_on_end,omitempty"`
+	SessionKeepAliveTimeSecs int       `json:"session_keep_alive_time_in_secs,omitempty"`
+	AIConfig                 *AIConfig `json:"ai_config,omitempty"`
 }
 
-// RecordingConfig holds recording configuration
-type RecordingConfig struct {
-	Codec      string `json:"codec,omitempty"`       // H264, VP8
-	AudioCodec string `json:"audio_codec,omitempty"` // OPUS, AAC
-	Storage    string `json:"storage,omitempty"`     // S3, R2
-	S3Bucket   string `json:"s3_bucket,omitempty"`
-	S3Region   string `json:"s3_region,omitempty"`
+// AIConfig holds AI feature configuration
+type AIConfig struct {
+	Transcription *TranscriptionConfig `json:"transcription,omitempty"`
+}
+
+// TranscriptionConfig holds transcription settings
+type TranscriptionConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Language string `json:"language,omitempty"` // e.g., "en-US"
+}
+
+// StorageConfig holds custom cloud storage configuration for recordings
+type StorageConfig struct {
+	ID        string `json:"id,omitempty"` // returned in responses
+	Type      string `json:"type"`         // aws, r2, digitaloceanspaces, azure, gcs
+	AccessKey string `json:"access_key,omitempty"`
+	SecretKey string `json:"secret_key,omitempty"`
+	Region    string `json:"region,omitempty"`
+	Bucket    string `json:"bucket"`
+	Path      string `json:"path,omitempty"`
 }
 
 // Meeting represents a Cloudflare RealtimeKit meeting
 type Meeting struct {
-	ID        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Status    string    `json:"status"` // ACTIVE, ENDED
-	Title     string    `json:"title"`
+	ID              string    `json:"id"`
+	Title           string    `json:"title"`
+	Status          string    `json:"status"` // ACTIVE or INACTIVE
+	PreferredRegion string    `json:"preferred_region,omitempty"`
+	RecordOnStart   bool      `json:"record_on_start,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // MeetingStatus constants
 const (
-	MeetingStatusActive = "ACTIVE"
-	MeetingStatusEnded  = "ENDED"
+	MeetingStatusActive   = "ACTIVE"
+	MeetingStatusInactive = "INACTIVE"
 )
 
 // AddParticipantRequest is the request body for adding a participant
 type AddParticipantRequest struct {
 	Name             string `json:"name"`
-	PresetName       string `json:"preset_name"`        // group_call_host, group_call_participant
-	ClientSpecificID string `json:"client_specific_id"` // External user ID
+	Picture          string `json:"picture,omitempty"`          // URL to avatar
+	PresetName       string `json:"preset_name"`                // group_call_host, group_call_participant
+	ClientSpecificID string `json:"client_specific_id,omitempty"` // External user ID
 }
 
 // Participant represents a Cloudflare RealtimeKit participant
 type Participant struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	PresetName       string `json:"preset_name"`
-	ClientSpecificID string `json:"client_specific_id"`
-	Token            string `json:"token"` // AuthToken for SDK initialization
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Picture          string    `json:"picture,omitempty"`
+	PresetName       string    `json:"preset_name"`
+	ClientSpecificID string    `json:"client_specific_id,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	Token            string    `json:"token"` // JWT for SDK initialization
 }
 
 // PresetName constants
@@ -81,27 +107,43 @@ func RoleToPreset(role string) string {
 
 // StartRecordingRequest is the request body for starting a recording
 type StartRecordingRequest struct {
-	MeetingID       string           `json:"meeting_id"`
-	RecordingConfig *RecordingConfig `json:"recording_config,omitempty"`
+	MeetingID     string         `json:"meeting_id"`
+	MaxSeconds    int            `json:"max_seconds,omitempty"` // max recording duration
+	StorageConfig *StorageConfig `json:"storage_config,omitempty"`
+}
+
+// StopRecordingRequest is the request body for stop/pause/resume recording
+type StopRecordingRequest struct {
+	Action string `json:"action"` // "stop", "pause", "resume"
+}
+
+// UpdateMeetingRequest is the request body for updating a meeting
+type UpdateMeetingRequest struct {
+	Status string `json:"status"` // "INACTIVE" to deactivate
 }
 
 // Recording represents a Cloudflare RealtimeKit recording
 type Recording struct {
-	ID          string     `json:"id"`
-	MeetingID   string     `json:"meeting_id"`
-	Status      string     `json:"status"` // RECORDING, STOPPED, PROCESSING, COMPLETED, FAILED
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	StoppedAt   *time.Time `json:"stopped_at,omitempty"`
-	Duration    int        `json:"duration,omitempty"`    // in seconds
-	FileSize    int64      `json:"file_size,omitempty"`   // in bytes
-	DownloadURL string     `json:"download_url,omitempty"` // Pre-signed URL for download
+	ID                string         `json:"id"`
+	MeetingID         string         `json:"meeting_id"`
+	SessionID         *string        `json:"session_id,omitempty"`
+	Status            string         `json:"status"` // INVOKED, RECORDING, UPLOADING, COMPLETED, FAILED
+	OutputFileName    string         `json:"output_file_name,omitempty"`
+	DownloadURL       *string        `json:"download_url,omitempty"`
+	DownloadAudioURL  *string        `json:"download_audio_url,omitempty"`
+	DownloadURLExpiry *time.Time     `json:"download_url_expiry,omitempty"`
+	FileSize          *int64         `json:"file_size,omitempty"`
+	InvokedTime       *time.Time     `json:"invoked_time,omitempty"`
+	StartedTime       *time.Time     `json:"started_time,omitempty"`
+	StoppedTime       *time.Time     `json:"stopped_time,omitempty"`
+	StorageConfig     *StorageConfig `json:"storage_config,omitempty"`
 }
 
 // RecordingStatus constants
 const (
-	RecordingStatusRecording  = "RECORDING"
-	RecordingStatusStopped    = "STOPPED"
-	RecordingStatusProcessing = "PROCESSING"
-	RecordingStatusCompleted  = "COMPLETED"
-	RecordingStatusFailed     = "FAILED"
+	RecordingStatusInvoked   = "INVOKED"
+	RecordingStatusRecording = "RECORDING"
+	RecordingStatusUploading = "UPLOADING"
+	RecordingStatusCompleted = "COMPLETED"
+	RecordingStatusFailed    = "FAILED"
 )

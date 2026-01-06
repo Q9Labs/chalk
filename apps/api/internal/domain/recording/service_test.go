@@ -24,7 +24,7 @@ func (m *mockCloudflareClient) StartRecording(ctx context.Context, meetingID str
 	return &cloudflare.Recording{
 		ID:        "cf-recording-123",
 		MeetingID: meetingID,
-		Status:    "RECORDING",
+		Status:    cloudflare.RecordingStatusRecording,
 	}, nil
 }
 
@@ -34,7 +34,7 @@ func (m *mockCloudflareClient) StopRecording(ctx context.Context, recordingID st
 	}
 	return &cloudflare.Recording{
 		ID:     recordingID,
-		Status: "STOPPED",
+		Status: cloudflare.RecordingStatusUploading,
 	}, nil
 }
 
@@ -44,7 +44,7 @@ func (m *mockCloudflareClient) GetRecording(ctx context.Context, recordingID str
 	}
 	return &cloudflare.Recording{
 		ID:     recordingID,
-		Status: "COMPLETED",
+		Status: cloudflare.RecordingStatusCompleted,
 	}, nil
 }
 
@@ -181,15 +181,15 @@ func TestMockCloudflareClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if stopped.Status != "STOPPED" {
-		t.Error("expected status to be STOPPED")
+	if stopped.Status != cloudflare.RecordingStatusUploading {
+		t.Error("expected status to be UPLOADING")
 	}
 
 	got, err := cf.GetRecording(context.Background(), "cf-recording-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.Status != "COMPLETED" {
+	if got.Status != cloudflare.RecordingStatusCompleted {
 		t.Error("expected status to be COMPLETED")
 	}
 }
