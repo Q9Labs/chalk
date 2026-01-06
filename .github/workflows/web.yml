@@ -101,7 +101,7 @@ jobs:
           retention-days: 7
 
   deploy:
-    name: Deploy to Cloudflare Workers
+    name: Deploy to Cloudflare Pages
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build
     if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || inputs.force_deploy
@@ -135,12 +135,18 @@ jobs:
           ls -la apps/web/dist/client/ || true
           ls -la apps/web/dist/server/ || true
 
-      - name: Deploy to Cloudflare Workers
+      - name: Deploy to Cloudflare Pages
         run: |
-          # Deploy using wrangler deploy for Workers
-          # Use bunx to resolve @tanstack/react-start/server-entry via bun's node_modules
+          # Deploy using pages deploy
+          # Built server.js is used as _worker.js entry
           cd apps/web
-          bunx wrangler deploy
+          # Create _worker.js from server build for Pages Functions
+          mkdir -p dist/client/_worker.js
+          cp -r dist/server/* dist/client/_worker.js/
+          # Rename server.js to index.js (Pages convention)
+          mv dist/client/_worker.js/server.js dist/client/_worker.js/index.js
+          # Deploy client dir with _worker.js
+          bunx wrangler pages deploy dist/client --project-name=chalk-web --branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
