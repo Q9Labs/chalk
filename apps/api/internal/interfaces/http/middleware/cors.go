@@ -9,12 +9,14 @@ func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Allow localhost origins for development
+		// Allow localhost origins for development and production domains
 		allowedOrigins := map[string]bool{
-			"http://localhost:3070": true,
-			"http://localhost:3000": true,
-			"http://127.0.0.1:3070": true,
-			"http://127.0.0.1:3000": true,
+			"http://localhost:3070":       true,
+			"http://localhost:3000":       true,
+			"http://127.0.0.1:3070":       true,
+			"http://127.0.0.1:3000":       true,
+			"https://chalk.q9labs.ai":     true,
+			"https://chalk-5bc.pages.dev": true,
 		}
 
 		if allowedOrigins[origin] {
