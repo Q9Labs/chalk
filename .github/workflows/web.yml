@@ -122,8 +122,8 @@ jobs:
           # Create project if it doesn't exist (first deploy)
           npx wrangler@3 pages project create chalk-web --production-branch=main 2>/dev/null || true
           # Deploy using --cwd flag as recommended by Nitro
-          # This properly handles _worker.js and module resolution
-          npx wrangler@3 --cwd web-output pages deploy --project-name=chalk-web --branch=main
+          # "." refers to current dir after --cwd changes to web-output
+          npx wrangler@3 --cwd web-output pages deploy . --project-name=chalk-web --branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
