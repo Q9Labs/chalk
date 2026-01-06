@@ -1,23 +1,23 @@
 import { useState, useEffect, memo } from 'react';
-import { 
-  Mic, 
-  MicOff, 
-  Video, 
+import {
+  Mic,
+  MicOff,
+  Video,
   VideoOff,
   MoreVertical,
   ChevronDown,
   X
 } from 'lucide-react';
-import { 
-  Spinner, 
+import {
+  Spinner,
   Toast,
   Avatar,
   VideoTile,
   ControlButton,
   Input
 } from '../atomic';
-import { 
-  DeviceSelector 
+import {
+  DeviceSelector
 } from '../composite';
 import { cn } from '../../utils/cn';
 import Logo from '../../../../../apps/web/public/logo.png';
@@ -36,11 +36,11 @@ export interface PreJoinLobbyProps {
   userName?: string;
   onJoin: (settings: JoinSettings) => void;
   onCancel?: () => void;
-  
+
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
   audioLevel?: number;
-  
+
   videoDevices?: MediaDeviceInfo[];
   audioInputDevices?: MediaDeviceInfo[];
   audioOutputDevices?: MediaDeviceInfo[];
@@ -50,14 +50,14 @@ export interface PreJoinLobbyProps {
   onVideoDeviceChange?: (deviceId: string) => void;
   onAudioInputChange?: (deviceId: string) => void;
   onAudioOutputChange?: (deviceId: string) => void;
-  
+
   initialVideoEnabled?: boolean;
   initialAudioEnabled?: boolean;
   initialShowSettings?: boolean;
-  
+
   isLoading?: boolean;
   error?: string;
-  
+
   className?: string;
 }
 
@@ -94,7 +94,7 @@ function PreJoinLobbyBase({
 
   const handleJoin = () => {
     if (!displayName.trim()) return;
-    
+
     onJoin({
       displayName,
       videoEnabled: isVideoEnabled,
@@ -103,7 +103,7 @@ function PreJoinLobbyBase({
       selectedAudioInput,
       selectedAudioOutput,
     });
-    
+
   };
 
   const hasVideoDevices = videoDevices.length > 0;
@@ -117,22 +117,22 @@ function PreJoinLobbyBase({
 
   return (
     <div className={cn(
-      "min-h-screen bg-background text-foreground font-sans flex flex-col overflow-hidden", 
+      "min-h-screen bg-background text-foreground font-sans flex flex-col overflow-hidden",
       className
     )}>
        {/* Settings Modal/Overlay */}
        {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center  p-4">
           <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 bg-background">
-            <button 
+            <button
               onClick={() => setShowSettings(false)}
               className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground"
             >
               <X size={20} />
             </button>
-            
+
             <h2 className="text-xl font-bold text-foreground mb-6">Media Settings</h2>
-            
+
             <div className="space-y-4">
                {hasVideoDevices && (
                  <DeviceSelector
@@ -144,7 +144,7 @@ function PreJoinLobbyBase({
                    disabled={isLoading || !isVideoEnabled}
                  />
                )}
-               
+
                {hasAudioInput && (
                  <DeviceSelector
                    type="audioinput"
@@ -156,7 +156,7 @@ function PreJoinLobbyBase({
                    disabled={isLoading || !isAudioEnabled}
                  />
                )}
-               
+
                {hasAudioOutput && (
                  <DeviceSelector
                    type="audiooutput"
@@ -168,7 +168,7 @@ function PreJoinLobbyBase({
                  />
                )}
             </div>
-            
+
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setShowSettings(false)}
@@ -184,15 +184,15 @@ function PreJoinLobbyBase({
       {/* Header */}
       <div className="flex justify-between items-center p-6 w-full max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
-              <img 
-                src={Logo} 
-                alt="Chalk logo" 
+              <img
+                src={Logo}
+                alt="Chalk logo"
                 className="h-8 w-auto"
                 draggable={false}
               />
               <span className="text-xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent hidden sm:block">Chalk</span>
           </div>
-          
+
           <div className="flex items-center gap-3 bg-muted/50 px-3 py-1.5 rounded-full border border-border hover:bg-muted transition-colors cursor-pointer">
               <Avatar name={displayName || "Guest"} size="xs" className="!w-6 !h-6" />
               <span className="font-medium text-sm text-foreground">{displayName || "Guest"}</span>
@@ -204,7 +204,7 @@ function PreJoinLobbyBase({
         <div className="flex-1 w-full max-w-5xl mx-auto flex items-center justify-center gap-12 lg:gap-24 px-6 pb-12">
           {/* Left Column: Video Preview */}
           <div className="w-full max-w-xl lg:w-[640px]">
-              <VideoTile 
+              <VideoTile
                   participant={{
                       id: 'lobby-me',
                       displayName: displayName || 'You',
@@ -219,7 +219,7 @@ function PreJoinLobbyBase({
                   aspectRatio="16:9"
               >
                   {/* Overlay Controls */}
-                  
+
                   {/* Top Left: Name Badge */}
                   <div className="absolute top-4 left-4 z-10">
                       <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-border">
@@ -232,7 +232,7 @@ function PreJoinLobbyBase({
                   </div>
 
                   {/* Top Right: Kebab Menu */}
-                  
+
                   <div className="absolute top-4 right-4 z-20">
                        <ControlButton
                            icon={<MoreVertical size={18} />}
@@ -241,7 +241,7 @@ function PreJoinLobbyBase({
                            onClick={toggleSettings}
                         />
                   </div>
-                  
+
 
                   {/* Center State: Camera Off */}
                   {!isVideoEnabled && (
@@ -255,7 +255,7 @@ function PreJoinLobbyBase({
 
                   {/* Bottom Center: Media Controls */}
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 z-20">
-                      <ControlButton 
+                      <ControlButton
                           icon={isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
                           label={isAudioEnabled ? "Mute" : "Unmute"}
                           onClick={toggleAudio}
@@ -265,7 +265,7 @@ function PreJoinLobbyBase({
                           )}
                           size="lg"
                       />
-                      <ControlButton 
+                      <ControlButton
                           icon={isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
                           label={isVideoEnabled ? "Stop Video" : "Start Video"}
                           onClick={toggleVideo}
@@ -300,7 +300,7 @@ function PreJoinLobbyBase({
                     />
                   </div>
 
-                  <button 
+                  <button
                       onClick={handleJoin}
                       disabled={!displayName.trim() || isLoading}
                       className="w-full py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full font-semibold text-lg transition-all shadow-lg hover:shadow-primary/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -309,7 +309,7 @@ function PreJoinLobbyBase({
                       {isLoading ? "Joining..." : "Ask to join"}
                   </button>
 
-                  <button 
+                  <button
                       className="w-full py-4 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-full font-medium flex items-center justify-center gap-2 transition-all active:scale-95"
                   >
                       Other ways to join
@@ -322,7 +322,7 @@ function PreJoinLobbyBase({
                    <div className="flex -space-x-3">
                        {[1, 2, 3].map(i => (
                            <div key={i} className="rounded-full border-2 border-background bg-muted">
-                               <Avatar 
+                               <Avatar
                                   name={`User ${i}`}
                                   src={`https://i.pravatar.cc/100?img=${i+10}`}
                                   size="md"
@@ -340,12 +340,12 @@ function PreJoinLobbyBase({
               </div> */}
           </div>
       </div>
-      
+
       {error && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md z-50">
-          <Toast 
-            type="error" 
-            message={error} 
+          <Toast
+            type="error"
+            message={error}
             onDismiss={() => {}}
             duration={0}
           />
