@@ -78,6 +78,15 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare SPA for Cloudflare Pages
+        run: |
+          # TanStack Start SPA mode outputs _shell.html
+          # Cloudflare Pages needs index.html for SPA fallback
+          cd apps/web/dist/client
+          cp _shell.html index.html
+          # Remove _redirects - Cloudflare auto-handles SPA routing
+          rm -f _redirects
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
