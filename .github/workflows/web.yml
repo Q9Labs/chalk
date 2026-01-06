@@ -138,9 +138,9 @@ jobs:
       - name: Deploy to Cloudflare Workers
         run: |
           # Deploy using wrangler deploy for Workers
-          # Entry point references @tanstack/react-start/server-entry from node_modules
+          # Use bunx to resolve @tanstack/react-start/server-entry via bun's node_modules
           cd apps/web
-          npx wrangler deploy
+          bunx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
