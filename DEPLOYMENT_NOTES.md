@@ -29,3 +29,29 @@ Quick reference for deployment issues and fixes.
 
 ### Test Quirks
 - Config test expects port 8081 (not 8080) - matches actual default in config.go
+
+## AWS API Gateway
+
+### VPC Link TLS Configuration
+- API Gateway connects to internal ALB via VPC Link
+- `TlsConfig.ServerNameToVerify` must match the ACM certificate domain (`chalk-api.q9labs.ai`)
+- NOT the internal ALB DNS name (`internal-chalk-prod-*.elb.amazonaws.com`)
+- Fix command: `aws apigatewayv2 update-integration --api-id <id> --integration-id <id> --tls-config ServerNameToVerify=chalk-api.q9labs.ai`
+
+### API Mapping
+- Custom domain `chalk-api.q9labs.ai` uses root mapping (empty key)
+- Requests go directly to backend without path prefix stripping
+- `/health` → `/health`, `/api/v1/*` → `/api/v1/*`
+
+### Security Groups (Manual Additions)
+ECS tasks SG (`sg-0dcfc32590d21fc75`) needs access to:
+- Aurora SG (`sg-0d7b000fdea80643a`) on port 5432
+- Redis SG (`sg-046488938b1194507`) on port 6379
+
+Commands used:
+```bash
+aws ec2 authorize-security-group-ingress --group-id sg-0d7b000fdea80643a --protocol tcp --port 5432 --source-group sg-0dcfc32590d21fc75
+aws ec2 authorize-security-group-ingress --group-id sg-046488938b1194507 --protocol tcp --port 6379 --source-group sg-0dcfc32590d21fc75
+```
+
+TODO: Codify these rules in Terraform
