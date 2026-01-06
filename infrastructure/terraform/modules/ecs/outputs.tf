@@ -82,3 +82,8 @@ output "https_listener_arn" {
   description = "HTTPS listener ARN"
   value       = try(aws_lb_listener.https[0].arn, null)
 }
+
+output "ecs_tasks_security_group_id" {
+  description = "ECS tasks security group ID (awsvpc mode)"
+  value       = try(aws_security_group.ecs_tasks[0].id, null)
+}

@@ -43,15 +43,24 @@ Quick reference for deployment issues and fixes.
 - Requests go directly to backend without path prefix stripping
 - `/health` → `/health`, `/api/v1/*` → `/api/v1/*`
 
-### Security Groups (Manual Additions)
-ECS tasks SG (`sg-0dcfc32590d21fc75`) needs access to:
-- Aurora SG (`sg-0d7b000fdea80643a`) on port 5432
-- Redis SG (`sg-046488938b1194507`) on port 6379
+### Security Groups
+ECS uses **two** security groups:
+- `ecs-instances-sg`: EC2 instances in ECS cluster (bridge mode)
+- `ecs-tasks-sg`: Container network interfaces (awsvpc mode)
 
-Commands used:
-```bash
-aws ec2 authorize-security-group-ingress --group-id sg-0d7b000fdea80643a --protocol tcp --port 5432 --source-group sg-0dcfc32590d21fc75
-aws ec2 authorize-security-group-ingress --group-id sg-046488938b1194507 --protocol tcp --port 6379 --source-group sg-0dcfc32590d21fc75
+Both must be allowed in Aurora and ElastiCache security groups. Fixed in Terraform:
+```hcl
+# modules/ecs/outputs.tf - added ecs_tasks_security_group_id output
+# environments/prod/main.tf - added both SGs to allowed_security_group_ids
+allowed_security_group_ids = compact([
+  module.ecs.ecs_instances_security_group_id,
+  module.ecs.ecs_tasks_security_group_id,
+])
 ```
 
-TODO: Codify these rules in Terraform
+## Cloudflare RealtimeKit (Demo Mode)
+
+When Cloudflare credentials are not configured (no `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_APP_ID`, `CLOUDFLARE_API_TOKEN`):
+- Demo mode returns mock meeting/participant data
+- Real video conferencing won't work, but API endpoints function for testing
+- Set `CHALK_ENABLE_DEMO=true` in ECS to enable demo join endpoint

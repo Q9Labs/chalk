@@ -131,7 +131,11 @@ module "aurora" {
   environment                = local.environment
   vpc_id                     = module.vpc.vpc_id
   subnet_ids                 = module.vpc.database_subnet_ids
-  allowed_security_group_ids = [module.ecs.ecs_instances_security_group_id]
+  # Allow both ECS instances (EC2 host) and ECS tasks (awsvpc containers) to connect
+  allowed_security_group_ids = compact([
+    module.ecs.ecs_instances_security_group_id,
+    module.ecs.ecs_tasks_security_group_id,
+  ])
 
   engine_version = "16.4"
   database_name  = "chalk"
@@ -156,7 +160,11 @@ module "elasticache" {
   environment                = local.environment
   vpc_id                     = module.vpc.vpc_id
   subnet_ids                 = module.vpc.database_subnet_ids
-  allowed_security_group_ids = [module.ecs.ecs_instances_security_group_id]
+  # Allow both ECS instances (EC2 host) and ECS tasks (awsvpc containers) to connect
+  allowed_security_group_ids = compact([
+    module.ecs.ecs_instances_security_group_id,
+    module.ecs.ecs_tasks_security_group_id,
+  ])
 
   engine_version     = "7.1"
   node_type          = "cache.r6g.large"
