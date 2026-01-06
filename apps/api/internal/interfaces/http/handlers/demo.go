@@ -113,8 +113,12 @@ func (h *DemoHandler) getOrCreateDemoTenant(c *gin.Context) (db.Tenant, error) {
 
 	// Create demo tenant
 	return h.queries.CreateTenant(c.Request.Context(), db.CreateTenantParams{
-		Name:       "Demo Tenant",
-		ApiKeyHash: "demo-key-hash",
+		Name:                        "Demo Tenant",
+		ApiKeyHash:                  "demo-key-hash",
+		Config:                      []byte("{}"),
+		MaxConcurrentRooms:          100,
+		MaxParticipantsPerRoom:      50,
+		MaxRecordingDurationMinutes: 120,
 	})
 }
 

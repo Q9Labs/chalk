@@ -40,10 +40,10 @@ export const Tooltip = React.memo(({
   }, []);
 
   const positionClasses = {
-    top: 'bottom-full left-1/2 mb-2 -translate-x-1/2',
-    bottom: 'top-full left-1/2 mt-2 -translate-x-1/2',
-    left: 'right-full top-1/2 mr-2 -translate-y-1/2',
-    right: 'left-full top-1/2 ml-2 -translate-y-1/2',
+    top: 'bottom-full left-1/2 mb-24 -translate-x-1/2',
+    bottom: 'top-full left-1/2 mt-24 -translate-x-1/2',
+    left: 'right-full top-1/2 mr-24 -translate-y-1/2',
+    right: 'left-full top-1/2 ml-24 -translate-y-1/2',
   };
 
   return (
@@ -58,8 +58,8 @@ export const Tooltip = React.memo(({
       {isVisible && (
         <div
           className={cn(
-            'absolute z-50 whitespace-nowrap rounded-[var(--chalk-border-radius-sm)] bg-[var(--chalk-bg-primary)] px-2 py-1 text-[var(--chalk-font-size-xs)] text-[var(--chalk-text-primary)] shadow-md ring-1 ring-[var(--chalk-border-color)]',
-            !prefersReducedMotion && 'chalk-animate-scale-in origin-center',
+            'absolute z-[1000] pointer-events-none whitespace-nowrap rounded-lg bg-[#1A1625] px-3 py-1.5 text-xs font-medium text-white shadow-xl ring-1 ring-white/10',
+            !prefersReducedMotion && 'animate-in fade-in zoom-in-95 duration-200',
             positionClasses[position],
             className
           )}
@@ -68,7 +68,7 @@ export const Tooltip = React.memo(({
           {content}
           <div
             className={cn(
-              'absolute h-2 w-2 rotate-45 border-r border-b border-[var(--chalk-border-color)] bg-[var(--chalk-bg-primary)]',
+              'absolute h-2 w-2 rotate-45 border-r border-b border-white/10 bg-[#1A1625]',
               position === 'top' && 'bottom-[-5px] left-1/2 -translate-x-1/2 rotate-45 border-l-0 border-t-0',
               position === 'bottom' && 'top-[-5px] left-1/2 -translate-x-1/2 -rotate-135 border-l-0 border-t-0',
               position === 'left' && 'right-[-5px] top-1/2 -translate-y-1/2 -rotate-45 border-l-0 border-t-0',

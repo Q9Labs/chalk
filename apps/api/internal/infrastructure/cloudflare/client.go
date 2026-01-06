@@ -122,10 +122,10 @@ func (c *Client) GetMeeting(ctx context.Context, meetingID string) (*Meeting, er
 	return &result.Data, nil
 }
 
-// EndMeeting ends a meeting by updating its status to ENDED
+// EndMeeting ends a meeting by updating its status to INACTIVE
 func (c *Client) EndMeeting(ctx context.Context, meetingID string) (*Meeting, error) {
 	path := fmt.Sprintf("/meetings/%s", meetingID)
-	req := map[string]string{"status": "ENDED"}
+	req := map[string]string{"status": "INACTIVE"}
 
 	resp, err := c.doRequest(ctx, "PATCH", path, req)
 	if err != nil {
@@ -226,22 +226,38 @@ func (c *Client) RefreshParticipantToken(ctx context.Context, meetingID, partici
 
 // StartRecording starts recording for a meeting
 func (c *Client) StartRecording(ctx context.Context, meetingID string, req StartRecordingRequest) (*Recording, error) {
-	resp, err := c.doRequest(ctx, "POST", "/recordings", map[string]interface{}{
-		"meeting_id":       meetingID,
-		"recording_config": req.RecordingConfig,
-	})
+	body := map[string]interface{}{
+		"meeting_id": meetingID,
+	}
+	if req.MaxSeconds > 0 {
+		body["max_seconds"] = req.MaxSeconds
+	}
+	if req.StorageConfig != nil {
+		body["storage_config"] = req.StorageConfig
+	}
+	resp, err := c.doRequest(ctx, "POST", "/recordings", body)
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Read raw body for better error reporting
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var result Response[Recording]
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	if !result.Success {
-		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+		return nil, fmt.Errorf("cloudflare error (errors=%v, messages=%v): raw=%s", result.Errors, result.Messages, string(bodyBytes))
 	}
 
 	return &result.Data, nil
@@ -250,7 +266,7 @@ func (c *Client) StartRecording(ctx context.Context, meetingID string, req Start
 // StopRecording stops an active recording
 func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Recording, error) {
 	path := fmt.Sprintf("/recordings/%s", recordingID)
-	req := map[string]string{"action": "STOP"}
+	req := map[string]string{"action": "stop"}
 
 	resp, err := c.doRequest(ctx, "PUT", path, req)
 	if err != nil {
@@ -273,6 +289,48 @@ func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Record
 // GetRecording retrieves recording details
 func (c *Client) GetRecording(ctx context.Context, recordingID string) (*Recording, error) {
 	path := fmt.Sprintf("/recordings/%s", recordingID)
+	resp, err := c.doRequest(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result Response[Recording]
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+	}
+
+	return &result.Data, nil
+}
+
+// KickAllParticipants ends an active session by kicking all participants
+func (c *Client) KickAllParticipants(ctx context.Context, meetingID string) error {
+	path := fmt.Sprintf("/meetings/%s/active-session/kick-all", meetingID)
+	resp, err := c.doRequest(ctx, "POST", path, nil)
+	if err != nil {
+		return fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result Response[interface{}]
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+
+	if !result.Success {
+		return fmt.Errorf("cloudflare error: %v", result.Errors)
+	}
+
+	return nil
+}
+
+// GetActiveRecording retrieves the active recording for a meeting
+func (c *Client) GetActiveRecording(ctx context.Context, meetingID string) (*Recording, error) {
+	path := fmt.Sprintf("/recordings/active-recording/%s", meetingID)
 	resp, err := c.doRequest(ctx, "GET", path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare request failed: %w", err)

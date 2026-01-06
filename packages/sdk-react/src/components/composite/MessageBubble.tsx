@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
 import { Avatar } from '../atomic/Avatar';
+import { Check, CheckCheck } from 'lucide-react';
 
 export interface MessageBubbleProps {
   content: string;
@@ -11,8 +12,45 @@ export interface MessageBubbleProps {
   isSystem?: boolean;
   showSender?: boolean;
   showTimestamp?: boolean;
+  showAvatar?: boolean;
+  isFirstInGroup?: boolean;
+  isLastInGroup?: boolean;
+  status?: 'sending' | 'sent' | 'delivered' | 'read';
   className?: string;
 }
+
+// Inline styles matching the reference design
+const styles = {
+  // SENDER (you/local) - Royal Blue #0764BB - RIGHT SIDE
+  // Tail on TOP-RIGHT, rounded on other corners
+  senderBubble: {
+    background: '#0764BB',
+    color: '#FFFFFF',
+    borderRadius: '20px 4px 20px 20px', // top-left, TOP-RIGHT (tail), bottom-right, bottom-left
+  } as React.CSSProperties,
+
+  // RECEIVER (others/remote) - Glassmorphism #F1F1F11C with blur - LEFT SIDE
+  // Tail on TOP-LEFT, rounded on other corners
+  receiverBubble: {
+    background: 'rgba(241, 241, 241, 0.11)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    color: '#E5E5E5',
+    borderRadius: '4px 20px 20px 20px', // TOP-LEFT (tail), top-right, bottom-right, bottom-left
+  } as React.CSSProperties,
+
+  // System message
+  systemBubble: {
+    background: 'rgba(255, 255, 255, 0.08)',
+    color: '#9CA3AF',
+  } as React.CSSProperties,
+
+  // Timestamp
+  timestamp: {
+    color: '#6B7280',
+    fontSize: '11px',
+  } as React.CSSProperties,
+};
 
 export const MessageBubble = React.memo<MessageBubbleProps>(({
   content,
@@ -21,8 +59,12 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
   timestamp,
   isLocal = false,
   isSystem = false,
-  showSender = true,
+  showSender: _showSender = true,
   showTimestamp = true,
+  showAvatar = true,
+  isFirstInGroup: _isFirstInGroup = true,
+  isLastInGroup = true,
+  status = 'delivered',
   className,
 }) => {
   const formatTime = (date: Date) => {
@@ -45,7 +87,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[var(--chalk-accent)] underline hover:text-[var(--chalk-accent-hover)] break-all"
+            style={{ color: '#93C5FD', textDecoration: 'underline' }}
           >
             {part}
           </a>
@@ -55,14 +97,43 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     });
   };
 
+  // Render read receipt status (blue double-ticks like reference)
+  const renderStatus = () => {
+    if (!isLocal) return null;
+
+    switch (status) {
+      case 'sending':
+        return (
+          <div
+            className="w-3 h-3 rounded-full animate-spin"
+            style={{ border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'transparent' }}
+          />
+        );
+      case 'sent':
+        return <Check className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />;
+      case 'delivered':
+        return <CheckCheck className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />;
+      case 'read':
+        return <CheckCheck className="w-3.5 h-3.5" style={{ color: '#3B82F6' }} />; // Blue ticks
+      default:
+        return null;
+    }
+  };
+
+  // System message (join/leave notifications)
   if (isSystem) {
     return (
-      <div className={cn('flex flex-col items-center gap-1 py-2', className)}>
-        <p className="text-sm italic text-[var(--chalk-text-muted)] text-center px-4">
-          {renderContent(content)}
-        </p>
+      <div className={cn('flex flex-col items-center gap-1 py-3', className)}>
+        <div
+          className="px-4 py-2 rounded-full"
+          style={styles.systemBubble}
+        >
+          <p style={{ fontSize: '12px', textAlign: 'center' }}>
+            {renderContent(content)}
+          </p>
+        </div>
         {showTimestamp && (
-          <span className="text-xs text-[var(--chalk-text-muted)] opacity-70">
+          <span style={styles.timestamp}>
             {formatTime(timestamp)}
           </span>
         )}
@@ -70,49 +141,102 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     );
   }
 
+  // DEBUG: Log isLocal value
+  console.log('MessageBubble DEBUG:', { senderName, isLocal, content: content.substring(0, 20) });
+
+  // SENDER (you) = isLocal=true = RIGHT side, blue, tail top-right
+  // RECEIVER (others) = isLocal=false = LEFT side, glassmorphism, tail top-left
+  const bubbleStyle: React.CSSProperties = isLocal ? styles.senderBubble : styles.receiverBubble;
+
+  // Use inline styles to guarantee positioning works regardless of Tailwind
+  const containerStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '12px',
+    width: '100%',
+    padding: '0 16px',
+    marginBottom: isLastInGroup ? '16px' : '4px',
+    // KEY: This controls LEFT vs RIGHT positioning
+    justifyContent: isLocal ? 'flex-end' : 'flex-start',
+    flexDirection: 'row',
+  };
+
+  const contentStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: isLocal ? 'flex-end' : 'flex-start',
+    maxWidth: '70%',
+  };
+
+  const timestampContainerStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    marginTop: '4px',
+    padding: '0 4px',
+    flexDirection: isLocal ? 'row-reverse' : 'row',
+  };
+
   return (
-    <div
-      className={cn(
-        'flex gap-3 w-full max-w-[85%]',
-        isLocal ? 'ml-auto flex-row-reverse' : 'mr-auto',
-        className
-      )}
-    >
-      {!isLocal && showSender && (
-        <Avatar
-          name={senderName}
-          src={senderAvatar}
-          size="sm"
-          className="mt-0.5"
-        />
-      )}
-      
-      {!isLocal && !showSender && <div className="w-8" />} 
-
-      <div className={cn('flex flex-col gap-1', isLocal ? 'items-end' : 'items-start')}>
-        {showSender && !isLocal && (
-          <span className="text-xs font-medium text-[var(--chalk-text-secondary)] ml-1">
-            {senderName}
-          </span>
-        )}
-
-        <div
-          className={cn(
-            'px-3 py-2 rounded-[var(--chalk-border-radius-lg)] text-sm shadow-sm break-words whitespace-pre-wrap',
-            isLocal
-              ? 'bg-[var(--chalk-primary)] text-white rounded-tr-none'
-              : 'bg-[var(--chalk-bg-secondary)] text-[var(--chalk-text-primary)] rounded-tl-none border border-[var(--chalk-border-color)]'
+    <div style={containerStyle} className={className}>
+      {/* Avatar for RECEIVER messages (left side) */}
+      {!isLocal && (
+        <div style={{ flexShrink: 0, width: '40px' }}>
+          {showAvatar && isLastInGroup && (
+            <Avatar
+              name={senderName}
+              src={senderAvatar}
+              size="sm"
+              className="!w-10 !h-10"
+            />
           )}
+        </div>
+      )}
+
+      {/* Message content */}
+      <div style={contentStyle}>
+        {/* Message bubble with asymmetric talk-bubble shape */}
+        <div
+          style={{
+            ...bubbleStyle,
+            padding: '12px 16px',
+          }}
         >
-          {renderContent(content)}
+          <p style={{
+            color: isLocal ? '#FFFFFF' : '#E5E5E5',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            margin: 0,
+            wordBreak: 'break-word',
+          }}>
+            {renderContent(content)}
+          </p>
         </div>
 
-        {showTimestamp && (
-          <span className={cn('text-[10px] text-[var(--chalk-text-muted)]', isLocal ? 'mr-1' : 'ml-1')}>
-            {formatTime(timestamp)}
-          </span>
+        {/* Timestamp and status */}
+        {showTimestamp && isLastInGroup && (
+          <div style={timestampContainerStyle}>
+            <span style={styles.timestamp}>
+              {formatTime(timestamp)}
+            </span>
+            {renderStatus()}
+          </div>
         )}
       </div>
+
+      {/* Avatar for SENDER messages (right side) */}
+      {isLocal && (
+        <div style={{ flexShrink: 0, width: '40px' }}>
+          {showAvatar && isLastInGroup && (
+            <Avatar
+              name={senderName}
+              src={senderAvatar}
+              size="sm"
+              className="!w-10 !h-10"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 });

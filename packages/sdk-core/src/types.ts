@@ -239,8 +239,10 @@ export type ParticipantRole = "host" | "participant";
  * ```
  */
 export interface Participant {
-	/** Unique participant identifier */
+	/** Unique participant identifier (RTK session ID) */
 	id: string;
+	/** User ID from authentication system (use this for chat message matching) */
+	userId?: string;
 	/** Display name visible to others */
 	displayName: string;
 	/** Role in the room */
@@ -257,6 +259,11 @@ export interface Participant {
 	 * Usually handled automatically, but available for custom audio processing
 	 */
 	audioTrack?: MediaStreamTrack;
+	/**
+	 * Screen share video MediaStreamTrack if sharing screen
+	 * Use with HTMLVideoElement.srcObject = new MediaStream([track])
+	 */
+	screenShareTrack?: MediaStreamTrack;
 	/** Camera is enabled and publishing */
 	videoEnabled: boolean;
 	/** Microphone is enabled (not muted) */

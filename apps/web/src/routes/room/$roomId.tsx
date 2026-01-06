@@ -1,263 +1,491 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  useRoom,
-  useParticipants,
-  useMedia,
-  useChat,
-  useRecording,
-  useTranscription,
-  useSoundEffects,
-  useKeyboardShortcuts,
-  createMeetingShortcuts,
-  useAnnouncer,
-  EndScreen,
-  useChalk,
+/**
+ * RoomPage - Main video conference room component
+ *
+ * This is the entry point for the room view. It orchestrates:
+ * - SDK hooks for room state and media
+ * - Custom hooks for events, notifications, and UI
+ * - Sub-components for video grid, controls, and panels
+ *
+ * Debug logging is comprehensive throughout. Enable verbose mode with:
+ * - URL param: ?verbose=true
+ * - localStorage: chalk_debug_verbose=true
+ */
 
+import {
+	EndScreen,
+	GuidedTour,
+	NotificationStack,
+	createMeetingShortcuts,
+	useAnnouncer,
+	useChalk,
+	useChat,
+	useKeyboardShortcuts,
+	useMedia,
+	useParticipants,
+	useRecording,
+	useRoom,
+	useSoundEffects,
 } from "@q9labs/chalk-react";
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+// Local modules
+import {
+	ControlBar,
+	LoadingScreen,
+	ReactionBubbles,
+	SidePanels,
+	VideoGrid,
+} from "@/features/room/components";
+import { useNotifications, useRoomEvents, useUIState } from "@/features/room/hooks";
+import { roomDebug as log } from "@/features/room/utils/debug";
+
+// =============================================================================
+// ROUTE DEFINITION
+// =============================================================================
 
 export const Route = createFileRoute("/room/$roomId")({
-  component: RoomPage,
+	component: RoomPage,
 });
 
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
+
 function RoomPage() {
-  const { roomId } = Route.useParams() as { roomId: string };
-  const navigate = useNavigate();
+	const { roomId } = Route.useParams() as { roomId: string };
+	const navigate = useNavigate();
 
-  const { client, joinRoom, leaveRoom } = useChalk();
-  const { isConnected } = useRoom();
-  const { participants, localParticipant } = useParticipants();
-  const {
-    isVideoEnabled,
-    isAudioEnabled,
-    isScreenSharing,
-    toggleVideo,
-    toggleAudio,
-    startScreenShare,
-    stopScreenShare
-  } = useMedia();
+	// =========================================================================
+	// LIFECYCLE LOGGING
+	// =========================================================================
 
-  const { messages } = useChat();
-  const { isRecording, durationSeconds, startRecording, stopRecording } = useRecording();
-  const { isTranscribing, transcripts } = useTranscription({ enabled: true });
+	useEffect(() => {
+		log.lifecycle("mount");
+		log.info("info", `RoomPage mounted for room: ${roomId}`, "lifecycle");
+		log.debug("Route Params", { roomId });
 
-  useSoundEffects({ enabled: true });
-  useAnnouncer({});
+		return () => {
+			log.lifecycle("unmount");
+			log.info("info", `RoomPage unmounting from room: ${roomId}`, "lifecycle");
+		};
+	}, [roomId]);
 
-  const [hasJoined, setHasJoined] = useState(false);
-  const [showEndScreen, setShowEndScreen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const joinAttempted = useRef(false);
+	// =========================================================================
+	// SDK HOOKS
+	// =========================================================================
 
-  useEffect(() => {
-    // Wait for client to be initialized and only attempt once
-    if (!client || joinAttempted.current || isConnected || hasJoined) {
-      return;
-    }
+	const { leaveRoom, removeParticipant } = useChalk();
+	const { room, isConnected } = useRoom();
+	const { participants, localParticipant, activeSpeaker } = useParticipants();
+	const {
+		isVideoEnabled,
+		isAudioEnabled,
+		isScreenSharing,
+		toggleVideo,
+		toggleAudio,
+		startScreenShare,
+		stopScreenShare,
+	} = useMedia();
+	const { messages, sendMessage } = useChat();
+	const {
+		isRecording,
+		durationSeconds: recordingDuration,
+		startRecording,
+		stopRecording,
+	} = useRecording();
 
-    joinAttempted.current = true;
+	// Log SDK state changes
+	useEffect(() => {
+		log.debug("SDK State", {
+			isConnected,
+			roomExists: !!room,
+			participantCount: participants.length,
+			localParticipantId: localParticipant?.id,
+			localParticipantName: localParticipant?.displayName,
+			activeSpeakerId: activeSpeaker?.id,
+		});
+	}, [isConnected, room, participants, localParticipant, activeSpeaker]);
 
-    const init = async () => {
-      try {
-        const displayName = sessionStorage.getItem('chalk_display_name') || "Demo User";
-        const videoEnabled = sessionStorage.getItem('chalk_video_enabled') !== 'false';
-        const audioEnabled = sessionStorage.getItem('chalk_audio_enabled') !== 'false';
+	useEffect(() => {
+		log.debug("Media State", {
+			video: isVideoEnabled,
+			audio: isAudioEnabled,
+			screen: isScreenSharing,
+			recording: isRecording,
+			recordingDuration,
+		});
+	}, [isVideoEnabled, isAudioEnabled, isScreenSharing, isRecording, recordingDuration]);
 
-        await joinRoom(roomId, {
-          displayName,
-          video: videoEnabled,
-          audio: audioEnabled,
-        });
-        setHasJoined(true);
-        setError(null);
-      } catch (err) {
-        console.error("Failed to join:", err);
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+	useEffect(() => {
+		const lastMsg = messages[messages.length - 1];
+		log.debug("Chat State", {
+			messageCount: messages.length,
+			lastMessage: lastMsg ? {
+				sender: lastMsg.senderName,
+				preview: lastMsg.content.substring(0, 30),
+			} : null,
+		});
+	}, [messages]);
 
-        // Provide helpful error messages
-        if (errorMessage.includes("403") || errorMessage.includes("Forbidden")) {
-          setError("API demo mode is disabled. Set CHALK_ENABLE_DEMO=true in apps/api/.env and restart the API server.");
-        } else if (errorMessage.includes("fetch") || errorMessage.includes("network")) {
-          setError("Cannot connect to API server. Make sure the API is running on http://localhost:8080");
-        } else {
-          setError(errorMessage);
-        }
-      }
-    };
-    init();
-  }, [client, roomId, isConnected, hasJoined, joinRoom]);
+	// =========================================================================
+	// SOUND EFFECTS & ANNOUNCER
+	// =========================================================================
 
-  const handleLeave = useCallback(async () => {
-    await leaveRoom();
-    setShowEndScreen(true);
-  }, [leaveRoom]);
+	const { playClick, playRecordingStart, playRecordingStop } =
+		useSoundEffects({ enabled: true, autoSubscribe: true });
+	useAnnouncer({});
 
-  const shortcuts = useMemo(() => createMeetingShortcuts({
-    onToggleMute: toggleAudio,
-    onToggleVideo: toggleVideo,
-    onToggleScreenShare: () => isScreenSharing ? stopScreenShare() : startScreenShare(),
-    onLeave: handleLeave,
-  }), [toggleAudio, toggleVideo, isScreenSharing, stopScreenShare, startScreenShare, handleLeave]);
+	// =========================================================================
+	// LOCAL STATE
+	// =========================================================================
 
-  useKeyboardShortcuts({
-    shortcuts,
-    enabled: true
-  });
+	const [showEndScreen, setShowEndScreen] = useState(false);
+	const [sessionSeconds, setSessionSeconds] = useState(0);
 
-  if (showEndScreen) {
-    return (
-      <EndScreen
-        roomName={roomId}
-        duration={durationSeconds}
-        participantCount={participants.length}
-        onRejoin={() => {
-            setShowEndScreen(false);
-            setHasJoined(false);
-        }}
-        onGoHome={() => navigate({ to: "/" })}
-      />
-    );
-  }
+	// Refs for redirect logic
+	const redirectedRef = useRef(false);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-white">
-        <div className="text-center max-w-lg p-6">
-          <div className="text-red-500 text-4xl mb-4">Connection Error</div>
-          <p className="text-red-300 mb-6">{error}</p>
-          <div className="space-x-4">
-            <button
-              type="button"
-              onClick={() => {
-                setError(null);
-                joinAttempted.current = false;
-              }}
-              className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/80"
-            >
-              Retry
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate({ to: "/demo" })}
-              className="px-4 py-2 bg-neutral-700 text-white rounded hover:bg-neutral-600"
-            >
-              Back to Lobby
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+	// =========================================================================
+	// CUSTOM HOOKS
+	// =========================================================================
 
-  if (!isConnected || !localParticipant) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-white">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p>Connecting to {roomId}...</p>
-        </div>
-      </div>
-    );
-  }
+	// UI State (panels, layout, tour)
+	const uiState = useUIState();
 
-  return (
-    <div className="flex flex-col min-h-screen bg-neutral-900 text-white">
-      <header className="flex items-center justify-between p-4 bg-neutral-800">
-        <h1 className="text-lg font-semibold">Room: {roomId}</h1>
-        <div className="flex items-center gap-2">
-          {isRecording && (
-            <span className="flex items-center gap-1 text-red-500">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              Recording
-            </span>
-          )}
-          <span className="text-sm text-neutral-400">
-            {participants.length} participant{participants.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </header>
+	// Notifications
+	const notificationsState = useNotifications({
+		messages,
+		localParticipantId: localParticipant?.id,
+		activePanel: uiState.activePanel,
+	});
 
-      <main className="flex-1 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {participants.map((participant) => (
-            <div
-              key={participant.id}
-              className="relative aspect-video bg-neutral-800 rounded-lg flex items-center justify-center"
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-neutral-700 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-2xl">{participant.displayName?.[0]?.toUpperCase() || '?'}</span>
-                </div>
-                <p className="text-sm">{participant.displayName}</p>
-                {participant.id === localParticipant?.id && (
-                  <span className="text-xs text-neutral-400">(You)</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+	// Memoize participants for room events to prevent effect re-runs
+	const participantsForEvents = useMemo(
+		() => participants.map((p) => ({ id: p.id, displayName: p.displayName })),
+		[participants]
+	);
 
-        {messages.length > 0 && (
-          <div className="mt-4 p-4 bg-neutral-800 rounded-lg max-h-48 overflow-y-auto">
-            <h2 className="text-sm font-semibold mb-2">Chat</h2>
-            {messages.map((msg) => (
-              <div key={msg.id} className="text-sm mb-1">
-                <span className="text-primary">{msg.senderName}: </span>
-                <span>{msg.content}</span>
-              </div>
-            ))}
-          </div>
-        )}
+	// Memoize notification callback
+	const handleEventNotification = useCallback(
+		(notif: { message: string; type?: "info" | "success" | "warning" | "error" }) => {
+			notificationsState.addNotification(notif.message, notif.type);
+		},
+		[notificationsState]
+	);
 
-        {isTranscribing && transcripts.length > 0 && (
-          <div className="mt-4 p-4 bg-neutral-800 rounded-lg">
-            <h2 className="text-sm font-semibold mb-2">Live Transcription</h2>
-            <p className="text-sm text-neutral-300">{transcripts[transcripts.length - 1]?.text}</p>
-          </div>
-        )}
-      </main>
+	// Room Events (reactions, hand raises)
+	const roomEvents = useRoomEvents({
+		room,
+		localParticipantId: localParticipant?.id,
+		participants: participantsForEvents,
+		onNotification: handleEventNotification,
+	});
 
-      <footer className="flex items-center justify-center gap-4 p-4 bg-neutral-800">
-        <button
-          type="button"
-          onClick={toggleAudio}
-          className={`p-3 rounded-full ${isAudioEnabled ? 'bg-neutral-700' : 'bg-red-600'}`}
-          title={isAudioEnabled ? 'Mute' : 'Unmute'}
-        >
-          {isAudioEnabled ? '🎤' : '🔇'}
-        </button>
-        <button
-          type="button"
-          onClick={toggleVideo}
-          className={`p-3 rounded-full ${isVideoEnabled ? 'bg-neutral-700' : 'bg-red-600'}`}
-          title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
-        >
-          {isVideoEnabled ? '📹' : '📷'}
-        </button>
-        <button
-          type="button"
-          onClick={() => isScreenSharing ? stopScreenShare() : startScreenShare()}
-          className={`p-3 rounded-full ${isScreenSharing ? 'bg-primary' : 'bg-neutral-700'}`}
-          title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
-        >
-          🖥️
-        </button>
-        <button
-          type="button"
-          onClick={() => isRecording ? stopRecording() : startRecording()}
-          className={`p-3 rounded-full ${isRecording ? 'bg-red-600' : 'bg-neutral-700'}`}
-          title={isRecording ? 'Stop recording' : 'Start recording'}
-        >
-          ⏺️
-        </button>
-        <button
-          type="button"
-          onClick={handleLeave}
-          className="px-4 py-2 bg-red-600 rounded-full hover:bg-red-700"
-        >
-          Leave
-        </button>
-      </footer>
-    </div>
-  );
+	// =========================================================================
+	// REDIRECT LOGIC - if not connected, redirect to lobby
+	// =========================================================================
+
+	useEffect(() => {
+		log.lifecycle("effect", "redirect-check");
+		log.debug("Redirect Check", {
+			isConnected,
+			alreadyRedirected: redirectedRef.current,
+			roomId,
+		});
+
+		const timer = setTimeout(() => {
+			if (!isConnected && !redirectedRef.current) {
+				redirectedRef.current = true;
+				log.nav("redirect", `/room/lobby?roomId=${roomId}`, "not connected after 500ms timeout");
+				navigate({ to: "/room/lobby", search: { roomId } });
+			}
+		}, 500);
+
+		return () => {
+			log.lifecycle("cleanup", "redirect-check");
+			clearTimeout(timer);
+		};
+	}, [isConnected, roomId, navigate]);
+
+	// =========================================================================
+	// SESSION TIMER
+	// =========================================================================
+
+	useEffect(() => {
+		if (isConnected) {
+			log.lifecycle("effect", "session-timer-start");
+			log.info("timer", "Session timer started", "state");
+
+			const timer = setInterval(() => {
+				setSessionSeconds((s) => s + 1);
+			}, 1000);
+
+			return () => {
+				log.lifecycle("cleanup", "session-timer-stop");
+				log.info("timer", `Session ended after ${sessionSeconds}s`, "state");
+				clearInterval(timer);
+			};
+		}
+	}, [isConnected]);
+
+	// =========================================================================
+	// ACTIONS
+	// =========================================================================
+
+	const handleLeave = useCallback(async () => {
+		log.action("leave", "Leave meeting initiated");
+		log.debug("Leave Context", {
+			roomId,
+			sessionSeconds,
+			participantCount: participants.length,
+		});
+
+		try {
+			log.sdk("leaveRoom");
+			await leaveRoom();
+			log.info("success", "Left room successfully", "action");
+			setShowEndScreen(true);
+		} catch (err) {
+			log.error("handleLeave", err, { roomId });
+		}
+	}, [leaveRoom, roomId, sessionSeconds, participants.length]);
+
+	const handleToggleVideo = useCallback(() => {
+		const newState = !isVideoEnabled;
+		log.action("video", "Toggle video", newState ? "ON" : "OFF");
+		log.media("video", newState);
+		toggleVideo();
+	}, [isVideoEnabled, toggleVideo]);
+
+	const handleToggleAudio = useCallback(() => {
+		const newState = !isAudioEnabled;
+		log.action("mic", "Toggle audio", newState ? "ON" : "OFF");
+		log.media("mic", newState);
+		toggleAudio();
+	}, [isAudioEnabled, toggleAudio]);
+
+	const handleStartScreenShare = useCallback(() => {
+		log.action("screen", "Start screen share");
+		log.sdk("startScreenShare");
+		startScreenShare();
+	}, [startScreenShare]);
+
+	const handleStopScreenShare = useCallback(() => {
+		log.action("screen", "Stop screen share");
+		log.sdk("stopScreenShare");
+		stopScreenShare();
+	}, [stopScreenShare]);
+
+	const handleStartRecording = useCallback(() => {
+		log.action("recording", "Start recording");
+		log.sdk("startRecording");
+		startRecording();
+	}, [startRecording]);
+
+	const handleStopRecording = useCallback(() => {
+		log.action("recording", "Stop recording", `duration=${recordingDuration}s`);
+		log.sdk("stopRecording");
+		stopRecording();
+	}, [stopRecording, recordingDuration]);
+
+	const handleRemoveParticipant = useCallback(
+		async (participantId: string) => {
+			const participant = participants.find((p) => p.id === participantId);
+			log.action("participant", "Remove participant", participant?.displayName || participantId);
+
+			try {
+				log.sdk("removeParticipant", { participantId });
+				await removeParticipant(participantId);
+				log.info("success", "Participant removed", "action");
+				notificationsState.addNotification("Participant removed", "success");
+			} catch (err) {
+				log.error("handleRemoveParticipant", err, { participantId });
+				const errorMsg = err instanceof Error ? err.message : String(err);
+				notificationsState.addNotification(`Failed: ${errorMsg}`, "error");
+			}
+		},
+		[removeParticipant, participants, notificationsState]
+	);
+
+	const handleSendMessage = useCallback(
+		(message: string) => {
+			log.action("chat", "Send message", `length=${message.length}`);
+			log.sdk("sendMessage", { length: message.length });
+			sendMessage(message);
+		},
+		[sendMessage]
+	);
+
+	// =========================================================================
+	// KEYBOARD SHORTCUTS
+	// =========================================================================
+
+	const shortcuts = useMemo(
+		() =>
+			createMeetingShortcuts({
+				onToggleMute: handleToggleAudio,
+				onToggleVideo: handleToggleVideo,
+				onToggleScreenShare: () =>
+					isScreenSharing ? handleStopScreenShare() : handleStartScreenShare(),
+				onLeave: handleLeave,
+			}),
+		[
+			handleToggleAudio,
+			handleToggleVideo,
+			isScreenSharing,
+			handleStopScreenShare,
+			handleStartScreenShare,
+			handleLeave,
+		]
+	);
+
+	useKeyboardShortcuts({
+		shortcuts,
+		enabled: isConnected,
+	});
+
+	// =========================================================================
+	// RENDER LOGGING (only log significant changes, not every render)
+	// =========================================================================
+
+	// Only log summary when key values change (not on session timer)
+	useEffect(() => {
+		log.summary({
+			roomId,
+			isConnected,
+			participants: participants.length,
+			localParticipant: localParticipant?.displayName,
+			mediaState: {
+				video: isVideoEnabled,
+				audio: isAudioEnabled,
+				screen: isScreenSharing,
+			},
+			activePanel: uiState.activePanel,
+		});
+	}, [
+		roomId,
+		isConnected,
+		participants.length,
+		localParticipant?.displayName,
+		isVideoEnabled,
+		isAudioEnabled,
+		isScreenSharing,
+		uiState.activePanel,
+	]);
+
+	// =========================================================================
+	// CONDITIONAL RENDERS
+	// =========================================================================
+
+	// End Screen
+	if (showEndScreen) {
+		return (
+			<EndScreen
+				roomName={roomId}
+				duration={sessionSeconds}
+				participantCount={participants.length}
+				onRejoin={() => {
+					log.action("click", "Rejoin from end screen");
+					navigate({ to: "/room/lobby", search: { roomId } });
+				}}
+				onGoHome={() => {
+					log.action("click", "Go home from end screen");
+					navigate({ to: "/" });
+				}}
+			/>
+		);
+	}
+
+	// Loading/Connecting Screen
+	if (!isConnected || !localParticipant) {
+		return <LoadingScreen roomId={roomId} />;
+	}
+
+	// =========================================================================
+	// MAIN RENDER
+	// =========================================================================
+
+	return (
+		<div className="flex flex-col h-screen bg-[#0D0D0D] font-sans text-white overflow-hidden relative">
+			{/* Content Area */}
+			<div className="flex-1 flex relative min-h-0 p-4 gap-4">
+				{/* Video Grid */}
+				<VideoGrid
+					participants={participants}
+					localParticipant={localParticipant}
+					activeSpeaker={activeSpeaker}
+					layout={uiState.layout}
+					isHandRaised={roomEvents.isHandRaised}
+				/>
+
+				{/* Side Panels */}
+				<SidePanels
+					activePanel={uiState.activePanel}
+					onClosePanel={() => uiState.setActivePanel(null)}
+					messages={messages}
+					onSendMessage={handleSendMessage}
+					localParticipantId={localParticipant?.id}
+					participants={participants}
+					isAudioEnabled={isAudioEnabled}
+					onRemoveParticipant={handleRemoveParticipant}
+					roomId={roomId}
+					sessionSeconds={sessionSeconds}
+				/>
+			</div>
+
+			{/* Control Bar */}
+			<ControlBar
+				isVideoEnabled={isVideoEnabled}
+				isAudioEnabled={isAudioEnabled}
+				isScreenSharing={isScreenSharing}
+				isRecording={isRecording}
+				recordingDuration={recordingDuration}
+				sessionSeconds={sessionSeconds}
+				layout={uiState.layout}
+				isHandRaised={roomEvents.isHandRaised}
+				isReactionPickerOpen={roomEvents.isReactionPickerOpen}
+				activePanel={uiState.activePanel}
+				unreadCount={notificationsState.unreadCount}
+				onToggleVideo={handleToggleVideo}
+				onToggleAudio={handleToggleAudio}
+				onStartScreenShare={handleStartScreenShare}
+				onStopScreenShare={handleStopScreenShare}
+				onStartRecording={handleStartRecording}
+				onStopRecording={handleStopRecording}
+				onToggleLayout={uiState.toggleLayout}
+				onHandRaise={roomEvents.handleHandRaise}
+				onLeave={handleLeave}
+				onTogglePanel={uiState.togglePanel}
+				onSetReactionPickerOpen={roomEvents.setIsReactionPickerOpen}
+				onSendReaction={roomEvents.handleSendReaction}
+				onShowTour={() => uiState.setShowTour(true)}
+				playClick={playClick}
+				playRecordingStart={playRecordingStart}
+				playRecordingStop={playRecordingStop}
+			/>
+
+			{/* Floating Reaction Bubbles */}
+			<ReactionBubbles reactions={roomEvents.activeReactions} />
+
+			{/* Notification Stack */}
+			<NotificationStack
+				notifications={notificationsState.notifications}
+				onDismiss={notificationsState.dismissNotification}
+				position="top-right"
+				maxVisible={3}
+			/>
+
+			{/* Guided Tour */}
+			<GuidedTour
+				isOpen={uiState.showTour}
+				onComplete={uiState.handleTourComplete}
+				onSkip={uiState.handleTourComplete}
+				showProgress
+				showSkip
+			/>
+		</div>
+	);
 }
+
+export default RoomPage;

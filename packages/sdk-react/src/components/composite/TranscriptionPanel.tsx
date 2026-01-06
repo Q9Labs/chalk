@@ -75,7 +75,7 @@ export const TranscriptionPanel = React.memo(({
     }
   };
 
-  const handleExportChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleExportChange = (e: { target: { value: string } }) => {
     if (onExport && e.target.value) {
       onExport(e.target.value as 'txt' | 'srt' | 'vtt');
       e.target.value = '';

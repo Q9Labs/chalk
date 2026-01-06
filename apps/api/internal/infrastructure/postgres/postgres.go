@@ -42,9 +42,16 @@ func DefaultConfig() Config {
 
 // DSN returns the connection string for the database
 func (c Config) DSN() string {
+	// Only include password if non-empty (empty password= confuses pgx parser)
+	if c.Password != "" {
+		return fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			c.Host, c.Port, c.User, c.Password, c.Database, c.SSLMode,
+		)
+	}
 	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		c.Host, c.Port, c.User, c.Password, c.Database, c.SSLMode,
+		"host=%s port=%d user=%s dbname=%s sslmode=%s",
+		c.Host, c.Port, c.User, c.Database, c.SSLMode,
 	)
 }
 

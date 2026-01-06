@@ -111,7 +111,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: getEnv("PORT", "8080"),
+			Port: getEnv("PORT", "8081"),
 			Env:  getEnv("ENV", "development"),
 		},
 		Database: DatabaseConfig{

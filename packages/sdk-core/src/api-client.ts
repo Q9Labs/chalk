@@ -120,13 +120,16 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				const errorData = rawData as {
 					code?: string;
 					message?: string;
+					error?: string; // Go API returns "error" field
 					details?: Record<string, unknown>;
 				};
+				const errorMessage = errorData.message ?? errorData.error ?? "An unknown error occurred";
+				this.log("API error:", response.status, errorMessage);
 				return {
 					success: false,
 					error: {
-						code: errorData.code ?? "UNKNOWN_ERROR",
-						message: errorData.message ?? "An unknown error occurred",
+						code: errorData.code ?? `HTTP_${response.status}`,
+						message: errorMessage,
 						details: errorData.details,
 					},
 				};
@@ -270,7 +273,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		return {
 			participantId: data.participantId,
 			tokens: {
-				accessToken: data.accessToken ?? data.authToken,
+				// Demo mode returns 'token', standard mode returns 'accessToken'
+				accessToken: data.token ?? data.accessToken ?? data.authToken,
 				refreshToken: data.refreshToken,
 				rtcToken: data.authToken,
 				expiresAt: data.expiresAt,
@@ -290,6 +294,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		roomId: string,
 		participantId: string,
 	): Promise<ApiResponse<void>> {
+		this.log("removeParticipant:", { roomId, participantId });
 		return this.request<void>(
 			"DELETE",
 			`/api/v1/rooms/${roomId}/participants/${participantId}`,

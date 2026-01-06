@@ -42,6 +42,7 @@ Thumbs.db
 *.dll
 *.so
 *.dylib
+apps/api/server
 
 # Terraform (handled in infrastructure/.gitignore)
 # *.tfstate

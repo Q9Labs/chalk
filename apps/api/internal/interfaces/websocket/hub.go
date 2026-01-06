@@ -161,12 +161,17 @@ func (h *Hub) BroadcastToRoom(roomID uuid.UUID, message []byte, excludeParticipa
 	defer h.mu.RUnlock()
 
 	if room, ok := h.rooms[roomID]; ok {
+		log.Printf("[Hub] Broadcasting to room %s with %d clients", roomID, len(room))
 		for participantID, client := range room {
 			if excludeParticipantID != "" && participantID.String() == excludeParticipantID {
+				log.Printf("[Hub] Skipping excluded participant %s", participantID)
 				continue
 			}
+			log.Printf("[Hub] Sending to participant %s", participantID)
 			client.Send(message)
 		}
+	} else {
+		log.Printf("[Hub] WARNING: Room %s not found in hub.rooms!", roomID)
 	}
 }
 

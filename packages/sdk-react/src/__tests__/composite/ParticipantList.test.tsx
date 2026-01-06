@@ -40,4 +40,25 @@ describe('ParticipantList', () => {
     fireEvent.click(getByLabelText('Close participant list'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('calls onMakeCoHost when Make Co-Host clicked', async () => {
+    const user = userEvent.setup();
+    const onMakeCoHost = vi.fn();
+    const participantsWithRegular = [
+      { id: '1', displayName: 'Alice', role: 'host' as const, isLocal: true },
+      { id: '2', displayName: 'Bob', role: 'participant' as const },
+    ];
+    const { getByLabelText, getByText } = render(
+      <ParticipantList
+        participants={participantsWithRegular}
+        onMakeCoHost={onMakeCoHost}
+        canManageParticipants={true}
+      />
+    );
+    // Open menu for Bob
+    await user.click(getByLabelText('Options for Bob'));
+    // Click Make Co-Host
+    await user.click(getByText('Make Co-Host'));
+    expect(onMakeCoHost).toHaveBeenCalledWith('2');
+  });
 });

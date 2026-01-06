@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Q9Labs/chalk/internal/config"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
@@ -43,6 +44,9 @@ func main() {
 		SSLMode:           cfg.Database.SSLMode,
 		MaxConns:          25,
 		MinConns:          5,
+		MaxConnLifetime:   time.Hour,
+		MaxConnIdleTime:   30 * time.Minute,
+		HealthCheckPeriod: time.Minute,
 	}
 	pool, err := postgres.NewPool(ctx, dbCfg)
 	if err != nil {

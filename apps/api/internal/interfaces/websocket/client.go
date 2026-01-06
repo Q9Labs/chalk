@@ -149,6 +149,8 @@ func (c *Client) writePump(ctx context.Context) {
 
 // handleMessage processes a message received from the client
 func (c *Client) handleMessage(msg *Message) {
+	log.Printf("[WS] handleMessage: type=%s from participant=%s room=%s", msg.Type, c.participantID, c.roomID)
+
 	switch msg.Type {
 	case MessageTypeChatSend:
 		c.handleChatMessage(msg)
@@ -161,23 +163,30 @@ func (c *Client) handleMessage(msg *Message) {
 	case MessageTypePong:
 		// Just acknowledge, no action needed
 	default:
-		log.Printf("Unknown message type: %s", msg.Type)
+		log.Printf("[WS] Unknown message type: %s", msg.Type)
 	}
 }
 
 func (c *Client) handleChatMessage(msg *Message) {
+	log.Printf("[Chat] handleChatMessage called from participant %s in room %s", c.participantID, c.roomID)
+
 	var payload ChatSendPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
+		log.Printf("[Chat] Failed to parse payload: %v", err)
 		c.sendErrorMessage("invalid_payload", "Failed to parse chat message")
 		return
 	}
 
+	log.Printf("[Chat] Received content: %s", payload.Content)
+
 	if payload.Content == "" {
+		log.Printf("[Chat] Empty content, rejecting")
 		c.sendErrorMessage("invalid_payload", "Content cannot be empty")
 		return
 	}
 
 	meta := c.hub.GetParticipantMetadata(c.participantID)
+	log.Printf("[Chat] Sender metadata - DisplayName: %s", meta.DisplayName)
 
 	chatMsg, _ := NewMessage(MessageTypeChatMessage, ChatMessagePayload{
 		ID:            uuid.New(),
@@ -188,6 +197,7 @@ func (c *Client) handleChatMessage(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(chatMsg)
+	log.Printf("[Chat] Broadcasting message to room %s: %s", c.roomID, string(msgData))
 	c.hub.BroadcastToRoom(c.roomID, msgData, "")
 }
 

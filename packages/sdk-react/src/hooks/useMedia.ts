@@ -4,7 +4,7 @@
  */
 
 import type { ScreenShareOptions } from "@q9labs/chalk-core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useChalk } from "../context.tsx";
 
 export interface UseMediaResult {
@@ -14,6 +14,10 @@ export interface UseMediaResult {
 	isAudioEnabled: boolean;
 	/** Whether screen sharing is active */
 	isScreenSharing: boolean;
+	/** Whether a video toggle is in progress */
+	isVideoToggling: boolean;
+	/** Whether an audio toggle is in progress */
+	isAudioToggling: boolean;
 	/** Local video track */
 	localVideoTrack: MediaStreamTrack | undefined;
 	/** Local audio track */
@@ -33,12 +37,18 @@ export function useMedia(): UseMediaResult {
 	const [isVideoEnabled, setIsVideoEnabled] = useState(false);
 	const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 	const [isScreenSharing, setIsScreenSharing] = useState(false);
+	const [isVideoToggling, setIsVideoToggling] = useState(false);
+	const [isAudioToggling, setIsAudioToggling] = useState(false);
 	const [localVideoTrack, setLocalVideoTrack] = useState<
 		MediaStreamTrack | undefined
 	>();
 	const [localAudioTrack, setLocalAudioTrack] = useState<
 		MediaStreamTrack | undefined
 	>();
+
+	// Refs to prevent concurrent calls
+	const videoToggleLock = useRef(false);
+	const audioToggleLock = useRef(false);
 
 	// Sync state with room
 	useEffect(() => {
@@ -71,17 +81,31 @@ export function useMedia(): UseMediaResult {
 	}, [room]);
 
 	const toggleVideo = useCallback(async () => {
-		if (!room) return;
-		const enabled = await room.toggleVideo();
-		setIsVideoEnabled(enabled);
-		setLocalVideoTrack(room.localParticipant?.videoTrack);
+		if (!room || videoToggleLock.current) return;
+		videoToggleLock.current = true;
+		setIsVideoToggling(true);
+		try {
+			const enabled = await room.toggleVideo();
+			setIsVideoEnabled(enabled);
+			setLocalVideoTrack(room.localParticipant?.videoTrack);
+		} finally {
+			videoToggleLock.current = false;
+			setIsVideoToggling(false);
+		}
 	}, [room]);
 
 	const toggleAudio = useCallback(async () => {
-		if (!room) return;
-		const enabled = await room.toggleAudio();
-		setIsAudioEnabled(enabled);
-		setLocalAudioTrack(room.localParticipant?.audioTrack);
+		if (!room || audioToggleLock.current) return;
+		audioToggleLock.current = true;
+		setIsAudioToggling(true);
+		try {
+			const enabled = await room.toggleAudio();
+			setIsAudioEnabled(enabled);
+			setLocalAudioTrack(room.localParticipant?.audioTrack);
+		} finally {
+			audioToggleLock.current = false;
+			setIsAudioToggling(false);
+		}
 	}, [room]);
 
 	const startScreenShare = useCallback(
@@ -105,6 +129,8 @@ export function useMedia(): UseMediaResult {
 		isVideoEnabled,
 		isAudioEnabled,
 		isScreenSharing,
+		isVideoToggling,
+		isAudioToggling,
 		localVideoTrack,
 		localAudioTrack,
 		toggleVideo,

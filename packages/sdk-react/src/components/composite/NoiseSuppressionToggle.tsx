@@ -21,7 +21,7 @@ export const NoiseSuppressionToggle = React.memo(({
   className
 }: NoiseSuppressionToggleProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleLevelChange = (e: { target: { value: string } }) => {
     onLevelChange?.(e.target.value as 'low' | 'medium' | 'high');
   };
 

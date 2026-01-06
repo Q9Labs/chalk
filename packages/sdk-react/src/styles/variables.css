@@ -1,16 +1,17 @@
 :root {
   /* Colors - Dark mode default */
-  --chalk-bg-primary: #111827;    /* gray-900 */
-  --chalk-bg-secondary: #1f2937;  /* gray-800 */
-  --chalk-bg-tertiary: #374151;   /* gray-700 */
+  --chalk-bg-primary: #050505;    /* Deep Black */
+  --chalk-bg-secondary: #1a1a1a;  /* Dark Gray (Cards/Modals) */
+  --chalk-bg-tertiary: #262626;   /* Lighter Gray (Hover states) */
   --chalk-text-primary: #ffffff;
-  --chalk-text-secondary: #d1d5db; /* gray-300 */
-  --chalk-text-muted: #6b7280;     /* gray-500 */
-  --chalk-accent: #3b82f6;         /* blue-500 */
-  --chalk-accent-hover: #60a5fa;   /* blue-400 */
+  --chalk-text-secondary: #a1a1aa; /* zinc-400 */
+  --chalk-text-muted: #71717a;     /* zinc-500 */
+  --chalk-accent: #6E00E6;         /* Primary Purple */
+  --chalk-accent-hover: #5a00bd;   /* Darker Purple */
   --chalk-danger: #ef4444;         /* red-500 */
   --chalk-success: #22c55e;        /* green-500 */
   --chalk-warning: #eab308;        /* yellow-500 */
+  --chalk-border-color: rgba(255, 255, 255, 0.1);
 
   /* Spacing */
   --chalk-spacing-xs: 0.25rem;
@@ -36,7 +37,6 @@
   --chalk-border-radius-lg: 0.75rem;
   --chalk-border-radius-xl: 1rem;
   --chalk-border-radius-full: 9999px;
-  --chalk-border-color: #374151;
 
   /* Shadows */
   --chalk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -50,7 +50,7 @@
   --chalk-transition-slow: 350ms ease;
 }
 
-/* Light Mode */
+/* Light Mode overrides if needed in future */
 [data-chalk-theme="light"] {
   --chalk-bg-primary: #ffffff;
   --chalk-bg-secondary: #f9fafb;
@@ -58,6 +58,8 @@
   --chalk-text-primary: #111827;
   --chalk-text-secondary: #4b5563;
   --chalk-text-muted: #9ca3af;
+  --chalk-accent: #6E00E6;
+  --chalk-accent-hover: #5a00bd;
   --chalk-border-color: #e5e7eb;
   --chalk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --chalk-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
