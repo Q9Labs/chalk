@@ -87,11 +87,9 @@ jobs:
 
       - name: Prepare artifacts
         run: |
-          # Copy entire web app dir for wrangler deploy (needs wrangler.toml)
+          # Copy dist contents for deploy job
           mkdir -p /tmp/web-output
-          cp -r apps/web/dist /tmp/web-output/
-          cp apps/web/wrangler.toml /tmp/web-output/
-          cp apps/web/package.json /tmp/web-output/
+          cp -r apps/web/dist/* /tmp/web-output/
           echo "Contents of /tmp/web-output:"
           ls -la /tmp/web-output/
 
@@ -114,20 +112,34 @@ jobs:
       name: production
       url: https://chalk.q9labs.ai
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: web-build
-          path: web-output
+          path: apps/web/dist
 
       - name: List artifacts
-        run: ls -la web-output/
+        run: |
+          ls -la apps/web/dist/
+          ls -la apps/web/dist/client/ || true
+          ls -la apps/web/dist/server/ || true
 
       - name: Deploy to Cloudflare Workers
         run: |
-          # Deploy using wrangler deploy for Workers (not Pages)
-          # @cloudflare/vite-plugin outputs to dist/client + dist/server
-          cd web-output
+          # Deploy using wrangler deploy for Workers
+          # Entry point references @tanstack/react-start/server-entry from node_modules
+          cd apps/web
           npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
