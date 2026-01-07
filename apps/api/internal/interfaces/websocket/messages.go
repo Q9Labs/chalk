@@ -258,7 +258,7 @@ func NewMessage(msgType MessageType, payload interface{}) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("type: %w | message: %v", msgType, payload)
+	log.Printf("type: %v | message: %v", msgType, payload)
 	return &Message{
 		Type:    msgType,
 		Payload: data,
