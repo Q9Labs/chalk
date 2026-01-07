@@ -22,6 +22,7 @@ import {
 	MonitorOff,
 	MoreHorizontal,
 	PhoneOff,
+	Presentation,
 	Square,
 	ThumbsUp,
 	Users,
@@ -70,6 +71,10 @@ interface ControlBarProps {
 	playClick: () => void;
 	playRecordingStart: () => void;
 	playRecordingStop: () => void;
+
+	// Whiteboard
+	isWhiteboardActive: boolean;
+	onToggleWhiteboard: () => void;
 }
 
 export const ControlBar = memo(function ControlBar({
@@ -100,6 +105,8 @@ export const ControlBar = memo(function ControlBar({
 	playClick,
 	playRecordingStart,
 	playRecordingStop,
+	isWhiteboardActive,
+	onToggleWhiteboard,
 }: ControlBarProps) {
 	// ==========================================================================
 	// LIFECYCLE & DEBUG
@@ -197,6 +204,12 @@ export const ControlBar = memo(function ControlBar({
 		onShowTour();
 	};
 
+	const handleToggleWhiteboard = () => {
+		log.action("toggle", "Whiteboard", isWhiteboardActive ? "closing" : "opening");
+		playClick();
+		onToggleWhiteboard();
+	};
+
 	// ==========================================================================
 	// HELPERS
 	// ==========================================================================
@@ -218,13 +231,13 @@ export const ControlBar = memo(function ControlBar({
 			<div className="flex items-center w-full mx-auto">
 				{/* Left: Timer */}
 				<div
-					className="hidden md:flex items-center gap-3 bg-white/5 backdrop-blur-3xl border border-white/10 rounded-full px-5 py-3 min-w-[160px] justify-center shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] ring-1 ring-white/5 transition-transform hover:scale-105 cursor-pointer"
+					className="hidden md:flex items-center gap-3 bg-background/80 backdrop-blur-3xl border border-border rounded-full px-5 py-3 min-w-[160px] justify-center shadow-[0_8px_32px_0_rgba(0,0,0,0.12)] ring-1 ring-border/60 transition-transform hover:scale-105 cursor-pointer"
 					onClick={handleToggleRecording}
 				>
 					<div
 						className={`w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] ${isRecording ? "bg-red-500 text-red-500 animate-pulse" : "bg-green-500 text-green-500"}`}
 					/>
-					<span className="text-sm font-semibold tracking-wide text-white/90">
+					<span className="text-sm font-semibold tracking-wide text-foreground/90">
 						{isRecording
 							? formatDuration(recordingDuration)
 							: formatDuration(sessionSeconds)}
@@ -232,11 +245,11 @@ export const ControlBar = memo(function ControlBar({
 				</div>
 
 				{/* Center: Main Controls */}
-				<div className="flex items-center gap-2 md:gap-4 bg-white/3 backdrop-blur-3xl border border-white/10 rounded-full px-4 md:px-6 py-2 md:py-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] mx-auto ring-1 ring-white/5 transition-all hover:bg-white/10 hover:shadow-[0_8px_40px_0_rgba(0,0,0,0.45)]">
+				<div className="flex items-center gap-2 md:gap-4 bg-background/80 backdrop-blur-3xl border border-border rounded-full px-4 md:px-6 py-2 md:py-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.12)] mx-auto ring-1 ring-border/60 transition-all hover:bg-background/90 hover:shadow-[0_8px_40px_0_rgba(0,0,0,0.2)]">
 					<ControlButton
 						icon={isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
 						onClick={handleToggleAudio}
-						className={`transition-all duration-300 ${!isAudioEnabled ? "bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]" : "bg-transparent hover:bg-white/10 text-white"}`}
+						className={`transition-all duration-300 ${!isAudioEnabled ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_0_15px_rgba(239,68,68,0.35)]" : "bg-transparent hover:bg-muted text-foreground"}`}
 						size="md"
 						label={isAudioEnabled ? "Mute" : "Unmute"}
 						data-tour="controls-mic"
@@ -246,7 +259,7 @@ export const ControlBar = memo(function ControlBar({
 							isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />
 						}
 						onClick={handleToggleVideo}
-						className={`transition-all duration-300 ${!isVideoEnabled ? "bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]" : "bg-transparent hover:bg-white/10 text-white"}`}
+						className={`transition-all duration-300 ${!isVideoEnabled ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_0_15px_rgba(239,68,68,0.35)]" : "bg-transparent hover:bg-muted text-foreground"}`}
 						size="md"
 						label={isVideoEnabled ? "Stop Video" : "Start Video"}
 						data-tour="controls-video"
@@ -260,12 +273,12 @@ export const ControlBar = memo(function ControlBar({
 							)
 						}
 						onClick={handleToggleScreenShare}
-						className={`transition-all duration-300 ${isScreenSharing ? "bg-purple-500/80 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]" : "bg-transparent hover:bg-white/10 text-white"}`}
+						className={`transition-all duration-300 ${isScreenSharing ? "bg-primary/80 text-primary-foreground shadow-[0_0_15px_rgba(14,165,233,0.35)]" : "bg-transparent hover:bg-muted text-foreground"}`}
 						size="md"
 						label="Share Screen"
 						data-tour="controls-screenshare"
 					/>
-					<div className="w-px h-8 bg-white/10 mx-1" />
+					<div className="w-px h-8 bg-border mx-1" />
 					<ControlButton
 						icon={
 							isRecording ? (
@@ -275,21 +288,21 @@ export const ControlBar = memo(function ControlBar({
 							)
 						}
 						onClick={handleToggleRecording}
-						className={`transition-all duration-300 ${isRecording ? "bg-red-500/80 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse" : "bg-transparent hover:bg-white/10 text-red-400"}`}
+						className={`transition-all duration-300 ${isRecording ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_0_15px_rgba(239,68,68,0.35)] animate-pulse" : "bg-transparent hover:bg-muted text-destructive"}`}
 						size="md"
 						label={isRecording ? "Stop Recording" : "Record"}
 					/>
 					<ControlButton
 						icon={<LayoutTemplate size={20} />}
 						onClick={handleToggleLayout}
-						className={`transition-all duration-300 ${layout === "spotlight" ? "bg-white/20" : "bg-transparent hover:bg-white/10"} text-white`}
+						className={`transition-all duration-300 ${layout === "spotlight" ? "bg-muted" : "bg-transparent hover:bg-muted"} text-foreground`}
 						size="md"
 						label={layout === "grid" ? "Spotlight" : "Grid"}
 					/>
 					<ControlButton
 						icon={<Hand size={20} />}
 						onClick={handleHandRaise}
-						className={`transition-all duration-300 ${isHandRaised ? "bg-yellow-500/80 text-white shadow-[0_0_15px_rgba(234,179,8,0.5)]" : "bg-transparent hover:bg-white/10 text-white"}`}
+						className={`transition-all duration-300 ${isHandRaised ? "bg-yellow-500/80 text-white shadow-[0_0_15px_rgba(234,179,8,0.35)]" : "bg-transparent hover:bg-muted text-foreground"}`}
 						size="md"
 						label={isHandRaised ? "Lower Hand" : "Raise Hand"}
 						data-tour="controls-hand"
@@ -300,14 +313,14 @@ export const ControlBar = memo(function ControlBar({
 							log.action("click", "More options");
 							playClick();
 						}}
-						className="bg-transparent hover:bg-white/10 text-white transition-all duration-300"
+						className="bg-transparent hover:bg-muted text-foreground transition-all duration-300"
 						size="md"
 						label="More"
 					/>
 					<ControlButton
 						icon={<PhoneOff size={20} />}
 						onClick={handleLeave}
-						className="bg-red-500/90 text-white hover:bg-red-600 shadow-[0_4px_15px_rgba(239,68,68,0.4)] ml-2 backdrop-blur-md border border-red-400/20"
+						className="bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_4px_15px_rgba(239,68,68,0.35)] ml-2 backdrop-blur-md border border-destructive/30"
 						size="md"
 						label="Leave"
 						danger
@@ -318,16 +331,24 @@ export const ControlBar = memo(function ControlBar({
 				{/* Right: Secondary Actions */}
 				<div className="hidden md:flex items-center gap-2">
 					<ControlButton
+						icon={<Presentation size={20} />}
+						onClick={handleToggleWhiteboard}
+						className={`backdrop-blur-xl border border-border text-foreground rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.12)] ${isWhiteboardActive ? "bg-primary/30" : "bg-background/60 hover:bg-muted"}`}
+						size="sm"
+						label="Whiteboard"
+						data-tour="controls-whiteboard"
+					/>
+					<ControlButton
 						icon={<Info size={20} />}
 						onClick={() => handleTogglePanel("info")}
-						className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === "info" ? "bg-white/20" : "bg-white/5 hover:bg-white/10"}`}
+						className={`backdrop-blur-xl border border-border text-foreground rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.12)] ${activePanel === "info" ? "bg-muted" : "bg-background/60 hover:bg-muted"}`}
 						size="sm"
 						label="Info"
 					/>
 					<ControlButton
 						icon={<Users size={20} />}
 						onClick={() => handleTogglePanel("participants")}
-						className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === "participants" ? "bg-white/20" : "bg-white/5 hover:bg-white/10"}`}
+						className={`backdrop-blur-xl border border-border text-foreground rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.12)] ${activePanel === "participants" ? "bg-muted" : "bg-background/60 hover:bg-muted"}`}
 						size="sm"
 						label="People"
 						data-tour="controls-participants"
@@ -336,13 +357,13 @@ export const ControlBar = memo(function ControlBar({
 						<ControlButton
 							icon={<MessageSquare size={20} />}
 							onClick={() => handleTogglePanel("chat")}
-							className={`backdrop-blur-xl border border-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${activePanel === "chat" ? "bg-white/20" : "bg-white/5 hover:bg-white/10"}`}
+							className={`backdrop-blur-xl border border-border text-foreground rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.12)] ${activePanel === "chat" ? "bg-muted" : "bg-background/60 hover:bg-muted"}`}
 							size="sm"
 							label="Chat"
 							data-tour="controls-chat"
 						/>
 						{unreadCount > 0 && (
-							<span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+							<span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
 								{unreadCount > 99 ? "99+" : unreadCount}
 							</span>
 						)}
@@ -351,7 +372,7 @@ export const ControlBar = memo(function ControlBar({
 						<ControlButton
 							icon={<ThumbsUp size={20} />}
 							onClick={handleReactionPickerToggle}
-							className={`backdrop-blur-xl border border-white/10 rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${isReactionPickerOpen ? "bg-white/20 text-yellow-400" : "bg-white/5 hover:bg-white/10 text-yellow-500"}`}
+							className={`backdrop-blur-xl border border-border rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.12)] ${isReactionPickerOpen ? "bg-muted text-amber-500" : "bg-background/60 hover:bg-muted text-amber-500"}`}
 							size="sm"
 							label="Reactions"
 							data-tour="reactions-button"
@@ -366,7 +387,7 @@ export const ControlBar = memo(function ControlBar({
 					<ControlButton
 						icon={<HelpCircle size={20} />}
 						onClick={handleShowTour}
-						className="bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 text-white rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.2)]"
+						className="bg-background/60 backdrop-blur-xl border border-border hover:bg-muted text-foreground rounded-full w-10 h-10 transition-all duration-300 shadow-[0_4px_15px_rgba(0,0,0,0.12)]"
 						size="sm"
 						label="Help"
 					/>

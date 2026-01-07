@@ -180,7 +180,7 @@ function ChatPanelWrapper({
 	}, [messages, localParticipantId]);
 
 	return (
-		<div className="h-full rounded-[32px] overflow-hidden border border-white/10 shadow-2xl ring-1 ring-white/5">
+		<div className="h-full rounded-[32px] overflow-hidden border border-border shadow-2xl ring-1 ring-border/60 bg-card">
 			<ChatPanel
 				messages={messages.map((msg) => ({
 					...msg,
@@ -218,7 +218,7 @@ function ParticipantsPanelWrapper({
 	}, [participants, localParticipantId]);
 
 	return (
-		<div className="h-full rounded-[32px] overflow-hidden border border-white/10 shadow-2xl ring-1 ring-white/5">
+		<div className="h-full rounded-[32px] overflow-hidden border border-border shadow-2xl ring-1 ring-border/60 bg-card">
 			<ParticipantList
 				participants={participants.map((p) => ({
 					id: p.id,
@@ -260,26 +260,26 @@ function InfoPanel({
 	}, [roomId, sessionSeconds, formatDuration]);
 
 	return (
-		<div className="h-full rounded-[32px] p-6 border border-white/10 bg-black/40 backdrop-blur-3xl shadow-2xl ring-1 ring-white/5 text-white">
+		<div className="h-full rounded-[32px] p-6 border border-border bg-card/80 backdrop-blur-3xl shadow-2xl ring-1 ring-border/60 text-foreground">
 			<div className="flex items-center justify-between mb-6">
 				<h2 className="text-xl font-bold">Meeting Info</h2>
 				<button
 					onClick={onClose}
-					className="p-2 hover:bg-white/10 rounded-full transition-colors"
+					className="p-2 hover:bg-muted rounded-full transition-colors"
 				>
 					<X size={20} />
 				</button>
 			</div>
 			<div className="space-y-4">
-				<div className="p-4 rounded-2xl bg-white/5 border border-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
-					<p className="text-sm text-gray-400 mb-1">Room ID</p>
-					<p className="font-mono text-lg select-all text-white/90">
+				<div className="p-4 rounded-2xl bg-muted/40 border border-border shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+					<p className="text-sm text-muted-foreground mb-1">Room ID</p>
+					<p className="font-mono text-lg select-all text-foreground/90">
 						{roomId}
 					</p>
 				</div>
-				<div className="p-4 rounded-2xl bg-white/5 border border-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
-					<p className="text-sm text-gray-400 mb-1">Duration</p>
-					<p className="font-mono text-lg text-white/90">
+				<div className="p-4 rounded-2xl bg-muted/40 border border-border shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+					<p className="text-sm text-muted-foreground mb-1">Duration</p>
+					<p className="font-mono text-lg text-foreground/90">
 						{formatDuration(sessionSeconds)}
 					</p>
 				</div>

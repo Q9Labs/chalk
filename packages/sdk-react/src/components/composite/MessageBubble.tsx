@@ -19,35 +19,28 @@ export interface MessageBubbleProps {
   className?: string;
 }
 
-// Inline styles matching the reference design
 const styles = {
-  // SENDER (you/local) - Royal Blue #0764BB - RIGHT SIDE
-  // Tail on TOP-RIGHT, rounded on other corners
   senderBubble: {
-    background: '#0764BB',
+    background: 'var(--chalk-accent)',
     color: '#FFFFFF',
     borderRadius: '20px 4px 20px 20px', // top-left, TOP-RIGHT (tail), bottom-right, bottom-left
   } as React.CSSProperties,
 
-  // RECEIVER (others/remote) - Glassmorphism #F1F1F11C with blur - LEFT SIDE
-  // Tail on TOP-LEFT, rounded on other corners
   receiverBubble: {
-    background: 'rgba(241, 241, 241, 0.11)',
+    background: 'var(--chalk-bg-tertiary)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    color: '#E5E5E5',
+    color: 'var(--chalk-text-primary)',
     borderRadius: '4px 20px 20px 20px', // TOP-LEFT (tail), top-right, bottom-right, bottom-left
   } as React.CSSProperties,
 
-  // System message
   systemBubble: {
-    background: 'rgba(255, 255, 255, 0.08)',
-    color: '#9CA3AF',
+    background: 'var(--chalk-bg-tertiary)',
+    color: 'var(--chalk-text-muted)',
   } as React.CSSProperties,
 
-  // Timestamp
   timestamp: {
-    color: '#6B7280',
+    color: 'var(--chalk-text-muted)',
     fontSize: '11px',
   } as React.CSSProperties,
 };
@@ -87,7 +80,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: '#93C5FD', textDecoration: 'underline' }}
+            style={{ color: 'var(--chalk-accent)', textDecoration: 'underline' }}
           >
             {part}
           </a>
@@ -110,11 +103,11 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
           />
         );
       case 'sent':
-        return <Check className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />;
+        return <Check className="w-3.5 h-3.5" style={{ color: 'var(--chalk-text-muted)' }} />;
       case 'delivered':
-        return <CheckCheck className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />;
+        return <CheckCheck className="w-3.5 h-3.5" style={{ color: 'var(--chalk-text-muted)' }} />;
       case 'read':
-        return <CheckCheck className="w-3.5 h-3.5" style={{ color: '#3B82F6' }} />; // Blue ticks
+        return <CheckCheck className="w-3.5 h-3.5" style={{ color: 'var(--chalk-accent)' }} />;
       default:
         return null;
     }
@@ -140,9 +133,6 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
       </div>
     );
   }
-
-  // DEBUG: Log isLocal value
-  console.log('MessageBubble DEBUG:', { senderName, isLocal, content: content.substring(0, 20) });
 
   // SENDER (you) = isLocal=true = RIGHT side, blue, tail top-right
   // RECEIVER (others) = isLocal=false = LEFT side, glassmorphism, tail top-left

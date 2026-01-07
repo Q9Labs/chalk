@@ -58,6 +58,20 @@ type CreateRoomOutput struct {
 }
 
 func (s *Service) CreateRoom(ctx context.Context, input CreateRoomInput) (*CreateRoomOutput, error) {
+
+	tenant, err := s.db.GetTenant(ctx, input.TenantID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting tenant: %w", err)
+	}
+
+	activeRooms, err := s.db.CountActiveRoomsByTenant(ctx, tenant.ID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting active tenant rooms: %w", err)
+	}
+
+	if activeRooms >= int64(tenant.MaxConcurrentRooms) {
+		return nil, fmt.Errorf("maximum concurrent room limit reached: %w", err)
+	}
 	cfMeeting, err := s.cfClient.CreateMeeting(ctx, cloudflare.CreateMeetingRequest{
 		Title: input.Name,
 	})

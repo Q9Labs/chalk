@@ -33,7 +33,7 @@ export const ReactionPicker = React.memo(({
       />
       <div 
         className={cn(
-          "absolute z-50 p-2 bg-background-primary rounded-lg shadow-xl border border-border",
+          "absolute z-50 p-2 bg-[var(--chalk-bg-panel)] rounded-lg shadow-xl border border-[var(--chalk-border-subtle)]",
           !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200",
           position === 'top' ? "bottom-full mb-2" : "top-full mt-2",
           "left-1/2 -translate-x-1/2 w-64",
@@ -43,14 +43,14 @@ export const ReactionPicker = React.memo(({
         aria-label="Reaction picker"
       >
         {recentReactions.length > 0 && (
-          <div className="mb-2 pb-2 border-b border-border">
-            <div className="text-xs text-foreground-secondary mb-1 px-1">Recent</div>
+          <div className="mb-2 pb-2 border-b border-[var(--chalk-border-subtle)]">
+            <div className="text-xs text-[var(--chalk-text-muted)] mb-1 px-1">Recent</div>
             <div className="flex gap-1 overflow-x-auto pb-1">
               {recentReactions.map((emoji, i) => (
                 <button
                   key={`recent-${i}`}
                   onClick={() => { onSelect(emoji); onClose(); }}
-                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-background-tertiary transition-colors text-xl"
+                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-xl"
                   aria-label={`React with ${emoji}`}
                 >
                   {emoji}
@@ -65,7 +65,7 @@ export const ReactionPicker = React.memo(({
             <button
               key={emoji}
               onClick={() => { onSelect(emoji); onClose(); }}
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-background-tertiary transition-colors text-xl"
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-xl"
               aria-label={`React with ${emoji}`}
             >
               {emoji}

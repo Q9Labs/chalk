@@ -23,6 +23,8 @@ interface Participant {
 	isSpeaking?: boolean;
 	handRaised?: boolean;
 	connectionQuality?: number;
+	videoEnabled?: boolean;
+	audioEnabled?: boolean;
 }
 
 interface VideoGridProps {
@@ -69,6 +71,8 @@ export const VideoGrid = memo(function VideoGrid({
 				name: p.displayName,
 				hasVideo: !!p.videoTrack,
 				hasAudio: !!p.audioTrack,
+				videoEnabled: p.videoEnabled,
+				audioEnabled: p.audioEnabled,
 				isScreenSharing: p.isScreenSharing,
 				isSpeaking: p.isSpeaking,
 				isLocal: p.isLocal,
@@ -131,6 +135,9 @@ export const VideoGrid = memo(function VideoGrid({
 					: undefined,
 			isHandRaised: p.id === localParticipant?.id ? isHandRaised : p.handRaised,
 			isSpeaking: p.id === activeSpeaker?.id || p.isSpeaking,
+			// CRITICAL: Pass video/audio enabled state to VideoTile
+			isVideoEnabled: p.videoEnabled ?? !!p.videoTrack,
+			isMuted: !(p.audioEnabled ?? !!p.audioTrack),
 		};
 	};
 
@@ -195,6 +202,8 @@ interface TileParticipant {
 	handRaised?: boolean;
 	connectionQuality?: 1 | 2 | 3 | 4;
 	isHandRaised?: boolean;
+	isVideoEnabled?: boolean;
+	isMuted?: boolean;
 }
 
 function ScreenShareTile({
@@ -209,7 +218,7 @@ function ScreenShareTile({
 	}, [participant.displayName]);
 
 	return (
-		<div className="relative w-full h-full rounded-[32px] overflow-hidden border border-green-500/50 bg-gradient-to-b from-[#0a2e0a] to-[#0a0a0a] shadow-2xl">
+		<div className="relative w-full h-full rounded-[32px] overflow-hidden border border-emerald-500/30 bg-gradient-to-b from-emerald-950/40 to-background shadow-2xl">
 			<VideoTile
 				participant={participant}
 				videoTrack={screenShareTrack}
@@ -219,9 +228,9 @@ function ScreenShareTile({
 				showStatus={false}
 				showName={false}
 			/>
-			<div className="absolute bottom-8 left-8 px-5 py-3 bg-green-500/20 backdrop-blur-2xl rounded-2xl border border-green-500/30 shadow-[0_4px_30px_rgba(0,0,0,0.1)] flex items-center gap-2">
-				<Monitor size={18} className="text-green-400" />
-				<h3 className="text-white font-bold text-xl tracking-wide">
+			<div className="absolute bottom-8 left-8 px-5 py-3 bg-emerald-500/15 backdrop-blur-2xl rounded-2xl border border-emerald-500/25 shadow-[0_4px_30px_rgba(0,0,0,0.1)] flex items-center gap-2">
+				<Monitor size={18} className="text-emerald-400" />
+				<h3 className="text-foreground font-bold text-xl tracking-wide">
 					{participant.displayName}'s screen
 				</h3>
 			</div>
@@ -235,7 +244,7 @@ function SpotlightTile({ participant }: { participant: TileParticipant }) {
 	}, [participant.displayName]);
 
 	return (
-		<div className="relative w-full h-full rounded-[32px] overflow-hidden border border-white/80 bg-gradient-to-b from-[#2e0046] to-[#0a0a0a] shadow-2xl">
+		<div className="relative w-full h-full rounded-[32px] overflow-hidden border border-border bg-gradient-to-b from-card to-background shadow-2xl">
 			<VideoTile
 				participant={participant}
 				videoTrack={participant.videoTrack}
@@ -244,8 +253,8 @@ function SpotlightTile({ participant }: { participant: TileParticipant }) {
 				showStatus={false}
 				showName={false}
 			/>
-			<div className="absolute bottom-8 left-8 px-5 py-3 bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
-				<h3 className="text-white font-bold text-xl tracking-wide">
+			<div className="absolute bottom-8 left-8 px-5 py-3 bg-background/70 backdrop-blur-2xl rounded-2xl border border-border shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+				<h3 className="text-foreground font-bold text-xl tracking-wide">
 					{participant.displayName}
 				</h3>
 			</div>
@@ -261,7 +270,7 @@ function GridTile({
 	isLocalParticipant: boolean;
 }) {
 	return (
-		<div className="relative w-full h-full rounded-[32px] overflow-hidden border border-white/10 bg-gradient-to-b from-[#2e0046] to-[#0a0a0a] shadow-xl group">
+		<div className="relative w-full h-full rounded-[32px] overflow-hidden border border-border bg-gradient-to-b from-card to-background shadow-xl group">
 			<VideoTile
 				participant={participant}
 				videoTrack={participant.videoTrack}
@@ -271,11 +280,11 @@ function GridTile({
 				showName={false}
 			/>
 			<div className="absolute bottom-6 left-6 transition-transform duration-300 group-hover:scale-105">
-				<div className="px-4 py-2 bg-white/5 backdrop-blur-2xl rounded-xl border border-white/10 flex items-center gap-2 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+				<div className="px-4 py-2 bg-background/70 backdrop-blur-2xl rounded-xl border border-border flex items-center gap-2 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
 					{participant.isSpeaking && (
-						<Mic size={14} className="text-green-400" />
+						<Mic size={14} className="text-emerald-500" />
 					)}
-					<h3 className="text-white font-bold text-lg tracking-wide">
+					<h3 className="text-foreground font-bold text-lg tracking-wide">
 						{participant.displayName}{" "}
 						{isLocalParticipant && "(You)"}
 					</h3>

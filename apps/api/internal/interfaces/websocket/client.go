@@ -162,6 +162,22 @@ func (c *Client) handleMessage(msg *Message) {
 		c.handleHandLower()
 	case MessageTypePong:
 		// Just acknowledge, no action needed
+	case MessageTypeWhiteboardUpdate:
+		c.handleWhiteboardUpdate(msg)
+	case MessageTypeWhiteboardSync:
+		c.handleWhiteboardSync()
+	case MessageTypeWhiteboardClear:
+		c.handleWhiteboardClear()
+	case MessageTypeWhiteboardCursor:
+		c.handleWhiteboardCursor(msg)
+	case MessageTypePermissionGrant:
+		c.handlePermissionGrant(msg)
+	case MessageTypePermissionRevoke:
+		c.handlePermissionRevoke(msg)
+	case MessageTypeWhiteboardOpen:
+		c.handleWhiteboardOpen()
+	case MessageTypeWhiteboardClose:
+		c.handleWhiteboardClose()
 	default:
 		log.Printf("[WS] Unknown message type: %s", msg.Type)
 	}
@@ -255,4 +271,170 @@ func (c *Client) sendErrorMessage(code, message string) {
 	})
 	data, _ := json.Marshal(msg)
 	c.Send(data)
+}
+
+// handleWhiteboardUpdate processes a whiteboard update and broadcasts it
+func (c *Client) handleWhiteboardUpdate(msg *Message) {
+	log.Printf("[WB-UPDATE] Received whiteboard.update from participant=%s room=%s", c.participantID, c.roomID)
+
+	var payload WhiteboardUpdatePayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		log.Printf("[WB-UPDATE] ERROR: Failed to parse payload: %v", err)
+		c.sendErrorMessage("invalid_payload", "Failed to parse whiteboard update")
+		return
+	}
+
+	log.Printf("[WB-UPDATE] Payload: seq=%d, elements=%d bytes", payload.Seq, len(payload.Elements))
+
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+	log.Printf("[WB-UPDATE] Sender metadata: displayName=%s", meta.DisplayName)
+
+	// Broadcast to all participants in room
+	dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
+		ParticipantID: c.participantID,
+		DisplayName:   meta.DisplayName,
+		Elements:      payload.Elements,
+		Files:         payload.Files,
+		Seq:           payload.Seq,
+		Timestamp:     time.Now(),
+	})
+
+	msgData, _ := json.Marshal(dataMsg)
+	log.Printf("[WB-UPDATE] Broadcasting whiteboard.data to room=%s, msgSize=%d bytes", c.roomID, len(msgData))
+	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	log.Printf("[WB-UPDATE] Broadcast complete")
+}
+
+// handleWhiteboardSync sends the current whiteboard state to the requesting client
+func (c *Client) handleWhiteboardSync() {
+	log.Printf("[WB-SYNC] Received whiteboard.sync request from participant=%s room=%s", c.participantID, c.roomID)
+
+	// For now, send empty snapshot (persistence can be added later)
+	snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, WhiteboardSnapshotPayload{
+		RoomID:   c.roomID,
+		Elements: json.RawMessage("[]"),
+		Files:    json.RawMessage("{}"),
+		AppState: json.RawMessage("{}"),
+		LastSeq:  0,
+	})
+	data, _ := json.Marshal(snapshot)
+	log.Printf("[WB-SYNC] Sending empty snapshot to participant=%s, size=%d bytes", c.participantID, len(data))
+	c.Send(data)
+}
+
+// handleWhiteboardClear broadcasts a whiteboard clear event
+func (c *Client) handleWhiteboardClear() {
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+
+	clearMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
+		ParticipantID: c.participantID,
+		DisplayName:   meta.DisplayName,
+		Elements:      json.RawMessage("[]"),
+		Files:         json.RawMessage("{}"),
+		Seq:           0,
+		Timestamp:     time.Now(),
+	})
+
+	msgData, _ := json.Marshal(clearMsg)
+	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+}
+
+// handleWhiteboardCursor broadcasts cursor position to other participants
+func (c *Client) handleWhiteboardCursor(msg *Message) {
+	var payload struct {
+		X float64 `json:"x"`
+		Y float64 `json:"y"`
+	}
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		return // Silently ignore cursor errors
+	}
+
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+
+	cursorMsg, _ := NewMessage(MessageTypeWhiteboardCursor, WhiteboardCursorPayload{
+		ParticipantID: c.participantID,
+		DisplayName:   meta.DisplayName,
+		X:             payload.X,
+		Y:             payload.Y,
+		Timestamp:     time.Now(),
+	})
+
+	msgData, _ := json.Marshal(cursorMsg)
+	// Broadcast to others (not self) - exclude sender
+	c.hub.BroadcastToRoom(c.roomID, msgData, c.participantID.String())
+}
+
+// handlePermissionGrant broadcasts a permission grant event
+func (c *Client) handlePermissionGrant(msg *Message) {
+	var payload PermissionGrantPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse permission grant")
+		return
+	}
+
+	// Broadcast permission change
+	changeMsg, _ := NewMessage(MessageTypePermissionChanged, PermissionChangedPayload{
+		ParticipantID: payload.ParticipantID,
+		Feature:       payload.Feature,
+		CanDraw:       true,
+		GrantedBy:     c.participantID,
+		Timestamp:     time.Now(),
+	})
+
+	msgData, _ := json.Marshal(changeMsg)
+	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+}
+
+// handlePermissionRevoke broadcasts a permission revoke event
+func (c *Client) handlePermissionRevoke(msg *Message) {
+	var payload PermissionGrantPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse permission revoke")
+		return
+	}
+
+	changeMsg, _ := NewMessage(MessageTypePermissionChanged, PermissionChangedPayload{
+		ParticipantID: payload.ParticipantID,
+		Feature:       payload.Feature,
+		CanDraw:       false,
+		GrantedBy:     c.participantID,
+		Timestamp:     time.Now(),
+	})
+
+	msgData, _ := json.Marshal(changeMsg)
+	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+}
+
+// handleWhiteboardOpen broadcasts that this participant opened the whiteboard
+func (c *Client) handleWhiteboardOpen() {
+	log.Printf("[WB-OPEN] Received whiteboard.open from participant=%s room=%s", c.participantID, c.roomID)
+
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+	log.Printf("[WB-OPEN] Participant metadata: displayName=%s", meta.DisplayName)
+
+	openedMsg, _ := NewMessage(MessageTypeWhiteboardOpened, WhiteboardOpenedPayload{
+		ParticipantID: c.participantID,
+		DisplayName:   meta.DisplayName,
+		Timestamp:     time.Now(),
+	})
+
+	msgData, _ := json.Marshal(openedMsg)
+	log.Printf("[WB-OPEN] Broadcasting whiteboard.opened to room=%s, msgSize=%d bytes", c.roomID, len(msgData))
+	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	log.Printf("[WB-OPEN] Broadcast complete")
+}
+
+// handleWhiteboardClose broadcasts that this participant closed the whiteboard
+func (c *Client) handleWhiteboardClose() {
+	log.Printf("[WB-CLOSE] Received whiteboard.close from participant=%s room=%s", c.participantID, c.roomID)
+
+	closedMsg, _ := NewMessage(MessageTypeWhiteboardClosed, WhiteboardClosedPayload{
+		ParticipantID: c.participantID,
+		Timestamp:     time.Now(),
+	})
+
+	msgData, _ := json.Marshal(closedMsg)
+	log.Printf("[WB-CLOSE] Broadcasting whiteboard.closed to room=%s, msgSize=%d bytes", c.roomID, len(msgData))
+	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	log.Printf("[WB-CLOSE] Broadcast complete")
 }

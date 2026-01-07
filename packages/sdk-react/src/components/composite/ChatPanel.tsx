@@ -23,55 +23,50 @@ export interface ChatPanelProps {
   title?: string;
 }
 
-// Inline styles matching the reference design
 const chatStyles = {
-  // Deep dark purple gradient background: #35004A at 21%, #8D00C5 at 3%
   container: {
-    background: 'linear-gradient(180deg, rgba(141, 0, 197, 0.08) 0%, rgba(53, 0, 74, 0.36) 100%)',
-    backgroundColor: '#0D0A14',
-    color: '#FFFFFF',
+    backgroundColor: 'var(--chalk-bg-panel)',
+    color: 'var(--chalk-text-primary)',
   } as React.CSSProperties,
   header: {
     background: 'transparent',
     padding: '16px 20px',
   } as React.CSSProperties,
   title: {
-    color: '#FFFFFF',
+    color: 'var(--chalk-text-primary)',
     fontSize: '20px',
     fontWeight: 600,
   } as React.CSSProperties,
-  // Muted dark grey-purple for empty state
   emptyState: {
-    color: '#6B7280',
+    color: 'var(--chalk-text-muted)',
   } as React.CSSProperties,
   emptyIcon: {
-    background: 'rgba(53, 0, 74, 0.5)',
-    color: '#9CA3AF',
+    background: 'var(--chalk-bg-tertiary)',
+    color: 'var(--chalk-text-muted)',
   } as React.CSSProperties,
   inputArea: {
     background: 'transparent',
     padding: '16px 20px',
   } as React.CSSProperties,
   inputField: {
-    background: 'rgba(45, 42, 62, 0.8)',
-    border: 'none',
-    color: '#FFFFFF',
+    background: 'var(--chalk-bg-tertiary)',
+    border: '1px solid var(--chalk-border-subtle)',
+    color: 'var(--chalk-text-primary)',
     borderRadius: '24px',
     fontSize: '14px',
   } as React.CSSProperties,
   placeholder: {
-    color: '#6B7280',
+    color: 'var(--chalk-text-muted)',
   } as React.CSSProperties,
-  // Bright saturated purple for action buttons
   actionButton: {
-    background: '#7C3AED',
+    background: 'var(--chalk-accent)',
     color: '#FFFFFF',
     borderRadius: '50%',
     width: '44px',
     height: '44px',
   } as React.CSSProperties,
   moreButton: {
-    color: '#9CA3AF',
+    color: 'var(--chalk-text-muted)',
   } as React.CSSProperties,
 };
 
@@ -195,7 +190,7 @@ export const ChatPanel = React.memo(({
         ref={messagesContainerRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto py-4"
-        style={{ scrollbarWidth: 'thin', scrollbarColor: '#2D2A3E transparent' }}
+        style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--chalk-border-subtle) transparent' }}
       >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6">
@@ -205,7 +200,7 @@ export const ChatPanel = React.memo(({
             >
               <MessageSquare className="w-8 h-8" />
             </div>
-            <h3 style={{ color: '#FFFFFF', fontWeight: 500, marginBottom: '4px' }}>No messages yet</h3>
+            <h3 style={{ color: 'var(--chalk-text-primary)', fontWeight: 500, marginBottom: '4px' }}>No messages yet</h3>
             <p style={{ ...chatStyles.emptyState, fontSize: '14px', maxWidth: '200px' }}>
               Send a message to start the conversation
             </p>
@@ -240,7 +235,7 @@ export const ChatPanel = React.memo(({
         <button
           onClick={() => scrollToBottom()}
           className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-medium transition-all"
-          style={{ background: '#7C3AED', color: '#FFFFFF' }}
+          style={{ background: 'var(--chalk-accent)', color: '#FFFFFF' }}
         >
           New messages
         </button>

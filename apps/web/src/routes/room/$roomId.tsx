@@ -12,6 +12,7 @@
  */
 
 import {
+	AudioRenderer,
 	EndScreen,
 	GuidedTour,
 	NotificationStack,
@@ -36,6 +37,7 @@ import {
 	ReactionBubbles,
 	SidePanels,
 	VideoGrid,
+	WhiteboardView,
 } from "@/features/room/components";
 import { useNotifications, useRoomEvents, useUIState } from "@/features/room/hooks";
 import { roomDebug as log } from "@/features/room/utils/debug";
@@ -142,6 +144,7 @@ function RoomPage() {
 
 	const [showEndScreen, setShowEndScreen] = useState(false);
 	const [sessionSeconds, setSessionSeconds] = useState(0);
+	const [showWhiteboard, setShowWhiteboard] = useState(false);
 
 	// Refs for redirect logic
 	const redirectedRef = useRef(false);
@@ -317,6 +320,11 @@ function RoomPage() {
 		[sendMessage]
 	);
 
+	const handleToggleWhiteboard = useCallback(() => {
+		log.action("toggle", "Whiteboard", !showWhiteboard ? "opening" : "closing");
+		setShowWhiteboard((prev) => !prev);
+	}, [showWhiteboard]);
+
 	// =========================================================================
 	// KEYBOARD SHORTCUTS
 	// =========================================================================
@@ -344,6 +352,67 @@ function RoomPage() {
 		shortcuts,
 		enabled: isConnected,
 	});
+
+	// Whiteboard keyboard shortcut (W key)
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "w" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+				// Don't toggle if typing in input
+				if (
+					e.target instanceof HTMLInputElement ||
+					e.target instanceof HTMLTextAreaElement
+				)
+					return;
+				handleToggleWhiteboard();
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [handleToggleWhiteboard]);
+
+	// Auto-open whiteboard when another participant opens it
+	useEffect(() => {
+		console.log("[RoomPage] Setting up whiteboard-opened listener, room:", room ? "exists" : "null");
+		if (!room) return;
+
+		const unsubOpen = room.on("whiteboard-opened", (data) => {
+			console.log("[RoomPage] Received whiteboard-opened event:", {
+				participantId: data.participantId,
+				displayName: data.displayName,
+				showWhiteboard,
+				localParticipantId: localParticipant?.id,
+				isFromSelf: data.participantId === localParticipant?.id,
+			});
+			// Only auto-open if we don't already have it open
+			if (!showWhiteboard && data.participantId !== localParticipant?.id) {
+				console.log("[RoomPage] Auto-opening whiteboard for remote participant");
+				log.info("info", `${data.displayName} opened the whiteboard`, "whiteboard");
+				notificationsState.addNotification(`${data.displayName} opened the whiteboard`, "info");
+				setShowWhiteboard(true);
+			} else {
+				console.log("[RoomPage] NOT auto-opening whiteboard:", {
+					reason: showWhiteboard ? "already open" : "from self",
+				});
+			}
+		});
+
+		const unsubClose = room.on("whiteboard-closed", (data) => {
+			console.log("[RoomPage] Received whiteboard-closed event:", {
+				participantId: data.participantId,
+				localParticipantId: localParticipant?.id,
+			});
+			if (data.participantId !== localParticipant?.id) {
+				log.info("info", `Participant closed the whiteboard`, "whiteboard");
+			}
+		});
+
+		console.log("[RoomPage] Whiteboard event listeners registered");
+		return () => {
+			console.log("[RoomPage] Cleaning up whiteboard event listeners");
+			unsubOpen();
+			unsubClose();
+		};
+	}, [room, showWhiteboard, localParticipant?.id, notificationsState]);
 
 	// =========================================================================
 	// RENDER LOGGING (only log significant changes, not every render)
@@ -407,7 +476,15 @@ function RoomPage() {
 	// =========================================================================
 
 	return (
-		<div className="flex flex-col h-screen bg-[#0D0D0D] font-sans text-white overflow-hidden relative">
+		<div className="flex flex-col h-screen bg-background font-sans text-foreground overflow-hidden relative">
+			{/* Whiteboard View */}
+			{showWhiteboard && (
+				<WhiteboardView onClose={() => setShowWhiteboard(false)} />
+			)}
+
+			{/* Audio Renderer - plays remote participant audio */}
+			<AudioRenderer participants={participants} />
+
 			{/* Content Area */}
 			<div className="flex-1 flex relative min-h-0 p-4 gap-4">
 				{/* Video Grid */}
@@ -463,6 +540,8 @@ function RoomPage() {
 				playClick={playClick}
 				playRecordingStart={playRecordingStart}
 				playRecordingStop={playRecordingStop}
+				isWhiteboardActive={showWhiteboard}
+				onToggleWhiteboard={handleToggleWhiteboard}
 			/>
 
 			{/* Floating Reaction Bubbles */}

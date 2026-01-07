@@ -150,27 +150,17 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         metadata: config.metadata,
       };
 
-      // WebSocket signaling path
+      // Optional WebSocket signaling (chat, reactions, whiteboard, etc.)
+      let wsClient: WSClient | null = null;
       if (this.wsUrl) {
         this.log("Initializing WebSocket signaling");
-        const wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
-        const room = new Room(roomInfo.id, wsClient, this.debug);
-        room._setLocalParticipant(localParticipant);
-        room._setInfo(roomInfo);
-        room._setTokens(tokens);
-
+        wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
         wsClient.on("token-expired", (error) => {
           this.emit("token-expired", error);
         });
-
-        wsClient.connect(tokens.rtcToken, roomId);
-
-        this.currentWsClient = wsClient;
-        this.currentRoom = room;
-        return room;
       }
 
-      // RealtimeKit path (default)
+      // RealtimeKit path (media)
       this.log("Initializing RealtimeKit");
 
       let rtkClient: RealtimeKitClient;
@@ -224,6 +214,16 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         this.log("ERROR: Failed to join RealtimeKit room:", errorMsg);
         this.log("Possible causes: room ended, token expired, network issue, or connection timeout");
         throw new Error(`Failed to join room: ${errorMsg}`);
+      }
+
+      if (wsClient) {
+        room.attachWsClient(wsClient);
+        if (tokens.accessToken) {
+          wsClient.connect(tokens.accessToken, roomId);
+        } else {
+          this.log("WARNING: accessToken missing; WebSocket features disabled");
+        }
+        this.currentWsClient = wsClient;
       }
 
       this.currentRoom = room;

@@ -62,7 +62,7 @@ export const ScreenShareView = React.memo(({
         className
       )}
     >
-      <div className="relative flex-1 min-h-0 min-w-0 rounded-lg overflow-hidden bg-background-secondary border border-border group">
+      <div className="relative flex-1 min-h-0 min-w-0 rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] group">
         <video
           ref={videoRef}
           autoPlay
@@ -100,7 +100,7 @@ export const ScreenShareView = React.memo(({
              <div 
                 key={p.id}
                 className={cn(
-                   "shrink-0 rounded-lg overflow-hidden border border-border bg-background-secondary relative",
+                  "shrink-0 rounded-lg overflow-hidden border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-secondary)] relative",
                    thumbnailPosition === 'bottom' ? "aspect-video h-full" : "aspect-video w-full"
                 )}
              >

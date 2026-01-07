@@ -91,7 +91,7 @@ export const VideoGrid = React.memo(({
         className={cn("flex flex-col h-full gap-4", className)}
         data-tour="video-grid"
       >
-        <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden bg-background-secondary border border-border">
+        <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)]">
           {mainParticipant && (
             <VideoTile
               participant={mapToVideoTileParticipant(mainParticipant)}
@@ -106,7 +106,7 @@ export const VideoGrid = React.memo(({
         {otherParticipants.length > 0 && (
           <div className="h-32 flex gap-4 overflow-x-auto pb-2 px-1">
             {otherParticipants.map((p) => (
-              <div key={p.id} className="w-48 flex-shrink-0 aspect-video rounded-lg overflow-hidden relative border border-border">
+              <div key={p.id} className="w-48 flex-shrink-0 aspect-video rounded-lg overflow-hidden relative border border-[var(--chalk-border-subtle)]">
                 <VideoTile
                   participant={mapToVideoTileParticipant(p)}
                   videoTrack={p.videoTrack}
@@ -118,7 +118,7 @@ export const VideoGrid = React.memo(({
               </div>
             ))}
             {overflowCount > 0 && (
-              <div className="w-48 flex-shrink-0 aspect-video rounded-lg bg-background-secondary border border-border flex items-center justify-center text-foreground-muted">
+              <div className="w-48 flex-shrink-0 aspect-video rounded-lg bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] flex items-center justify-center text-[var(--chalk-text-muted)]">
                 +{overflowCount} more
               </div>
             )}
@@ -137,7 +137,7 @@ export const VideoGrid = React.memo(({
         className={cn("flex h-full gap-4", className)}
         data-tour="video-grid"
       >
-        <div className="flex-1 relative rounded-lg overflow-hidden bg-background-secondary border border-border">
+        <div className="flex-1 relative rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)]">
           {mainParticipant && (
             <VideoTile
               participant={mapToVideoTileParticipant(mainParticipant)}
@@ -151,7 +151,7 @@ export const VideoGrid = React.memo(({
         
         <div className="w-64 flex flex-col gap-2 overflow-y-auto pl-1 pr-2">
           {otherParticipants.map((p) => (
-            <div key={p.id} className="w-full aspect-video rounded-lg overflow-hidden relative border border-border flex-shrink-0">
+            <div key={p.id} className="w-full aspect-video rounded-lg overflow-hidden relative border border-[var(--chalk-border-subtle)] flex-shrink-0">
               <VideoTile
                 participant={mapToVideoTileParticipant(p)}
                 videoTrack={p.videoTrack}
@@ -163,7 +163,7 @@ export const VideoGrid = React.memo(({
             </div>
           ))}
            {overflowCount > 0 && (
-              <div className="w-full aspect-video rounded-lg bg-background-secondary border border-border flex items-center justify-center text-foreground-muted flex-shrink-0">
+              <div className="w-full aspect-video rounded-lg bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] flex items-center justify-center text-[var(--chalk-text-muted)] flex-shrink-0">
                 +{overflowCount} more
               </div>
             )}
@@ -184,7 +184,7 @@ export const VideoGrid = React.memo(({
       {visibleParticipants.map((p) => (
         <div 
           key={p.id} 
-          className="relative rounded-lg overflow-hidden border border-border bg-background-secondary aspect-video"
+          className="relative rounded-lg overflow-hidden border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-secondary)] aspect-video"
         >
           <VideoTile
             participant={mapToVideoTileParticipant(p)}
@@ -196,8 +196,8 @@ export const VideoGrid = React.memo(({
         </div>
       ))}
       {overflowCount > 0 && (
-         <div className="relative rounded-lg overflow-hidden border border-border bg-background-secondary aspect-video flex items-center justify-center">
-            <span className="text-xl font-medium text-foreground-muted">+{overflowCount} more</span>
+         <div className="relative rounded-lg overflow-hidden border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-secondary)] aspect-video flex items-center justify-center">
+            <span className="text-xl font-medium text-[var(--chalk-text-muted)]">+{overflowCount} more</span>
          </div>
       )}
     </div>

@@ -225,9 +225,9 @@ export const ControlBar = React.memo(({
     <div
       className={cn(
         "flex items-center justify-center gap-2 p-2 transition-all duration-300",
-        position === 'bottom' ? "border-t border-border" : "border-b border-border",
-        variant === 'floating' && "rounded-full bg-background-primary/90 backdrop-blur-md shadow-lg border border-border/50",
-        variant === 'fixed' && "w-full bg-background-primary",
+        position === 'bottom' ? "border-t border-[var(--chalk-border-subtle)]" : "border-b border-[var(--chalk-border-subtle)]",
+        variant === 'floating' && "rounded-full bg-[var(--chalk-bg-controls)] backdrop-blur-md shadow-lg border border-[var(--chalk-border-subtle)]",
+        variant === 'fixed' && "w-full bg-[var(--chalk-bg-controls)]",
         variant === 'minimal' && "bg-transparent border-none",
         className
       )}

@@ -23,10 +23,10 @@ export function LoadingScreen({ roomId }: LoadingScreenProps) {
 	}, [roomId]);
 
 	return (
-		<div className="flex items-center justify-center min-h-screen bg-[#1c1c1c] text-white">
-			<div className="flex flex-col items-center p-8 rounded-3xl bg-black/40 backdrop-blur-xl border border-white/5">
-				<div className="animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full mb-4" />
-				<p className="text-white/80 font-medium">Connecting to {roomId}...</p>
+		<div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+			<div className="flex flex-col items-center p-8 rounded-3xl bg-card/80 backdrop-blur-xl border border-border">
+				<div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mb-4" />
+				<p className="text-foreground/80 font-medium">Connecting to {roomId}...</p>
 			</div>
 		</div>
 	);

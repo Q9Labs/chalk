@@ -6,7 +6,8 @@
 		"dev": "vite dev --port 3070",
 		"build": "vite build",
 		"preview": "vite preview",
-		"test": "vitest run"
+		"test": "vitest run",
+		"postinstall": "mkdir -p public/vendor && cp ../../node_modules/@excalidraw/excalidraw/dist/prod/index.css public/vendor/excalidraw.css 2>/dev/null || true"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.0.0",
@@ -14,8 +15,10 @@
 		"@fontsource-variable/figtree": "^5.2.10",
 		"@hugeicons/core-free-icons": "^3.1.0",
 		"@hugeicons/react": "^1.1.4",
+		"@excalidraw/excalidraw": "^0.18.0",
 		"@q9labs/chalk-core": "workspace:*",
 		"@q9labs/chalk-react": "workspace:*",
+		"@q9labs/chalk-whiteboard": "workspace:*",
 		"@tailwindcss/vite": "^4.0.6",
 		"@tanstack/react-devtools": "^0.7.0",
 		"@tanstack/react-router": "^1.132.0",

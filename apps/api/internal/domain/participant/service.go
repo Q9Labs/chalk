@@ -16,6 +16,7 @@ import (
 var (
 	ErrRoomNotAvailable    = errors.New("room not available")
 	ErrRoomFull            = errors.New("room is full")
+	ErrTenantNotFound      = errors.New("tenant does not exist")
 	ErrParticipantNotFound = errors.New("participant not found")
 )
 
@@ -35,6 +36,7 @@ type WebSocketHub interface {
 	SetParticipantMetadata(participantID uuid.UUID, meta domain.ParticipantMetadata)
 	RemoveParticipantMetadata(participantID uuid.UUID)
 	GetParticipantsInRoom(roomID uuid.UUID) []uuid.UUID
+	BroadcastToRoom(roomID uuid.UUID, message []byte, excludeParticipantID string)
 }
 
 type TokenIssuer interface {
@@ -77,6 +79,18 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	room, err := s.db.GetRoom(ctx, input.RoomID)
 	if err != nil || room.Status != "active" {
 		return nil, ErrRoomNotAvailable
+	}
+
+	activeParticipantsCount, err := s.db.CountActiveParticipantsByRoom(ctx, input.RoomID)
+	if err != nil {
+		return nil, errors.New("error fetching participant count")
+	}
+	tenant, err := s.db.GetTenant(ctx, room.TenantID)
+	if err != nil {
+		return nil, ErrTenantNotFound
+	}
+	if activeParticipantsCount >= int64(tenant.MaxParticipantsPerRoom) {
+		return nil, ErrRoomFull
 	}
 
 	presetName := cloudflare.PresetParticipant

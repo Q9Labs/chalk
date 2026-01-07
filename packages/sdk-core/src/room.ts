@@ -35,6 +35,30 @@ interface RoomEvents {
   "recording-started": { recordingId: string };
   "recording-stopped": Recording;
   error: ChalkError;
+  "whiteboard-update": {
+    participantId: string;
+    displayName: string;
+    elements: unknown[];
+    files?: Record<string, unknown>;
+    seq: number;
+  };
+  "whiteboard-cursor": {
+    participantId: string;
+    displayName: string;
+    x: number;
+    y: number;
+  };
+  "whiteboard-permission-changed": {
+    participantId: string;
+    canDraw: boolean;
+  };
+  "whiteboard-opened": {
+    participantId: string;
+    displayName: string;
+  };
+  "whiteboard-closed": {
+    participantId: string;
+  };
 }
 
 export class Room extends EventEmitter<RoomEvents> {
@@ -47,6 +71,8 @@ export class Room extends EventEmitter<RoomEvents> {
   private _messages: ChatMessage[] = [];
   private _currentRecording: { id: string } | null = null;
   private _tokens: TokenSet | null = null;
+  private _whiteboardPermissions: Map<string, boolean> = new Map();
+  private _whiteboardDefaultAccess = true; // tenant config, default: everyone can draw
 
   private rtkClient?: RealtimeKitClient;
   private wsClient?: WSClient;
@@ -258,17 +284,23 @@ export class Room extends EventEmitter<RoomEvents> {
 
     this.wsClient.on("connected", () => {
       this.log("WebSocket connected");
-      this._setStatus("connected");
+      if (!this.rtkClient) {
+        this._setStatus("connected");
+      }
     });
 
     this.wsClient.on("disconnected", () => {
       this.log("WebSocket disconnected");
-      this._setStatus("disconnected");
+      if (!this.rtkClient) {
+        this._setStatus("disconnected");
+      }
     });
 
     this.wsClient.on("reconnecting", () => {
       this.log("WebSocket reconnecting");
-      this._setStatus("reconnecting");
+      if (!this.rtkClient) {
+        this._setStatus("reconnecting");
+      }
     });
 
     this.wsClient.on("participant.joined", (data) => {
@@ -384,6 +416,68 @@ export class Room extends EventEmitter<RoomEvents> {
         this._currentRecording = { id: snapshot.recordingId };
       }
     });
+
+    // Whiteboard events
+    this.wsClient.on("whiteboard.data", (data) => {
+      console.log("[Room] Received whiteboard.data from WS:", {
+        participantId: data.participantId,
+        displayName: data.displayName,
+        seq: data.seq,
+        elementsCount: Array.isArray(data.elements) ? data.elements.length : "unknown",
+      });
+      this.emit("whiteboard-update", {
+        participantId: data.participantId,
+        displayName: data.displayName,
+        elements: data.elements,
+        files: data.files,
+        seq: data.seq,
+      });
+      console.log("[Room] Emitted whiteboard-update event");
+    });
+
+    this.wsClient.on("whiteboard.cursor", (data) => {
+      // Don't log cursor - too noisy
+      this.emit("whiteboard-cursor", {
+        participantId: data.participantId,
+        displayName: data.displayName,
+        x: data.x,
+        y: data.y,
+      });
+    });
+
+    this.wsClient.on("permission.changed", (data) => {
+      console.log("[Room] Received permission.changed from WS:", data);
+      if (data.feature === "whiteboard") {
+        this._whiteboardPermissions.set(data.participantId, data.canDraw);
+        this.emit("whiteboard-permission-changed", {
+          participantId: data.participantId,
+          canDraw: data.canDraw,
+        });
+      }
+    });
+
+    this.wsClient.on("whiteboard.opened", (data) => {
+      console.log("[Room] Received whiteboard.opened from WS:", data);
+      this.emit("whiteboard-opened", {
+        participantId: data.participantId,
+        displayName: data.displayName,
+      });
+      console.log("[Room] Emitted whiteboard-opened event");
+    });
+
+    this.wsClient.on("whiteboard.closed", (data) => {
+      console.log("[Room] Received whiteboard.closed from WS:", data);
+      this.emit("whiteboard-closed", {
+        participantId: data.participantId,
+      });
+      console.log("[Room] Emitted whiteboard-closed event");
+    });
+  }
+
+  attachWsClient(wsClient: WSClient): void {
+    if (this.wsClient === wsClient) return;
+    this.wsClient = wsClient;
+    this.setupWSListeners();
   }
 
   /**
@@ -1194,5 +1288,94 @@ export class Room extends EventEmitter<RoomEvents> {
    */
   get rtkMeeting(): RealtimeKitClient | undefined {
     return this.rtkClient;
+  }
+
+  // ===== Whiteboard Methods =====
+
+  /**
+   * Check if a participant can draw on the whiteboard
+   */
+  canDrawWhiteboard(participantId?: string): boolean {
+    const id = participantId ?? this._localParticipant?.id;
+    if (!id) return false;
+
+    // Host always can draw
+    const participant = this._participants.get(id);
+    if (participant?.role === "host") return true;
+
+    // Check explicit permission
+    const explicit = this._whiteboardPermissions.get(id);
+    if (explicit !== undefined) return explicit;
+
+    // Fall back to default
+    return this._whiteboardDefaultAccess;
+  }
+
+  /**
+   * Grant whiteboard drawing permission to a participant (host only)
+   */
+  grantWhiteboardPermission(participantId: string): void {
+    if (this._localParticipant?.role !== "host") {
+      this.log("Only host can grant permissions");
+      return;
+    }
+    this.wsClient?.grantWhiteboardPermission(participantId);
+  }
+
+  /**
+   * Revoke whiteboard drawing permission from a participant (host only)
+   */
+  revokeWhiteboardPermission(participantId: string): void {
+    if (this._localParticipant?.role !== "host") {
+      this.log("Only host can revoke permissions");
+      return;
+    }
+    this.wsClient?.revokeWhiteboardPermission(participantId);
+  }
+
+  /**
+   * Send a whiteboard update (elements changed)
+   */
+  sendWhiteboardUpdate(
+    elements: unknown[],
+    files?: Record<string, unknown>,
+    seq?: number,
+  ): void {
+    this.wsClient?.sendWhiteboardUpdate(elements, files, seq);
+  }
+
+  /**
+   * Send cursor position on whiteboard
+   */
+  sendWhiteboardCursor(x: number, y: number): void {
+    this.wsClient?.sendWhiteboardCursor(x, y);
+  }
+
+  /**
+   * Clear the whiteboard (host only)
+   */
+  clearWhiteboard(): void {
+    this.wsClient?.sendWhiteboardClear();
+  }
+
+  /**
+   * Request whiteboard sync (get current state)
+   */
+  requestWhiteboardSync(): void {
+    this.wsClient?.requestWhiteboardSync();
+  }
+
+  /**
+   * Notify others that you opened the whiteboard
+   */
+  openWhiteboard(): void {
+    this.wsClient?.sendWhiteboardOpen();
+  }
+
+  /**
+   * Notify others that you closed the whiteboard
+   */
+  closeWhiteboard(): void {
+    this.wsClient?.sendWhiteboardClose();
   }
 }

@@ -3,6 +3,9 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
 
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
+@source "../../../packages/sdk-react/src/**/*.{ts,tsx}";
+
 @custom-variant dark (&:is(.dark *));
 
 body {
@@ -26,8 +29,8 @@ code {
   --card-foreground: oklch(0.13 0.028 261.692);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.13 0.028 261.692);
-  --primary: oklch(0.59 0.14 242);
-  --primary-foreground: oklch(0.98 0.01 237);
+  --primary: #0ea5e9;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.967 0.003 264.542);
@@ -46,8 +49,8 @@ code {
   --radius: 0.875rem;
   --sidebar: oklch(0.985 0.002 247.839);
   --sidebar-foreground: oklch(0.13 0.028 261.692);
-  --sidebar-primary: oklch(0.59 0.14 242);
-  --sidebar-primary-foreground: oklch(0.98 0.01 237);
+  --sidebar-primary: #0ea5e9;
+  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: oklch(0.967 0.003 264.542);
   --sidebar-accent-foreground: oklch(0.21 0.034 264.665);
   --sidebar-border: oklch(0.928 0.006 264.531);
@@ -61,7 +64,7 @@ code {
   --card-foreground: oklch(0.985 0.002 247.839);
   --popover: #1a1a1a;
   --popover-foreground: oklch(0.985 0.002 247.839);
-  --primary: #6E00E6;
+  --primary: #0ea5e9;
   --primary-foreground: #ffffff;
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
@@ -80,8 +83,8 @@ code {
   --chart-5: oklch(0.50 0.12 243);
   --sidebar: oklch(0.21 0.034 264.665);
   --sidebar-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-primary: oklch(0.75 0.14 233);
-  --sidebar-primary-foreground: oklch(0.29 0.06 243);
+  --sidebar-primary: #0ea5e9;
+  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: oklch(0.278 0.033 256.848);
   --sidebar-accent-foreground: oklch(0.985 0.002 247.839);
   --sidebar-border: oklch(1 0 0 / 10%);

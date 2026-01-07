@@ -194,10 +194,10 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
   return (
     <div 
       className={cn(
-        "flex flex-col h-screen w-full bg-neutral-900 text-white overflow-hidden",
+        "chalk-root relative flex flex-col h-screen w-full bg-[var(--chalk-bg-surface)] text-[var(--chalk-text-primary)] overflow-hidden",
         className
       )}
-      data-chalk-theme={theme}
+      data-chalk-theme={theme === 'system' ? undefined : theme}
     >
       <div className="flex-none z-10">
         <MeetingHeader
@@ -207,12 +207,13 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
           isTranscribing={isTranscribing}
           layout={layout}
           onLayoutChange={setLayout}
+          className="bg-transparent border-[var(--chalk-border-subtle)] px-6 h-14"
         />
       </div>
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative px-6 pb-24 pt-4">
         <div 
-          className="flex-1 relative bg-neutral-950 flex items-center justify-center p-4"
+          className="flex-1 min-w-0 relative bg-[var(--chalk-bg-stage)] flex items-center justify-center p-4 rounded-2xl border border-[var(--chalk-border-subtle)] shadow-2xl"
           data-tour="video-grid"
         >
           {showScreenShare && screenSharer?.screenShareTrack ? (
@@ -237,7 +238,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
         </div>
 
         {activePanel && (
-          <div className="w-80 border-l border-neutral-800 bg-neutral-900 flex flex-col transition-all duration-300 ease-in-out">
+          <div className="ml-4 w-[360px] shrink-0 border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-panel)] rounded-2xl overflow-hidden flex flex-col transition-all duration-300 ease-in-out">
             {activePanel === 'chat' && (
               <ChatPanel
                 messages={chatMessages}
@@ -261,49 +262,46 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
         )}
       </div>
 
-      <div className="flex-none z-10 relative">
-        <ControlBar
-          isMuted={isMuted}
-          isVideoEnabled={isVideoEnabled}
-          isScreenSharing={isScreenSharing}
-          isHandRaised={isHandRaised}
-          isRecording={isRecording}
-          onToggleMute={onToggleMute}
-          onToggleVideo={onToggleVideo}
-          onToggleScreenShare={enableScreenShare ? onToggleScreenShare : undefined}
-          onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
-          onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
-          onLeave={onLeave}
-          onToggleChat={enableChat ? () => togglePanel('chat') : undefined}
-          onToggleParticipants={() => togglePanel('participants')}
-          onToggleTranscription={enableTranscription ? () => {
-            togglePanel('transcription');
-            onToggleTranscription?.();
-          } : undefined}
-        />
-        
-        {enableReactions && (
-          <div className="absolute right-4 bottom-24 z-50">
-             <button
-                className="p-3 rounded-full bg-neutral-800 hover:bg-neutral-700 text-white transition-colors shadow-lg"
-                onClick={() => setIsReactionPickerOpen(!isReactionPickerOpen)}
-                data-tour="reactions-button"
-                aria-label="Reactions"
-             >
-                 <span className="text-xl">😀</span>
-             </button>
-             <ReactionPicker 
-               isOpen={isReactionPickerOpen}
-               onClose={() => setIsReactionPickerOpen(false)}
-               onSelect={(emoji) => {
-                 onSendReaction?.(emoji);
-                 setIsReactionPickerOpen(false);
-               }}
-               position="top"
-               className="right-0 left-auto translate-x-0 bottom-full mb-2"
-             />
-          </div>
-        )}
+      <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center">
+        <div className="relative pointer-events-auto">
+          <ControlBar
+            variant="floating"
+            isMuted={isMuted}
+            isVideoEnabled={isVideoEnabled}
+            isScreenSharing={isScreenSharing}
+            isHandRaised={isHandRaised}
+            isRecording={isRecording}
+            isChatOpen={activePanel === 'chat'}
+            isParticipantsOpen={activePanel === 'participants'}
+            isTranscriptionEnabled={activePanel === 'transcription'}
+            onToggleMute={onToggleMute}
+            onToggleVideo={onToggleVideo}
+            onToggleScreenShare={enableScreenShare ? onToggleScreenShare : undefined}
+            onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
+            onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
+            onLeave={onLeave}
+            onToggleChat={enableChat ? () => togglePanel('chat') : undefined}
+            onToggleParticipants={() => togglePanel('participants')}
+            onToggleTranscription={enableTranscription ? () => {
+              togglePanel('transcription');
+              onToggleTranscription?.();
+            } : undefined}
+            onOpenReactions={enableReactions ? () => setIsReactionPickerOpen(true) : undefined}
+            className="bg-[var(--chalk-bg-controls)] border border-[var(--chalk-border-subtle)] px-3 py-2 shadow-2xl"
+          />
+          {enableReactions && (
+            <ReactionPicker 
+              isOpen={isReactionPickerOpen}
+              onClose={() => setIsReactionPickerOpen(false)}
+              onSelect={(emoji) => {
+                onSendReaction?.(emoji);
+                setIsReactionPickerOpen(false);
+              }}
+              position="top"
+              className="bottom-full mb-3"
+            />
+          )}
+        </div>
       </div>
 
       <ConnectionLostOverlay

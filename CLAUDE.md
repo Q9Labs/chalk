@@ -85,6 +85,13 @@ Clean Architecture:
 - **RealtimeKit** - API provides credentials, Cloudflare handles WebRTC
 - **Demo app only** - `apps/web` is reference impl, real UI in Phase 2
 
+## UI & Theme Guide (minimal)
+
+- Primary brand color: `packages/sdk-react/src/styles/variables.css` (`--chalk-brand`, `--chalk-brand-hover`) for SDK UI.
+- Web app theme tokens: `apps/web/src/styles.css` (`--primary`, `--sidebar-primary`) for landing + app chrome.
+- Meeting room demo styling uses Tailwind theme tokens in `apps/web/src/features/room/components/**` and `apps/web/src/routes/room/$roomId.tsx`.
+- Light/dark: toggle root class (`html.dark` / `html.light`) in `apps/web/src/routes/__root.tsx`; SDK also reads `data-chalk-theme`.
+
 ## Response Style
 
 User is busy, always be concise. Provide context: what issue/fix, what files, reasoning, how.

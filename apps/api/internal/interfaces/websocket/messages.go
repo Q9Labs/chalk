@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,23 @@ const (
 	MessageTypeHandRaise   MessageType = "hand.raise"
 	MessageTypeHandLower   MessageType = "hand.lower"
 	MessageTypePong        MessageType = "pong"
+
+	// Whiteboard messages
+	MessageTypeWhiteboardUpdate   MessageType = "whiteboard.update"
+	MessageTypeWhiteboardSync     MessageType = "whiteboard.sync"
+	MessageTypeWhiteboardClear    MessageType = "whiteboard.clear"
+	MessageTypeWhiteboardCursor   MessageType = "whiteboard.cursor"
+	MessageTypeWhiteboardSnapshot MessageType = "whiteboard.snapshot"
+	MessageTypeWhiteboardData     MessageType = "whiteboard.data"
+	MessageTypeWhiteboardOpen     MessageType = "whiteboard.open"
+	MessageTypeWhiteboardClose    MessageType = "whiteboard.close"
+	MessageTypeWhiteboardOpened   MessageType = "whiteboard.opened"
+	MessageTypeWhiteboardClosed   MessageType = "whiteboard.closed"
+
+	// Permission messages
+	MessageTypePermissionGrant   MessageType = "permission.grant"
+	MessageTypePermissionRevoke  MessageType = "permission.revoke"
+	MessageTypePermissionChanged MessageType = "permission.changed"
 )
 
 // Message is the top-level WebSocket message structure
@@ -170,12 +188,77 @@ type PongPayload struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// WhiteboardUpdatePayload - client sends drawing changes
+type WhiteboardUpdatePayload struct {
+	Elements json.RawMessage `json:"elements"`  // Excalidraw elements array
+	Files    json.RawMessage `json:"files"`     // Image files map (optional)
+	AppState json.RawMessage `json:"app_state"` // View state (optional)
+	Seq      int64           `json:"seq"`       // Sequence number for ordering
+}
+
+// WhiteboardDataPayload - server broadcasts to room
+type WhiteboardDataPayload struct {
+	ParticipantID uuid.UUID       `json:"participant_id"`
+	DisplayName   string          `json:"display_name"`
+	Elements      json.RawMessage `json:"elements"`
+	Files         json.RawMessage `json:"files,omitempty"`
+	Seq           int64           `json:"seq"`
+	Timestamp     time.Time       `json:"timestamp"`
+}
+
+// WhiteboardSnapshotPayload - full state sent on join
+type WhiteboardSnapshotPayload struct {
+	RoomID   uuid.UUID       `json:"room_id"`
+	Elements json.RawMessage `json:"elements"`
+	Files    json.RawMessage `json:"files"`
+	AppState json.RawMessage `json:"app_state"`
+	LastSeq  int64           `json:"last_seq"`
+}
+
+// WhiteboardCursorPayload - cursor position updates
+type WhiteboardCursorPayload struct {
+	ParticipantID uuid.UUID `json:"participant_id"`
+	DisplayName   string    `json:"display_name"`
+	X             float64   `json:"x"`
+	Y             float64   `json:"y"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
+// PermissionGrantPayload - host grants drawing permission
+type PermissionGrantPayload struct {
+	ParticipantID uuid.UUID `json:"participant_id"`
+	Feature       string    `json:"feature"` // "whiteboard" or "annotations"
+}
+
+// PermissionChangedPayload - broadcast permission change
+type PermissionChangedPayload struct {
+	ParticipantID uuid.UUID `json:"participant_id"`
+	Feature       string    `json:"feature"`
+	CanDraw       bool      `json:"can_draw"`
+	GrantedBy     uuid.UUID `json:"granted_by"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
+// WhiteboardOpenedPayload - broadcast when whiteboard is opened
+type WhiteboardOpenedPayload struct {
+	ParticipantID uuid.UUID `json:"participant_id"`
+	DisplayName   string    `json:"display_name"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
+// WhiteboardClosedPayload - broadcast when whiteboard is closed
+type WhiteboardClosedPayload struct {
+	ParticipantID uuid.UUID `json:"participant_id"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
 // NewMessage creates a new message with the given type and payload
 func NewMessage(msgType MessageType, payload interface{}) (*Message, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("type: %w | message: %v", msgType, payload)
 	return &Message{
 		Type:    msgType,
 		Payload: data,

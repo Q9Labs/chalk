@@ -76,6 +76,7 @@ type mockHub struct {
 	setMetadataFn     func(participantID uuid.UUID, meta domain.ParticipantMetadata)
 	removeMetadataFn  func(participantID uuid.UUID)
 	getParticipantsIn func(roomID uuid.UUID) []uuid.UUID
+	broadcastFn       func(roomID uuid.UUID, message []byte, excludeParticipantID string)
 }
 
 func (m *mockHub) SetParticipantMetadata(participantID uuid.UUID, meta domain.ParticipantMetadata) {
@@ -95,6 +96,12 @@ func (m *mockHub) GetParticipantsInRoom(roomID uuid.UUID) []uuid.UUID {
 		return m.getParticipantsIn(roomID)
 	}
 	return []uuid.UUID{}
+}
+
+func (m *mockHub) BroadcastToRoom(roomID uuid.UUID, message []byte, excludeParticipantID string) {
+	if m.broadcastFn != nil {
+		m.broadcastFn(roomID, message, excludeParticipantID)
+	}
 }
 
 type mockTokenIssuer struct {

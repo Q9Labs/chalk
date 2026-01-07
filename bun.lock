@@ -24,11 +24,13 @@
       "dependencies": {
         "@base-ui/react": "^1.0.0",
         "@cloudflare/vite-plugin": "^1.17.1",
+        "@excalidraw/excalidraw": "^0.18.0",
         "@fontsource-variable/figtree": "^5.2.10",
         "@hugeicons/core-free-icons": "^3.1.0",
         "@hugeicons/react": "^1.1.4",
         "@q9labs/chalk-core": "workspace:*",
         "@q9labs/chalk-react": "workspace:*",
+        "@q9labs/chalk-whiteboard": "workspace:*",
         "@tailwindcss/vite": "^4.0.6",
         "@tanstack/react-devtools": "^0.7.0",
         "@tanstack/react-router": "^1.132.0",
@@ -63,6 +65,22 @@
         "vite": "^7.1.7",
         "vitest": "^3.0.5",
         "web-vitals": "^5.1.0",
+      },
+    },
+    "packages/chalk-whiteboard": {
+      "name": "@q9labs/chalk-whiteboard",
+      "version": "0.0.1",
+      "dependencies": {
+        "@excalidraw/excalidraw": "^0.17.0",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/react": "^19.0.0",
+        "typescript": "^5.7.2",
+      },
+      "peerDependencies": {
+        "react": "^18.0.0 || ^19.0.0",
+        "react-dom": "^18.0.0 || ^19.0.0",
       },
     },
     "packages/sdk-core": {
@@ -613,6 +631,8 @@
     "@q9labs/chalk-react-native": ["@q9labs/chalk-react-native@workspace:packages/sdk-react-native"],
 
     "@q9labs/chalk-ui": ["@q9labs/chalk-ui@workspace:packages/ui"],
+
+    "@q9labs/chalk-whiteboard": ["@q9labs/chalk-whiteboard@workspace:packages/chalk-whiteboard"],
 
     "@radix-ui/primitive": ["@radix-ui/primitive@1.1.1", "", {}, "sha512-SJ31y+Q/zAyShtXJc8x83i9TYdbAfHZ++tUZnvjJJqFjzsdUnKsxPL6IEtBlxKkU7yzer//GQtZSV4GbldL3YA=="],
 
@@ -2585,6 +2605,8 @@
     "@joshwooding/vite-plugin-react-docgen-typescript/magic-string": ["magic-string@0.27.0", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.4.13" } }, "sha512-8UnnX2PeRAPZuN12svgR9j7M1uWMovg/CEnIwIG0LFkXSJJe4PdfUGiTGl8V9bsBHFUtfVINcSyYxd7q+kx9fA=="],
 
     "@modelcontextprotocol/sdk/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
+
+    "@q9labs/chalk-whiteboard/@excalidraw/excalidraw": ["@excalidraw/excalidraw@0.17.6", "", { "peerDependencies": { "react": "^17.0.2 || ^18.2.0", "react-dom": "^17.0.2 || ^18.2.0" } }, "sha512-fyCl+zG/Z5yhHDh5Fq2ZGmphcrALmuOdtITm8gN4d8w4ntnaopTXcTfnAAaU3VleDC6LhTkoLOTG6P5kgREiIg=="],
 
     "@radix-ui/react-collection/@radix-ui/react-compose-refs": ["@radix-ui/react-compose-refs@1.0.0", "", { "dependencies": { "@babel/runtime": "^7.13.10" }, "peerDependencies": { "react": "^16.8 || ^17.0 || ^18.0" } }, "sha512-0KaSv6sx787/hK3eF53iOkiSLwAGlFMx5lotrqD2pTjB18KbybKoEIgkNZTKC60YECDQTKGTRcDBILwZVqVKvA=="],
 

@@ -11,3 +11,6 @@ export * from './useAnnouncer';
 export * from './useMediaQuery';
 export * from './useTour';
 export * from './useTranscription';
+// Whiteboard hooks
+export * from './useWhiteboard';
+export * from './useWhiteboardPermissions';

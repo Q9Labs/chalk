@@ -46,6 +46,44 @@ interface WSEvents {
 		tenantId: string;
 	};
 	"room-sync": RoomSnapshot;
+	"whiteboard.data": {
+		participantId: string;
+		displayName: string;
+		elements: unknown[];
+		files?: Record<string, unknown>;
+		seq: number;
+		timestamp: Date;
+	};
+	"whiteboard.snapshot": {
+		roomId: string;
+		elements: unknown[];
+		files: Record<string, unknown>;
+		appState: Record<string, unknown>;
+		lastSeq: number;
+	};
+	"whiteboard.cursor": {
+		participantId: string;
+		displayName: string;
+		x: number;
+		y: number;
+		timestamp: Date;
+	};
+	"permission.changed": {
+		participantId: string;
+		feature: string;
+		canDraw: boolean;
+		grantedBy: string;
+		timestamp: Date;
+	};
+	"whiteboard.opened": {
+		participantId: string;
+		displayName: string;
+		timestamp: Date;
+	};
+	"whiteboard.closed": {
+		participantId: string;
+		timestamp: Date;
+	};
 }
 
 export class WSClient extends EventEmitter<WSEvents> {
@@ -248,6 +286,65 @@ export class WSClient extends EventEmitter<WSEvents> {
 				case "error":
 					this.emit("error", payload as unknown as ChalkError);
 					break;
+				case "whiteboard.data":
+					console.log("[WS-CLIENT] Received whiteboard.data:", {
+						participantId: (payload as WSEvents["whiteboard.data"]).participantId,
+						displayName: (payload as WSEvents["whiteboard.data"]).displayName,
+						seq: (payload as WSEvents["whiteboard.data"]).seq,
+						elementsCount: Array.isArray((payload as WSEvents["whiteboard.data"]).elements)
+							? (payload as WSEvents["whiteboard.data"]).elements.length
+							: "unknown",
+					});
+					this.emit("whiteboard.data", {
+						...(payload as WSEvents["whiteboard.data"]),
+						timestamp: new Date(
+							(payload as { timestamp: string }).timestamp,
+						),
+					});
+					break;
+				case "whiteboard.snapshot":
+					console.log("[WS-CLIENT] Received whiteboard.snapshot:", payload);
+					this.emit(
+						"whiteboard.snapshot",
+						payload as WSEvents["whiteboard.snapshot"],
+					);
+					break;
+				case "whiteboard.cursor":
+					// Don't log cursor - too noisy
+					this.emit("whiteboard.cursor", {
+						...(payload as WSEvents["whiteboard.cursor"]),
+						timestamp: new Date(
+							(payload as { timestamp: string }).timestamp,
+						),
+					});
+					break;
+				case "permission.changed":
+					console.log("[WS-CLIENT] Received permission.changed:", payload);
+					this.emit("permission.changed", {
+						...(payload as WSEvents["permission.changed"]),
+						timestamp: new Date(
+							(payload as { timestamp: string }).timestamp,
+						),
+					});
+					break;
+				case "whiteboard.opened":
+					console.log("[WS-CLIENT] Received whiteboard.opened:", payload);
+					this.emit("whiteboard.opened", {
+						...(payload as WSEvents["whiteboard.opened"]),
+						timestamp: new Date(
+							(payload as { timestamp: string }).timestamp,
+						),
+					});
+					break;
+				case "whiteboard.closed":
+					console.log("[WS-CLIENT] Received whiteboard.closed:", payload);
+					this.emit("whiteboard.closed", {
+						...(payload as WSEvents["whiteboard.closed"]),
+						timestamp: new Date(
+							(payload as { timestamp: string }).timestamp,
+						),
+					});
+					break;
 				default:
 					this.log("Unknown message type:", rawMessage.type);
 			}
@@ -403,5 +500,66 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 		this.token = null;
 		this.roomId = null;
+	}
+
+	// Whiteboard methods
+	sendWhiteboardUpdate(
+		elements: unknown[],
+		files?: Record<string, unknown>,
+		seq?: number,
+	): void {
+		console.log("[WS-CLIENT] Sending whiteboard.update:", {
+			elementsCount: elements.length,
+			hasFiles: !!files,
+			seq: seq ?? Date.now(),
+		});
+		this.send({
+			type: "whiteboard.update",
+			payload: { elements, files, seq: seq ?? Date.now() },
+		});
+	}
+
+	sendWhiteboardCursor(x: number, y: number): void {
+		// Don't log cursor - too noisy
+		this.send({
+			type: "whiteboard.cursor",
+			payload: { x, y },
+		});
+	}
+
+	sendWhiteboardClear(): void {
+		console.log("[WS-CLIENT] Sending whiteboard.clear");
+		this.send({ type: "whiteboard.clear", payload: {} });
+	}
+
+	requestWhiteboardSync(): void {
+		console.log("[WS-CLIENT] Sending whiteboard.sync request");
+		this.send({ type: "whiteboard.sync", payload: {} });
+	}
+
+	grantWhiteboardPermission(participantId: string): void {
+		console.log("[WS-CLIENT] Sending permission.grant:", { participantId });
+		this.send({
+			type: "permission.grant",
+			payload: { participantId, feature: "whiteboard" },
+		});
+	}
+
+	revokeWhiteboardPermission(participantId: string): void {
+		console.log("[WS-CLIENT] Sending permission.revoke:", { participantId });
+		this.send({
+			type: "permission.revoke",
+			payload: { participantId, feature: "whiteboard" },
+		});
+	}
+
+	sendWhiteboardOpen(): void {
+		console.log("[WS-CLIENT] Sending whiteboard.open");
+		this.send({ type: "whiteboard.open", payload: {} });
+	}
+
+	sendWhiteboardClose(): void {
+		console.log("[WS-CLIENT] Sending whiteboard.close");
+		this.send({ type: "whiteboard.close", payload: {} });
 	}
 }

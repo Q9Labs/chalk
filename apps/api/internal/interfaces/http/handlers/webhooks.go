@@ -2,8 +2,13 @@ package handlers
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
@@ -31,6 +36,21 @@ type RecordingReadyWebhook struct {
 }
 
 func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
+	signature := c.GetHeader("X-Cloudflare-Signature")
+
+	if signature == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing signature"})
+		return
+	}
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or malformed body"})
+		return
+	}
+	if !h.verifySignatureBody(body, signature) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
+		return
+	}
 	var webhook RecordingReadyWebhook
 	if err := c.ShouldBindJSON(&webhook); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload: " + err.Error()})
@@ -79,6 +99,23 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"size_bytes":  webhook.Size,
 		"duration":    webhook.Duration,
 	})
+}
+
+func (h *WebhookHandler) verifySignatureBody(body []byte, signature string) bool {
+	secret := os.Getenv("CLOUDFLARE_WEBHOOK_SECRET")
+	if secret == "" {
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expectedMac := mac.Sum(nil)
+
+	receivedMac, err := hex.DecodeString(signature)
+	if err != nil {
+		return false
+	}
+	return hmac.Equal(expectedMac, receivedMac)
 }
 
 func streamDownload(ctx context.Context, url string) (*http.Response, error) {

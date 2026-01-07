@@ -1,4 +1,5 @@
 export * from './AudioIndicator';
+export * from './AudioRenderer';
 export * from './Avatar';
 export * from './Badge';
 export * from './CaptionLine';
