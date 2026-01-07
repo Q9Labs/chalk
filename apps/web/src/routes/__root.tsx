@@ -85,8 +85,8 @@ function RootComponent() {
 	};
 
 	// API URL for backend - use env var or default to production
-	// IMPORTANT: IF GETTING LOCAL URL IN PROD, ADD THE FALLBACK URL TO `https://chalk-api.q9labs.ai`
-	const apiUrl = import.meta.env.VITE_API_URL;
+	const apiUrl =
+		import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
 	// WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
 	const wsUrl =
 		import.meta.env.VITE_WS_URL ||
