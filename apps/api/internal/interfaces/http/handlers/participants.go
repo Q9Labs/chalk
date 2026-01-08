@@ -27,12 +27,13 @@ type AddParticipantRequest struct {
 }
 
 type AddParticipantResponse struct {
-	Participant  db.Participant `json:"participant"`
-	AccessToken  string         `json:"access_token"`
-	RefreshToken string         `json:"refresh_token"`
-	TokenType    string         `json:"token_type"`
-	ExpiresIn    int            `json:"expires_in"`
-	AuthToken    string         `json:"auth_token"`
+	Participant          db.Participant `json:"participant"`
+	AccessToken          string         `json:"access_token"`
+	RefreshToken         string         `json:"refresh_token"`
+	TokenType            string         `json:"token_type"`
+	ExpiresIn            int            `json:"expires_in"`
+	AuthToken            string         `json:"auth_token"`
+	ShouldStartRecording bool           `json:"should_start_recording,omitempty"`
 }
 
 func (h *ParticipantHandler) Add(c *gin.Context) {
@@ -66,12 +67,13 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 	p, _ := h.participantService.GetParticipant(c.Request.Context(), output.ParticipantID)
 
 	c.JSON(http.StatusCreated, AddParticipantResponse{
-		Participant:  *p,
-		AccessToken:  output.TokenPair.AccessToken,
-		RefreshToken: output.TokenPair.RefreshToken,
-		TokenType:    output.TokenPair.TokenType,
-		ExpiresIn:    output.TokenPair.ExpiresIn,
-		AuthToken:    output.CFAuthToken,
+		Participant:          *p,
+		AccessToken:          output.TokenPair.AccessToken,
+		RefreshToken:         output.TokenPair.RefreshToken,
+		TokenType:            output.TokenPair.TokenType,
+		ExpiresIn:            output.TokenPair.ExpiresIn,
+		AuthToken:            output.CFAuthToken,
+		ShouldStartRecording: output.ShouldStartRecording,
 	})
 }
 
@@ -162,4 +164,60 @@ func (h *ParticipantHandler) RefreshToken(c *gin.Context) {
 		"expires_in":    output.TokenPair.ExpiresIn,
 		"auth_token":    output.CFAuthToken,
 	})
+}
+
+type BulkAddRequest struct {
+	Participants []struct {
+		DisplayName    string `json:"display_name" binding:"required"`
+		ExternalUserID string `json:"external_user_id"`
+		Role           string `json:"role"`
+	} `json:"participants" binding:"required,dive"`
+}
+
+func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
+	roomID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	var req BulkAddRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if len(req.Participants) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no participants provided"})
+		return
+	}
+
+	results := make([]gin.H, 0, len(req.Participants))
+	for _, p := range req.Participants {
+		output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
+			RoomID:         roomID,
+			DisplayName:    p.DisplayName,
+			ExternalUserID: p.ExternalUserID,
+			Role:           p.Role,
+		})
+		if err != nil {
+			results = append(results, gin.H{
+				"external_user_id": p.ExternalUserID,
+				"display_name":     p.DisplayName,
+				"success":          false,
+				"error":            err.Error(),
+			})
+			continue
+		}
+		results = append(results, gin.H{
+			"participant_id":   output.ParticipantID,
+			"external_user_id": p.ExternalUserID,
+			"display_name":     p.DisplayName,
+			"success":          true,
+			"access_token":     output.TokenPair.AccessToken,
+			"auth_token":       output.CFAuthToken,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"results": results})
 }

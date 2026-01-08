@@ -44,7 +44,7 @@ export function useChat(): UseChatResult {
 		// Attach listener for new messages
 		const handler = (message: ChatMessage) => {
 			console.log("[useChat] Received message:", message.id, message.content);
-			setMessages(prev => [...prev, message]);
+			setMessages((prev) => [...prev, message]);
 		};
 
 		const unsubscribe = room.on("chat-message", handler);
@@ -56,10 +56,13 @@ export function useChat(): UseChatResult {
 		};
 	}, [room]); // Depend on room object
 
-	const sendMessage = useCallback((content: string) => {
-		console.log("[useChat] Sending message:", content);
-		room?.sendMessage(content);
-	}, [room]);
+	const sendMessage = useCallback(
+		(content: string) => {
+			console.log("[useChat] Sending message:", content);
+			room?.sendMessage(content);
+		},
+		[room],
+	);
 
 	return { messages, sendMessage };
 }

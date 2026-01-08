@@ -31,7 +31,121 @@ export {
 	snakeToCamel,
 	snakeToCamelString,
 } from "./transforms.ts";
-// Types
+
+// ============================================================================
+// New Phase 1 Exports (typed events, errors, utilities)
+// ============================================================================
+
+// Typed event emitter utility
+export { TypedEventEmitter } from "./utils/typed-emitter.ts";
+
+// Error handling
+export { ChalkError as ChalkErrorClass, ChalkErrorCode as ErrorCode } from "./errors/chalk-error.ts";
+
+// Namespaced type exports
+export * as types from "./types/index.ts";
+
+// Direct type exports for convenience
+export type {
+	// Event maps
+	ServerEventMap,
+	ClientEventMap,
+	ServerEventName,
+	ClientEventName,
+	// Server event payloads
+	ConnectedPayload,
+	ParticipantJoinedPayload,
+	ParticipantLeftPayload,
+	ParticipantUpdatedPayload,
+	ChatMessagePayload,
+	ReactionPayload,
+	HandRaisedPayload,
+	HandLoweredPayload,
+	RoomSnapshotPayload,
+	RecordingStartedPayload,
+	RecordingStoppedPayload,
+	WhiteboardDataPayload,
+	WhiteboardSnapshotPayload,
+	WhiteboardCursorPayload,
+	PermissionChangedPayload,
+	// Client event payloads
+	ChatSendPayload,
+	ReactionSendPayload,
+	WhiteboardUpdatePayload,
+} from "./types/events/index.ts";
+
+// Wire protocol helpers
+export {
+	serverMessageTypeMap,
+	clientMessageTypeMap,
+} from "./types/events/client-events.ts";
+
+// ============================================================================
+// Phase 2: Managers and Session (new SDK architecture)
+// ============================================================================
+
+// State container base class
+export { StateContainer } from "./state/state-container.ts";
+
+// ChalkSession - main orchestrator
+export { ChalkSession } from "./session/chalk-session.ts";
+export type { ChalkSessionConfig, ChalkSessionEvents } from "./session/chalk-session.ts";
+
+// Individual managers
+export {
+  RoomManager,
+  ParticipantManager,
+  MediaManager,
+  ScreenShareManager,
+  ChatManager,
+  RecordingManager,
+  InteractionManager,
+  UIManager,
+  WhiteboardManager,
+} from "./managers/index.ts";
+
+// Manager state types
+export type {
+  RoomState,
+  RoomManagerEvents,
+  JoinOptions,
+  LeaveOptions,
+  ParticipantState,
+  ParticipantManagerEvents,
+  MediaState,
+  MediaManagerEvents,
+  ScreenShareState,
+  ScreenShareManagerEvents,
+  ChatState,
+  ChatManagerEvents,
+  RecordingState,
+  RecordingManagerEvents,
+  InteractionState,
+  InteractionManagerEvents,
+  ActiveReaction,
+  UIState,
+  UIManagerEvents,
+  LayoutMode,
+  PanelType,
+  Notification,
+  NotificationSeverity,
+  WhiteboardState,
+  WhiteboardManagerEvents,
+} from "./managers/index.ts";
+
+// Whiteboard types
+export type { WhiteboardCursor } from "./types/entities/whiteboard.ts";
+
+// Namespace exports for managers
+export * as managers from "./managers/index.ts";
+export * as session from "./session/index.ts";
+export * as state from "./state/index.ts";
+
+// ============================================================================
+// Legacy exports (backward compatibility with existing code)
+// ============================================================================
+
+// Types from original types.ts
 export type {
 	ApiResponse,
 	ChalkClientConfig,

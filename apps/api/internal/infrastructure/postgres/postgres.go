@@ -134,7 +134,9 @@ CREATE TABLE IF NOT EXISTS tenants (
     max_recording_duration_minutes INT NOT NULL DEFAULT 120,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    whiteboard_config JSONB DEFAULT '{"default_access": "all", "host_can_override": true}',
+    tenant_config JSONB NOT NULL DEFAULT '{"force_recording": false, "duplicate_participant_policy": "allow", "empty_room_timeout_minutes": 30, "recording_retention_days": 90, "auto_start_recording": false, "allow_early_join": true}'::jsonb
 );
 
 DROP TRIGGER IF EXISTS update_tenants_updated_at ON tenants;
@@ -154,7 +156,9 @@ CREATE TABLE IF NOT EXISTS rooms (
     started_at TIMESTAMPTZ,
     ended_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    whiteboard_state JSONB,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 DROP TRIGGER IF EXISTS update_rooms_updated_at ON rooms;
@@ -179,7 +183,8 @@ CREATE TABLE IF NOT EXISTS participants (
     role VARCHAR(50) NOT NULL DEFAULT 'participant' CHECK (role IN ('host', 'participant')),
     joined_at TIMESTAMPTZ,
     left_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_participants_room_id ON participants(room_id);
@@ -199,7 +204,8 @@ CREATE TABLE IF NOT EXISTS recordings (
     started_at TIMESTAMPTZ,
     ended_at TIMESTAMPTZ,
     archived_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_recordings_room_id ON recordings(room_id);
@@ -227,6 +233,38 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DE
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON audit_logs(actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_created ON audit_logs(tenant_id, created_at DESC);
+
+-- WHITEBOARD PERMISSIONS TABLE
+CREATE TABLE IF NOT EXISTS whiteboard_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+    can_draw BOOLEAN NOT NULL DEFAULT true,
+    granted_by UUID REFERENCES participants(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(room_id, participant_id)
+);
+
+DROP TRIGGER IF EXISTS update_whiteboard_permissions_updated_at ON whiteboard_permissions;
+CREATE TRIGGER update_whiteboard_permissions_updated_at
+    BEFORE UPDATE ON whiteboard_permissions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE INDEX IF NOT EXISTS idx_whiteboard_permissions_room_id ON whiteboard_permissions(room_id);
+CREATE INDEX IF NOT EXISTS idx_whiteboard_permissions_participant_id ON whiteboard_permissions(participant_id);
+
+-- Add missing columns to existing tables (idempotent)
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whiteboard_config JSONB DEFAULT '{"default_access": "all", "host_can_override": true}';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_config JSONB NOT NULL DEFAULT '{"force_recording": false, "duplicate_participant_policy": "allow", "empty_room_timeout_minutes": 30, "recording_retention_days": 90, "auto_start_recording": false, "allow_early_join": true}'::jsonb;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS whiteboard_state JSONB;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE recordings ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- Create indexes that depend on columns added above
+CREATE INDEX IF NOT EXISTS idx_rooms_whiteboard_state ON rooms USING GIN (whiteboard_state) WHERE whiteboard_state IS NOT NULL;
 `
 	_, err := p.Exec(ctx, schema)
 	if err != nil {

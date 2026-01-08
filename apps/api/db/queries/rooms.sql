@@ -81,3 +81,11 @@ WHERE r.tenant_id = $1 AND r.status = 'active'
 GROUP BY r.id
 ORDER BY r.created_at DESC
 LIMIT $2 OFFSET $3;
+
+-- name: ListEmptyActiveRooms :many
+SELECT r.* FROM rooms r
+LEFT JOIN participants p ON p.room_id = r.id AND p.left_at IS NULL
+WHERE r.status = 'active'
+  AND r.created_at < NOW() - INTERVAL '1 minute' * $1
+GROUP BY r.id
+HAVING COUNT(p.id) = 0;

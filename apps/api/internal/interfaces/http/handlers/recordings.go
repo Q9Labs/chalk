@@ -117,7 +117,12 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 		return
 	}
 
-	downloadURL, err := h.recordingService.GetDownloadURL(c.Request.Context(), id)
+	claims, _ := middleware.GetClaims(c)
+	actorID := ""
+	if claims != nil {
+		actorID = claims.Subject
+	}
+	downloadURL, err := h.recordingService.GetDownloadURL(c.Request.Context(), id, actorID, c.ClientIP())
 	if err != nil {
 		if errors.Is(err, recording.ErrRecordingNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})

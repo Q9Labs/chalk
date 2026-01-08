@@ -36,7 +36,7 @@ INSERT INTO rooms (
 ) VALUES (
     $1, $2, $3, $4, NOW()
 )
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata
 `
 
 type CreateRoomParams struct {
@@ -67,6 +67,8 @@ func (q *Queries) CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, e
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -87,7 +89,7 @@ SET
     status = 'ended',
     ended_at = NOW()
 WHERE id = $1
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata
 `
 
 func (q *Queries) EndRoom(ctx context.Context, id uuid.UUID) (Room, error) {
@@ -104,12 +106,14 @@ func (q *Queries) EndRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getRoom = `-- name: GetRoom :one
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata FROM rooms
 WHERE id = $1 LIMIT 1
 `
 
@@ -127,12 +131,14 @@ func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getRoomByCloudflareID = `-- name: GetRoomByCloudflareID :one
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata FROM rooms
 WHERE cloudflare_meeting_id = $1 LIMIT 1
 `
 
@@ -150,13 +156,15 @@ func (q *Queries) GetRoomByCloudflareID(ctx context.Context, cloudflareMeetingID
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getRoomWithParticipantCount = `-- name: GetRoomWithParticipantCount :one
 SELECT
-    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at,
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata,
     COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
 FROM rooms r
 LEFT JOIN participants p ON p.room_id = r.id
@@ -175,6 +183,8 @@ type GetRoomWithParticipantCountRow struct {
 	EndedAt                pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
 	CreatedAt              time.Time          `db:"created_at" json:"created_at"`
 	UpdatedAt              time.Time          `db:"updated_at" json:"updated_at"`
+	WhiteboardState        []byte             `db:"whiteboard_state" json:"whiteboard_state"`
+	Metadata               []byte             `db:"metadata" json:"metadata"`
 	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
 }
 
@@ -192,13 +202,15 @@ func (q *Queries) GetRoomWithParticipantCount(ctx context.Context, id uuid.UUID)
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
 		&i.ActiveParticipantCount,
 	)
 	return i, err
 }
 
 const listActiveRoomsByTenant = `-- name: ListActiveRoomsByTenant :many
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata FROM rooms
 WHERE tenant_id = $1 AND status = 'active'
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -230,6 +242,8 @@ func (q *Queries) ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoo
 			&i.EndedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.WhiteboardState,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -243,7 +257,7 @@ func (q *Queries) ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoo
 
 const listActiveRoomsWithParticipantCount = `-- name: ListActiveRoomsWithParticipantCount :many
 SELECT
-    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at,
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata,
     COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
 FROM rooms r
 LEFT JOIN participants p ON p.room_id = r.id
@@ -270,6 +284,8 @@ type ListActiveRoomsWithParticipantCountRow struct {
 	EndedAt                pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
 	CreatedAt              time.Time          `db:"created_at" json:"created_at"`
 	UpdatedAt              time.Time          `db:"updated_at" json:"updated_at"`
+	WhiteboardState        []byte             `db:"whiteboard_state" json:"whiteboard_state"`
+	Metadata               []byte             `db:"metadata" json:"metadata"`
 	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
 }
 
@@ -293,6 +309,8 @@ func (q *Queries) ListActiveRoomsWithParticipantCount(ctx context.Context, arg L
 			&i.EndedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.WhiteboardState,
+			&i.Metadata,
 			&i.ActiveParticipantCount,
 		); err != nil {
 			return nil, err
@@ -305,8 +323,50 @@ func (q *Queries) ListActiveRoomsWithParticipantCount(ctx context.Context, arg L
 	return items, nil
 }
 
+const listEmptyActiveRooms = `-- name: ListEmptyActiveRooms :many
+SELECT r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata FROM rooms r
+LEFT JOIN participants p ON p.room_id = r.id AND p.left_at IS NULL
+WHERE r.status = 'active'
+  AND r.created_at < NOW() - INTERVAL '1 minute' * $1
+GROUP BY r.id
+HAVING COUNT(p.id) = 0
+`
+
+func (q *Queries) ListEmptyActiveRooms(ctx context.Context, dollar_1 interface{}) ([]Room, error) {
+	rows, err := q.db.Query(ctx, listEmptyActiveRooms, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Room{}
+	for rows.Next() {
+		var i Room
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CloudflareMeetingID,
+			&i.Name,
+			&i.Config,
+			&i.Status,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.WhiteboardState,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRooms = `-- name: ListRooms :many
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata FROM rooms
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -336,6 +396,8 @@ func (q *Queries) ListRooms(ctx context.Context, arg ListRoomsParams) ([]Room, e
 			&i.EndedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.WhiteboardState,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -348,7 +410,7 @@ func (q *Queries) ListRooms(ctx context.Context, arg ListRoomsParams) ([]Room, e
 }
 
 const listRoomsByTenant = `-- name: ListRoomsByTenant :many
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata FROM rooms
 WHERE tenant_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -380,6 +442,8 @@ func (q *Queries) ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantPa
 			&i.EndedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.WhiteboardState,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -397,7 +461,7 @@ SET
     name = COALESCE($2, name),
     config = COALESCE($3, config)
 WHERE id = $1
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata
 `
 
 type UpdateRoomParams struct {
@@ -420,6 +484,8 @@ func (q *Queries) UpdateRoom(ctx context.Context, arg UpdateRoomParams) (Room, e
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
 	)
 	return i, err
 }

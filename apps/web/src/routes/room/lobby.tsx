@@ -1,4 +1,4 @@
-import { PreJoinLobby, useChalk, type JoinSettings } from "@q9labs/chalk-react";
+import { type JoinSettings, PreJoinLobby, useChalk } from "@q9labs/chalk-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
@@ -198,6 +198,9 @@ function RoomLobbyPage() {
 				// CRITICAL: Store in sessionStorage ONLY in browser
 				if (typeof window !== "undefined") {
 					sessionStorage.setItem("chalk_display_name", settings.displayName);
+					// Clear stale tokens before join - fresh tokens will be stored after successful join
+					sessionStorage.removeItem("chalk_refresh_token");
+					sessionStorage.removeItem("chalk_access_token");
 				}
 
 				// Stop preview tracks BEFORE joining to ensure media devices are released
@@ -224,6 +227,14 @@ function RoomLobbyPage() {
 					video: settings.videoEnabled,
 					audio: settings.audioEnabled,
 				});
+
+				// Store refresh token for auto-refresh
+				if (room.tokens?.refreshToken) {
+					sessionStorage.setItem("chalk_refresh_token", room.tokens.refreshToken);
+				}
+				if (room.tokens?.accessToken) {
+					sessionStorage.setItem("chalk_access_token", room.tokens.accessToken);
+				}
 
 				// If specific devices were selected, switch to them after joining
 				if (settings.videoEnabled && settings.selectedVideoDevice) {
@@ -318,8 +329,8 @@ function RoomLobbyPage() {
 			onAudioInputChange={setSelectedAudioInput}
 			onAudioOutputChange={setSelectedAudioOutput}
 			isLoading={isJoining}
-			initialVideoEnabled={true}
-			initialAudioEnabled={true}
+			initialVideoEnabled={false}
+			initialAudioEnabled={false}
 		/>
 	);
 }

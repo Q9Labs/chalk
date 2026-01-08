@@ -510,6 +510,7 @@ export class Room extends EventEmitter<RoomEvents> {
       videoTrack: p.videoTrack,
       audioTrack: p.audioTrack,
       screenShareTrack: p.screenShareTracks?.video,
+      screenShareAudioTrack: p.screenShareTracks?.audio,
       isSpeaking: false,
       isScreenSharing: p.screenShareEnabled ?? false,
       handRaised: false,
@@ -665,6 +666,8 @@ export class Room extends EventEmitter<RoomEvents> {
           this._localParticipant.isScreenSharing = data.screenShareEnabled;
           this._localParticipant.screenShareTrack =
             data.screenShareTracks?.video ?? undefined;
+          this._localParticipant.screenShareAudioTrack =
+            data.screenShareTracks?.audio ?? undefined;
           this.emit("participant-updated", {
             participantId: this._localParticipant.id,
             participant: this._localParticipant,
@@ -799,6 +802,7 @@ export class Room extends EventEmitter<RoomEvents> {
             ...existing,
             isScreenSharing: participant.isScreenSharing,
             screenShareTrack: participant.screenShareTrack,
+            screenShareAudioTrack: participant.screenShareAudioTrack,
           };
           this._participants.set(participant.id, updated);
 

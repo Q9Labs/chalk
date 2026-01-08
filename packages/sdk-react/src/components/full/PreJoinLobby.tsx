@@ -20,7 +20,6 @@ import {
   DeviceSelector
 } from '../composite';
 import { cn } from '../../utils/cn';
-import Logo from '../../../../../apps/web/public/logo.png';
 
 export interface JoinSettings {
   displayName: string;
@@ -185,8 +184,8 @@ function PreJoinLobbyBase({
       <div className="flex justify-between items-center px-6 py-5 w-full max-w-6xl mx-auto">
           <div className="flex items-center gap-3">
               <img
-                src={Logo}
-                alt="Chalk logo"
+                src="/chalk-logo.svg"
+                alt="Chalk"
                 className="h-8 w-auto"
                 draggable={false}
               />

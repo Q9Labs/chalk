@@ -26,12 +26,13 @@ const statusColorMap = {
 
 export const Avatar = React.memo(({ name, src, size = 'md', status, className }: AvatarProps) => {
   const initials = useMemo(() => {
+    if (!name) return '?';
     return name
       .split(' ')
       .slice(0, 2)
-      .map((n) => n[0])
+      .map((n) => n?.[0] ?? '')
       .join('')
-      .toUpperCase();
+      .toUpperCase() || '?';
   }, [name]);
 
   const { size: pxSize, fontSize } = sizeMap[size];

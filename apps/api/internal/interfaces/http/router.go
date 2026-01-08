@@ -128,6 +128,7 @@ func (r *Router) setupRoutes() {
 
 			participants := handlers.NewParticipantHandler(r.participantService)
 			roomsGroup.POST("/:id/participants", participants.Add)
+			roomsGroup.POST("/:id/participants/bulk", participants.BulkAdd)
 			roomsGroup.GET("/:id/participants", participants.List)
 			roomsGroup.DELETE("/:id/participants/:pid", participants.Remove)
 			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
@@ -182,4 +183,12 @@ func (r *Router) JWTService() *auth.JWTService {
 
 func (r *Router) APIKeyService() *auth.APIKeyService {
 	return r.apiKeyService
+}
+
+func (r *Router) RoomService() *room.Service {
+	return r.roomService
+}
+
+func (r *Router) Queries() *db.Queries {
+	return r.queries
 }

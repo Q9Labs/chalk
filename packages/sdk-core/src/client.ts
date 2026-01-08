@@ -104,8 +104,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         throw new Error(response.error?.message ?? "Failed to join room");
       }
 
-      const { participantId, tokens, room: roomInfo } = response.data;
-      this.log("Got auth tokens");
+      const { participantId, role, tokens, room: roomInfo } = response.data;
+      this.log("Got auth tokens, role:", role);
 
       // CRITICAL: Validate token BEFORE using it
       if (!tokens.rtcToken) {
@@ -139,7 +139,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       const localParticipant: Participant = {
         id: participantId,
         displayName: config.displayName,
-        role: "participant",
+        role: role ?? "participant",
         isLocal: true,
         videoEnabled: config.video ?? false,
         audioEnabled: config.audio ?? false,

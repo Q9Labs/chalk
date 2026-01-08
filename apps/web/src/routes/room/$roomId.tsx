@@ -13,10 +13,12 @@
 
 import {
 	AudioRenderer,
+	createMeetingShortcuts,
 	EndScreen,
 	GuidedTour,
 	NotificationStack,
-	createMeetingShortcuts,
+	SidePanelsWrapper,
+	VideoGrid as SDKVideoGrid,
 	useAnnouncer,
 	useChalk,
 	useChat,
@@ -35,11 +37,13 @@ import {
 	ControlBar,
 	LoadingScreen,
 	ReactionBubbles,
-	SidePanels,
-	VideoGrid,
 	WhiteboardView,
 } from "@/features/room/components";
-import { useNotifications, useRoomEvents, useUIState } from "@/features/room/hooks";
+import {
+	useNotifications,
+	useRoomEvents,
+	useUIState,
+} from "@/features/room/hooks";
 import { roomDebug as log } from "@/features/room/utils/debug";
 
 // =============================================================================
@@ -117,16 +121,24 @@ function RoomPage() {
 			recording: isRecording,
 			recordingDuration,
 		});
-	}, [isVideoEnabled, isAudioEnabled, isScreenSharing, isRecording, recordingDuration]);
+	}, [
+		isVideoEnabled,
+		isAudioEnabled,
+		isScreenSharing,
+		isRecording,
+		recordingDuration,
+	]);
 
 	useEffect(() => {
 		const lastMsg = messages[messages.length - 1];
 		log.debug("Chat State", {
 			messageCount: messages.length,
-			lastMessage: lastMsg ? {
-				sender: lastMsg.senderName,
-				preview: lastMsg.content.substring(0, 30),
-			} : null,
+			lastMessage: lastMsg
+				? {
+						sender: lastMsg.senderName,
+						preview: lastMsg.content.substring(0, 30),
+					}
+				: null,
 		});
 	}, [messages]);
 
@@ -134,8 +146,10 @@ function RoomPage() {
 	// SOUND EFFECTS & ANNOUNCER
 	// =========================================================================
 
-	const { playClick, playRecordingStart, playRecordingStop } =
-		useSoundEffects({ enabled: true, autoSubscribe: true });
+	const { playClick, playRecordingStart, playRecordingStop } = useSoundEffects({
+		enabled: true,
+		autoSubscribe: true,
+	});
 	useAnnouncer({});
 
 	// =========================================================================
@@ -166,15 +180,18 @@ function RoomPage() {
 	// Memoize participants for room events to prevent effect re-runs
 	const participantsForEvents = useMemo(
 		() => participants.map((p) => ({ id: p.id, displayName: p.displayName })),
-		[participants]
+		[participants],
 	);
 
 	// Memoize notification callback
 	const handleEventNotification = useCallback(
-		(notif: { message: string; type?: "info" | "success" | "warning" | "error" }) => {
+		(notif: {
+			message: string;
+			type?: "info" | "success" | "warning" | "error";
+		}) => {
 			notificationsState.addNotification(notif.message, notif.type);
 		},
-		[notificationsState]
+		[notificationsState],
 	);
 
 	// Room Events (reactions, hand raises)
@@ -200,7 +217,11 @@ function RoomPage() {
 		const timer = setTimeout(() => {
 			if (!isConnected && !redirectedRef.current) {
 				redirectedRef.current = true;
-				log.nav("redirect", `/room/lobby?roomId=${roomId}`, "not connected after 500ms timeout");
+				log.nav(
+					"redirect",
+					`/room/lobby?roomId=${roomId}`,
+					"not connected after 500ms timeout",
+				);
 				navigate({ to: "/room/lobby", search: { roomId } });
 			}
 		}, 500);
@@ -295,7 +316,11 @@ function RoomPage() {
 	const handleRemoveParticipant = useCallback(
 		async (participantId: string) => {
 			const participant = participants.find((p) => p.id === participantId);
-			log.action("participant", "Remove participant", participant?.displayName || participantId);
+			log.action(
+				"participant",
+				"Remove participant",
+				participant?.displayName || participantId,
+			);
 
 			try {
 				log.sdk("removeParticipant", { participantId });
@@ -308,7 +333,7 @@ function RoomPage() {
 				notificationsState.addNotification(`Failed: ${errorMsg}`, "error");
 			}
 		},
-		[removeParticipant, participants, notificationsState]
+		[removeParticipant, participants, notificationsState],
 	);
 
 	const handleSendMessage = useCallback(
@@ -317,7 +342,7 @@ function RoomPage() {
 			log.sdk("sendMessage", { length: message.length });
 			sendMessage(message);
 		},
-		[sendMessage]
+		[sendMessage],
 	);
 
 	const handleToggleWhiteboard = useCallback(() => {
@@ -345,7 +370,7 @@ function RoomPage() {
 			handleStopScreenShare,
 			handleStartScreenShare,
 			handleLeave,
-		]
+		],
 	);
 
 	useKeyboardShortcuts({
@@ -372,7 +397,10 @@ function RoomPage() {
 
 	// Auto-open whiteboard when another participant opens it
 	useEffect(() => {
-		console.log("[RoomPage] Setting up whiteboard-opened listener, room:", room ? "exists" : "null");
+		console.log(
+			"[RoomPage] Setting up whiteboard-opened listener, room:",
+			room ? "exists" : "null",
+		);
 		if (!room) return;
 
 		const unsubOpen = room.on("whiteboard-opened", (data) => {
@@ -385,9 +413,18 @@ function RoomPage() {
 			});
 			// Only auto-open if we don't already have it open
 			if (!showWhiteboard && data.participantId !== localParticipant?.id) {
-				console.log("[RoomPage] Auto-opening whiteboard for remote participant");
-				log.info("info", `${data.displayName} opened the whiteboard`, "whiteboard");
-				notificationsState.addNotification(`${data.displayName} opened the whiteboard`, "info");
+				console.log(
+					"[RoomPage] Auto-opening whiteboard for remote participant",
+				);
+				log.info(
+					"info",
+					`${data.displayName} opened the whiteboard`,
+					"whiteboard",
+				);
+				notificationsState.addNotification(
+					`${data.displayName} opened the whiteboard`,
+					"info",
+				);
 				setShowWhiteboard(true);
 			} else {
 				console.log("[RoomPage] NOT auto-opening whiteboard:", {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	wsocket "github.com/Q9Labs/chalk/internal/interfaces/websocket"
@@ -28,8 +29,21 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSock
 
 // HandleWebSocket upgrades an HTTP connection to WebSocket
 func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
-	// Extract JWT from query parameter
+	// Extract JWT from query parameter (legacy)
 	token := c.Query("token")
+	if token == "" {
+		// Fallback: token passed via Sec-WebSocket-Protocol header
+		protocolHeader := c.GetHeader("Sec-WebSocket-Protocol")
+		if protocolHeader != "" {
+			for _, entry := range strings.Split(protocolHeader, ",") {
+				entry = strings.TrimSpace(entry)
+				if strings.HasPrefix(entry, "token.") {
+					token = strings.TrimPrefix(entry, "token.")
+					break
+				}
+			}
+		}
+	}
 	if token == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 		return
@@ -55,8 +69,19 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	}
 
 	// Upgrade connection to WebSocket
-	ws, err := websocket.Accept(c.Writer, c.Request, &websocket.AcceptOptions{
-		Subprotocols: []string{},
+	var writer http.ResponseWriter = c.Writer
+	if uw, ok := writer.(interface{ Unwrap() http.ResponseWriter }); ok {
+		writer = uw.Unwrap()
+	}
+	ws, err := websocket.Accept(writer, c.Request, &websocket.AcceptOptions{
+		Subprotocols: []string{"chalk"},
+		OriginPatterns: []string{
+			"localhost:*",
+			"127.0.0.1:*",
+			"chalk.q9labs.ai",
+			"chalk-5bc.pages.dev",
+			"*.pages.dev",
+		},
 	})
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)

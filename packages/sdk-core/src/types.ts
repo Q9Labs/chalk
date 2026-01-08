@@ -264,6 +264,11 @@ export interface Participant {
 	 * Use with HTMLVideoElement.srcObject = new MediaStream([track])
 	 */
 	screenShareTrack?: MediaStreamTrack;
+	/**
+	 * Screen share audio MediaStreamTrack if sharing screen with audio
+	 * Available when screen sharing includes system audio (browser support varies)
+	 */
+	screenShareAudioTrack?: MediaStreamTrack;
 	/** Camera is enabled and publishing */
 	videoEnabled: boolean;
 	/** Microphone is enabled (not muted) */
@@ -641,6 +646,10 @@ export interface CreateRoomResponse {
 export interface JoinRoomResponse {
 	participantId: string;
 	/**
+	 * Role assigned to the participant
+	 */
+	role: "host" | "participant";
+	/**
 	 * Authentication tokens for the session
 	 */
 	tokens: TokenSet;
@@ -674,6 +683,7 @@ export interface TransformedJoinRoomApiResponse {
 	success: boolean;
 	roomId: string;
 	participantId: string;
+	role?: "host" | "participant";
 	accessToken?: string;
 	refreshToken?: string;
 	authToken: string;

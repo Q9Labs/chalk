@@ -53,17 +53,19 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			</head>
 			<body>
 				{children}
-				<TanStackDevtools
-					config={{
-						position: "bottom-right",
-					}}
-					plugins={[
-						{
-							name: "Tanstack Router",
-							render: <TanStackRouterDevtoolsPanel />,
-						},
-					]}
-				/>
+				{import.meta.env.DEV && (
+					<TanStackDevtools
+						config={{
+							position: "bottom-right",
+						}}
+						plugins={[
+							{
+								name: "Tanstack Router",
+								render: <TanStackRouterDevtoolsPanel />,
+							},
+						]}
+					/>
+				)}
 				<Scripts />
 			</body>
 		</html>
@@ -85,8 +87,7 @@ function RootComponent() {
 	};
 
 	// API URL for backend - use env var or default to production
-	const apiUrl =
-		import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
+	const apiUrl = import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
 	// WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
 	const wsUrl =
 		import.meta.env.VITE_WS_URL ||
@@ -98,8 +99,46 @@ function RootComponent() {
 				})()
 			: undefined);
 
+	// Token provider for auto-refresh when access token expires
+	// Returns empty string if no refresh token (signals SDK to use normal auth)
+	const tokenProvider = async (): Promise<string> => {
+		const refreshToken = sessionStorage.getItem("chalk_refresh_token");
+		if (!refreshToken) {
+			// No refresh token yet - this is normal for first join
+			// Return empty to signal SDK should proceed with normal authentication
+			return "";
+		}
+
+		const response = await fetch(`${apiUrl}/api/v1/auth/refresh`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${refreshToken}`,
+			},
+		});
+
+		if (!response.ok) {
+			sessionStorage.removeItem("chalk_refresh_token");
+			sessionStorage.removeItem("chalk_access_token");
+			throw new Error("Token refresh failed");
+		}
+
+		const data = await response.json();
+		const newAccessToken = data.accessToken || data.access_token;
+
+		// Update stored tokens
+		if (newAccessToken) {
+			sessionStorage.setItem("chalk_access_token", newAccessToken);
+		}
+		if (data.refreshToken || data.refresh_token) {
+			sessionStorage.setItem("chalk_refresh_token", data.refreshToken || data.refresh_token);
+		}
+
+		return newAccessToken;
+	};
+
 	return (
-		<ChalkProvider debug={true} apiUrl={apiUrl} wsUrl={wsUrl}>
+		<ChalkProvider debug={true} apiUrl={apiUrl} wsUrl={wsUrl} tokenProvider={tokenProvider}>
 			<div
 				className={` overflow-hidden bg-background text-foreground ${theme}`}
 			>

@@ -20,6 +20,7 @@ export type { ParticipantListProps, Participant as ParticipantListParticipant } 
 export * from './ChatPanel';
 export * from './TranscriptionPanel';
 export * from './SettingsPanel';
+// SidePanelsWrapper removed - file does not exist
 export * from './WaitingRoom';
 
 // Device & Media

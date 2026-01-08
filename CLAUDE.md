@@ -16,6 +16,7 @@ bun run check-types            # Type check
 Per-package: `cd packages/sdk-core && bun run dev|build|test`
 
 **API (Go 1.22+):**
+
 ```bash
 cd apps/api && go run ./cmd/main.go    # Run
 cd apps/api && go test ./...           # Test
@@ -23,30 +24,32 @@ cd apps/api && go test ./...           # Test
 
 ## Structure
 
-| Path | Purpose |
-|------|---------|
-| `packages/sdk-core` | Vanilla JS SDK - WebRTC client, room mgmt |
-| `packages/sdk-react` | React hooks (useRoom, useParticipants, useMedia, etc.) |
-| `packages/sdk-react-native` | React Native bindings (WIP) |
-| `packages/ui` | UI components (Base UI + Tailwind v4) |
-| `apps/web` | Demo app (Vite + React 19 + TanStack Router) |
-| `apps/api` | Go backend (Gin + PostgreSQL + sqlc) |
-| `infrastructure/terraform` | AWS IaC (VPC, ECS, Aurora, ElastiCache) |
+| Path                        | Purpose                                                |
+| --------------------------- | ------------------------------------------------------ |
+| `packages/sdk-core`         | Vanilla JS SDK - WebRTC client, room mgmt              |
+| `packages/sdk-react`        | React hooks (useRoom, useParticipants, useMedia, etc.) |
+| `packages/sdk-react-native` | React Native bindings (WIP)                            |
+| `packages/chalk-whiteboard` | Chalk Whiteboard with Excalidraw                       |
+| `packages/ui`               | UI components (Base UI + Tailwind v4)                  |
+| `apps/web`                  | Demo app (Vite + React 19 + TanStack Router)           |
+| `apps/api`                  | Go backend (Gin + PostgreSQL + sqlc)                   |
+| `infrastructure/terraform`  | AWS IaC (VPC, ECS, Aurora, ElastiCache)                |
 
 ## SDK Architecture
 
 Layered: `chalk-core` → `chalk-react` → `chalk-react-native` + `chalk-ui`
 
-| Feature | Description |
-|---------|-------------|
+| Feature       | Description                                            |
+| ------------- | ------------------------------------------------------ |
 | OpenAPI types | `apps/api/openapi.yaml` → `src/generated/api-types.ts` |
-| TokenProvider | JWT refresh callback (replaces deprecated apiKey) |
-| Transforms | Auto snake_case ↔ camelCase |
-| Result<T> | Type-safe errors without exceptions |
+| TokenProvider | JWT refresh callback (replaces deprecated apiKey)      |
+| Transforms    | Auto snake_case ↔ camelCase                           |
+| Result<T>     | Type-safe errors without exceptions                    |
 
 ## Backend (Go)
 
 Clean Architecture:
+
 - `cmd/main.go` - Entry point
 - `internal/domain/` - Business logic (RoomService, ParticipantService, RecordingService)
 - `internal/interfaces/http/` - Handlers + middleware (JWT, API key)
@@ -54,17 +57,17 @@ Clean Architecture:
 
 ## Authentication
 
-| Type | Usage | Endpoints |
-|------|-------|-----------|
-| API Key (`ck_live_*`) | Server-to-server, tenant API | `/api/v1/auth/token`, `/api/v1/tenants` |
+| Type                     | Usage                              | Endpoints                                 |
+| ------------------------ | ---------------------------------- | ----------------------------------------- |
+| API Key (`ck_live_*`)    | Server-to-server, tenant API       | `/api/v1/auth/token`, `/api/v1/tenants`   |
 | JWT (15min + 7d refresh) | Room ops, participants, recordings | `/api/v1/rooms/*`, `/api/v1/recordings/*` |
 
 ## CI/CD
 
-| Workflow | Trigger | Jobs |
-|----------|---------|------|
-| `api.yml` | `apps/api/**` | lint → test → build → docker (GHCR) |
-| `sdk.yml` | `packages/**` | type-check → lint → test → build → publish |
+| Workflow    | Trigger                       | Jobs                                                    |
+| ----------- | ----------------------------- | ------------------------------------------------------- |
+| `api.yml`   | `apps/api/**`                 | lint → test → build → docker (GHCR)                     |
+| `sdk.yml`   | `packages/**`                 | type-check → lint → test → build → publish              |
 | `infra.yml` | `infrastructure/terraform/**` | validate → plan → apply (dev/staging auto, prod manual) |
 
 ## Development Workflow
@@ -91,7 +94,3 @@ Clean Architecture:
 - Web app theme tokens: `apps/web/src/styles.css` (`--primary`, `--sidebar-primary`) for landing + app chrome.
 - Meeting room demo styling uses Tailwind theme tokens in `apps/web/src/features/room/components/**` and `apps/web/src/routes/room/$roomId.tsx`.
 - Light/dark: toggle root class (`html.dark` / `html.light`) in `apps/web/src/routes/__root.tsx`; SDK also reads `data-chalk-theme`.
-
-## Response Style
-
-User is busy, always be concise. Provide context: what issue/fix, what files, reasoning, how.

@@ -2,6 +2,7 @@ package room
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/Q9Labs/chalk/internal/domain"
@@ -86,6 +87,8 @@ func (s *Service) CreateRoom(ctx context.Context, input CreateRoomInput) (*Creat
 		Config:              input.Config,
 	})
 	if err != nil {
+		// Rollback: delete orphaned Cloudflare meeting
+		_, _ = s.cfClient.EndMeeting(ctx, cfMeeting.ID)
 		return nil, fmt.Errorf("database insert failed: %w", err)
 	}
 
@@ -156,6 +159,17 @@ func (s *Service) EndRoom(ctx context.Context, roomID uuid.UUID) error {
 	room, err := s.db.GetRoom(ctx, roomID)
 	if err != nil {
 		return fmt.Errorf("room not found: %w", err)
+	}
+
+	// Broadcast room.ended to all participants before cleanup
+	if s.hub != nil {
+		msg, _ := json.Marshal(map[string]interface{}{
+			"event": "room.ended",
+			"data": map[string]interface{}{
+				"room_id": roomID,
+			},
+		})
+		s.hub.BroadcastToRoom(roomID, msg, "")
 	}
 
 	_, _ = s.cfClient.EndMeeting(ctx, room.CloudflareMeetingID)

@@ -123,7 +123,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 					error?: string; // Go API returns "error" field
 					details?: Record<string, unknown>;
 				};
-				const errorMessage = errorData.message ?? errorData.error ?? "An unknown error occurred";
+				const errorMessage =
+					errorData.message ?? errorData.error ?? "An unknown error occurred";
 				this.log("API error:", response.status, errorMessage);
 				return {
 					success: false,
@@ -272,6 +273,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	): JoinRoomResponse {
 		return {
 			participantId: data.participantId,
+			role: data.role ?? "participant",
 			tokens: {
 				// Demo mode returns 'token', standard mode returns 'accessToken'
 				accessToken: data.token ?? data.accessToken ?? data.authToken,

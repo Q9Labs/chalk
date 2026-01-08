@@ -12,6 +12,7 @@ import { useEffect, useRef } from 'react';
 export interface AudioParticipant {
   id: string;
   audioTrack?: MediaStreamTrack | null;
+  screenShareAudioTrack?: MediaStreamTrack | null;
   isLocal?: boolean;
 }
 
@@ -27,8 +28,10 @@ export interface AudioRendererProps {
  * Must be included once in your room to hear other participants.
  */
 export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) {
-  // Map of participant ID -> audio element
+  // Map of participant ID -> audio element (mic audio)
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  // Map of participant ID -> audio element (screen share audio)
+  const screenShareAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
   // Filter to remote participants with valid audio tracks
   const remoteWithAudio = participants.filter((p) => {
@@ -38,6 +41,17 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       return p.audioTrack.readyState === 'live';
     } catch {
       // Track may have been disposed
+      return false;
+    }
+  });
+
+  // Filter to remote participants with valid screen share audio tracks
+  const remoteWithScreenShareAudio = participants.filter((p) => {
+    if (p.isLocal) return false;
+    if (!p.screenShareAudioTrack) return false;
+    try {
+      return p.screenShareAudioTrack.readyState === 'live';
+    } catch {
       return false;
     }
   });
@@ -141,6 +155,59 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       }
     };
   }, [remoteWithAudio]);
+
+  // Handle screen share audio tracks
+  useEffect(() => {
+    const audioElements = screenShareAudioRef.current;
+
+    for (const participant of remoteWithScreenShareAudio) {
+      const { id, screenShareAudioTrack } = participant;
+      if (!screenShareAudioTrack) continue;
+
+      const ssKey = `ss-${id}`;
+      let audioEl = audioElements.get(ssKey);
+
+      if (!audioEl) {
+        audioEl = new Audio();
+        audioEl.autoplay = true;
+        audioEl.muted = false;
+        audioElements.set(ssKey, audioEl);
+      }
+
+      audioEl.volume = volume;
+
+      const currentStream = audioEl.srcObject as MediaStream | null;
+      const currentTrack = currentStream?.getAudioTracks()[0];
+
+      if (currentTrack?.id !== screenShareAudioTrack.id) {
+        const stream = new MediaStream([screenShareAudioTrack]);
+        audioEl.srcObject = stream;
+        audioEl.play().catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.warn(`[AudioRenderer] Screen share audio blocked for ${id}`);
+          }
+        });
+      }
+    }
+
+    // Clean up
+    const activeIds = new Set(remoteWithScreenShareAudio.map((p) => `ss-${p.id}`));
+    for (const [key, audioEl] of audioElements.entries()) {
+      if (!activeIds.has(key)) {
+        audioEl.srcObject = null;
+        audioEl.pause();
+        audioElements.delete(key);
+      }
+    }
+
+    return () => {
+      for (const audioEl of audioElements.values()) {
+        audioEl.srcObject = null;
+        audioEl.pause();
+      }
+      audioElements.clear();
+    };
+  }, [remoteWithScreenShareAudio, volume]);
 
   // This component renders nothing visible - audio is played through Audio elements
   return null;

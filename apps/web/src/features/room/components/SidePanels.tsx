@@ -139,6 +139,7 @@ export function SidePanels({
 					isAudioEnabled={isAudioEnabled}
 					onClose={handleClosePanel}
 					onRemoveParticipant={handleRemoveParticipant}
+					roomId={roomId}
 				/>
 			)}
 
@@ -199,12 +200,14 @@ function ParticipantsPanelWrapper({
 	isAudioEnabled,
 	onClose,
 	onRemoveParticipant,
+	roomId,
 }: {
 	participants: Participant[];
 	localParticipantId: string | undefined;
 	isAudioEnabled: boolean;
 	onClose: () => void;
 	onRemoveParticipant: (id: string) => void;
+	roomId: string;
 }) {
 	useEffect(() => {
 		log.debug("Participants Panel State", {
@@ -229,7 +232,12 @@ function ParticipantsPanelWrapper({
 				}))}
 				onClose={onClose}
 				onAddPeople={() => {
-					log.action("click", "Add people (not implemented)");
+					const roomLink = `${window.location.origin}/room/lobby?roomId=${roomId}`;
+					navigator.clipboard.writeText(roomLink).then(() => {
+						log.action("click", "Copied room link to clipboard");
+					}).catch((err) => {
+						log.debug("Failed to copy link", err);
+					});
 				}}
 				onRemoveParticipant={onRemoveParticipant}
 				canManageParticipants={true}

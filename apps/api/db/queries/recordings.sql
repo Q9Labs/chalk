@@ -121,3 +121,6 @@ SELECT COALESCE(SUM(rec.size_bytes), 0)::bigint as total_bytes
 FROM recordings rec
 JOIN rooms r ON r.id = rec.room_id
 WHERE r.tenant_id = $1 AND rec.status IN ('ready', 'archived');
+
+-- name: MarkRecordingFailed :one
+UPDATE recordings SET status = 'failed' WHERE id = $1 RETURNING *;

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -188,7 +190,7 @@ func (s *Service) ListRecordingsByStatus(ctx context.Context, status string, lim
 	return recordings, nil
 }
 
-func (s *Service) GetDownloadURL(ctx context.Context, recordingID uuid.UUID) (string, error) {
+func (s *Service) GetDownloadURL(ctx context.Context, recordingID uuid.UUID, actorID, ipAddress string) (string, error) {
 	recording, err := s.db.GetRecording(ctx, recordingID)
 	if err != nil {
 		return "", ErrRecordingNotFound
@@ -200,6 +202,22 @@ func (s *Service) GetDownloadURL(ctx context.Context, recordingID uuid.UUID) (st
 
 	if recording.StoragePath == nil {
 		return "", ErrRecordingNotReady
+	}
+
+	// Create audit log for GDPR compliance
+	if actorID != "" {
+		ip, _ := netip.ParseAddr(ipAddress)
+		metadata := []byte(fmt.Sprintf(`{"size_bytes":%d,"duration_seconds":%d}`,
+			ptrInt64(recording.SizeBytes), ptrInt32(recording.DurationSeconds)))
+		_, _ = s.db.CreateAuditLog(ctx, db.CreateAuditLogParams{
+			RoomID:       pgtype.UUID{Bytes: recording.RoomID, Valid: true},
+			ActorID:      &actorID,
+			Action:       "recording.downloaded",
+			ResourceType: strPtr("recording"),
+			ResourceID:   pgtype.UUID{Bytes: recordingID, Valid: true},
+			Metadata:     metadata,
+			IpAddress:    &ip,
+		})
 	}
 
 	if s.r2Client != nil {
@@ -283,9 +301,9 @@ func (s *Service) DeleteRecording(ctx context.Context, recordingID uuid.UUID) er
 		}
 	}
 
-	_, err = s.db.MarkRecordingDeleted(ctx, recordingID)
+	err = s.db.DeleteRecording(ctx, recordingID)
 	if err != nil {
-		return fmt.Errorf("failed to mark recording as deleted: %w", err)
+		return fmt.Errorf("failed to delete recording: %w", err)
 	}
 	return nil
 }
@@ -311,4 +329,18 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func ptrInt64(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func ptrInt32(p *int32) int32 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }

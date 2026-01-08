@@ -15,16 +15,18 @@ export interface Participant {
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
   screenShareTrack?: MediaStreamTrack | null;
+  screenShareAudioTrack?: MediaStreamTrack | null;
 }
 
 export interface VideoGridProps {
   participants: Participant[];
-  layout?: 'grid' | 'spotlight' | 'sidebar';
+  layout?: 'grid' | 'spotlight' | 'sidebar' | 'screen-share';
   pinnedParticipantId?: string;
   onParticipantClick?: (participantId: string) => void;
   onParticipantDoubleClick?: (participantId: string) => void;
   maxVisibleParticipants?: number;
   className?: string;
+  showScreenShareIndicator?: boolean;
 }
 
 export const VideoGrid = React.memo(({
@@ -35,7 +37,10 @@ export const VideoGrid = React.memo(({
   onParticipantDoubleClick,
   maxVisibleParticipants = 25,
   className,
+  showScreenShareIndicator: _showScreenShareIndicator = true,
 }: VideoGridProps) => {
+  // Note: screenSharer and effectiveLayout reserved for future screen-share layout feature
+
   const sortedParticipants = useMemo(() => {
     const sorted = [...participants];
     if (pinnedParticipantId) {

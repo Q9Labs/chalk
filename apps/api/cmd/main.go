@@ -10,6 +10,7 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/config"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
+	"github.com/Q9Labs/chalk/internal/infrastructure/jobs"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
@@ -135,6 +136,15 @@ func main() {
 		go lifecycleMgr.Start(ctx)
 		log.Println("Started recording lifecycle manager")
 	}
+
+	// Start background jobs
+	recChecker := jobs.NewRecordingChecker(router.Queries(), cfClient)
+	go recChecker.Run(ctx, 30*time.Minute)
+	log.Println("Started recording checker (30min interval)")
+
+	roomCleanup := jobs.NewRoomCleanup(router.Queries(), router.RoomService())
+	go roomCleanup.Run(ctx, 10*time.Minute, 30) // Check every 10min, cleanup rooms empty for 30min
+	log.Println("Started room cleanup (10min interval, 30min timeout)")
 
 	// Graceful shutdown
 	go func() {

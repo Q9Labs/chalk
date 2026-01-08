@@ -134,11 +134,23 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private doConnect(): void {
 		if (!this.token || !this.roomId) return;
 
-		const url = `${this.wsUrl}?token=${encodeURIComponent(this.token)}&room=${encodeURIComponent(this.roomId)}`;
+		let url = this.wsUrl;
+		try {
+			const parsed = new URL(this.wsUrl);
+			parsed.searchParams.delete("token");
+			parsed.searchParams.delete("authToken");
+			parsed.searchParams.delete("accessToken");
+			parsed.searchParams.set("room", this.roomId);
+			url = parsed.toString();
+		} catch {
+			const separator = this.wsUrl.includes("?") ? "&" : "?";
+			url = `${this.wsUrl}${separator}room=${encodeURIComponent(this.roomId)}`;
+		}
 		this.log("Connecting to", this.wsUrl);
 
 		try {
-			this.ws = new WebSocket(url);
+			const protocols = ["chalk", `token.${this.token}`];
+			this.ws = new WebSocket(url, protocols);
 			this.setupEventHandlers();
 		} catch (error) {
 			this.log("Connection error:", error);

@@ -35,6 +35,7 @@ type Participant struct {
 	JoinedAt                pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
 	LeftAt                  pgtype.Timestamptz `db:"left_at" json:"left_at"`
 	CreatedAt               time.Time          `db:"created_at" json:"created_at"`
+	Metadata                []byte             `db:"metadata" json:"metadata"`
 }
 
 type Recording struct {
@@ -50,6 +51,7 @@ type Recording struct {
 	EndedAt               pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
 	ArchivedAt            pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
 	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
+	Metadata              []byte             `db:"metadata" json:"metadata"`
 }
 
 type Room struct {
@@ -63,6 +65,9 @@ type Room struct {
 	EndedAt             pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
 	CreatedAt           time.Time          `db:"created_at" json:"created_at"`
 	UpdatedAt           time.Time          `db:"updated_at" json:"updated_at"`
+	// Excalidraw state JSON (elements, files, appState)
+	WhiteboardState []byte `db:"whiteboard_state" json:"whiteboard_state"`
+	Metadata        []byte `db:"metadata" json:"metadata"`
 }
 
 type Tenant struct {
@@ -76,4 +81,17 @@ type Tenant struct {
 	IsActive                    bool      `db:"is_active" json:"is_active"`
 	CreatedAt                   time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt                   time.Time `db:"updated_at" json:"updated_at"`
+	// Whiteboard permission config: default_access (all/host_only/none), host_can_override (boolean)
+	WhiteboardConfig []byte `db:"whiteboard_config" json:"whiteboard_config"`
+	TenantConfig     []byte `db:"tenant_config" json:"tenant_config"`
+}
+
+type WhiteboardPermission struct {
+	ID            uuid.UUID   `db:"id" json:"id"`
+	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`
+	ParticipantID uuid.UUID   `db:"participant_id" json:"participant_id"`
+	CanDraw       bool        `db:"can_draw" json:"can_draw"`
+	GrantedBy     pgtype.UUID `db:"granted_by" json:"granted_by"`
+	CreatedAt     time.Time   `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time   `db:"updated_at" json:"updated_at"`
 }

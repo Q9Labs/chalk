@@ -145,7 +145,8 @@ func (h *Hub) unregisterClient(client *Client) {
 
 	h.mu.Unlock()
 
-	close(client.done)
+	// Use client.Close() which has proper channel close protection
+	client.Close()
 	log.Printf("Client unregistered: participant %s from room %s", client.participantID, client.roomID)
 
 	leftMsg, _ := NewMessage(MessageTypeParticipantLeft, ParticipantLeftPayload{

@@ -34,6 +34,7 @@ export type {
 	RecordingControlsProps,
 	ScreenShareViewProps,
 	SettingsPanelProps,
+	// SidePanelsWrapperProps removed - component does not exist
 	TourOverlayProps,
 	TranscriptionPanelProps,
 	TypingIndicatorProps,

@@ -9,7 +9,7 @@ dist
 # Code coverage
 coverage
 *.lcov
-
+.scratchpad/
 # Logs
 logs
 *.log

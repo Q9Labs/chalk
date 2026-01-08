@@ -6,7 +6,7 @@
  */
 
 import { VideoTile } from "@q9labs/chalk-react";
-import { Mic, Monitor } from "lucide-react";
+import { Mic, MicOff, Monitor } from "lucide-react";
 import { memo, useEffect } from "react";
 import { createDebugger } from "@/features/room/utils/debug";
 
@@ -60,17 +60,18 @@ export const VideoGrid = memo(function VideoGrid({
 
 	// Only log render on layout or participant count changes
 	useEffect(() => {
-		log.debug("VideoGrid Render", { layout, participantCount: participants.length });
-	}, [layout, participants.length]);
+		log.debug("VideoGrid Render", { layout, participantCount: allParticipants.length });
+	}, [layout, allParticipants.length]);
 
 	useEffect(() => {
 		log.debug("Participants Update", {
-			count: participants.length,
-			participants: participants.map(p => ({
+			count: allParticipants.length,
+			participants: allParticipants.map(p => ({
 				id: p.id.substring(0, 8),
 				name: p.displayName,
 				hasVideo: !!p.videoTrack,
 				hasAudio: !!p.audioTrack,
+				hasScreenShare: !!p.screenShareTrack,
 				videoEnabled: p.videoEnabled,
 				audioEnabled: p.audioEnabled,
 				isScreenSharing: p.isScreenSharing,
@@ -78,7 +79,7 @@ export const VideoGrid = memo(function VideoGrid({
 				isLocal: p.isLocal,
 			})),
 		});
-	}, [participants]);
+	}, [allParticipants]);
 
 	useEffect(() => {
 		if (activeSpeaker) {
@@ -91,17 +92,24 @@ export const VideoGrid = memo(function VideoGrid({
 	// COMPUTED VALUES
 	// ==========================================================================
 
-	const screenSharer = participants.find(
+	// CRITICAL: Combine local + remote participants for display
+	// The `participants` array from useParticipants only contains REMOTE participants
+	// We need to include localParticipant to show local user's screen share
+	const allParticipants = localParticipant
+		? [localParticipant, ...participants.filter(p => p.id !== localParticipant.id)]
+		: participants;
+
+	const screenSharer = allParticipants.find(
 		(p) => p.isScreenSharing && p.screenShareTrack
 	);
 	const showScreenShare = !!screenSharer;
 
 	const visibleParticipants =
-		layout === "grid" ? participants : participants.slice(0, 6);
+		layout === "grid" ? allParticipants : allParticipants.slice(0, 6);
 
 	const mainParticipant =
-		participants.find((p) => p.id === activeSpeaker?.id) ||
-		participants[0] ||
+		allParticipants.find((p) => p.id === activeSpeaker?.id) ||
+		allParticipants[0] ||
 		localParticipant;
 
 	useEffect(() => {
@@ -143,8 +151,8 @@ export const VideoGrid = memo(function VideoGrid({
 
 	const getGridCols = () => {
 		if (layout === "spotlight") return "grid-cols-1";
-		if (participants.length <= 1) return "grid-cols-1";
-		if (participants.length <= 2) return "grid-cols-2";
+		if (allParticipants.length <= 1) return "grid-cols-1";
+		if (allParticipants.length <= 2) return "grid-cols-2";
 		return "grid-cols-3";
 	};
 
@@ -157,31 +165,49 @@ export const VideoGrid = memo(function VideoGrid({
 			className="flex-1 flex flex-col min-w-0 transition-all duration-500 ease-in-out"
 			data-tour="video-grid"
 		>
-			<div
-				className={`w-full h-full grid gap-4 transition-all duration-500 ${getGridCols()}`}
-			>
-				{showScreenShare && screenSharer ? (
-					// Screen Share View (takes priority)
-					<ScreenShareTile
-						participant={mapToVideoTileParticipant(screenSharer)}
-						screenShareTrack={screenSharer.screenShareTrack!}
-					/>
-				) : layout === "spotlight" && mainParticipant ? (
-					// Spotlight View
-					<SpotlightTile
-						participant={mapToVideoTileParticipant(mainParticipant)}
-					/>
-				) : (
-					// Grid View
-					visibleParticipants.map((p) => (
-						<GridTile
-							key={p.id}
-							participant={mapToVideoTileParticipant(p)}
-							isLocalParticipant={p.id === localParticipant?.id}
+			{showScreenShare && screenSharer ? (
+				// Screen Share View with participant thumbnails
+				<div className="w-full h-full flex gap-4">
+					{/* Main screen share area */}
+					<div className="flex-1 min-w-0">
+						<ScreenShareTile
+							participant={mapToVideoTileParticipant(screenSharer)}
+							screenShareTrack={screenSharer.screenShareTrack!}
 						/>
-					))
-				)}
-			</div>
+					</div>
+					{/* Participant thumbnails sidebar */}
+					<div className="w-48 flex flex-col gap-2 overflow-y-auto">
+						{allParticipants.map((p) => (
+							<ThumbnailTile
+								key={p.id}
+								participant={mapToVideoTileParticipant(p)}
+								isLocalParticipant={p.id === localParticipant?.id}
+								isScreenSharer={p.id === screenSharer.id}
+							/>
+						))}
+					</div>
+				</div>
+			) : (
+				<div
+					className={`w-full h-full grid gap-4 transition-all duration-500 ${getGridCols()}`}
+				>
+					{layout === "spotlight" && mainParticipant ? (
+						// Spotlight View
+						<SpotlightTile
+							participant={mapToVideoTileParticipant(mainParticipant)}
+						/>
+					) : (
+						// Grid View
+						visibleParticipants.map((p) => (
+							<GridTile
+								key={p.id}
+								participant={mapToVideoTileParticipant(p)}
+								isLocalParticipant={p.id === localParticipant?.id}
+							/>
+						))
+					)}
+				</div>
+			)}
 		</div>
 	);
 });
@@ -269,8 +295,11 @@ function GridTile({
 	participant: TileParticipant;
 	isLocalParticipant: boolean;
 }) {
+	const isSpeaking = participant.isSpeaking;
+	const isMuted = participant.isMuted;
+
 	return (
-		<div className="relative w-full h-full rounded-[32px] overflow-hidden border border-border bg-gradient-to-b from-card to-background shadow-xl group">
+		<div className={`relative w-full h-full rounded-[32px] overflow-hidden border-2 ${isSpeaking ? "border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]" : "border-border"} bg-gradient-to-b from-card to-background shadow-xl group transition-all duration-300`}>
 			<VideoTile
 				participant={participant}
 				videoTrack={participant.videoTrack}
@@ -280,14 +309,55 @@ function GridTile({
 				showName={false}
 			/>
 			<div className="absolute bottom-6 left-6 transition-transform duration-300 group-hover:scale-105">
-				<div className="px-4 py-2 bg-background/70 backdrop-blur-2xl rounded-xl border border-border flex items-center gap-2 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
-					{participant.isSpeaking && (
-						<Mic size={14} className="text-emerald-500" />
+				<div className="px-3 py-1.5 bg-background/70 backdrop-blur-2xl rounded-lg border border-border flex items-center gap-2 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+					{isMuted ? (
+						<MicOff size={12} className="text-red-500" />
+					) : (
+						<Mic size={12} className={isSpeaking ? "text-emerald-500" : "text-foreground/60"} />
 					)}
-					<h3 className="text-foreground font-bold text-lg tracking-wide">
-						{participant.displayName}{" "}
-						{isLocalParticipant && "(You)"}
-					</h3>
+					<span className="text-foreground font-medium text-sm">
+						{participant.displayName}
+						{isLocalParticipant && " (You)"}
+					</span>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function ThumbnailTile({
+	participant,
+	isLocalParticipant,
+	isScreenSharer,
+}: {
+	participant: TileParticipant;
+	isLocalParticipant: boolean;
+	isScreenSharer: boolean;
+}) {
+	const isSpeaking = participant.isSpeaking;
+	const isMuted = participant.isMuted;
+
+	return (
+		<div className={`relative w-full aspect-video rounded-xl overflow-hidden border ${isSpeaking ? "border-emerald-500" : isScreenSharer ? "border-emerald-500/50" : "border-border"} bg-gradient-to-b from-card to-background shadow-md transition-all duration-300`}>
+			<VideoTile
+				participant={participant}
+				videoTrack={participant.videoTrack}
+				mirror={participant.isLocal}
+				className="w-full h-full bg-transparent"
+				showStatus={false}
+				showName={false}
+			/>
+			<div className="absolute bottom-1 left-1 right-1">
+				<div className="px-2 py-1 bg-background/80 backdrop-blur rounded-md border border-border flex items-center gap-1 text-xs">
+					{isMuted ? (
+						<MicOff size={10} className="text-red-500" />
+					) : (
+						<Mic size={10} className={isSpeaking ? "text-emerald-500" : "text-foreground/60"} />
+					)}
+					<span className="text-foreground font-medium truncate">
+						{participant.displayName}
+						{isLocalParticipant && " (You)"}
+					</span>
 				</div>
 			</div>
 		</div>

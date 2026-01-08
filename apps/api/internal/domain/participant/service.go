@@ -2,6 +2,7 @@ package participant
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -69,10 +70,11 @@ type JoinRoomInput struct {
 }
 
 type JoinRoomOutput struct {
-	ParticipantID uuid.UUID
-	TokenPair     *auth.TokenPair
-	CFAuthToken   string
-	Room          *db.Room
+	ParticipantID        uuid.UUID
+	TokenPair            *auth.TokenPair
+	CFAuthToken          string
+	Room                 *db.Room
+	ShouldStartRecording bool // True if tenant has force_recording and this is first host
 }
 
 func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomOutput, error) {
@@ -91,6 +93,18 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	}
 	if activeParticipantsCount >= int64(tenant.MaxParticipantsPerRoom) {
 		return nil, ErrRoomFull
+	}
+
+	// Check for existing active participant (multi-device support)
+	if input.ExternalUserID != "" {
+		existing, err := s.db.GetParticipantByExternalUserAndRoom(ctx, db.GetParticipantByExternalUserAndRoomParams{
+			RoomID:         input.RoomID,
+			ExternalUserID: strPtr(input.ExternalUserID),
+		})
+		// If found and still active (hasn't left), return existing with refreshed token
+		if err == nil && !existing.LeftAt.Valid {
+			return s.RefreshToken(ctx, existing.ID)
+		}
 	}
 
 	presetName := cloudflare.PresetParticipant
@@ -149,11 +163,41 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		return nil, fmt.Errorf("token generation failed: %w", err)
 	}
 
+	// Broadcast participant.joined to room
+	if s.hub != nil {
+		msg, _ := json.Marshal(map[string]interface{}{
+			"event": "participant.joined",
+			"data": map[string]interface{}{
+				"participant_id": participant.ID,
+				"room_id":        input.RoomID,
+				"display_name":   input.DisplayName,
+				"role":           role,
+			},
+		})
+		s.hub.BroadcastToRoom(input.RoomID, msg, participant.ID.String())
+	}
+
+	// Check if force recording should trigger
+	shouldStartRecording := false
+	if role == "host" && tenant.TenantConfig != nil {
+		var tenantConfig struct {
+			ForceRecording bool `json:"force_recording"`
+		}
+		if err := json.Unmarshal(tenant.TenantConfig, &tenantConfig); err == nil && tenantConfig.ForceRecording {
+			// Check if no active recording
+			_, recErr := s.db.GetActiveRecordingByRoom(ctx, input.RoomID)
+			if recErr != nil { // No active recording
+				shouldStartRecording = true
+			}
+		}
+	}
+
 	return &JoinRoomOutput{
-		ParticipantID: participant.ID,
-		TokenPair:     tokenPair,
-		CFAuthToken:   cfParticipant.Token,
-		Room:          &room,
+		ParticipantID:        participant.ID,
+		TokenPair:            tokenPair,
+		CFAuthToken:          cfParticipant.Token,
+		Room:                 &room,
+		ShouldStartRecording: shouldStartRecording,
 	}, nil
 }
 
@@ -169,6 +213,16 @@ func (s *Service) LeaveRoom(ctx context.Context, roomID, participantID uuid.UUID
 
 	if s.hub != nil {
 		s.hub.RemoveParticipantMetadata(participantID)
+
+		// Broadcast participant.left to room
+		msg, _ := json.Marshal(map[string]interface{}{
+			"event": "participant.left",
+			"data": map[string]interface{}{
+				"participant_id": participantID,
+				"room_id":        roomID,
+			},
+		})
+		s.hub.BroadcastToRoom(roomID, msg, "")
 	}
 
 	return nil

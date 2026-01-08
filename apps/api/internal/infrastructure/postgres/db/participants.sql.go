@@ -37,7 +37,7 @@ INSERT INTO participants (
 ) VALUES (
     $1, $2, $3, $4, $5, NOW()
 )
-RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at
+RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata
 `
 
 type CreateParticipantParams struct {
@@ -69,6 +69,7 @@ func (q *Queries) CreateParticipant(ctx context.Context, arg CreateParticipantPa
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -84,7 +85,7 @@ func (q *Queries) DeleteParticipant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getParticipant = `-- name: GetParticipant :one
-SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at FROM participants
+SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata FROM participants
 WHERE id = $1 LIMIT 1
 `
 
@@ -101,12 +102,13 @@ func (q *Queries) GetParticipant(ctx context.Context, id uuid.UUID) (Participant
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getParticipantByCloudflareID = `-- name: GetParticipantByCloudflareID :one
-SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at FROM participants
+SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata FROM participants
 WHERE cloudflare_participant_id = $1 LIMIT 1
 `
 
@@ -123,12 +125,13 @@ func (q *Queries) GetParticipantByCloudflareID(ctx context.Context, cloudflarePa
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getParticipantByExternalUserAndRoom = `-- name: GetParticipantByExternalUserAndRoom :one
-SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at FROM participants
+SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata FROM participants
 WHERE room_id = $1 AND external_user_id = $2
 ORDER BY created_at DESC
 LIMIT 1
@@ -152,12 +155,13 @@ func (q *Queries) GetParticipantByExternalUserAndRoom(ctx context.Context, arg G
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getRoomHost = `-- name: GetRoomHost :one
-SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at FROM participants
+SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata FROM participants
 WHERE room_id = $1 AND role = 'host' AND left_at IS NULL
 ORDER BY joined_at ASC
 LIMIT 1
@@ -176,12 +180,13 @@ func (q *Queries) GetRoomHost(ctx context.Context, roomID uuid.UUID) (Participan
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const listActiveParticipantsByRoom = `-- name: ListActiveParticipantsByRoom :many
-SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at FROM participants
+SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata FROM participants
 WHERE room_id = $1 AND left_at IS NULL
 ORDER BY joined_at ASC
 `
@@ -205,6 +210,7 @@ func (q *Queries) ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.
 			&i.JoinedAt,
 			&i.LeftAt,
 			&i.CreatedAt,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -217,7 +223,7 @@ func (q *Queries) ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.
 }
 
 const listParticipantsByRoom = `-- name: ListParticipantsByRoom :many
-SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at FROM participants
+SELECT id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata FROM participants
 WHERE room_id = $1
 ORDER BY joined_at ASC
 `
@@ -241,6 +247,7 @@ func (q *Queries) ListParticipantsByRoom(ctx context.Context, roomID uuid.UUID) 
 			&i.JoinedAt,
 			&i.LeftAt,
 			&i.CreatedAt,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -254,7 +261,7 @@ func (q *Queries) ListParticipantsByRoom(ctx context.Context, roomID uuid.UUID) 
 
 const listParticipantsWithRoomInfo = `-- name: ListParticipantsWithRoomInfo :many
 SELECT
-    p.id, p.room_id, p.cloudflare_participant_id, p.external_user_id, p.display_name, p.role, p.joined_at, p.left_at, p.created_at,
+    p.id, p.room_id, p.cloudflare_participant_id, p.external_user_id, p.display_name, p.role, p.joined_at, p.left_at, p.created_at, p.metadata,
     r.name as room_name,
     r.status as room_status
 FROM participants p
@@ -280,6 +287,7 @@ type ListParticipantsWithRoomInfoRow struct {
 	JoinedAt                pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
 	LeftAt                  pgtype.Timestamptz `db:"left_at" json:"left_at"`
 	CreatedAt               time.Time          `db:"created_at" json:"created_at"`
+	Metadata                []byte             `db:"metadata" json:"metadata"`
 	RoomName                *string            `db:"room_name" json:"room_name"`
 	RoomStatus              string             `db:"room_status" json:"room_status"`
 }
@@ -303,6 +311,7 @@ func (q *Queries) ListParticipantsWithRoomInfo(ctx context.Context, arg ListPart
 			&i.JoinedAt,
 			&i.LeftAt,
 			&i.CreatedAt,
+			&i.Metadata,
 			&i.RoomName,
 			&i.RoomStatus,
 		); err != nil {
@@ -320,7 +329,7 @@ const participantLeave = `-- name: ParticipantLeave :one
 UPDATE participants
 SET left_at = NOW()
 WHERE id = $1
-RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at
+RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata
 `
 
 func (q *Queries) ParticipantLeave(ctx context.Context, id uuid.UUID) (Participant, error) {
@@ -336,6 +345,7 @@ func (q *Queries) ParticipantLeave(ctx context.Context, id uuid.UUID) (Participa
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -344,7 +354,7 @@ const participantLeaveByCloudflareID = `-- name: ParticipantLeaveByCloudflareID 
 UPDATE participants
 SET left_at = NOW()
 WHERE cloudflare_participant_id = $1 AND left_at IS NULL
-RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at
+RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata
 `
 
 func (q *Queries) ParticipantLeaveByCloudflareID(ctx context.Context, cloudflareParticipantID string) (Participant, error) {
@@ -360,6 +370,7 @@ func (q *Queries) ParticipantLeaveByCloudflareID(ctx context.Context, cloudflare
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -370,7 +381,7 @@ SET
     display_name = COALESCE($2, display_name),
     role = COALESCE($3, role)
 WHERE id = $1
-RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at
+RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata
 `
 
 type UpdateParticipantParams struct {
@@ -392,6 +403,7 @@ func (q *Queries) UpdateParticipant(ctx context.Context, arg UpdateParticipantPa
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }

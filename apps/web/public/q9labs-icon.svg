@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none">
+  <!-- Rounded rectangle container - white -->
+  <rect width="72" height="72" rx="14" fill="white"/>
+
+  <!-- Q outer shape - black -->
+  <ellipse cx="32" cy="34" rx="18" ry="18" fill="black"/>
+  <!-- Q inner hole - white cutout -->
+  <ellipse cx="32" cy="34" rx="9" ry="9" fill="white"/>
+
+  <!-- Q tail - diagonal stroke -->
+  <rect x="40" y="44" width="22" height="9" rx="2" transform="rotate(45 40 44)" fill="black"/>
+
+  <!-- Superscript 9 -->
+  <text x="50" y="26" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="black">9</text>
+</svg>

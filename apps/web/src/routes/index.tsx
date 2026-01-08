@@ -12,7 +12,6 @@ import {
 	Code2,
 	Github,
 	Globe2,
-	Video,
 	Zap,
 } from "lucide-react";
 
@@ -24,12 +23,7 @@ function App() {
 			{/* Navigation */}
 			<header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
 				<div className="container mx-auto flex h-14 items-center justify-between px-4 sm:px-8">
-					<div className="flex items-center gap-2 font-bold text-xl">
-						<div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
-							<Video className="h-5 w-5" />
-						</div>
-						Chalk
-					</div>
+					<img src="/chalk-logo.svg" alt="Chalk" className="h-8 w-auto" />
 					<nav className="flex items-center gap-4">
 						<a
 							href="https://github.com/Q9Labs/chalk"
@@ -228,12 +222,7 @@ function VideoRoom() {
 
 			<footer className="border-t py-12 bg-muted/10">
 				<div className="container mx-auto px-4 sm:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
-					<div className="flex items-center gap-2 font-bold text-lg text-muted-foreground">
-						<div className="h-6 w-6 rounded bg-muted-foreground/20 flex items-center justify-center">
-							<Video className="h-3 w-3" />
-						</div>
-						Chalk
-					</div>
+					<img src="/chalk-logo.svg" alt="Chalk" className="h-6 w-auto opacity-75" />
 					<p className="text-sm text-muted-foreground">
 						© {new Date().getFullYear()} Chalk. All rights reserved.
 					</p>
