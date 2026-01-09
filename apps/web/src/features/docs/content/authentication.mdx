@@ -1,0 +1,343 @@
+# Authentication
+
+Chalk uses a secure 3-token authentication system designed for production applications. This guide explains each token type and how to implement the authentication flow.
+
+## Token Types
+
+| Token | Format | Created By | Purpose | Lifetime |
+|-------|--------|------------|---------|----------|
+| API Key | `ck_live_*` | Dashboard | Server-to-server auth | Permanent |
+| Access Token | JWT | `/auth/token` | API calls | 15 min |
+| Auth Token | Opaque | `/participants` | WebRTC connection | Session |
+
+### API Key
+
+Your API key is a permanent credential for server-to-server communication. It identifies your tenant (organization) and should **never** be exposed to clients.
+
+```bash
+# Format
+ck_live_a1b2c3d4e5f6...  # Production key
+ck_test_a1b2c3d4e5f6...  # Test environment key
+```
+
+<Callout type="error" title="Security Warning">
+Store your API key in environment variables only. Never commit it to version control or expose it in client-side code.
+</Callout>
+
+### Access Token (JWT)
+
+Access tokens are short-lived JWTs used for API calls. They contain claims about your tenant and expire after 15 minutes.
+
+```json
+{
+  "sub": "tenant_abc123",
+  "iat": 1704067200,
+  "exp": 1704068100,
+  "type": "access"
+}
+```
+
+### Auth Token (RTC Token)
+
+Auth tokens are opaque credentials used by the SDK to authenticate WebRTC connections with Cloudflare. They are tied to a specific participant and room session.
+
+---
+
+## Authentication Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     YOUR BACKEND                            │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ 1. Exchange API Key for JWT                            │ │
+│  │    POST /api/v1/auth/token                             │ │
+│  │    Body: { "api_key": "ck_live_..." }                  │ │
+│  │    Returns: { access_token, refresh_token }            │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                            ↓                                 │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ 2. Create/Join Room with Participant                   │ │
+│  │    POST /api/v1/rooms/:roomId/participants             │ │
+│  │    Header: Authorization: Bearer {access_token}        │ │
+│  │    Body: { display_name, role }                        │ │
+│  │    Returns: { participant, access_token, auth_token }  │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                            ↓                                 │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ 3. Return tokens to client                             │ │
+│  │    { roomId, authToken, accessToken }                  │ │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                     YOUR FRONTEND                           │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ 4. Initialize SDK with tokens                          │ │
+│  │    ChalkProvider + VideoConference                     │ │
+│  │    Uses: authToken for WebRTC                          │ │
+│  │    Uses: accessToken for API features                  │ │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Backend Implementation
+
+### Token Exchange Endpoint
+
+```typescript
+// pages/api/chalk/token.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+
+const CHALK_API_URL = process.env.CHALK_API_URL!
+const CHALK_API_KEY = process.env.CHALK_API_KEY!
+
+interface TokenResponse {
+  roomId: string
+  participantId: string
+  authToken: string
+  accessToken: string
+  refreshToken: string
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<TokenResponse | { error: string }>
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  const { roomId, displayName, userId } = req.body
+
+  try {
+    // Step 1: Exchange API key for JWT
+    const authRes = await fetch(`${CHALK_API_URL}/api/v1/auth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: CHALK_API_KEY })
+    })
+
+    if (!authRes.ok) {
+      const error = await authRes.text()
+      throw new Error(`Auth failed: ${error}`)
+    }
+
+    const { access_token } = await authRes.json()
+
+    // Step 2: Add participant to room
+    const participantRes = await fetch(
+      `${CHALK_API_URL}/api/v1/rooms/${roomId}/participants`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${access_token}`
+        },
+        body: JSON.stringify({
+          display_name: displayName,
+          external_id: userId, // Optional: your internal user ID
+          role: 'participant'  // or 'host' for room owners
+        })
+      }
+    )
+
+    if (!participantRes.ok) {
+      const error = await participantRes.text()
+      throw new Error(`Join failed: ${error}`)
+    }
+
+    const data = await participantRes.json()
+
+    // Step 3: Return tokens to client
+    return res.json({
+      roomId,
+      participantId: data.participant.id,
+      authToken: data.auth_token,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token
+    })
+  } catch (error) {
+    console.error('Chalk auth error:', error)
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Authentication failed'
+    })
+  }
+}
+```
+
+---
+
+## Token Refresh
+
+Access tokens expire after 15 minutes. Implement a refresh endpoint to get new tokens without re-authenticating:
+
+```typescript
+// pages/api/chalk/refresh.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+
+const CHALK_API_URL = process.env.CHALK_API_URL!
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  const { refreshToken } = req.body
+
+  try {
+    const response = await fetch(`${CHALK_API_URL}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${refreshToken}`
+      }
+    })
+
+    if (!response.ok) {
+      return res.status(401).json({ error: 'Refresh failed' })
+    }
+
+    const data = await response.json()
+    return res.json({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      authToken: data.auth_token
+    })
+  } catch (error) {
+    console.error('Token refresh error:', error)
+    return res.status(500).json({ error: 'Refresh failed' })
+  }
+}
+```
+
+---
+
+## Client-Side Token Provider
+
+Configure the SDK to automatically refresh tokens:
+
+```tsx
+// lib/chalk-config.ts
+export async function tokenProvider(): Promise<string> {
+  const refreshToken = sessionStorage.getItem('chalk_refresh_token')
+
+  if (!refreshToken) {
+    // No refresh token yet - return empty to trigger initial auth
+    return ''
+  }
+
+  const response = await fetch('/api/chalk/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken })
+  })
+
+  if (!response.ok) {
+    // Refresh failed - clear tokens and redirect to login
+    sessionStorage.removeItem('chalk_refresh_token')
+    sessionStorage.removeItem('chalk_access_token')
+    throw new Error('Session expired')
+  }
+
+  const data = await response.json()
+
+  // Store new tokens
+  sessionStorage.setItem('chalk_access_token', data.accessToken)
+  sessionStorage.setItem('chalk_refresh_token', data.refreshToken)
+
+  return data.accessToken
+}
+```
+
+```tsx
+// pages/_app.tsx
+import { ChalkProvider } from '@q9labs/chalk-react'
+import { tokenProvider } from '../lib/chalk-config'
+
+export default function App({ Component, pageProps }) {
+  return (
+    <ChalkProvider tokenProvider={tokenProvider}>
+      <Component {...pageProps} />
+    </ChalkProvider>
+  )
+}
+```
+
+---
+
+## Participant Roles
+
+When adding a participant, specify their role to control permissions:
+
+| Role | Permissions |
+|------|-------------|
+| `host` | Record, kick participants, mute others, screen share, all features |
+| `participant` | Screen share, chat, reactions, hand raise |
+
+```typescript
+// Host - full control
+body: JSON.stringify({
+  display_name: 'Room Moderator',
+  role: 'host'
+})
+
+// Participant - limited permissions
+body: JSON.stringify({
+  display_name: 'Attendee',
+  role: 'participant'
+})
+```
+
+---
+
+## Security Best Practices
+
+<Callout type="tip" title="Recommendations">
+1. **Never expose API keys** - Always exchange tokens server-side
+2. **Use HTTPS** - WebRTC requires secure contexts
+3. **Validate users** - Verify user identity before issuing tokens
+4. **Short token lifetimes** - 15-minute access tokens limit exposure
+5. **Audit room access** - Log who joins which rooms for compliance
+</Callout>
+
+---
+
+## Error Handling
+
+Common authentication errors and how to handle them:
+
+| Status | Error | Solution |
+|--------|-------|----------|
+| 401 | Invalid API key | Verify `CHALK_API_KEY` is correct |
+| 401 | Token expired | Implement refresh flow |
+| 403 | Forbidden | Check participant role permissions |
+| 404 | Room not found | Create room before adding participants |
+| 409 | Participant exists | Handle duplicate join attempts |
+
+```typescript
+// Example error handling
+if (!response.ok) {
+  const error = await response.json()
+
+  switch (response.status) {
+    case 401:
+      // Token expired - trigger refresh
+      return refreshAndRetry()
+    case 403:
+      // Permission denied - show error to user
+      throw new Error('You do not have permission to join this room')
+    case 404:
+      // Room doesn't exist - create it first
+      return createRoomAndRetry()
+    default:
+      throw new Error(error.message || 'Unknown error')
+  }
+}
+```

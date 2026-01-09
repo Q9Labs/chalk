@@ -72,6 +72,7 @@ function App() {
 										Try the Demo <ArrowRight className="ml-2 h-4 w-4" />
 									</Button>
 								</Link>
+								<Link to="/docs">
 								<Button
 									variant="outline"
 									size="lg"
@@ -79,6 +80,7 @@ function App() {
 								>
 									Read Documentation
 								</Button>
+							</Link>
 							</div>
 
 							<div className="pt-8 flex items-center justify-center gap-8 text-muted-foreground/50">

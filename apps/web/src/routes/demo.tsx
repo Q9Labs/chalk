@@ -12,7 +12,7 @@ function DemoPage() {
 		const randomId = Math.floor(Math.random() * 10000)
 			.toString()
 			.padStart(4, "0");
-		navigate({ to: "/room/lobby", search: { roomId: `room-${randomId}` } });
+		navigate({ to: "/room/$roomId", params: { roomId: `room-${randomId}` } });
 	}, [navigate]);
 
 	return (

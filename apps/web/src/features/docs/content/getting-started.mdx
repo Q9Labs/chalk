@@ -1,0 +1,268 @@
+# Getting Started
+
+Get Chalk video conferencing running in your Next.js 13 (Pages Router) app in under 30 minutes.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- Node.js 18 or later
+- A Chalk API key (contact your account manager)
+- An existing Next.js 13 application with Pages Router
+
+## Overview
+
+Chalk uses a secure backend-to-frontend authentication flow:
+
+1. **Your backend** stores the API key securely and creates rooms/participants
+2. **Your frontend** receives tokens from your backend and connects via the SDK
+3. **The SDK** handles WebRTC connections, token refresh, and real-time features
+
+<Callout type="warning" title="Security First">
+Never expose your API key to the client. All token exchange happens server-side in your `pages/api/*` routes.
+</Callout>
+
+---
+
+## Step 1: Install the SDK
+
+Install the React SDK in your Next.js project:
+
+```bash
+npm install @q9labs/chalk-react
+```
+
+---
+
+## Step 2: Create a Token API Route
+
+Create an API route that exchanges your API key for user tokens:
+
+```typescript
+// pages/api/chalk/token.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+
+const CHALK_API_URL = process.env.CHALK_API_URL
+const CHALK_API_KEY = process.env.CHALK_API_KEY
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  const { roomId, displayName } = req.body
+
+  try {
+    // 1. Exchange API key for JWT
+    const authRes = await fetch(`${CHALK_API_URL}/api/v1/auth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: CHALK_API_KEY })
+    })
+
+    if (!authRes.ok) {
+      throw new Error('Failed to authenticate with Chalk API')
+    }
+
+    const { access_token } = await authRes.json()
+
+    // 2. Create or join room as participant
+    const roomRes = await fetch(
+      `${CHALK_API_URL}/api/v1/rooms/${roomId}/participants`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${access_token}`
+        },
+        body: JSON.stringify({
+          display_name: displayName,
+          role: 'participant'
+        })
+      }
+    )
+
+    if (!roomRes.ok) {
+      throw new Error('Failed to join room')
+    }
+
+    const data = await roomRes.json()
+
+    // 3. Return tokens to client
+    res.json({
+      roomId,
+      participantId: data.participant.id,
+      authToken: data.auth_token,
+      accessToken: data.access_token
+    })
+  } catch (error) {
+    console.error('Chalk token error:', error)
+    res.status(500).json({ error: 'Failed to get Chalk tokens' })
+  }
+}
+```
+
+Add your credentials to `.env.local`:
+
+```bash
+CHALK_API_URL=https://chalk-api.q9labs.ai
+CHALK_API_KEY=ck_live_your_api_key_here
+```
+
+---
+
+## Step 3: Set Up the Provider
+
+Wrap your app with `ChalkProvider` in `_app.tsx`:
+
+```tsx
+// pages/_app.tsx
+import { ChalkProvider } from '@q9labs/chalk-react'
+import '@q9labs/chalk-react/styles.css'
+import type { AppProps } from 'next/app'
+
+export default function App({ Component, pageProps }: AppProps) {
+  return (
+    <ChalkProvider
+      apiUrl={process.env.NEXT_PUBLIC_CHALK_API_URL}
+    >
+      <Component {...pageProps} />
+    </ChalkProvider>
+  )
+}
+```
+
+---
+
+## Step 4: Create a Room Page
+
+Create a dynamic room page that uses the SDK:
+
+```tsx
+// pages/room/[id].tsx
+import { useRouter } from 'next/router'
+import { useEffect, useState } from 'react'
+import { VideoConference } from '@q9labs/chalk-react'
+
+export default function RoomPage() {
+  const router = useRouter()
+  const { id: roomId } = router.query
+  const [tokens, setTokens] = useState<{
+    authToken: string
+    accessToken: string
+  } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!roomId) return
+
+    async function joinRoom() {
+      try {
+        const res = await fetch('/api/chalk/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId,
+            displayName: 'Test User' // Replace with actual user name
+          })
+        })
+
+        if (!res.ok) throw new Error('Failed to get tokens')
+
+        const data = await res.json()
+        setTokens({
+          authToken: data.authToken,
+          accessToken: data.accessToken
+        })
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to join')
+      }
+    }
+
+    joinRoom()
+  }, [roomId])
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-red-500">{error}</p>
+      </div>
+    )
+  }
+
+  if (!tokens) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p>Connecting...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-screen">
+      <VideoConference
+        roomId={roomId as string}
+        authToken={tokens.authToken}
+        userName="Test User"
+      />
+    </div>
+  )
+}
+```
+
+---
+
+## Step 5: Test Your Integration
+
+1. Start your development server:
+
+```bash
+npm run dev
+```
+
+2. Navigate to `http://localhost:3000/room/test-room`
+
+3. Allow camera and microphone permissions when prompted
+
+4. You should see yourself in the video conference!
+
+<Callout type="success" title="You did it!">
+You now have a working Chalk video conferencing integration. Open the same room in another browser tab to test multi-participant functionality.
+</Callout>
+
+---
+
+## Next Steps
+
+Now that you have the basics working, explore these guides:
+
+- **[Authentication](/docs/authentication)** - Deep dive into the 3-token auth system
+- **[SDK React](/docs/sdk-react)** - Explore hooks and component tiers
+- **[Components](/docs/components)** - Customize the UI with composable and atomic components
+
+---
+
+## Troubleshooting
+
+### "Failed to authenticate with Chalk API"
+
+- Verify your `CHALK_API_KEY` is correct
+- Ensure the API URL matches your environment (production vs staging)
+
+### Camera/microphone not working
+
+- Check browser permissions (click the lock icon in the address bar)
+- Ensure you're using HTTPS in production (required for WebRTC)
+- Try a different browser to rule out extension conflicts
+
+### Tokens expire immediately
+
+- Implement the refresh token flow (see [Authentication](/docs/authentication))
+- Access tokens expire after 15 minutes by design
+
+<Callout type="info">
+Need help? Contact your account manager or check the [API Reference](/docs/api-reference) for detailed endpoint documentation.
+</Callout>

@@ -11,9 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RoomLobbyRouteImport } from './routes/room/lobby'
+import { Route as DocsIndexRouteImport } from './routes/docs/index'
 import { Route as RoomErrorRouteImport } from './routes/room/error'
 import { Route as RoomRoomIdRouteImport } from './routes/room/$roomId'
+import { Route as DocsSdkReactRouteImport } from './routes/docs/sdk-react'
+import { Route as DocsHooksRouteImport } from './routes/docs/hooks'
+import { Route as DocsGettingStartedRouteImport } from './routes/docs/getting-started'
+import { Route as DocsComponentsRouteImport } from './routes/docs/components'
+import { Route as DocsAuthenticationRouteImport } from './routes/docs/authentication'
+import { Route as DocsApiReferenceRouteImport } from './routes/docs/api-reference'
 
 const DemoRoute = DemoRouteImport.update({
   id: '/demo',
@@ -25,9 +31,9 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RoomLobbyRoute = RoomLobbyRouteImport.update({
-  id: '/room/lobby',
-  path: '/room/lobby',
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/docs/',
+  path: '/docs/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RoomErrorRoute = RoomErrorRouteImport.update({
@@ -40,49 +46,131 @@ const RoomRoomIdRoute = RoomRoomIdRouteImport.update({
   path: '/room/$roomId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsSdkReactRoute = DocsSdkReactRouteImport.update({
+  id: '/docs/sdk-react',
+  path: '/docs/sdk-react',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsHooksRoute = DocsHooksRouteImport.update({
+  id: '/docs/hooks',
+  path: '/docs/hooks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsGettingStartedRoute = DocsGettingStartedRouteImport.update({
+  id: '/docs/getting-started',
+  path: '/docs/getting-started',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsComponentsRoute = DocsComponentsRouteImport.update({
+  id: '/docs/components',
+  path: '/docs/components',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsAuthenticationRoute = DocsAuthenticationRouteImport.update({
+  id: '/docs/authentication',
+  path: '/docs/authentication',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsApiReferenceRoute = DocsApiReferenceRouteImport.update({
+  id: '/docs/api-reference',
+  path: '/docs/api-reference',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/demo': typeof DemoRoute
+  '/docs/api-reference': typeof DocsApiReferenceRoute
+  '/docs/authentication': typeof DocsAuthenticationRoute
+  '/docs/components': typeof DocsComponentsRoute
+  '/docs/getting-started': typeof DocsGettingStartedRoute
+  '/docs/hooks': typeof DocsHooksRoute
+  '/docs/sdk-react': typeof DocsSdkReactRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/error': typeof RoomErrorRoute
-  '/room/lobby': typeof RoomLobbyRoute
+  '/docs': typeof DocsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/demo': typeof DemoRoute
+  '/docs/api-reference': typeof DocsApiReferenceRoute
+  '/docs/authentication': typeof DocsAuthenticationRoute
+  '/docs/components': typeof DocsComponentsRoute
+  '/docs/getting-started': typeof DocsGettingStartedRoute
+  '/docs/hooks': typeof DocsHooksRoute
+  '/docs/sdk-react': typeof DocsSdkReactRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/error': typeof RoomErrorRoute
-  '/room/lobby': typeof RoomLobbyRoute
+  '/docs': typeof DocsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/demo': typeof DemoRoute
+  '/docs/api-reference': typeof DocsApiReferenceRoute
+  '/docs/authentication': typeof DocsAuthenticationRoute
+  '/docs/components': typeof DocsComponentsRoute
+  '/docs/getting-started': typeof DocsGettingStartedRoute
+  '/docs/hooks': typeof DocsHooksRoute
+  '/docs/sdk-react': typeof DocsSdkReactRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/error': typeof RoomErrorRoute
-  '/room/lobby': typeof RoomLobbyRoute
+  '/docs/': typeof DocsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/demo' | '/room/$roomId' | '/room/error' | '/room/lobby'
+  fullPaths:
+    | '/'
+    | '/demo'
+    | '/docs/api-reference'
+    | '/docs/authentication'
+    | '/docs/components'
+    | '/docs/getting-started'
+    | '/docs/hooks'
+    | '/docs/sdk-react'
+    | '/room/$roomId'
+    | '/room/error'
+    | '/docs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/demo' | '/room/$roomId' | '/room/error' | '/room/lobby'
+  to:
+    | '/'
+    | '/demo'
+    | '/docs/api-reference'
+    | '/docs/authentication'
+    | '/docs/components'
+    | '/docs/getting-started'
+    | '/docs/hooks'
+    | '/docs/sdk-react'
+    | '/room/$roomId'
+    | '/room/error'
+    | '/docs'
   id:
     | '__root__'
     | '/'
     | '/demo'
+    | '/docs/api-reference'
+    | '/docs/authentication'
+    | '/docs/components'
+    | '/docs/getting-started'
+    | '/docs/hooks'
+    | '/docs/sdk-react'
     | '/room/$roomId'
     | '/room/error'
-    | '/room/lobby'
+    | '/docs/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DemoRoute: typeof DemoRoute
+  DocsApiReferenceRoute: typeof DocsApiReferenceRoute
+  DocsAuthenticationRoute: typeof DocsAuthenticationRoute
+  DocsComponentsRoute: typeof DocsComponentsRoute
+  DocsGettingStartedRoute: typeof DocsGettingStartedRoute
+  DocsHooksRoute: typeof DocsHooksRoute
+  DocsSdkReactRoute: typeof DocsSdkReactRoute
   RoomRoomIdRoute: typeof RoomRoomIdRoute
   RoomErrorRoute: typeof RoomErrorRoute
-  RoomLobbyRoute: typeof RoomLobbyRoute
+  DocsIndexRoute: typeof DocsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -101,11 +189,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/room/lobby': {
-      id: '/room/lobby'
-      path: '/room/lobby'
-      fullPath: '/room/lobby'
-      preLoaderRoute: typeof RoomLobbyRouteImport
+    '/docs/': {
+      id: '/docs/'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/room/error': {
@@ -122,15 +210,63 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoomRoomIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs/sdk-react': {
+      id: '/docs/sdk-react'
+      path: '/docs/sdk-react'
+      fullPath: '/docs/sdk-react'
+      preLoaderRoute: typeof DocsSdkReactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/hooks': {
+      id: '/docs/hooks'
+      path: '/docs/hooks'
+      fullPath: '/docs/hooks'
+      preLoaderRoute: typeof DocsHooksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/getting-started': {
+      id: '/docs/getting-started'
+      path: '/docs/getting-started'
+      fullPath: '/docs/getting-started'
+      preLoaderRoute: typeof DocsGettingStartedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/components': {
+      id: '/docs/components'
+      path: '/docs/components'
+      fullPath: '/docs/components'
+      preLoaderRoute: typeof DocsComponentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/authentication': {
+      id: '/docs/authentication'
+      path: '/docs/authentication'
+      fullPath: '/docs/authentication'
+      preLoaderRoute: typeof DocsAuthenticationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/api-reference': {
+      id: '/docs/api-reference'
+      path: '/docs/api-reference'
+      fullPath: '/docs/api-reference'
+      preLoaderRoute: typeof DocsApiReferenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DemoRoute: DemoRoute,
+  DocsApiReferenceRoute: DocsApiReferenceRoute,
+  DocsAuthenticationRoute: DocsAuthenticationRoute,
+  DocsComponentsRoute: DocsComponentsRoute,
+  DocsGettingStartedRoute: DocsGettingStartedRoute,
+  DocsHooksRoute: DocsHooksRoute,
+  DocsSdkReactRoute: DocsSdkReactRoute,
   RoomRoomIdRoute: RoomRoomIdRoute,
   RoomErrorRoute: RoomErrorRoute,
-  RoomLobbyRoute: RoomLobbyRoute,
+  DocsIndexRoute: DocsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

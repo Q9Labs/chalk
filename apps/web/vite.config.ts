@@ -1,3 +1,5 @@
+import mdx from "@mdx-js/rollup";
+import remarkGfm from "remark-gfm";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
@@ -19,6 +21,10 @@ const config = defineConfig({
 			spa: {
 				enabled: true,
 			},
+		}),
+		mdx({
+			providerImportSource: "@mdx-js/react",
+			remarkPlugins: [remarkGfm],
 		}),
 		viteReact(),
 	],

@@ -15,7 +15,7 @@ interface ActiveReaction {
 }
 
 interface ReactionBubblesProps {
-	reactions: ActiveReaction[];
+	reactions: readonly ActiveReaction[];
 }
 
 export function ReactionBubbles({ reactions }: ReactionBubblesProps) {

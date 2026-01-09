@@ -1,12 +1,10 @@
 import { ChalkProvider } from "@q9labs/chalk-react";
-import { TanStackDevtools } from "@tanstack/react-devtools";
 import {
 	createRootRoute,
 	HeadContent,
 	Outlet,
 	Scripts,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -44,28 +42,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 		<html lang="en">
 			<head>
 				<HeadContent />
-				{import.meta.env.DEV && (
-					<script
-						src="//unpkg.com/react-grab/dist/index.global.js"
-						crossOrigin="anonymous"
-					/>
-				)}
 			</head>
 			<body>
 				{children}
-				{import.meta.env.DEV && (
-					<TanStackDevtools
-						config={{
-							position: "bottom-right",
-						}}
-						plugins={[
-							{
-								name: "Tanstack Router",
-								render: <TanStackRouterDevtoolsPanel />,
-							},
-						]}
-					/>
-				)}
 				<Scripts />
 			</body>
 		</html>
