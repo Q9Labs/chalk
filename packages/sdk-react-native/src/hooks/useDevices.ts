@@ -2,9 +2,11 @@
  * useDevices hook - List and select media devices (cameras, microphones)
  */
 
-import type { MediaDevice } from "@q9labs/chalk-core";
+import { createLogger, type MediaDevice } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
+
+const log = createLogger("useDevices");
 
 export interface UseDevicesResult {
 	/** All available media devices */
@@ -83,7 +85,7 @@ export function useDevices(): UseDevicesResult {
 				}
 				return success;
 			} catch (err) {
-				console.error("[useDevices] selectCamera error:", err);
+				log.error("selectCamera error", err);
 				return false;
 			}
 		},
@@ -101,7 +103,7 @@ export function useDevices(): UseDevicesResult {
 				}
 				return success;
 			} catch (err) {
-				console.error("[useDevices] selectMicrophone error:", err);
+				log.error("selectMicrophone error", err);
 				return false;
 			}
 		},

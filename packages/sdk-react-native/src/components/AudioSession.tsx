@@ -3,8 +3,11 @@
  * Handles speakerphone, Bluetooth, and audio focus management
  */
 
+import { createLogger } from "@q9labs/chalk-core";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
+
+const log = createLogger("AudioSession");
 
 interface AudioSessionProps {
 	/** Whether audio should be routed to speaker (loud speaker) */
@@ -54,9 +57,7 @@ async function configureIOSAudioSession(useSpeaker: boolean): Promise<void> {
 	try {
 		// This would typically call into native code via NativeModules
 		// For now, we document the expected behavior
-		console.log(
-			`[AudioSession] iOS audio mode: ${useSpeaker ? "SPEAKER" : "EARPIECE"}`,
-		);
+		log.info(`iOS audio mode: ${useSpeaker ? "SPEAKER" : "EARPIECE"}`);
 
 		// Expected native implementation would do:
 		// const audioSession = AVAudioSession.sharedInstance();
@@ -67,7 +68,7 @@ async function configureIOSAudioSession(useSpeaker: boolean): Promise<void> {
 		//   audioSession.overrideOutputAudioPort("Speaker")
 		// }
 	} catch (err) {
-		console.error("[AudioSession] iOS config error:", err);
+		log.error("iOS config error", err);
 	}
 }
 
@@ -79,7 +80,7 @@ async function configureAndroidAudioFocus(): Promise<void> {
 	try {
 		// This would typically call into native code via NativeModules
 		// For now, we document the expected behavior
-		console.log("[AudioSession] Android audio focus configured");
+		log.info("Android audio focus configured");
 
 		// Expected native implementation would do:
 		// final audioManager = context.getSystemService(Context.AUDIO_SERVICE)
@@ -90,7 +91,7 @@ async function configureAndroidAudioFocus(): Promise<void> {
 		// audioManager.setMicrophoneMute(false)
 		// audioManager.setSpeakerphoneOn(useSpeaker)
 	} catch (err) {
-		console.error("[AudioSession] Android config error:", err);
+		log.error("Android config error", err);
 	}
 }
 
@@ -109,7 +110,7 @@ export function useSpeakerphone() {
 			await configureIOSAudioSession(newState);
 		} else if (Platform.OS === "android") {
 			// Android would use AudioManager.setSpeakerphoneOn(newState)
-			console.log(`[useSpeakerphone] Android speakerphone: ${newState}`);
+			log.debug(`Android speakerphone: ${newState}`);
 		}
 	}, [isSpeakerOn]);
 
@@ -135,9 +136,9 @@ export function useBluetoothAudio() {
 		try {
 			// This would check Bluetooth audio device availability
 			// via native code or react-native-device-info
-			console.log("[useBluetoothAudio] Checking Bluetooth status");
+			log.debug("Checking Bluetooth status");
 		} catch (err) {
-			console.error("[useBluetoothAudio] Error:", err);
+			log.error("Bluetooth status check error", err);
 		}
 	}
 

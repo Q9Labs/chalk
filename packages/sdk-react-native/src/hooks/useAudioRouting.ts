@@ -1,5 +1,8 @@
+import { createLogger } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { NativeModules, Platform } from "react-native";
+
+const log = createLogger("useAudioRouting");
 
 export type AudioRoute = "speaker" | "earpiece" | "bluetooth" | "headphones";
 
@@ -70,7 +73,7 @@ export function useAudioRouting(): UseAudioRoutingResult {
 			}
 			setCurrentRoute(route);
 		} catch (error) {
-			console.error("[useAudioRouting] Failed to set route:", error);
+			log.error("Failed to set route", error);
 		}
 	}, []);
 

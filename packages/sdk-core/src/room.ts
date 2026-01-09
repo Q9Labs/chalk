@@ -185,16 +185,16 @@ export class Room extends EventEmitter<RoomEvents> {
   }
 
   /**
-   * DEBUG: Dump current RTK participant state to console
+   * DEBUG: Dump current RTK participant state to logger
    * Call this from browser console: room.debugDumpParticipants()
    */
   debugDumpParticipants(): void {
-    console.log("=== DEBUG: Chalk Room Participant Dump ===");
-    console.log("Local participant:", this._localParticipant);
-    console.log("Participants map size:", this._participants.size);
+    this.log.debug("=== Participant Dump ===");
+    this.log.debug("Local participant", { participant: this._localParticipant });
+    this.log.debug("Participants map size", { size: this._participants.size });
 
     this._participants.forEach((p, id) => {
-      console.log(`Participant [${id}]:`, {
+      this.log.debug(`Participant [${id}]`, {
         displayName: p.displayName,
         isLocal: p.isLocal,
         videoEnabled: p.videoEnabled,
@@ -219,11 +219,11 @@ export class Room extends EventEmitter<RoomEvents> {
         };
       };
 
-      console.log("=== RAW RTK State ===");
+      this.log.debug("=== RAW RTK State ===");
       const joinedParticipants = rtk.participants?.joined?.toArray?.() ?? rtk.participants?.joined?.all ?? [];
-      console.log("RTK joined participants count:", (joinedParticipants as unknown[]).length);
+      this.log.debug("RTK joined participants count", { count: (joinedParticipants as unknown[]).length });
       (joinedParticipants as Record<string, unknown>[]).forEach((p, i) => {
-        console.log(`RTK Participant [${i}]:`, {
+        this.log.debug(`RTK Participant [${i}]`, {
           id: p.id,
           name: p.name,
           videoEnabled: p.videoEnabled,
@@ -236,7 +236,7 @@ export class Room extends EventEmitter<RoomEvents> {
         });
       });
     }
-    console.log("=== END DEBUG ===");
+    this.log.debug("=== END DEBUG ===");
   }
 
   // Getters
@@ -1046,14 +1046,7 @@ export class Room extends EventEmitter<RoomEvents> {
         this._localParticipant.videoEnabled = false;
         this._localParticipant.videoTrack = undefined;
       } else {
-        // Enable video with HD constraints for better quality
-        await (this.rtkClient.self.enableVideo as (opts?: unknown) => Promise<void>)({
-          constraints: {
-            width: { ideal: 1280, min: 640 },
-            height: { ideal: 720, min: 480 },
-            frameRate: { ideal: 30, min: 15 },
-          },
-        });
+        await this.rtkClient.self.enableVideo();
         this._localParticipant.videoEnabled = true;
         this._localParticipant.videoTrack =
           this.rtkClient.self.videoTrack ?? undefined;

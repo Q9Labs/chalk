@@ -4,6 +4,7 @@
 
 import { EventEmitter } from "./events.ts";
 import { camelToSnake, snakeToCamel } from "./transforms.ts";
+import { createLogger, type Logger } from "./utils/logger.ts";
 import type {
 	ApiResponse,
 	ChalkClientConfig,
@@ -27,8 +28,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	private readonly apiKey?: string;
 	private readonly tokenProvider?: TokenProvider;
 	private token?: string;
-	private readonly debug: boolean;
 	private isRefreshingToken = false;
+	private readonly log: Logger = createLogger("API");
 
 	constructor(config: ChalkClientConfig) {
 		super();
@@ -36,12 +37,10 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		this.apiKey = config.apiKey;
 		this.tokenProvider = config.tokenProvider;
 		this.token = config.token;
-		this.debug = config.debug ?? false;
 
 		if (config.apiKey) {
-			console.warn(
-				"[Chalk] DEPRECATION WARNING: Using apiKey is deprecated and will be removed in v2.0. " +
-					"Use `token` or `tokenProvider` instead for improved security.",
+			this.log.warn(
+				"Using apiKey is deprecated and will be removed in v2.0. Use `token` or `tokenProvider` instead for improved security.",
 			);
 		}
 	}
@@ -57,11 +56,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		return this.token;
 	}
 
-	private log(...args: unknown[]): void {
-		if (this.debug) {
-			console.log("[Chalk API]", ...args);
-		}
-	}
 
 	private async request<T>(
 		method: string,
@@ -84,7 +78,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 					this.token = newToken;
 				}
 			} catch (error) {
-				this.log("Token provider failed:", error);
+				this.log.error("Token provider failed", { error });
 				return {
 					success: false,
 					error: {
@@ -105,7 +99,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		}
 
 		const url = `${this.apiUrl}${path}`;
-		this.log(`${method} ${url}`);
+		this.log.debug("Request", { method, url });
 
 		try {
 			const transformedBody = body ? camelToSnake(body) : undefined;
@@ -132,7 +126,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				};
 				const errorMessage =
 					errorData.message ?? errorData.error ?? "An unknown error occurred";
-				this.log("API error:", response.status, errorMessage);
+				this.log.error("API error", { status: response.status, message: errorMessage });
 				return {
 					success: false,
 					error: {
@@ -148,7 +142,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				data,
 			};
 		} catch (error) {
-			this.log("Request failed:", error);
+			this.log.error("Request failed", { error });
 			return {
 				success: false,
 				error: {
@@ -164,7 +158,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		path: string,
 		body?: unknown,
 	): Promise<ApiResponse<T>> {
-		this.log("Received 401, attempting token refresh");
+		this.log.debug("Received 401, attempting token refresh");
 
 		if (!this.tokenProvider) {
 			const error: ChalkError = {
@@ -192,7 +186,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 
 			// Only proceed if we got a valid token
 			if (!newToken) {
-				this.log("Token refresh returned empty token");
+				this.log.warn("Token refresh returned empty token");
 				const error: ChalkError = {
 					code: "TOKEN_EXPIRED",
 					message: "Token refresh failed: no token returned",
@@ -202,10 +196,10 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			}
 
 			this.token = newToken;
-			this.log("Token refreshed successfully");
+			this.log.debug("Token refreshed successfully");
 			return this.request<T>(method, path, body, true);
 		} catch (error) {
-			this.log("Token refresh failed:", error);
+			this.log.error("Token refresh failed", { error });
 			const chalkError: ChalkError = {
 				code: "TOKEN_EXPIRED",
 				message:
@@ -316,7 +310,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		roomId: string,
 		participantId: string,
 	): Promise<ApiResponse<void>> {
-		this.log("removeParticipant:", { roomId, participantId });
+		this.log.debug("removeParticipant", { roomId, participantId });
 		return this.request<void>(
 			"DELETE",
 			`/api/v1/rooms/${roomId}/participants/${participantId}`,

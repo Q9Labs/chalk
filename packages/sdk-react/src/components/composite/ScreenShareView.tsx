@@ -2,7 +2,10 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
 import { VideoTile } from '../atomic';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { createLogger } from '@q9labs/chalk-core';
 import type { Participant } from './VideoGrid';
+
+const log = createLogger('ScreenShareView');
 
 export interface ScreenShareViewProps {
   screenShareTrack: MediaStreamTrack;
@@ -43,7 +46,7 @@ export const ScreenShareView = React.memo(({
     if (!videoEl || !screenShareTrack) return;
 
     if (screenShareTrack.readyState === 'ended') {
-      console.warn('[ScreenShareView] Screen share track is ended');
+      log.warn('Screen share track is ended');
       return;
     }
 
@@ -52,11 +55,11 @@ export const ScreenShareView = React.memo(({
       videoEl.srcObject = stream;
       videoEl.play().catch((error) => {
         if (error.name !== 'AbortError') {
-          console.error('[ScreenShareView] Failed to play video:', error);
+          log.error('Failed to play video:', error);
         }
       });
     } catch (error) {
-      console.error('[ScreenShareView] Failed to create MediaStream:', error);
+      log.error('Failed to create MediaStream:', error);
     }
 
     return () => {

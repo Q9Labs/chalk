@@ -7,6 +7,10 @@
  * @module @q9labs/chalk-core/utils
  */
 
+import { createLogger } from "./logger.ts";
+
+const log = createLogger("EventEmitter");
+
 type EventHandler<T> = (data: T) => void;
 
 /**
@@ -79,7 +83,7 @@ export class TypedEventEmitter<TEventMap extends object> {
 			try {
 				handler(data);
 			} catch (error) {
-				console.error(`Error in event handler for ${String(event)}:`, error);
+				log.error(`Handler error for ${String(event)}`, { error });
 			}
 		});
 	}

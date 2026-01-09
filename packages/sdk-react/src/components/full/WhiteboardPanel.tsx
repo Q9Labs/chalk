@@ -15,9 +15,12 @@
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { createLogger } from "@q9labs/chalk-core";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
 import { cn } from "../../utils/cn";
+
+const log = createLogger("WhiteboardPanel");
 
 // Icons (inline to avoid lucide-react version issues)
 const XIcon = () => (
@@ -253,7 +256,7 @@ function WhiteboardPanelBase({
 				root.render(React.createElement(ExcalidrawWrapper));
 				setIsReady(true);
 			} catch (err) {
-				console.error("[WhiteboardPanel] Failed to load Excalidraw:", err);
+				log.error("Failed to load Excalidraw:", err);
 				setLoadError(
 					err instanceof Error ? err.message : "Failed to load whiteboard",
 				);

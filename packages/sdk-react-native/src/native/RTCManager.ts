@@ -4,9 +4,12 @@
  * Falls back to raw react-native-webrtc when RealtimeKit is not available
  */
 
+import { createLogger } from "@q9labs/chalk-core";
 import { PermissionsAndroid, Platform } from "react-native";
 import type { MediaStream, RTCPeerConnection } from "react-native-webrtc";
 import { mediaDevices } from "react-native-webrtc";
+
+const log = createLogger("RTCManager");
 
 // RealtimeKit client type definition
 // The actual import is dynamic to allow fallback when package is not available
@@ -47,7 +50,7 @@ try {
 	RealtimeKitClient = require("@cloudflare/realtimekit-react-native").default;
 } catch {
 	// RealtimeKit not available, will use fallback mode
-	console.info("[RTCManager] RealtimeKit not available, using fallback mode");
+	log.info("RealtimeKit not available, using fallback mode");
 }
 
 export interface MediaDeviceInfo {
@@ -158,7 +161,7 @@ export class RTCManager {
 					granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === "granted"
 				);
 			} catch (err) {
-				console.error("[RTCManager] Permission request error:", err);
+				log.error("Permission request error", err);
 				return false;
 			}
 		}
@@ -225,7 +228,7 @@ export class RTCManager {
 	 */
 	async startScreenShare(): Promise<boolean> {
 		if (!this.rtkClient) {
-			console.error("[RTCManager] Screen share requires RealtimeKit");
+			log.error("Screen share requires RealtimeKit");
 			return false;
 		}
 
@@ -234,7 +237,7 @@ export class RTCManager {
 			this.isScreenSharing = true;
 			return true;
 		} catch (error) {
-			console.error("[RTCManager] Screen share failed:", error);
+			log.error("Screen share failed", error);
 			return false;
 		}
 	}
@@ -248,7 +251,7 @@ export class RTCManager {
 				await this.rtkClient.self.disableScreenShare();
 				this.isScreenSharing = false;
 			} catch (error) {
-				console.error("[RTCManager] Stop screen share failed:", error);
+				log.error("Stop screen share failed", error);
 			}
 		}
 	}
@@ -292,7 +295,7 @@ export class RTCManager {
 			this.localStream = await mediaDevices.getUserMedia(constraints);
 			return this.localStream;
 		} catch (err) {
-			console.error("[RTCManager] getUserMedia error:", err);
+			log.error("getUserMedia error", err);
 			throw err;
 		}
 	}
@@ -305,7 +308,7 @@ export class RTCManager {
 			const devices = await mediaDevices.enumerateDevices();
 			return devices as MediaDeviceInfo[];
 		} catch (err) {
-			console.error("[RTCManager] enumerateDevices error:", err);
+			log.error("enumerateDevices error", err);
 			return [];
 		}
 	}
@@ -364,7 +367,7 @@ export class RTCManager {
 				}
 			}
 		} catch (err) {
-			console.error("[RTCManager] switchCamera error:", err);
+			log.error("switchCamera error", err);
 			throw err;
 		}
 	}
@@ -406,7 +409,7 @@ export class RTCManager {
 					this.localStream.addTrack(newVideoTrack);
 				}
 			} catch (err) {
-				console.error("[RTCManager] startVideo error:", err);
+				log.error("startVideo error", err);
 				throw err;
 			}
 		}
@@ -469,7 +472,7 @@ export class RTCManager {
 					this.localStream.addTrack(newAudioTrack);
 				}
 			} catch (err) {
-				console.error("[RTCManager] startAudio error:", err);
+				log.error("startAudio error", err);
 				throw err;
 			}
 		}
@@ -516,7 +519,7 @@ export class RTCManager {
 		// Clean up RealtimeKit
 		if (this.rtkClient) {
 			this.rtkClient.leave().catch((err) => {
-				console.error("[RTCManager] Error leaving room during cleanup:", err);
+				log.error("Error leaving room during cleanup", err);
 			});
 			this.rtkClient = null;
 		}

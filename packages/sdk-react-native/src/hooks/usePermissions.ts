@@ -1,5 +1,8 @@
+import { createLogger } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
+
+const log = createLogger("usePermissions");
 
 /**
  * Permission status for each permission type
@@ -185,7 +188,7 @@ export function usePermissions(): UsePermissionsResult {
 
 				return cameraStatus === "granted" && micStatus === "granted";
 			} catch (error) {
-				console.error("[usePermissions] Request failed:", error);
+				log.error("Request failed", error);
 				return false;
 			}
 		}
@@ -221,10 +224,7 @@ export function usePermissions(): UsePermissionsResult {
 				setPermissions((prev) => ({ ...prev, notifications: status }));
 				return status === "granted";
 			} catch (error) {
-				console.error(
-					"[usePermissions] Notification permission request failed:",
-					error,
-				);
+				log.error("Notification permission request failed", error);
 				return false;
 			}
 		}, []);
@@ -236,7 +236,7 @@ export function usePermissions(): UsePermissionsResult {
 		try {
 			await Linking.openSettings();
 		} catch (error) {
-			console.error("[usePermissions] Failed to open settings:", error);
+			log.error("Failed to open settings", error);
 		}
 	}, []);
 

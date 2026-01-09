@@ -2,7 +2,11 @@
  * Event emitter for Chalk SDK
  */
 
+import { createLogger } from "./utils/logger.ts";
+
 type EventHandler<T = unknown> = (data: T) => void;
+
+const log = createLogger("Events");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class EventEmitter<Events extends Record<string, any>> {
@@ -33,7 +37,7 @@ export class EventEmitter<Events extends Record<string, any>> {
 			try {
 				handler(data);
 			} catch (error) {
-				console.error(`Error in event handler for ${String(event)}:`, error);
+				log.error(`Error in event handler for ${String(event)}:`, error);
 			}
 		});
 	}

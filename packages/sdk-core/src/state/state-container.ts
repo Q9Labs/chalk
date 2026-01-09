@@ -5,7 +5,11 @@
  * @module @q9labs/chalk-core/state
  */
 
+import { createLogger } from "../utils/logger.ts";
+
 type StateListener<T> = (state: T, prevState: T) => void;
+
+const log = createLogger("StateContainer");
 
 /**
  * Base class for observable state management in SDK managers.
@@ -73,7 +77,7 @@ export abstract class StateContainer<TState extends object> {
       try {
         listener(this.state, prevState);
       } catch (error) {
-        console.error('[StateContainer] Error in listener:', error);
+        log.error('[StateContainer] Error in listener:', error);
       }
     });
   }

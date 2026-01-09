@@ -10,6 +10,7 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import {
 	ChalkSession,
+	createLogger,
 	type ChalkSessionConfig,
 	type JoinOptions,
 } from "@q9labs/chalk-core";
@@ -23,6 +24,8 @@ import {
 	useRef,
 	useState,
 } from "react";
+
+const log = createLogger("ChalkProvider");
 
 /** ChalkProvider props */
 export interface ChalkProviderProps {
@@ -141,7 +144,7 @@ export function ChalkProvider({
 	useEffect(() => {
 		if (roomId && userName && !isConnected) {
 			session.join(roomId, { userName }).catch((err) => {
-				console.error("[ChalkProvider] Auto-join failed:", err);
+				log.error("Auto-join failed:", err);
 			});
 		}
 	}, [roomId, userName, isConnected, session]);

@@ -1,5 +1,6 @@
 import { EventEmitter } from "./events.ts";
 import { camelToSnake, snakeToCamel } from "./transforms.ts";
+import { createLogger, type Logger } from "./utils/logger.ts";
 import type {
 	ChalkError,
 	ChatMessage,
@@ -96,19 +97,12 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private reconnectAttempt = 0;
 	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 	private lastPongTime: number = Date.now();
-	private readonly debug: boolean;
+	private readonly log: Logger = createLogger("WebSocket");
 
-	constructor(wsUrl?: string, debug = false, tokenProvider?: TokenProvider) {
+	constructor(wsUrl?: string, _debug = false, tokenProvider?: TokenProvider) {
 		super();
 		this.wsUrl = wsUrl ?? DEFAULT_WS_URL;
-		this.debug = debug;
 		this.tokenProvider = tokenProvider;
-	}
-
-	private log(...args: unknown[]): void {
-		if (this.debug) {
-			console.log("[Chalk WS]", ...args);
-		}
 	}
 
 	get connectionState(): ConnectionState {
@@ -121,7 +115,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	connect(token: string, roomId: string): void {
 		if (this.state === "connected" || this.state === "connecting") {
-			this.log("Already connected or connecting");
+			this.log.debug("Already connected or connecting");
 			return;
 		}
 
@@ -146,14 +140,14 @@ export class WSClient extends EventEmitter<WSEvents> {
 			const separator = this.wsUrl.includes("?") ? "&" : "?";
 			url = `${this.wsUrl}${separator}room=${encodeURIComponent(this.roomId)}`;
 		}
-		this.log("Connecting to", this.wsUrl);
+		this.log.info("Connecting", { url: this.wsUrl });
 
 		try {
 			const protocols = ["chalk", `token.${this.token}`];
 			this.ws = new WebSocket(url, protocols);
 			this.setupEventHandlers();
 		} catch (error) {
-			this.log("Connection error:", error);
+			this.log.error("Connection error", { error });
 			this.handleConnectionFailure();
 		}
 	}
@@ -162,7 +156,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 		if (!this.ws) return;
 
 		this.ws.onopen = () => {
-			this.log("Connected");
+			this.log.info("Connected");
 			this.state = "connected";
 			this.reconnectAttempt = 0;
 			this.startHeartbeat();
@@ -170,7 +164,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 		};
 
 		this.ws.onclose = (event) => {
-			this.log("Disconnected:", event.code, event.reason);
+			this.log.info("Disconnected", { code: event.code, reason: event.reason });
 			this.stopHeartbeat();
 
 			if (this.state === "connected") {
@@ -183,7 +177,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 		};
 
 		this.ws.onerror = (event) => {
-			this.log("WebSocket error:", event);
+			this.log.warn("WebSocket error", { event });
 			this.emit("error", {
 				code: "WS_ERROR",
 				message: "WebSocket connection error",
@@ -198,7 +192,10 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private handleMessage(data: string): void {
 		try {
 			const rawMessage = JSON.parse(data);
-			this.log("[WS Recv]", rawMessage.type, JSON.stringify(rawMessage.payload).substring(0, 200));
+			this.log.debug("Received", {
+				type: rawMessage.type,
+				payloadPreview: JSON.stringify(rawMessage.payload).substring(0, 200),
+			});
 
 			const payload = rawMessage.payload
 				? snakeToCamel<Record<string, unknown>>(rawMessage.payload)
@@ -229,7 +226,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 					break;
 				case "chat.message": {
 					// Map backend field names to frontend ChatMessage interface
-					this.log("[Chat] Received raw payload:", JSON.stringify(payload));
+					this.log.debug("Chat message received", { payload });
 					const rawPayload = payload as {
 						id: string;
 						participantId: string;
@@ -244,7 +241,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 						content: rawPayload.content,
 						timestamp: new Date(rawPayload.timestamp),
 					};
-					this.log("[Chat] Emitting chat.message:", JSON.stringify(chatMessage));
+					this.log.debug("Chat message emitting", { id: chatMessage.id, senderId: chatMessage.senderId });
 					this.emit("chat.message", chatMessage);
 					break;
 				}
@@ -302,24 +299,22 @@ export class WSClient extends EventEmitter<WSEvents> {
 				case "error":
 					this.emit("error", payload as unknown as ChalkError);
 					break;
-				case "whiteboard.data":
-					console.log("[WS-CLIENT] Received whiteboard.data:", {
-						participantId: (payload as WSEvents["whiteboard.data"]).participantId,
-						displayName: (payload as WSEvents["whiteboard.data"]).displayName,
-						seq: (payload as WSEvents["whiteboard.data"]).seq,
-						elementsCount: Array.isArray((payload as WSEvents["whiteboard.data"]).elements)
-							? (payload as WSEvents["whiteboard.data"]).elements.length
-							: "unknown",
+				case "whiteboard.data": {
+					const data = payload as WSEvents["whiteboard.data"];
+					this.log.debug("Whiteboard data received", {
+						participantId: data.participantId,
+						displayName: data.displayName,
+						seq: data.seq,
+						elementsCount: Array.isArray(data.elements) ? data.elements.length : "unknown",
 					});
 					this.emit("whiteboard.data", {
-						...(payload as WSEvents["whiteboard.data"]),
-						timestamp: new Date(
-							(payload as { timestamp: string }).timestamp,
-						),
+						...data,
+						timestamp: new Date(data.timestamp),
 					});
 					break;
+				}
 				case "whiteboard.snapshot":
-					console.log("[WS-CLIENT] Received whiteboard.snapshot:", payload);
+					this.log.debug("Whiteboard snapshot received", { roomId: (payload as { roomId: string }).roomId });
 					this.emit(
 						"whiteboard.snapshot",
 						payload as WSEvents["whiteboard.snapshot"],
@@ -334,38 +329,38 @@ export class WSClient extends EventEmitter<WSEvents> {
 						),
 					});
 					break;
-				case "permission.changed":
-					console.log("[WS-CLIENT] Received permission.changed:", payload);
+				case "permission.changed": {
+					const data = payload as WSEvents["permission.changed"];
+					this.log.debug("Permission changed", { participantId: data.participantId, feature: data.feature, canDraw: data.canDraw });
 					this.emit("permission.changed", {
-						...(payload as WSEvents["permission.changed"]),
-						timestamp: new Date(
-							(payload as { timestamp: string }).timestamp,
-						),
+						...data,
+						timestamp: new Date(data.timestamp),
 					});
 					break;
-				case "whiteboard.opened":
-					console.log("[WS-CLIENT] Received whiteboard.opened:", payload);
+				}
+				case "whiteboard.opened": {
+					const data = payload as WSEvents["whiteboard.opened"];
+					this.log.debug("Whiteboard opened", { participantId: data.participantId, displayName: data.displayName });
 					this.emit("whiteboard.opened", {
-						...(payload as WSEvents["whiteboard.opened"]),
-						timestamp: new Date(
-							(payload as { timestamp: string }).timestamp,
-						),
+						...data,
+						timestamp: new Date(data.timestamp),
 					});
 					break;
-				case "whiteboard.closed":
-					console.log("[WS-CLIENT] Received whiteboard.closed:", payload);
+				}
+				case "whiteboard.closed": {
+					const data = payload as WSEvents["whiteboard.closed"];
+					this.log.debug("Whiteboard closed", { participantId: data.participantId });
 					this.emit("whiteboard.closed", {
-						...(payload as WSEvents["whiteboard.closed"]),
-						timestamp: new Date(
-							(payload as { timestamp: string }).timestamp,
-						),
+						...data,
+						timestamp: new Date(data.timestamp),
 					});
 					break;
+				}
 				default:
-					this.log("Unknown message type:", rawMessage.type);
+					this.log.warn("Unknown message type", { type: rawMessage.type });
 			}
 		} catch (error) {
-			this.log("Failed to parse message:", error);
+			this.log.error("Failed to parse message", { error });
 		}
 	}
 
@@ -407,7 +402,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 		this.stopHeartbeat();
 
 		if (this.reconnectAttempt >= RECONNECT_DELAYS.length) {
-			this.log("Max reconnect attempts reached");
+			this.log.error("Max reconnect attempts reached");
 			this.state = "failed";
 			this.emit("error", {
 				code: "MAX_RECONNECT_ATTEMPTS",
@@ -422,7 +417,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 			RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1]!;
 		this.reconnectAttempt++;
 
-		this.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
+		this.log.info("Reconnecting", { delayMs: delay, attempt: this.reconnectAttempt });
 		this.emit("reconnecting", { attempt: this.reconnectAttempt });
 
 		setTimeout(async () => {
@@ -435,11 +430,11 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private async refreshTokenAndConnect(): Promise<void> {
 		if (this.tokenProvider) {
 			try {
-				this.log("Refreshing token before reconnect");
+				this.log.debug("Refreshing token before reconnect");
 				this.token = await this.tokenProvider();
-				this.log("Token refreshed successfully");
+				this.log.info("Token refreshed successfully");
 			} catch (error) {
-				this.log("Token refresh failed:", error);
+				this.log.error("Token refresh failed", { error });
 				const chalkError: ChalkError = {
 					code: "TOKEN_EXPIRED",
 					message:
@@ -478,17 +473,16 @@ export class WSClient extends EventEmitter<WSEvents> {
 					: message.payload,
 			};
 			const jsonMsg = JSON.stringify(transformedMessage);
-			this.log("[WS Send]", jsonMsg);
+			this.log.debug("Sending", { type: message.type, messageLength: jsonMsg.length });
 			this.ws.send(jsonMsg);
 		} else {
-			this.log("[WS Send] FAILED - not connected, state:", this.ws?.readyState);
+			this.log.warn("Send failed", { type: message.type, readyState: this.ws?.readyState, OPEN: WebSocket.OPEN });
 		}
 	}
 
 	// Client-to-server actions
 	sendChatMessage(content: string): void {
-		this.log("[Chat] Sending message:", content);
-		this.log("[Chat] WebSocket state:", this.ws?.readyState, "OPEN=", WebSocket.OPEN);
+		this.log.debug("Chat message sending", { contentLength: content.length, readyState: this.ws?.readyState, OPEN: WebSocket.OPEN });
 		this.send({ type: "chat.send", payload: { content } });
 	}
 
@@ -505,7 +499,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	disconnect(): void {
-		this.log("Disconnecting");
+		this.log.info("Disconnecting");
 		this.state = "disconnected";
 		this.stopHeartbeat();
 
@@ -524,7 +518,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 		files?: Record<string, unknown>,
 		seq?: number,
 	): void {
-		console.log("[WS-CLIENT] Sending whiteboard.update:", {
+		this.log.debug("Whiteboard update sending", {
 			elementsCount: elements.length,
 			hasFiles: !!files,
 			seq: seq ?? Date.now(),
@@ -544,17 +538,17 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	sendWhiteboardClear(): void {
-		console.log("[WS-CLIENT] Sending whiteboard.clear");
+		this.log.debug("Whiteboard clear sending");
 		this.send({ type: "whiteboard.clear", payload: {} });
 	}
 
 	requestWhiteboardSync(): void {
-		console.log("[WS-CLIENT] Sending whiteboard.sync request");
+		this.log.debug("Whiteboard sync request sending");
 		this.send({ type: "whiteboard.sync", payload: {} });
 	}
 
 	grantWhiteboardPermission(participantId: string): void {
-		console.log("[WS-CLIENT] Sending permission.grant:", { participantId });
+		this.log.debug("Whiteboard permission grant sending", { participantId });
 		this.send({
 			type: "permission.grant",
 			payload: { participantId, feature: "whiteboard" },
@@ -562,7 +556,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	revokeWhiteboardPermission(participantId: string): void {
-		console.log("[WS-CLIENT] Sending permission.revoke:", { participantId });
+		this.log.debug("Whiteboard permission revoke sending", { participantId });
 		this.send({
 			type: "permission.revoke",
 			payload: { participantId, feature: "whiteboard" },
@@ -570,12 +564,12 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	sendWhiteboardOpen(): void {
-		console.log("[WS-CLIENT] Sending whiteboard.open");
+		this.log.debug("Whiteboard open sending");
 		this.send({ type: "whiteboard.open", payload: {} });
 	}
 
 	sendWhiteboardClose(): void {
-		console.log("[WS-CLIENT] Sending whiteboard.close");
+		this.log.debug("Whiteboard close sending");
 		this.send({ type: "whiteboard.close", payload: {} });
 	}
 }

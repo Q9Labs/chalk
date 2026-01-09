@@ -3,6 +3,9 @@ import { Volume2 } from 'lucide-react';
 import { Select, AudioIndicator, Thumbnail, IconButton } from '../atomic';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { createLogger } from '@q9labs/chalk-core';
+
+const log = createLogger('DeviceSelector');
 
 export interface DeviceSelectorProps {
   type: 'audioinput' | 'audiooutput' | 'videoinput';
@@ -52,7 +55,7 @@ export const DeviceSelector = React.memo(({
   useEffect(() => {
     if (type === 'audiooutput' && selectedDeviceId && audioRef.current) {
       if ('setSinkId' in audioRef.current && typeof (audioRef.current as any).setSinkId === 'function') {
-         (audioRef.current as any).setSinkId(selectedDeviceId).catch((e: any) => console.warn('Failed to set sink ID', e));
+         (audioRef.current as any).setSinkId(selectedDeviceId).catch((e: any) => log.warn('Failed to set sink ID', e));
       }
     }
   }, [type, selectedDeviceId]);

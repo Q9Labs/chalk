@@ -172,20 +172,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
             audio: config.audio ?? false,
             video: config.video ?? false,
           },
-          // Video quality: request HD resolution with good framerate
-          videoConstraints: {
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            frameRate: { ideal: 30, max: 30 },
-          },
-          // Audio quality: optimize for voice
-          audioConstraints: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 48000,
-          },
-        } as Parameters<typeof RealtimeKitClient.init>[0]);
+        });
       } catch (initError) {
         const errorMsg = initError instanceof Error ? initError.message : String(initError);
         this.log.error("RealtimeKit init failed", { error: errorMsg });
