@@ -1,6 +1,7 @@
 # SDK Package Release
 
 **Scope:** Publish `@q9labs/*` packages to GitHub Packages.
+You may stage and commit the worktree changes to ensure all changes are pushed
 
 ## Packages
 

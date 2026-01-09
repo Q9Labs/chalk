@@ -9,6 +9,7 @@ import {
 	type Room,
 	type RoomConfig,
 	type RoomStatus,
+	createLogger,
 } from "@q9labs/chalk-core";
 import {
 	createContext,
@@ -62,6 +63,8 @@ export function ChalkProvider({
 	const [connectionStatus, setConnectionStatus] =
 		useState<RoomStatus>("disconnected");
 
+	const log = createLogger("ChalkProvider");
+
 	// Initialize client and RTC manager
 	useEffect(() => {
 		const config: ChalkClientConfig = {
@@ -79,7 +82,7 @@ export function ChalkProvider({
 		setRtcManager(manager);
 
 		if (debug && !apiKey && !token) {
-			console.info("[Chalk] Running in demo mode without credentials");
+			log.info("Running in demo mode without credentials");
 		}
 
 		return () => {

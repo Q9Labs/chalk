@@ -17,6 +17,7 @@ import {
 	useWhiteboard,
 	VideoConference,
 } from "@q9labs/chalk-react";
+import { createLogger } from "@q9labs/chalk-core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import z from "zod";
@@ -32,6 +33,7 @@ export const Route = createFileRoute("/room/$roomId")({
 function RoomPage() {
 	const { roomId } = Route.useParams() as { roomId: string };
 	const navigate = useNavigate();
+	const log = createLogger("RoomPage");
 
 	const [storedUserName, setStoredUserName] = useState<string>("");
 
@@ -48,12 +50,12 @@ function RoomPage() {
 	}, [navigate]);
 
 	const handleJoin = useCallback((joinedRoomId: string) => {
-		console.log("[RoomPage] Joined room:", joinedRoomId);
-	}, []);
+		log.info("Joined room", { roomId: joinedRoomId });
+	}, [log]);
 
 	const handleError = useCallback(
 		(error: unknown) => {
-			console.error("[RoomPage] Error:", error);
+			log.error("Room error", error);
 			const errorMessage =
 				error instanceof Error ? error.message : String(error);
 			navigate({
