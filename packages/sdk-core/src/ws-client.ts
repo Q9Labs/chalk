@@ -131,18 +131,18 @@ export class WSClient extends EventEmitter<WSEvents> {
 		let url = this.wsUrl;
 		try {
 			const parsed = new URL(this.wsUrl);
-			parsed.searchParams.delete("token");
-			parsed.searchParams.delete("authToken");
-			parsed.searchParams.delete("accessToken");
+			// Pass token via query param (primary auth method)
+			parsed.searchParams.set("token", this.token);
 			parsed.searchParams.set("room", this.roomId);
 			url = parsed.toString();
 		} catch {
 			const separator = this.wsUrl.includes("?") ? "&" : "?";
-			url = `${this.wsUrl}${separator}room=${encodeURIComponent(this.roomId)}`;
+			url = `${this.wsUrl}${separator}token=${encodeURIComponent(this.token)}&room=${encodeURIComponent(this.roomId)}`;
 		}
 		this.log.info("Connecting", { url: this.wsUrl });
 
 		try {
+			// Also pass token via subprotocol as fallback
 			const protocols = ["chalk", `token.${this.token}`];
 			this.ws = new WebSocket(url, protocols);
 			this.setupEventHandlers();
