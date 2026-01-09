@@ -20,7 +20,26 @@ import type {
   TokenSet,
 } from "./types.ts";
 import { ChalkErrorCode } from "./types.ts";
+import { createLogger, type Logger } from "./utils/logger.ts";
 import type { WSClient } from "./ws-client.ts";
+
+/** Real-time transcript entry from speech-to-text */
+export interface Transcript {
+  /** Unique transcript ID */
+  id: string;
+  /** Participant who spoke */
+  participantId: string;
+  /** Display name of speaker */
+  speakerName: string;
+  /** Transcribed text */
+  text: string;
+  /** Timestamp of the transcript */
+  timestamp: Date;
+  /** Whether this is an interim (in-progress) result */
+  isInterim?: boolean;
+  /** Confidence score (0-1) */
+  confidence?: number;
+}
 
 interface RoomEvents {
   "status-changed": RoomStatus;
@@ -34,6 +53,8 @@ interface RoomEvents {
   "hand-lowered": { participantId: string };
   "recording-started": { recordingId: string };
   "recording-stopped": Recording;
+  /** Real-time transcript from speech-to-text */
+  transcript: Transcript;
   error: ChalkError;
   "whiteboard-update": {
     participantId: string;
@@ -69,6 +90,7 @@ export class Room extends EventEmitter<RoomEvents> {
   private _localParticipant: Participant | null = null;
   private _activeSpeaker: Participant | null = null;
   private _messages: ChatMessage[] = [];
+  private _transcripts: Transcript[] = [];
   private _currentRecording: { id: string } | null = null;
   private _tokens: TokenSet | null = null;
   private _whiteboardPermissions: Map<string, boolean> = new Map();
@@ -77,7 +99,8 @@ export class Room extends EventEmitter<RoomEvents> {
   private rtkClient?: RealtimeKitClient;
   private wsClient?: WSClient;
   private readonly debug: boolean;
-  
+  private readonly log: Logger;
+
   // CRITICAL: Track cleanup state to prevent race conditions
   private isLeaving = false;
   private leavePromise: Promise<void> | null = null;
@@ -90,6 +113,7 @@ export class Room extends EventEmitter<RoomEvents> {
     super();
     this.id = roomId;
     this.debug = debug;
+    this.log = createLogger("Room");
 
     // Support both WSClient and RealtimeKitClient for backwards compatibility
     if (wsClientOrRtkClient) {
@@ -105,39 +129,31 @@ export class Room extends EventEmitter<RoomEvents> {
     }
   }
 
-  private log(...args: unknown[]): void {
-    if (this.debug) {
-      console.log("[Chalk Room]", ...args);
-    }
-  }
-
   /**
    * Validate a media track and log diagnostic info
    * Returns true if track is usable, false otherwise
    */
   private validateTrack(track: MediaStreamTrack | undefined | null, type: string, participantId: string): boolean {
     if (!track) {
-      this.log(`TRACK_WARN: ${type} track is null/undefined for participant ${participantId}`);
+      this.log.warn(`${type} track missing`, { participantId });
       return false;
     }
 
     const isLive = track.readyState === "live";
     const isEnabled = track.enabled;
 
-    this.log(`TRACK_INFO: ${type} track for ${participantId}:`, {
-      id: track.id?.slice(0, 8),
-      kind: track.kind,
-      readyState: track.readyState,
+    this.log.debug(`${type} track info`, {
+      participantId,
+      trackId: track.id?.slice(0, 8),
+      state: track.readyState,
       enabled: track.enabled,
-      muted: track.muted,
-      label: track.label?.slice(0, 30),
     });
 
     if (!isLive) {
-      this.log(`TRACK_WARN: ${type} track for ${participantId} is not live (state: ${track.readyState})`);
+      this.log.warn(`${type} track not live`, { participantId, state: track.readyState });
     }
     if (!isEnabled) {
-      this.log(`TRACK_WARN: ${type} track for ${participantId} is disabled`);
+      this.log.warn(`${type} track disabled`, { participantId });
     }
 
     return isLive && isEnabled;
@@ -159,14 +175,12 @@ export class Room extends EventEmitter<RoomEvents> {
       };
     };
 
-    this.log("CONNECTION_STATE:", {
-      roomStatus: this._status,
-      rtkConnectionState: rtk.connectionState ?? "unknown",
-      localVideoEnabled: rtk.self?.videoEnabled,
-      localAudioEnabled: rtk.self?.audioEnabled,
-      localVideoTrackExists: !!rtk.self?.videoTrack,
-      localAudioTrackExists: !!rtk.self?.audioTrack,
-      participantCount: this._participants.size,
+    this.log.debug("Connection state", {
+      status: this._status,
+      rtkState: rtk.connectionState ?? "unknown",
+      video: rtk.self?.videoEnabled,
+      audio: rtk.self?.audioEnabled,
+      participants: this._participants.size,
     });
   }
 
@@ -250,6 +264,11 @@ export class Room extends EventEmitter<RoomEvents> {
     return [...this._messages];
   }
 
+  /** Get all transcripts from the current session */
+  get transcripts(): Transcript[] {
+    return [...this._transcripts];
+  }
+
   get isRecording(): boolean {
     return this._currentRecording !== null;
   }
@@ -283,57 +302,67 @@ export class Room extends EventEmitter<RoomEvents> {
     if (!this.wsClient) return;
 
     this.wsClient.on("connected", () => {
-      this.log("WebSocket connected");
+      this.log.info("WebSocket connected");
       if (!this.rtkClient) {
         this._setStatus("connected");
       }
     });
 
     this.wsClient.on("disconnected", () => {
-      this.log("WebSocket disconnected");
+      this.log.info("WebSocket disconnected");
       if (!this.rtkClient) {
         this._setStatus("disconnected");
       }
     });
 
     this.wsClient.on("reconnecting", () => {
-      this.log("WebSocket reconnecting");
+      this.log.info("WebSocket reconnecting");
       if (!this.rtkClient) {
         this._setStatus("reconnecting");
       }
     });
 
-    this.wsClient.on("participant.joined", (data) => {
-      this.log("Participant joined:", data.displayName);
-      this._participants.set(data.id, data);
-      this.emit("participant-joined", data);
-    });
+    // CRITICAL: Only set up WS participant handlers when RTK is NOT active
+    // RTK is the source of truth for participant presence (has media tracks)
+    // WS uses different participant IDs than RTK, causing duplicates
+    if (!this.rtkClient) {
+      this.wsClient.on("participant.joined", (data) => {
+        if (this._participants.has(data.id)) {
+          this.log.debug("Skipping duplicate WS participant", { id: data.id });
+          return;
+        }
+        this.log.info("Participant joined", { name: data.displayName, id: data.id });
+        this._participants.set(data.id, data);
+        this.emit("participant-joined", data);
+      });
 
-    this.wsClient.on("participant.left", (data) => {
-      this.log("Participant left:", data.participantId);
-      const participant = this._participants.get(data.participantId);
-      this._participants.delete(data.participantId);
-      if (participant) {
-        this.emit("participant-left", data.participantId);
-      }
-    });
+      this.wsClient.on("participant.left", (data) => {
+        this.log.info("Participant left", { id: data.participantId });
+        const participant = this._participants.get(data.participantId);
+        this._participants.delete(data.participantId);
+        if (participant) {
+          this.emit("participant-left", data.participantId);
+        }
+      });
 
-    this.wsClient.on("participant.updated", (data) => {
-      const participant = this._participants.get(data.participantId);
-      if (participant) {
-        const updated = { ...participant, ...data.changes };
-        this._participants.set(data.participantId, updated);
-        this.emit("participant-updated", {
-          participantId: data.participantId,
-          participant: updated,
-        });
-      }
-    });
+      this.wsClient.on("participant.updated", (data) => {
+        const participant = this._participants.get(data.participantId);
+        if (participant) {
+          const updated = { ...participant, ...data.changes };
+          this._participants.set(data.participantId, updated);
+          this.emit("participant-updated", {
+            participantId: data.participantId,
+            participant: updated,
+          });
+        }
+      });
+    } else {
+      this.log.debug("RTK active, skipping WS participant handlers");
+    }
 
     this.wsClient.on("chat.message", (data) => {
-      this.log("[Chat] Room received chat.message:", JSON.stringify(data));
+      this.log.debug("Chat message received", { from: data.senderName, count: this._messages.length + 1 });
       this._messages.push(data);
-      this.log("[Chat] Room emitting chat-message, total messages:", this._messages.length);
       this.emit("chat-message", data);
     });
 
@@ -389,12 +418,20 @@ export class Room extends EventEmitter<RoomEvents> {
     });
 
     this.wsClient.on("room.snapshot", (snapshot) => {
-      this.log(
-        "Received room snapshot:",
-        snapshot.participants.length,
-        "participants",
-      );
+      this.log.debug("Room snapshot received", { participants: snapshot.participants.length });
 
+      // CRITICAL: When RTK is active, it manages participants (different IDs than WS)
+      // Only use snapshot for non-participant data like recording state
+      if (this.rtkClient) {
+        this.log.debug("RTK active, skipping snapshot participant sync");
+        if (snapshot.isRecording && snapshot.recordingId) {
+          this._currentRecording = { id: snapshot.recordingId };
+        }
+        return;
+      }
+
+      // WS-only mode: snapshot is authoritative for participants
+      const previousIds = new Set(this._participants.keys());
       this._participants.clear();
 
       for (const p of snapshot.participants) {
@@ -402,7 +439,11 @@ export class Room extends EventEmitter<RoomEvents> {
           continue;
         }
         this._participants.set(p.id, p);
-        this.emit("participant-joined", p);
+
+        if (!previousIds.has(p.id)) {
+          this.log.info("New participant from snapshot", { name: p.displayName });
+          this.emit("participant-joined", p);
+        }
       }
 
       if (this._localParticipant) {
@@ -419,11 +460,10 @@ export class Room extends EventEmitter<RoomEvents> {
 
     // Whiteboard events
     this.wsClient.on("whiteboard.data", (data) => {
-      console.log("[Room] Received whiteboard.data from WS:", {
+      this.log.debug("Whiteboard data received", {
         participantId: data.participantId,
-        displayName: data.displayName,
         seq: data.seq,
-        elementsCount: Array.isArray(data.elements) ? data.elements.length : "unknown",
+        elements: Array.isArray(data.elements) ? data.elements.length : 0,
       });
       this.emit("whiteboard-update", {
         participantId: data.participantId,
@@ -432,7 +472,6 @@ export class Room extends EventEmitter<RoomEvents> {
         files: data.files,
         seq: data.seq,
       });
-      console.log("[Room] Emitted whiteboard-update event");
     });
 
     this.wsClient.on("whiteboard.cursor", (data) => {
@@ -446,7 +485,7 @@ export class Room extends EventEmitter<RoomEvents> {
     });
 
     this.wsClient.on("permission.changed", (data) => {
-      console.log("[Room] Received permission.changed from WS:", data);
+      this.log.info("Permission changed", { participantId: data.participantId, feature: data.feature, canDraw: data.canDraw });
       if (data.feature === "whiteboard") {
         this._whiteboardPermissions.set(data.participantId, data.canDraw);
         this.emit("whiteboard-permission-changed", {
@@ -457,20 +496,18 @@ export class Room extends EventEmitter<RoomEvents> {
     });
 
     this.wsClient.on("whiteboard.opened", (data) => {
-      console.log("[Room] Received whiteboard.opened from WS:", data);
+      this.log.info("Whiteboard opened", { participantId: data.participantId, displayName: data.displayName });
       this.emit("whiteboard-opened", {
         participantId: data.participantId,
         displayName: data.displayName,
       });
-      console.log("[Room] Emitted whiteboard-opened event");
     });
 
     this.wsClient.on("whiteboard.closed", (data) => {
-      console.log("[Room] Received whiteboard.closed from WS:", data);
+      this.log.info("Whiteboard closed", { participantId: data.participantId });
       this.emit("whiteboard-closed", {
         participantId: data.participantId,
       });
-      console.log("[Room] Emitted whiteboard-closed event");
     });
   }
 
@@ -528,31 +565,27 @@ export class Room extends EventEmitter<RoomEvents> {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (this.rtkClient!.participants.joined as any).on(evt, (data: unknown) => {
-            console.log('[RTK DEBUG EVENT]', evt, JSON.stringify(data, (_, v) =>
-              v instanceof MediaStreamTrack ? `Track<${v.kind}:${v.id?.slice(0,8)}:${v.readyState}>` : v
-            , 2));
+            this.log.debug(`RTK event: ${evt}`, data);
           });
-        } catch (e) {
-          console.log('[RTK DEBUG] Failed to attach listener for:', evt);
+        } catch {
+          this.log.debug(`Failed to attach RTK listener: ${evt}`);
         }
       });
-      console.log('[RTK DEBUG] Attached debug listeners for participant events');
+      this.log.debug("RTK debug listeners attached");
     }
 
     // Log RTK client structure for debugging
     if (this.debug) {
-      console.log('[RTK DEBUG] Client structure:', {
+      this.log.debug("RTK client structure", {
         hasParticipants: !!this.rtkClient.participants,
         hasSelf: !!this.rtkClient.self,
         hasChat: !!this.rtkClient.chat,
-        participantKeys: this.rtkClient.participants ? Object.keys(this.rtkClient.participants) : [],
-        selfKeys: this.rtkClient.self ? Object.keys(this.rtkClient.self) : [],
       });
     }
 
     // Room joined event
     this.rtkClient.self.on("roomJoined", () => {
-      this.log("Room joined successfully");
+      this.log.info("Room joined");
       this._setStatus("connected");
 
       // Sync local participant state with RTK
@@ -578,7 +611,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
     // Room left event
     this.rtkClient.self.on("roomLeft", () => {
-      this.log("Room left");
+      this.log.info("Room left");
       this._setStatus("disconnected");
     });
 
@@ -589,7 +622,7 @@ export class Room extends EventEmitter<RoomEvents> {
         videoEnabled: boolean;
         videoTrack: MediaStreamTrack | null;
       }) => {
-        this.log("Local video update:", data.videoEnabled, "track:", data.videoTrack ? "present" : "null");
+        this.log.debug("Local video update", { enabled: data.videoEnabled, hasTrack: !!data.videoTrack });
         if (this._localParticipant) {
           this._localParticipant.videoEnabled = data.videoEnabled;
           this._localParticipant.videoTrack = data.videoTrack ?? undefined;
@@ -621,7 +654,7 @@ export class Room extends EventEmitter<RoomEvents> {
         audioEnabled: boolean;
         audioTrack: MediaStreamTrack | null;
       }) => {
-        this.log("Local audio update:", data.audioEnabled, "track:", data.audioTrack ? "present" : "null");
+        this.log.debug("Local audio update", { enabled: data.audioEnabled, hasTrack: !!data.audioTrack });
         if (this._localParticipant) {
           this._localParticipant.audioEnabled = data.audioEnabled;
           this._localParticipant.audioTrack = data.audioTrack ?? undefined;
@@ -656,11 +689,10 @@ export class Room extends EventEmitter<RoomEvents> {
           video?: MediaStreamTrack;
         };
       }) => {
-        this.log("Local screen share update:", data.screenShareEnabled);
-        this.log("Local screen share tracks:", {
+        this.log.debug("Local screen share update", {
+          enabled: data.screenShareEnabled,
           hasVideo: !!data.screenShareTracks?.video,
           hasAudio: !!data.screenShareTracks?.audio,
-          videoState: data.screenShareTracks?.video?.readyState,
         });
         if (this._localParticipant) {
           this._localParticipant.isScreenSharing = data.screenShareEnabled;
@@ -680,19 +712,28 @@ export class Room extends EventEmitter<RoomEvents> {
     this.rtkClient.participants.joined.on(
       "participantJoined",
       (rtkParticipant: unknown) => {
-        const participant = this.mapRTKParticipant(rtkParticipant);
-        this.log("Participant joined:", participant.displayName);
-        this.log("Participant initial state:", {
-          videoEnabled: participant.videoEnabled,
-          audioEnabled: participant.audioEnabled,
-          isScreenSharing: participant.isScreenSharing,
-          hasVideoTrack: !!participant.videoTrack,
-          hasAudioTrack: !!participant.audioTrack,
-          hasScreenShareTrack: !!participant.screenShareTrack,
-        });
-        // Log raw RTK participant for debugging
         const raw = rtkParticipant as Record<string, unknown>;
-        this.log("RAW RTK participant keys:", Object.keys(raw));
+
+        // Skip if this is the local participant (RTK may include self in joined list)
+        if (this._localParticipant && raw.id === this._localParticipant.id) {
+          this.log.debug("Skipping participantJoined for local user", { id: raw.id });
+          return;
+        }
+
+        const participant = this.mapRTKParticipant(rtkParticipant);
+
+        // CRITICAL: Skip if participant already exists (prevents duplicates from WS + RTK)
+        if (this._participants.has(participant.id)) {
+          this.log.debug("Skipping duplicate participantJoined", { id: participant.id });
+          return;
+        }
+
+        this.log.info("Participant joined", {
+          name: participant.displayName,
+          id: participant.id,
+          video: participant.videoEnabled,
+          audio: participant.audioEnabled,
+        });
         this._participants.set(participant.id, participant);
         this.emit("participant-joined", participant);
       },
@@ -703,7 +744,7 @@ export class Room extends EventEmitter<RoomEvents> {
       "participantLeft",
       (rtkParticipant: unknown) => {
         const p = rtkParticipant as { id: string };
-        this.log("Participant left:", p.id);
+        this.log.info("Participant left", { id: p.id });
         this._participants.delete(p.id);
         this.emit("participant-left", p.id);
       },
@@ -714,7 +755,7 @@ export class Room extends EventEmitter<RoomEvents> {
       "videoUpdate",
       (rtkParticipant: unknown) => {
         const participant = this.mapRTKParticipant(rtkParticipant);
-        this.log("REMOTE_VIDEO_UPDATE:", participant.id, "enabled:", participant.videoEnabled);
+        this.log.debug("Remote video update", { id: participant.id, enabled: participant.videoEnabled });
 
         const existing = this._participants.get(participant.id);
         if (existing) {
@@ -728,10 +769,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
           // Validate remote video track
           if (participant.videoEnabled) {
-            const isValid = this.validateTrack(participant.videoTrack, "REMOTE_VIDEO", participant.id);
-            if (!isValid) {
-              this.log("TRACK_ISSUE: Remote participant", participant.id, "has video enabled but track is invalid");
-            }
+            this.validateTrack(participant.videoTrack, "REMOTE_VIDEO", participant.id);
           }
 
           this.emit("participant-updated", {
@@ -739,7 +777,7 @@ export class Room extends EventEmitter<RoomEvents> {
             participant: updated,
           });
         } else {
-          this.log("WARN: Video update for unknown participant:", participant.id);
+          this.log.warn("Video update for unknown participant", { id: participant.id });
         }
       },
     );
@@ -749,7 +787,7 @@ export class Room extends EventEmitter<RoomEvents> {
       "audioUpdate",
       (rtkParticipant: unknown) => {
         const participant = this.mapRTKParticipant(rtkParticipant);
-        this.log("REMOTE_AUDIO_UPDATE:", participant.id, "enabled:", participant.audioEnabled);
+        this.log.debug("Remote audio update", { id: participant.id, enabled: participant.audioEnabled });
 
         const existing = this._participants.get(participant.id);
         if (existing) {
@@ -763,10 +801,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
           // Validate remote audio track
           if (participant.audioEnabled) {
-            const isValid = this.validateTrack(participant.audioTrack, "REMOTE_AUDIO", participant.id);
-            if (!isValid) {
-              this.log("TRACK_ISSUE: Remote participant", participant.id, "has audio enabled but track is invalid");
-            }
+            this.validateTrack(participant.audioTrack, "REMOTE_AUDIO", participant.id);
           }
 
           this.emit("participant-updated", {
@@ -774,7 +809,7 @@ export class Room extends EventEmitter<RoomEvents> {
             participant: updated,
           });
         } else {
-          this.log("WARN: Audio update for unknown participant:", participant.id);
+          this.log.warn("Audio update for unknown participant", { id: participant.id });
         }
       },
     );
@@ -783,17 +818,12 @@ export class Room extends EventEmitter<RoomEvents> {
     this.rtkClient.participants.joined.on(
       "screenShareUpdate",
       (rtkParticipant: unknown) => {
-        // Log raw data first for debugging
-        const raw = rtkParticipant as Record<string, unknown>;
-        this.log("REMOTE_SCREENSHARE_UPDATE raw:", JSON.stringify({
-          id: raw.id,
-          screenShareEnabled: raw.screenShareEnabled,
-          hasScreenShareTracks: !!raw.screenShareTracks,
-          screenShareTracksKeys: raw.screenShareTracks ? Object.keys(raw.screenShareTracks as object) : [],
-        }));
-
         const participant = this.mapRTKParticipant(rtkParticipant);
-        this.log("REMOTE_SCREENSHARE_UPDATE mapped:", participant.id, "sharing:", participant.isScreenSharing, "hasTrack:", !!participant.screenShareTrack);
+        this.log.debug("Remote screen share update", {
+          id: participant.id,
+          sharing: participant.isScreenSharing,
+          hasTrack: !!participant.screenShareTrack,
+        });
 
         const existing = this._participants.get(participant.id);
         if (existing) {
@@ -810,7 +840,6 @@ export class Room extends EventEmitter<RoomEvents> {
           if (participant.isScreenSharing) {
             const isValid = this.validateTrack(participant.screenShareTrack, "REMOTE_SCREENSHARE", participant.id);
             if (!isValid) {
-              this.log("TRACK_ISSUE: Remote participant", participant.id, "screen sharing enabled but track is invalid");
               this.emit("error", {
                 code: "SCREEN_SHARE_ERROR",
                 message: `Screen share track unavailable for participant ${participant.displayName}`,
@@ -824,14 +853,14 @@ export class Room extends EventEmitter<RoomEvents> {
             participant: updated,
           });
         } else {
-          this.log("WARN: Screen share update for unknown participant:", participant.id);
+          this.log.warn("Screen share update for unknown participant", { id: participant.id });
         }
       },
     );
 
     // RTK Chat message handling
     if (this.rtkClient.chat) {
-      this.log("[Chat] Setting up RTK chat listeners");
+      this.log.debug("Setting up RTK chat listeners");
 
       // Cast to unknown to access events that may not be in type defs
       const chat = this.rtkClient.chat as unknown as {
@@ -839,16 +868,13 @@ export class Room extends EventEmitter<RoomEvents> {
         messages?: unknown[];
       };
 
-      // Log available chat properties
-      this.log("[Chat] RTK chat object keys:", Object.keys(this.rtkClient.chat));
-
       // Helper to extract message from various payload formats
       const extractMessage = (payload: unknown): ChatMessage | null => {
         const rawData = payload as Record<string, unknown>;
 
         // Skip non-add actions (like "delete", "pin", etc.)
         if (rawData.action && rawData.action !== "add") {
-          this.log("[Chat] Skipping non-add action:", rawData.action);
+          this.log.debug("Skipping non-add chat action", { action: rawData.action });
           return null;
         }
 
@@ -866,7 +892,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
         // Ensure content is a string
         if (typeof chatMessage.content !== "string") {
-          this.log("[Chat] Warning: content is not a string, converting");
+          this.log.warn("Chat content is not a string, converting");
           chatMessage.content = String(chatMessage.content);
         }
 
@@ -875,8 +901,6 @@ export class Room extends EventEmitter<RoomEvents> {
 
       // Handler for chat events
       const chatEventHandler = (eventName: string) => (payload: unknown) => {
-        this.log(`[Chat] RTK ${eventName} received:`, JSON.stringify(payload));
-
         const chatMessage = extractMessage(payload);
         if (!chatMessage) {
           return;
@@ -891,11 +915,11 @@ export class Room extends EventEmitter<RoomEvents> {
         );
 
         if (isDuplicate) {
-          this.log("[Chat] Skipping duplicate message:", chatMessage.id);
+          this.log.debug("Skipping duplicate chat message", { id: chatMessage.id });
           return;
         }
 
-        this.log("[Chat] Mapped to ChatMessage:", JSON.stringify(chatMessage));
+        this.log.debug("Chat message via RTK", { event: eventName, from: chatMessage.senderName });
         this._messages.push(chatMessage);
         this.emit("chat-message", chatMessage);
       };
@@ -905,16 +929,83 @@ export class Room extends EventEmitter<RoomEvents> {
       for (const eventName of chatEvents) {
         try {
           chat.on(eventName, chatEventHandler(eventName));
-          this.log(`[Chat] Registered handler for '${eventName}' event`);
-        } catch (e) {
-          this.log(`[Chat] Could not register '${eventName}' event:`, e);
+          this.log.debug("Registered RTK chat handler", { event: eventName });
+        } catch {
+          this.log.debug("Could not register RTK chat handler", { event: eventName });
         }
       }
     } else {
-      this.log("[Chat] RTK chat module not available");
+      this.log.debug("RTK chat module not available");
     }
 
+    // Transcription support (if enabled in preset)
+    this.setupTranscriptListener();
+
     this.setupActiveSpeakerListener();
+  }
+
+  private setupTranscriptListener(): void {
+    if (!this.rtkClient) return;
+
+    // Access RTK ai module for transcription (may not be available in all versions)
+    const ai = (this.rtkClient as unknown as { ai?: {
+      transcripts?: unknown[];
+      on?: (event: string, handler: (data: unknown) => void) => void;
+    } }).ai;
+
+    if (!ai) {
+      this.log.debug("RTK ai module not available");
+      return;
+    }
+
+    this.log.debug("Setting up transcript listener");
+
+    // Load existing transcripts if available
+    if (Array.isArray(ai.transcripts)) {
+      for (const t of ai.transcripts) {
+        const transcript = this.mapRTKTranscript(t);
+        if (transcript) {
+          this._transcripts.push(transcript);
+        }
+      }
+      this.log.debug("Loaded existing transcripts", { count: this._transcripts.length });
+    }
+
+    // Listen for new transcripts
+    if (typeof ai.on === "function") {
+      ai.on("transcript", (data: unknown) => {
+        const transcript = this.mapRTKTranscript(data);
+        if (transcript) {
+          this._transcripts.push(transcript);
+          this.emit("transcript", transcript);
+          this.log.debug("Transcript received", { speaker: transcript.speakerName });
+        }
+      });
+      this.log.debug("Transcript handler registered");
+    }
+  }
+
+  private mapRTKTranscript(data: unknown): Transcript | null {
+    if (!data || typeof data !== "object") return null;
+
+    const raw = data as Record<string, unknown>;
+
+    // Handle various RTK transcript formats
+    const participantId = (raw.participantId as string) ?? (raw.userId as string) ?? (raw.peerId as string) ?? "";
+    const speakerName = (raw.participantName as string) ?? (raw.displayName as string) ?? (raw.name as string) ?? "Unknown";
+    const text = (raw.text as string) ?? (raw.transcript as string) ?? (raw.content as string) ?? "";
+
+    if (!text) return null;
+
+    return {
+      id: (raw.id as string) ?? crypto.randomUUID(),
+      participantId,
+      speakerName,
+      text,
+      timestamp: raw.timestamp ? new Date(raw.timestamp as string | number) : new Date(),
+      isInterim: (raw.isInterim as boolean) ?? (raw.isFinal === false),
+      confidence: raw.confidence as number | undefined,
+    };
   }
 
   private setupActiveSpeakerListener(): void {
@@ -955,14 +1046,21 @@ export class Room extends EventEmitter<RoomEvents> {
         this._localParticipant.videoEnabled = false;
         this._localParticipant.videoTrack = undefined;
       } else {
-        await this.rtkClient.self.enableVideo();
+        // Enable video with HD constraints for better quality
+        await (this.rtkClient.self.enableVideo as (opts?: unknown) => Promise<void>)({
+          constraints: {
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            frameRate: { ideal: 30, min: 15 },
+          },
+        });
         this._localParticipant.videoEnabled = true;
         this._localParticipant.videoTrack =
           this.rtkClient.self.videoTrack ?? undefined;
       }
       return this._localParticipant.videoEnabled;
     } catch (error) {
-      this.log("Failed to toggle video:", error);
+      this.log.error("Failed to toggle video", { error });
       this.emit("error", {
         code: "MEDIA_ERROR",
         message: "Failed to toggle camera",
@@ -981,15 +1079,17 @@ export class Room extends EventEmitter<RoomEvents> {
         await this.rtkClient.self.disableAudio();
         this._localParticipant.audioEnabled = false;
         this._localParticipant.audioTrack = undefined;
+        this.log.info("Audio disabled");
       } else {
         await this.rtkClient.self.enableAudio();
         this._localParticipant.audioEnabled = true;
         this._localParticipant.audioTrack =
           this.rtkClient.self.audioTrack ?? undefined;
+        this.log.info("Audio enabled");
       }
       return this._localParticipant.audioEnabled;
     } catch (error) {
-      this.log("Failed to toggle audio:", error);
+      this.log.error("Failed to toggle audio", { error });
       this.emit("error", {
         code: "MEDIA_ERROR",
         message: "Failed to toggle microphone",
@@ -1006,9 +1106,10 @@ export class Room extends EventEmitter<RoomEvents> {
     try {
       await this.rtkClient.self.enableScreenShare();
       this._localParticipant.isScreenSharing = true;
+      this.log.info("Screen share started");
       return true;
     } catch (error) {
-      this.log("Failed to start screen share:", error);
+      this.log.error("Failed to start screen share", { error });
       this.emit("error", {
         code: "SCREEN_SHARE_ERROR",
         message: "Failed to start screen sharing",
@@ -1026,8 +1127,9 @@ export class Room extends EventEmitter<RoomEvents> {
       await this.rtkClient.self.disableScreenShare();
       this._localParticipant.isScreenSharing = false;
       this._localParticipant.screenShareTrack = undefined;
+      this.log.info("Screen share stopped");
     } catch (error) {
-      this.log("Failed to stop screen share:", error);
+      this.log.error("Failed to stop screen share", { error });
     }
   }
 
@@ -1039,13 +1141,14 @@ export class Room extends EventEmitter<RoomEvents> {
   async getDevices(): Promise<MediaDevice[]> {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
+      this.log.debug("Enumerated devices", { count: devices.length });
       return devices.map((d) => ({
         deviceId: d.deviceId,
         label: d.label || `${d.kind} (${d.deviceId.slice(0, 8)})`,
         kind: d.kind as MediaDeviceKind,
       }));
     } catch (error) {
-      this.log("Failed to enumerate devices:", error);
+      this.log.error("Failed to enumerate devices", { error });
       this.emit("error", {
         code: ChalkErrorCode.MEDIA_ERROR,
         message: "Failed to list media devices",
@@ -1105,9 +1208,10 @@ export class Room extends EventEmitter<RoomEvents> {
       this._localParticipant.videoEnabled = true;
       this._localParticipant.videoTrack =
         (self.videoTrack as MediaStreamTrack | undefined) ?? undefined;
+      this.log.info("Camera selected", { deviceId: deviceId.slice(0, 8) });
       return true;
     } catch (error) {
-      this.log("Failed to select camera:", error);
+      this.log.error("Failed to select camera", { deviceId: deviceId.slice(0, 8), error });
       this.emit("error", {
         code: ChalkErrorCode.DEVICE_NOT_FOUND,
         message: "Failed to switch camera",
@@ -1142,9 +1246,10 @@ export class Room extends EventEmitter<RoomEvents> {
       this._localParticipant.audioEnabled = true;
       this._localParticipant.audioTrack =
         (self.audioTrack as MediaStreamTrack | undefined) ?? undefined;
+      this.log.info("Microphone selected", { deviceId: deviceId.slice(0, 8) });
       return true;
     } catch (error) {
-      this.log("Failed to select microphone:", error);
+      this.log.error("Failed to select microphone", { deviceId: deviceId.slice(0, 8), error });
       this.emit("error", {
         code: ChalkErrorCode.DEVICE_NOT_FOUND,
         message: "Failed to switch microphone",
@@ -1156,30 +1261,27 @@ export class Room extends EventEmitter<RoomEvents> {
 
   // Chat
   sendMessage(content: string): void {
-    this.log("[Chat] Room.sendMessage called:", content);
     if (!content.trim()) {
-      this.log("[Chat] Empty content, skipping");
       return;
     }
 
     const trimmed = content.trim();
+    this.log.debug("Sending chat message", { length: trimmed.length });
 
     // Try WSClient first, fallback to RealtimeKit
     if (this.wsClient) {
-      this.log("[Chat] Using WSClient to send");
       this.wsClient.sendChatMessage(trimmed);
       // WSClient will echo the message back via chat.message event
     } else if (this.rtkClient) {
-      this.log("[Chat] Using RTK client to send");
       try {
         this.rtkClient.chat?.sendTextMessage(trimmed);
         // RTK echoes messages back via chatUpdate event, so don't add locally
       } catch (e) {
-        this.log("[Chat] Chat send failed:", e);
+        this.log.error("Chat send failed", { error: e });
       }
     } else {
       // No client available - add locally for demo/testing only
-      this.log("[Chat] No client available, adding locally for demo");
+      this.log.debug("No client, adding message locally");
       const localMessage: ChatMessage = {
         id: crypto.randomUUID(),
         senderId: this._localParticipant?.id ?? "local",
@@ -1194,6 +1296,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
   // Reactions
   sendReaction(emoji: ReactionEmoji): void {
+    this.log.debug("Sending reaction", { emoji });
     // Try WSClient first, fallback to RealtimeKit
     if (this.wsClient) {
       this.wsClient.sendReaction(emoji);
@@ -1206,7 +1309,7 @@ export class Room extends EventEmitter<RoomEvents> {
           }
         ).reactions?.send(emoji);
       } catch {
-        this.log("Reactions not available");
+        this.log.warn("Reactions not available");
       }
     }
   }
@@ -1241,12 +1344,12 @@ export class Room extends EventEmitter<RoomEvents> {
   // CRITICAL: Async leave with proper cleanup sequencing
   async leave(): Promise<void> {
     if (this.isLeaving && this.leavePromise) {
-      this.log("Leave already in progress, returning existing promise");
+      this.log.debug("Leave already in progress");
       return this.leavePromise;
     }
 
     this.isLeaving = true;
-    this.log("Leaving room - starting cleanup");
+    this.log.info("Leaving room");
 
     // Create a promise that resolves when cleanup is complete
     this.leavePromise = (async () => {
@@ -1260,9 +1363,9 @@ export class Room extends EventEmitter<RoomEvents> {
         if (this.rtkClient) {
           try {
             await this.rtkClient.leave();
-            this.log("RealtimeKit leave completed");
+            this.log.debug("RTK leave completed");
           } catch (e) {
-            this.log("Error during RTK leave (ignoring):", e);
+            this.log.warn("Error during RTK leave", { error: e });
           }
         }
 
@@ -1277,7 +1380,7 @@ export class Room extends EventEmitter<RoomEvents> {
         this._localParticipant = null;
 
         this._setStatus("disconnected");
-        this.log("Room cleanup completed");
+        this.log.info("Room cleanup completed");
       } finally {
         this.isLeaving = false;
         this.leavePromise = null;
@@ -1320,9 +1423,10 @@ export class Room extends EventEmitter<RoomEvents> {
    */
   grantWhiteboardPermission(participantId: string): void {
     if (this._localParticipant?.role !== "host") {
-      this.log("Only host can grant permissions");
+      this.log.warn("Only host can grant permissions");
       return;
     }
+    this.log.info("Granting whiteboard permission", { participantId });
     this.wsClient?.grantWhiteboardPermission(participantId);
   }
 
@@ -1331,9 +1435,10 @@ export class Room extends EventEmitter<RoomEvents> {
    */
   revokeWhiteboardPermission(participantId: string): void {
     if (this._localParticipant?.role !== "host") {
-      this.log("Only host can revoke permissions");
+      this.log.warn("Only host can revoke permissions");
       return;
     }
+    this.log.info("Revoking whiteboard permission", { participantId });
     this.wsClient?.revokeWhiteboardPermission(participantId);
   }
 

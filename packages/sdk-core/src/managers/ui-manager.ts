@@ -6,6 +6,7 @@
  */
 
 import { StateContainer } from "../state/state-container";
+import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Layout mode for video grid */
@@ -72,8 +73,9 @@ export class UIManager extends StateContainer<UIState> {
 	>();
 	private notifications: Notification[] = [];
 	private controlsHideTimeout: ReturnType<typeof setTimeout> | null = null;
+	private readonly log: Logger;
 
-	constructor() {
+	constructor(_debug = false) {
 		super({
 			layout: "auto",
 			activePanel: null,
@@ -82,6 +84,7 @@ export class UIManager extends StateContainer<UIState> {
 			isFullscreen: false,
 			isMobileView: false,
 		});
+		this.log = createLogger("UI");
 
 		// Detect mobile on init
 		if (typeof window !== "undefined") {
@@ -107,6 +110,7 @@ export class UIManager extends StateContainer<UIState> {
 
 	/** Set layout mode */
 	setLayout(layout: LayoutMode): void {
+		this.log.debug("Layout changed", { layout });
 		this.setState({ layout });
 		this.events.emit("layout:changed", { layout });
 	}
@@ -120,12 +124,14 @@ export class UIManager extends StateContainer<UIState> {
 
 	/** Open a side panel */
 	openPanel(panel: PanelType): void {
+		this.log.debug("Panel opened", { type: panel });
 		this.setState({ activePanel: panel });
 		this.events.emit("panel:changed", { panel });
 	}
 
 	/** Close the current panel */
 	closePanel(): void {
+		this.log.debug("Panel closed");
 		this.setState({ activePanel: null });
 		this.events.emit("panel:changed", { panel: null });
 	}
@@ -153,6 +159,7 @@ export class UIManager extends StateContainer<UIState> {
 			autoDismiss,
 		};
 
+		this.log.debug("Notification added", { id: notification.id, message, type: severity });
 		this.notifications.push(notification);
 		this.setState({ notifications: [...this.notifications] });
 		this.events.emit("notification:added", { notification });
@@ -222,13 +229,15 @@ export class UIManager extends StateContainer<UIState> {
 		try {
 			if (document.fullscreenElement) {
 				await document.exitFullscreen();
+				this.log.debug("Exited fullscreen");
 				this.setState({ isFullscreen: false });
 			} else {
 				await document.documentElement.requestFullscreen();
+				this.log.debug("Entered fullscreen");
 				this.setState({ isFullscreen: true });
 			}
 		} catch (err) {
-			console.warn("[UIManager] Fullscreen toggle failed:", err);
+			this.log.warn("Fullscreen toggle failed", { reason: (err as Error).message });
 		}
 	}
 

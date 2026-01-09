@@ -38,6 +38,10 @@ export {
 } from "./features/useInteractions";
 export { type UseRecordingReturn, useRecording } from "./features/useRecording";
 export {
+	type UseTranscriptsReturn,
+	useTranscripts,
+} from "./features/useTranscripts";
+export {
 	type UseWhiteboardReturn,
 	useWhiteboard,
 } from "./features/useWhiteboard";
@@ -110,4 +114,8 @@ export {
 	type UseTranscriptionReturn,
 	useTranscription,
 } from "./useTranscription";
-export { useWhiteboardPermissions } from "./useWhiteboardPermissions";
+export {
+	type UseWhiteboardPermissionsReturn,
+	useWhiteboardPermissions,
+} from "./useWhiteboardPermissions";
+export { type UseLoggerReturn, useLogger } from "./utilities/useLogger";

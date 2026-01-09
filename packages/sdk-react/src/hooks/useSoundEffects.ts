@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useChalk } from '../context';
+import { useChalkSession } from '../context/chalk-provider';
 
 export type SoundEffect =
   | 'join'
@@ -59,7 +59,7 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
     autoSubscribe = false,
   } = options;
 
-  const { room } = useChalk();
+  const { session } = useChalkSession();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [volume, setVolume] = useState(initialVolume);
   const audioCache = useRef<Map<SoundEffect, HTMLAudioElement>>(new Map());
@@ -82,70 +82,80 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
     });
   }, [enabled, volume, basePath]);
 
-  // Auto-subscribe to room events
+  // Auto-subscribe to session events
   useEffect(() => {
-    if (!autoSubscribe || !room || !enabled) return;
+    if (!autoSubscribe || !session || !enabled) return;
 
-    const localId = room.localParticipant?.id;
+    const unsubscribers: (() => void)[] = [];
 
-    // Play join sound immediately if room is already connected (subscribed after connection)
-    if (room.status === 'connected') {
-      play('join');
-    }
-
-    // Play sounds on future status changes
-    const unsubStatus = room.on('status-changed', (status) => {
-      if (status === 'connected') {
+    // Play join sound on connected
+    unsubscribers.push(
+      session.on('connected', () => {
         play('join');
-      } else if (status === 'disconnected') {
+      })
+    );
+
+    // Play leave sound on disconnected
+    unsubscribers.push(
+      session.on('disconnected', () => {
         play('leave');
-      }
-    });
+      })
+    );
 
-    // Play join sound when remote participants join
-    const unsubJoin = room.on('participant-joined', () => {
-      play('join');
-    });
+    // Subscribe to participant manager events
+    unsubscribers.push(
+      session.participants.on('participant:joined', () => {
+        play('join');
+      })
+    );
 
-    // Play leave sound when remote participants leave
-    const unsubLeave = room.on('participant-left', () => {
-      play('leave');
-    });
+    unsubscribers.push(
+      session.participants.on('participant:left', () => {
+        play('leave');
+      })
+    );
 
-    const unsubMessage = room.on('chat-message', (msg) => {
-      // Only play for messages from others
-      if (msg.senderId !== localId) {
-        play('message');
-      }
-    });
+    // Subscribe to chat manager events
+    const localId = session.participants.getState().localParticipant?.id;
+    unsubscribers.push(
+      session.chat.on('message', ({ message }) => {
+        if (message.senderId !== localId) {
+          play('message');
+        }
+      })
+    );
 
-    const unsubHandRaised = room.on('hand-raised', () => {
-      play('handRaise');
-    });
+    // Subscribe to interaction manager events
+    unsubscribers.push(
+      session.interactions.on('hand:raised', () => {
+        play('handRaise');
+      })
+    );
 
-    const unsubRecordingStart = room.on('recording-started', () => {
-      play('recordingStart');
-    });
+    // Subscribe to recording manager events
+    unsubscribers.push(
+      session.recording.on('started', () => {
+        play('recordingStart');
+      })
+    );
 
-    const unsubRecordingStop = room.on('recording-stopped', () => {
-      play('recordingStop');
-    });
+    unsubscribers.push(
+      session.recording.on('stopped', () => {
+        play('recordingStop');
+      })
+    );
 
-    const unsubError = room.on('error', () => {
-      play('error');
-    });
+    // Subscribe to error events
+    unsubscribers.push(
+      session.on('error', () => {
+        play('error');
+      })
+    );
 
     return () => {
-      unsubStatus();
-      unsubJoin();
-      unsubLeave();
-      unsubMessage();
-      unsubHandRaised();
-      unsubRecordingStart();
-      unsubRecordingStop();
-      unsubError();
+      unsubscribers.forEach(unsub => unsub());
     };
-  }, [autoSubscribe, room, enabled, play]);
+  }, [autoSubscribe, session, enabled, play]);
 
   return {
     playJoin: useCallback(() => play('join'), [play]),

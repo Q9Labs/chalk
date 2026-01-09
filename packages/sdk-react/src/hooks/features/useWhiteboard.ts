@@ -4,7 +4,11 @@
  * useWhiteboard - Whiteboard from WhiteboardManager
  */
 
-import type { WhiteboardCursor, WhiteboardState } from "@q9labs/chalk-core";
+import type {
+	WhiteboardCursor,
+	WhiteboardState,
+	WhiteboardUpdate,
+} from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
@@ -21,6 +25,8 @@ export interface UseWhiteboardReturn {
 	lastSeq: number;
 	/** Participants who have whiteboard open */
 	openParticipants: readonly string[];
+	/** Latest update from remote participants */
+	latestUpdate: WhiteboardUpdate | null;
 	/** Open whiteboard */
 	open: () => void;
 	/** Close whiteboard */
@@ -28,7 +34,11 @@ export interface UseWhiteboardReturn {
 	/** Toggle whiteboard */
 	toggle: () => void;
 	/** Send elements update */
-	sendUpdate: (elements: unknown[], files?: Record<string, unknown>) => void;
+	sendUpdate: (
+		elements: unknown[],
+		files?: Record<string, unknown>,
+		seq?: number,
+	) => void;
 	/** Send cursor position */
 	sendCursor: (x: number, y: number) => void;
 	/** Request sync from others */
@@ -39,6 +49,10 @@ export interface UseWhiteboardReturn {
 	grantPermission: (participantId: string) => void;
 	/** Revoke permission (host only) */
 	revokePermission: (participantId: string) => void;
+	/** Notify others that whiteboard is opened (alias for open) */
+	notifyOpen: () => void;
+	/** Notify others that whiteboard is closed (alias for close) */
+	notifyClose: () => void;
 }
 
 /**
@@ -64,9 +78,29 @@ export function useWhiteboard(): UseWhiteboardReturn {
 	const [state, setState] = useState<WhiteboardState>(() =>
 		whiteboard.getState(),
 	);
+	const [latestUpdate, setLatestUpdate] = useState<WhiteboardUpdate | null>(
+		null,
+	);
 
 	useEffect(() => {
 		return whiteboard.subscribe(setState);
+	}, [whiteboard]);
+
+	// Listen for remote updates
+	useEffect(() => {
+		return whiteboard.on("update", (update) => {
+			setLatestUpdate(update);
+		});
+	}, [whiteboard]);
+
+	// Auto-open when another participant opens whiteboard
+	useEffect(() => {
+		return whiteboard.on("opened", () => {
+			const currentState = whiteboard.getState();
+			if (!currentState.isOpen) {
+				whiteboard.open();
+			}
+		});
 	}, [whiteboard]);
 
 	const open = useCallback((): void => whiteboard.open(), [whiteboard]);
@@ -82,8 +116,11 @@ export function useWhiteboard(): UseWhiteboardReturn {
 	}, [whiteboard, state.isOpen]);
 
 	const sendUpdate = useCallback(
-		(elements: unknown[], files?: Record<string, unknown>): void =>
-			whiteboard.sendUpdate(elements, files),
+		(
+			elements: unknown[],
+			files?: Record<string, unknown>,
+			_seq?: number,
+		): void => whiteboard.sendUpdate(elements, files),
 		[whiteboard],
 	);
 
@@ -117,6 +154,7 @@ export function useWhiteboard(): UseWhiteboardReturn {
 			cursors: state.cursors,
 			lastSeq: state.lastSeq,
 			openParticipants: state.openParticipants,
+			latestUpdate,
 			open,
 			close,
 			toggle,
@@ -126,9 +164,12 @@ export function useWhiteboard(): UseWhiteboardReturn {
 			clear,
 			grantPermission,
 			revokePermission,
+			notifyOpen: open,
+			notifyClose: close,
 		}),
 		[
 			state,
+			latestUpdate,
 			open,
 			close,
 			toggle,

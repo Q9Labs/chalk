@@ -9,144 +9,149 @@
 // Re-export useful types from core
 // ============================================================================
 
+// Re-export Room type for backward compatibility
 export type {
+	ActiveReaction,
 	// Entities
 	ChalkError,
-	ChatMessage,
-	MediaDevice,
-	Participant,
-	Reaction,
-	ReactionEmoji,
-	Recording,
-	RoomConfig,
-	RoomInfo,
-	RoomStatus,
-	ScreenShareOptions,
-	// Manager types
-	RoomState,
-	ParticipantState,
-	MediaState,
-	ScreenShareState,
-	ChatState,
-	RecordingState,
-	InteractionState,
-	ActiveReaction,
-	UIState,
-	LayoutMode,
-	PanelType,
-	Notification,
-	NotificationSeverity,
-	WhiteboardState,
 	// Session
 	ChalkSessionConfig,
 	ChalkSessionEvents,
+	ChatMessage,
+	ChatState,
+	InteractionState,
 	JoinOptions,
+	LayoutMode,
 	LeaveOptions,
+	MediaDevice,
+	MediaState,
+	Notification,
+	NotificationSeverity,
+	PanelType,
+	Participant,
+	ParticipantState,
+	Reaction,
+	ReactionEmoji,
+	Recording,
+	RecordingState,
+	Room,
+	RoomConfig,
+	RoomInfo,
+	// Manager types
+	RoomState,
+	RoomStatus,
+	ScreenShareOptions,
+	ScreenShareState,
+	UIState,
+	WhiteboardState,
 } from "@q9labs/chalk-core";
-
 // Re-export error codes
 export { ChalkErrorCode } from "@q9labs/chalk-core";
 
-// Re-export Room type for backward compatibility
-export type { Room } from "@q9labs/chalk-core";
+// Re-export logging utilities
+export {
+	createLogger,
+	configureLogger,
+	initLogging,
+	isLoggingEnabled,
+	type Logger,
+	type LogLevel,
+	type LoggerConfig,
+	type LogEntry,
+} from "@q9labs/chalk-core";
 
 // ============================================================================
 // Provider and Context
 // ============================================================================
 
-// New session-based provider
+// Session-based provider
 export {
 	ChalkProvider,
-	useSession,
-	useChalkSession,
 	type ChalkProviderProps,
+	useChalkSession,
+	useSession,
 } from "./context/index";
-
-// Legacy provider for backward compatibility
-export {
-	ChalkProvider as LegacyChalkProvider,
-	useChalk as useLegacyChalk,
-	useRtkMeeting,
-} from "./context.tsx";
 
 // ============================================================================
 // Hooks
 // ============================================================================
 
+// Whiteboard types re-exported from core
+export type { WhiteboardCursor, WhiteboardUpdate } from "@q9labs/chalk-core";
 // Namespace exports for discoverability
 export * as hooks from "./hooks";
-
 // Direct hook exports for convenience
 export {
-	// Room
-	useChalk,
-	useRoom,
-	useConnection,
-	// Participants
-	useParticipants,
-	useActiveSpeaker,
-	// Stream
-	useMedia,
-	useDevices,
-	useScreenShare,
-	// Features
-	useChat,
-	useRecording,
-	useWhiteboard,
-	useInteractions,
-	// UI
-	useLayout,
-	usePanels,
-	useNotifications,
-	// Utilities
-	useSoundEffects,
-	useKeyboardShortcuts,
-	createMeetingShortcuts,
-	useMediaQuery,
-	useIsMobile,
-	useIsTablet,
-	useIsDesktop,
-	usePrefersReducedMotion,
-	usePrefersDarkMode,
-	useAnnouncer,
-	useTour,
-	DEFAULT_MEETING_TOUR_STEPS,
-	useTranscription,
-	useWhiteboardPermissions,
-	// Types
-	type UseRoomReturn,
-	type UseConnectionReturn,
-	type UseParticipantsReturn,
-	type UseActiveSpeakerReturn,
-	type UseMediaReturn,
-	type UseDevicesReturn,
-	type UseScreenShareReturn,
-	type UseChatReturn,
-	type UseRecordingReturn,
-	type UseWhiteboardReturn,
-	type UseInteractionsReturn,
-	type UseLayoutReturn,
-	type UsePanelsReturn,
-	type UseNotificationsReturn,
-	type SoundEffect,
-	type UseSoundEffectsOptions,
-	type UseSoundEffectsReturn,
-	type KeyboardShortcut,
-	type UseKeyboardShortcutsOptions,
-	type UseKeyboardShortcutsReturn,
 	type AnnouncementPoliteness,
+	createMeetingShortcuts,
+	DEFAULT_MEETING_TOUR_STEPS,
+	type KeyboardShortcut,
+	type SoundEffect,
+	type TourStep,
+	type TranscriptEntry,
+	type UseActiveSpeakerReturn,
 	type UseAnnouncerOptions,
 	type UseAnnouncerReturn,
-	type TourStep,
+	type UseChatReturn,
+	type UseConnectionReturn,
+	type UseDevicesReturn,
+	type UseInteractionsReturn,
+	type UseKeyboardShortcutsOptions,
+	type UseKeyboardShortcutsReturn,
+	type UseLayoutReturn,
+	type UseMediaReturn,
+	type UseNotificationsReturn,
+	type UsePanelsReturn,
+	type UseParticipantsReturn,
+	type UseRecordingReturn,
+	// Types
+	type UseRoomReturn,
+	type UseScreenShareReturn,
+	type UseSoundEffectsOptions,
+	type UseSoundEffectsReturn,
 	type UseTourOptions,
 	type UseTourReturn,
-	type TranscriptEntry,
 	type UseTranscriptionOptions,
 	type UseTranscriptionReturn,
+	type UseWhiteboardPermissionsReturn,
+	type UseWhiteboardReturn,
+	useActiveSpeaker,
+	useAnnouncer,
+	// Room
+	useChalk,
+	// Features
+	useChat,
+	useConnection,
+	useDevices,
+	useInteractions,
+	useIsDesktop,
+	useIsMobile,
+	useIsTablet,
+	useKeyboardShortcuts,
+	// UI
+	useLayout,
+	// Stream
+	useMedia,
+	useMediaQuery,
+	useNotifications,
+	usePanels,
+	// Participants
+	useParticipants,
+	usePrefersDarkMode,
+	usePrefersReducedMotion,
+	useRecording,
+	useRoom,
+	useScreenShare,
+	// Utilities
+	useSoundEffects,
+	useTour,
+	useTranscription,
+	useWhiteboard,
+	useWhiteboardPermissions,
+	// Logging
+	useLogger,
+	type UseLoggerReturn,
 } from "./hooks";
-
-// WhiteboardCursor re-exported from core
-export type { WhiteboardCursor } from "@q9labs/chalk-core";
 
 // ============================================================================
 // Components

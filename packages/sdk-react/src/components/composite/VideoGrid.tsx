@@ -57,13 +57,14 @@ export const VideoGrid = React.memo(({
   const visibleParticipants = sortedParticipants.slice(0, maxVisibleParticipants);
   const overflowCount = participants.length - visibleParticipants.length;
 
-  const getGridClass = (count: number) => {
-    if (count <= 1) return 'grid-cols-1';
-    if (count <= 2) return 'grid-cols-1 sm:grid-cols-2';
-    if (count <= 4) return 'grid-cols-2';
-    if (count <= 6) return 'grid-cols-2 sm:grid-cols-3';
-    if (count <= 9) return 'grid-cols-3';
-    return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4';
+  const getGridLayout = (count: number) => {
+    if (count <= 1) return { cols: 'grid-cols-1', rows: '' };
+    if (count === 2) return { cols: 'grid-cols-2', rows: '' };
+    if (count === 3) return { cols: 'grid-cols-3', rows: '' };
+    if (count === 4) return { cols: 'grid-cols-2', rows: 'grid-rows-2' };
+    if (count <= 6) return { cols: 'grid-cols-3', rows: 'grid-rows-2' };
+    if (count <= 9) return { cols: 'grid-cols-3', rows: 'grid-rows-3' };
+    return { cols: 'grid-cols-4', rows: '' };
   };
 
   const mapToVideoTileParticipant = (p: Participant | undefined) => {
@@ -92,11 +93,11 @@ export const VideoGrid = React.memo(({
     const otherParticipants = visibleParticipants.slice(1);
 
     return (
-      <div 
-        className={cn("flex flex-col h-full gap-4", className)}
+      <div
+        className={cn("flex flex-col h-full gap-1", className)}
         data-tour="video-grid"
       >
-        <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)]">
+        <div className="flex-1 min-h-0 relative">
           {mainParticipant && (
             <VideoTile
               participant={mapToVideoTileParticipant(mainParticipant)}
@@ -107,11 +108,11 @@ export const VideoGrid = React.memo(({
             />
           )}
         </div>
-        
+
         {otherParticipants.length > 0 && (
-          <div className="h-32 flex gap-4 overflow-x-auto pb-2 px-1">
+          <div className="h-28 flex gap-1 overflow-x-auto">
             {otherParticipants.map((p) => (
-              <div key={p.id} className="w-48 flex-shrink-0 aspect-video rounded-lg overflow-hidden relative border border-[var(--chalk-border-subtle)]">
+              <div key={p.id} className="w-44 flex-shrink-0">
                 <VideoTile
                   participant={mapToVideoTileParticipant(p)}
                   videoTrack={p.videoTrack}
@@ -123,7 +124,7 @@ export const VideoGrid = React.memo(({
               </div>
             ))}
             {overflowCount > 0 && (
-              <div className="w-48 flex-shrink-0 aspect-video rounded-lg bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] flex items-center justify-center text-[var(--chalk-text-muted)]">
+              <div className="w-44 flex-shrink-0 aspect-video rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] flex items-center justify-center text-[var(--chalk-text-muted)]">
                 +{overflowCount} more
               </div>
             )}
@@ -138,11 +139,11 @@ export const VideoGrid = React.memo(({
     const otherParticipants = visibleParticipants.slice(1);
 
     return (
-      <div 
-        className={cn("flex h-full gap-4", className)}
+      <div
+        className={cn("flex h-full gap-1", className)}
         data-tour="video-grid"
       >
-        <div className="flex-1 relative rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)]">
+        <div className="flex-1 relative">
           {mainParticipant && (
             <VideoTile
               participant={mapToVideoTileParticipant(mainParticipant)}
@@ -153,57 +154,124 @@ export const VideoGrid = React.memo(({
             />
           )}
         </div>
-        
-        <div className="w-64 flex flex-col gap-2 overflow-y-auto pl-1 pr-2">
-          {otherParticipants.map((p) => (
-            <div key={p.id} className="w-full aspect-video rounded-lg overflow-hidden relative border border-[var(--chalk-border-subtle)] flex-shrink-0">
-              <VideoTile
-                participant={mapToVideoTileParticipant(p)}
-                videoTrack={p.videoTrack}
-                onClick={() => onParticipantClick?.(p.id)}
-                onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
-                className="w-full h-full"
-                showName={false}
-              />
-            </div>
-          ))}
-           {overflowCount > 0 && (
-              <div className="w-full aspect-video rounded-lg bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] flex items-center justify-center text-[var(--chalk-text-muted)] flex-shrink-0">
+
+        {otherParticipants.length > 0 && (
+          <div className="w-48 flex flex-col gap-1 overflow-y-auto">
+            {otherParticipants.map((p) => (
+              <div key={p.id} className="w-full aspect-video flex-shrink-0">
+                <VideoTile
+                  participant={mapToVideoTileParticipant(p)}
+                  videoTrack={p.videoTrack}
+                  onClick={() => onParticipantClick?.(p.id)}
+                  onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
+                  className="w-full h-full"
+                  showName={false}
+                />
+              </div>
+            ))}
+            {overflowCount > 0 && (
+              <div className="w-full aspect-video rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] flex items-center justify-center text-[var(--chalk-text-muted)] flex-shrink-0">
                 +{overflowCount} more
               </div>
             )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Screen-share layout: content fills main area, participants in right filmstrip
+  if (layout === 'screen-share') {
+    const screenSharer = visibleParticipants.find((p) => p.isScreenSharing);
+    const otherParticipants = visibleParticipants.filter((p) => p.id !== screenSharer?.id);
+
+    return (
+      <div
+        className={cn("flex h-full gap-1", className)}
+        data-tour="video-grid"
+      >
+        <div className="flex-1 relative">
+          {screenSharer && (
+            <VideoTile
+              participant={mapToVideoTileParticipant(screenSharer)}
+              videoTrack={screenSharer.screenShareTrack || screenSharer.videoTrack}
+              onClick={() => onParticipantClick?.(screenSharer.id)}
+              onDoubleClick={() => onParticipantDoubleClick?.(screenSharer.id)}
+              className="w-full h-full"
+              aspectRatio="16:9"
+            />
+          )}
         </div>
+
+        {otherParticipants.length > 0 && (
+          <div className="w-48 flex flex-col gap-1 overflow-y-auto">
+            {otherParticipants.map((p) => (
+              <div key={p.id} className="w-full aspect-video flex-shrink-0">
+                <VideoTile
+                  participant={mapToVideoTileParticipant(p)}
+                  videoTrack={p.videoTrack}
+                  onClick={() => onParticipantClick?.(p.id)}
+                  onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
+                  className="w-full h-full"
+                  showName
+                />
+              </div>
+            ))}
+            {overflowCount > 0 && (
+              <div className="w-full aspect-video rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] flex items-center justify-center text-[var(--chalk-text-muted)] flex-shrink-0">
+                +{overflowCount} more
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Default grid layout
+  const gridLayout = getGridLayout(visibleParticipants.length);
+
+  // Single participant: full bleed
+  if (visibleParticipants.length === 1) {
+    const p = visibleParticipants[0]!;
+    return (
+      <div className={cn("h-full w-full", className)} data-tour="video-grid">
+        <VideoTile
+          participant={mapToVideoTileParticipant(p)}
+          videoTrack={p.videoTrack}
+          onClick={() => onParticipantClick?.(p.id)}
+          onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
+          className="w-full h-full"
+        />
       </div>
     );
   }
 
   return (
-    <div 
+    <div
       className={cn(
-        "grid gap-4 w-full h-full overflow-y-auto p-1",
-        getGridClass(visibleParticipants.length),
+        "grid gap-1 w-full h-full place-items-center",
+        gridLayout.cols,
+        gridLayout.rows,
         className
       )}
       data-tour="video-grid"
     >
       {visibleParticipants.map((p) => (
-        <div 
-          key={p.id} 
-          className="relative rounded-lg overflow-hidden border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-secondary)] aspect-video"
-        >
-          <VideoTile
-            participant={mapToVideoTileParticipant(p)}
-            videoTrack={p.videoTrack}
-            onClick={() => onParticipantClick?.(p.id)}
-            onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
-            className="w-full h-full"
-          />
-        </div>
+        <VideoTile
+          key={p.id}
+          participant={mapToVideoTileParticipant(p)}
+          videoTrack={p.videoTrack}
+          onClick={() => onParticipantClick?.(p.id)}
+          onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
+          pinned={p.id === pinnedParticipantId}
+          className="w-full h-full max-h-full"
+        />
       ))}
       {overflowCount > 0 && (
-         <div className="relative rounded-lg overflow-hidden border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-secondary)] aspect-video flex items-center justify-center">
-            <span className="text-xl font-medium text-[var(--chalk-text-muted)]">+{overflowCount} more</span>
-         </div>
+        <div className="rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] aspect-video flex items-center justify-center w-full h-full">
+          <span className="text-xl font-medium text-[var(--chalk-text-muted)]">+{overflowCount} more</span>
+        </div>
       )}
     </div>
   );

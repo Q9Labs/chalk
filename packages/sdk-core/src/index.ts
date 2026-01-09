@@ -24,7 +24,7 @@ export { ChalkClient } from "./client.ts";
 // Event emitter (for advanced use cases)
 export { EventEmitter } from "./events.ts";
 // Room
-export { Room } from "./room.ts";
+export { Room, type Transcript } from "./room.ts";
 export {
 	camelToSnake,
 	camelToSnakeString,
@@ -38,6 +38,18 @@ export {
 
 // Typed event emitter utility
 export { TypedEventEmitter } from "./utils/typed-emitter.ts";
+
+// Debug logging
+export {
+	createLogger,
+	configureLogger,
+	initLogging,
+	isLoggingEnabled,
+	type Logger,
+	type LogLevel,
+	type LoggerConfig,
+	type LogEntry,
+} from "./utils/logger.ts";
 
 // Error handling
 export { ChalkError as ChalkErrorClass, ChalkErrorCode as ErrorCode } from "./errors/chalk-error.ts";
@@ -134,7 +146,7 @@ export type {
 } from "./managers/index.ts";
 
 // Whiteboard types
-export type { WhiteboardCursor } from "./types/entities/whiteboard.ts";
+export type { WhiteboardCursor, WhiteboardUpdate } from "./types/entities/whiteboard.ts";
 
 // Namespace exports for managers
 export * as managers from "./managers/index.ts";

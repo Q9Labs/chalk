@@ -33,3 +33,8 @@ export {
 	type UseAnnouncerOptions,
 	type UseAnnouncerReturn,
 } from "../useAnnouncer";
+
+export {
+	useLogger,
+	type UseLoggerReturn,
+} from "./useLogger";

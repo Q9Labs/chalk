@@ -9,6 +9,7 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { Room } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { ScreenShareOptions } from "../types/entities/media";
+import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Screen share manager state */
@@ -41,8 +42,9 @@ export interface ScreenShareManagerEvents {
 export class ScreenShareManager extends StateContainer<ScreenShareState> {
 	private readonly events = new TypedEventEmitter<ScreenShareManagerEvents>();
 	private room: Room | null = null;
+	private readonly log: Logger;
 
-	constructor() {
+	constructor(_debug = false) {
 		super({
 			isActive: false,
 			isStarting: false,
@@ -50,6 +52,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			videoTrack: null,
 			audioTrack: null,
 		});
+		this.log = createLogger("ScreenShare");
 	}
 
 	/** Subscribe to screen share events */
@@ -106,6 +109,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			if (!wasSharing && isNowSharing) {
 				// Started sharing
 				const isLocal = participant.isLocal;
+				this.log.info("Screen share started", { participantId, isLocal });
 				this.setState({
 					isActive: true,
 					sharerParticipantId: participantId,
@@ -115,6 +119,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 				this.events.emit("started", { participantId, isLocal });
 			} else if (wasSharing && !isNowSharing) {
 				// Stopped sharing
+				this.log.info("Screen share stopped", { participantId });
 				this.setState({
 					isActive: false,
 					sharerParticipantId: null,
@@ -124,6 +129,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 				this.events.emit("stopped", { participantId });
 			} else if (wasSharing && isNowSharing) {
 				// Update tracks
+				this.log.debug("Screen share tracks updated", { participantId });
 				this.setState({
 					videoTrack: participant.screenShareTrack ?? null,
 					audioTrack: participant.screenShareAudioTrack ?? null,
@@ -133,6 +139,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 
 		this.room.on("participant-left", (participantId) => {
 			if (this.getState().sharerParticipantId === participantId) {
+				this.log.info("Screen share stopped (participant left)", { participantId });
 				this.setState({
 					isActive: false,
 					sharerParticipantId: null,
@@ -158,6 +165,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			return false;
 		}
 
+		this.log.info("Starting screen share");
 		this.setState({ isStarting: true });
 
 		try {
@@ -205,6 +213,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			return;
 		}
 
+		this.log.info("Stopping screen share");
 		await this.room.stopScreenShare();
 
 		this.setState({
@@ -214,6 +223,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			audioTrack: null,
 		});
 
+		this.log.info("Screen share stopped");
 		if (localId) {
 			this.events.emit("stopped", { participantId: localId });
 		}

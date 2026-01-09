@@ -73,9 +73,16 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			"Content-Type": "application/json",
 		};
 
-		if (this.tokenProvider && !isRetry) {
+		// Only call tokenProvider if we don't have a token yet
+		// tokenProvider is for REFRESH, not initial token acquisition
+		// The token is set via setToken() after join
+		if (!this.token && this.tokenProvider && !isRetry) {
 			try {
-				this.token = await this.tokenProvider();
+				const newToken = await this.tokenProvider();
+				// Only use the token if it's non-empty
+				if (newToken) {
+					this.token = newToken;
+				}
 			} catch (error) {
 				this.log("Token provider failed:", error);
 				return {
@@ -181,7 +188,20 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		this.isRefreshingToken = true;
 
 		try {
-			this.token = await this.tokenProvider();
+			const newToken = await this.tokenProvider();
+
+			// Only proceed if we got a valid token
+			if (!newToken) {
+				this.log("Token refresh returned empty token");
+				const error: ChalkError = {
+					code: "TOKEN_EXPIRED",
+					message: "Token refresh failed: no token returned",
+				};
+				this.emit("token-expired", error);
+				return { success: false, error };
+			}
+
+			this.token = newToken;
 			this.log("Token refreshed successfully");
 			return this.request<T>(method, path, body, true);
 		} catch (error) {

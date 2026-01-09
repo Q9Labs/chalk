@@ -15,6 +15,7 @@ import type {
   RoomStatus,
   TokenProvider,
 } from "./types.ts";
+import { createLogger, initLogging, type Logger } from "./utils/logger.ts";
 import { WSClient } from "./ws-client.ts";
 
 interface ChalkClientEvents {
@@ -29,12 +30,17 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private currentRoom: Room | null = null;
   private currentWsClient: WSClient | null = null;
   private isJoining = false; // Prevent concurrent joins
+  private readonly log: Logger;
 
   constructor(config: ChalkClientConfig) {
     super();
     this.debug = config.debug ?? false;
     this.wsUrl = config.wsUrl;
     this.tokenProvider = config.tokenProvider;
+
+    // Initialize logging globally
+    initLogging(this.debug);
+    this.log = createLogger("Client");
 
     const hasAuth =
       config.token || config.tokenProvider || config.apiKey || this.debug;
@@ -45,16 +51,12 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     }
 
     this.apiClient = new APIClient(config);
+    this.log.info("Initialized", { debug: this.debug, hasWsUrl: !!this.wsUrl });
 
     this.apiClient.on("token-expired", (error) => {
+      this.log.warn("Token expired", { code: error.code });
       this.emit("token-expired", error);
     });
-  }
-
-  private log(...args: unknown[]): void {
-    if (this.debug) {
-      console.log("[ChalkClient]", ...args);
-    }
   }
 
   /**
@@ -84,12 +86,12 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
       // Clean up existing room before joining new one
       if (this.currentRoom) {
-        this.log("Leaving existing room before joining new one");
+        this.log.info("Leaving existing room before joining new one");
         await this.currentRoom.leave();
         this.currentRoom = null;
       }
 
-      this.log("Joining room:", roomId);
+      this.log.info("Joining room", { roomId });
 
       const response = this.debug
         ? await this.apiClient.demoJoin(roomId, config.displayName)
@@ -105,26 +107,25 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       }
 
       const { participantId, role, tokens, room: roomInfo } = response.data;
-      this.log("Got auth tokens, role:", role);
+      this.log.info("Got auth tokens", { role, participantId });
 
       // CRITICAL: Validate token BEFORE using it
       if (!tokens.rtcToken) {
-        const error = new Error("RealtimeKit token missing - API did not return rtcToken");
-        this.log("ERROR:", error.message);
-        throw error;
+        this.log.error("RealtimeKit token missing");
+        throw new Error("RealtimeKit token missing - API did not return rtcToken");
       }
 
       // Check token expiration
       if (this.isTokenExpired(tokens.rtcToken)) {
-        this.log("WARNING: rtcToken is expired or invalid");
-        
+        this.log.warn("rtcToken is expired or invalid");
+
         // Attempt token refresh if provider is available
         if (this.tokenProvider) {
-          this.log("Attempting to refresh token...");
+          this.log.info("Attempting token refresh");
           try {
             const newToken = await this.tokenProvider();
             tokens.rtcToken = newToken;
-            this.log("Token refreshed successfully");
+            this.log.info("Token refreshed successfully");
           } catch (refreshError) {
             throw new Error("Token expired and refresh failed: " + 
               (refreshError instanceof Error ? refreshError.message : String(refreshError)));
@@ -153,7 +154,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       // Optional WebSocket signaling (chat, reactions, whiteboard, etc.)
       let wsClient: WSClient | null = null;
       if (this.wsUrl) {
-        this.log("Initializing WebSocket signaling");
+        this.log.debug("Initializing WebSocket signaling");
         wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
         wsClient.on("token-expired", (error) => {
           this.emit("token-expired", error);
@@ -161,7 +162,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       }
 
       // RealtimeKit path (media)
-      this.log("Initializing RealtimeKit");
+      this.log.debug("Initializing RealtimeKit");
 
       let rtkClient: RealtimeKitClient;
       try {
@@ -171,21 +172,32 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
             audio: config.audio ?? false,
             video: config.video ?? false,
           },
-        });
+          // Video quality: request HD resolution with good framerate
+          videoConstraints: {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 30 },
+          },
+          // Audio quality: optimize for voice
+          audioConstraints: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+          },
+        } as Parameters<typeof RealtimeKitClient.init>[0]);
       } catch (initError) {
         const errorMsg = initError instanceof Error ? initError.message : String(initError);
-        this.log("ERROR: RealtimeKit init failed:", errorMsg);
-        this.log("Possible causes: invalid token, network issue, browser incompatibility");
+        this.log.error("RealtimeKit init failed", { error: errorMsg });
         throw new Error(`RealtimeKit initialization failed: ${errorMsg}`);
       }
 
       if (!rtkClient) {
-        const error = new Error("RealtimeKit init returned null/undefined client");
-        this.log("ERROR:", error.message);
-        throw error;
+        this.log.error("RealtimeKit init returned null/undefined client");
+        throw new Error("RealtimeKit init returned null/undefined client");
       }
 
-      this.log("RealtimeKit initialized successfully, creating Room");
+      this.log.debug("RealtimeKit initialized, creating Room");
 
       const room = new Room(roomInfo.id, rtkClient, this.debug);
       room._setLocalParticipant(localParticipant);
@@ -193,7 +205,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       room._setTokens(tokens);
 
       // CRITICAL: Add timeout to WebSocket join
-      this.log("Joining RealtimeKit room");
+      this.log.debug("Joining RealtimeKit room");
       try {
         let timeoutId: NodeJS.Timeout;
         const joinPromise = rtkClient.join();
@@ -207,12 +219,11 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
           joinPromise.finally(() => clearTimeout(timeoutId)),
           timeout
         ]);
-        
-        this.log("Successfully joined RealtimeKit room");
+
+        this.log.info("Joined RealtimeKit room", { roomId });
       } catch (joinError) {
         const errorMsg = joinError instanceof Error ? joinError.message : String(joinError);
-        this.log("ERROR: Failed to join RealtimeKit room:", errorMsg);
-        this.log("Possible causes: room ended, token expired, network issue, or connection timeout");
+        this.log.error("Failed to join RealtimeKit room", { error: errorMsg });
         throw new Error(`Failed to join room: ${errorMsg}`);
       }
 
@@ -221,7 +232,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         if (tokens.accessToken) {
           wsClient.connect(tokens.accessToken, roomId);
         } else {
-          this.log("WARNING: accessToken missing; WebSocket features disabled");
+          this.log.warn("accessToken missing; WebSocket features disabled");
         }
         this.currentWsClient = wsClient;
       }
@@ -244,7 +255,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     name?: string,
     config?: Record<string, unknown>,
   ): Promise<string> {
-    this.log("Creating room:", name);
+    this.log.info("Creating room", { name });
 
     const response = await this.apiClient.createRoom(name, config);
 
@@ -260,7 +271,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * @param roomId - The room ID to end
    */
   async endRoom(roomId: string): Promise<void> {
-    this.log("Ending room:", roomId);
+    this.log.info("Ending room", { roomId });
 
     const response = await this.apiClient.endRoom(roomId);
 
@@ -346,7 +357,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       throw new Error("Cannot remove yourself from the room");
     }
 
-    this.log("Removing participant:", apiParticipantId, "from room:", this.currentRoom.id);
+    this.log.info("Removing participant", { participantId: apiParticipantId, roomId: this.currentRoom.id });
 
     const response = await this.apiClient.removeParticipant(
       this.currentRoom.id,
@@ -354,7 +365,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     );
 
     if (!response.success) {
-      this.log("Remove participant failed:", response.error);
+      this.log.error("Remove participant failed", { error: response.error });
       throw new Error(response.error?.message ?? "Failed to remove participant");
     }
   }
@@ -363,8 +374,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * Disconnect from the current room and clean up resources
    */
   disconnect(): void {
+    this.log.info("Disconnecting");
     if (this.currentRoom) {
-      this.log("Disconnecting");
       this.currentRoom.leave();
       this.currentRoom = null;
     }
@@ -372,7 +383,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       this.currentWsClient.disconnect();
       this.currentWsClient = null;
     }
-    
+
     this.isJoining = false; // Reset join flag
+    this.log.info("Disconnected");
   }
 }

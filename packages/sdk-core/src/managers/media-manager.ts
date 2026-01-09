@@ -9,6 +9,7 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { Room } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { MediaDevice } from "../types/entities/media";
+import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Media manager state */
@@ -57,8 +58,9 @@ export class MediaManager extends StateContainer<MediaState> {
 	private toggleLock = false;
 	private undoTimeout: ReturnType<typeof setTimeout> | null = null;
 	private previousDevice: PreviousDevice | null = null;
+	private readonly log: Logger;
 
-	constructor() {
+	constructor(_debug = false) {
 		super({
 			isVideoEnabled: false,
 			isAudioEnabled: false,
@@ -69,6 +71,7 @@ export class MediaManager extends StateContainer<MediaState> {
 			selectedSpeaker: null,
 			devices: [],
 		});
+		this.log = createLogger("Media");
 	}
 
 	/** Subscribe to media events */
@@ -115,11 +118,13 @@ export class MediaManager extends StateContainer<MediaState> {
 			const track = this.room.localParticipant?.videoTrack ?? null;
 
 			this.setState({ isVideoEnabled: result });
+			this.log.info("Video toggled", { enabled: result });
 			this.events.emit("video:changed", { enabled: result, track });
 
 			return result;
 		} catch (err) {
 			const error = ChalkError.wrap(err);
+			this.log.error("Video toggle failed", { code: error.code });
 			this.events.emit("error", error);
 			throw error;
 		} finally {
@@ -149,11 +154,13 @@ export class MediaManager extends StateContainer<MediaState> {
 			const track = this.room.localParticipant?.audioTrack ?? null;
 
 			this.setState({ isAudioEnabled: result });
+			this.log.info("Audio toggled", { enabled: result });
 			this.events.emit("audio:changed", { enabled: result, track });
 
 			return result;
 		} catch (err) {
 			const error = ChalkError.wrap(err);
+			this.log.error("Audio toggle failed", { code: error.code });
 			this.events.emit("error", error);
 			throw error;
 		} finally {
@@ -179,6 +186,7 @@ export class MediaManager extends StateContainer<MediaState> {
 
 		await this.room.selectCamera(deviceId);
 		this.setState({ selectedCamera: deviceId });
+		this.log.info("Camera selected", { deviceId });
 		this.startUndoTimer();
 	}
 
@@ -199,6 +207,7 @@ export class MediaManager extends StateContainer<MediaState> {
 
 		await this.room.selectMicrophone(deviceId);
 		this.setState({ selectedMicrophone: deviceId });
+		this.log.info("Microphone selected", { deviceId });
 		this.startUndoTimer();
 	}
 

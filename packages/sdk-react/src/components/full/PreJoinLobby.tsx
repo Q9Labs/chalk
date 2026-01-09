@@ -116,21 +116,21 @@ function PreJoinLobbyBase({
 
   return (
     <div className={cn(
-      "min-h-screen bg-[#0b0b0c] text-foreground font-sans flex flex-col overflow-hidden",
+      "chalk-root min-h-screen flex flex-col overflow-hidden",
       className
     )}>
        {/* Settings Modal/Overlay */}
        {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center  p-4">
-          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 bg-background">
+          <div className="bg-[var(--chalk-bg-secondary)] rounded-2xl border border-[var(--chalk-border-color)] p-6 w-full max-w-md shadow-[var(--chalk-shadow-xl)] relative animate-in fade-in zoom-in-95 duration-200">
             <button
               onClick={() => setShowSettings(false)}
-              className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground"
+              className="absolute top-4 right-4 p-2 hover:bg-[var(--chalk-bg-tertiary)] rounded-full transition-colors text-[var(--chalk-text-muted)] hover:text-[var(--chalk-text-primary)]"
             >
               <X size={20} />
             </button>
 
-            <h2 className="text-xl font-bold text-foreground mb-6">Media Settings</h2>
+            <h2 className="text-xl font-semibold text-[var(--chalk-text-primary)] mb-6">Media Settings</h2>
 
             <div className="space-y-4">
                {hasVideoDevices && (
@@ -171,7 +171,7 @@ function PreJoinLobbyBase({
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setShowSettings(false)}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
+                className="px-4 py-2 bg-[var(--chalk-accent)] text-white rounded-lg hover:bg-[var(--chalk-accent-hover)] transition-colors font-medium"
               >
                 Done
               </button>
@@ -191,10 +191,10 @@ function PreJoinLobbyBase({
               />
           </div>
 
-          <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/10 transition-colors cursor-pointer">
+          <div className="flex items-center gap-3 bg-[var(--chalk-bg-tertiary)] px-3 py-1.5 rounded-full border border-[var(--chalk-border-color)] hover:bg-[var(--chalk-bg-subtle)] transition-colors cursor-pointer">
               <Avatar name={displayName || "Guest"} size="xs" className="!w-6 !h-6" />
-              <span className="font-medium text-sm text-foreground">{displayName || "Guest"}</span>
-              <ChevronDown size={14} className="text-muted-foreground" />
+              <span className="font-medium text-sm text-[var(--chalk-text-primary)]">{displayName || "Guest"}</span>
+              <ChevronDown size={14} className="text-[var(--chalk-text-muted)]" />
           </div>
       </div>
 
@@ -211,7 +211,7 @@ function PreJoinLobbyBase({
                       isLocal: true,
                   }}
                   videoTrack={videoTrack}
-                  className="w-full bg-[#16181b] aspect-video rounded-2xl border border-white/10 overflow-hidden shadow-2xl"
+                  className="w-full bg-[var(--chalk-bg-tile)] aspect-video rounded-2xl border border-[var(--chalk-border-subtle)] overflow-hidden shadow-[var(--chalk-shadow-xl)]"
                   showStatus={false}
                   showName={false}
                   showAvatar={false}
@@ -226,7 +226,7 @@ function PreJoinLobbyBase({
                             "w-2 h-2 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]",
                             isAudioEnabled ? "bg-green-500" : "bg-red-500"
                           )}></div>
-                          <span className="text-sm font-medium text-foreground">{displayName || "You"}</span>
+                          <span className="text-sm font-medium text-white">{displayName || "You"}</span>
                       </div>
                   </div>
 
@@ -234,10 +234,10 @@ function PreJoinLobbyBase({
                   {/* Center State: Camera Off */}
                   {!isVideoEnabled && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-4">
-                          <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-2">
+                          <div className="w-20 h-20 rounded-full bg-black/40 flex items-center justify-center mb-2">
                              <Avatar name={displayName} size="xl" className="!w-20 !h-20 text-3xl opacity-50" />
                           </div>
-                          <span className="text-lg font-medium text-muted-foreground">Camera Is Off</span>
+                          <span className="text-lg font-medium text-white/70">Camera Is Off</span>
                       </div>
                   )}
 
@@ -249,10 +249,10 @@ function PreJoinLobbyBase({
                     label={isAudioEnabled ? "Mute" : "Unmute"}
                     onClick={toggleAudio}
                     className={cn(
-                      "border border-white/10 w-12 h-12 rounded-full transition-all duration-200",
+                      "border border-[var(--chalk-border-color)] w-12 h-12 rounded-full transition-all duration-200",
                       !isAudioEnabled
-                        ? "bg-[#ea4335] text-white hover:bg-[#d83b2f] border-transparent"
-                        : "bg-[#202124] text-white hover:bg-[#2a2c30]"
+                        ? "bg-[var(--chalk-danger)] text-white hover:bg-[#c6281d] border-transparent"
+                        : "bg-[var(--chalk-bg-secondary)] text-[var(--chalk-text-primary)] hover:bg-[var(--chalk-bg-tertiary)]"
                     )}
                     size="lg"
                 />
@@ -261,10 +261,10 @@ function PreJoinLobbyBase({
                     label={isVideoEnabled ? "Stop Video" : "Start Video"}
                     onClick={toggleVideo}
                     className={cn(
-                      "border border-white/10 w-12 h-12 rounded-full transition-all duration-200",
+                      "border border-[var(--chalk-border-color)] w-12 h-12 rounded-full transition-all duration-200",
                       !isVideoEnabled
-                        ? "bg-[#ea4335] text-white hover:bg-[#d83b2f] border-transparent"
-                        : "bg-[#202124] text-white hover:bg-[#2a2c30]"
+                        ? "bg-[var(--chalk-danger)] text-white hover:bg-[#c6281d] border-transparent"
+                        : "bg-[var(--chalk-bg-secondary)] text-[var(--chalk-text-primary)] hover:bg-[var(--chalk-bg-tertiary)]"
                     )}
                     size="lg"
                 />
@@ -273,7 +273,7 @@ function PreJoinLobbyBase({
                     label="Settings"
                     size="lg"
                     onClick={toggleSettings}
-                    className="border border-white/10 w-12 h-12 rounded-full bg-[#202124] text-white hover:bg-[#2a2c30] transition-all duration-200"
+                    className="border border-[var(--chalk-border-color)] w-12 h-12 rounded-full bg-[var(--chalk-bg-secondary)] text-[var(--chalk-text-primary)] hover:bg-[var(--chalk-bg-tertiary)] transition-all duration-200"
                 />
               </div>
           </div>
@@ -281,8 +281,8 @@ function PreJoinLobbyBase({
           {/* Right Column: Join Actions */}
           <div className="flex flex-col items-start text-left space-y-6 w-full max-w-sm lg:justify-self-end">
               <div className="space-y-2 text-left">
-                  <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-foreground">Ready to join?</h1>
-                  <p className="text-muted-foreground text-base">You'll be in a waiting room before entering the call</p>
+                  <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-[var(--chalk-text-primary)]">Ready to join?</h1>
+                  <p className="text-[var(--chalk-text-secondary)] text-base">You'll be in a waiting room before entering the call</p>
               </div>
 
               <div className="w-full space-y-4">
@@ -295,7 +295,7 @@ function PreJoinLobbyBase({
                       placeholder="Enter your name"
                       fullWidth
                       disabled={isLoading}
-                      className="h-11 text-base text-left bg-[#1f2226] border border-white/10 text-foreground placeholder:text-muted-foreground focus:border-white/20"
+                      className="h-11 text-base text-left bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-color)] text-[var(--chalk-text-primary)] placeholder:text-[var(--chalk-text-muted)] focus:border-[var(--chalk-accent)]"
                     />
                   </div>
 
@@ -309,10 +309,10 @@ function PreJoinLobbyBase({
                   </button>
 
                   <button
-                      className="w-full h-11 bg-[#202124] hover:bg-[#2a2c30] text-white/90 rounded-full font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+                      className="w-full h-11 bg-[var(--chalk-bg-tertiary)] hover:bg-[var(--chalk-bg-subtle)] text-[var(--chalk-text-primary)] rounded-full font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
                   >
                       Other ways to join
-                      <ChevronDown size={16} className="text-secondary-foreground/70" />
+                      <ChevronDown size={16} className="text-[var(--chalk-text-muted)]" />
                   </button>
               </div>
 

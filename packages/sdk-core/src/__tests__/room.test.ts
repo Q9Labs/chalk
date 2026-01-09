@@ -482,7 +482,7 @@ describe("Room", () => {
 	});
 
 	describe("leave()", () => {
-		it("should disconnect from room", () => {
+		it("should disconnect from room", async () => {
 			const participant: Participant = {
 				id: "participant_1",
 				displayName: "Alice",
@@ -499,7 +499,7 @@ describe("Room", () => {
 			room._setLocalParticipant(participant);
 			room._setStatus("connected");
 
-			room.leave();
+			await room.leave();
 
 			expect(mockWSClient.disconnect).toHaveBeenCalled();
 			expect(room.status).toBe("disconnected");

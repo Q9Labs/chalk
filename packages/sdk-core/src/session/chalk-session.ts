@@ -18,6 +18,7 @@ import { ScreenShareManager } from "../managers/screen-share-manager";
 import { UIManager } from "../managers/ui-manager";
 import { WhiteboardManager } from "../managers/whiteboard-manager";
 import type { Room } from "../room";
+import { createLogger, initLogging, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** ChalkSession configuration */
@@ -97,11 +98,17 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	readonly whiteboard: WhiteboardManager;
 
 	private readonly client: ChalkClient;
-	private readonly debug: boolean;
+	private readonly log: Logger;
 
 	constructor(config: ChalkSessionConfig) {
 		super();
-		this.debug = config.debug ?? false;
+		const debug = config.debug ?? false;
+
+		// Initialize global logging
+		initLogging(debug);
+		this.log = createLogger("Session");
+
+		this.log.info("Initializing", { apiUrl: config.apiUrl });
 
 		// Initialize ChalkClient for API/WebRTC
 		this.client = new ChalkClient({
@@ -110,11 +117,11 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			token: config.token,
 			tokenProvider: config.tokenProvider,
 			apiKey: config.apiKey,
-			debug: config.debug,
+			debug,
 		});
 
 		// Initialize all managers
-		this.room = new RoomManager(config.debug);
+		this.room = new RoomManager(debug);
 		this.participants = new ParticipantManager();
 		this.media = new MediaManager();
 		this.screenShare = new ScreenShareManager();
@@ -125,12 +132,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this.whiteboard = new WhiteboardManager();
 
 		this.setupEventForwarding();
-	}
-
-	private log(...args: unknown[]): void {
-		if (this.debug) {
-			console.log("[ChalkSession]", ...args);
-		}
 	}
 
 	private setupEventForwarding(): void {
@@ -189,7 +190,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	 * @param options - Join options including userName
 	 */
 	async join(roomId: string, options: JoinOptions): Promise<void> {
-		this.log("Joining room:", roomId);
+		this.log.info("Joining room", { roomId, displayName: options.userName });
 
 		try {
 			// Signal join starting
@@ -209,9 +210,10 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			// Mark join complete
 			this.room.joinComplete(room);
 
-			this.log("Successfully joined room:", roomId);
+			this.log.info("Room joined", { roomId });
 		} catch (err) {
 			const error = ChalkError.wrap(err);
+			this.log.error("Join failed", { roomId, code: error.code });
 			this.room.joinFailed(error);
 			throw error;
 		}
@@ -223,13 +225,15 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	 * @param options - Leave options (endForAll for hosts)
 	 */
 	async leave(options?: LeaveOptions): Promise<void> {
-		this.log("Leaving room");
+		this.log.info("Leaving room");
 
 		try {
 			await this.room.leave(options);
 			this.client.disconnect();
+			this.log.info("Left room");
 		} catch (err) {
 			const error = ChalkError.wrap(err);
+			this.log.error("Leave failed", { code: error.code });
 			this.emit("error", error);
 			throw error;
 		}
@@ -309,7 +313,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	 * Cleanup all resources
 	 */
 	dispose(): void {
-		this.log("Disposing session");
+		this.log.info("Disposing session");
 
 		this.room.dispose();
 		this.participants.dispose();
@@ -323,5 +327,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 
 		this.client.disconnect();
 		this.removeAllListeners();
+
+		this.log.info("Session disposed");
 	}
 }

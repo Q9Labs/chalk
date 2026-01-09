@@ -205,12 +205,16 @@ export class WSClient extends EventEmitter<WSEvents> {
 				: undefined;
 
 			switch (rawMessage.type) {
-				case "participant.joined":
+				case "participant.joined": {
+					// Backend sends {participant: {...}}, extract nested object
+					const joinedPayload = payload as { participant?: Record<string, unknown> };
+					const participantData = joinedPayload.participant ?? payload;
 					this.emit(
 						"participant.joined",
-						this.transformParticipant(payload as Record<string, unknown>),
+						this.transformParticipant(participantData as Record<string, unknown>),
 					);
 					break;
+				}
 				case "participant.left":
 					this.emit("participant.left", payload as { participantId: string });
 					break;

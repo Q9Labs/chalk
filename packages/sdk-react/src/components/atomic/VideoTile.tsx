@@ -165,12 +165,10 @@ export const VideoTile = React.memo(({
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-secondary)] shadow-sm transition-all',
+        'relative overflow-hidden rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] shadow-[var(--chalk-shadow-tile)] transition-all duration-200',
         aspectRatioClasses[aspectRatio],
-        participant.isSpeaking && !prefersReducedMotion && 'chalk-animate-speaking ring-2 ring-[var(--chalk-accent)]',
-        participant.isSpeaking && prefersReducedMotion && 'ring-2 ring-[var(--chalk-accent)]',
-        pinned && 'ring-2 ring-[var(--chalk-accent)]',
-        onClick && 'cursor-pointer hover:opacity-95',
+        (participant.isSpeaking || pinned) && 'ring-2 ring-[var(--chalk-accent)]',
+        onClick && 'cursor-pointer hover:shadow-[var(--chalk-shadow-tile-hover)] hover:scale-[1.01]',
         className
       )}
       onClick={onClick}
@@ -195,28 +193,28 @@ export const VideoTile = React.memo(({
           <Avatar
             name={participant.displayName}
             src={participant.avatarUrl}
-            size="xl"
+            size="2xl"
           />
         </div>
       ) : null}
 
       {children}
 
-      <div className="absolute inset-0 p-3 flex flex-col justify-between pointer-events-none">
-        <div className="flex justify-end gap-2">
+      <div className="absolute inset-0 p-3 flex flex-col justify-end pointer-events-none">
+        <div className="flex items-center gap-2">
           {showStatus && (
             <>
+              {participant.isMuted && (
+                <div className="rounded-full bg-black/60 p-1.5 text-white backdrop-blur-sm">
+                  <MicOff size={14} />
+                </div>
+              )}
               {showTrackWarning && (
                 <div
                   className="rounded-full bg-[var(--chalk-warning,#f59e0b)] p-1.5 text-white backdrop-blur-sm"
                   title={trackError || 'Video track unavailable'}
                 >
-                  <AlertTriangle size={16} />
-                </div>
-              )}
-              {participant.isMuted && (
-                <div className="rounded-full bg-black/50 p-1.5 text-white backdrop-blur-sm">
-                  <MicOff size={16} />
+                  <AlertTriangle size={14} />
                 </div>
               )}
               {participant.isHandRaised && (
@@ -224,24 +222,21 @@ export const VideoTile = React.memo(({
                   "rounded-full bg-[var(--chalk-accent)] p-1.5 text-white backdrop-blur-sm",
                   !prefersReducedMotion && "chalk-animate-hand-bounce"
                 )}>
-                  <Hand size={16} />
+                  <Hand size={14} />
                 </div>
               )}
               {participant.isScreenSharing && (
                 <div className="rounded-full bg-[var(--chalk-success)] p-1.5 text-white backdrop-blur-sm">
-                  <Monitor size={16} />
+                  <Monitor size={14} />
                 </div>
               )}
               {pinned && (
                 <div className="rounded-full bg-[var(--chalk-accent)] p-1.5 text-white backdrop-blur-sm">
-                  <Pin size={16} />
+                  <Pin size={14} />
                 </div>
               )}
             </>
           )}
-        </div>
-
-        <div className="flex items-end justify-between gap-2">
           {showName && (
             <NameTag
               name={participant.displayName}
@@ -249,9 +244,9 @@ export const VideoTile = React.memo(({
               size="sm"
             />
           )}
-          
+          <div className="flex-1" />
           {showStatus && isPoorConnection && participant.connectionQuality && (
-             <div className="rounded-[var(--chalk-border-radius-sm)] bg-black/50 p-1 backdrop-blur-sm">
+             <div className="rounded-[var(--chalk-border-radius-sm)] bg-black/60 p-1 backdrop-blur-sm">
                <ConnectionQuality
                  quality={participant.connectionQuality}
                  size="sm"

@@ -1,6 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
 import { VideoTile } from '../atomic';
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import type { Participant } from './VideoGrid';
 
 export interface ScreenShareViewProps {
@@ -10,8 +11,13 @@ export interface ScreenShareViewProps {
   onStopShare?: () => void;
   showThumbnails?: boolean;
   thumbnailPosition?: 'bottom' | 'right';
+  enableZoom?: boolean;
   className?: string;
 }
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
+const ZOOM_STEP = 0.5;
 
 export const ScreenShareView = React.memo(({
   screenShareTrack,
@@ -20,15 +26,22 @@ export const ScreenShareView = React.memo(({
   onStopShare,
   showThumbnails = true,
   thumbnailPosition = 'bottom',
+  enableZoom = true,
   className,
 }: ScreenShareViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Zoom state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || !screenShareTrack) return;
 
-    // Validate track is active and not ended
     if (screenShareTrack.readyState === 'ended') {
       console.warn('[ScreenShareView] Screen share track is ended');
       return;
@@ -38,42 +51,153 @@ export const ScreenShareView = React.memo(({
       const stream = new MediaStream([screenShareTrack]);
       videoEl.srcObject = stream;
       videoEl.play().catch((error) => {
-        console.error('[ScreenShareView] Failed to play video:', error);
+        if (error.name !== 'AbortError') {
+          console.error('[ScreenShareView] Failed to play video:', error);
+        }
       });
     } catch (error) {
       console.error('[ScreenShareView] Failed to create MediaStream:', error);
     }
 
-    // Cleanup function
     return () => {
-      if (videoEl.srcObject) {
-        const stream = videoEl.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        videoEl.srcObject = null;
-      }
+      videoEl.srcObject = null;
     };
   }, [screenShareTrack]);
 
+  // Reset pan when zoom resets
+  useEffect(() => {
+    if (zoom === 1) {
+      setPan({ x: 0, y: 0 });
+    }
+  }, [zoom]);
+
+  const handleZoomIn = useCallback(() => {
+    setZoom(z => Math.min(z + ZOOM_STEP, MAX_ZOOM));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(z => Math.max(z - ZOOM_STEP, MIN_ZOOM));
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  // Mouse wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (!enableZoom) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setZoom(z => Math.max(MIN_ZOOM, Math.min(z + delta, MAX_ZOOM)));
+  }, [enableZoom]);
+
+  // Pan handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (zoom <= 1) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+  }, [zoom, pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging || zoom <= 1) return;
+
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+
+    // Limit pan based on zoom level
+    const maxPan = (zoom - 1) * 50; // percentage
+    setPan({
+      x: Math.max(-maxPan, Math.min(maxPan, dragStart.current.panX + (dx / 5))),
+      y: Math.max(-maxPan, Math.min(maxPan, dragStart.current.panY + (dy / 5))),
+    });
+  }, [isDragging, zoom]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
   return (
-    <div 
+    <div
       className={cn(
         "flex h-full w-full gap-4",
         thumbnailPosition === 'bottom' ? "flex-col" : "flex-row",
         className
       )}
     >
-      <div className="relative flex-1 min-h-0 min-w-0 rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] group">
+      <div
+        ref={containerRef}
+        className="relative flex-1 min-h-0 min-w-0 rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] group"
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+      >
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-contain bg-black"
+          className={cn(
+            "w-full h-full object-contain bg-black transition-transform duration-150",
+            zoom > 1 && isDragging && "cursor-grabbing",
+            zoom > 1 && !isDragging && "cursor-grab"
+          )}
+          style={{
+            transform: `scale(${zoom}) translate(${pan.x}%, ${pan.y}%)`,
+            transformOrigin: 'center center',
+          }}
         />
-        
+
         <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-sm font-medium">
           Shared by {sharedByName}
         </div>
+
+        {/* Zoom controls */}
+        {enableZoom && (
+          <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleZoomOut}
+              disabled={zoom <= MIN_ZOOM}
+              className="p-2 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Zoom out"
+            >
+              <ZoomOut size={18} />
+            </button>
+            <span className="px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-sm font-medium min-w-[3rem] text-center">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              onClick={handleZoomIn}
+              disabled={zoom >= MAX_ZOOM}
+              className="p-2 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Zoom in"
+            >
+              <ZoomIn size={18} />
+            </button>
+            {zoom > 1 && (
+              <button
+                onClick={handleResetZoom}
+                className="p-2 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors ml-1"
+                aria-label="Reset zoom"
+              >
+                <Maximize2 size={18} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Zoom indicator when zoomed */}
+        {zoom > 1 && (
+          <div className="absolute bottom-4 right-4 px-2 py-1 rounded bg-black/60 backdrop-blur-sm text-white text-xs">
+            Drag to pan • Scroll to zoom
+          </div>
+        )}
 
         {onStopShare && (
            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -88,16 +212,16 @@ export const ScreenShareView = React.memo(({
       </div>
 
       {showThumbnails && participants.length > 0 && (
-        <div 
+        <div
           className={cn(
             "flex gap-2 overflow-auto p-1",
-            thumbnailPosition === 'bottom' 
-              ? "h-32 w-full flex-row" 
+            thumbnailPosition === 'bottom'
+              ? "h-32 w-full flex-row"
               : "w-64 h-full flex-col"
           )}
         >
           {participants.map((p) => (
-             <div 
+             <div
                 key={p.id}
                 className={cn(
                   "shrink-0 rounded-lg overflow-hidden border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-secondary)] relative",

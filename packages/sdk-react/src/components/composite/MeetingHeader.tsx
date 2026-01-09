@@ -1,8 +1,7 @@
 import React from 'react';
-import { Settings, UserPlus, LayoutGrid, Maximize2, Columns } from 'lucide-react';
+import { Settings, LayoutGrid, Maximize2, Columns } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { StatusBadge } from '../atomic/StatusBadge';
-import { IconButton } from '../atomic/IconButton';
 
 export interface MeetingHeaderProps {
   roomName: string;
@@ -34,50 +33,43 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
   isTranscribing = false,
   layout = 'grid',
   onLayoutChange,
-  onInvite,
+  onInvite: _onInvite,
   onSettings,
   className,
 }) => {
   return (
     <header
       className={cn(
-        'flex items-center justify-between px-4 py-3 bg-[var(--chalk-bg-primary)] border-b border-[var(--chalk-border-color)] h-16',
+        'flex items-center justify-between px-5 py-2.5 transition-opacity duration-300',
         className
       )}
       role="banner"
     >
-      <div className="flex items-center gap-4 flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded bg-[var(--chalk-primary)] flex items-center justify-center text-white font-bold text-xs">
-            C
-          </div>
-          <h1 className="text-lg font-semibold text-[var(--chalk-text-primary)] truncate">
-            {roomName}
-          </h1>
-        </div>
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <h1 className="text-sm font-medium text-white/90 truncate">
+          {roomName}
+        </h1>
       </div>
 
-      <div className="hidden md:flex flex-1 justify-center">
-        <div className="bg-[var(--chalk-bg-secondary)] px-3 py-1.5 rounded-[var(--chalk-border-radius-full)] text-sm font-variant-numeric tabular-nums text-[var(--chalk-text-primary)]">
+      <div className="flex flex-1 justify-center">
+        <div className="bg-white/10 px-3 py-1.5 rounded-full text-sm font-medium tabular-nums text-white">
           {formatDuration(duration)}
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 flex-1">
+      <div className="flex items-center justify-end gap-3 flex-1">
         {isRecording && <StatusBadge status="recording" pulse />}
         {isTranscribing && <StatusBadge status="transcribing" />}
 
-        <div className="h-4 w-px bg-[var(--chalk-border-color)] mx-2 hidden sm:block" />
-
         {onLayoutChange && (
-          <div className="hidden sm:flex bg-[var(--chalk-bg-tertiary)] rounded-[var(--chalk-border-radius-md)] p-1 gap-1">
+          <div className="hidden sm:flex bg-white/10 rounded-full p-1 gap-1">
             <button
               onClick={() => onLayoutChange('grid')}
               className={cn(
-                'p-1.5 rounded-[var(--chalk-border-radius-sm)] transition-colors',
-                layout === 'grid' 
-                  ? 'bg-[var(--chalk-bg-primary)] text-[var(--chalk-text-primary)] shadow-sm' 
-                  : 'text-[var(--chalk-text-secondary)] hover:text-[var(--chalk-text-primary)]'
+                'p-2 rounded-full transition-colors',
+                layout === 'grid'
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/50 hover:text-white hover:bg-white/10'
               )}
               aria-label="Grid layout"
               aria-pressed={layout === 'grid'}
@@ -87,10 +79,10 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
             <button
               onClick={() => onLayoutChange('spotlight')}
               className={cn(
-                'p-1.5 rounded-[var(--chalk-border-radius-sm)] transition-colors',
-                layout === 'spotlight' 
-                  ? 'bg-[var(--chalk-bg-primary)] text-[var(--chalk-text-primary)] shadow-sm' 
-                  : 'text-[var(--chalk-text-secondary)] hover:text-[var(--chalk-text-primary)]'
+                'p-2 rounded-full transition-colors',
+                layout === 'spotlight'
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/50 hover:text-white hover:bg-white/10'
               )}
               aria-label="Spotlight layout"
               aria-pressed={layout === 'spotlight'}
@@ -100,10 +92,10 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
             <button
               onClick={() => onLayoutChange('sidebar')}
               className={cn(
-                'p-1.5 rounded-[var(--chalk-border-radius-sm)] transition-colors',
-                layout === 'sidebar' 
-                  ? 'bg-[var(--chalk-bg-primary)] text-[var(--chalk-text-primary)] shadow-sm' 
-                  : 'text-[var(--chalk-text-secondary)] hover:text-[var(--chalk-text-primary)]'
+                'p-2 rounded-full transition-colors',
+                layout === 'sidebar'
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/50 hover:text-white hover:bg-white/10'
               )}
               aria-label="Sidebar layout"
               aria-pressed={layout === 'sidebar'}
@@ -113,23 +105,14 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
           </div>
         )}
 
-        {onInvite && (
-          <IconButton
-            icon={<UserPlus size={20} />}
-            variant="default"
-            onClick={onInvite}
-            aria-label="Invite participants"
-            className="ml-2"
-          />
-        )}
-
         {onSettings && (
-          <IconButton
-            icon={<Settings size={20} />}
-            variant="ghost"
+          <button
             onClick={onSettings}
+            className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors"
             aria-label="Settings"
-          />
+          >
+            <Settings size={18} />
+          </button>
         )}
       </div>
     </header>

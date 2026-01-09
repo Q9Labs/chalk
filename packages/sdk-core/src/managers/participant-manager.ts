@@ -8,6 +8,7 @@
 import type { Room } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { Participant } from "../types";
+import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Participant manager state */
@@ -39,10 +40,11 @@ export interface ParticipantManagerEvents {
  */
 export class ParticipantManager extends StateContainer<ParticipantState> {
 	private readonly events = new TypedEventEmitter<ParticipantManagerEvents>();
+	private readonly log: Logger = createLogger("Participants");
 	private room: Room | null = null;
 	private participantMap = new Map<string, Participant>();
 
-	constructor() {
+	constructor(_debug = false) {
 		super({
 			participants: [],
 			activeSpeaker: null,
@@ -109,12 +111,15 @@ export class ParticipantManager extends StateContainer<ParticipantState> {
 			const normalized = this.normalizeParticipant(participant);
 			this.participantMap.set(normalized.id, normalized);
 			this.updateState();
+			this.log.info("Joined", { participantId: normalized.id, displayName: normalized.displayName });
 			this.events.emit("participant:joined", { participant: normalized });
 		});
 
 		this.room.on("participant-left", (participantId) => {
+			const p = this.participantMap.get(participantId);
 			this.participantMap.delete(participantId);
 			this.updateState();
+			this.log.info("Left", { participantId, displayName: p?.displayName });
 			this.events.emit("participant:left", { participantId });
 		});
 
@@ -122,6 +127,7 @@ export class ParticipantManager extends StateContainer<ParticipantState> {
 			const normalized = this.normalizeParticipant(participant);
 			this.participantMap.set(participantId, normalized);
 			this.updateState();
+			this.log.debug("Updated", { participantId, displayName: normalized.displayName });
 			this.events.emit("participant:updated", {
 				participantId,
 				participant: normalized,
@@ -131,6 +137,7 @@ export class ParticipantManager extends StateContainer<ParticipantState> {
 		this.room.on("active-speaker-changed", (speaker) => {
 			const normalized = speaker ? this.normalizeParticipant(speaker) : null;
 			this.setState({ activeSpeaker: normalized });
+			this.log.debug("Active speaker", { displayName: normalized?.displayName ?? null });
 			this.events.emit("active-speaker:changed", { participant: normalized });
 		});
 	}

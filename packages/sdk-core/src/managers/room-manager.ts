@@ -9,6 +9,7 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { Room } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { RoomStatus } from "../types";
+import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Options for joining a room */
@@ -62,10 +63,10 @@ export interface RoomManagerEvents {
  */
 export class RoomManager extends StateContainer<RoomState> {
 	private readonly events = new TypedEventEmitter<RoomManagerEvents>();
+	private readonly log: Logger = createLogger("Room");
 	private room: Room | null = null;
-	private readonly debug: boolean;
 
-	constructor(debug = false) {
+	constructor(_debug = false) {
 		super({
 			status: "disconnected",
 			roomId: null,
@@ -73,13 +74,6 @@ export class RoomManager extends StateContainer<RoomState> {
 			isJoining: false,
 			hostId: null,
 		});
-		this.debug = debug;
-	}
-
-	private log(...args: unknown[]): void {
-		if (this.debug) {
-			console.log("[RoomManager]", ...args);
-		}
 	}
 
 	/** Subscribe to room events */
@@ -117,13 +111,15 @@ export class RoomManager extends StateContainer<RoomState> {
 		if (!this.room) return;
 
 		this.room.on("status-changed", (status) => {
-			this.log("Status changed:", status);
+			this.log.state("status", status);
 			this.setState({ status });
 			this.events.emit("status:changed", { status });
 
 			if (status === "connected") {
+				this.log.info("Connected", { roomId: this.room!.id });
 				this.events.emit("connected", { roomId: this.room!.id });
 			} else if (status === "disconnected") {
+				this.log.info("Disconnected", { reason: "connection_lost" });
 				this.events.emit("disconnected", { reason: "connection_lost" });
 			}
 		});
@@ -154,8 +150,8 @@ export class RoomManager extends StateContainer<RoomState> {
 			);
 		}
 
+		this.log.info("Join requested", { roomId });
 		this.setState({ isJoining: true, status: "connecting" });
-		this.log("Join requested for room:", roomId);
 	}
 
 	/** Mark join as complete (called by ChalkSession after ChalkClient joins) */
@@ -192,7 +188,7 @@ export class RoomManager extends StateContainer<RoomState> {
 				? options.endForAll()
 				: (options?.endForAll ?? false);
 
-		this.log("Leaving room, endForAll:", shouldEndForAll);
+		this.log.info("Leaving", { endForAll: shouldEndForAll });
 
 		if (shouldEndForAll) {
 			// TODO: Call API to end room for all
@@ -208,6 +204,7 @@ export class RoomManager extends StateContainer<RoomState> {
 			hostId: null,
 		});
 
+		this.log.info("Left room");
 		this.events.emit("disconnected", { reason: "user_left" });
 	}
 
