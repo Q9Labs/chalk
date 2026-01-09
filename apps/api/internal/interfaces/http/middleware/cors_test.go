@@ -13,8 +13,12 @@ func TestCORS_AllowedOrigins(t *testing.T) {
 	allowedOrigins := []string{
 		"http://localhost:3070",
 		"http://localhost:3000",
+		"http://localhost:8080", // Any localhost port allowed
+		"http://localhost",      // localhost without port
 		"http://127.0.0.1:3070",
 		"http://127.0.0.1:3000",
+		"http://127.0.0.1:8080", // Any 127.0.0.1 port allowed
+		"http://127.0.0.1",      // 127.0.0.1 without port
 		"https://chalk.q9labs.ai",
 		"https://chalk-5bc.pages.dev",
 	}
@@ -41,10 +45,10 @@ func TestCORS_AllowedOrigins(t *testing.T) {
 
 func TestCORS_DisallowedOrigins(t *testing.T) {
 	disallowedOrigins := []string{
-		"http://localhost:8080",
 		"http://evil.com",
 		"https://malicious-site.com",
-		"http://localhost:3000.evil.com",
+		"http://localhost:3000.evil.com", // Subdomain attack
+		"http://localhostevil.com",       // Similar domain attack
 	}
 
 	for _, origin := range disallowedOrigins {

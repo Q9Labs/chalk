@@ -1,25 +1,29 @@
 package middleware
 
 import (
+	"regexp"
+
 	"github.com/gin-gonic/gin"
 )
+
+// localhostPattern matches http://localhost or http://localhost:PORT (numeric port only)
+var localhostPattern = regexp.MustCompile(`^http://(localhost|127\.0\.0\.1)(:\d+)?$`)
 
 // CORS returns a middleware that handles Cross-Origin Resource Sharing
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Allow localhost origins for development and production domains
+		// Production domains
 		allowedOrigins := map[string]bool{
-			"http://localhost:3070":       true,
-			"http://localhost:3000":       true,
-			"http://127.0.0.1:3070":       true,
-			"http://127.0.0.1:3000":       true,
 			"https://chalk.q9labs.ai":     true,
 			"https://chalk-5bc.pages.dev": true,
 		}
 
-		if allowedOrigins[origin] {
+		// Allow any localhost or 127.0.0.1 origin for development
+		isLocalhost := localhostPattern.MatchString(origin)
+
+		if allowedOrigins[origin] || isLocalhost {
 			c.Header("Access-Control-Allow-Origin", origin)
 		}
 
