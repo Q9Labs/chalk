@@ -22,7 +22,6 @@ func TestJWTService_GenerateAccessToken(t *testing.T) {
 		DisplayName: "John Doe",
 		Role:        "host",
 		Permissions: auth.DefaultHostPermissions(),
-		CFAuthToken: "cf-token-123",
 	}
 
 	token, err := svc.GenerateAccessToken(claims)
@@ -46,7 +45,6 @@ func TestJWTService_GenerateAccessToken_ValidToken(t *testing.T) {
 		DisplayName: "John Doe",
 		Role:        "host",
 		Permissions: auth.DefaultHostPermissions(),
-		CFAuthToken: "cf-token-123",
 	}
 
 	token, err := svc.GenerateAccessToken(claims)
@@ -60,8 +58,8 @@ func TestJWTService_GenerateAccessToken_ValidToken(t *testing.T) {
 	assert.Equal(t, roomID, validatedClaims.RoomID)
 	assert.Equal(t, "John Doe", validatedClaims.DisplayName)
 	assert.Equal(t, "host", validatedClaims.Role)
-	assert.Equal(t, "cf-token-123", validatedClaims.CFAuthToken)
 	assert.Equal(t, claims.Permissions, validatedClaims.Permissions)
+	// Note: CFAuthToken is NOT embedded in JWT - returned separately in API response
 }
 
 func TestJWTService_GenerateRefreshToken(t *testing.T) {
@@ -248,7 +246,6 @@ func TestJWTService_ValidateToken_ExtractsAllClaims(t *testing.T) {
 		DisplayName: "Jane Doe",
 		Role:        "participant",
 		Permissions: permissions,
-		CFAuthToken: "cloudflare-auth-xyz",
 	}
 
 	token, err := svc.GenerateAccessToken(originalClaims)
@@ -263,7 +260,7 @@ func TestJWTService_ValidateToken_ExtractsAllClaims(t *testing.T) {
 	assert.Equal(t, originalClaims.DisplayName, validatedClaims.DisplayName)
 	assert.Equal(t, originalClaims.Role, validatedClaims.Role)
 	assert.Equal(t, originalClaims.Permissions, validatedClaims.Permissions)
-	assert.Equal(t, originalClaims.CFAuthToken, validatedClaims.CFAuthToken)
+	// CFAuthToken not in JWT - returned separately
 }
 
 func TestJWTService_ValidateRefreshToken_ValidToken(t *testing.T) {

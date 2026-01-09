@@ -46,6 +46,7 @@ func NewJWTService(config JWTConfig) *JWTService {
 }
 
 // jwtClaims wraps our claims for jwt-go
+// Note: CFAuthToken is NOT embedded - it's returned separately to avoid bloating the JWT
 type jwtClaims struct {
 	jwt.RegisteredClaims
 	TenantID    uuid.UUID        `json:"tenant_id"`
@@ -53,7 +54,6 @@ type jwtClaims struct {
 	DisplayName string           `json:"display_name,omitempty"`
 	Role        string           `json:"role,omitempty"`
 	Permissions auth.Permissions `json:"permissions,omitempty"`
-	CFAuthToken string           `json:"cf_auth_token,omitempty"`
 	TokenType   string           `json:"type"` // access or refresh
 }
 
@@ -75,7 +75,6 @@ func (s *JWTService) GenerateAccessToken(claims auth.Claims) (string, error) {
 		DisplayName: claims.DisplayName,
 		Role:        claims.Role,
 		Permissions: claims.Permissions,
-		CFAuthToken: claims.CFAuthToken,
 		TokenType:   "access",
 	}
 
@@ -155,7 +154,7 @@ func (s *JWTService) ValidateToken(tokenString string) (*auth.Claims, error) {
 		DisplayName: claims.DisplayName,
 		Role:        claims.Role,
 		Permissions: claims.Permissions,
-		CFAuthToken: claims.CFAuthToken,
+		// Note: CFAuthToken is not in JWT - returned separately in API response
 	}, nil
 }
 
