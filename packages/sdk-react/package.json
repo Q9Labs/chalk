@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -26,7 +26,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:types",
+    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:types && bun run build:styles",
+    "build:styles": "mkdir -p ./dist/styles && cp ./src/styles/*.css ./dist/styles/",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
     "test": "bun test --preload ./src/__tests__/setup.ts",
@@ -39,7 +40,7 @@
   "dependencies": {
     "@cloudflare/realtimekit": "^1.2.2",
     "@cloudflare/realtimekit-react": "^1.2.2",
-    "@q9labs/chalk-core": "^0.0.10",
+    "@q9labs/chalk-core": "^0.0.11",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
     "tailwind-merge": "^3.4.0"
@@ -80,7 +81,7 @@
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "typescript": "^5",
-    "@q9labs/chalk-whiteboard": "^0.0.10"
+    "@q9labs/chalk-whiteboard": "^0.0.11"
   },
   "peerDependenciesMeta": {
     "@q9labs/chalk-whiteboard": {
