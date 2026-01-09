@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -13,10 +13,13 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./styles.css": "./dist/styles/bundled.css",
+    "./styles/bundled.css": "./dist/styles/bundled.css",
     "./styles/base.css": "./dist/styles/base.css",
     "./styles/variables.css": "./dist/styles/variables.css",
     "./styles/animations.css": "./dist/styles/animations.css",
     "./styles/*": "./dist/styles/*",
+    "./dist/styles/bundled.css": "./dist/styles/bundled.css",
     "./dist/styles/base.css": "./dist/styles/base.css",
     "./dist/styles/variables.css": "./dist/styles/variables.css",
     "./dist/styles/animations.css": "./dist/styles/animations.css",
@@ -40,7 +43,7 @@
   "dependencies": {
     "@cloudflare/realtimekit": "^1.2.2",
     "@cloudflare/realtimekit-react": "^1.2.2",
-    "@q9labs/chalk-core": "^0.0.13",
+    "@q9labs/chalk-core": "^0.0.14",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
     "tailwind-merge": "^3.4.0"
@@ -81,7 +84,7 @@
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "typescript": "^5",
-    "@q9labs/chalk-whiteboard": "^0.0.13"
+    "@q9labs/chalk-whiteboard": "^0.0.14"
   },
   "peerDependenciesMeta": {
     "@q9labs/chalk-whiteboard": {
