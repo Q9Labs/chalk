@@ -149,7 +149,7 @@ func TestAuthHandler_GenerateParticipantToken_Host(t *testing.T) {
 	assert.Equal(t, roomID, claims.RoomID)
 	assert.Equal(t, "Test User", claims.DisplayName)
 	assert.Equal(t, "host", claims.Role)
-	assert.Equal(t, "cf-token", claims.CFAuthToken)
+	// CFAuthToken not in JWT - returned separately in API response
 	// Host should have all permissions
 	assert.True(t, claims.Permissions.CanMute)
 	assert.True(t, claims.Permissions.CanKick)
