@@ -13,7 +13,16 @@ variable "alert_emails" {
 variable "cors_allowed_origins" {
   description = "CORS allowed origins"
   type        = list(string)
-  default     = ["https://chalk.q9labs.ai"]
+  default = [
+    "https://chalk.q9labs.ai",
+    "https://chalk-5bc.pages.dev",
+    "http://localhost:3000",
+    "http://localhost:3070",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3070",
+    "http://127.0.0.1:5173"
+  ]
 }
 
 variable "api_domain_name" {
