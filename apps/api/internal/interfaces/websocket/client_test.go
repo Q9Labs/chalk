@@ -13,9 +13,7 @@ import (
 )
 
 // testMockRedis is a mock Redis client for testing
-type testMockRedis struct {
-	published map[string][]byte
-}
+type testMockRedis struct{}
 
 func (m *testMockRedis) Close() error                                                     { return nil }
 func (m *testMockRedis) Publish(ctx context.Context, channel string, message []byte) error { return nil }

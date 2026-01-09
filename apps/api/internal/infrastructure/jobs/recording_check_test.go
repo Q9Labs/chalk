@@ -21,7 +21,7 @@ func TestRecordingChecker_CheckStalledRecordings_NilDB_Panics(t *testing.T) {
 	ctx := context.Background()
 
 	assert.Panics(t, func() {
-		checker.CheckStalledRecordings(ctx)
+		_ = checker.CheckStalledRecordings(ctx)
 	})
 }
 

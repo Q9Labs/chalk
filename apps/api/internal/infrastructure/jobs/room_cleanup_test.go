@@ -35,7 +35,7 @@ func TestRoomCleanup_CleanupEmptyRooms_NilDB_Panics(t *testing.T) {
 	ctx := context.Background()
 
 	assert.Panics(t, func() {
-		cleanup.CleanupEmptyRooms(ctx, 30)
+		_ = cleanup.CleanupEmptyRooms(ctx, 30)
 	})
 }
 
