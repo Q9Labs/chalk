@@ -24,7 +24,7 @@ interface ChalkClientEvents {
 
 export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private readonly apiClient: APIClient;
-  private readonly wsUrl?: string;
+  private readonly wsUrl: string;
   private readonly tokenProvider?: TokenProvider;
   private readonly debug: boolean;
   private currentRoom: Room | null = null;
@@ -35,7 +35,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   constructor(config: ChalkClientConfig) {
     super();
     this.debug = config.debug ?? false;
-    this.wsUrl = config.wsUrl;
+    this.wsUrl = config.wsUrl ?? this.deriveWsUrl(config.apiUrl);
     this.tokenProvider = config.tokenProvider;
 
     // Initialize logging globally
@@ -57,6 +57,28 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       this.log.warn("Token expired", { code: error.code });
       this.emit("token-expired", error);
     });
+  }
+
+  /**
+   * Derive WebSocket URL from API URL
+   * https://api.example.com -> wss://api.example.com/ws
+   * http://localhost:8080 -> ws://localhost:8080/ws
+   */
+  private deriveWsUrl(apiUrl?: string): string {
+    if (!apiUrl) {
+      throw new Error("apiUrl is required");
+    }
+    try {
+      const url = new URL(apiUrl);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      url.pathname = "/ws";
+      return url.toString();
+    } catch {
+      // Fallback for malformed URLs
+      const wsProtocol = apiUrl.startsWith("https") ? "wss" : "ws";
+      const baseUrl = apiUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      return `${wsProtocol}://${baseUrl}/ws`;
+    }
   }
 
   /**

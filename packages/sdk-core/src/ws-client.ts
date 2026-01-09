@@ -10,7 +10,6 @@ import type {
 	TokenProvider,
 } from "./types.ts";
 
-const DEFAULT_WS_URL = "ws://localhost:8080/ws";
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 const HEARTBEAT_INTERVAL = 30000;
 
@@ -99,9 +98,9 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private lastPongTime: number = Date.now();
 	private readonly log: Logger = createLogger("WebSocket");
 
-	constructor(wsUrl?: string, _debug = false, tokenProvider?: TokenProvider) {
+	constructor(wsUrl: string, _debug = false, tokenProvider?: TokenProvider) {
 		super();
-		this.wsUrl = wsUrl ?? DEFAULT_WS_URL;
+		this.wsUrl = wsUrl;
 		this.tokenProvider = tokenProvider;
 	}
 

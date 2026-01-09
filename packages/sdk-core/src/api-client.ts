@@ -17,8 +17,6 @@ import type {
 	TransformedJoinRoomApiResponse,
 } from "./types.ts";
 
-const DEFAULT_API_URL = "http://localhost:8080";
-
 interface APIClientEvents {
 	"token-expired": ChalkError;
 }
@@ -33,7 +31,10 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 
 	constructor(config: ChalkClientConfig) {
 		super();
-		this.apiUrl = config.apiUrl ?? DEFAULT_API_URL;
+		if (!config.apiUrl) {
+			throw new Error("apiUrl is required in ChalkClientConfig");
+		}
+		this.apiUrl = config.apiUrl;
 		this.apiKey = config.apiKey;
 		this.tokenProvider = config.tokenProvider;
 		this.token = config.token;
