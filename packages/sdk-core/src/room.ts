@@ -1034,6 +1034,62 @@ export class Room extends EventEmitter<RoomEvents> {
     });
   }
 
+  /**
+   * Boost video bitrate for better quality
+   * Attempts to set higher bitrate on the video sender
+   */
+  private async boostVideoBitrate(): Promise<void> {
+    try {
+      // Try to access RTCPeerConnection from RealtimeKit client
+      const client = this.rtkClient as unknown as {
+        peerConnection?: RTCPeerConnection;
+        pc?: RTCPeerConnection;
+        _peerConnection?: RTCPeerConnection;
+        webrtcPeer?: { peerConnection?: RTCPeerConnection };
+      };
+
+      const pc =
+        client.peerConnection ||
+        client.pc ||
+        client._peerConnection ||
+        client.webrtcPeer?.peerConnection;
+
+      if (!pc) {
+        this.log.debug("Cannot access peer connection for bitrate boost");
+        return;
+      }
+
+      const senders = pc.getSenders();
+      const videoSender = senders.find(
+        (s) => s.track?.kind === "video"
+      );
+
+      if (!videoSender) {
+        this.log.debug("No video sender found for bitrate boost");
+        return;
+      }
+
+      const params = videoSender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+
+      const encoding = params.encodings[0];
+      if (encoding) {
+        // Set higher bitrate: 2.5 Mbps for 720p (default is 1.2 Mbps)
+        encoding.maxBitrate = 2_500_000;
+        // Ensure no downscaling
+        encoding.scaleResolutionDownBy = 1;
+      }
+
+      await videoSender.setParameters(params);
+      this.log.info("Video bitrate boosted to 2.5 Mbps");
+    } catch (error) {
+      // Fail silently - this is an optimization, not critical
+      this.log.debug("Could not boost video bitrate", { error });
+    }
+  }
+
   // Media controls using RealtimeKit
   async toggleVideo(): Promise<boolean> {
     if (!this.rtkClient || !this._localParticipant) {
@@ -1050,6 +1106,8 @@ export class Room extends EventEmitter<RoomEvents> {
         this._localParticipant.videoEnabled = true;
         this._localParticipant.videoTrack =
           this.rtkClient.self.videoTrack ?? undefined;
+        // Boost bitrate after enabling video
+        await this.boostVideoBitrate();
       }
       return this._localParticipant.videoEnabled;
     } catch (error) {
