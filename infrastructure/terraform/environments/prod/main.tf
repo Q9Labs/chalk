@@ -128,9 +128,9 @@ module "ecs" {
 module "aurora" {
   source = "../../modules/aurora"
 
-  environment                = local.environment
-  vpc_id                     = module.vpc.vpc_id
-  subnet_ids                 = module.vpc.database_subnet_ids
+  environment = local.environment
+  vpc_id      = module.vpc.vpc_id
+  subnet_ids  = module.vpc.database_subnet_ids
   # Allow both ECS instances (EC2 host) and ECS tasks (awsvpc containers) to connect
   allowed_security_group_ids = compact([
     module.ecs.ecs_instances_security_group_id,
@@ -157,9 +157,9 @@ module "aurora" {
 module "elasticache" {
   source = "../../modules/elasticache"
 
-  environment                = local.environment
-  vpc_id                     = module.vpc.vpc_id
-  subnet_ids                 = module.vpc.database_subnet_ids
+  environment = local.environment
+  vpc_id      = module.vpc.vpc_id
+  subnet_ids  = module.vpc.database_subnet_ids
   # Allow both ECS instances (EC2 host) and ECS tasks (awsvpc containers) to connect
   allowed_security_group_ids = compact([
     module.ecs.ecs_instances_security_group_id,
