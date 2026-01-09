@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -18,7 +18,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core && bun run build:types",
+    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:types",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
     "test": "bun test --preload ./src/__tests__/setup.ts",
@@ -71,6 +71,12 @@
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@q9labs/chalk-whiteboard": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@q9labs/chalk-whiteboard": {
+      "optional": true
+    }
   }
 }
