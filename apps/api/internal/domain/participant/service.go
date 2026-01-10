@@ -158,10 +158,16 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		presetName = cloudflare.PresetHost
 	}
 
+	// Generate a participant ID if none provided (Cloudflare requires client_specific_id)
+	clientSpecificID := input.ExternalUserID
+	if clientSpecificID == "" {
+		clientSpecificID = uuid.New().String()
+	}
+
 	cfParticipant, err := s.cfClient.AddParticipant(ctx, room.CloudflareMeetingID, cloudflare.AddParticipantRequest{
 		Name:             input.DisplayName,
 		PresetName:       presetName,
-		ClientSpecificID: input.ExternalUserID,
+		ClientSpecificID: clientSpecificID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare add participant failed: %w", err)
@@ -175,7 +181,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	participant, err := s.db.CreateParticipant(ctx, db.CreateParticipantParams{
 		RoomID:                  input.RoomID,
 		CloudflareParticipantID: cfParticipant.ID,
-		ExternalUserID:          strPtr(input.ExternalUserID),
+		ExternalUserID:          strPtr(clientSpecificID),
 		DisplayName:             strPtr(input.DisplayName),
 		Role:                    role,
 	})
