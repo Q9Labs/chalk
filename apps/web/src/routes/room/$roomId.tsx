@@ -49,13 +49,6 @@ function RoomPage() {
 		navigate({ to: "/" });
 	}, [navigate]);
 
-	const handleJoin = useCallback(
-		(joinedRoomId: string) => {
-			log.info("Joined room", { roomId: joinedRoomId });
-		},
-		[log],
-	);
-
 	const handleError = useCallback(
 		(error: unknown) => {
 			log.error("Room error", error);
@@ -74,7 +67,6 @@ function RoomPage() {
 			<VideoConference
 				roomId={roomId}
 				userName={storedUserName || "Guest"}
-				onJoin={handleJoin}
 				onLeave={handleLeave}
 				onError={handleError}
 				sounds={true}
