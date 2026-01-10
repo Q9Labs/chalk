@@ -1455,7 +1455,9 @@ export class Room extends EventEmitter<RoomEvents> {
    */
   canDrawWhiteboard(participantId?: string): boolean {
     const id = participantId ?? this._localParticipant?.id;
-    if (!id) return false;
+
+    // If no participant ID, return default access (allows drawing before fully joined)
+    if (!id) return this._whiteboardDefaultAccess;
 
     // Host always can draw
     const participant = this._participants.get(id);
@@ -1465,7 +1467,7 @@ export class Room extends EventEmitter<RoomEvents> {
     const explicit = this._whiteboardPermissions.get(id);
     if (explicit !== undefined) return explicit;
 
-    // Fall back to default
+    // Fall back to default - everyone can draw unless explicitly revoked
     return this._whiteboardDefaultAccess;
   }
 
