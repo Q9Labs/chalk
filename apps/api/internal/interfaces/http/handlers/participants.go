@@ -26,8 +26,15 @@ type AddParticipantRequest struct {
 	Role           string `json:"role"`
 }
 
+type RoomResponse struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
 type AddParticipantResponse struct {
 	Participant          db.Participant `json:"participant"`
+	Room                 RoomResponse   `json:"room"`
 	AccessToken          string         `json:"access_token"`
 	RefreshToken         string         `json:"refresh_token"`
 	TokenType            string         `json:"token_type"`
@@ -66,8 +73,18 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 
 	p, _ := h.participantService.GetParticipant(c.Request.Context(), output.ParticipantID)
 
+	roomName := ""
+	if output.Room.Name != nil {
+		roomName = *output.Room.Name
+	}
+
 	c.JSON(http.StatusCreated, AddParticipantResponse{
-		Participant:          *p,
+		Participant: *p,
+		Room: RoomResponse{
+			ID:     output.Room.ID.String(),
+			Name:   roomName,
+			Status: output.Room.Status,
+		},
 		AccessToken:          output.TokenPair.AccessToken,
 		RefreshToken:         output.TokenPair.RefreshToken,
 		TokenType:            output.TokenPair.TokenType,
