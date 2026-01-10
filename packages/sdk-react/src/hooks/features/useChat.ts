@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useChat - Chat from ChatManager
  */

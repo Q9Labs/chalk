@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useNotifications - Notifications from UIManager
  */

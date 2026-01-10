@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useWhiteboard - Whiteboard from WhiteboardManager
  */

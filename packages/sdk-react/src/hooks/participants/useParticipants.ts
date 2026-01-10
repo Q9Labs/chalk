@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useParticipants - Access participant list from ParticipantManager
  */

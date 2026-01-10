@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useChalk - Access the ChalkSession instance
  *

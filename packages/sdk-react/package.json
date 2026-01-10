@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -10,8 +10,10 @@
   },
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./styles.css": "./dist/styles/bundled.css",
     "./styles/bundled.css": "./dist/styles/bundled.css",
@@ -29,9 +31,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:types && bun run build:styles",
+    "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:fix-use-client && bun run build:types && bun run build:styles",
+    "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
     "build:styles": "mkdir -p ./dist/styles && cp ./src/styles/*.css ./dist/styles/",
-    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:types": "tsc --project tsconfig.json",
     "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
     "test": "bun test --preload ./src/__tests__/setup.ts",
     "check-types": "tsc --noEmit",
@@ -43,7 +46,7 @@
   "dependencies": {
     "@cloudflare/realtimekit": "^1.2.2",
     "@cloudflare/realtimekit-react": "^1.2.2",
-    "@q9labs/chalk-core": "^0.0.15",
+    "@q9labs/chalk-core": "^0.0.16",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
     "tailwind-merge": "^3.4.0"
@@ -84,7 +87,7 @@
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "typescript": "^5",
-    "@q9labs/chalk-whiteboard": "^0.0.15"
+    "@q9labs/chalk-whiteboard": "^0.0.16"
   },
   "peerDependenciesMeta": {
     "@q9labs/chalk-whiteboard": {

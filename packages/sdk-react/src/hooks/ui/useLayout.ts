@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useLayout - Layout control from UIManager
  */

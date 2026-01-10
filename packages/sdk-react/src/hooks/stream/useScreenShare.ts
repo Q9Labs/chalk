@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useScreenShare - Screen sharing from ScreenShareManager
  */

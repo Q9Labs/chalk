@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useTranscripts - Real-time transcription from RealtimeKit AI
  *

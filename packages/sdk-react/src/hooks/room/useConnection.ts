@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useConnection - Connection actions and status
  */

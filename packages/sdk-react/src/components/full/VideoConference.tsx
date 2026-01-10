@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * VideoConference - Turnkey video conferencing component
  *

@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useDevices - Device management from MediaManager
  *

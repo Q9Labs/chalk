@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useInteractions - Reactions and hand raise from InteractionManager
  */

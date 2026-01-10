@@ -1,6 +1,6 @@
 {
 	"name": "@q9labs/chalk-core",
-	"version": "0.0.15",
+	"version": "0.0.16",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
@@ -10,8 +10,10 @@
 	},
 	"exports": {
 		".": {
+			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
+			"require": "./dist/index.js",
+			"default": "./dist/index.js"
 		}
 	},
 	"files": [
@@ -19,7 +21,7 @@
 	],
 	"scripts": {
 		"build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
-		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+		"build:types": "tsc --project tsconfig.json",
 		"dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
 		"test": "bun test",
 		"check-types": "tsc --noEmit",

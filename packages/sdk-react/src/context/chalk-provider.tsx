@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * ChalkProvider - New session-based context provider
  *

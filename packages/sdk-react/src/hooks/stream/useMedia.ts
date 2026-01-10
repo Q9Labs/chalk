@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useMedia - Control video/audio from MediaManager
  */

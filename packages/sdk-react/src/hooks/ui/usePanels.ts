@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * usePanels - Panel control from UIManager
  */

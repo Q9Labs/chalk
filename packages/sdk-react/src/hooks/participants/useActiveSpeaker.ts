@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useActiveSpeaker - Track the current active speaker
  */

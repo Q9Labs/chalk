@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * WhiteboardPanel - Full-screen collaborative whiteboard using Excalidraw
  *

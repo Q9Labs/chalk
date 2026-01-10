@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useWhiteboardPermissions - Host controls for whiteboard permissions
  *

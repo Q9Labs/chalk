@@ -1,5 +1,3 @@
-"use client";
-
 import React, { memo } from "react";
 import { Spinner } from "../atomic";
 import { cn } from "../../utils/cn";

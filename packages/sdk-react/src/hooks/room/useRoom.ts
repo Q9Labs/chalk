@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useRoom - Access room state from RoomManager
  */

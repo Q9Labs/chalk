@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * useRecording - Recording from RecordingManager
  */
