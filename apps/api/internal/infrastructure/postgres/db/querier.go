@@ -35,6 +35,7 @@ type Querier interface {
 	// Room Queries
 	// CRUD operations and room management
 	CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, error)
+	CreateRoomWithID(ctx context.Context, arg CreateRoomWithIDParams) (Room, error)
 	// Tenant Queries
 	// CRUD operations and tenant-specific queries
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)

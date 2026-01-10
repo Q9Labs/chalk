@@ -73,6 +73,54 @@ func (q *Queries) CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, e
 	return i, err
 }
 
+const createRoomWithID = `-- name: CreateRoomWithID :one
+INSERT INTO rooms (
+    id,
+    tenant_id,
+    cloudflare_meeting_id,
+    name,
+    config,
+    started_at
+) VALUES (
+    $1, $2, $3, $4, $5, NOW()
+)
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata
+`
+
+type CreateRoomWithIDParams struct {
+	ID                  uuid.UUID `db:"id" json:"id"`
+	TenantID            uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	CloudflareMeetingID string    `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
+	Name                *string   `db:"name" json:"name"`
+	Config              []byte    `db:"config" json:"config"`
+}
+
+func (q *Queries) CreateRoomWithID(ctx context.Context, arg CreateRoomWithIDParams) (Room, error) {
+	row := q.db.QueryRow(ctx, createRoomWithID,
+		arg.ID,
+		arg.TenantID,
+		arg.CloudflareMeetingID,
+		arg.Name,
+		arg.Config,
+	)
+	var i Room
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.CloudflareMeetingID,
+		&i.Name,
+		&i.Config,
+		&i.Status,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
+	)
+	return i, err
+}
+
 const deleteRoom = `-- name: DeleteRoom :exec
 DELETE FROM rooms
 WHERE id = $1

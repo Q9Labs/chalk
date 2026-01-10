@@ -13,6 +13,19 @@ INSERT INTO rooms (
 )
 RETURNING *;
 
+-- name: CreateRoomWithID :one
+INSERT INTO rooms (
+    id,
+    tenant_id,
+    cloudflare_meeting_id,
+    name,
+    config,
+    started_at
+) VALUES (
+    $1, $2, $3, $4, $5, NOW()
+)
+RETURNING *;
+
 -- name: GetRoom :one
 SELECT * FROM rooms
 WHERE id = $1 LIMIT 1;

@@ -65,6 +65,7 @@ func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateMan
 
 type JoinRoomInput struct {
 	RoomID         uuid.UUID
+	TenantID       uuid.UUID // From JWT - used for auto-creating rooms
 	DisplayName    string
 	ExternalUserID string
 	Role           string
@@ -83,9 +84,46 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 
 	// Room doesn't exist - auto-create if tenant allows early join
 	if err != nil {
-		// Try to get tenant from JWT context (passed via input) or find default tenant
-		// For now, return error - room must be created first via API
-		return nil, ErrRoomNotAvailable
+		if input.TenantID == uuid.Nil {
+			return nil, ErrRoomNotAvailable
+		}
+
+		tenant, err := s.db.GetTenant(ctx, input.TenantID)
+		if err != nil {
+			return nil, ErrTenantNotFound
+		}
+
+		// Check if tenant allows early join (auto-creation)
+		var tenantConfig struct {
+			AllowEarlyJoin bool `json:"allow_early_join"`
+		}
+		if tenant.TenantConfig != nil {
+			_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
+		}
+
+		if !tenantConfig.AllowEarlyJoin {
+			return nil, ErrRoomNotAvailable
+		}
+
+		// Auto-create the room
+		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cloudflare.CreateMeetingRequest{
+			Title: "Auto-created Room",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create room: %w", err)
+		}
+
+		newRoom, err := s.db.CreateRoomWithID(ctx, db.CreateRoomWithIDParams{
+			ID:                  input.RoomID,
+			TenantID:            input.TenantID,
+			CloudflareMeetingID: cfMeeting.ID,
+			Name:                strPtr("Auto-created Room"),
+			Config:              []byte("{}"),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create room in database: %w", err)
+		}
+		room = newRoom
 	}
 
 	// Room exists but is ended - reactivate it

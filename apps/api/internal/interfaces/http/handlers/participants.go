@@ -6,6 +6,7 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/domain/participant"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -56,8 +57,16 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
+	// Get tenant ID from JWT for auto-creating rooms
+	claims, _ := middleware.GetClaims(c)
+	var tenantID uuid.UUID
+	if claims != nil {
+		tenantID = claims.TenantID
+	}
+
 	output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
 		RoomID:         roomID,
+		TenantID:       tenantID,
 		DisplayName:    req.DisplayName,
 		ExternalUserID: req.ExternalUserID,
 		Role:           req.Role,
