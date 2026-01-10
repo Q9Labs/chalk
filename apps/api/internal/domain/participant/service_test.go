@@ -12,9 +12,20 @@ import (
 )
 
 type mockCloudflareClient struct {
+	createMeetingFn         func(ctx context.Context, req cloudflare.CreateMeetingRequest) (*cloudflare.Meeting, error)
 	addParticipantFn        func(ctx context.Context, meetingID string, req cloudflare.AddParticipantRequest) (*cloudflare.Participant, error)
 	removeParticipantFn     func(ctx context.Context, meetingID, participantID string) error
 	refreshParticipantToken func(ctx context.Context, meetingID, participantID string) (*cloudflare.Participant, error)
+}
+
+func (m *mockCloudflareClient) CreateMeeting(ctx context.Context, req cloudflare.CreateMeetingRequest) (*cloudflare.Meeting, error) {
+	if m.createMeetingFn != nil {
+		return m.createMeetingFn(ctx, req)
+	}
+	return &cloudflare.Meeting{
+		ID:    "cf-meeting-123",
+		Title: req.Title,
+	}, nil
 }
 
 func (m *mockCloudflareClient) AddParticipant(ctx context.Context, meetingID string, req cloudflare.AddParticipantRequest) (*cloudflare.Participant, error) {
