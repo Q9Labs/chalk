@@ -22,6 +22,7 @@ var (
 )
 
 type CloudflareClient interface {
+	CreateMeeting(ctx context.Context, req cloudflare.CreateMeetingRequest) (*cloudflare.Meeting, error)
 	AddParticipant(ctx context.Context, meetingID string, req cloudflare.AddParticipantRequest) (*cloudflare.Participant, error)
 	RemoveParticipant(ctx context.Context, meetingID, participantID string) error
 	RefreshParticipantToken(ctx context.Context, meetingID, participantID string) (*cloudflare.Participant, error)
@@ -79,8 +80,53 @@ type JoinRoomOutput struct {
 
 func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomOutput, error) {
 	room, err := s.db.GetRoom(ctx, input.RoomID)
-	if err != nil || room.Status != "active" {
+
+	// Room doesn't exist - auto-create if tenant allows early join
+	if err != nil {
+		// Try to get tenant from JWT context (passed via input) or find default tenant
+		// For now, return error - room must be created first via API
 		return nil, ErrRoomNotAvailable
+	}
+
+	// Room exists but is ended - reactivate it
+	if room.Status != "active" {
+		tenant, err := s.db.GetTenant(ctx, room.TenantID)
+		if err != nil {
+			return nil, ErrTenantNotFound
+		}
+
+		// Check if tenant allows early join (reactivation)
+		var tenantConfig struct {
+			AllowEarlyJoin bool `json:"allow_early_join"`
+		}
+		if tenant.TenantConfig != nil {
+			_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
+		}
+
+		if !tenantConfig.AllowEarlyJoin {
+			return nil, ErrRoomNotAvailable
+		}
+
+		// Create new Cloudflare meeting for the reactivated room
+		roomName := ""
+		if room.Name != nil {
+			roomName = *room.Name
+		}
+		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cloudflare.CreateMeetingRequest{
+			Title: roomName,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to reactivate room: %w", err)
+		}
+
+		// Reactivate room in database with new CF meeting ID
+		room, err = s.db.ReactivateRoom(ctx, db.ReactivateRoomParams{
+			ID:                  input.RoomID,
+			CloudflareMeetingID: cfMeeting.ID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to reactivate room in database: %w", err)
+		}
 	}
 
 	activeParticipantsCount, err := s.db.CountActiveParticipantsByRoom(ctx, input.RoomID)

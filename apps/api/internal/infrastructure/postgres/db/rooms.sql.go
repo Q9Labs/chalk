@@ -455,6 +455,42 @@ func (q *Queries) ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantPa
 	return items, nil
 }
 
+const reactivateRoom = `-- name: ReactivateRoom :one
+UPDATE rooms
+SET
+    status = 'active',
+    cloudflare_meeting_id = $2,
+    started_at = NOW(),
+    ended_at = NULL
+WHERE id = $1
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata
+`
+
+type ReactivateRoomParams struct {
+	ID                  uuid.UUID `db:"id" json:"id"`
+	CloudflareMeetingID string    `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
+}
+
+func (q *Queries) ReactivateRoom(ctx context.Context, arg ReactivateRoomParams) (Room, error) {
+	row := q.db.QueryRow(ctx, reactivateRoom, arg.ID, arg.CloudflareMeetingID)
+	var i Room
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.CloudflareMeetingID,
+		&i.Name,
+		&i.Config,
+		&i.Status,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
+	)
+	return i, err
+}
+
 const updateRoom = `-- name: UpdateRoom :one
 UPDATE rooms
 SET

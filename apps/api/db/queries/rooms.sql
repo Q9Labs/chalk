@@ -58,6 +58,16 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- name: ReactivateRoom :one
+UPDATE rooms
+SET
+    status = 'active',
+    cloudflare_meeting_id = $2,
+    started_at = NOW(),
+    ended_at = NULL
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteRoom :exec
 DELETE FROM rooms
 WHERE id = $1;

@@ -89,6 +89,7 @@ type Querier interface {
 	MarkRecordingFailed(ctx context.Context, id uuid.UUID) (Recording, error)
 	ParticipantLeave(ctx context.Context, id uuid.UUID) (Participant, error)
 	ParticipantLeaveByCloudflareID(ctx context.Context, cloudflareParticipantID string) (Participant, error)
+	ReactivateRoom(ctx context.Context, arg ReactivateRoomParams) (Room, error)
 	RotateTenantAPIKey(ctx context.Context, arg RotateTenantAPIKeyParams) (Tenant, error)
 	StopRecording(ctx context.Context, id uuid.UUID) (Recording, error)
 	UpdateParticipant(ctx context.Context, arg UpdateParticipantParams) (Participant, error)
