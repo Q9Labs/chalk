@@ -135,12 +135,11 @@ func (h *Hub) unregisterClient(client *Client) {
 	delete(h.clients, client.participantID)
 	delete(h.participantMeta, client.participantID)
 
+	// Check if room exists and count remaining participants
+	roomEmpty := false
 	if room, ok := h.rooms[client.roomID]; ok {
 		delete(room, client.participantID)
-		if len(room) == 0 {
-			delete(h.rooms, client.roomID)
-			delete(h.roomRecording, client.roomID)
-		}
+		roomEmpty = len(room) == 0
 	}
 
 	h.mu.Unlock()
@@ -149,11 +148,23 @@ func (h *Hub) unregisterClient(client *Client) {
 	client.Close()
 	log.Printf("Client unregistered: participant %s from room %s", client.participantID, client.roomID)
 
-	leftMsg, _ := NewMessage(MessageTypeParticipantLeft, ParticipantLeftPayload{
-		ParticipantID: client.participantID,
-	})
-	data, _ := json.Marshal(leftMsg)
-	h.BroadcastToRoom(client.roomID, data, "")
+	// Broadcast participant_left BEFORE removing room (only if room has other participants)
+	if !roomEmpty {
+		leftMsg, _ := NewMessage(MessageTypeParticipantLeft, ParticipantLeftPayload{
+			ParticipantID: client.participantID,
+		})
+		data, _ := json.Marshal(leftMsg)
+		h.BroadcastToRoom(client.roomID, data, "")
+	}
+
+	// Now clean up empty room
+	if roomEmpty {
+		h.mu.Lock()
+		delete(h.rooms, client.roomID)
+		delete(h.roomRecording, client.roomID)
+		h.mu.Unlock()
+		log.Printf("Room %s removed from hub (last participant left)", client.roomID)
+	}
 }
 
 // BroadcastToRoom broadcasts a message to all clients in a room

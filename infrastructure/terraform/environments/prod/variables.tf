@@ -18,6 +18,7 @@ variable "cors_allowed_origins" {
     "https://chalk-5bc.pages.dev",
     "http://localhost:3000",
     "http://localhost:3070",
+    "https://collabdash-dev.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3070",
