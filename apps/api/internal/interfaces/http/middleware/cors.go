@@ -18,7 +18,7 @@ func CORS() gin.HandlerFunc {
 		allowedOrigins := map[string]bool{
 			"https://chalk.q9labs.ai":     true,
 			"https://chalk-5bc.pages.dev": true,
-			"https://collabdash-dev.vercel.app": true
+			"https://collabdash-dev.vercel.app": true,
 		}
 
 		// Allow any localhost or 127.0.0.1 origin for development
