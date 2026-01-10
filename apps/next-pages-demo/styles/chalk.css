@@ -1,0 +1,406 @@
+/**
+ * Chalk SDK - Bundled Styles
+ * Single-file CSS bundle for external consumers (no @import dependencies)
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600&display=swap");
+
+/* =============================================================================
+   Variables
+   ============================================================================= */
+
+:root {
+    /* Colors - Light mode default */
+    --chalk-bg-primary: #f8fafc;
+    --chalk-bg-secondary: #ffffff;
+    --chalk-bg-tertiary: #f1f5f9;
+    --chalk-bg-subtle: #eef2f7;
+    --chalk-bg-subtle-50: rgba(238, 242, 247, 0.5);
+    --chalk-bg-surface: #f3f5f9;
+    --chalk-bg-stage: #0f172a;
+    --chalk-bg-tile: #111827;
+    --chalk-bg-panel: #ffffff;
+    --chalk-bg-controls: rgba(255, 255, 255, 0.92);
+    --chalk-bg-overlay: rgba(15, 23, 42, 0.18);
+    --chalk-text-primary: #0f172a;
+    --chalk-text-secondary: #475569;
+    --chalk-text-muted: #64748b;
+
+    /* Brand */
+    --chalk-brand: #1a73e8;
+    --chalk-brand-hover: #1558c0;
+    --chalk-accent: var(--chalk-brand);
+    --chalk-accent-hover: var(--chalk-brand-hover);
+    --chalk-primary: var(--chalk-brand);
+    --chalk-primary-hover: var(--chalk-brand-hover);
+    --chalk-danger: #d93025;
+    --chalk-success: #1e8e3e;
+    --chalk-warning: #f9ab00;
+    --chalk-error-subtle: rgba(217, 48, 37, 0.12);
+    --chalk-success-subtle: rgba(30, 142, 62, 0.12);
+    --chalk-border-color: #e2e8f0;
+    --chalk-border-subtle: #e5e7eb;
+
+    /* Spacing */
+    --chalk-spacing-xs: 0.25rem;
+    --chalk-spacing-sm: 0.5rem;
+    --chalk-spacing-md: 1rem;
+    --chalk-spacing-lg: 1.5rem;
+    --chalk-spacing-xl: 2rem;
+
+    /* Typography */
+    --chalk-font-family:
+        "Sora", "Avenir Next", "Avenir", "Helvetica Neue", "Segoe UI",
+        sans-serif;
+    --chalk-font-size-xs: 0.75rem;
+    --chalk-font-size-sm: 0.875rem;
+    --chalk-font-size-md: 1rem;
+    --chalk-font-size-lg: 1.125rem;
+    --chalk-font-size-xl: 1.25rem;
+    --chalk-font-weight-normal: 400;
+    --chalk-font-weight-medium: 500;
+    --chalk-font-weight-semibold: 600;
+
+    /* Borders & Radius */
+    --chalk-border-radius-sm: 0.25rem;
+    --chalk-border-radius-md: 0.5rem;
+    --chalk-border-radius-lg: 0.75rem;
+    --chalk-border-radius-xl: 1rem;
+    --chalk-border-radius-full: 9999px;
+
+    /* Shadows */
+    --chalk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --chalk-shadow-md: 0 6px 16px rgba(15, 23, 42, 0.12);
+    --chalk-shadow-lg: 0 16px 30px rgba(15, 23, 42, 0.14);
+    --chalk-shadow-xl: 0 26px 60px rgba(15, 23, 42, 0.18);
+    --chalk-shadow-panel: 0 18px 40px rgba(15, 23, 42, 0.12);
+    --chalk-shadow-controls: 0 12px 30px rgba(15, 23, 42, 0.2);
+    --chalk-shadow-tile: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --chalk-shadow-tile-hover: 0 8px 24px rgba(0, 0, 0, 0.25);
+
+    /* Grid */
+    --chalk-tile-gap: 4px;
+
+    /* Transitions */
+    --chalk-transition-fast: 150ms ease;
+    --chalk-transition-normal: 250ms ease;
+    --chalk-transition-slow: 350ms ease;
+}
+
+/* Dark mode overrides */
+[data-chalk-theme="dark"],
+.dark .chalk-root,
+.chalk-root[data-chalk-theme="dark"] {
+    --chalk-bg-primary: #0b0f14;
+    --chalk-bg-secondary: #121721;
+    --chalk-bg-tertiary: #1c232d;
+    --chalk-bg-subtle: #141a21;
+    --chalk-bg-subtle-50: rgba(20, 26, 33, 0.5);
+    --chalk-bg-surface: #0b0f14;
+    --chalk-bg-stage: #0b0f14;
+    --chalk-bg-tile: #11161f;
+    --chalk-bg-panel: #121721;
+    --chalk-bg-controls: rgba(18, 23, 33, 0.92);
+    --chalk-bg-overlay: rgba(2, 6, 23, 0.6);
+    --chalk-text-primary: #f8fafc;
+    --chalk-text-secondary: #cbd5e1;
+    --chalk-text-muted: #94a3b8;
+    --chalk-border-color: rgba(148, 163, 184, 0.18);
+    --chalk-border-subtle: rgba(148, 163, 184, 0.12);
+    --chalk-error-subtle: rgba(217, 48, 37, 0.2);
+    --chalk-success-subtle: rgba(30, 142, 62, 0.2);
+    --chalk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --chalk-shadow-md: 0 6px 16px rgba(0, 0, 0, 0.35);
+    --chalk-shadow-lg: 0 16px 30px rgba(0, 0, 0, 0.45);
+    --chalk-shadow-xl: 0 26px 60px rgba(0, 0, 0, 0.55);
+    --chalk-shadow-panel: 0 18px 40px rgba(0, 0, 0, 0.45);
+    --chalk-shadow-controls: 0 12px 30px rgba(0, 0, 0, 0.5);
+    --chalk-shadow-tile: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --chalk-shadow-tile-hover: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* =============================================================================
+   Animations
+   ============================================================================= */
+
+@keyframes chalk-scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes chalk-fade-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes chalk-speaking-glow {
+    0%,
+    100% {
+        box-shadow: 0 0 0 2px var(--chalk-accent);
+    }
+    50% {
+        box-shadow: 0 0 0 4px var(--chalk-accent);
+    }
+}
+
+@keyframes chalk-bounce {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(0.95);
+    }
+}
+
+@keyframes chalk-slide-right {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes chalk-slide-left {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes chalk-float-up {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-50px) scale(1.2);
+    }
+}
+
+@keyframes chalk-hand-bounce {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+@keyframes chalk-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+@keyframes chalk-toast-in {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes chalk-highlight-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3);
+    }
+}
+
+@keyframes chalk-transcript-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Animation utility classes */
+.chalk-animate-scale-in {
+    animation: chalk-scale-in var(--chalk-transition-normal) ease-out;
+}
+.chalk-animate-fade-out {
+    animation: chalk-fade-out var(--chalk-transition-normal) ease-out forwards;
+}
+.chalk-animate-speaking {
+    animation: chalk-speaking-glow 1.5s ease-in-out infinite;
+}
+.chalk-animate-bounce {
+    animation: chalk-bounce var(--chalk-transition-fast) ease-out;
+}
+.chalk-animate-slide-right {
+    animation: chalk-slide-right var(--chalk-transition-normal) ease-out;
+}
+.chalk-animate-slide-left {
+    animation: chalk-slide-left var(--chalk-transition-normal) ease-out;
+}
+.chalk-animate-float-up {
+    animation: chalk-float-up 2s ease-out forwards;
+}
+.chalk-animate-hand-bounce {
+    animation: chalk-hand-bounce 0.6s ease-in-out infinite;
+}
+.chalk-animate-pulse {
+    animation: chalk-pulse 2s ease-in-out infinite;
+}
+.chalk-animate-toast-in {
+    animation: chalk-toast-in var(--chalk-transition-normal) ease-out;
+}
+.chalk-animate-highlight {
+    animation: chalk-highlight-pulse 2s ease-in-out infinite;
+}
+.chalk-animate-transcript-in {
+    animation: chalk-transcript-in var(--chalk-transition-fast) ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* =============================================================================
+   Base Styles
+   ============================================================================= */
+
+.chalk-root {
+    font-family: var(--chalk-font-family);
+    color: var(--chalk-text-primary);
+    background:
+        radial-gradient(
+            1200px 600px at 15% -10%,
+            rgba(26, 115, 232, 0.12),
+            transparent 60%
+        ),
+        var(--chalk-bg-surface);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.chalk-root *,
+.chalk-root *::before,
+.chalk-root *::after {
+    box-sizing: border-box;
+}
+
+/* Utility classes for SDK tokens */
+.bg-chalk-bg-subtle {
+    background-color: var(--chalk-bg-subtle);
+}
+.bg-chalk-bg-subtle\/50 {
+    background-color: var(--chalk-bg-subtle-50);
+}
+.bg-chalk-bg-tertiary {
+    background-color: var(--chalk-bg-tertiary);
+}
+.bg-chalk-bg-surface {
+    background-color: var(--chalk-bg-surface);
+}
+.bg-chalk-accent {
+    background-color: var(--chalk-accent);
+}
+.bg-chalk-accent-hover {
+    background-color: var(--chalk-accent-hover);
+}
+.bg-chalk-danger {
+    background-color: var(--chalk-danger);
+}
+.bg-chalk-success {
+    background-color: var(--chalk-success);
+}
+.bg-chalk-error-subtle {
+    background-color: var(--chalk-error-subtle);
+}
+
+.text-chalk-text-primary {
+    color: var(--chalk-text-primary);
+}
+.text-chalk-text-secondary {
+    color: var(--chalk-text-secondary);
+}
+.text-chalk-text-muted {
+    color: var(--chalk-text-muted);
+}
+.text-chalk-accent {
+    color: var(--chalk-accent);
+}
+.text-chalk-success {
+    color: var(--chalk-success);
+}
+.text-chalk-danger {
+    color: var(--chalk-danger);
+}
+.text-chalk-error-main {
+    color: var(--chalk-danger);
+}
+
+.border-chalk-border-subtle {
+    border-color: var(--chalk-border-subtle);
+}
+.border-chalk-border-color {
+    border-color: var(--chalk-border-color);
+}
+.border-chalk-accent {
+    border-color: var(--chalk-accent);
+}
+
+.hover\:bg-chalk-bg-subtle:hover {
+    background-color: var(--chalk-bg-subtle);
+}
+.hover\:bg-chalk-bg-tertiary:hover {
+    background-color: var(--chalk-bg-tertiary);
+}
+.hover\:bg-chalk-success\/10:hover {
+    background-color: var(--chalk-success-subtle);
+}
+.hover\:bg-chalk-danger\/10:hover {
+    background-color: var(--chalk-error-subtle);
+}
+.hover\:bg-chalk-error-subtle:hover {
+    background-color: var(--chalk-error-subtle);
+}
+.hover\:border-chalk-text-secondary:hover {
+    border-color: var(--chalk-text-secondary);
+}
+/* chalk test */
+.chalk-test {
+    color: red !important;
+}

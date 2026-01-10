@@ -73,14 +73,14 @@ function App() {
 									</Button>
 								</Link>
 								<Link to="/docs">
-								<Button
-									variant="outline"
-									size="lg"
-									className="h-12 px-8 text-base"
-								>
-									Read Documentation
-								</Button>
-							</Link>
+									<Button
+										variant="outline"
+										size="lg"
+										className="h-12 px-8 text-base"
+									>
+										Read Documentation
+									</Button>
+								</Link>
 							</div>
 
 							<div className="pt-8 flex items-center justify-center gap-8 text-muted-foreground/50">
@@ -224,7 +224,11 @@ function VideoRoom() {
 
 			<footer className="border-t py-12 bg-muted/10">
 				<div className="container mx-auto px-4 sm:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
-					<img src="/chalk-logo.svg" alt="Chalk" className="h-6 w-auto opacity-75" />
+					<img
+						src="/chalk-logo.svg"
+						alt="Chalk"
+						className="h-6 w-auto opacity-75"
+					/>
 					<p className="text-sm text-muted-foreground">
 						© {new Date().getFullYear()} Chalk. All rights reserved.
 					</p>

@@ -12,12 +12,12 @@
  * - Keyboard shortcut 'W' to toggle whiteboard
  */
 
+import { createLogger } from "@q9labs/chalk-core";
 import {
 	useInteractions,
 	useWhiteboard,
 	VideoConference,
 } from "@q9labs/chalk-react";
-import { createLogger } from "@q9labs/chalk-core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import z from "zod";
@@ -49,9 +49,12 @@ function RoomPage() {
 		navigate({ to: "/" });
 	}, [navigate]);
 
-	const handleJoin = useCallback((joinedRoomId: string) => {
-		log.info("Joined room", { roomId: joinedRoomId });
-	}, [log]);
+	const handleJoin = useCallback(
+		(joinedRoomId: string) => {
+			log.info("Joined room", { roomId: joinedRoomId });
+		},
+		[log],
+	);
 
 	const handleError = useCallback(
 		(error: unknown) => {

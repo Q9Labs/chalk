@@ -110,14 +110,22 @@ function RootComponent() {
 			sessionStorage.setItem("chalk_access_token", newAccessToken);
 		}
 		if (data.refreshToken || data.refresh_token) {
-			sessionStorage.setItem("chalk_refresh_token", data.refreshToken || data.refresh_token);
+			sessionStorage.setItem(
+				"chalk_refresh_token",
+				data.refreshToken || data.refresh_token,
+			);
 		}
 
 		return newAccessToken;
 	};
 
 	return (
-		<ChalkProvider debug={true} apiUrl={apiUrl} wsUrl={wsUrl} tokenProvider={tokenProvider}>
+		<ChalkProvider
+			debug={true}
+			apiUrl={apiUrl}
+			wsUrl={wsUrl}
+			tokenProvider={tokenProvider}
+		>
 			<div
 				className={` overflow-hidden bg-background text-foreground ${theme}`}
 			>
