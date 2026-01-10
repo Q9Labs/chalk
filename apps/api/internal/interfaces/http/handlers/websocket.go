@@ -74,14 +74,8 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		writer = uw.Unwrap()
 	}
 	ws, err := websocket.Accept(writer, c.Request, &websocket.AcceptOptions{
-		Subprotocols: []string{"chalk"},
-		OriginPatterns: []string{
-			"localhost:*",
-			"127.0.0.1:*",
-			"chalk.q9labs.ai",
-			"chalk-5bc.pages.dev",
-			"*.pages.dev",
-		},
+		Subprotocols:   []string{"chalk"},
+		InsecureSkipVerify: true, // Allow all origins for development
 	})
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
