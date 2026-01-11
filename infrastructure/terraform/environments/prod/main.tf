@@ -171,8 +171,9 @@ module "elasticache" {
   num_cache_clusters = 2                # Minimum 2 for auto-failover (down from 3)
   multi_az_enabled   = true             # Keep for reliability (free with 2 nodes)
 
-  snapshot_retention_limit = 1 # Reduced from 7
+  snapshot_retention_limit = 1    # Reduced from 7
   log_retention_days       = 14
+  apply_immediately        = true # Force immediate node type change
 }
 
 module "secrets" {

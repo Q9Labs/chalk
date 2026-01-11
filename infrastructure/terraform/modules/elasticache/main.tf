@@ -170,7 +170,7 @@ resource "aws_elasticache_replication_group" "redis" {
   maintenance_window       = var.maintenance_window
 
   auto_minor_version_upgrade = true
-  apply_immediately          = var.environment != "prod"
+  apply_immediately          = var.apply_immediately != null ? var.apply_immediately : var.environment != "prod"
 
   log_delivery_configuration {
     destination      = aws_cloudwatch_log_group.redis_slow.name

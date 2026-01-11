@@ -85,6 +85,12 @@ variable "log_retention_days" {
   default     = 14
 }
 
+variable "apply_immediately" {
+  description = "Apply changes immediately (overrides environment-based default)"
+  type        = bool
+  default     = null
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)
