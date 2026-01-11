@@ -25,41 +25,43 @@ Cost/hour = GB × $0.05
 
 ## Monthly Cost Tiers
 
-### Startup
-- **Users:** 60 concurrent (20 rooms × 3p)
+### Startup (~200 MAU, current prod)
+- **Users:** 30 concurrent (10 rooms × 3p)
 - **Hours:** 80/month (4hr/day × 20 days)
-- **Bandwidth:** 3,360 GB
-- **Cloudflare:** $118
-- **AWS Infra:** $92
-- **Total:** **$210/month** ($3.50/user)
+- **Bandwidth:** 1,680 GB
+- **Cloudflare:** $34 (1TB free applied)
+- **AWS Infra:** $174
+- **Total:** **~$210/month** ($1.05/MAU)
 
-### Growth
-- **Users:** 300 concurrent (100 rooms × 3p)
+### Growth (~1,000 MAU)
+- **Users:** 100 concurrent (33 rooms × 3p)
 - **Hours:** 120/month (6hr/day × 20 days)
-- **Bandwidth:** 25,200 GB
-- **Cloudflare:** $1,210
+- **Bandwidth:** 8,400 GB
+- **Cloudflare:** $370
 - **AWS Infra:** $319
-- **Total:** **$1,529/month** ($5.10/user)
+- **Total:** **~$690/month** ($0.69/MAU)
 
-### Scale
-- **Users:** 2,000 concurrent (500 rooms × 4p)
+### Scale (~5,000 MAU)
+- **Users:** 500 concurrent (125 rooms × 4p)
 - **Hours:** 160/month (8hr/day × 20 days)
-- **Bandwidth:** 336,000 GB
-- **Cloudflare:** $16,750
+- **Bandwidth:** 84,000 GB
+- **Cloudflare:** $4,150
 - **AWS Infra:** $800
-- **Total:** **$17,550/month** ($8.78/user)
+- **Total:** **~$4,950/month** ($0.99/MAU)
 
 ## AWS Infrastructure
 
 | Component | Startup | Growth | Scale |
 |-----------|---------|--------|-------|
-| ECS | $15 | $61 | $200 |
-| Aurora Serverless v2 | $44 | $175 | $250 |
-| ElastiCache | $12 | $25 | $150 |
-| API Gateway | $5 | $25 | $100 |
-| R2 Storage | $1 | $3 | $15 |
-| Other | $15 | $30 | $85 |
-| **Total** | **$92** | **$319** | **$800** |
+| ECS | $15 (1× t3.small) | $61 (2× t3.medium) | $200 (4× t3.large) |
+| Aurora Serverless v2 | $44 (0.5-2 ACU) | $175 (2-8 ACU) | $350 (4-16 ACU) |
+| ElastiCache | $24 (2× t3.micro) | $50 (2× t3.small) | $150 (2× r6g.large) |
+| NAT Gateway | $33 (1×) | $33 (1×) | $99 (3×) |
+| ALB + API Gateway | $26 | $35 | $100 |
+| Other (WAF, KMS, CW) | $32 | $50 | $101 |
+| **Total** | **$174** | **$404** | **$1,000** |
+
+*Current prod (Startup tier) verified Jan 2026. Scale up as load grows.*
 
 ## Recording Storage
 
@@ -80,16 +82,16 @@ Cost/hour = GB × $0.05
 ```javascript
 function calculateMinutes(budget, participants) {
   const costPerHour = { 2: 0.035, 3: 0.105, 5: 0.35, 10: 1.58 };
-  const awsInfra = budget <= 200 ? 92 : 319;
+  const awsInfra = budget <= 300 ? 174 : 404; // Startup vs Growth tier
   const available = (budget - awsInfra) + 50; // +$50 free tier
   const hours = available / costPerHour[participants];
   return Math.round(hours * 60);
 }
 
-// Examples:
-calculateMinutes(200, 3)  → 90,286 min  (1,505 hrs)
-calculateMinutes(500, 3)  → 132,000 min (2,200 hrs)
-calculateMinutes(1000, 3) → 417,429 min (6,957 hrs)
+// Examples (with $174 startup infra):
+calculateMinutes(250, 3)  → 72,000 min  (1,200 hrs)
+calculateMinutes(500, 3)  → 216,000 min (3,600 hrs)
+calculateMinutes(1000, 3) → 502,857 min (8,381 hrs)
 ```
 
 ## Capacity by Budget

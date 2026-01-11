@@ -43,9 +43,9 @@ infrastructure/terraform/
 
 | Env | VPC | ECS | Aurora ACU | Redis | Cost/mo |
 |-----|-----|-----|------------|-------|---------|
-| dev | 10.0/16, 2 AZ, 1 NAT | t3.small, 1-2 | 0.5-2 | t3.micro, 1 node | ~$210 |
-| staging | 10.1/16, 2 AZ, 1 NAT | t3.medium, 2-4 | 1-4 | t3.small, 2 nodes | ~$400 |
-| prod | 10.2/16, 3 AZ, 3 NAT | t3.large, 3-10 | 2-16 | r6g.large, 3 nodes | ~$800 |
+| dev | 10.0/16, 2 AZ, 1 NAT | t3.small, 1-2 | 0.5-2 | t3.micro, 1 node | ~$120 |
+| staging | 10.1/16, 2 AZ, 1 NAT | t3.medium, 2-4 | 1-4 | t3.small, 2 nodes | ~$250 |
+| prod | 10.2/16, 3 AZ, 1 NAT | t3.small, 1-2 | 0.5-2 | t3.micro, 2 nodes | ~$174 |
 
 ## Outputs
 
@@ -90,14 +90,17 @@ cd modules/<module> && terraform init -backend=false && terraform validate  # Va
 
 | Component | Dev | Staging | Prod |
 |-----------|-----|---------|------|
-| ECS | $15 | $61 | $200 |
-| Aurora | $44 | $88 | $250 |
-| ElastiCache | $12 | $25 | $150 |
-| NAT Gateway | $32 | $32 | $96 |
-| Other | $20 | $30 | $100 |
-| **Total** | **~$123** | **~$246** | **~$846** |
+| ECS | $15 | $61 | $15 |
+| Aurora | $44 | $88 | $44 |
+| ElastiCache | $12 | $25 | $24 |
+| NAT Gateway | $33 | $33 | $33 |
+| ALB + API GW | $26 | $30 | $26 |
+| Other (WAF, KMS, CW) | $10 | $20 | $32 |
+| **Total** | **~$140** | **~$257** | **~$174** |
 
 *Excludes API Gateway usage (pay-per-request) and data transfer. Cloudflare usage-based (R2 + Calls minutes).*
+
+**Note:** Prod is right-sized for ~200 MAU. Scale up ECS/Aurora/Redis as load grows.
 
 ## Requirements
 

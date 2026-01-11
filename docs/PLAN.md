@@ -383,23 +383,25 @@ GB per room per hour = Egress Streams × 0.35 GB (medium quality @ 784 Kbps)
 
 ### Monthly Cost by Tier
 
-| Tier | Concurrent | Bandwidth | Cloudflare | AWS Infra | Total |
-|------|------------|-----------|------------|-----------|-------|
-| **Startup** | 20 rooms × 3p = 60 users | 3,360 GB | $118 | $92 | **~$210/mo** |
-| **Growth** | 100 rooms × 3p = 300 users | 25,200 GB | $1,210 | $319 | **~$1,529/mo** |
-| **Scale** | 500 rooms × 4p = 2,000 users | 336,000 GB | $16,750 | $800 | **~$17,550/mo** |
+| Tier | MAU | Concurrent | Cloudflare | AWS Infra | Total |
+|------|-----|------------|------------|-----------|-------|
+| **Startup** | ~200 | 10 rooms × 3p = 30 | $34 | $174 | **~$210/mo** |
+| **Growth** | ~1,000 | 33 rooms × 3p = 100 | $370 | $404 | **~$775/mo** |
+| **Scale** | ~5,000 | 125 rooms × 4p = 500 | $4,150 | $1,000 | **~$5,150/mo** |
+
+*Current prod is Startup tier (verified Jan 2026)*
 
 ### AWS Infrastructure Breakdown
 
 | Component | Startup | Growth | Scale |
 |-----------|---------|--------|-------|
 | ECS | $15 (1× t3.small) | $61 (2× t3.medium) | $200 (4× t3.large) |
-| Aurora Serverless v2 | $44 (0.5 ACU) | $175 (2 ACU) | $250 (4-6 ACU) |
-| ElastiCache | $12 (t3.micro) | $25 (t3.small) | $150 (r6g.large) |
-| API Gateway | $5 | $25 | $100 |
-| R2 Storage | $1 | $3 | $15 |
-| Other | $15 | $30 | $85 |
-| **Total** | **$92** | **$319** | **$800** |
+| Aurora Serverless v2 | $44 (0.5-2 ACU) | $175 (2-8 ACU) | $350 (4-16 ACU) |
+| ElastiCache | $24 (2× t3.micro) | $50 (2× t3.small) | $150 (2× r6g.large) |
+| NAT Gateway | $33 (1×) | $33 (1×) | $99 (3×) |
+| ALB + API Gateway | $26 | $35 | $100 |
+| Other (WAF, KMS, CW) | $32 | $50 | $101 |
+| **Total** | **$174** | **$404** | **$1,000** |
 
 ### Recording Storage Costs
 - **R2 (0-7 days):** $0.015/GB/month, FREE egress
@@ -410,12 +412,12 @@ GB per room per hour = Egress Streams × 0.35 GB (medium quality @ 784 Kbps)
 ```javascript
 function calculateMinutes(budget, participants) {
   const costPerHour = { 2: 0.035, 3: 0.105, 5: 0.35, 10: 1.58 };
-  const awsInfra = budget <= 200 ? 92 : 319;
+  const awsInfra = budget <= 300 ? 174 : 404; // Startup vs Growth tier
   const available = (budget - awsInfra) + 50; // +$50 free tier
   const hours = available / costPerHour[participants];
   return Math.round(hours * 60);
 }
-// calculateMinutes(200, 3) → 90,286 minutes (~1,505 hours)
+// calculateMinutes(250, 3) → 72,000 minutes (~1,200 hours)
 ```
 
 ### Cost Optimization
