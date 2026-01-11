@@ -92,6 +92,10 @@ resource "aws_apigatewayv2_vpc_link" "main" {
   subnet_ids         = var.private_subnet_ids
 
   tags = local.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_apigatewayv2_api" "http" {
