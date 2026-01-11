@@ -202,7 +202,7 @@ jobs:
       - name: Update task definition with new image
         if: steps.download-task-def.outputs.skip_deploy != 'true'
         id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        uses: aws-actions/amazon-ecs-render-task-definition@v2
         with:
           task-definition: task-definition.json
           container-name: api
