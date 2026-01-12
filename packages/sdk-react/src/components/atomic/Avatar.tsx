@@ -81,11 +81,11 @@ export const Avatar = React.memo(({ name, src, size = 'md', status, className }:
         <img
           src={src}
           alt={name}
-          className="h-full w-full rounded-[var(--chalk-border-radius-full)] object-cover shadow-lg"
+          className="h-full w-full rounded-[var(--chalk-border-radius-full)] object-cover"
         />
       ) : (
         <div
-          className="flex h-full w-full items-center justify-center rounded-[var(--chalk-border-radius-full)] text-white font-medium shadow-lg"
+          className="flex h-full w-full items-center justify-center rounded-[var(--chalk-border-radius-full)] text-white font-medium"
           style={{ fontSize, background: gradient }}
         >
           {initials}

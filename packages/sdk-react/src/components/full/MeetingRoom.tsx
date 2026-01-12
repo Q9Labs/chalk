@@ -6,7 +6,7 @@ import {
 	ChatPanel,
 	ConnectionLostOverlay,
 	ControlBar,
-	MeetingHeader,
+	InviteModal,
 	NotificationStack,
 	ParticipantList,
 	ReactionPicker,
@@ -96,6 +96,7 @@ export interface MeetingRoomProps {
 	onToggleTranscription?: () => void;
 	onLeave?: () => void;
 	onTourComplete?: () => void;
+	onAddPeople?: () => void;
 	connectionStatus?: "connected" | "connecting" | "reconnecting" | "failed";
 	onRetryConnection?: () => void;
 	theme?: "light" | "dark" | "system";
@@ -115,7 +116,6 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	recordingDuration: _recordingDuration = 0,
 	meetingDuration = 0,
 	canRecord = false,
-	isTranscribing = false,
 	transcripts = [],
 	chatMessages = [],
 	onSendMessage,
@@ -142,6 +142,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	onToggleTranscription,
 	onLeave,
 	onTourComplete,
+	onAddPeople,
 	connectionStatus = "connected",
 	onRetryConnection,
 	theme = "system",
@@ -160,6 +161,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 		defaultLayout || "grid",
 	);
 	const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+	const [showInviteModal, setShowInviteModal] = useState(false);
 	const [showTour, setShowTour] = useState(false);
 	const [isIdle, setIsIdle] = useState(false);
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,37 +239,72 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 		onTourComplete?.();
 	};
 
+	const handleCopyLink = useCallback(() => {
+		const meetingLink = window.location.href;
+		navigator.clipboard.writeText(meetingLink);
+	}, []);
+
+	const handleAddPeople = useCallback(() => {
+		setShowInviteModal(true);
+		onAddPeople?.();
+	}, [onAddPeople]);
+
 	return (
 		<div
 			className={cn(
-				"chalk-root relative h-screen w-full text-[var(--chalk-text-primary)] overflow-hidden",
-				"bg-gradient-to-b from-[#1a1f2e] to-[#0f1219]",
+				" relative min-h-screen w-full text-white overflow-hidden p-6 flex flex-col justify-between",
 				className,
 			)}
 			data-chalk-theme={theme === "system" ? undefined : theme}
 		>
-			{/* Auto-hide header */}
-			<div
-				className={cn(
-					"absolute top-0 left-0 right-0 z-20 transition-all duration-300",
-					isIdle && !activePanel ? "opacity-0 -translate-y-2" : "opacity-100",
-				)}
-			>
-				<MeetingHeader
-					roomName={roomName}
-					isRecording={isRecording}
-					duration={meetingDuration}
-					isTranscribing={isTranscribing}
-					layout={layout}
-					onLayoutChange={setLayout}
-					className="px-4"
-				/>
+			<div className="absolute top-6 left-8 z-10">
+				<h1 className="text-white/40 text-sm font-medium">{roomName || "Video Call Screen"}</h1>
+			</div>
+
+			{/* Layout Switcher */}
+			<div className="absolute top-6 right-8 z-10 flex gap-2">
+				<button
+					onClick={() => setLayout("grid")}
+					className={cn(
+						"px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+						layout === "grid"
+							? "bg-white/20 text-white"
+							: "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+					)}
+					aria-label="Grid layout"
+				>
+					Grid
+				</button>
+				<button
+					onClick={() => setLayout("spotlight")}
+					className={cn(
+						"px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+						layout === "spotlight"
+							? "bg-white/20 text-white"
+							: "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+					)}
+					aria-label="Spotlight layout"
+				>
+					Spotlight
+				</button>
+				<button
+					onClick={() => setLayout("sidebar")}
+					className={cn(
+						"px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+						layout === "sidebar"
+							? "bg-white/20 text-white"
+							: "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+					)}
+					aria-label="Sidebar layout"
+				>
+					Sidebar
+				</button>
 			</div>
 
 			{/* Main content area */}
-			<div className="absolute inset-0 flex overflow-hidden pt-14 pb-24 px-4">
+			<div className="flex-1 min-h-0 relative pt-8 flex flex-row gap-4">
 				<div
-					className="flex-1 min-w-0 relative flex items-center justify-center p-2"
+					className="flex-1 min-h-0 h-full relative"
 					data-tour="video-grid"
 				>
 					{showScreenShare && screenSharer?.screenShareTrack ? (
@@ -286,7 +323,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				</div>
 
 				{activePanel && (
-					<div className="ml-2 w-[340px] shrink-0 bg-black/40 backdrop-blur-md rounded-xl overflow-hidden flex flex-col shadow-[var(--chalk-shadow-panel)] transition-all duration-300 ease-in-out">
+					<div className="w-[340px] shrink-0 rounded-xl overflow-hidden flex flex-col shadow-2xl transition-all duration-300 ease-in-out self-stretch">
 						{activePanel === "chat" && (
 							<ChatPanel
 								messages={chatMessages}
@@ -298,12 +335,15 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 							<ParticipantList
 								participants={allParticipants}
 								onClose={() => setActivePanel(null)}
+								variant="sidebar"
+								onAddPeople={handleAddPeople}
 							/>
 						)}
 						{activePanel === "transcription" && (
 							<TranscriptionPanel
 								transcripts={transcripts}
 								onClose={() => setActivePanel(null)}
+								variant="sidebar"
 							/>
 						)}
 					</div>
@@ -313,19 +353,19 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			{/* Auto-hide control bar */}
 			<div
 				className={cn(
-					"pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center transition-all duration-300",
+					"w-full z-20 transition-all duration-300",
 					isIdle && !activePanel ? "opacity-0 translate-y-2" : "opacity-100",
 				)}
 			>
-				<div className="relative pointer-events-auto">
+				<div className="relative">
 					<ControlBar
-						variant="floating"
 						isMuted={isMuted}
 						isVideoEnabled={isVideoEnabled}
 						isScreenSharing={isScreenSharing}
 						isHandRaised={isHandRaised}
 						isWhiteboardOpen={isWhiteboardOpen}
 						isRecording={isRecording}
+						meetingDuration={meetingDuration}
 						isChatOpen={activePanel === "chat"}
 						isParticipantsOpen={activePanel === "participants"}
 						isTranscriptionEnabled={activePanel === "transcription"}
@@ -353,7 +393,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						onOpenReactions={
 							enableReactions ? () => setIsReactionPickerOpen(true) : undefined
 						}
-						className="bg-black/60 backdrop-blur-md px-4 py-2.5 shadow-[var(--chalk-shadow-controls)]"
+						className="w-full"
 					/>
 					{enableReactions && (
 						<ReactionPicker
@@ -364,7 +404,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 								setIsReactionPickerOpen(false);
 							}}
 							position="top"
-							className="bottom-full mb-3"
+							className="bottom-full mb-3 left-1/2 -translate-x-1/2"
 						/>
 					)}
 				</div>
@@ -391,6 +431,14 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					showSkip={true}
 				/>
 			)}
+
+			<InviteModal
+				isOpen={showInviteModal}
+				onClose={() => setShowInviteModal(false)}
+				meetingLink={typeof window !== 'undefined' ? window.location.href : ''}
+				meetingId={roomName}
+				onCopyLink={handleCopyLink}
+			/>
 
 			{/* Hidden audio renderer for remote participant audio */}
 			<AudioRenderer participants={allParticipants} />

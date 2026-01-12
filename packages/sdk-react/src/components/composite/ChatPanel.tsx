@@ -25,48 +25,57 @@ export interface ChatPanelProps {
 
 const chatStyles = {
   container: {
-    backgroundColor: 'var(--chalk-bg-panel)',
-    color: 'var(--chalk-text-primary)',
+    backgroundColor: '#151515',
+    color: '#FFFFFF',
   } as React.CSSProperties,
   header: {
     background: 'transparent',
-    padding: '16px 20px',
+    padding: '20px 24px',
   } as React.CSSProperties,
   title: {
-    color: 'var(--chalk-text-primary)',
-    fontSize: '20px',
-    fontWeight: 600,
+    color: '#FFFFFF',
+    fontSize: '24px',
+    fontWeight: 700,
   } as React.CSSProperties,
   emptyState: {
-    color: 'var(--chalk-text-muted)',
+    color: '#9CA3AF',
   } as React.CSSProperties,
   emptyIcon: {
-    background: 'var(--chalk-bg-tertiary)',
-    color: 'var(--chalk-text-muted)',
+    background: '#1F2937',
+    color: '#9CA3AF',
   } as React.CSSProperties,
   inputArea: {
     background: 'transparent',
-    padding: '16px 20px',
+    padding: '20px 24px',
   } as React.CSSProperties,
   inputField: {
-    background: 'var(--chalk-bg-tertiary)',
-    border: '1px solid var(--chalk-border-subtle)',
-    color: 'var(--chalk-text-primary)',
+    background: '#151515',
+    border: 'none',
+    color: '#FFFFFF',
     borderRadius: '24px',
     fontSize: '14px',
+    paddingLeft: '20px',
   } as React.CSSProperties,
   placeholder: {
-    color: 'var(--chalk-text-muted)',
+    color: '#6B7280',
   } as React.CSSProperties,
   actionButton: {
-    background: 'var(--chalk-accent)',
+    background: '#151515',
     color: '#FFFFFF',
     borderRadius: '50%',
-    width: '44px',
-    height: '44px',
+    width: '48px',
+    height: '48px',
+    boxShadow: '0 4px 12px rgba(110, 0, 230, 0.4)',
+  } as React.CSSProperties,
+  secondaryActionButton: {
+    background: '#151515',
+    color: '#FFFFFF',
+    borderRadius: '50%',
+    width: '48px',
+    height: '48px',
   } as React.CSSProperties,
   moreButton: {
-    color: 'var(--chalk-text-muted)',
+    color: '#FFFFFF',
   } as React.CSSProperties,
 };
 
@@ -244,14 +253,14 @@ export const ChatPanel = React.memo(({
       {/* Input area - "+" button, text field, Send button */}
       <div style={chatStyles.inputArea}>
         <div className="flex items-center gap-3">
-          {/* Plus/Attachment button - bright purple circle */}
+          {/* Plus/Attachment button - Dark circle with Purple Plus */}
           <button
             type="button"
             className="flex-shrink-0 flex items-center justify-center transition-opacity hover:opacity-80"
-            style={chatStyles.actionButton}
+            style={chatStyles.secondaryActionButton}
             aria-label="Add attachment"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
@@ -265,7 +274,7 @@ export const ChatPanel = React.memo(({
               onKeyDown={handleKeyDown}
               placeholder={placeholder || "Write message..."}
               disabled={disabled}
-              className="w-full py-3 px-5 resize-none outline-none"
+              className="w-full py-3.5 px-6 resize-none outline-none placeholder-gray-500"
               style={{
                 ...chatStyles.inputField,
                 minHeight: '48px',
@@ -275,7 +284,7 @@ export const ChatPanel = React.memo(({
             />
           </div>
 
-          {/* Send button - bright purple circle with paper plane */}
+          {/* Send button - Bright purple circle with paper plane */}
           <button
             type="button"
             onClick={handleSend}
@@ -287,7 +296,7 @@ export const ChatPanel = React.memo(({
             }}
             aria-label="Send message"
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-5 h-5 ml-0.5" />
           </button>
         </div>
       </div>

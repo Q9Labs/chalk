@@ -172,7 +172,7 @@ function PreJoinLobbyBase({
 						<div className="mt-6 flex justify-end">
 							<button
 								onClick={() => setShowSettings(false)}
-								className="px-4 py-2 bg-[var(--chalk-accent)] text-white rounded-lg hover:bg-[var(--chalk-accent-hover)] transition-colors font-medium"
+								className="px-4 py-2 bg-[var(--chalk-primary)] text-white rounded-lg hover:bg-[var(--chalk-primary-hover)] transition-colors font-medium"
 							>
 								Done
 							</button>
@@ -326,7 +326,7 @@ function PreJoinLobbyBase({
 							<button
 								onClick={handleJoin}
 								disabled={!displayName.trim() || isLoading}
-								className="w-full h-11 bg-[var(--chalk-accent)] hover:bg-[var(--chalk-accent-hover)] text-white rounded-full font-semibold text-base transition-all shadow-lg hover:shadow-[var(--chalk-accent)]/20 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+								className="w-full h-11 bg-[var(--chalk-primary)] hover:bg-[var(--chalk-primary-hover)] text-white rounded-full font-semibold text-base transition-all shadow-lg hover:shadow-[var(--chalk-primary)]/20 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
 							>
 								{isLoading ? <Spinner size="sm" className="mr-2" /> : null}
 								{isLoading ? "Joining..." : "Ask to join"}

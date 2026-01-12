@@ -10,16 +10,11 @@ interface ControlButtonProps {
 	disabled?: boolean;
 	size?: "sm" | "md" | "lg";
 	showLabel?: boolean;
+	noBorder?: boolean;
 	onClick?: () => void;
 	className?: string;
 	"data-tour"?: string;
 }
-
-const sizeClasses = {
-	sm: "h-8 w-8 p-1.5",
-	md: "h-10 w-10 p-2",
-	lg: "h-12 w-12 p-3",
-};
 
 export const ControlButton = React.memo(
 	React.forwardRef<HTMLButtonElement, ControlButtonProps>(
@@ -32,6 +27,7 @@ export const ControlButton = React.memo(
 				disabled = false,
 				size = "md",
 				showLabel = false,
+				noBorder = false,
 				onClick,
 				className,
 				"data-tour": dataTour,
@@ -46,16 +42,18 @@ export const ControlButton = React.memo(
 					disabled={disabled}
 					data-tour={dataTour}
 					className={cn(
-						"group relative flex items-center justify-center rounded-full transition-all duration-200 ease-out border border-transparent",
-						sizeClasses[size],
+						"group relative flex items-center justify-center transition-all duration-300 ease-out",
+						size === "md" ? "h-[44px] w-[44px] rounded-full" : "h-14 w-14 rounded-full",
 						disabled && "cursor-not-allowed opacity-50",
+						// Default state (Purple Gradient)
+						!disabled && !active && !danger && !noBorder && "text-white shadow-lg hover:brightness-110 bg-[#151515]",
+						// No Border state (Ghost)
+						!disabled && !active && !danger && noBorder && "text-white/70 hover:text-white bg-[#151515]",
+						
 						!disabled &&
-							!active &&
-							!danger &&
-							"bg-[#202124] text-white border border-[#303134] hover:bg-[#303134]",
-						active &&
-							"bg-[#8ab4f8] text-[#202124] hover:bg-[#a8c7fa]",
-						danger && "bg-[#ea4335] text-white hover:bg-[#d93025]",
+							active &&
+							"bg-[#151515] text-white border-transparent hover:bg-[#252525]",
+						danger && "bg-[#EF4444] text-white border-transparent hover:bg-[#DC2626]",
 						className,
 					)}
 					aria-label={label}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, MoreVertical, Search, Mic, MicOff, UserX, Crown, UserPlus, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { X, MoreVertical, Search, Mic, MicOff, UserX, Crown, ChevronDown, ChevronUp, Shield, Users } from 'lucide-react';
 import { 
   Avatar, 
   AudioIndicator, 
@@ -82,8 +82,8 @@ export const ParticipantList = React.memo(({
     <div 
       key={participant.id}
       className={cn(
-        "group flex items-center justify-between p-2 rounded-md hover:bg-chalk-bg-subtle transition-colors relative",
-        variant === 'sidebar' && "rounded-xl hover:bg-white/5"
+        "group flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors relative",
+        variant === 'sidebar' && "hover:bg-white/5"
       )}
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -91,7 +91,7 @@ export const ParticipantList = React.memo(({
           <Avatar 
             name={participant.displayName}
             size="sm"
-            className={cn(variant === 'sidebar' && "border border-white/10")}
+            className={cn(variant === 'sidebar' && "w-9 h-9")}
           />
           {participant.isHandRaised && (
             <HandRaiseIndicator 
@@ -105,8 +105,8 @@ export const ParticipantList = React.memo(({
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-1.5">
             <span className={cn(
-              "text-sm font-medium truncate",
-              variant === 'sidebar' ? "text-gray-200" : "text-chalk-text-primary"
+              "text-sm font-normal truncate",
+              variant === 'sidebar' ? "text-white" : "text-chalk-text-primary"
             )}>
               {participant.displayName}
             </span>
@@ -114,16 +114,16 @@ export const ParticipantList = React.memo(({
               <span className={cn(
                 "text-xs",
                 variant === 'sidebar' ? "text-gray-500" : "text-chalk-text-muted"
-              )}>(You)</span>
+              )}>(you)</span>
             )}
           </div>
           <div className="flex items-center gap-1.5">
             {participant.role && participant.role !== 'participant' && (
               <span className={cn(
-                "text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded",
+                "text-[11px] tracking-normal font-normal",
                 variant === 'sidebar' 
-                  ? "text-gray-500 bg-transparent p-0" 
-                  : "text-chalk-text-secondary bg-chalk-bg-subtle"
+                  ? "text-gray-400" 
+                  : "text-chalk-text-secondary bg-chalk-bg-subtle px-1.5 py-0.5 rounded"
               )}>
                 {variant === 'sidebar' && participant.role === 'host' ? 'Meeting Host' : participant.role}
               </span>
@@ -171,7 +171,7 @@ export const ParticipantList = React.memo(({
                 <div className={cn(
                   "absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg z-20 overflow-hidden py-1",
                   variant === 'sidebar'
-                    ? "bg-[#2B2B2B] border border-white/10"
+                    ? "bg-[#151515] border border-white/10"
                     : "bg-chalk-bg-surface border border-chalk-border-subtle"
                 )}>
                   {onMuteParticipant && (
@@ -258,74 +258,87 @@ export const ParticipantList = React.memo(({
     return (
       <div 
         className={cn(
-          "flex flex-col h-full w-full bg-[#1E1E1E] rounded-[24px] overflow-hidden font-sans",
+          "flex flex-col h-full w-full overflow-hidden font-sans relative",
           !prefersReducedMotion && "chalk-animate-slide-right",
           className
         )}
+        style={{ backgroundColor: '#151515' }}
         data-tour="participants-panel"
         role="complementary"
         aria-label="Participants list"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 pb-4">
-          <h2 className="text-xl font-bold text-white">{title === 'Participants' ? 'People' : title}</h2>
+        <div className="flex items-center justify-between px-6 pt-6 pb-5">
+          <h2 className="text-2xl font-bold text-white tracking-tight">{title === 'Participants' ? 'People' : title}</h2>
           {onClose && (
-            <IconButton 
-              icon={<X className="w-5 h-5" />} 
-              size="sm" 
-              variant="ghost" 
+            <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="text-white/80 hover:text-white transition-colors p-1"
               aria-label="Close"
-            />
+            >
+              <X className="w-5 h-5" />
+            </button>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
           {onAddPeople && (
             <button
               onClick={onAddPeople}
-              className="w-full bg-[var(--chalk-accent)] hover:bg-[var(--chalk-accent-hover)] text-white rounded-full py-3 px-4 flex items-center justify-center gap-2 transition-all shadow-lg shadow-black/10 mb-8 font-medium text-sm"
+              className="w-full bg-[#151515] hover:bg-[#252525] text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-6 font-medium text-sm shadow-lg"
             >
-              <UserPlus className="w-4 h-4" />
+              <Users className="w-4 h-4" />
               <span>Add people</span>
             </button>
           )}
 
-          {/* Section Header */}
-          <div className="mb-3">
-            <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold pl-1">
+          {/* Section Label */}
+          <div className="mb-3 px-1">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-gray-500 font-semibold">
               IN THE MEETING
             </p>
           </div>
 
-          {/* Participants List Container */}
-          <div className="bg-[#2B2B2B] rounded-2xl overflow-hidden">
+          {/* Participants Container with Glass Effect */}
+          <div 
+            className="rounded-2xl overflow-hidden"
+            style={{
+              backgroundColor: '#151515',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)'
+            }}
+          >
             {/* Collapsible Header */}
             <button 
               onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+              className="w-full px-4 py-3.5 flex items-center justify-between group focus:outline-none cursor-pointer hover:bg-white/5 transition-colors"
             >
-              <span className="text-sm font-medium text-gray-200">Participants</span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-semibold text-sm">Participants</span>
+              </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-400">{participants.length}</span>
+                <span className="text-white/60 text-sm font-medium">
+                  {participants.length}
+                </span>
                 {isExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                  <ChevronUp className="w-4 h-4 text-white/60" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                  <ChevronDown className="w-4 h-4 text-white/60" />
                 )}
               </div>
             </button>
 
-            {/* List */}
+            {/* Participants List */}
             {isExpanded && (
-              <div className="px-2 pb-2">
+              <div className="px-3 pb-3">
                 {filteredParticipants.length === 0 ? (
                   <div className="p-8 text-center text-sm text-gray-500">
                     No participants found
                   </div>
                 ) : (
-                  filteredParticipants.map(renderParticipantRow)
+                  <div className="space-y-1">
+                    {filteredParticipants.map(renderParticipantRow)}
+                  </div>
                 )}
               </div>
             )}

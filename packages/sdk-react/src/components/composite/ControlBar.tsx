@@ -2,6 +2,7 @@ import {
 	Circle,
 	FileText,
 	Hand,
+	Info,
 	MessageSquare,
 	Mic,
 	MicOff,
@@ -12,6 +13,7 @@ import {
 	PhoneOff,
 	Settings,
 	Smile,
+	ThumbsUp,
 	Users,
 	Video,
 	VideoOff,
@@ -33,6 +35,8 @@ export type ControlBarButton =
 	| "whiteboard"
 	| "settings"
 	| "more"
+	| "info"
+	| "thumbsup"
 	| "leave";
 
 export interface ControlBarProps {
@@ -50,6 +54,7 @@ export interface ControlBarProps {
 	isTranscriptionEnabled?: boolean;
 	isHandRaised?: boolean;
 	isWhiteboardOpen?: boolean;
+	meetingDuration?: number;
 
 	onToggleMute?: () => void;
 	onToggleVideo?: () => void;
@@ -63,28 +68,26 @@ export interface ControlBarProps {
 	onOpenReactions?: () => void;
 	onOpenSettings?: () => void;
 	onOpenMore?: () => void;
+	onOpenInfo?: () => void;
 	onLeave?: () => void;
 
 	className?: string;
 }
 
-const DEFAULT_BUTTONS: ControlBarButton[] = [
-	"mic",
-	"video",
-	"screenshare",
-	"chat",
-	"reactions",
-	"whiteboard",
-	"leave",
-];
+const formatDuration = (ms: number) => {
+	const totalSeconds = Math.floor(ms / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+
+	if (hours > 0) {
+		return `${hours}hr ${minutes}min ${seconds}s`;
+	}
+	return `${minutes}min ${seconds}s`;
+};
 
 export const ControlBar = React.memo(
 	({
-		position: _position = "bottom",
-		variant = "floating",
-		showLabels = false,
-		buttons = DEFAULT_BUTTONS,
-
 		isMuted = false,
 		isVideoEnabled = true,
 		isScreenSharing = false,
@@ -94,6 +97,8 @@ export const ControlBar = React.memo(
 		isTranscriptionEnabled = false,
 		isHandRaised = false,
 		isWhiteboardOpen = false,
+		meetingDuration = 0,
+		showLabels = false,
 
 		onToggleMute,
 		onToggleVideo,
@@ -107,6 +112,7 @@ export const ControlBar = React.memo(
 		onOpenReactions,
 		onOpenSettings,
 		onOpenMore,
+		onOpenInfo,
 		onLeave,
 
 		className,
@@ -117,10 +123,10 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="mic"
-							icon={isMuted ? <MicOff /> : <Mic />}
+							icon={isMuted ? <MicOff className="text-[#EF4444]" /> : <Mic />}
 							label={isMuted ? "Unmute" : "Mute"}
 							onClick={onToggleMute}
-							danger={isMuted}
+							active={!isMuted}
 							showLabel={showLabels}
 							data-tour="controls-mic"
 						/>
@@ -129,10 +135,10 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="video"
-							icon={isVideoEnabled ? <Video /> : <VideoOff />}
+							icon={isVideoEnabled ? <VideoOff /> : <Video />}
 							label={isVideoEnabled ? "Stop Video" : "Start Video"}
 							onClick={onToggleVideo}
-							danger={!isVideoEnabled}
+							danger={isVideoEnabled}
 							showLabel={showLabels}
 							data-tour="controls-video"
 						/>
@@ -232,9 +238,10 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="settings"
-							icon={<Settings />}
+							icon={<Settings size={20} />}
 							label="Settings"
 							onClick={onOpenSettings}
+							noBorder
 							showLabel={showLabels}
 						/>
 					);
@@ -249,18 +256,26 @@ export const ControlBar = React.memo(
 						/>
 					);
 				case "leave":
+					return null; // Handled explicitly in the layout
+				case "info":
 					return (
-						<button
-							key="leave"
-							type="button"
-							onClick={onLeave}
-							className="ml-2 flex items-center gap-2 px-6 h-10 rounded-full bg-[#ea4335] hover:bg-[#d93025] text-white font-medium transition-colors"
-							aria-label="Leave meeting"
-							data-tour="controls-leave"
-						>
-							<PhoneOff size={20} />
-							{showLabels && <span>Leave</span>}
-						</button>
+						<ControlButton
+							key="info"
+							icon={<Info size={20} />}
+							label="Info"
+							onClick={onOpenInfo}
+							noBorder
+						/>
+					);
+				case "thumbsup":
+					return (
+						<ControlButton
+							key="thumbsup"
+							icon={<ThumbsUp size={20} className="text-[#FFD700]" />}
+							label="Reactions"
+							onClick={onOpenReactions}
+							noBorder
+						/>
 					);
 				default:
 					return null;
@@ -270,16 +285,52 @@ export const ControlBar = React.memo(
 		return (
 			<div
 				className={cn(
-					"flex items-center justify-center gap-3 p-3 transition-all duration-300",
-					variant === "floating" && "rounded-2xl bg-[#121212] shadow-lg border border-[#303134]",
-					variant === "fixed" && "w-full bg-[#121212] border-t border-[#303134]",
-					variant === "minimal" && "bg-transparent",
+					"flex items-center justify-between w-full px-6 py-4",
 					className,
 				)}
 				role="toolbar"
 				aria-label="Meeting controls"
 			>
-				{buttons.map(renderButton)}
+				{/* Left: Timer section */}
+				<div className="flex items-center bg-[#1A1A1A] rounded-full px-5 py-2.5">
+					<div className="flex items-center gap-3">
+						<div className="w-2 h-2 rounded-full bg-[#151515] shadow-[0_0_8px_rgba(21,21,21,0.5)]" />
+						<span className="text-white text-[14px] font-medium tracking-wide tabular-nums opacity-90">
+							{formatDuration(meetingDuration)}
+						</span>
+					</div>
+				</div>
+
+				{/* Middle: Media controls */}
+				<div className="flex items-center gap-3">
+					{renderButton("mic")}
+					{renderButton("video")}
+					{renderButton("screenshare")}
+					{renderButton("whiteboard")}
+					{renderButton("handraise")}
+					{renderButton("more")}
+					<div className="ml-2">
+						<ControlButton
+							key="leave"
+							icon={<PhoneOff size={24} />}
+							label="Leave"
+							onClick={onLeave}
+							danger
+							size="lg"
+							className="h-12 w-12 rounded-full bg-[#EF4444] hover:bg-[#DC2626] transition-colors shadow-lg"
+							data-tour="controls-leave"
+						/>
+					</div>
+				</div>
+
+				{/* Right: Interaction controls */}
+				<div className="flex items-center gap-4">
+					{renderButton("info")}
+					{renderButton("participants")}
+					{renderButton("chat")}
+					{renderButton("transcription")}
+					{renderButton("thumbsup")}
+				</div>
 			</div>
 		);
 	},

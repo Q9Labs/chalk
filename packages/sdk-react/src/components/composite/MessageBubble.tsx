@@ -21,26 +21,26 @@ export interface MessageBubbleProps {
 
 const styles = {
   senderBubble: {
-    background: 'var(--chalk-accent)',
+    background: '#0056D2', // Blue from Chat UI image
     color: '#FFFFFF',
     borderRadius: '20px 4px 20px 20px', // top-left, TOP-RIGHT (tail), bottom-right, bottom-left
   } as React.CSSProperties,
 
   receiverBubble: {
-    background: 'var(--chalk-bg-tertiary)',
+    background: '#1F1F1F', // Dark Gray from Chat UI image
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    color: 'var(--chalk-text-primary)',
+    color: '#FFFFFF',
     borderRadius: '4px 20px 20px 20px', // TOP-LEFT (tail), top-right, bottom-right, bottom-left
   } as React.CSSProperties,
 
   systemBubble: {
-    background: 'var(--chalk-bg-tertiary)',
-    color: 'var(--chalk-text-muted)',
+    background: '#1F1F1F',
+    color: '#9CA3AF',
   } as React.CSSProperties,
 
   timestamp: {
-    color: 'var(--chalk-text-muted)',
+    color: '#6B7280',
     fontSize: '11px',
   } as React.CSSProperties,
 };
