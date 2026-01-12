@@ -159,25 +159,38 @@ func (m *APIKeyMiddleware) RequireAPIKey() gin.HandlerFunc {
 			return
 		}
 
-		// Find tenant by iterating through active tenants and checking hash
-		// In production, you'd use a more efficient lookup
-		tenants, err := m.queries.ListActiveTenants(c.Request.Context(), db.ListActiveTenantsParams{
-			Limit:  1000,
-			Offset: 0,
-		})
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": "failed to validate API key",
-			})
-			return
-		}
-
+		// API-MED-01: Paginated API key lookup with no hard limit
+		// TODO: For O(1) lookup, add api_key_prefix column and index
 		var matchedTenant *db.Tenant
-		for _, tenant := range tenants {
-			if m.apiKeyService.VerifyAPIKey(apiKey, tenant.ApiKeyHash) {
-				matchedTenant = &tenant
-				break
+		const pageSize int32 = 100
+		var offset int32 = 0
+		totalChecked := 0
+
+		for matchedTenant == nil {
+			tenants, err := m.queries.ListActiveTenants(c.Request.Context(), db.ListActiveTenantsParams{
+				Limit:  pageSize,
+				Offset: offset,
+			})
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": "failed to validate API key",
+				})
+				return
 			}
+
+			if len(tenants) == 0 {
+				break // No more tenants to check
+			}
+
+			for _, tenant := range tenants {
+				totalChecked++
+				if m.apiKeyService.VerifyAPIKey(apiKey, tenant.ApiKeyHash) {
+					matchedTenant = &tenant
+					break
+				}
+			}
+
+			offset += pageSize
 		}
 
 		if matchedTenant == nil {

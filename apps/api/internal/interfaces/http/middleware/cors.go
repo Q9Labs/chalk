@@ -16,19 +16,23 @@ func CORS() gin.HandlerFunc {
 
 		// Production domains
 		allowedOrigins := map[string]bool{
-			"https://chalk.q9labs.ai":     true,
-			"https://chalk-5bc.pages.dev": true,
+			"https://chalk.q9labs.ai":           true,
+			"https://chalk-5bc.pages.dev":       true,
 			"https://collabdash-dev.vercel.app": true,
 		}
 
 		// Allow any localhost or 127.0.0.1 origin for development
 		isLocalhost := localhostPattern.MatchString(origin)
+		isAllowed := allowedOrigins[origin] || isLocalhost
 
-		if allowedOrigins[origin] || isLocalhost {
+		if isAllowed {
 			c.Header("Access-Control-Allow-Origin", origin)
+			// API-MED-06: Only set credentials header when origin is allowed
+			c.Header("Access-Control-Allow-Credentials", "true")
+			// Add Vary header for proper caching behavior
+			c.Header("Vary", "Origin")
 		}
 
-		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-API-Key, accept, origin, Cache-Control, X-Requested-With")
 		c.Header("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
 

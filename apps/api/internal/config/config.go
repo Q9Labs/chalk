@@ -162,6 +162,19 @@ func Load() (*Config, error) {
 
 // validate checks that required configuration is present
 func (c *Config) validate() error {
+	// JWT secret is required in production - fail fast
+	devSecrets := []string{"", "development-secret-key", "chalk-dev-secret-change-in-production"}
+	isDevSecret := false
+	for _, s := range devSecrets {
+		if c.JWT.SigningKey == s {
+			isDevSecret = true
+			break
+		}
+	}
+	if isDevSecret && c.IsProduction() {
+		return fmt.Errorf("JWT_SIGNING_KEY must be set to a secure value in production (not empty or default)")
+	}
+
 	// Cloudflare config is optional - API can run in limited mode without real-time features
 	// Only validate if any Cloudflare config is provided (indicates intent to use)
 	hasCloudflareConfig := c.Cloudflare.AccountID != "" || c.Cloudflare.AppID != "" || c.Cloudflare.APIToken != ""

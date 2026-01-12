@@ -55,7 +55,9 @@ interface PreviousDevice {
 export class MediaManager extends StateContainer<MediaState> {
 	private readonly events = new TypedEventEmitter<MediaManagerEvents>();
 	private room: Room | null = null;
-	private toggleLock = false;
+	// SDKCORE-MED-07: Split toggle locks for independent audio/video control
+	private videoToggleLock = false;
+	private audioToggleLock = false;
 	private undoTimeout: ReturnType<typeof setTimeout> | null = null;
 	private previousDevice: PreviousDevice | null = null;
 	private readonly log: Logger;
@@ -106,11 +108,12 @@ export class MediaManager extends StateContainer<MediaState> {
 			);
 		}
 
-		if (this.toggleLock) {
+		// SDKCORE-MED-07: Use video-specific lock
+		if (this.videoToggleLock) {
 			return this.getState().isVideoEnabled;
 		}
 
-		this.toggleLock = true;
+		this.videoToggleLock = true;
 		this.setState({ isTogglingVideo: true });
 
 		try {
@@ -129,7 +132,7 @@ export class MediaManager extends StateContainer<MediaState> {
 			throw error;
 		} finally {
 			this.setState({ isTogglingVideo: false });
-			this.toggleLock = false;
+			this.videoToggleLock = false;
 		}
 	}
 
@@ -142,11 +145,12 @@ export class MediaManager extends StateContainer<MediaState> {
 			);
 		}
 
-		if (this.toggleLock) {
+		// SDKCORE-MED-07: Use audio-specific lock
+		if (this.audioToggleLock) {
 			return this.getState().isAudioEnabled;
 		}
 
-		this.toggleLock = true;
+		this.audioToggleLock = true;
 		this.setState({ isTogglingAudio: true });
 
 		try {
@@ -165,7 +169,7 @@ export class MediaManager extends StateContainer<MediaState> {
 			throw error;
 		} finally {
 			this.setState({ isTogglingAudio: false });
-			this.toggleLock = false;
+			this.audioToggleLock = false;
 		}
 	}
 

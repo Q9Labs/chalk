@@ -83,6 +83,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
   /**
    * Validate JWT token expiration
+   * SDKCORE-MED-03: Use Buffer.from for Node.js/SSR compatibility
    */
   private isTokenExpired(token: string): boolean {
     try {
@@ -90,7 +91,17 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       if (parts.length !== 3 || !parts[1]) {
         return true; // Invalid JWT format
       }
-      const payload = JSON.parse(atob(parts[1]));
+      // Decode base64 - works in both browser and Node.js
+      let decoded: string;
+      if (typeof atob === 'function') {
+        decoded = atob(parts[1]);
+      } else if (typeof Buffer !== 'undefined') {
+        decoded = Buffer.from(parts[1], 'base64').toString('utf-8');
+      } else {
+        // Fallback: assume not expired if we can't decode
+        return false;
+      }
+      const payload = JSON.parse(decoded);
       return Date.now() >= payload.exp * 1000;
     } catch {
       return true; // Invalid token format = treat as expired

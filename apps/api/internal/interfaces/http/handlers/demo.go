@@ -102,19 +102,30 @@ func (h *DemoHandler) Join(c *gin.Context) {
 }
 
 func (h *DemoHandler) getOrCreateDemoTenant(c *gin.Context) (db.Tenant, error) {
-	// Try to get existing demo tenant
+	// API-MED-02: Look up demo tenant by known name instead of arbitrary first tenant
+	const demoTenantName = "Chalk Demo Tenant"
+
+	// Try to find existing demo tenant by name
 	tenants, err := h.queries.ListTenants(c.Request.Context(), db.ListTenantsParams{
-		Limit:  1,
+		Limit:  100,
 		Offset: 0,
 	})
-	if err == nil && len(tenants) > 0 {
-		return tenants[0], nil
+	if err == nil {
+		for _, t := range tenants {
+			if t.Name == demoTenantName {
+				return t, nil
+			}
+		}
 	}
 
-	// Create demo tenant
+	// Create demo tenant with a proper bcrypt hash placeholder
+	// In production, demo mode should be disabled via CHALK_ENABLE_DEMO=false
+	// This hash is intentionally invalid and won't match any real API key
+	demoHash := "$2a$10$demohashnotforproductionuse"
+
 	return h.queries.CreateTenant(c.Request.Context(), db.CreateTenantParams{
-		Name:                        "Demo Tenant",
-		ApiKeyHash:                  "demo-key-hash",
+		Name:                        demoTenantName,
+		ApiKeyHash:                  demoHash,
 		Config:                      []byte("{}"),
 		MaxConcurrentRooms:          100,
 		MaxParticipantsPerRoom:      50,

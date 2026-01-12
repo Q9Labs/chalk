@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -51,6 +52,10 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
 		return
 	}
+
+	// API-HIGH-07: Reset body for JSON binding after signature verification consumed it
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+
 	var webhook RecordingReadyWebhook
 	if err := c.ShouldBindJSON(&webhook); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload: " + err.Error()})

@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	ErrInvalidToken = errors.New("invalid token")
-	ErrExpiredToken = errors.New("token has expired")
-	ErrInvalidClaim = errors.New("invalid token claims")
+	ErrInvalidToken     = errors.New("invalid token")
+	ErrExpiredToken     = errors.New("token has expired")
+	ErrInvalidClaim     = errors.New("invalid token claims")
+	ErrWrongTokenType   = errors.New("wrong token type: expected access token")
 )
 
 // JWTConfig holds JWT configuration
@@ -124,7 +125,8 @@ func (s *JWTService) GenerateTokenPair(claims auth.Claims) (*auth.TokenPair, err
 	}, nil
 }
 
-// ValidateToken validates a token and returns the claims
+// ValidateToken validates an access token and returns the claims
+// Rejects refresh tokens - use ValidateRefreshToken for those
 func (s *JWTService) ValidateToken(tokenString string) (*auth.Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &jwtClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -143,6 +145,11 @@ func (s *JWTService) ValidateToken(tokenString string) (*auth.Claims, error) {
 	claims, ok := token.Claims.(*jwtClaims)
 	if !ok || !token.Valid {
 		return nil, ErrInvalidClaim
+	}
+
+	// API-HIGH-02: Enforce token type - reject refresh tokens on access endpoints
+	if claims.TokenType != "access" {
+		return nil, ErrWrongTokenType
 	}
 
 	return &auth.Claims{

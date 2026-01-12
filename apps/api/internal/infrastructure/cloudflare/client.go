@@ -214,6 +214,11 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 
 // RemoveParticipant removes a participant from a meeting
 func (c *Client) RemoveParticipant(ctx context.Context, meetingID, participantID string) error {
+	// API-MED-08: Return mock response when not configured
+	if !c.IsConfigured() {
+		return nil
+	}
+
 	path := fmt.Sprintf("/meetings/%s/participants/%s", meetingID, participantID)
 	resp, err := c.doRequest(ctx, "DELETE", path, nil)
 	if err != nil {
@@ -235,6 +240,14 @@ func (c *Client) RemoveParticipant(ctx context.Context, meetingID, participantID
 
 // RefreshParticipantToken refreshes a participant's auth token
 func (c *Client) RefreshParticipantToken(ctx context.Context, meetingID, participantID string) (*Participant, error) {
+	// API-MED-08: Return mock response when not configured
+	if !c.IsConfigured() {
+		return &Participant{
+			ID:    participantID,
+			Token: "demo-refreshed-token-not-for-production",
+		}, nil
+	}
+
 	path := fmt.Sprintf("/meetings/%s/participants/%s/token", meetingID, participantID)
 	resp, err := c.doRequest(ctx, "POST", path, nil)
 	if err != nil {
@@ -256,6 +269,14 @@ func (c *Client) RefreshParticipantToken(ctx context.Context, meetingID, partici
 
 // StartRecording starts recording for a meeting
 func (c *Client) StartRecording(ctx context.Context, meetingID string, req StartRecordingRequest) (*Recording, error) {
+	// API-MED-08: Return mock response when not configured
+	if !c.IsConfigured() {
+		return &Recording{
+			ID:     fmt.Sprintf("demo-recording-%d", time.Now().UnixNano()),
+			Status: "recording",
+		}, nil
+	}
+
 	body := map[string]interface{}{
 		"meeting_id": meetingID,
 	}
@@ -295,6 +316,14 @@ func (c *Client) StartRecording(ctx context.Context, meetingID string, req Start
 
 // StopRecording stops an active recording
 func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Recording, error) {
+	// API-MED-08: Return mock response when not configured
+	if !c.IsConfigured() {
+		return &Recording{
+			ID:     recordingID,
+			Status: "stopped",
+		}, nil
+	}
+
 	path := fmt.Sprintf("/recordings/%s", recordingID)
 	req := map[string]string{"action": "stop"}
 
@@ -318,6 +347,14 @@ func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Record
 
 // GetRecording retrieves recording details
 func (c *Client) GetRecording(ctx context.Context, recordingID string) (*Recording, error) {
+	// API-MED-08: Return mock response when not configured
+	if !c.IsConfigured() {
+		return &Recording{
+			ID:     recordingID,
+			Status: "ready",
+		}, nil
+	}
+
 	path := fmt.Sprintf("/recordings/%s", recordingID)
 	resp, err := c.doRequest(ctx, "GET", path, nil)
 	if err != nil {
@@ -339,6 +376,11 @@ func (c *Client) GetRecording(ctx context.Context, recordingID string) (*Recordi
 
 // KickAllParticipants ends an active session by kicking all participants
 func (c *Client) KickAllParticipants(ctx context.Context, meetingID string) error {
+	// API-MED-08: Return mock response when not configured
+	if !c.IsConfigured() {
+		return nil
+	}
+
 	path := fmt.Sprintf("/meetings/%s/active-session/kick-all", meetingID)
 	resp, err := c.doRequest(ctx, "POST", path, nil)
 	if err != nil {
@@ -360,6 +402,11 @@ func (c *Client) KickAllParticipants(ctx context.Context, meetingID string) erro
 
 // GetActiveRecording retrieves the active recording for a meeting
 func (c *Client) GetActiveRecording(ctx context.Context, meetingID string) (*Recording, error) {
+	// API-MED-08: Return mock response when not configured
+	if !c.IsConfigured() {
+		return nil, fmt.Errorf("no active recording (mock mode)")
+	}
+
 	path := fmt.Sprintf("/recordings/active-recording/%s", meetingID)
 	resp, err := c.doRequest(ctx, "GET", path, nil)
 	if err != nil {

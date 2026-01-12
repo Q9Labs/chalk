@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -35,10 +36,17 @@ func main() {
 
 	log.Printf("Starting server in %s mode", cfg.Server.Env)
 
-	// Database connection using config from environment
+	// API-MED-03: Database connection using config from environment (including port)
+	dbPort := 5432
+	if cfg.Database.Port != "" {
+		if p, err := strconv.Atoi(cfg.Database.Port); err == nil {
+			dbPort = p
+		}
+	}
+
 	dbCfg := postgres.Config{
 		Host:              cfg.Database.Host,
-		Port:              5432, // Default port, parse from cfg.Database.Port if needed
+		Port:              dbPort,
 		User:              cfg.Database.User,
 		Password:          cfg.Database.Password,
 		Database:          cfg.Database.Name,
@@ -123,6 +131,7 @@ func main() {
 		RedisClient: redisClient,
 		StorageR2:   storageR2,
 		StorageS3:   storageS3,
+		AppConfig:   cfg,
 	})
 
 	if storageR2 != nil && storageS3 != nil {

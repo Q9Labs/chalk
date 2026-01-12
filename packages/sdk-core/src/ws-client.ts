@@ -12,6 +12,8 @@ import type {
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 const HEARTBEAT_INTERVAL = 30000;
+// SDKCORE-LOW-01: Timeout threshold (2 missed pongs = timeout)
+const HEARTBEAT_TIMEOUT = HEARTBEAT_INTERVAL * 2.5;
 
 type ConnectionState =
 	| "disconnected"
@@ -451,7 +453,18 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	private startHeartbeat(): void {
+		this.lastPongTime = Date.now();
 		this.heartbeatTimer = setInterval(() => {
+			// SDKCORE-LOW-01: Check for heartbeat timeout
+			const timeSinceLastPong = Date.now() - this.lastPongTime;
+			if (timeSinceLastPong > HEARTBEAT_TIMEOUT) {
+				this.log.warn("Heartbeat timeout - no pong received", {
+					timeSinceLastPong,
+					threshold: HEARTBEAT_TIMEOUT,
+				});
+				this.handleConnectionFailure();
+				return;
+			}
 			this.send({ type: "ping" });
 		}, HEARTBEAT_INTERVAL);
 	}

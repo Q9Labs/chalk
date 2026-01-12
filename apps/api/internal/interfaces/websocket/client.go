@@ -365,7 +365,15 @@ func (c *Client) handleWhiteboardCursor(msg *Message) {
 }
 
 // handlePermissionGrant broadcasts a permission grant event
+// API-HIGH-04: Only hosts can grant permissions
 func (c *Client) handlePermissionGrant(msg *Message) {
+	// Check if caller is host
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+	if meta.Role != "host" {
+		c.sendErrorMessage("forbidden", "Only hosts can grant permissions")
+		return
+	}
+
 	var payload PermissionGrantPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
 		c.sendErrorMessage("invalid_payload", "Failed to parse permission grant")
@@ -386,7 +394,15 @@ func (c *Client) handlePermissionGrant(msg *Message) {
 }
 
 // handlePermissionRevoke broadcasts a permission revoke event
+// API-HIGH-04: Only hosts can revoke permissions
 func (c *Client) handlePermissionRevoke(msg *Message) {
+	// Check if caller is host
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+	if meta.Role != "host" {
+		c.sendErrorMessage("forbidden", "Only hosts can revoke permissions")
+		return
+	}
+
 	var payload PermissionGrantPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
 		c.sendErrorMessage("invalid_payload", "Failed to parse permission revoke")
