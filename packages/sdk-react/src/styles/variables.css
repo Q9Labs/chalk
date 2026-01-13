@@ -28,6 +28,14 @@
   --chalk-success-subtle: rgba(30, 142, 62, 0.12);
   --chalk-border-color: #0066E6;
   --chalk-border-subtle: #0066E6;
+  --chalk-pill-bg: rgba(15, 23, 42, 0.08);
+  --chalk-pill-bg-hover: rgba(15, 23, 42, 0.12);
+  --chalk-pill-text: #0f172a;
+  --chalk-pill-text-hover: #0f172a;
+  --chalk-pill-border: rgba(15, 23, 42, 0.12);
+  --chalk-pill-bg-active: #0f172a;
+  --chalk-pill-text-active: #ffffff;
+  --chalk-pill-dot-ring: rgba(15, 23, 42, 0.25);
 
   /* Spacing */
   --chalk-spacing-xs: 0.25rem;
@@ -91,6 +99,14 @@
   --chalk-text-muted: #707070;
   --chalk-border-color: rgba(255, 255, 255, 0.1);
   --chalk-border-subtle: rgba(255, 255, 255, 0.05);
+  --chalk-pill-bg: rgba(255, 255, 255, 0.08);
+  --chalk-pill-bg-hover: rgba(255, 255, 255, 0.16);
+  --chalk-pill-text: rgba(255, 255, 255, 0.72);
+  --chalk-pill-text-hover: #ffffff;
+  --chalk-pill-border: rgba(255, 255, 255, 0.12);
+  --chalk-pill-bg-active: rgba(255, 255, 255, 0.18);
+  --chalk-pill-text-active: #ffffff;
+  --chalk-pill-dot-ring: rgba(255, 255, 255, 0.6);
   --chalk-error-subtle: rgba(217, 48, 37, 0.2);
   --chalk-success-subtle: rgba(30, 142, 62, 0.2);
   --chalk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);

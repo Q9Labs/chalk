@@ -291,10 +291,23 @@ export const ControlBar = React.memo(
 				aria-label="Meeting controls"
 			>
 				{/* Left: Timer section */}
-				<div className="flex items-center bg-[#1A1A1A] rounded-full px-5 py-2.5">
+				<div
+					className="flex items-center rounded-full px-5 py-2.5 backdrop-blur-md border"
+					style={{
+						background: "var(--chalk-pill-bg)",
+						color: "var(--chalk-pill-text)",
+						borderColor: "var(--chalk-pill-border)",
+						boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+					}}
+				>
 					<div className="flex items-center gap-3">
-						<div className="w-2 h-2 rounded-full bg-[#151515] shadow-[0_0_8px_rgba(21,21,21,0.5)]" />
-						<span className="text-white text-[14px] font-medium tracking-wide tabular-nums opacity-90">
+						<div
+							className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.65)]"
+							style={{ outline: "2px solid var(--chalk-pill-dot-ring)", outlineOffset: "2px" }}
+						/>
+						<span className="text-[14px] font-semibold tracking-wide tabular-nums"
+							style={{ color: "var(--chalk-pill-text)" }}
+						>
 							{formatDuration(meetingDuration)}
 						</span>
 					</div>
