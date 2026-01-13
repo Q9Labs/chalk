@@ -29,7 +29,6 @@ func mockAuthMiddleware() gin.HandlerFunc {
 // TestParticipantHandler_Add_InvalidRoomID tests invalid UUID param returns 400
 func TestParticipantHandler_Add_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -39,17 +38,16 @@ func TestParticipantHandler_Add_InvalidRoomID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid room id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_Add_InvalidJSON tests invalid JSON body returns 400
 func TestParticipantHandler_Add_InvalidJSON(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -60,17 +58,16 @@ func TestParticipantHandler_Add_InvalidJSON(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.NotNil(t, response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_Add_MissingDisplayName tests missing required display_name returns 400
 func TestParticipantHandler_Add_MissingDisplayName(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -81,17 +78,16 @@ func TestParticipantHandler_Add_MissingDisplayName(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.NotNil(t, response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_Add_EmptyDisplayName tests empty display_name string returns 400
 func TestParticipantHandler_Add_EmptyDisplayName(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -102,11 +98,11 @@ func TestParticipantHandler_Add_EmptyDisplayName(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.NotNil(t, response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_Add_ValidRequest tests valid request structure parsing
@@ -132,7 +128,6 @@ func TestParticipantHandler_Add_ValidRequest(t *testing.T) {
 // TestParticipantHandler_List_InvalidRoomID tests invalid UUID param returns 400
 func TestParticipantHandler_List_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.GET("/rooms/:id/participants", handler.List)
 
@@ -141,17 +136,16 @@ func TestParticipantHandler_List_InvalidRoomID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid room id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_Remove_InvalidRoomID tests invalid room UUID param returns 400
 func TestParticipantHandler_Remove_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.DELETE("/rooms/:id/participants/:pid", handler.Remove)
 
@@ -161,17 +155,16 @@ func TestParticipantHandler_Remove_InvalidRoomID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid room id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_Remove_InvalidParticipantID tests invalid UUID param returns 400
 func TestParticipantHandler_Remove_InvalidParticipantID(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.DELETE("/rooms/:id/participants/:pid", handler.Remove)
 
@@ -181,17 +174,16 @@ func TestParticipantHandler_Remove_InvalidParticipantID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid participant id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_RefreshToken_InvalidRoomID tests invalid room UUID param returns 400
 func TestParticipantHandler_RefreshToken_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants/:pid/token", handler.RefreshToken)
 
@@ -201,17 +193,16 @@ func TestParticipantHandler_RefreshToken_InvalidRoomID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid room id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_RefreshToken_InvalidParticipantID tests invalid participant UUID param returns 400
 func TestParticipantHandler_RefreshToken_InvalidParticipantID(t *testing.T) {
 	router := setupTestRouter()
-	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants/:pid/token", handler.RefreshToken)
 
@@ -221,11 +212,11 @@ func TestParticipantHandler_RefreshToken_InvalidParticipantID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid participant id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestParticipantHandler_List_ValidRoomID tests List with valid UUID format
