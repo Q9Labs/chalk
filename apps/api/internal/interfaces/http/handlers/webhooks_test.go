@@ -78,9 +78,8 @@ func TestWebhookHandler_HandleRecordingReady_NoSecret(t *testing.T) {
 }
 
 func TestWebhookHandler_HandleRecordingReady_AfterBodyRead(t *testing.T) {
-	// Note: The handler reads the body with io.ReadAll for signature verification
-	// Then calls ShouldBindJSON which fails with EOF because body is consumed.
-	// This is the actual behavior of the handler - documenting it here.
+	// API-HIGH-07: Body is now reset after signature verification, so binding succeeds.
+	// This test verifies that non-recording.ready webhook types are rejected.
 	secret := "test-secret"
 	os.Setenv("CLOUDFLARE_WEBHOOK_SECRET", secret)
 	defer os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
@@ -99,12 +98,12 @@ func TestWebhookHandler_HandleRecordingReady_AfterBodyRead(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	// After signature verification, body is consumed, so binding fails
+	// Body reset works, binding succeeds, but wrong webhook type is rejected
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Contains(t, response["error"], "invalid webhook payload")
+	assert.Contains(t, response["error"], "unsupported webhook type")
 }
 
 func TestWebhookHandler_verifySignatureBody_ValidSignature(t *testing.T) {

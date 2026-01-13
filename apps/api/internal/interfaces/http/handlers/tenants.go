@@ -116,13 +116,6 @@ func (h *TenantHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Verify tenant ownership
-	authTenant, ok := middleware.GetTenant(c)
-	if !ok || authTenant.ID != id {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied: tenant mismatch"})
-		return
-	}
-
 	var req struct {
 		Name                        *string `json:"name"`
 		MaxConcurrentRooms          *int32  `json:"max_concurrent_rooms"`
@@ -131,6 +124,13 @@ func (h *TenantHandler) Update(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify tenant ownership
+	authTenant, ok := middleware.GetTenant(c)
+	if !ok || authTenant.ID != id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied: tenant mismatch"})
 		return
 	}
 

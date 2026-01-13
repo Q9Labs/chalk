@@ -131,6 +131,15 @@ func (h *RoomHandler) Update(c *gin.Context) {
 		return
 	}
 
+	var req struct {
+		Name   *string `json:"name"`
+		Config []byte  `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Verify tenant ownership before update
 	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), id)
 	if err != nil {
@@ -139,15 +148,6 @@ func (h *RoomHandler) Update(c *gin.Context) {
 	}
 	if existingRoom.TenantID != claims.TenantID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
-	}
-
-	var req struct {
-		Name   *string `json:"name"`
-		Config []byte  `json:"config"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

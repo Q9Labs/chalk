@@ -6,7 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain/auth"
+	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -16,6 +19,26 @@ import (
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	return gin.New()
+}
+
+func setupTestRouterWithClaims() (*gin.Engine, *auth.Claims) {
+	router := setupTestRouter()
+	tenantID := uuid.New()
+	roomID := uuid.New()
+	claims := &auth.Claims{
+		Subject:     "test-user",
+		TenantID:    tenantID,
+		RoomID:      roomID,
+		DisplayName: "Test User",
+		Role:        "host",
+		IssuedAt:    time.Now(),
+		ExpiresAt:   time.Now().Add(15 * time.Minute),
+	}
+	router.Use(func(c *gin.Context) {
+		c.Set(middleware.ClaimsKey, claims)
+		c.Next()
+	})
+	return router, claims
 }
 
 func TestRoomHandler_Create_WithoutClaims_ReturnsUnauthorized(t *testing.T) {
@@ -76,7 +99,7 @@ func TestRoomHandler_Create_RequestStructure(t *testing.T) {
 
 // TestRoomHandler_Get_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_Get_InvalidRoomID(t *testing.T) {
-	router := setupTestRouter()
+	router, _ := setupTestRouterWithClaims()
 	handler := NewRoomHandler(nil)
 	router.GET("/rooms/:id", handler.Get)
 
@@ -94,7 +117,7 @@ func TestRoomHandler_Get_InvalidRoomID(t *testing.T) {
 
 // TestRoomHandler_Update_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_Update_InvalidRoomID(t *testing.T) {
-	router := setupTestRouter()
+	router, _ := setupTestRouterWithClaims()
 	handler := NewRoomHandler(nil)
 	router.PATCH("/rooms/:id", handler.Update)
 
@@ -113,7 +136,7 @@ func TestRoomHandler_Update_InvalidRoomID(t *testing.T) {
 
 // TestRoomHandler_Update_InvalidJSON tests invalid JSON body in Update returns 400
 func TestRoomHandler_Update_InvalidJSON(t *testing.T) {
-	router := setupTestRouter()
+	router, _ := setupTestRouterWithClaims()
 	handler := NewRoomHandler(nil)
 	router.PATCH("/rooms/:id", handler.Update)
 
@@ -133,7 +156,7 @@ func TestRoomHandler_Update_InvalidJSON(t *testing.T) {
 
 // TestRoomHandler_Delete_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_Delete_InvalidRoomID(t *testing.T) {
-	router := setupTestRouter()
+	router, _ := setupTestRouterWithClaims()
 	handler := NewRoomHandler(nil)
 	router.DELETE("/rooms/:id", handler.Delete)
 
@@ -151,7 +174,7 @@ func TestRoomHandler_Delete_InvalidRoomID(t *testing.T) {
 
 // TestRoomHandler_End_InvalidRoomID tests invalid UUID param returns 400
 func TestRoomHandler_End_InvalidRoomID(t *testing.T) {
-	router := setupTestRouter()
+	router, _ := setupTestRouterWithClaims()
 	handler := NewRoomHandler(nil)
 	router.POST("/rooms/:id/end", handler.End)
 
@@ -178,7 +201,7 @@ func TestRoomHandler_Create_ValidUUIDPassesParsing(t *testing.T) {
 
 // TestRoomHandler_Get_ValidIDFormat tests invalid param rejection
 func TestRoomHandler_Get_InvalidParamFormat(t *testing.T) {
-	router := setupTestRouter()
+	router, _ := setupTestRouterWithClaims()
 	handler := NewRoomHandler(nil)
 	router.GET("/rooms/:id", handler.Get)
 

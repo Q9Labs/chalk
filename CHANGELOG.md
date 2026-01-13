@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+#### Tests
+- Updated 12 handler tests to align with security fix behavior (auth checks, token types, CORS)
+- Fixed handler order: JSON parsing before auth for proper 400 vs 403 responses
+
 #### API - Critical
 - Tenant ownership bypass: API endpoints now verify path ID matches authenticated tenant (API-CRIT-01)
 - Cross-tenant access: Room/participant/recording handlers scope queries by JWT claims (API-CRIT-02)
