@@ -46,9 +46,9 @@ export const ControlButton = React.memo(
 						size === "md" ? "h-[44px] w-[44px] rounded-full" : "h-14 w-14 rounded-full",
 						disabled && "cursor-not-allowed opacity-50",
 						// Default state (Purple Gradient)
-						!disabled && !active && !danger && !noBorder && "text-white shadow-lg hover:brightness-110 bg-[#151515]",
+						!disabled && !active && !danger && !noBorder && "shadow-lg hover:brightness-110 bg-[#151515]",
 						// No Border state (Ghost)
-						!disabled && !active && !danger && noBorder && "text-white/70 hover:text-white bg-[#151515]",
+						!disabled && !active && !danger && noBorder && "bg-[#151515]",
 						
 						!disabled &&
 							active &&
