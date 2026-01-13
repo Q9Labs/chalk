@@ -15,10 +15,10 @@
   --chalk-text-secondary: #475569;
   --chalk-text-muted: #64748b;
   /* Brand */
-  --chalk-brand: #0073FF;          /* Bright Blue */
+  --chalk-brand: #0066E6;          /* Bright Blue */
   --chalk-brand-hover: #0066E6;
-  --chalk-accent: #A855F7;         /* Purple/Magenta */
-  --chalk-accent-hover: #9333EA;
+  --chalk-accent: #0066E6;         /* Purple/Magenta */
+  --chalk-accent-hover: #0066E6;
   --chalk-primary: var(--chalk-brand);
   --chalk-primary-hover: var(--chalk-brand-hover);
   --chalk-danger: #d93025;
@@ -26,8 +26,8 @@
   --chalk-warning: #f9ab00;
   --chalk-error-subtle: rgba(217, 48, 37, 0.12);
   --chalk-success-subtle: rgba(30, 142, 62, 0.12);
-  --chalk-border-color: #e2e8f0;
-  --chalk-border-subtle: #e5e7eb;
+  --chalk-border-color: #0066E6;
+  --chalk-border-subtle: #0066E6;
 
   /* Spacing */
   --chalk-spacing-xs: 0.25rem;

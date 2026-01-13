@@ -14,12 +14,12 @@ function LoadingScreenBase({
 	return (
 		<div
 			className={cn(
-				"flex flex-col items-center justify-center min-h-screen bg-[var(--chalk-bg-primary)] text-[var(--chalk-text-primary)]",
+				"flex flex-col items-center justify-center min-h-screen bg-[var(--chalk-bg-primary)] text-[var(--chalk-brand)]",
 				className,
 			)}
 		>
 			<Spinner size="lg" />
-			<p className="mt-4 text-[var(--chalk-text-secondary)] text-sm animate-pulse">
+			<p className="mt-4 text-[var(--chalk-brand)] text-sm animate-pulse">
 				{message}
 			</p>
 		</div>

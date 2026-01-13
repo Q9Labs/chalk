@@ -218,7 +218,7 @@ function PreJoinLobbyBase({
 								isLocal: true,
 							}}
 							videoTrack={videoTrack}
-							className="w-full bg-[var(--chalk-bg-tile)] aspect-video rounded-2xl border border-[var(--chalk-border-subtle)] overflow-hidden shadow-[var(--chalk-shadow-xl)]"
+							className="w-full aspect-video rounded-2xl overflow-hidden"
 							showStatus={false}
 							showName={false}
 							showAvatar={false}
@@ -326,7 +326,7 @@ function PreJoinLobbyBase({
 							<button
 								onClick={handleJoin}
 								disabled={!displayName.trim() || isLoading}
-								className="w-full h-11 bg-[var(--chalk-primary)] hover:bg-[var(--chalk-primary-hover)] text-white rounded-full font-semibold text-base transition-all shadow-lg hover:shadow-[var(--chalk-primary)]/20 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+								className="w-full h-11 bg-[var(--chalk-brand)] text-white rounded-full font-semibold text-base transition-all shadow-lg active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
 							>
 								{isLoading ? <Spinner size="sm" className="mr-2" /> : null}
 								{isLoading ? "Joining..." : "Ask to join"}

@@ -172,7 +172,7 @@ export const VideoTile = React.memo(({
       )}
       style={{
         background: participantGradient,
-        border: `1px solid ${participantBorder}`
+        border: `2px solid ${participantBorder}`,
       }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
