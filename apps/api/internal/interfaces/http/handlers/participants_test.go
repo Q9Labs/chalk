@@ -7,26 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Q9Labs/chalk/internal/domain/auth"
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// mockAuthMiddleware adds mock claims to context for testing
-func mockAuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		claims := &auth.Claims{
-			Subject:  uuid.New().String(),
-			TenantID: uuid.New(),
-		}
-		c.Set("claims", claims)
-		c.Next()
-	}
-}
-
-// TestParticipantHandler_Add_InvalidRoomID tests invalid UUID param returns 400
+// TestParticipantHandler_Add_InvalidRoomID tests handler requires authentication
 func TestParticipantHandler_Add_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
 	handler := NewParticipantHandler(nil, nil)
