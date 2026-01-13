@@ -285,7 +285,7 @@ export const ParticipantList = React.memo(({
           {onAddPeople && (
             <button
               onClick={onAddPeople}
-              className="w-full bg-[#151515] hover:bg-[#252525] text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-6 font-medium text-sm shadow-lg"
+              className="w-full bg-primary hover:bg-primary/80 text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-6 font-medium text-sm shadow-lg"
             >
               <Users className="w-4 h-4" />
               <span>Add people</span>

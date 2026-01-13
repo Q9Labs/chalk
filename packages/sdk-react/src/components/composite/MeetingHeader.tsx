@@ -52,7 +52,8 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
       </div>
 
       <div className="flex flex-1 justify-center">
-        <div className="bg-white/10 px-3 py-1.5 rounded-full text-sm font-medium tabular-nums text-white">
+        <div className="bg-white/10 px-3 py-1.5 rounded-full text-sm font-medium tabular-nums text-white flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           {formatDuration(duration)}
         </div>
       </div>

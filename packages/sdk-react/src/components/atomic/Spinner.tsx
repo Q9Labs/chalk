@@ -11,7 +11,7 @@ export interface SpinnerProps {
 
 export const Spinner = React.memo<SpinnerProps>(({
   size = 'md',
-  color = 'var(--chalk-accent)',
+  color = 'var(--chalk-brand)',
   className,
 }) => {
   const prefersReducedMotion = usePrefersReducedMotion();

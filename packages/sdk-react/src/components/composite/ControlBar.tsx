@@ -74,16 +74,15 @@ export interface ControlBarProps {
 	className?: string;
 }
 
-const formatDuration = (ms: number) => {
-	const totalSeconds = Math.floor(ms / 1000);
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
+const formatDuration = (seconds: number) => {
+	const hours = Math.floor(seconds / 3600);
+	const minutes = Math.floor((seconds % 3600) / 60);
+	const secs = seconds % 60;
 
 	if (hours > 0) {
-		return `${hours}hr ${minutes}min ${seconds}s`;
+		return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 	}
-	return `${minutes}min ${seconds}s`;
+	return `${minutes}:${String(secs).padStart(2, '0')}`;
 };
 
 export const ControlBar = React.memo(
@@ -135,10 +134,10 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="video"
-							icon={isVideoEnabled ? <VideoOff /> : <Video />}
+							icon={isVideoEnabled ? <Video /> : <VideoOff className="text-[#EF4444]" />}
 							label={isVideoEnabled ? "Stop Video" : "Start Video"}
 							onClick={onToggleVideo}
-							danger={isVideoEnabled}
+							active={isVideoEnabled}
 							showLabel={showLabels}
 							data-tour="controls-video"
 						/>
