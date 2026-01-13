@@ -258,7 +258,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			data-chalk-theme={theme === "system" ? undefined : theme}
 		>
 			<div className="absolute top-6 left-8 z-10">
-				<h1 className="text-white/40 text-sm font-medium">{roomName || "Video Call Screen"}</h1>
+				<h1 className="text-sm font-semibold text-(--chalk-text-secondary)/80">
+					{roomName || "Video Call Screen"}
+				</h1>
 			</div>
 
 			{/* Layout Switcher */}
