@@ -49,3 +49,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Migration `005_add_failed_recording_status.sql` for recording status constraint
+- Effect-TS foundation for SDK-Core internal async/state/validation patterns:
+  - `src/effect/errors.ts`: Tagged error types with exhaustive matching
+  - `src/effect/services.ts`: Context Tags for dependency injection (TokenService, LoggerService, etc.)
+  - `src/effect/runtime.ts`: Bridge between Effect internals and Promise-based public API
+  - `src/effect/token-service.ts`: Token management with exponential backoff retry
+  - `src/effect/connection.ts`: Scoped resources with acquireRelease for RTK/WebSocket
+  - `src/effect/websocket.ts`: Reconnect schedules, heartbeat fibers, message queues
+  - `src/effect/schemas/ws-events.ts`: Runtime validation schemas for WS payloads
+  - `src/effect/schemas/api.ts`: Runtime validation schemas for API responses
+
+### Changed
+- `client.ts`: Integrated Effect patterns into `joinRoom`:
+  - Replaced `isJoining` boolean with `OperationLock` for serialized joins
+  - Added `_initRealtimeKitEffect` for RTK init with typed `ConnectionError`
+  - Added `_joinRealtimeKitEffect` for RTK join with `Effect.timeout` handling
+  - Public API unchanged (still returns `Promise<Room>`)

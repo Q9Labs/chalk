@@ -34,8 +34,19 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSock
 	}
 	// Add default development origins
 	if os.Getenv("ENV") != "production" {
-		origins = append(origins, "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173")
+		origins = append(origins,
+			"http://localhost:*",
+			"http://127.0.0.1:*",
+			"localhost:*",    // Some browsers send origin without scheme
+			"127.0.0.1:*",
+		)
 	}
+
+	// Production/staging origins (always allowed)
+	origins = append(origins,
+		"https://chalk.q9labs.ai",
+		"https://collabdash-dev.vercel.app",
+	)
 
 	return &WebSocketHandler{
 		jwtService:     jwtService,

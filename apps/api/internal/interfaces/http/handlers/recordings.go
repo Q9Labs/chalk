@@ -209,7 +209,7 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 		return
 	}
 
-	rec, _ := h.recordingService.GetRecording(c.Request.Context(), id)
+	h.recordingService.GetRecording(c.Request.Context(), id)
 	response := gin.H{
 		"recording_id": id,
 		"download_url": downloadURL,

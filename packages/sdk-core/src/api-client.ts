@@ -19,7 +19,7 @@ import type {
 } from "./types.ts";
 
 interface APIClientEvents {
-	"token-expired": ChalkError;
+	"token-expired": ChalkErrorType;
 }
 
 export class APIClient extends EventEmitter<APIClientEvents> {
