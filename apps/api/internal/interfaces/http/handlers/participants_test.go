@@ -7,14 +7,29 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Q9Labs/chalk/internal/domain/auth"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// mockAuthMiddleware adds mock claims to context for testing
+func mockAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := &auth.Claims{
+			Subject:  uuid.New().String(),
+			TenantID: uuid.New(),
+		}
+		c.Set("claims", claims)
+		c.Next()
+	}
+}
+
 // TestParticipantHandler_Add_InvalidRoomID tests invalid UUID param returns 400
 func TestParticipantHandler_Add_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -34,6 +49,7 @@ func TestParticipantHandler_Add_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_Add_InvalidJSON tests invalid JSON body returns 400
 func TestParticipantHandler_Add_InvalidJSON(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -54,6 +70,7 @@ func TestParticipantHandler_Add_InvalidJSON(t *testing.T) {
 // TestParticipantHandler_Add_MissingDisplayName tests missing required display_name returns 400
 func TestParticipantHandler_Add_MissingDisplayName(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -74,6 +91,7 @@ func TestParticipantHandler_Add_MissingDisplayName(t *testing.T) {
 // TestParticipantHandler_Add_EmptyDisplayName tests empty display_name string returns 400
 func TestParticipantHandler_Add_EmptyDisplayName(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
@@ -114,6 +132,7 @@ func TestParticipantHandler_Add_ValidRequest(t *testing.T) {
 // TestParticipantHandler_List_InvalidRoomID tests invalid UUID param returns 400
 func TestParticipantHandler_List_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.GET("/rooms/:id/participants", handler.List)
 
@@ -132,6 +151,7 @@ func TestParticipantHandler_List_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_Remove_InvalidRoomID tests invalid room UUID param returns 400
 func TestParticipantHandler_Remove_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.DELETE("/rooms/:id/participants/:pid", handler.Remove)
 
@@ -151,6 +171,7 @@ func TestParticipantHandler_Remove_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_Remove_InvalidParticipantID tests invalid UUID param returns 400
 func TestParticipantHandler_Remove_InvalidParticipantID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.DELETE("/rooms/:id/participants/:pid", handler.Remove)
 
@@ -170,6 +191,7 @@ func TestParticipantHandler_Remove_InvalidParticipantID(t *testing.T) {
 // TestParticipantHandler_RefreshToken_InvalidRoomID tests invalid room UUID param returns 400
 func TestParticipantHandler_RefreshToken_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants/:pid/token", handler.RefreshToken)
 
@@ -189,6 +211,7 @@ func TestParticipantHandler_RefreshToken_InvalidRoomID(t *testing.T) {
 // TestParticipantHandler_RefreshToken_InvalidParticipantID tests invalid participant UUID param returns 400
 func TestParticipantHandler_RefreshToken_InvalidParticipantID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockAuthMiddleware())
 	handler := NewParticipantHandler(nil, nil)
 	router.POST("/rooms/:id/participants/:pid/token", handler.RefreshToken)
 

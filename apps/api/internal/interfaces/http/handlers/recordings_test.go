@@ -7,14 +7,29 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Q9Labs/chalk/internal/domain/auth"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// mockAuthMiddleware adds mock claims to context for testing
+func mockRecordingAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := &auth.Claims{
+			Subject:  uuid.New().String(),
+			TenantID: uuid.New(),
+		}
+		c.Set("claims", claims)
+		c.Next()
+	}
+}
+
 // TestRecordingHandler_Start_InvalidRoomID tests invalid UUID param returns 400
 func TestRecordingHandler_Start_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/start", handler.Start)
 
@@ -33,6 +48,7 @@ func TestRecordingHandler_Start_InvalidRoomID(t *testing.T) {
 // TestRecordingHandler_Start_EmptyRoomID tests empty room ID param returns 400
 func TestRecordingHandler_Start_EmptyRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/start", handler.Start)
 
@@ -48,6 +64,7 @@ func TestRecordingHandler_Start_EmptyRoomID(t *testing.T) {
 // TestRecordingHandler_Stop_InvalidRoomID tests invalid UUID param returns 400
 func TestRecordingHandler_Stop_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/stop", handler.Stop)
 
@@ -66,6 +83,7 @@ func TestRecordingHandler_Stop_InvalidRoomID(t *testing.T) {
 // TestRecordingHandler_Stop_SpecialCharRoomID tests special char room IDs are rejected
 func TestRecordingHandler_Stop_SpecialCharRoomID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/stop", handler.Stop)
 
@@ -80,6 +98,7 @@ func TestRecordingHandler_Stop_SpecialCharRoomID(t *testing.T) {
 // TestRecordingHandler_Get_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Get_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.GET("/recordings/:id", handler.Get)
 
@@ -129,6 +148,7 @@ func TestRecordingHandler_Get_InvalidUUIDFormats(t *testing.T) {
 // TestRecordingHandler_Download_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Download_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.GET("/recordings/:id/download", handler.Download)
 
@@ -147,6 +167,7 @@ func TestRecordingHandler_Download_InvalidRecordingID(t *testing.T) {
 // TestRecordingHandler_Download_AtSymbolInID tests @ symbol in ID is rejected
 func TestRecordingHandler_Download_AtSymbolInID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.GET("/recordings/:id/download", handler.Download)
 
@@ -161,6 +182,7 @@ func TestRecordingHandler_Download_AtSymbolInID(t *testing.T) {
 // TestRecordingHandler_Delete_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Delete_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
+	router.Use(mockRecordingAuthMiddleware())
 	handler := NewRecordingHandler(nil, nil)
 	router.DELETE("/recordings/:id", handler.Delete)
 
