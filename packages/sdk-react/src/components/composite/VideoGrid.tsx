@@ -235,13 +235,13 @@ export const VideoGrid = React.memo(({
   if (visibleParticipants.length === 1) {
     const p = visibleParticipants[0]!;
     return (
-      <div className={cn("h-full w-full", className)} data-tour="video-grid">
+      <div className={cn("h-full w-full flex items-center justify-center p-8", className)} data-tour="video-grid">
         <VideoTile
           participant={mapToVideoTileParticipant(p)}
           videoTrack={p.videoTrack}
           onClick={() => onParticipantClick?.(p.id)}
           onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
-          className="w-full h-full"
+          className="w-full h-full max-w-[90%] max-h-[85vh] shadow-2xl"
         />
       </div>
     );
@@ -250,7 +250,7 @@ export const VideoGrid = React.memo(({
   return (
     <div
       className={cn(
-        "grid gap-1 w-full h-full place-items-center",
+        "grid gap-4 w-full h-full place-items-center p-4",
         gridLayout.cols,
         gridLayout.rows,
         className

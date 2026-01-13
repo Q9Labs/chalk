@@ -161,7 +161,7 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
                         ? 'var(--accent, var(--muted, var(--chalk-bg-tertiary, #262626)))'
                         : 'transparent',
                       color: option.value === value
-                        ? 'var(--primary, var(--chalk-accent, #6E00E6))'
+                        ? 'var(--primary, var(--chalk-accent, #151515))'
                         : 'var(--foreground, var(--chalk-text-primary, #ffffff))',
                     }}
                     onMouseEnter={(e) => {
@@ -180,7 +180,7 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
                       <Check
                         size={14}
                         className="shrink-0"
-                        style={{ color: 'var(--primary, var(--chalk-accent, #6E00E6))' }}
+                        style={{ color: 'var(--primary, var(--chalk-accent, #151515))' }}
                       />
                     )}
                   </button>

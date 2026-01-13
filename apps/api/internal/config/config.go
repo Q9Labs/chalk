@@ -77,9 +77,9 @@ func Load() (*Config, error) {
 	dbURL := getEnv("DATABASE_URL", "")
 	dbHost := getEnv("DATABASE_HOST", "localhost")
 	dbPort := getEnv("DATABASE_PORT", "5432")
-	dbName := getEnv("DATABASE_NAME", "chalk")
-	dbUser := getEnv("DATABASE_USER", "postgres")
-	dbPassword := getEnv("DATABASE_PASSWORD", "")
+	dbName := getEnv("DATABASE_NAME", "my_app_db")
+	dbUser := getEnv("DATABASE_USER", "bilal123")
+	dbPassword := getEnv("DATABASE_PASSWORD", "hello123")
 	dbSSLMode := getEnv("DATABASE_SSLMODE", "disable")
 
 	if dbURL == "" && dbPassword != "" {

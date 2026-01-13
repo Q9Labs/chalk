@@ -62,6 +62,8 @@ function RoomPage() {
 		[navigate, roomId],
 	);
 
+
+
 	return (
 		<div className="h-screen w-screen relative">
 			<VideoConference

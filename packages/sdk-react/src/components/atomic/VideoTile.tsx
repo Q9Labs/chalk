@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { cn } from '../../utils/cn';
-import { MicOff, Monitor, Hand, Pin, AlertTriangle } from 'lucide-react';
+import { MicOff, Monitor, Hand } from 'lucide-react';
 import { Avatar } from './Avatar';
-import { ConnectionQuality } from './ConnectionQuality';
 import { NameTag } from './NameTag';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { getParticipantGradient, getParticipantBorder } from '../../utils/colorGenerator';
 
 export interface VideoTileProps {
   participant: {
@@ -156,21 +156,24 @@ export const VideoTile = React.memo(({
   // Compute display state
   const isTrackValid = isTrackUsable(videoTrack);
   const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError;
-  const isPoorConnection = participant.connectionQuality && participant.connectionQuality < 3;
 
-  // Show warning only when video should be on but track is genuinely problematic
-  // Don't show warning during brief state transitions
-  const showTrackWarning = participant.isVideoEnabled && trackError;
+  // Generate consistent color for this participant
+  const participantGradient = useMemo(() => getParticipantGradient(participant.id), [participant.id]);
+  const participantBorder = useMemo(() => getParticipantBorder(participant.id), [participant.id]);
 
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] shadow-[var(--chalk-shadow-tile)] transition-all duration-200',
+        'relative overflow-hidden rounded-[32px] shadow-2xl transition-all duration-300',
         aspectRatioClasses[aspectRatio],
-        (participant.isSpeaking || pinned) && 'ring-2 ring-[var(--chalk-accent)]',
-        onClick && 'cursor-pointer hover:shadow-[var(--chalk-shadow-tile-hover)] hover:scale-[1.01]',
+        (participant.isSpeaking || pinned) && 'ring-2 ring-[#151515]',
+        onClick && 'cursor-pointer hover:scale-[1.01]',
         className
       )}
+      style={{
+        background: participantGradient,
+        border: `1px solid ${participantBorder}`
+      }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       data-tour={participant.isLocal ? 'local-video' : 'video-grid'}
@@ -190,68 +193,54 @@ export const VideoTile = React.memo(({
         />
       ) : showAvatar ? (
         <div className="absolute inset-0 flex items-center justify-center">
-          <Avatar
-            name={participant.displayName}
-            src={participant.avatarUrl}
-            size="2xl"
-          />
+          <div className="relative">
+            <Avatar
+              name={participant.displayName}
+              src={participant.avatarUrl}
+              size="2xl"
+            />
+          </div>
         </div>
       ) : null}
 
       {children}
 
-      <div className="absolute inset-0 p-3 flex flex-col justify-end pointer-events-none">
-        <div className="flex items-center gap-2">
+      <div 
+        className="absolute inset-x-0 bottom-0 p-6 pointer-events-none"
+        style={{
+          background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.4) 100%)'
+        }}
+      >
+        <div className="flex items-center justify-between">
+          {showName && (
+            <NameTag
+              name={participant.displayName}
+              size="lg"
+              className="font-bold text-lg text-white/90"
+            />
+          )}
+          <div className="flex-1" />
           {showStatus && (
-            <>
+            <div className="flex items-center gap-2">
               {participant.isMuted && (
-                <div className="rounded-full bg-black/60 p-1.5 text-white backdrop-blur-sm">
-                  <MicOff size={14} />
-                </div>
-              )}
-              {showTrackWarning && (
-                <div
-                  className="rounded-full bg-[var(--chalk-warning,#f59e0b)] p-1.5 text-white backdrop-blur-sm"
-                  title={trackError || 'Video track unavailable'}
-                >
-                  <AlertTriangle size={14} />
+                <div className="rounded-full bg-black/40 p-2 text-white backdrop-blur-md border border-white/10">
+                  <MicOff size={16} />
                 </div>
               )}
               {participant.isHandRaised && (
                 <div className={cn(
-                  "rounded-full bg-[var(--chalk-accent)] p-1.5 text-white backdrop-blur-sm",
+                  "rounded-full bg-[#151515] p-2 text-white backdrop-blur-md",
                   !prefersReducedMotion && "chalk-animate-hand-bounce"
                 )}>
-                  <Hand size={14} />
+                  <Hand size={16} />
                 </div>
               )}
               {participant.isScreenSharing && (
-                <div className="rounded-full bg-[var(--chalk-success)] p-1.5 text-white backdrop-blur-sm">
-                  <Monitor size={14} />
+                <div className="rounded-full bg-green-500 p-2 text-white backdrop-blur-md">
+                  <Monitor size={16} />
                 </div>
               )}
-              {pinned && (
-                <div className="rounded-full bg-[var(--chalk-accent)] p-1.5 text-white backdrop-blur-sm">
-                  <Pin size={14} />
-                </div>
-              )}
-            </>
-          )}
-          {showName && (
-            <NameTag
-              name={participant.displayName}
-              isLocal={participant.isLocal}
-              size="sm"
-            />
-          )}
-          <div className="flex-1" />
-          {showStatus && isPoorConnection && participant.connectionQuality && (
-             <div className="rounded-[var(--chalk-border-radius-sm)] bg-black/60 p-1 backdrop-blur-sm">
-               <ConnectionQuality
-                 quality={participant.connectionQuality}
-                 size="sm"
-               />
-             </div>
+            </div>
           )}
         </div>
       </div>

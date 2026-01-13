@@ -103,6 +103,7 @@ export interface VideoConferenceProps {
 	onJoin?: (roomId: string) => void;
 	onLeave?: () => void;
 	onError?: (error: ChalkError) => void;
+	onAddPeople?: () => void;
 	className?: string;
 }
 
@@ -119,6 +120,7 @@ function VideoConferenceBase({
 	onJoin,
 	onLeave,
 	onError,
+	onAddPeople,
 	className,
 }: VideoConferenceProps): React.JSX.Element {
 	const [phase, setPhase] = useState<Phase>("lobby");
@@ -459,6 +461,7 @@ function VideoConferenceBase({
 			onToggleWhiteboard={whiteboard.toggle}
 			onSendReaction={handleSendReaction}
 			onLeave={handleLeave}
+			onAddPeople={onAddPeople}
 			connectionStatus={connectionStatus}
 			className={className}
 		/>

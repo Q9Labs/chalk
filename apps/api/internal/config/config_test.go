@@ -274,9 +274,9 @@ func TestLoad_WithDefaultValues(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
-	assert.Equal(t, "8081", cfg.Server.Port)
+	assert.Equal(t, "8080", cfg.Server.Port)
 	assert.Equal(t, "development", cfg.Server.Env)
-	assert.Equal(t, "postgres://postgres@localhost:5432/chalk?sslmode=disable", cfg.Database.URL)
+	assert.Equal(t, "postgres://bilalhome:hello123@localhost:5432/my_app_db?sslmode=disable", cfg.Database.URL)
 	assert.Equal(t, "redis://localhost:6379", cfg.Redis.URL)
 	assert.Equal(t, "development-secret-key", cfg.JWT.SigningKey)
 	assert.Equal(t, 60, cfg.JWT.ExpiryMinutes)
