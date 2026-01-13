@@ -73,5 +73,4 @@ export function getParticipantGradient(participantId: string): string {
  */
 export function getParticipantBorder(participantId: string): string {
   const colors = getParticipantColor(participantId);
-  return colors.border;
 }
