@@ -57,7 +57,7 @@ function hashString(str: string): number {
 export function getParticipantColor(participantId: string): ColorPalette {
   const hash = hashString(participantId);
   const index = hash % COLOR_PALETTES.length;
-  return COLOR_PALETTES[index];
+  return COLOR_PALETTES[index] as ColorPalette;
 }
 
 /**
@@ -73,4 +73,5 @@ export function getParticipantGradient(participantId: string): string {
  */
 export function getParticipantBorder(participantId: string): string {
   const colors = getParticipantColor(participantId);
+  return colors.border;
 }
