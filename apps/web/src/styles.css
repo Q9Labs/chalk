@@ -1,10 +1,10 @@
 @import "tailwindcss";
-@import "tw-animate-css"; 
+@import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
 
-/* @source "../../../packages/ui/src*.{ts,tsx}"; */
-/* @source "../../../packages/sdk-react/src*.{ts,tsx}"; */
+ @source "../../../packages/ui/src/**/*.{ts,tsx}";
+ @source "../../../packages/sdk-react/src/**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
 
