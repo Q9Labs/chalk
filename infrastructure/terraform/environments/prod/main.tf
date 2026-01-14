@@ -105,8 +105,9 @@ module "ecs" {
     { name = "REDIS_PORT", value = tostring(module.elasticache.port) },
     { name = "REDIS_TLS", value = "true" },
     { name = "CHALK_ENABLE_DEMO", value = "true" },
-    # Note: Cloudflare Calls not enabled yet - omit config to run in limited mode
-    # { name = "CLOUDFLARE_ACCOUNT_ID", value = var.cloudflare_account_id },
+    { name = "CLOUDFLARE_ACCOUNT_ID", value = "5281943bd26d5bdcf4c3915606cd6bfb" },
+    { name = "CLOUDFLARE_APP_ID", value = "c645c6d1-909c-4643-a733-1da00ded9522" },
+    { name = "CLOUDFLARE_API_TOKEN", value = "MesahQRKmgqzvNsebp0rAGbuJB7w3L-ybwl_oMpo" },
     { name = "R2_BUCKET_NAME", value = module.cloudflare.recordings_bucket_name },
     { name = "R2_ACCOUNT_ID", value = var.cloudflare_account_id },
   ]
@@ -115,10 +116,6 @@ module "ecs" {
     { name = "DATABASE_PASSWORD", valueFrom = "${module.aurora.master_user_secret_arn}:password::" },
     { name = "REDIS_PASSWORD", valueFrom = module.elasticache.auth_token_secret_arn },
     { name = "JWT_SIGNING_KEY", valueFrom = module.secrets.jwt_secret_arn },
-    # Note: Cloudflare Calls API secrets omitted - Calls not enabled yet (403)
-    # Add these back when Cloudflare Calls is activated:
-    # { name = "CLOUDFLARE_API_TOKEN", valueFrom = "${module.secrets.cloudflare_secret_arn}:sfu_app_secret::" },
-    # { name = "CLOUDFLARE_APP_ID", valueFrom = "${module.secrets.cloudflare_secret_arn}:sfu_app_id::" },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets
