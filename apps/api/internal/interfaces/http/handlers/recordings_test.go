@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRecordingHandler_Start_InvalidRoomID tests invalid UUID param returns 400
+// TestRecordingHandler_Start_InvalidRoomID tests handler requires authentication
 func TestRecordingHandler_Start_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/start", handler.Start)
 
 	req := httptest.NewRequest("POST", "/rooms/invalid-uuid/recordings/start", nil)
@@ -23,17 +23,17 @@ func TestRecordingHandler_Start_InvalidRoomID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := ReadJSONResponse(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid room id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestRecordingHandler_Start_EmptyRoomID tests empty room ID param returns 400
 func TestRecordingHandler_Start_EmptyRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/start", handler.Start)
 
 	req := httptest.NewRequest("POST", "/rooms//recordings/start", nil)
@@ -42,13 +42,13 @@ func TestRecordingHandler_Start_EmptyRoomID(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// Empty param will be treated as invalid UUID
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // TestRecordingHandler_Stop_InvalidRoomID tests invalid UUID param returns 400
 func TestRecordingHandler_Stop_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/stop", handler.Stop)
 
 	req := httptest.NewRequest("POST", "/rooms/invalid-uuid/recordings/stop", nil)
@@ -56,17 +56,17 @@ func TestRecordingHandler_Stop_InvalidRoomID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := ReadJSONResponse(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid room id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestRecordingHandler_Stop_SpecialCharRoomID tests special char room IDs are rejected
 func TestRecordingHandler_Stop_SpecialCharRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.POST("/rooms/:id/recordings/stop", handler.Stop)
 
 	req := httptest.NewRequest("POST", "/rooms/room!@#$/recordings/stop", nil)
@@ -74,13 +74,13 @@ func TestRecordingHandler_Stop_SpecialCharRoomID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code, "Should reject UUID with special characters")
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "Should reject without auth")
 }
 
 // TestRecordingHandler_Get_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Get_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.GET("/recordings/:id", handler.Get)
 
 	req := httptest.NewRequest("GET", "/recordings/not-a-uuid", nil)
@@ -88,11 +88,11 @@ func TestRecordingHandler_Get_InvalidRecordingID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := ReadJSONResponse(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid recording id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestRecordingHandler_Get_InvalidUUIDFormats tests invalid UUID formats are rejected
@@ -109,7 +109,7 @@ func TestRecordingHandler_Get_InvalidUUIDFormats(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewRecordingHandler(nil)
+			handler := NewRecordingHandler(nil, nil)
 			router.GET("/recordings/:id", handler.Get)
 
 			req := httptest.NewRequest("GET", "/recordings/"+tc.recordingID, nil)
@@ -117,11 +117,11 @@ func TestRecordingHandler_Get_InvalidUUIDFormats(t *testing.T) {
 
 			router.ServeHTTP(w, req)
 
-			assert.Equal(t, http.StatusBadRequest, w.Code, "Should reject invalid UUID format: %s", tc.name)
+			assert.Equal(t, http.StatusUnauthorized, w.Code, "Should reject without auth: %s", tc.name)
 			var response map[string]interface{}
 			err := ReadJSONResponse(w.Body.Bytes(), &response)
 			require.NoError(t, err)
-			assert.Equal(t, "invalid recording id", response["error"])
+			assert.Equal(t, "unauthorized", response["error"])
 		})
 	}
 }
@@ -129,7 +129,7 @@ func TestRecordingHandler_Get_InvalidUUIDFormats(t *testing.T) {
 // TestRecordingHandler_Download_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Download_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.GET("/recordings/:id/download", handler.Download)
 
 	req := httptest.NewRequest("GET", "/recordings/invalid-recording-id/download", nil)
@@ -137,17 +137,17 @@ func TestRecordingHandler_Download_InvalidRecordingID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := ReadJSONResponse(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid recording id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestRecordingHandler_Download_AtSymbolInID tests @ symbol in ID is rejected
 func TestRecordingHandler_Download_AtSymbolInID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.GET("/recordings/:id/download", handler.Download)
 
 	req := httptest.NewRequest("GET", "/recordings/id-with-@symbol/download", nil)
@@ -155,13 +155,13 @@ func TestRecordingHandler_Download_AtSymbolInID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // TestRecordingHandler_Delete_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Delete_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil)
+	handler := NewRecordingHandler(nil, nil)
 	router.DELETE("/recordings/:id", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/recordings/bad-id", nil)
@@ -169,11 +169,11 @@ func TestRecordingHandler_Delete_InvalidRecordingID(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var response map[string]interface{}
 	err := ReadJSONResponse(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "invalid recording id", response["error"])
+	assert.Equal(t, "unauthorized", response["error"])
 }
 
 // TestRecordingHandler_Delete_UUIDValidation tests UUID validation for Delete

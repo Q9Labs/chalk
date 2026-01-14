@@ -386,11 +386,11 @@ func TestJWTService_TokenTypesDistinct(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, accessClaims)
 
-	// Refresh token will validate as access token (ValidateToken doesn't check type)
-	// This is by design - type is only checked in ValidateRefreshToken
-	refreshAsAccess, err := svc.ValidateToken(refreshToken)
-	require.NoError(t, err)
-	assert.NotNil(t, refreshAsAccess)
+	// Refresh token should NOT validate as access token (type mismatch)
+	// ValidateToken now enforces token type (API-HIGH-02 security fix)
+	_, err = svc.ValidateToken(refreshToken)
+	assert.Error(t, err)
+	assert.Equal(t, ErrWrongTokenType, err)
 
 	// Refresh token should validate successfully with ValidateRefreshToken
 	refreshTenant, refreshSubject, err := svc.ValidateRefreshToken(refreshToken)

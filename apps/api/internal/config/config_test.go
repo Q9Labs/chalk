@@ -560,6 +560,7 @@ func TestLoad_WithProductionEnv(t *testing.T) {
 	}()
 
 	os.Setenv("ENV", "production")
+	os.Setenv("JWT_SIGNING_KEY", "test-production-jwt-signing-key-secure")
 	os.Setenv("CLOUDFLARE_ACCOUNT_ID", "test-account-id")
 	os.Setenv("CLOUDFLARE_APP_ID", "test-app-id")
 	os.Setenv("CLOUDFLARE_API_TOKEN", "test-api-token")

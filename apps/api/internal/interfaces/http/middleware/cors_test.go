@@ -168,8 +168,8 @@ func TestCORS_NoOriginHeader(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	// No Access-Control-Allow-Origin should be set
 	assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
-	// But other headers should still be set
-	assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Credentials"))
+	// API-MED-06: Credentials header only set when origin is allowed
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
 }
 
 func TestCORS_PostRequest(t *testing.T) {

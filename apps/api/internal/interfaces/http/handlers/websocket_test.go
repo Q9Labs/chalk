@@ -226,15 +226,15 @@ func TestWebSocketHandler_QueryParamTakesPrecedence(t *testing.T) {
 	router := setupTestRouter()
 	router.GET("/ws", handler.HandleWebSocket)
 
-	// Query param has valid token, header has invalid
+	// Header takes precedence over query param (more secure - not logged)
 	req := httptest.NewRequest("GET", "/ws?token="+validToken, nil)
 	req.Header.Set("Sec-WebSocket-Protocol", "token.invalid.token")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	// Should not return unauthorized because query param takes precedence
-	assert.NotEqual(t, http.StatusUnauthorized, w.Code)
+	// Header token is invalid, so should return unauthorized (header takes precedence)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestNewWebSocketHandler(t *testing.T) {
