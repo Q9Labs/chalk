@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { StyleSheet, View, type ViewStyle } from "react-native";
+import { StyleSheet, View, Text, Platform, type ViewStyle } from "react-native";
 import { RTCView } from "react-native-webrtc";
 
 interface VideoViewProps {
@@ -45,19 +45,40 @@ export const VideoView = React.forwardRef<View, VideoViewProps>(
 		ref,
 	) => {
 		if (!stream) {
-			return <View style={[styles.placeholder, style]} testID={testID} />;
+			console.log("[VideoView] No stream provided");
+			return (
+				<View style={[styles.placeholder, style]} testID={testID}>
+					<Text style={styles.placeholderText}>No camera stream</Text>
+				</View>
+			);
 		}
 
+		const streamURL = (stream as unknown as { toURL(): string }).toURL();
+		console.log("[VideoView] Rendering stream:", { streamURL, hasToURL: typeof (stream as unknown as { toURL(): string }).toURL === 'function' });
+
 		return (
-			<RTCView
-				ref={ref}
-				streamURL={(stream as unknown as { toURL(): string }).toURL()}
-				style={[styles.video, style]}
-				mirror={mirror}
-				objectFit={objectFit}
-				zOrder={zOrder}
-				testID={testID}
-			/>
+			<View style={[styles.container, style]}>
+				<RTCView
+					ref={ref}
+					streamURL={streamURL}
+					style={styles.video}
+					mirror={mirror}
+					objectFit={objectFit}
+					zOrder={zOrder}
+					testID={testID}
+				/>
+				{/* Show helpful message on simulator where camera isn't available */}
+				{Platform.OS === "ios" && __DEV__ && (
+					<View style={styles.simulatorOverlay}>
+						<Text style={styles.simulatorText}>
+							📱 Camera unavailable on simulator
+						</Text>
+						<Text style={styles.simulatorSubtext}>
+							Test with physical device to see video stream
+						</Text>
+					</View>
+				)}
+			</View>
 		);
 	},
 );
@@ -65,6 +86,10 @@ export const VideoView = React.forwardRef<View, VideoViewProps>(
 VideoView.displayName = "VideoView";
 
 const styles = StyleSheet.create({
+	container: {
+		flex: 1,
+		position: "relative",
+	},
 	video: {
 		flex: 1,
 		backgroundColor: "#000",
@@ -72,5 +97,31 @@ const styles = StyleSheet.create({
 	placeholder: {
 		flex: 1,
 		backgroundColor: "#1a1a1a",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	placeholderText: {
+		color: "rgba(255,255,255,0.5)",
+		fontSize: 14,
+	},
+	simulatorOverlay: {
+		position: "absolute",
+		bottom: 0,
+		left: 0,
+		right: 0,
+		backgroundColor: "rgba(0,0,0,0.7)",
+		paddingVertical: 12,
+		paddingHorizontal: 16,
+		alignItems: "center",
+	},
+	simulatorText: {
+		color: "#fff",
+		fontSize: 13,
+		fontWeight: "600",
+		marginBottom: 4,
+	},
+	simulatorSubtext: {
+		color: "rgba(255,255,255,0.6)",
+		fontSize: 11,
 	},
 });
