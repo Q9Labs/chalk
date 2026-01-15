@@ -41,6 +41,8 @@ export interface ChalkProviderProps {
 	apiKey?: string;
 	/** JWT token from your server (use for server-to-server auth flow) */
 	token?: string;
+	/** Dynamic token provider for automatic JWT refresh (recommended) */
+	tokenProvider?: () => Promise<string>;
 	/** Custom API URL */
 	apiUrl?: string;
 	/** Custom WebSocket URL */
@@ -53,6 +55,7 @@ export function ChalkProvider({
 	children,
 	apiKey,
 	token,
+	tokenProvider,
 	apiUrl,
 	wsUrl,
 	debug,
@@ -70,6 +73,7 @@ export function ChalkProvider({
 		const config: ChalkClientConfig = {
 			apiKey,
 			token,
+			tokenProvider,
 			apiUrl,
 			wsUrl,
 			debug,
@@ -81,7 +85,7 @@ export function ChalkProvider({
 		const manager = new RTCManager();
 		setRtcManager(manager);
 
-		if (debug && !apiKey && !token) {
+		if (debug && !apiKey && !token && !tokenProvider) {
 			log.info("Running in demo mode without credentials");
 		}
 
@@ -89,7 +93,7 @@ export function ChalkProvider({
 			// Cleanup
 			manager.cleanup();
 		};
-	}, [apiKey, token, apiUrl, wsUrl, debug]);
+	}, [apiKey, token, tokenProvider, apiUrl, wsUrl, debug]);
 
 	const joinRoom = useCallback(
 		async (roomId: string, config: RoomConfig): Promise<Room> => {
