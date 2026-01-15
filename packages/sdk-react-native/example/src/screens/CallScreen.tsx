@@ -111,7 +111,7 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
   // Join the room when component mounts
   useEffect(() => {
     if (!room) {
-      joinRoom(roomId, {});
+      joinRoom(roomId, {displayName: 'Mobile User'});
     }
   }, [roomId, room, joinRoom]);
 
