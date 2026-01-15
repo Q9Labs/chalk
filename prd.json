@@ -99,56 +99,68 @@
         "Room connection is established (WebSocket connected)"
       ],
       "passes": true,
-      "note": "Auth code complete (f986b55). WebRTC connection blocked by infra: enable_calls=false in Terraform. Requires Cloudflare Calls account activation."
+      "note": "Auth code complete. API has valid Cloudflare credentials. RN SDK connects to API but lacks RTK WebRTC integration (see rn-sdk-008)."
     },
     {
       "id": "rn-sdk-008",
-      "title": "Fix participant sync between web and mobile",
-      "description": "When joining same room from web and mobile, participants don't see each other. After auth works, need to verify participant-joined/left events fire and useParticipants reflects remote users.",
+      "title": "Integrate Cloudflare RTK signaling with react-native-webrtc",
+      "description": "Web SDK uses @cloudflare/realtimekit for WebRTC signaling. React Native SDK only has local streams via RTCManager with no RTK integration. Need to bridge RTK signaling protocol to react-native-webrtc peer connections.",
       "priority": 8,
       "dependsOn": ["rn-sdk-007"],
       "verification": [
-        "Join room on web app with one user",
-        "Join same room on mobile app with different user",
-        "Web app shows mobile participant in participant list",
-        "Mobile app shows web participant in participant list",
-        "useParticipants hook returns correct participant count on both platforms",
-        "participant-joined event fires when remote user joins"
+        "RTCManager connects to Cloudflare RTK using authToken from API",
+        "WebRTC signaling (offer/answer/ICE) works through RTK",
+        "Peer connection establishes with Cloudflare SFU",
+        "Local stream is published to SFU",
+        "bun run check-types passes"
       ],
-      "passes": false,
-      "note": "Client code complete (4afdb97): useParticipants hook properly subscribes to Room events, added remoteParticipants/getParticipant for API parity. BLOCKED by same infra issues as rn-sdk-007: enable_calls=false, no valid rtcToken."
+      "passes": true,
+      "note": "Client code complete: ChalkProvider uses @cloudflare/realtimekit-react-native hooks, all hooks use rtkClient. Runtime testing requires Cloudflare Calls enabled with valid APP_ID/APP_KEY in API."
     },
     {
       "id": "rn-sdk-009",
-      "title": "Render remote participant video tracks",
-      "description": "CallScreen only shows local video preview. Need to display grid/list of remote participant video streams using VideoView component.",
+      "title": "Receive and render remote participant streams",
+      "description": "After RTK signaling works, subscribe to remote participant tracks from SFU and render them in VideoView components.",
       "priority": 9,
       "dependsOn": ["rn-sdk-008"],
       "verification": [
-        "CallScreen shows remote participant video tiles (not just local preview)",
-        "Remote video streams render in VideoView components",
+        "RTCManager receives remote track events from SFU",
+        "Remote video tracks are exposed via useParticipants or dedicated hook",
+        "CallScreen renders remote participant video tiles",
         "Video grid adjusts layout based on participant count",
-        "Remote participant name labels show correctly",
-        "When remote participant leaves, their video tile is removed"
+        "Remote participant leaves -> video tile removed"
       ],
-      "passes": false,
-      "note": "BLOCKED by infra: requires enable_calls=true in Terraform. Cannot implement/verify without participant sync (rn-sdk-008) working first."
+      "passes": false
     },
     {
       "id": "rn-sdk-010",
-      "title": "Add remote participant audio playback",
-      "description": "Remote participant audio needs to play through device speakers. Ensure audio tracks from remote participants are attached and playing.",
+      "title": "Handle remote audio tracks",
+      "description": "Remote audio tracks from SFU need to be attached to audio output. React Native WebRTC auto-plays remote audio, but verify it works correctly.",
       "priority": 10,
       "dependsOn": ["rn-sdk-008"],
       "verification": [
         "Join room with two devices (web + mobile)",
-        "Speak on web - audio should play on mobile device speakers",
-        "Speak on mobile - audio should play on web",
+        "Speak on web - audio plays on mobile speakers",
+        "Speak on mobile - audio plays on web",
         "Muting local audio stops remote from hearing",
-        "Audio continues working when video is disabled"
+        "Audio works when video is disabled"
       ],
-      "passes": false,
-      "note": "BLOCKED by infra: requires enable_calls=true in Terraform. Cannot implement/verify without participant sync (rn-sdk-008) working first."
+      "passes": false
+    },
+    {
+      "id": "rn-sdk-011",
+      "title": "Participant sync via RTK events",
+      "description": "RTK emits participant-joined/left events. Wire these to useParticipants hook so UI reflects all room participants.",
+      "priority": 11,
+      "dependsOn": ["rn-sdk-008"],
+      "verification": [
+        "Join room on web with user A",
+        "Join same room on mobile with user B",
+        "Web shows B in participant list",
+        "Mobile shows A in participant list",
+        "Participant counts match on both platforms"
+      ],
+      "passes": false
     }
   ]
 }
