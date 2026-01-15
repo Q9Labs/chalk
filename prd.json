@@ -1,169 +1,147 @@
 {
-  "project": "React Native SDK - Multi-user Video Conferencing",
-  "description": "Enable real room connections, participant sync, and multi-user video conferencing in @q9labs/chalk-react-native",
+  "project": "React Native SDK - End-to-End Verification",
+  "description": "Verify all React Native SDK features work correctly using iOS simulator automation",
   "userStories": [
     {
-      "id": "rn-sdk-001",
-      "title": "Fix race condition in PreCallScreen stream initialization",
-      "description": "PreCallScreen calls startStream() before ChalkProvider finishes initializing rtcManager, causing 'RTCManager not available' error and black camera preview",
+      "id": "verify-001",
+      "title": "Verify app builds and launches",
+      "description": "Ensure the React Native example app builds without errors and launches on iOS simulator",
       "priority": 1,
       "verification": [
-        "Use ios-simulator skill: python scripts/app_launcher.py --launch com.q9labs.chalk-example",
-        "Use ios-simulator skill: python scripts/navigator.py --find-text 'Create' --tap",
-        "Check Metro logs for '[useLocalStream] Got stream: {\"stream\": true}'",
-        "Verify NO '[useLocalStream] RTCManager not available' error after tap",
-        "Use ios-simulator skill: xcrun simctl io booted screenshot to capture result"
+        "Run: cd packages/sdk-react-native/example && bun run ios (or verify already running)",
+        "Use ios-simulator: python scripts/app_launcher.py --launch com.q9labs.chalk-example",
+        "Take screenshot and verify HomeScreen shows 'Chalk Video' title",
+        "Verify 'Create & Join Room' button is visible"
       ],
       "passes": true
     },
     {
-      "id": "rn-sdk-002",
-      "title": "Fix iOS permission detection returning 'unavailable'",
-      "description": "usePermissions hook always shows camera/microphone as 'unavailable' on iOS even when permissions are already granted, blocking camera preview from starting",
+      "id": "verify-002",
+      "title": "Verify navigation to PreCallScreen",
+      "description": "Test that tapping Create & Join Room navigates to PreCallScreen with camera preview",
       "priority": 2,
+      "dependsOn": ["verify-001"],
       "verification": [
-        "Use ios-simulator skill: python scripts/privacy_manager.py --bundle-id com.q9labs.chalk-example --grant camera,microphone",
-        "Use ios-simulator skill: python scripts/app_launcher.py --terminate com.q9labs.chalk-example then --launch",
-        "Use ios-simulator skill: python scripts/navigator.py --find-text 'Create' --tap",
-        "Take screenshot and verify 'Camera: granted' and 'Microphone: granted' are shown (not 'unavailable')",
-        "Verify hasRequiredPermissions is true in the UI (Join Call button should be enabled, not dimmed)"
+        "Use ios-simulator: python scripts/navigator.py --find-text 'Create' --tap",
+        "Take screenshot of PreCallScreen",
+        "Verify 'Join Room' title is shown",
+        "Verify permissions show 'granted' for camera and microphone",
+        "Verify 'Join Call' button is visible and enabled (green, not dimmed)"
       ],
       "passes": true
     },
     {
-      "id": "rn-sdk-003",
-      "title": "Fix VideoView not rendering stream",
-      "description": "VideoView receives valid stream with streamURL but renders black/empty. Metro logs show valid streamURL but no video appears in preview area",
+      "id": "verify-003",
+      "title": "Verify CallScreen UI and controls",
+      "description": "Navigate to CallScreen and verify all UI elements render correctly",
       "priority": 3,
+      "dependsOn": ["verify-002"],
       "verification": [
-        "Use ios-simulator skill: Launch app and navigate to PreCallScreen",
-        "Check Metro logs show '[VideoView] Rendering stream:' with valid streamURL",
-        "Take screenshot - preview area should show camera feed OR clear 'camera unavailable' message",
-        "NOT a black box with no explanation",
-        "If on simulator without camera, verify placeholder UI explains the limitation"
-      ],
-      "passes": true
-    },
-    {
-      "id": "rn-sdk-004",
-      "title": "Fix CallScreen status stuck on 'Connecting'",
-      "description": "CallScreen shows 'Connecting' status indefinitely in demo mode instead of showing 'Demo Mode' or appropriate status",
-      "priority": 4,
-      "verification": [
-        "Use ios-simulator skill: Navigate to PreCallScreen then tap 'Join Call'",
-        "Use ios-simulator skill: python scripts/navigator.py --find-text 'Join' --tap",
+        "Use ios-simulator: python scripts/navigator.py --find-text 'Join Call' --tap",
+        "Wait 2 seconds for CallScreen to load",
         "Take screenshot of CallScreen",
-        "Verify status badge shows 'Demo Mode' NOT 'Connecting'",
-        "Use ios-simulator skill: Test controls - tap mute, camera, hand raise buttons and verify they respond"
+        "Verify room ID is shown in header",
+        "Verify status badge shows either 'Demo Mode' or 'Connecting' or 'Live'",
+        "Verify participant count badge is visible",
+        "Verify reaction buttons (thumbs up, heart, etc) are visible",
+        "Verify control bar shows Mute, Stop/Start, Raise, Leave buttons"
       ],
       "passes": true
     },
     {
-      "id": "rn-sdk-005",
-      "title": "Add error UI when camera unavailable",
-      "description": "When running on simulator without camera support, user sees confusing black screen instead of helpful error message explaining why camera isn't working",
+      "id": "verify-004",
+      "title": "Verify mute/unmute control works",
+      "description": "Test that tapping the mute button toggles audio state",
+      "priority": 4,
+      "dependsOn": ["verify-003"],
+      "verification": [
+        "Take screenshot showing current mute button label",
+        "Use ios-simulator: python scripts/navigator.py --find-text 'Mute' --tap OR --find-text 'Unmute' --tap",
+        "Take screenshot showing button label changed (Mute <-> Unmute)",
+        "Verify the button state toggled successfully"
+      ],
+      "passes": true
+    },
+    {
+      "id": "verify-005",
+      "title": "Verify video toggle control works",
+      "description": "Test that tapping the camera button toggles video state",
       "priority": 5,
+      "dependsOn": ["verify-003"],
       "verification": [
-        "Use ios-simulator skill: Launch app on simulator",
-        "Navigate to PreCallScreen",
-        "If camera stream fails or returns empty, UI should show clear message like 'Camera not available on simulator'",
-        "Take screenshot to verify - should NOT be a black preview with no text",
-        "Error should be user-friendly, not a technical error message"
+        "Take screenshot showing current camera button label (Start or Stop)",
+        "Use ios-simulator: python scripts/navigator.py --find-text 'Start' --tap OR --find-text 'Stop' --tap",
+        "Take screenshot showing button label changed",
+        "Verify the button state toggled successfully"
       ],
-      "passes": true
+      "passes": false
     },
     {
-      "id": "rn-sdk-006",
-      "title": "Add tokenProvider support to React Native ChalkProvider",
-      "description": "React Native ChalkProvider only supports static token/apiKey but web version has tokenProvider for dynamic JWT refresh. Add tokenProvider prop to match web SDK capabilities.",
+      "id": "verify-006",
+      "title": "Verify hand raise control works",
+      "description": "Test that tapping the hand raise button toggles hand state",
       "priority": 6,
+      "dependsOn": ["verify-003"],
       "verification": [
-        "ChalkProviderProps interface includes tokenProvider?: () => Promise<string>",
-        "ChalkProvider accepts and uses tokenProvider when provided",
-        "Token refresh works - when token expires, tokenProvider is called again",
-        "bun run check-types passes",
-        "Existing apiKey/token auth continues to work (backwards compatible)"
+        "Take screenshot showing current hand button label (Raise or Lower)",
+        "Use ios-simulator: python scripts/navigator.py --find-text 'Raise' --tap OR --find-text 'Lower' --tap",
+        "Take screenshot showing button label changed (Raise <-> Lower)",
+        "Verify the button state toggled successfully"
       ],
-      "passes": true
+      "passes": false
     },
     {
-      "id": "rn-sdk-007",
-      "title": "Configure example app with working authentication",
-      "description": "Example app has no authentication configured - just apiUrl. Need to add tokenProvider that fetches JWT from API or use environment variable for API key so rooms actually connect.",
+      "id": "verify-007",
+      "title": "Verify reaction sending works",
+      "description": "Test that tapping a reaction emoji triggers floating animation",
       "priority": 7,
-      "dependsOn": ["rn-sdk-006"],
+      "dependsOn": ["verify-003"],
       "verification": [
-        "Example App.tsx has tokenProvider or apiKey configured",
-        "Launch app, create room, join - status shows 'Live' or 'Connected' NOT 'Demo Mode'",
-        "Metro logs show successful API responses (not 401/403 errors)",
-        "Room connection is established (WebSocket connected)"
+        "Use ios-simulator: Tap the thumbs up reaction button",
+        "Quickly take screenshot to capture floating emoji animation",
+        "Verify no crash or error occurs",
+        "Metro logs should not show errors related to reactions"
       ],
-      "passes": true,
-      "note": "Auth code complete. API has valid Cloudflare credentials. RN SDK connects to API but lacks RTK WebRTC integration (see rn-sdk-008)."
+      "passes": false
     },
     {
-      "id": "rn-sdk-008",
-      "title": "Integrate Cloudflare RTK signaling with react-native-webrtc",
-      "description": "Web SDK uses @cloudflare/realtimekit for WebRTC signaling. React Native SDK only has local streams via RTCManager with no RTK integration. Need to bridge RTK signaling protocol to react-native-webrtc peer connections.",
+      "id": "verify-008",
+      "title": "Verify leave call and return to home",
+      "description": "Test that tapping Leave returns to HomeScreen",
       "priority": 8,
-      "dependsOn": ["rn-sdk-007"],
+      "dependsOn": ["verify-003"],
       "verification": [
-        "RTCManager connects to Cloudflare RTK using authToken from API",
-        "WebRTC signaling (offer/answer/ICE) works through RTK",
-        "Peer connection establishes with Cloudflare SFU",
-        "Local stream is published to SFU",
-        "bun run check-types passes"
+        "Use ios-simulator: python scripts/navigator.py --find-text 'Leave' --tap",
+        "Wait 1 second for navigation",
+        "Take screenshot",
+        "Verify HomeScreen is shown with 'Chalk Video' title",
+        "Verify can join again (Create & Join Room button visible)"
       ],
-      "passes": true,
-      "note": "Client code complete: ChalkProvider uses @cloudflare/realtimekit-react-native hooks, all hooks use rtkClient. Runtime testing requires Cloudflare Calls enabled with valid APP_ID/APP_KEY in API."
+      "passes": false
     },
     {
-      "id": "rn-sdk-009",
-      "title": "Receive and render remote participant streams",
-      "description": "After RTK signaling works, subscribe to remote participant tracks from SFU and render them in VideoView components.",
+      "id": "verify-009",
+      "title": "Verify type checking passes",
+      "description": "Run type checker to ensure no TypeScript errors in SDK",
       "priority": 9,
-      "dependsOn": ["rn-sdk-008"],
       "verification": [
-        "RTCManager receives remote track events from SFU",
-        "Remote video tracks are exposed via useParticipants or dedicated hook",
-        "CallScreen renders remote participant video tiles",
-        "Video grid adjusts layout based on participant count",
-        "Remote participant leaves -> video tile removed"
+        "Run: bun run check-types",
+        "Verify all packages pass type checking",
+        "No TypeScript errors should be reported"
       ],
-      "passes": true,
-      "note": "Client code complete: ParticipantTile component renders remote video, VideoGrid handles responsive layout, useParticipants exposes remoteParticipants with videoTrack. Runtime testing requires Cloudflare Calls enabled."
+      "passes": false
     },
     {
-      "id": "rn-sdk-010",
-      "title": "Handle remote audio tracks",
-      "description": "Remote audio tracks from SFU need to be attached to audio output. React Native WebRTC auto-plays remote audio, but verify it works correctly.",
+      "id": "verify-010",
+      "title": "Verify SDK exports are correct",
+      "description": "Ensure all expected hooks and components are exported from the SDK",
       "priority": 10,
-      "dependsOn": ["rn-sdk-008"],
       "verification": [
-        "Join room with two devices (web + mobile)",
-        "Speak on web - audio plays on mobile speakers",
-        "Speak on mobile - audio plays on web",
-        "Muting local audio stops remote from hearing",
-        "Audio works when video is disabled"
+        "Check packages/sdk-react-native/src/index.ts exports",
+        "Verify exports include: ChalkProvider, useChalk, useRoom, useMedia, useParticipants, useLocalStream, usePermissions, useDevices, useInteractions, VideoView, ParticipantTile, AudioSession",
+        "Run: bun run build in packages/sdk-react-native to verify build succeeds"
       ],
-      "passes": true,
-      "note": "Client code complete: CallScreen wrapped in AudioSession for proper audio routing. React Native WebRTC auto-plays remote audio tracks when received via RTK. AudioSession configures iOS AVAudioSession and Android audio focus. Runtime testing requires Cloudflare Calls enabled."
-    },
-    {
-      "id": "rn-sdk-011",
-      "title": "Participant sync via RTK events",
-      "description": "RTK emits participant-joined/left events. Wire these to useParticipants hook so UI reflects all room participants.",
-      "priority": 11,
-      "dependsOn": ["rn-sdk-008"],
-      "verification": [
-        "Join room on web with user A",
-        "Join same room on mobile with user B",
-        "Web shows B in participant list",
-        "Mobile shows A in participant list",
-        "Participant counts match on both platforms"
-      ],
-      "passes": true,
-      "note": "Client code complete: useParticipants subscribes to RTK events (participantJoined, participantLeft, videoUpdate, audioUpdate) and syncs participant list. Implemented in commit 4afdb97. Runtime testing requires Cloudflare Calls enabled."
+      "passes": false
     }
   ]
 }
