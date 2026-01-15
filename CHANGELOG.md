@@ -9,12 +9,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+#### SDK-React-Native
+- **iOS permission detection** - `usePermissions` now correctly detects granted camera/microphone permissions on iOS using native AVFoundation APIs via `PermissionsModule.swift`. Previously always showed "unavailable".
+- **Swift compilation errors** - Fixed deprecated `nativeCallConferencingSupported` in CallKitModule and incorrect `AVAudioSession.Port` enum values in AudioSessionModule.
+- **Infinite re-render loop** - Fixed `checkPermissions` callback causing "Maximum update depth exceeded" error due to `permissions` state in dependency array.
+
+### Added
+
+#### SDK-React-Native
+- **PermissionsModule** (`packages/sdk-react-native/ios/PermissionsModule.swift`) - Native iOS module for checking/requesting camera and microphone permissions via AVFoundation
+- **Native iOS modules** (`packages/sdk-react-native/ios/`)
+  - `AudioSessionModule.swift` - AVAudioSession for VoIP, speaker/earpiece/bluetooth routing
+  - `CallKitModule.swift` - Native call UI, lock screen integration, CarPlay support
+  - `ChalkReactNative.podspec` - CocoaPods configuration
+- **Native Android modules** (`packages/sdk-react-native/android/`)
+  - `AudioSessionModule.kt` - AudioManager, audio focus, bluetooth SCO
+  - `CallServiceModule.kt` - Foreground service for background audio
+  - Gradle build configuration with Kotlin 1.9.22
+- **New hooks**
+  - `useCallKit` - iOS CallKit integration (reportIncomingCall, reportCallEnded, etc.)
+  - `useForegroundService` - Android foreground service control
+  - `useInteractions` - Hand raise and reactions
+  - `useHandRaise` - Convenience wrapper for hand raise only
+- **Updated components**
+  - `AudioSession.tsx` - Now calls native modules for audio routing
+  - `useBluetoothAudio` - Real device detection and routing
+- **Example app** (`packages/sdk-react-native/example/`)
+  - Full iOS and Android configuration for React Native 0.76.x
+  - Three-screen flow: Home, PreCall (permissions), Call
+  - Metro config for monorepo module resolution
+
+#### SDK-Core
+- Effect-based manager services: RoomService, ParticipantService, MediaService
+  - SubscriptionRef for observable state (replaces StateContainer)
+  - PubSub for typed events (replaces TypedEventEmitter internally)
+  - Semaphore for concurrent operation protection (join/toggle serialization)
+- Manager state schemas with type inference (`effect/schemas/manager-state.ts`)
+- RoomInstanceService for shared Room reference across services
+- Layer composition helpers (`makeManagerServicesLayer`, `makeManagerRuntime`)
+
+### Changed
+
+#### SDK-Core
+- **ChalkSession** now uses Effect services internally (RoomService, ParticipantService, MediaService)
+  - Same public API maintained for backwards compatibility
+  - `room`, `participants`, `media` objects delegate to Effect services via ManagedRuntime
+  - State updates via SubscriptionRef, events via PubSub
+
+### Removed
+
+#### SDK-Core
+- `RoomManager` class - replaced by Effect-based RoomService
+- `ParticipantManager` class - replaced by Effect-based ParticipantService
+- `MediaManager` class - replaced by Effect-based MediaService
+
+### Fixed
+
 #### Tests
 - Updated 12 handler tests to align with security fix behavior (auth checks, token types, CORS)
 - Fixed handler order: JSON parsing before auth for proper 400 vs 403 responses
 
 #### SDK-React
 - Added type declarations for `@cloudflare/realtimekit-react` module
+- Fixed false "Connection Failed" overlay showing on room join - `"disconnected"` status was incorrectly mapped to `"failed"`
+- Fixed video/audio tracks not updating in UI - added state bridges from Room events to session state for React hooks
+- Fixed HMR causing session destruction - sessions now cached and preserved across hot module replacement
+
+#### SDK-Core
+- Fixed missing state bridge between Effect services and session state objects - participant/media updates now properly propagate to React hooks
 
 #### API - Critical
 - Tenant ownership bypass: API endpoints now verify path ID matches authenticated tenant (API-CRIT-01)
