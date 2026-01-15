@@ -131,7 +131,8 @@
         "Remote participant name labels show correctly",
         "When remote participant leaves, their video tile is removed"
       ],
-      "passes": false
+      "passes": false,
+      "note": "BLOCKED by infra: requires enable_calls=true in Terraform. Cannot implement/verify without participant sync (rn-sdk-008) working first."
     },
     {
       "id": "rn-sdk-010",
@@ -146,7 +147,8 @@
         "Muting local audio stops remote from hearing",
         "Audio continues working when video is disabled"
       ],
-      "passes": false
+      "passes": false,
+      "note": "BLOCKED by infra: requires enable_calls=true in Terraform. Cannot implement/verify without participant sync (rn-sdk-008) working first."
     }
   ]
 }
