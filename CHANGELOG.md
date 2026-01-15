@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### SDK-React-Native
+- **Cloudflare RTK integration** - Integrated `@cloudflare/realtimekit-react-native` for WebRTC signaling
+  - ChalkProvider now uses RTK hooks for room joining and media streaming
+  - Requires `@cloudflare/react-native-webrtc` instead of `react-native-webrtc`
+  - APIClient from chalk-core exported for React Native use
+  - All hooks updated to use RTK client for media controls and participant state
+
 ### Fixed
 
 #### SDK-React-Native

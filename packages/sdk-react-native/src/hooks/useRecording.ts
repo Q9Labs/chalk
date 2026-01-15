@@ -1,9 +1,13 @@
 /**
  * useRecording hook - Control and monitor recording state
+ * Note: Recording requires API integration for start/stop
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
+import { createLogger } from "@q9labs/chalk-core";
+
+const log = createLogger("useRecording");
 
 export interface UseRecordingResult {
 	/** Whether recording is currently active */
@@ -21,18 +25,11 @@ export interface UseRecordingResult {
 }
 
 export function useRecording(): UseRecordingResult {
-	const { room, client } = useChalk();
+	const { apiClient, roomInfo } = useChalk();
 	const [isRecording, setIsRecording] = useState(false);
 	const [recordingId, setRecordingId] = useState<string | null>(null);
 	const [durationSeconds, setDurationSeconds] = useState(0);
 	const [error, setError] = useState<Error | null>(null);
-
-	// Sync with room state
-	useEffect(() => {
-		if (room) {
-			setIsRecording(room.isRecording);
-		}
-	}, [room]);
 
 	// Duration timer
 	useEffect(() => {
@@ -48,60 +45,50 @@ export function useRecording(): UseRecordingResult {
 		return () => clearInterval(interval);
 	}, [isRecording]);
 
-	// Listen for recording events
-	useEffect(() => {
-		if (!room) return;
-
-		const unsubStart = room.on("recording-started", ({ recordingId: id }) => {
-			setIsRecording(true);
-			setRecordingId(id);
-			setDurationSeconds(0);
-			setError(null);
-		});
-
-		const unsubStop = room.on("recording-stopped", () => {
-			setIsRecording(false);
-			setRecordingId(null);
-		});
-
-		return () => {
-			unsubStart();
-			unsubStop();
-		};
-	}, [room]);
-
 	const startRecording = useCallback(async () => {
-		if (!client) {
-			setError(new Error("Not connected"));
+		if (!apiClient || !roomInfo) {
+			setError(new Error("Not connected to a room"));
 			return;
 		}
 
 		try {
 			setError(null);
-			const id = await client.startRecording();
-			setRecordingId(id);
-			setIsRecording(true);
-			setDurationSeconds(0);
+			const response = await apiClient.startRecording(roomInfo.room.id);
+			if (response.success && response.data) {
+				setRecordingId(response.data.recordingId);
+				setIsRecording(true);
+				setDurationSeconds(0);
+				log.info("Recording started", { recordingId: response.data.recordingId });
+			} else {
+				throw new Error(response.error?.message ?? "Failed to start recording");
+			}
 		} catch (err) {
+			log.error("startRecording error", err);
 			setError(err as Error);
 		}
-	}, [client]);
+	}, [apiClient, roomInfo]);
 
 	const stopRecording = useCallback(async () => {
-		if (!client) {
-			setError(new Error("Not connected"));
+		if (!apiClient || !roomInfo) {
+			setError(new Error("Not connected to a room"));
 			return;
 		}
 
 		try {
 			setError(null);
-			await client.stopRecording();
-			setIsRecording(false);
-			setRecordingId(null);
+			const response = await apiClient.stopRecording(roomInfo.room.id);
+			if (response.success) {
+				setIsRecording(false);
+				setRecordingId(null);
+				log.info("Recording stopped");
+			} else {
+				throw new Error(response.error?.message ?? "Failed to stop recording");
+			}
 		} catch (err) {
+			log.error("stopRecording error", err);
 			setError(err as Error);
 		}
-	}, [client]);
+	}, [apiClient, roomInfo]);
 
 	return {
 		isRecording,

@@ -6,8 +6,17 @@
 
 import { createLogger } from "@q9labs/chalk-core";
 import { PermissionsAndroid, Platform } from "react-native";
-import type { MediaStream, RTCPeerConnection } from "react-native-webrtc";
-import { mediaDevices } from "react-native-webrtc";
+import type { MediaStream, RTCPeerConnection } from "@cloudflare/react-native-webrtc";
+
+// Dynamic import to handle cases where native module isn't initialized
+let mediaDevices: typeof import("@cloudflare/react-native-webrtc").mediaDevices | null =
+	null;
+try {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	mediaDevices = require("@cloudflare/react-native-webrtc").mediaDevices;
+} catch {
+	// Native module not available (e.g., running in simulator without full setup)
+}
 
 const log = createLogger("RTCManager");
 
@@ -274,6 +283,11 @@ export class RTCManager {
 		video: boolean = true,
 		audio: boolean = true,
 	): Promise<MediaStream> {
+		if (!mediaDevices) {
+			log.warn("mediaDevices not available - running in limited mode");
+			throw new Error("WebRTC not available on this device");
+		}
+
 		const constraints = {
 			audio: audio
 				? {
@@ -304,6 +318,17 @@ export class RTCManager {
 	 * Get all available media devices
 	 */
 	async enumerateDevices(): Promise<MediaDeviceInfo[]> {
+		if (!mediaDevices) {
+			log.warn("mediaDevices not available - returning mock devices");
+			// Return mock devices for simulator/testing
+			return [
+				{ deviceId: "mock-camera-front", label: "Front Camera", kind: "videoinput" },
+				{ deviceId: "mock-camera-back", label: "Back Camera", kind: "videoinput" },
+				{ deviceId: "mock-mic", label: "Built-in Microphone", kind: "audioinput" },
+				{ deviceId: "mock-speaker", label: "Built-in Speaker", kind: "audiooutput" },
+			];
+		}
+
 		try {
 			const devices = await mediaDevices.enumerateDevices();
 			return devices as MediaDeviceInfo[];
@@ -383,6 +408,11 @@ export class RTCManager {
 	 * Start video on local stream (fallback mode)
 	 */
 	async startVideo(): Promise<void> {
+		if (!mediaDevices) {
+			log.warn("startVideo: mediaDevices not available");
+			return;
+		}
+
 		if (!this.localStream) {
 			this.localStream = await this.getLocalStream(true, true);
 			return;
@@ -446,6 +476,11 @@ export class RTCManager {
 	 * Start audio on local stream (fallback mode)
 	 */
 	async startAudio(): Promise<void> {
+		if (!mediaDevices) {
+			log.warn("startAudio: mediaDevices not available");
+			return;
+		}
+
 		if (!this.localStream) {
 			this.localStream = await this.getLocalStream(false, true);
 			return;

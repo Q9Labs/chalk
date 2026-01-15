@@ -1,16 +1,17 @@
 /**
  * ChalkProvider - React Native context provider for Chalk video conferencing
- * Manages client initialization, room state, and permissions
+ * Integrates with @cloudflare/realtimekit-react-native for WebRTC signaling
  */
 
 import {
-	ChalkClient,
+	APIClient,
 	type ChalkClientConfig,
-	type Room,
+	type JoinRoomResponse,
 	type RoomConfig,
 	type RoomStatus,
 	createLogger,
 } from "@q9labs/chalk-core";
+import type RealtimeKitClient from "@cloudflare/realtimekit";
 import {
 	createContext,
 	type ReactNode,
@@ -18,17 +19,35 @@ import {
 	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { RTCManager } from "./native/RTCManager";
 
+// Dynamic import for RTK RN hooks (may not be available in all environments)
+let useRealtimeKitClientHook: (() => [
+	RealtimeKitClient | undefined,
+	(options: { authToken: string; defaults?: { audio?: boolean; video?: boolean } }) => void,
+]) | null = null;
+
+try {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	const rtkRN = require("@cloudflare/realtimekit-react-native");
+	useRealtimeKitClientHook = rtkRN.useRealtimeKitClient;
+} catch {
+	// RTK RN not available - will use fallback mode
+}
+
+const log = createLogger("ChalkProvider");
+
 interface ChalkContextValue {
-	client: ChalkClient | null;
-	room: Room | null;
+	apiClient: APIClient | null;
+	rtkClient: RealtimeKitClient | undefined;
 	rtcManager: RTCManager | null;
 	isConnected: boolean;
 	connectionStatus: RoomStatus;
-	joinRoom: (roomId: string, config: RoomConfig) => Promise<Room>;
+	roomInfo: JoinRoomResponse | null;
+	joinRoom: (roomId: string, config: RoomConfig) => Promise<JoinRoomResponse>;
 	leaveRoom: () => Promise<void>;
 	createRoom: (name?: string) => Promise<string>;
 }
@@ -60,15 +79,22 @@ export function ChalkProvider({
 	wsUrl,
 	debug,
 }: ChalkProviderProps) {
-	const [client, setClient] = useState<ChalkClient | null>(null);
-	const [room, setRoom] = useState<Room | null>(null);
+	const [apiClient, setApiClient] = useState<APIClient | null>(null);
 	const [rtcManager, setRtcManager] = useState<RTCManager | null>(null);
 	const [connectionStatus, setConnectionStatus] =
 		useState<RoomStatus>("disconnected");
+	const [roomInfo, setRoomInfo] = useState<JoinRoomResponse | null>(null);
 
-	const log = createLogger("ChalkProvider");
+	// RTK client from hook (if available)
+	// We call the hook unconditionally but it may be a no-op
+	const [rtkClient, initRtk] = useRealtimeKitClientHook
+		? useRealtimeKitClientHook()
+		: [undefined, () => {}];
 
-	// Initialize client and RTC manager
+	// Track if we've joined RTK
+	const hasJoinedRtk = useRef(false);
+
+	// Initialize API client and RTC manager
 	useEffect(() => {
 		const config: ChalkClientConfig = {
 			apiKey,
@@ -79,8 +105,8 @@ export function ChalkProvider({
 			debug,
 		};
 
-		const chalkClient = new ChalkClient(config);
-		setClient(chalkClient);
+		const client = new APIClient(config);
+		setApiClient(client);
 
 		const manager = new RTCManager();
 		setRtcManager(manager);
@@ -90,14 +116,28 @@ export function ChalkProvider({
 		}
 
 		return () => {
-			// Cleanup
 			manager.cleanup();
 		};
 	}, [apiKey, token, tokenProvider, apiUrl, wsUrl, debug]);
 
+	// Join RTK room after init
+	useEffect(() => {
+		if (rtkClient && !hasJoinedRtk.current) {
+			hasJoinedRtk.current = true;
+			log.debug("RTK client ready, joining room");
+			rtkClient.join().then(() => {
+				log.info("Joined RTK room");
+				setConnectionStatus("connected");
+			}).catch((err) => {
+				log.error("Failed to join RTK room", err);
+				setConnectionStatus("disconnected");
+			});
+		}
+	}, [rtkClient]);
+
 	const joinRoom = useCallback(
-		async (roomId: string, config: RoomConfig): Promise<Room> => {
-			if (!client || !rtcManager) {
+		async (roomId: string, config: RoomConfig): Promise<JoinRoomResponse> => {
+			if (!apiClient || !rtcManager) {
 				throw new Error("Client not initialized");
 			}
 
@@ -107,61 +147,123 @@ export function ChalkProvider({
 				throw new Error("Camera/microphone permissions denied");
 			}
 
-			// Join room
-			const joinedRoom = await client.joinRoom(roomId, config);
-			setRoom(joinedRoom);
+			setConnectionStatus("connecting");
+			log.info("Joining room", { roomId });
 
-			// Listen for status changes
-			const unsubStatus = joinedRoom.on("status-changed", (status) => {
-				setConnectionStatus(status);
-			});
+			// Call API to get auth tokens
+			const response = debug
+				? await apiClient.demoJoin(roomId, config.displayName)
+				: await apiClient.addParticipant(
+						roomId,
+						config.displayName,
+						undefined,
+						config.metadata,
+					);
 
-			// Store unsubscriber for cleanup
-			(joinedRoom as any)._unsubStatus = unsubStatus;
+			if (!response.success || !response.data) {
+				setConnectionStatus("disconnected");
+				throw new Error(response.error?.message ?? "Failed to join room");
+			}
 
-			return joinedRoom;
+			const { tokens } = response.data;
+			log.info("Got auth tokens", { participantId: response.data.participantId });
+
+			// Check for valid RTC token
+			if (!tokens.rtcToken || tokens.rtcToken === "demo-token-not-for-production") {
+				log.warn("No valid rtcToken - Cloudflare Calls may not be enabled");
+				// Still store room info for demo mode
+				setRoomInfo(response.data);
+				setConnectionStatus("disconnected");
+				return response.data;
+			}
+
+			// Initialize RTK with the auth token
+			if (useRealtimeKitClientHook && initRtk) {
+				log.debug("Initializing RTK with auth token");
+				hasJoinedRtk.current = false; // Reset so useEffect can join
+				initRtk({
+					authToken: tokens.rtcToken,
+					defaults: {
+						audio: config.audio ?? false,
+						video: config.video ?? false,
+					},
+				});
+			} else {
+				log.warn("RTK RN hooks not available - using fallback mode");
+				// Fallback: Try using RTCManager directly
+				try {
+					await rtcManager.initializeWithToken(tokens.rtcToken, {
+						audio: config.audio ?? true,
+						video: config.video ?? true,
+					});
+					await rtcManager.joinRoom();
+					setConnectionStatus("connected");
+				} catch (err) {
+					log.error("RTCManager fallback failed", err);
+					setConnectionStatus("disconnected");
+				}
+			}
+
+			setRoomInfo(response.data);
+			apiClient.setToken(tokens.accessToken);
+
+			return response.data;
 		},
-		[client, rtcManager],
+		[apiClient, rtcManager, debug, initRtk],
 	);
 
 	const leaveRoom = useCallback(async () => {
-		if (room) {
-			const unsubStatus = (room as any)._unsubStatus;
-			if (unsubStatus) {
-				unsubStatus();
+		if (rtkClient) {
+			try {
+				await rtkClient.leave();
+			} catch (err) {
+				log.error("Error leaving RTK room", err);
 			}
-			await room.leave();
-			setRoom(null);
-			setConnectionStatus("disconnected");
 		}
-	}, [room]);
+		if (rtcManager) {
+			try {
+				await rtcManager.leaveRoom();
+			} catch (err) {
+				log.error("Error leaving via RTCManager", err);
+			}
+		}
+		hasJoinedRtk.current = false;
+		setRoomInfo(null);
+		setConnectionStatus("disconnected");
+	}, [rtkClient, rtcManager]);
 
 	const createRoom = useCallback(
 		async (name?: string): Promise<string> => {
-			if (!client) {
+			if (!apiClient) {
 				throw new Error("Client not initialized");
 			}
-			return client.createRoom(name);
+			const response = await apiClient.createRoom(name);
+			if (!response.success || !response.data) {
+				throw new Error(response.error?.message ?? "Failed to create room");
+			}
+			return response.data.roomId;
 		},
-		[client],
+		[apiClient],
 	);
 
 	const value = useMemo<ChalkContextValue>(
 		() => ({
-			client,
-			room,
+			apiClient,
+			rtkClient,
 			rtcManager,
 			isConnected: connectionStatus === "connected",
 			connectionStatus,
+			roomInfo,
 			joinRoom,
 			leaveRoom,
 			createRoom,
 		}),
 		[
-			client,
-			room,
+			apiClient,
+			rtkClient,
 			rtcManager,
 			connectionStatus,
+			roomInfo,
 			joinRoom,
 			leaveRoom,
 			createRoom,

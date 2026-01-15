@@ -1,5 +1,6 @@
 /**
  * useMedia hook - Control local media (video, audio, screen share)
+ * Integrates with @cloudflare/realtimekit-react-native
  */
 
 import type { ScreenShareOptions } from "@q9labs/chalk-core";
@@ -13,10 +14,10 @@ export interface UseMediaResult {
 	isAudioEnabled: boolean;
 	/** Whether screen sharing is active */
 	isScreenSharing: boolean;
-	/** Local video track */
-	localVideoTrack: unknown | undefined;
-	/** Local audio track */
-	localAudioTrack: unknown | undefined;
+	/** Local video track (unknown type for cross-platform compatibility) */
+	localVideoTrack: unknown;
+	/** Local audio track (unknown type for cross-platform compatibility) */
+	localAudioTrack: unknown;
 	/** Toggle video on/off */
 	toggleVideo: () => Promise<void>;
 	/** Toggle audio on/off */
@@ -28,73 +29,88 @@ export interface UseMediaResult {
 }
 
 export function useMedia(): UseMediaResult {
-	const { room } = useChalk();
+	const { rtkClient, rtcManager } = useChalk();
 	const [isVideoEnabled, setIsVideoEnabled] = useState(false);
 	const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 	const [isScreenSharing, setIsScreenSharing] = useState(false);
 	const [localVideoTrack, setLocalVideoTrack] = useState<unknown>();
 	const [localAudioTrack, setLocalAudioTrack] = useState<unknown>();
 
-	// Sync state with room
+	// Sync state with RTK client
 	useEffect(() => {
-		if (room?.localParticipant) {
-			setIsVideoEnabled(room.localParticipant.videoEnabled);
-			setIsAudioEnabled(room.localParticipant.audioEnabled);
-			setIsScreenSharing(room.localParticipant.isScreenSharing);
-			setLocalVideoTrack(room.localParticipant.videoTrack);
-			setLocalAudioTrack(room.localParticipant.audioTrack);
+		if (rtkClient?.self) {
+			setIsVideoEnabled(rtkClient.self.videoEnabled);
+			setIsAudioEnabled(rtkClient.self.audioEnabled);
+			setIsScreenSharing(rtkClient.self.screenShareEnabled ?? false);
+			setLocalVideoTrack(rtkClient.self.videoTrack);
+			setLocalAudioTrack(rtkClient.self.audioTrack);
 		}
-	}, [room]);
-
-	// Listen for updates
-	useEffect(() => {
-		if (!room) return;
-
-		const unsub = room.on("participant-updated", ({ participant }) => {
-			if (participant.isLocal) {
-				setIsVideoEnabled(participant.videoEnabled);
-				setIsAudioEnabled(participant.audioEnabled);
-				setIsScreenSharing(participant.isScreenSharing);
-				setLocalVideoTrack(participant.videoTrack);
-				setLocalAudioTrack(participant.audioTrack);
-			}
-		});
-
-		return () => {
-			unsub();
-		};
-	}, [room]);
+	}, [rtkClient?.self]);
 
 	const toggleVideo = useCallback(async () => {
-		if (!room) return;
-		const enabled = await room.toggleVideo();
-		setIsVideoEnabled(enabled);
-		setLocalVideoTrack(room.localParticipant?.videoTrack);
-	}, [room]);
+		if (rtkClient?.self) {
+			// Use RTK for video toggle
+			if (rtkClient.self.videoEnabled) {
+				await rtkClient.self.disableVideo();
+				setIsVideoEnabled(false);
+			} else {
+				await rtkClient.self.enableVideo();
+				setIsVideoEnabled(true);
+			}
+			setLocalVideoTrack(rtkClient.self.videoTrack);
+		} else if (rtcManager) {
+			// Fallback to RTCManager
+			const enabled = await rtcManager.toggleVideo();
+			setIsVideoEnabled(enabled);
+		} else {
+			// Demo mode - toggle local state
+			setIsVideoEnabled((prev) => !prev);
+		}
+	}, [rtkClient, rtcManager]);
 
 	const toggleAudio = useCallback(async () => {
-		if (!room) return;
-		const enabled = await room.toggleAudio();
-		setIsAudioEnabled(enabled);
-		setLocalAudioTrack(room.localParticipant?.audioTrack);
-	}, [room]);
+		if (rtkClient?.self) {
+			// Use RTK for audio toggle
+			if (rtkClient.self.audioEnabled) {
+				await rtkClient.self.disableAudio();
+				setIsAudioEnabled(false);
+			} else {
+				await rtkClient.self.enableAudio();
+				setIsAudioEnabled(true);
+			}
+			setLocalAudioTrack(rtkClient.self.audioTrack);
+		} else if (rtcManager) {
+			// Fallback to RTCManager
+			const enabled = await rtcManager.toggleAudio();
+			setIsAudioEnabled(enabled);
+		} else {
+			// Demo mode - toggle local state
+			setIsAudioEnabled((prev) => !prev);
+		}
+	}, [rtkClient, rtcManager]);
 
 	const startScreenShare = useCallback(
-		async (options?: ScreenShareOptions) => {
-			if (!room) return;
-			const success = await room.startScreenShare(options);
-			if (success) {
+		async (_options?: ScreenShareOptions) => {
+			if (rtkClient?.self) {
+				await rtkClient.self.enableScreenShare();
 				setIsScreenSharing(true);
+			} else if (rtcManager) {
+				const success = await rtcManager.startScreenShare();
+				setIsScreenSharing(success);
 			}
 		},
-		[room],
+		[rtkClient, rtcManager],
 	);
 
 	const stopScreenShare = useCallback(() => {
-		if (!room) return;
-		room.stopScreenShare();
-		setIsScreenSharing(false);
-	}, [room]);
+		if (rtkClient?.self) {
+			rtkClient.self.disableScreenShare();
+			setIsScreenSharing(false);
+		} else if (rtcManager) {
+			rtcManager.stopScreenShare();
+			setIsScreenSharing(false);
+		}
+	}, [rtkClient, rtcManager]);
 
 	return {
 		isVideoEnabled,

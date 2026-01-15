@@ -1,3 +1,7 @@
+/**
+ * useScreenShare hook - Screen sharing for React Native
+ */
+
 import { useCallback, useState } from "react";
 import { useChalk } from "../ChalkProvider";
 
@@ -9,11 +13,27 @@ export interface UseScreenShareResult {
 }
 
 export function useScreenShare(): UseScreenShareResult {
-	const { rtcManager, room } = useChalk();
+	const { rtcManager, rtkClient } = useChalk();
 	const [isScreenSharing, setIsScreenSharing] = useState(false);
 	const [error, setError] = useState<Error | null>(null);
 
 	const startScreenShare = useCallback(async (): Promise<boolean> => {
+		// Prefer RTK if available
+		if (rtkClient?.self) {
+			try {
+				await rtkClient.self.enableScreenShare();
+				setIsScreenSharing(true);
+				setError(null);
+				return true;
+			} catch (err) {
+				const screenShareError =
+					err instanceof Error ? err : new Error("Screen share failed");
+				setError(screenShareError);
+				return false;
+			}
+		}
+
+		// Fallback to RTCManager
 		if (!rtcManager) {
 			setError(new Error("RTCManager not initialized"));
 			return false;
@@ -23,11 +43,6 @@ export function useScreenShare(): UseScreenShareResult {
 			const success = await rtcManager.startScreenShare();
 			setIsScreenSharing(success);
 			setError(null);
-
-			if (room && success) {
-				room.startScreenShare().catch(() => {});
-			}
-
 			return success;
 		} catch (err) {
 			const screenShareError =
@@ -35,25 +50,37 @@ export function useScreenShare(): UseScreenShareResult {
 			setError(screenShareError);
 			return false;
 		}
-	}, [rtcManager, room]);
+	}, [rtcManager, rtkClient]);
 
 	const stopScreenShare = useCallback(async (): Promise<void> => {
+		// Prefer RTK if available
+		if (rtkClient?.self) {
+			try {
+				await rtkClient.self.disableScreenShare();
+				setIsScreenSharing(false);
+				setError(null);
+				return;
+			} catch (err) {
+				const stopError =
+					err instanceof Error ? err : new Error("Failed to stop screen share");
+				setError(stopError);
+				return;
+			}
+		}
+
+		// Fallback to RTCManager
 		if (!rtcManager) return;
 
 		try {
 			await rtcManager.stopScreenShare();
 			setIsScreenSharing(false);
 			setError(null);
-
-			if (room) {
-				room.stopScreenShare();
-			}
 		} catch (err) {
 			const stopError =
 				err instanceof Error ? err : new Error("Failed to stop screen share");
 			setError(stopError);
 		}
-	}, [rtcManager, room]);
+	}, [rtcManager, rtkClient]);
 
 	return {
 		isScreenSharing,

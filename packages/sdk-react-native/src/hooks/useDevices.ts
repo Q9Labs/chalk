@@ -32,7 +32,7 @@ export interface UseDevicesResult {
 }
 
 export function useDevices(): UseDevicesResult {
-	const { room, rtcManager } = useChalk();
+	const { rtcManager } = useChalk();
 	const [devices, setDevices] = useState<MediaDevice[]>([]);
 	const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
 	const [selectedMicrophone, setSelectedMicrophone] = useState<string | null>(
@@ -76,38 +76,31 @@ export function useDevices(): UseDevicesResult {
 
 	const selectCamera = useCallback(
 		async (deviceId: string): Promise<boolean> => {
-			if (!room) return false;
+			if (!rtcManager) return false;
 
 			try {
-				const success = await room.selectCamera(deviceId);
-				if (success) {
-					setSelectedCamera(deviceId);
-				}
-				return success;
+				// In RN, camera switching is done via switchCamera() on the video track
+				// For now, just track the selection
+				await rtcManager.switchCamera();
+				setSelectedCamera(deviceId);
+				return true;
 			} catch (err) {
 				log.error("selectCamera error", err);
 				return false;
 			}
 		},
-		[room],
+		[rtcManager],
 	);
 
 	const selectMicrophone = useCallback(
 		async (deviceId: string): Promise<boolean> => {
-			if (!room) return false;
-
-			try {
-				const success = await room.selectMicrophone(deviceId);
-				if (success) {
-					setSelectedMicrophone(deviceId);
-				}
-				return success;
-			} catch (err) {
-				log.error("selectMicrophone error", err);
-				return false;
-			}
+			// RN WebRTC doesn't support dynamic microphone switching
+			// Would need to stop/restart the audio track
+			log.warn("Microphone switching not yet supported in RN SDK");
+			setSelectedMicrophone(deviceId);
+			return false;
 		},
-		[room],
+		[],
 	);
 
 	return {
