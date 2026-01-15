@@ -3,7 +3,7 @@
  */
 
 import type { Participant } from "@q9labs/chalk-core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useChalk } from "../ChalkProvider";
 
 export interface UseParticipantsResult {
@@ -11,10 +11,14 @@ export interface UseParticipantsResult {
 	participants: Participant[];
 	/** The local participant */
 	localParticipant: Participant | null;
+	/** Remote participants only (excludes local) */
+	remoteParticipants: Participant[];
 	/** Current active speaker */
 	activeSpeaker: Participant | null;
 	/** Total participant count */
 	participantCount: number;
+	/** Get a participant by ID */
+	getParticipant: (id: string) => Participant | undefined;
 }
 
 export function useParticipants(): UseParticipantsResult {
@@ -56,10 +60,22 @@ export function useParticipants(): UseParticipantsResult {
 
 	const localParticipant = room?.localParticipant ?? null;
 
+	const remoteParticipants = useMemo(
+		() => participants.filter((p) => !p.isLocal),
+		[participants],
+	);
+
+	const getParticipant = useCallback(
+		(id: string) => participants.find((p) => p.id === id),
+		[participants],
+	);
+
 	return {
 		participants,
 		localParticipant,
+		remoteParticipants,
 		activeSpeaker,
 		participantCount: participants.length,
+		getParticipant,
 	};
 }
