@@ -1,5 +1,5 @@
-import React, {useEffect, useState} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, Animated} from 'react-native';
+import React, {useEffect, useState, useMemo} from 'react';
+import {View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView} from 'react-native';
 import {
   useChalk,
   useRoom,
@@ -8,12 +8,23 @@ import {
   useInteractions,
   useLocalStream,
   VideoView,
+  ParticipantTile,
   type ReactionEmoji,
 } from '@q9labs/chalk-react-native';
+import type {Participant} from '@q9labs/chalk-core';
 
 interface CallScreenProps {
   roomId: string;
   onLeave: () => void;
+}
+
+// Helper to chunk array into rows
+function chunk<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
 }
 
 // Simple icon components using styled text
@@ -103,10 +114,31 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
   const {leaveRoom, rtcManager, joinRoom} = useChalk();
   const {room, isConnected, status} = useRoom();
   const {isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio} = useMedia();
-  const {participants, localParticipant} = useParticipants();
+  const {participants, localParticipant, remoteParticipants} = useParticipants();
   const {isHandRaised, toggleHand, sendReaction, activeReactions} = useInteractions();
   const {stream, startStream, isActive} = useLocalStream();
   const [floatingReactions, setFloatingReactions] = useState<{id: string; emoji: string}[]>([]);
+
+  // Build local participant with stream for video grid
+  const localWithStream = useMemo<Participant | null>(() => {
+    if (!localParticipant) return null;
+    return {
+      ...localParticipant,
+      videoEnabled: isVideoEnabled,
+      audioEnabled: isAudioEnabled,
+      // Create a video track from local stream if available
+      videoTrack: stream?.getVideoTracks()[0] ?? null,
+      audioTrack: stream?.getAudioTracks()[0] ?? null,
+    };
+  }, [localParticipant, isVideoEnabled, isAudioEnabled, stream]);
+
+  // Combined participants for grid (local first, then remotes)
+  const allParticipants = useMemo<Participant[]>(() => {
+    const list: Participant[] = [];
+    if (localWithStream) list.push(localWithStream);
+    list.push(...remoteParticipants);
+    return list;
+  }, [localWithStream, remoteParticipants]);
 
   // Join the room when component mounts
   useEffect(() => {
@@ -194,47 +226,80 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
 
       {/* Video Grid Area */}
       <View style={styles.videoGrid}>
-        {/* Local video preview */}
-        {stream && isVideoEnabled ? (
-          <View style={styles.localVideoContainer}>
-            <VideoView
-              stream={stream as unknown as MediaStream}
-              mirror={true}
-              objectFit="cover"
-              style={styles.localVideo}
-            />
-            <View style={styles.localVideoLabel}>
-              <Text style={styles.localVideoText}>
-                {localParticipant?.displayName || 'You'}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.switchCameraButton}
-              onPress={handleSwitchCamera}
-              activeOpacity={0.7}>
-              <SwitchCameraIcon />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.videoOff}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {(localParticipant?.displayName || 'You')[0].toUpperCase()}
-              </Text>
-            </View>
-            <Text style={styles.videoOffText}>
-              {isVideoEnabled ? 'Starting camera...' : 'Camera off'}
-            </Text>
-          </View>
-        )}
-
         {/* Participant count badge */}
         <View style={styles.participantBadge}>
-          <Text style={styles.participantCount}>{participants.length}</Text>
+          <Text style={styles.participantCount}>{allParticipants.length}</Text>
           <Text style={styles.participantLabel}>
-            {participants.length === 1 ? 'participant' : 'participants'}
+            {allParticipants.length === 1 ? 'participant' : 'participants'}
           </Text>
         </View>
+
+        {/* Video tiles for all participants */}
+        {allParticipants.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Waiting for participants...</Text>
+          </View>
+        ) : allParticipants.length === 1 ? (
+          // Single participant - full screen
+          <View style={styles.singleTile}>
+            <ParticipantTile
+              participant={allParticipants[0]!}
+              mirror={allParticipants[0]?.isLocal}
+              style={styles.fullTile}
+            />
+            {/* Switch camera button for local video */}
+            {allParticipants[0]?.isLocal && (
+              <TouchableOpacity
+                style={styles.switchCameraButton}
+                onPress={handleSwitchCamera}
+                activeOpacity={0.7}>
+                <SwitchCameraIcon />
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : allParticipants.length <= 4 ? (
+          // 2-4 participants - 2x2 grid
+          <View style={styles.gridContainer}>
+            <View style={styles.gridRow}>
+              {allParticipants.slice(0, 2).map((p) => (
+                <ParticipantTile
+                  key={p.id}
+                  participant={p}
+                  mirror={p.isLocal}
+                  style={styles.gridTile}
+                />
+              ))}
+            </View>
+            {allParticipants.length > 2 && (
+              <View style={styles.gridRow}>
+                {allParticipants.slice(2, 4).map((p) => (
+                  <ParticipantTile
+                    key={p.id}
+                    participant={p}
+                    mirror={p.isLocal}
+                    style={styles.gridTile}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        ) : (
+          // 5+ participants - scrollable grid
+          <ScrollView style={styles.scrollGrid} contentContainerStyle={styles.scrollContent}>
+            {chunk(allParticipants, 2).map((row, i) => (
+              <View key={i} style={styles.gridRow}>
+                {row.map((p) => (
+                  <ParticipantTile
+                    key={p.id}
+                    participant={p}
+                    mirror={p.isLocal}
+                    style={styles.scrollTile}
+                  />
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {/* Quick Reactions Bar */}
@@ -445,6 +510,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 16,
+  },
+  singleTile: {
+    flex: 1,
+    width: '100%',
+    position: 'relative',
+  },
+  fullTile: {
+    flex: 1,
+    borderRadius: 16,
+  },
+  gridContainer: {
+    flex: 1,
+    width: '100%',
+    gap: 8,
+  },
+  gridRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  gridTile: {
+    flex: 1,
+    borderRadius: 12,
+  },
+  scrollGrid: {
+    flex: 1,
+    width: '100%',
+  },
+  scrollContent: {
+    gap: 8,
+    paddingBottom: 16,
+  },
+  scrollTile: {
+    flex: 1,
+    height: 180,
+    borderRadius: 12,
+  },
   localVideoContainer: {
     flex: 1,
     width: '100%',
@@ -508,8 +618,8 @@ const styles = StyleSheet.create({
   },
   participantBadge: {
     position: 'absolute',
-    top: 24,
-    left: 24,
+    top: 8,
+    left: 8,
     backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -517,6 +627,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    zIndex: 10,
   },
   participantCount: {
     color: '#fff',

@@ -71,9 +71,11 @@ export {
 // Components
 export {
 	AudioSession,
+	ParticipantTile,
 	ScreenShareView,
 	useBluetoothAudio,
 	useSpeakerphone,
+	VideoGrid,
 	VideoView,
 } from "./components/index";
 // Hooks

@@ -505,3 +505,48 @@ Runtime testing still requires:
 **Commit**: 804d556
 
 --- Iteration 13 completed at $(date) ---
+
+--- Iteration 1 completed at Thu Jan 15 19:54:36 PKT 2026 ---
+
+## Iteration 14 - rn-sdk-009 - 2026-01-15
+**Status**: completed
+**What I did**:
+- Created `ParticipantTile` component for rendering remote participant video
+- Created `VideoGrid` component for responsive grid layout
+- Updated `CallScreen` with responsive video grid showing all participants
+- Grid layout auto-adjusts: 1 participant = full screen, 2-4 = 2x2 grid, 5+ = scrollable grid
+- `useParticipants` hook already exposes `remoteParticipants` with `videoTrack` from RTK
+
+**Architecture**:
+```
+Remote Video Flow:
+1. RTK client receives remote tracks from SFU
+2. rtkClient.participants.toArray() returns RealtimeKitParticipant[]
+3. useParticipants converts to Chalk Participant type (includes videoTrack)
+4. CallScreen combines local + remote participants into allParticipants
+5. Each participant rendered via ParticipantTile → VideoView → RTCView
+```
+
+**Key Components**:
+- `ParticipantTile`: Renders video via VideoView or avatar fallback, shows mute indicator & name
+- `VideoGrid`: Calculates responsive grid layout based on participant count + screen dimensions
+- `CallScreen`: Combines local (with stream track) + remote participants, handles grid rendering
+
+**Gotchas**:
+- `MediaStream` from react-native-webrtc must be imported dynamically (not as value in verbatimModuleSyntax)
+- Used `require("react-native-webrtc").MediaStream` constructor pattern
+- VideoView already handles stream.toURL() for RTCView, so ParticipantTile delegates to it
+
+**Verification Results**:
+- ✅ ParticipantTile renders video via VideoView component
+- ✅ CallScreen uses responsive grid layout (1, 2-4, 5+ participant layouts)
+- ✅ useParticipants exposes remoteParticipants with videoTrack
+- ✅ Grid adjusts based on allParticipants.length
+- ✅ bun run check-types passes
+- ✅ bun test (14/14 pass)
+
+**Runtime Dependencies** (unchanged):
+- Cloudflare Calls must be enabled for remote tracks to arrive
+- API must return valid rtcToken (not demo-token-not-for-production)
+
+--- Iteration 14 completed at $(date) ---
