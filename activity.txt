@@ -592,3 +592,32 @@ Audio Flow in React Native WebRTC:
 - API must return valid rtcToken (not demo-token-not-for-production)
 
 --- Iteration 15 completed at $(date) ---
+
+## Iteration 16 - rn-sdk-011 - 2026-01-15
+**Status**: completed (code was already done in iteration 8)
+**What I did**:
+- Verified useParticipants hook already subscribes to RTK events
+- Code was implemented in commit 4afdb97 (iteration 8)
+- No additional changes needed
+
+**Already Implemented**:
+- useParticipants subscribes to:
+  - `participantJoined` event
+  - `participantLeft` event
+  - `videoUpdate` event
+  - `audioUpdate` event
+- updateParticipants() fetches from rtkClient.participants.toArray()
+- toChalkParticipant() converts RTK participants to Chalk Participant type
+- remoteParticipants computed from participants.filter(p => !p.isLocal)
+
+**Verification Results**:
+- ✅ bun run check-types passes
+- ✅ bun test (14/14 pass)
+- ✅ Event subscriptions in place
+- ✅ Participant sync ready for runtime testing
+
+**Runtime Dependencies** (unchanged):
+- Cloudflare Calls must be enabled for events to fire
+- API must return valid rtcToken
+
+--- Iteration 16 completed at $(date) ---
