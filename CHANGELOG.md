@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Requires `@cloudflare/react-native-webrtc` instead of `react-native-webrtc`
   - APIClient from chalk-core exported for React Native use
   - All hooks updated to use RTK client for media controls and participant state
+- **Remote audio handling** - CallScreen now wrapped in AudioSession for proper audio routing
+  - iOS: AVAudioSession configured for PlayAndRecord mode
+  - Android: Audio focus management enabled
+  - React Native WebRTC auto-plays remote audio tracks (no AudioRenderer needed)
 
 ### Fixed
 

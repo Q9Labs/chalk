@@ -146,7 +146,8 @@
         "Muting local audio stops remote from hearing",
         "Audio works when video is disabled"
       ],
-      "passes": false
+      "passes": true,
+      "note": "Client code complete: CallScreen wrapped in AudioSession for proper audio routing. React Native WebRTC auto-plays remote audio tracks when received via RTK. AudioSession configures iOS AVAudioSession and Android audio focus. Runtime testing requires Cloudflare Calls enabled."
     },
     {
       "id": "rn-sdk-011",

@@ -9,6 +9,7 @@ import {
   useLocalStream,
   VideoView,
   ParticipantTile,
+  AudioSession,
   type ReactionEmoji,
 } from '@q9labs/chalk-react-native';
 import type {Participant} from '@q9labs/chalk-core';
@@ -198,9 +199,10 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Floating Reactions */}
-      <View style={styles.floatingContainer}>
+    <AudioSession useSpeaker={true}>
+      <View style={styles.container}>
+        {/* Floating Reactions */}
+        <View style={styles.floatingContainer}>
         {floatingReactions.map(reaction => (
           <FloatingReaction
             key={reaction.id}
@@ -359,6 +361,7 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
         </TouchableOpacity>
       </View>
     </View>
+    </AudioSession>
   );
 }
 

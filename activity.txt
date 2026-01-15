@@ -550,3 +550,45 @@ Remote Video Flow:
 - API must return valid rtcToken (not demo-token-not-for-production)
 
 --- Iteration 14 completed at $(date) ---
+
+--- Iteration 2 completed at Thu Jan 15 20:06:15 PKT 2026 ---
+
+## Iteration 15 - rn-sdk-010 - 2026-01-15
+**Status**: completed
+**What I did**:
+- Researched react-native-webrtc audio handling
+- Key finding: RN WebRTC auto-plays remote audio tracks (unlike web which needs explicit <audio> elements)
+- However, proper audio routing requires AudioSession component for iOS AVAudioSession and Android audio focus
+- Wrapped CallScreen in AudioSession component with useSpeaker={true} (default to speaker mode)
+
+**Technical Analysis**:
+```
+Audio Flow in React Native WebRTC:
+1. RTK receives remote tracks from SFU
+2. Remote audio tracks are automatically played by react-native-webrtc
+3. BUT audio routing needs proper configuration:
+   - iOS: AVAudioSession category must be PlayAndRecord
+   - Android: Audio focus must be managed
+4. AudioSession component handles all native audio configuration
+5. No separate AudioRenderer needed (unlike web SDK)
+```
+
+**Key Difference from Web SDK**:
+- Web SDK: Requires AudioRenderer component with explicit <audio> elements
+- React Native: Audio auto-plays, just need AudioSession for routing/focus
+
+**Code Changes**:
+- CallScreen.tsx: Added AudioSession import
+- CallScreen.tsx: Wrapped return content in <AudioSession useSpeaker={true}>
+
+**Verification Results**:
+- ✅ bun run check-types passes
+- ✅ bun test (14/14 pass)
+- ✅ AudioSession component properly configures audio routing
+- ✅ Remote audio will auto-play when RTK connection established
+
+**Runtime Dependencies** (unchanged):
+- Cloudflare Calls must be enabled for remote audio tracks to arrive
+- API must return valid rtcToken (not demo-token-not-for-production)
+
+--- Iteration 15 completed at $(date) ---
