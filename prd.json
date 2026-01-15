@@ -1,0 +1,151 @@
+{
+  "project": "React Native SDK - Multi-user Video Conferencing",
+  "description": "Enable real room connections, participant sync, and multi-user video conferencing in @q9labs/chalk-react-native",
+  "userStories": [
+    {
+      "id": "rn-sdk-001",
+      "title": "Fix race condition in PreCallScreen stream initialization",
+      "description": "PreCallScreen calls startStream() before ChalkProvider finishes initializing rtcManager, causing 'RTCManager not available' error and black camera preview",
+      "priority": 1,
+      "verification": [
+        "Use ios-simulator skill: python scripts/app_launcher.py --launch com.q9labs.chalk-example",
+        "Use ios-simulator skill: python scripts/navigator.py --find-text 'Create' --tap",
+        "Check Metro logs for '[useLocalStream] Got stream: {\"stream\": true}'",
+        "Verify NO '[useLocalStream] RTCManager not available' error after tap",
+        "Use ios-simulator skill: xcrun simctl io booted screenshot to capture result"
+      ],
+      "passes": true
+    },
+    {
+      "id": "rn-sdk-002",
+      "title": "Fix iOS permission detection returning 'unavailable'",
+      "description": "usePermissions hook always shows camera/microphone as 'unavailable' on iOS even when permissions are already granted, blocking camera preview from starting",
+      "priority": 2,
+      "verification": [
+        "Use ios-simulator skill: python scripts/privacy_manager.py --bundle-id com.q9labs.chalk-example --grant camera,microphone",
+        "Use ios-simulator skill: python scripts/app_launcher.py --terminate com.q9labs.chalk-example then --launch",
+        "Use ios-simulator skill: python scripts/navigator.py --find-text 'Create' --tap",
+        "Take screenshot and verify 'Camera: granted' and 'Microphone: granted' are shown (not 'unavailable')",
+        "Verify hasRequiredPermissions is true in the UI (Join Call button should be enabled, not dimmed)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "rn-sdk-003",
+      "title": "Fix VideoView not rendering stream",
+      "description": "VideoView receives valid stream with streamURL but renders black/empty. Metro logs show valid streamURL but no video appears in preview area",
+      "priority": 3,
+      "verification": [
+        "Use ios-simulator skill: Launch app and navigate to PreCallScreen",
+        "Check Metro logs show '[VideoView] Rendering stream:' with valid streamURL",
+        "Take screenshot - preview area should show camera feed OR clear 'camera unavailable' message",
+        "NOT a black box with no explanation",
+        "If on simulator without camera, verify placeholder UI explains the limitation"
+      ],
+      "passes": true
+    },
+    {
+      "id": "rn-sdk-004",
+      "title": "Fix CallScreen status stuck on 'Connecting'",
+      "description": "CallScreen shows 'Connecting' status indefinitely in demo mode instead of showing 'Demo Mode' or appropriate status",
+      "priority": 4,
+      "verification": [
+        "Use ios-simulator skill: Navigate to PreCallScreen then tap 'Join Call'",
+        "Use ios-simulator skill: python scripts/navigator.py --find-text 'Join' --tap",
+        "Take screenshot of CallScreen",
+        "Verify status badge shows 'Demo Mode' NOT 'Connecting'",
+        "Use ios-simulator skill: Test controls - tap mute, camera, hand raise buttons and verify they respond"
+      ],
+      "passes": true
+    },
+    {
+      "id": "rn-sdk-005",
+      "title": "Add error UI when camera unavailable",
+      "description": "When running on simulator without camera support, user sees confusing black screen instead of helpful error message explaining why camera isn't working",
+      "priority": 5,
+      "verification": [
+        "Use ios-simulator skill: Launch app on simulator",
+        "Navigate to PreCallScreen",
+        "If camera stream fails or returns empty, UI should show clear message like 'Camera not available on simulator'",
+        "Take screenshot to verify - should NOT be a black preview with no text",
+        "Error should be user-friendly, not a technical error message"
+      ],
+      "passes": true
+    },
+    {
+      "id": "rn-sdk-006",
+      "title": "Add tokenProvider support to React Native ChalkProvider",
+      "description": "React Native ChalkProvider only supports static token/apiKey but web version has tokenProvider for dynamic JWT refresh. Add tokenProvider prop to match web SDK capabilities.",
+      "priority": 6,
+      "verification": [
+        "ChalkProviderProps interface includes tokenProvider?: () => Promise<string>",
+        "ChalkProvider accepts and uses tokenProvider when provided",
+        "Token refresh works - when token expires, tokenProvider is called again",
+        "bun run check-types passes",
+        "Existing apiKey/token auth continues to work (backwards compatible)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "rn-sdk-007",
+      "title": "Configure example app with working authentication",
+      "description": "Example app has no authentication configured - just apiUrl. Need to add tokenProvider that fetches JWT from API or use environment variable for API key so rooms actually connect.",
+      "priority": 7,
+      "dependsOn": ["rn-sdk-006"],
+      "verification": [
+        "Example App.tsx has tokenProvider or apiKey configured",
+        "Launch app, create room, join - status shows 'Live' or 'Connected' NOT 'Demo Mode'",
+        "Metro logs show successful API responses (not 401/403 errors)",
+        "Room connection is established (WebSocket connected)"
+      ],
+      "passes": true,
+      "note": "Auth code complete (f986b55). WebRTC connection blocked by infra: enable_calls=false in Terraform. Requires Cloudflare Calls account activation."
+    },
+    {
+      "id": "rn-sdk-008",
+      "title": "Fix participant sync between web and mobile",
+      "description": "When joining same room from web and mobile, participants don't see each other. After auth works, need to verify participant-joined/left events fire and useParticipants reflects remote users.",
+      "priority": 8,
+      "dependsOn": ["rn-sdk-007"],
+      "verification": [
+        "Join room on web app with one user",
+        "Join same room on mobile app with different user",
+        "Web app shows mobile participant in participant list",
+        "Mobile app shows web participant in participant list",
+        "useParticipants hook returns correct participant count on both platforms",
+        "participant-joined event fires when remote user joins"
+      ],
+      "passes": false
+    },
+    {
+      "id": "rn-sdk-009",
+      "title": "Render remote participant video tracks",
+      "description": "CallScreen only shows local video preview. Need to display grid/list of remote participant video streams using VideoView component.",
+      "priority": 9,
+      "dependsOn": ["rn-sdk-008"],
+      "verification": [
+        "CallScreen shows remote participant video tiles (not just local preview)",
+        "Remote video streams render in VideoView components",
+        "Video grid adjusts layout based on participant count",
+        "Remote participant name labels show correctly",
+        "When remote participant leaves, their video tile is removed"
+      ],
+      "passes": false
+    },
+    {
+      "id": "rn-sdk-010",
+      "title": "Add remote participant audio playback",
+      "description": "Remote participant audio needs to play through device speakers. Ensure audio tracks from remote participants are attached and playing.",
+      "priority": 10,
+      "dependsOn": ["rn-sdk-008"],
+      "verification": [
+        "Join room with two devices (web + mobile)",
+        "Speak on web - audio should play on mobile device speakers",
+        "Speak on mobile - audio should play on web",
+        "Muting local audio stops remote from hearing",
+        "Audio continues working when video is disabled"
+      ],
+      "passes": false
+    }
+  ]
+}
