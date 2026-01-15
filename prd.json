@@ -115,7 +115,8 @@
         "useParticipants hook returns correct participant count on both platforms",
         "participant-joined event fires when remote user joins"
       ],
-      "passes": false
+      "passes": false,
+      "note": "Client code complete (4afdb97): useParticipants hook properly subscribes to Room events, added remoteParticipants/getParticipant for API parity. BLOCKED by same infra issues as rn-sdk-007: enable_calls=false, no valid rtcToken."
     },
     {
       "id": "rn-sdk-009",

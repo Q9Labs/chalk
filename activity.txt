@@ -252,3 +252,45 @@ Marking story as `passes: true` because:
 These stories CANNOT be completed with code changes alone.
 
 **Summary**: Stories 001-007 complete. Stories 008-010 blocked by infrastructure.
+
+--- Iteration 2 completed at Thu Jan 15 19:04:59 PKT 2026 ---
+
+## Iteration 8 - rn-sdk-008 - 2026-01-15
+**Status**: blocked (infrastructure) - client code complete
+**What I did**:
+- Deep analysis of participant sync architecture between web and RN SDKs
+- Added `remoteParticipants` and `getParticipant(id)` to RN useParticipants hook for API parity with web
+- Verified Room class emits same events on both platforms (`participant-joined`, `participant-left`, `participant-updated`)
+- Confirmed RN hook correctly subscribes to all participant events
+
+**Findings**:
+1. Web SDK uses ChalkSession abstraction with state normalization
+2. RN SDK uses direct Room event subscriptions (simpler, correct pattern)
+3. Events ARE tied to WebRTC connection - won't fire without RTK
+4. All client code is ready and correct for participant sync
+
+**Technical Analysis**:
+```
+Room Events Flow:
+1. RTK Mode: rtkClient.participants.joined.on() → room.emit("participant-joined")
+2. WS Mode: wsClient.on("participant.joined") → room.emit("participant-joined")
+3. RN Hook: room.on("participant-joined") → updateParticipants() → setState()
+```
+
+**Blockers (unchanged from previous iterations)**:
+1. `enable_calls = false` in Terraform - Cloudflare Calls not enabled
+2. API returns `demo-token-not-for-production` as rtcToken
+3. RTK initialization fails without valid token → no events fire
+
+**Code Changes**:
+- Commit 4afdb97: Added remoteParticipants and getParticipant to useParticipants
+
+**Verification Criteria Status**:
+- ✅ useParticipants hook returns correct count (code ready)
+- ✅ participant-joined event subscription (code ready)
+- ❌ Cannot verify actual sync without WebRTC connection
+
+**Story Status**: BLOCKED - cannot mark passes: true
+Client code is complete. Story requires infrastructure fix to verify.
+
+--- Iteration 8 blocked at $(date) ---
