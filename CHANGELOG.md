@@ -5,9 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.20] - 2026-01-16
 
 ### Added
+
+#### Mobile Test App
+
+- **`apps/mobile`** - Expo bare workflow app for testing `@q9labs/chalk-react-native` SDK
+  - Dashboard with grid navigation to all test screens
+  - 14 hook test screens: useRoom, useMedia, useParticipants, useDevices, usePermissions, useChat, useRecording, useScreenShare, useAudioRouting, useCallKit, useForegroundService, useInteractions, useHandRaise, useLocalStream
+  - 5 component test screens: VideoView, ScreenShareView, ParticipantTile, VideoGrid, AudioSession
+  - 2 E2E flow screens: Pre-call flow (permissions, devices, preview), Full call flow (join, interact, leave)
+  - Metro config for monorepo workspace resolution
+  - iOS/Android native permissions configured for camera, microphone, VoIP background modes
 
 #### SDK-Core
 

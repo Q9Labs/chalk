@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.17",
+  "version": "0.0.20",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -46,7 +46,7 @@
   "dependencies": {
     "@cloudflare/realtimekit": "^1.2.2",
     "@cloudflare/realtimekit-react": "^1.2.2",
-    "@q9labs/chalk-core": "^0.0.17",
+    "@q9labs/chalk-core": "^0.0.20",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
     "tailwind-merge": "^3.4.0"
@@ -87,7 +87,7 @@
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "typescript": "^5",
-    "@q9labs/chalk-whiteboard": "^0.0.17"
+    "@q9labs/chalk-whiteboard": "^0.0.20"
   },
   "peerDependenciesMeta": {
     "@q9labs/chalk-whiteboard": {
