@@ -302,6 +302,7 @@ function VideoConferenceBase({
 		if (status === "connected") return "connected" as const;
 		if (status === "connecting") return "connecting" as const;
 		if (status === "reconnecting") return "reconnecting" as const;
+		if (status === "disconnected") return "connected" as const; // Idle state, not a failure
 		return "failed" as const;
 	}, [status]);
 

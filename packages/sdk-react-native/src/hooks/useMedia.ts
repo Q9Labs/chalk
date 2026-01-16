@@ -48,6 +48,12 @@ export function useMedia(): UseMediaResult {
 	}, [rtkClient?.self]);
 
 	const toggleVideo = useCallback(async () => {
+		console.log("[useMedia] toggleVideo called", {
+			hasRtkClient: !!rtkClient,
+			hasRtkSelf: !!rtkClient?.self,
+			hasRtcManager: !!rtcManager,
+			currentState: isVideoEnabled,
+		});
 		if (rtkClient?.self) {
 			// Use RTK for video toggle
 			if (rtkClient.self.videoEnabled) {
@@ -60,13 +66,16 @@ export function useMedia(): UseMediaResult {
 			setLocalVideoTrack(rtkClient.self.videoTrack);
 		} else if (rtcManager) {
 			// Fallback to RTCManager
+			console.log("[useMedia] Using RTCManager fallback for toggleVideo");
 			const enabled = await rtcManager.toggleVideo();
+			console.log("[useMedia] RTCManager toggleVideo returned:", enabled);
 			setIsVideoEnabled(enabled);
 		} else {
 			// Demo mode - toggle local state
+			console.log("[useMedia] Using demo mode for toggleVideo");
 			setIsVideoEnabled((prev) => !prev);
 		}
-	}, [rtkClient, rtcManager]);
+	}, [rtkClient, rtcManager, isVideoEnabled]);
 
 	const toggleAudio = useCallback(async () => {
 		if (rtkClient?.self) {

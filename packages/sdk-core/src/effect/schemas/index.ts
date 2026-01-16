@@ -77,3 +77,28 @@ export {
   decodeEffect,
   encode,
 } from "./api";
+
+// Manager state schemas
+export {
+  // Room state
+  RoomStatusSchema as RoomManagerStatusSchema,
+  RoomStateSchema,
+  RoomEventSchema,
+  type RoomStatus as RoomManagerStatus,
+  type RoomState,
+  type RoomEvent,
+  // Participant state
+  ParticipantSchema,
+  ParticipantStateSchema,
+  ParticipantEventSchema,
+  type ParticipantData,
+  type ParticipantState,
+  type ParticipantEvent,
+  // Media state
+  MediaDeviceSchema,
+  MediaStateSchema,
+  MediaEventSchema,
+  type MediaDeviceData,
+  type MediaState,
+  type MediaEvent,
+} from "./manager-state";

@@ -4,6 +4,7 @@
 	"type": "module",
 	"workspaces": [
 		"packages/*",
+		"packages/sdk-react-native/example",
 		"apps/web"
 	],
 	"scripts": {

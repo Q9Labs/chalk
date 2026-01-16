@@ -101,3 +101,35 @@ export {
 
 // Schemas - re-export all from schemas module
 export * from "./schemas";
+
+// Manager Services
+export {
+  // Room Instance
+  RoomInstanceService,
+  RoomInstanceServiceLive,
+  getRoom,
+  requireRoom,
+  setRoom,
+  // Room Service
+  RoomService,
+  RoomServiceLive,
+  type RoomServiceInterface,
+  type JoinOptions,
+  type LeaveOptions,
+  // Participant Service
+  ParticipantService,
+  ParticipantServiceLive,
+  type ParticipantServiceInterface,
+  // Media Service
+  MediaService,
+  MediaServiceLive,
+  type MediaServiceInterface,
+  // Layer composition
+  type ManagerServices,
+  makeManagerServicesLayer,
+  ManagerServicesLive,
+  ManagerServicesDebug,
+  makeManagerRuntime,
+  runManagerEffect,
+  getManagerServices,
+} from "./services/index";

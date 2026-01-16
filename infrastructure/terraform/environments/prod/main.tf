@@ -281,7 +281,6 @@ module "cloudflare" {
   source = "../../modules/cloudflare"
 
   enabled                  = var.enable_cloudflare
-  enable_calls             = false # Cloudflare Calls API returns 403 - requires separate activation
   cloudflare_account_id    = var.cloudflare_account_id
   environment              = local.environment
   r2_location              = "enam"

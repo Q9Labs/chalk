@@ -5,8 +5,20 @@
  */
 
 import { createLogger } from "@q9labs/chalk-core";
-import { PermissionsAndroid, Platform } from "react-native";
+import { PermissionsAndroid, Platform, NativeModules } from "react-native";
 import type { MediaStream, RTCPeerConnection } from "@cloudflare/react-native-webrtc";
+
+// Detect iOS simulator - on simulator, enumerateDevices() crashes with nil object insertion
+// Use multiple detection methods for reliability
+const isIOSSimulator = Platform.OS === "ios" && (
+	// Check for simulator-specific environment variable
+	(Platform.constants as Record<string, unknown>)?.isTesting === true ||
+	// Check PlatformConstants for simulator flag (available in newer RN)
+	(NativeModules.PlatformConstants as Record<string, unknown>)?.isSimulator === true ||
+	// Fallback: in __DEV__ mode on iOS, assume simulator to be safe
+	// Real device testing should use release builds
+	__DEV__
+);
 
 // Dynamic import to handle cases where native module isn't initialized
 let mediaDevices: typeof import("@cloudflare/react-native-webrtc").mediaDevices | null =
@@ -316,11 +328,16 @@ export class RTCManager {
 
 	/**
 	 * Get all available media devices
+	 * Note: On iOS simulator, native enumerateDevices crashes so we return mock devices
 	 */
 	async enumerateDevices(): Promise<MediaDeviceInfo[]> {
-		if (!mediaDevices) {
-			log.warn("mediaDevices not available - returning mock devices");
-			// Return mock devices for simulator/testing
+		// Return mock devices on simulator to avoid native crash
+		if (!mediaDevices || isIOSSimulator) {
+			if (isIOSSimulator) {
+				log.info("Running on simulator - returning mock devices");
+			} else {
+				log.warn("mediaDevices not available - returning mock devices");
+			}
 			return [
 				{ deviceId: "mock-camera-front", label: "Front Camera", kind: "videoinput" },
 				{ deviceId: "mock-camera-back", label: "Back Camera", kind: "videoinput" },

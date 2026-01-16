@@ -5,7 +5,7 @@
 
 import React from "react";
 import { StyleSheet, View, Text, Platform, type ViewStyle } from "react-native";
-import { RTCView } from "react-native-webrtc";
+import { RTCView } from "@cloudflare/react-native-webrtc";
 
 interface VideoViewProps {
 	/** MediaStream to display */

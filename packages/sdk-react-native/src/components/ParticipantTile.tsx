@@ -24,7 +24,7 @@ interface ParticipantTileProps {
 let MediaStreamClass: { new (tracks?: unknown[]): any } | null = null;
 try {
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	MediaStreamClass = require("react-native-webrtc").MediaStream;
+	MediaStreamClass = require("@cloudflare/react-native-webrtc").MediaStream;
 } catch {
 	// Native module not available
 }

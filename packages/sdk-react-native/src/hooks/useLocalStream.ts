@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { MediaStream } from "react-native-webrtc";
+import type { MediaStream } from "@cloudflare/react-native-webrtc";
 import { useChalk } from "../ChalkProvider";
 
 export interface UseLocalStreamResult {
