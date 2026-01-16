@@ -1,1 +1,0 @@
-![alt text](image.png), I wait this as my prejoin lobby UI, please replicate it exactly 100 percent

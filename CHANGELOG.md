@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### SDK-React-Native
+
 - **Cloudflare RTK integration** - Integrated `@cloudflare/realtimekit-react-native` for WebRTC signaling
   - ChalkProvider now uses RTK hooks for room joining and media streaming
   - Requires `@cloudflare/react-native-webrtc` instead of `react-native-webrtc`
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 #### SDK-React-Native
+
 - **iOS permission detection** - `usePermissions` now correctly detects granted camera/microphone permissions on iOS using native AVFoundation APIs via `PermissionsModule.swift`. Previously always showed "unavailable".
 - **Swift compilation errors** - Fixed deprecated `nativeCallConferencingSupported` in CallKitModule and incorrect `AVAudioSession.Port` enum values in AudioSessionModule.
 - **Infinite re-render loop** - Fixed `checkPermissions` callback causing "Maximum update depth exceeded" error due to `permissions` state in dependency array.
@@ -30,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### SDK-React-Native
+
 - **PermissionsModule** (`packages/sdk-react-native/ios/PermissionsModule.swift`) - Native iOS module for checking/requesting camera and microphone permissions via AVFoundation
 - **Native iOS modules** (`packages/sdk-react-native/ios/`)
   - `AudioSessionModule.swift` - AVAudioSession for VoIP, speaker/earpiece/bluetooth routing
@@ -53,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Metro config for monorepo module resolution
 
 #### SDK-Core
+
 - Effect-based manager services: RoomService, ParticipantService, MediaService
   - SubscriptionRef for observable state (replaces StateContainer)
   - PubSub for typed events (replaces TypedEventEmitter internally)
@@ -64,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 #### SDK-Core
+
 - **ChalkSession** now uses Effect services internally (RoomService, ParticipantService, MediaService)
   - Same public API maintained for backwards compatibility
   - `room`, `participants`, `media` objects delegate to Effect services via ManagedRuntime
@@ -72,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 #### SDK-Core
+
 - `RoomManager` class - replaced by Effect-based RoomService
 - `ParticipantManager` class - replaced by Effect-based ParticipantService
 - `MediaManager` class - replaced by Effect-based MediaService
@@ -79,23 +85,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 #### Tests
+
 - Updated 12 handler tests to align with security fix behavior (auth checks, token types, CORS)
 - Fixed handler order: JSON parsing before auth for proper 400 vs 403 responses
 
 #### SDK-React
+
 - Added type declarations for `@cloudflare/realtimekit-react` module
 - Fixed false "Connection Failed" overlay showing on room join - `"disconnected"` status was incorrectly mapped to `"failed"`
 - Fixed video/audio tracks not updating in UI - added state bridges from Room events to session state for React hooks
 - Fixed HMR causing session destruction - sessions now cached and preserved across hot module replacement
 
 #### SDK-Core
+
 - Fixed missing state bridge between Effect services and session state objects - participant/media updates now properly propagate to React hooks
 
 #### API - Critical
+
 - Tenant ownership bypass: API endpoints now verify path ID matches authenticated tenant (API-CRIT-01)
 - Cross-tenant access: Room/participant/recording handlers scope queries by JWT claims (API-CRIT-02)
 
 #### API - High
+
 - JWT hardcoded secret: Config now loaded from env; production fails fast on dev secrets (API-HIGH-01)
 - Token type validation: `ValidateToken` enforces `TokenType == "access"` (API-HIGH-02)
 - WebSocket CSWSH: Origin checking enabled; query param token deprecated (API-HIGH-03)
@@ -106,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Participant nil dereference: `GetParticipant` error now checked (API-HIGH-08)
 
 #### API - Medium
+
 - O(n) API key lookup: Paginated search replaces hard 1000 limit (API-MED-01)
 - Demo tenant creation: Uses known name instead of arbitrary first tenant (API-MED-02)
 - DB port config: Now parsed from environment instead of hardcoded 5432 (API-MED-03)
@@ -117,9 +129,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Redis nil handling: `GetRecordingState` treats nil as "no recording" (API-MED-10)
 
 #### SDK-Core - High
+
 - Token fallback: Removed `authToken` fallback; throws `AUTH_FAILED` if missing (SDKCORE-HIGH-01)
 
 #### SDK-Core - Medium
+
 - Empty response handling: 204/empty responses handled before JSON parse (SDKCORE-MED-01)
 - Refresh serialization: Concurrent refresh requests now share a single promise (SDKCORE-MED-02)
 - Node.js compatibility: `isTokenExpired` uses `Buffer.from` fallback (SDKCORE-MED-03)
@@ -127,9 +141,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Toggle locks: Separate locks for audio/video operations (SDKCORE-MED-07)
 
 #### SDK-Core - Low
+
 - Heartbeat timeout: 2.5x interval without pong triggers reconnect (SDKCORE-LOW-01)
 
 ### Added
+
 - Migration `005_add_failed_recording_status.sql` for recording status constraint
 - Effect-TS foundation for SDK-Core internal async/state/validation patterns:
   - `src/effect/errors.ts`: Tagged error types with exhaustive matching
@@ -142,6 +158,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `src/effect/schemas/api.ts`: Runtime validation schemas for API responses
 
 ### Changed
+
 - `client.ts`: Integrated Effect patterns into `joinRoom`:
   - Replaced `isJoining` boolean with `OperationLock` for serialized joins
   - Added `_initRealtimeKitEffect` for RTK init with typed `ConnectionError`
