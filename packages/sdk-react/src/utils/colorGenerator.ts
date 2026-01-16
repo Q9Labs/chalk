@@ -54,7 +54,10 @@ function hashString(str: string): number {
  * Get a consistent color palette for a participant based on their ID
  * Same ID will always return the same color
  */
-export function getParticipantColor(participantId: string): ColorPalette {
+export function getParticipantColor(participantId?: string): ColorPalette {
+  if (!participantId) {
+    return COLOR_PALETTES[0] as ColorPalette;
+  }
   const hash = hashString(participantId);
   const index = hash % COLOR_PALETTES.length;
   return COLOR_PALETTES[index] as ColorPalette;
@@ -63,7 +66,7 @@ export function getParticipantColor(participantId: string): ColorPalette {
 /**
  * Generate a gradient background string for a video tile
  */
-export function getParticipantGradient(participantId: string): string {
+export function getParticipantGradient(participantId?: string): string {
   const colors = getParticipantColor(participantId);
   return `linear-gradient(180deg, ${colors.primary} 0%, ${colors.secondary} 50%, #000000 100%)`;
 }
@@ -71,7 +74,7 @@ export function getParticipantGradient(participantId: string): string {
 /**
  * Get border color for a video tile
  */
-export function getParticipantBorder(participantId: string): string {
+export function getParticipantBorder(participantId?: string): string {
   const colors = getParticipantColor(participantId);
   return colors.border;
 }

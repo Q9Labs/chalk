@@ -332,6 +332,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				config: {},
 				createdAt: new Date(),
 			},
+			shouldStartRecording: data.shouldStartRecording,
 		};
 	}
 

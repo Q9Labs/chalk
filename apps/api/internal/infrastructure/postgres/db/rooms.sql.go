@@ -210,6 +210,38 @@ func (q *Queries) GetRoomByCloudflareID(ctx context.Context, cloudflareMeetingID
 	return i, err
 }
 
+const getRoomByNameAndTenant = `-- name: GetRoomByNameAndTenant :one
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata FROM rooms
+WHERE name = $1 AND tenant_id = $2
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetRoomByNameAndTenantParams struct {
+	Name     *string   `db:"name" json:"name"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *Queries) GetRoomByNameAndTenant(ctx context.Context, arg GetRoomByNameAndTenantParams) (Room, error) {
+	row := q.db.QueryRow(ctx, getRoomByNameAndTenant, arg.Name, arg.TenantID)
+	var i Room
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.CloudflareMeetingID,
+		&i.Name,
+		&i.Config,
+		&i.Status,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.WhiteboardState,
+		&i.Metadata,
+	)
+	return i, err
+}
+
 const getRoomWithParticipantCount = `-- name: GetRoomWithParticipantCount :one
 SELECT
     r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata,

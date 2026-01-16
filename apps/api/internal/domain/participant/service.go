@@ -65,6 +65,7 @@ func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateMan
 
 type JoinRoomInput struct {
 	RoomID         uuid.UUID
+	RoomName       string    // Room name - used for auto-creating rooms
 	TenantID       uuid.UUID // From JWT - used for auto-creating rooms
 	DisplayName    string
 	ExternalUserID string
@@ -106,8 +107,13 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		}
 
 		// Auto-create the room
+		roomName := input.RoomName
+		if roomName == "" {
+			roomName = "Auto-created Room"
+		}
+
 		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cloudflare.CreateMeetingRequest{
-			Title: "Auto-created Room",
+			Title: roomName,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create room: %w", err)
@@ -117,7 +123,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			ID:                  input.RoomID,
 			TenantID:            input.TenantID,
 			CloudflareMeetingID: cfMeeting.ID,
-			Name:                strPtr("Auto-created Room"),
+			Name:                strPtr(roomName),
 			Config:              []byte("{}"),
 		})
 		if err != nil {

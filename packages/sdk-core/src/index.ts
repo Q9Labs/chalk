@@ -190,3 +190,13 @@ export type {
 } from "./types.ts";
 // Export error code constants
 export { ChalkErrorCode, err, ok } from "./types.ts";
+
+// ============================================================================
+// Token Provider Utility
+// ============================================================================
+
+export { createTokenProvider } from "./token-provider.ts";
+export type {
+	CreateTokenProviderConfig,
+	TokenStorage,
+} from "./token-provider.ts";

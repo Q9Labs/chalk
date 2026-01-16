@@ -73,3 +73,9 @@ UPDATE tenants
 SET api_key_hash = $2
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateTenantConfig :one
+UPDATE tenants
+SET tenant_config = $2
+WHERE id = $1
+RETURNING *;

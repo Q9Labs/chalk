@@ -57,6 +57,7 @@ type Querier interface {
 	GetRecordingWithRoomInfo(ctx context.Context, id uuid.UUID) (GetRecordingWithRoomInfoRow, error)
 	GetRoom(ctx context.Context, id uuid.UUID) (Room, error)
 	GetRoomByCloudflareID(ctx context.Context, cloudflareMeetingID string) (Room, error)
+	GetRoomByNameAndTenant(ctx context.Context, arg GetRoomByNameAndTenantParams) (Room, error)
 	GetRoomHost(ctx context.Context, roomID uuid.UUID) (Participant, error)
 	GetRoomWithParticipantCount(ctx context.Context, id uuid.UUID) (GetRoomWithParticipantCountRow, error)
 	GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
@@ -96,6 +97,7 @@ type Querier interface {
 	UpdateParticipant(ctx context.Context, arg UpdateParticipantParams) (Participant, error)
 	UpdateRoom(ctx context.Context, arg UpdateRoomParams) (Room, error)
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
+	UpdateTenantConfig(ctx context.Context, arg UpdateTenantConfigParams) (Tenant, error)
 }
 
 var _ Querier = (*Queries)(nil)

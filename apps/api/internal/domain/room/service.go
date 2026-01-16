@@ -123,6 +123,18 @@ func (s *Service) GetRoomWithParticipantCount(ctx context.Context, roomID uuid.U
 	return &room, nil
 }
 
+// GetRoomByName looks up a room by name within a tenant
+func (s *Service) GetRoomByName(ctx context.Context, name string, tenantID uuid.UUID) (*db.Room, error) {
+	room, err := s.db.GetRoomByNameAndTenant(ctx, db.GetRoomByNameAndTenantParams{
+		Name:     &name,
+		TenantID: tenantID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &room, nil
+}
+
 func (s *Service) ListActiveRoomsByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int32) ([]db.Room, error) {
 	rooms, err := s.db.ListActiveRoomsByTenant(ctx, db.ListActiveRoomsByTenantParams{
 		TenantID: tenantID,

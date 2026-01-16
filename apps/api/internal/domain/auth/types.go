@@ -9,7 +9,7 @@ import (
 // Claims represents the JWT claims for Chalk tokens
 type Claims struct {
 	// Standard claims
-	Subject   string    `json:"sub"`            // participant_id
+	Subject   string    `json:"sub"` // participant_id
 	IssuedAt  time.Time `json:"iat"`
 	ExpiresAt time.Time `json:"exp"`
 

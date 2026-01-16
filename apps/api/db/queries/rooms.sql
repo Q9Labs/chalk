@@ -112,3 +112,9 @@ WHERE r.status = 'active'
   AND r.created_at < NOW() - INTERVAL '1 minute' * $1
 GROUP BY r.id
 HAVING COUNT(p.id) = 0;
+
+-- name: GetRoomByNameAndTenant :one
+SELECT * FROM rooms
+WHERE name = $1 AND tenant_id = $2
+ORDER BY created_at DESC
+LIMIT 1;

@@ -3,15 +3,15 @@
  * Integrates with @cloudflare/realtimekit-react-native for WebRTC signaling
  */
 
+import type RealtimeKitClient from "@cloudflare/realtimekit";
 import {
 	APIClient,
 	type ChalkClientConfig,
+	createLogger,
 	type JoinRoomResponse,
 	type RoomConfig,
 	type RoomStatus,
-	createLogger,
 } from "@q9labs/chalk-core";
-import type RealtimeKitClient from "@cloudflare/realtimekit";
 import {
 	createContext,
 	type ReactNode,
@@ -25,10 +25,15 @@ import {
 import { RTCManager } from "./native/RTCManager";
 
 // Dynamic import for RTK RN hooks (may not be available in all environments)
-let useRealtimeKitClientHook: (() => [
-	RealtimeKitClient | undefined,
-	(options: { authToken: string; defaults?: { audio?: boolean; video?: boolean } }) => void,
-]) | null = null;
+let useRealtimeKitClientHook:
+	| (() => [
+			RealtimeKitClient | undefined,
+			(options: {
+				authToken: string;
+				defaults?: { audio?: boolean; video?: boolean };
+			}) => void,
+	  ])
+	| null = null;
 
 try {
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -125,13 +130,16 @@ export function ChalkProvider({
 		if (rtkClient && !hasJoinedRtk.current) {
 			hasJoinedRtk.current = true;
 			log.debug("RTK client ready, joining room");
-			rtkClient.join().then(() => {
-				log.info("Joined RTK room");
-				setConnectionStatus("connected");
-			}).catch((err) => {
-				log.error("Failed to join RTK room", err);
-				setConnectionStatus("disconnected");
-			});
+			rtkClient
+				.join()
+				.then(() => {
+					log.info("Joined RTK room");
+					setConnectionStatus("connected");
+				})
+				.catch((err) => {
+					log.error("Failed to join RTK room", err);
+					setConnectionStatus("disconnected");
+				});
 		}
 	}, [rtkClient]);
 
@@ -166,10 +174,15 @@ export function ChalkProvider({
 			}
 
 			const { tokens } = response.data;
-			log.info("Got auth tokens", { participantId: response.data.participantId });
+			log.info("Got auth tokens", {
+				participantId: response.data.participantId,
+			});
 
 			// Check for valid RTC token
-			if (!tokens.rtcToken || tokens.rtcToken === "demo-token-not-for-production") {
+			if (
+				!tokens.rtcToken ||
+				tokens.rtcToken === "demo-token-not-for-production"
+			) {
 				log.warn("No valid rtcToken - Cloudflare Calls may not be enabled");
 				// Still store room info for demo mode
 				setRoomInfo(response.data);

@@ -3,7 +3,8 @@
 ## Project Overview
 
 **Chalk** - Ultra low-latency video conferencing for education (Cloudflare RealtimeKit).
-Monorepo: **Turbo** + **Bun**. Packages → GitHub Packages `@q9labs/*`.
+Monorepo: **Turbo** + **Bun**.
+Packages → GitHub Packages `@q9labs/*`.
 
 ## Commands
 
@@ -28,7 +29,7 @@ cd apps/api && go test ./...           # Test
 | --------------------------- | ------------------------------------------------------ |
 | `packages/sdk-core`         | Vanilla JS SDK - WebRTC client, room mgmt              |
 | `packages/sdk-react`        | React hooks (useRoom, useParticipants, useMedia, etc.) |
-| `packages/sdk-react-native` | React Native bindings (WIP)                            |
+| `packages/sdk-react-native` | React Native bindings                                  |
 | `packages/chalk-whiteboard` | Chalk Whiteboard with Excalidraw                       |
 | `packages/ui`               | UI components (Base UI + Tailwind v4)                  |
 | `apps/web`                  | Demo app (Vite + React 19 + TanStack Router)           |
@@ -37,7 +38,7 @@ cd apps/api && go test ./...           # Test
 
 ## SDK Architecture
 
-Layered: `chalk-core` → `chalk-react` → `chalk-react-native` + `chalk-ui`
+Layered: `chalk-core` → `chalk-react` → `chalk-react-native` + `chalk-ui` + `chalk-whiteboard`
 
 | Feature       | Description                                            |
 | ------------- | ------------------------------------------------------ |
@@ -69,28 +70,3 @@ Clean Architecture:
 | `api.yml`   | `apps/api/**`                 | lint → test → build → docker (GHCR)                     |
 | `sdk.yml`   | `packages/**`                 | type-check → lint → test → build → publish              |
 | `infra.yml` | `infrastructure/terraform/**` | validate → plan → apply (dev/staging auto, prod manual) |
-
-## Development Workflow
-
-1. Identify affected packages
-2. Make changes
-3. DB changes? Update `schema.sql` → `sqlc generate`
-4. `bun run check-types && bun run test`
-5. Test in `apps/web`
-
-**Infra changes:** Edit `.tf` → `terraform plan` → `terraform apply`
-
-## Key Notes
-
-- **Always use Bun** - `bun` not `node`, `bun run` not `npm run`
-- **TypeScript strict mode** enabled, no unused vars
-- **Turbo caching** - `build` depends on `^build`
-- **RealtimeKit** - API provides credentials, Cloudflare handles WebRTC
-- **Demo app only** - `apps/web` is reference impl, real UI in Phase 2
-
-## UI & Theme Guide (minimal)
-
-- Primary brand color: `packages/sdk-react/src/styles/variables.css` (`--chalk-brand`, `--chalk-brand-hover`) for SDK UI.
-- Web app theme tokens: `apps/web/src/styles.css` (`--primary`, `--sidebar-primary`) for landing + app chrome.
-- Meeting room demo styling uses Tailwind theme tokens in `apps/web/src/features/room/components/**` and `apps/web/src/routes/room/$roomId.tsx`.
-- Light/dark: toggle root class (`html.dark` / `html.light`) in `apps/web/src/routes/__root.tsx`; SDK also reads `data-chalk-theme`.

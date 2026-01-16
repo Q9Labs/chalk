@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
@@ -211,4 +212,102 @@ func (h *TenantHandler) RotateAPIKey(c *gin.Context) {
 	c.JSON(http.StatusOK, RotateAPIKeyResponse{
 		APIKey: apiKey,
 	})
+}
+
+type UpdateTenantConfigRequest struct {
+	ForceRecording             *bool   `json:"force_recording"`
+	AutoStartRecording         *bool   `json:"auto_start_recording"`
+	AllowEarlyJoin             *bool   `json:"allow_early_join"`
+	EmptyRoomTimeoutMinutes    *int32  `json:"empty_room_timeout_minutes"`
+	RecordingRetentionDays     *int32  `json:"recording_retention_days"`
+	DuplicateParticipantPolicy *string `json:"duplicate_participant_policy"`
+}
+
+// TenantConfig represents the tenant_config JSONB structure
+type TenantConfig struct {
+	ForceRecording             bool   `json:"force_recording"`
+	AutoStartRecording         bool   `json:"auto_start_recording"`
+	AllowEarlyJoin             bool   `json:"allow_early_join"`
+	EmptyRoomTimeoutMinutes    int32  `json:"empty_room_timeout_minutes"`
+	RecordingRetentionDays     int32  `json:"recording_retention_days"`
+	DuplicateParticipantPolicy string `json:"duplicate_participant_policy"`
+}
+
+// PATCH /api/v1/tenants/:id/config
+func (h *TenantHandler) UpdateConfig(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant id"})
+		return
+	}
+
+	var req UpdateTenantConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify tenant ownership
+	authTenant, ok := middleware.GetTenant(c)
+	if !ok || authTenant.ID != id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied: tenant mismatch"})
+		return
+	}
+
+	// Get current config
+	tenant, err := h.queries.GetTenant(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
+		return
+	}
+
+	// Parse existing config with defaults
+	config := TenantConfig{
+		AllowEarlyJoin:             true, // default
+		EmptyRoomTimeoutMinutes:    30,   // default
+		RecordingRetentionDays:     30,   // default
+		DuplicateParticipantPolicy: "reject",
+	}
+	if tenant.TenantConfig != nil {
+		_ = json.Unmarshal(tenant.TenantConfig, &config)
+	}
+
+	// Merge with request
+	if req.ForceRecording != nil {
+		config.ForceRecording = *req.ForceRecording
+	}
+	if req.AutoStartRecording != nil {
+		config.AutoStartRecording = *req.AutoStartRecording
+	}
+	if req.AllowEarlyJoin != nil {
+		config.AllowEarlyJoin = *req.AllowEarlyJoin
+	}
+	if req.EmptyRoomTimeoutMinutes != nil {
+		config.EmptyRoomTimeoutMinutes = *req.EmptyRoomTimeoutMinutes
+	}
+	if req.RecordingRetentionDays != nil {
+		config.RecordingRetentionDays = *req.RecordingRetentionDays
+	}
+	if req.DuplicateParticipantPolicy != nil {
+		config.DuplicateParticipantPolicy = *req.DuplicateParticipantPolicy
+	}
+
+	// Serialize updated config
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to serialize config"})
+		return
+	}
+
+	// Save
+	updatedTenant, err := h.queries.UpdateTenantConfig(c.Request.Context(), db.UpdateTenantConfigParams{
+		ID:           id,
+		TenantConfig: configBytes,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedTenant)
 }

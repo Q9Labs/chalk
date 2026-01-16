@@ -13,12 +13,25 @@ npm install @chalk/react-native react-native react-native-webrtc
 ## Quick Start
 
 ```tsx
+import { createTokenProvider } from '@q9labs/chalk-core';
 import { ChalkProvider, useRoom, useParticipants, useMedia } from '@chalk/react-native';
 import { VideoView, AudioSession } from '@chalk/react-native/components';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Create token provider with AsyncStorage
+const tokenProvider = createTokenProvider({
+  apiKey: 'ck_live_xxx',
+  apiUrl: 'https://api.chalk.example.com',
+  storage: {
+    get: (key) => AsyncStorage.getItem(key),
+    set: (key, value) => AsyncStorage.setItem(key, value),
+    remove: (key) => AsyncStorage.removeItem(key),
+  },
+});
 
 export default function App() {
   return (
-    <ChalkProvider token="your-jwt-token">
+    <ChalkProvider tokenProvider={tokenProvider}>
       <CallScreen />
     </ChalkProvider>
   );

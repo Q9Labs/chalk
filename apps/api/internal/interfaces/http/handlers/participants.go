@@ -54,21 +54,26 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
-	roomID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
-		return
-	}
+	// Try to parse as UUID first, fall back to room name lookup
+	roomIDParam := c.Param("id")
+	roomID, err := uuid.Parse(roomIDParam)
 
-	// Verify room belongs to the caller's tenant
-	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
-	}
-	if existingRoom.TenantID != claims.TenantID {
-		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
+		// Not a UUID - look up by room name
+		existingRoom, lookupErr := h.roomService.GetRoomByName(c.Request.Context(), roomIDParam, claims.TenantID)
+		if lookupErr != nil {
+			// Room doesn't exist yet - generate UUID for auto-creation (allow_early_join will handle it)
+			roomID = uuid.New()
+		} else {
+			roomID = existingRoom.ID
+		}
+	} else {
+		// UUID provided - verify room belongs to the caller's tenant if it exists
+		existingRoom, lookupErr := h.roomService.GetRoom(c.Request.Context(), roomID)
+		if lookupErr == nil && existingRoom.TenantID != claims.TenantID {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
 	}
 
 	var req AddParticipantRequest
@@ -79,6 +84,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 
 	output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
 		RoomID:         roomID,
+		RoomName:       roomIDParam, // Use original param as room name for auto-creation
 		TenantID:       claims.TenantID,
 		DisplayName:    req.DisplayName,
 		ExternalUserID: req.ExternalUserID,
@@ -276,21 +282,30 @@ func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
 		return
 	}
 
-	roomID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
-		return
-	}
+	// Try to parse as UUID first, fall back to room name lookup
+	roomIDParam := c.Param("id")
+	roomID, err := uuid.Parse(roomIDParam)
 
-	// Verify room belongs to tenant
-	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
-	}
-	if existingRoom.TenantID != claims.TenantID {
-		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
+		// Not a UUID - look up by room name
+		existingRoom, lookupErr := h.roomService.GetRoomByName(c.Request.Context(), roomIDParam, claims.TenantID)
+		if lookupErr != nil {
+			// For bulk add, room must already exist
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
+		roomID = existingRoom.ID
+	} else {
+		// UUID provided - verify room belongs to the caller's tenant
+		existingRoom, lookupErr := h.roomService.GetRoom(c.Request.Context(), roomID)
+		if lookupErr != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
+		if existingRoom.TenantID != claims.TenantID {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
 	}
 
 	var req BulkAddRequest

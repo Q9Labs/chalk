@@ -304,6 +304,15 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       }
 
       this.currentRoom = room;
+
+      // Auto-start recording if server indicates (force_recording enabled)
+      if (response.data.shouldStartRecording) {
+        this.log.info("Auto-starting recording (force_recording enabled)");
+        this.startRecording().catch((err) => {
+          this.log.error("Failed to auto-start recording", { error: err });
+        });
+      }
+
       return room;
     });
   }

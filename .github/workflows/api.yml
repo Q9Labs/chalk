@@ -4,25 +4,25 @@ on:
   push:
     branches: [master]
     paths:
-      - 'apps/api/**'
-      - '.github/workflows/api.yml'
+      - "apps/api/**"
+      - ".github/workflows/api.yml"
   pull_request:
     paths:
-      - 'apps/api/**'
+      - "apps/api/**"
   workflow_dispatch:
     inputs:
       skip_tests:
-        description: 'Skip tests'
+        description: "Skip tests"
         required: false
         type: boolean
         default: false
       force_deploy:
-        description: 'Force deploy even without changes'
+        description: "Force deploy even without changes"
         required: false
         type: boolean
         default: false
       environment:
-        description: 'Target environment'
+        description: "Target environment"
         required: false
         type: choice
         options:
@@ -35,7 +35,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: "1.24"
   AWS_REGION: us-east-1
   # ECR repository name follows pattern: chalk-{environment}-api
   ECR_REPOSITORY: chalk-${{ inputs.environment || 'prod' }}-api
@@ -190,7 +190,7 @@ jobs:
           aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_SERVICE }} \
             --query taskDefinition > task-definition.json
-          
+
           # Check if task definition exists
           if [ ! -s task-definition.json ] || [ "$(cat task-definition.json)" == "null" ]; then
             echo "::warning::Task definition not found. Infrastructure may not be deployed yet."
@@ -244,15 +244,15 @@ jobs:
         run: |
           CLUSTER="chalk-${{ inputs.environment || 'prod' }}"
           SERVICE="chalk-${{ inputs.environment || 'prod' }}-api"
-          
+
           STATUS=$(aws ecs describe-services \
             --cluster $CLUSTER \
             --services $SERVICE \
             --query 'services[0].deployments[0].rolloutState' \
             --output text 2>/dev/null || echo "NOT_FOUND")
-          
+
           echo "Deployment status: $STATUS"
-          
+
           if [ "$STATUS" == "COMPLETED" ]; then
             echo "✅ Deployment completed successfully"
           elif [ "$STATUS" == "IN_PROGRESS" ]; then

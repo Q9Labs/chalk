@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### SDK-Core
+
+- **`createTokenProvider` utility** - Handles complete auth flow (API key → JWT with auto-refresh)
+  - Browser support with `sessionStorage` (default) or `localStorage`
+  - Custom `TokenStorage` interface for React Native (`AsyncStorage`) and SSR
+  - Concurrent refresh request serialization
+  - Automatic fallback to API key when refresh fails
+
+#### API
+
+- **`PATCH /api/v1/tenants/:id/config`** - Update tenant configuration via API
+  - Supports `force_recording`, `auto_start_recording`, `allow_early_join`
+  - Additional options: `empty_room_timeout_minutes`, `recording_retention_days`, `duplicate_participant_policy`
+  - Requires API key authentication, enforces tenant ownership
+
 #### SDK-React-Native
 
 - **Cloudflare RTK integration** - Integrated `@cloudflare/realtimekit-react-native` for WebRTC signaling

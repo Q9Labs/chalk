@@ -4,25 +4,30 @@
  * Falls back to raw react-native-webrtc when RealtimeKit is not available
  */
 
+import type {
+	MediaStream,
+	RTCPeerConnection,
+} from "@cloudflare/react-native-webrtc";
 import { createLogger } from "@q9labs/chalk-core";
-import { PermissionsAndroid, Platform, NativeModules } from "react-native";
-import type { MediaStream, RTCPeerConnection } from "@cloudflare/react-native-webrtc";
+import { NativeModules, PermissionsAndroid, Platform } from "react-native";
 
 // Detect iOS simulator - on simulator, enumerateDevices() crashes with nil object insertion
 // Use multiple detection methods for reliability
-const isIOSSimulator = Platform.OS === "ios" && (
+const isIOSSimulator =
+	Platform.OS === "ios" &&
 	// Check for simulator-specific environment variable
-	(Platform.constants as Record<string, unknown>)?.isTesting === true ||
-	// Check PlatformConstants for simulator flag (available in newer RN)
-	(NativeModules.PlatformConstants as Record<string, unknown>)?.isSimulator === true ||
-	// Fallback: in __DEV__ mode on iOS, assume simulator to be safe
-	// Real device testing should use release builds
-	__DEV__
-);
+	((Platform.constants as Record<string, unknown>)?.isTesting === true ||
+		// Check PlatformConstants for simulator flag (available in newer RN)
+		(NativeModules.PlatformConstants as Record<string, unknown>)
+			?.isSimulator === true ||
+		// Fallback: in __DEV__ mode on iOS, assume simulator to be safe
+		// Real device testing should use release builds
+		__DEV__);
 
 // Dynamic import to handle cases where native module isn't initialized
-let mediaDevices: typeof import("@cloudflare/react-native-webrtc").mediaDevices | null =
-	null;
+let mediaDevices:
+	| typeof import("@cloudflare/react-native-webrtc").mediaDevices
+	| null = null;
 try {
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	mediaDevices = require("@cloudflare/react-native-webrtc").mediaDevices;
@@ -339,10 +344,26 @@ export class RTCManager {
 				log.warn("mediaDevices not available - returning mock devices");
 			}
 			return [
-				{ deviceId: "mock-camera-front", label: "Front Camera", kind: "videoinput" },
-				{ deviceId: "mock-camera-back", label: "Back Camera", kind: "videoinput" },
-				{ deviceId: "mock-mic", label: "Built-in Microphone", kind: "audioinput" },
-				{ deviceId: "mock-speaker", label: "Built-in Speaker", kind: "audiooutput" },
+				{
+					deviceId: "mock-camera-front",
+					label: "Front Camera",
+					kind: "videoinput",
+				},
+				{
+					deviceId: "mock-camera-back",
+					label: "Back Camera",
+					kind: "videoinput",
+				},
+				{
+					deviceId: "mock-mic",
+					label: "Built-in Microphone",
+					kind: "audioinput",
+				},
+				{
+					deviceId: "mock-speaker",
+					label: "Built-in Speaker",
+					kind: "audiooutput",
+				},
 			];
 		}
 

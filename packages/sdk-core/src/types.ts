@@ -654,6 +654,10 @@ export interface JoinRoomResponse {
 	 */
 	tokens: TokenSet;
 	room: RoomInfo;
+	/**
+	 * Whether the SDK should auto-start recording (tenant has force_recording enabled)
+	 */
+	shouldStartRecording?: boolean;
 }
 
 /**
@@ -689,6 +693,7 @@ export interface TransformedJoinRoomApiResponse {
 	authToken: string;
 	token?: string;
 	expiresAt?: number;
+	shouldStartRecording?: boolean;
 	room: {
 		id: string;
 		name: string;

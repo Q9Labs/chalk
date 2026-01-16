@@ -123,6 +123,7 @@ func (r *Router) setupRoutes() {
 			tenantsGroup.PATCH("/:id", tenants.Update)
 			tenantsGroup.DELETE("/:id", tenants.Delete)
 			tenantsGroup.POST("/:id/rotate-key", tenants.RotateAPIKey)
+			tenantsGroup.PATCH("/:id/config", tenants.UpdateConfig)
 		}
 
 		rooms := handlers.NewRoomHandler(r.roomService)

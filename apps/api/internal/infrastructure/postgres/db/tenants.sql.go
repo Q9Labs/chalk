@@ -370,3 +370,35 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Ten
 	)
 	return i, err
 }
+
+const updateTenantConfig = `-- name: UpdateTenantConfig :one
+UPDATE tenants
+SET tenant_config = $2
+WHERE id = $1
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, is_active, created_at, updated_at, whiteboard_config, tenant_config
+`
+
+type UpdateTenantConfigParams struct {
+	ID           uuid.UUID `db:"id" json:"id"`
+	TenantConfig []byte    `db:"tenant_config" json:"tenant_config"`
+}
+
+func (q *Queries) UpdateTenantConfig(ctx context.Context, arg UpdateTenantConfigParams) (Tenant, error) {
+	row := q.db.QueryRow(ctx, updateTenantConfig, arg.ID, arg.TenantConfig)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ApiKeyHash,
+		&i.Config,
+		&i.MaxConcurrentRooms,
+		&i.MaxParticipantsPerRoom,
+		&i.MaxRecordingDurationMinutes,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.WhiteboardConfig,
+		&i.TenantConfig,
+	)
+	return i, err
+}
