@@ -74,6 +74,8 @@ export class UIManager extends StateContainer<UIState> {
 	private notifications: Notification[] = [];
 	private controlsHideTimeout: ReturnType<typeof setTimeout> | null = null;
 	private readonly log: Logger;
+	// SDKCORE-MED-06: Store bound handler for proper cleanup
+	private readonly boundDetectMobileView: () => void;
 
 	constructor(_debug = false) {
 		super({
@@ -86,10 +88,13 @@ export class UIManager extends StateContainer<UIState> {
 		});
 		this.log = createLogger("UI");
 
+		// SDKCORE-MED-06: Bind once and store reference
+		this.boundDetectMobileView = this.detectMobileView.bind(this);
+
 		// Detect mobile on init
 		if (typeof window !== "undefined") {
 			this.detectMobileView();
-			window.addEventListener("resize", this.detectMobileView.bind(this));
+			window.addEventListener("resize", this.boundDetectMobileView);
 		}
 	}
 
@@ -253,9 +258,9 @@ export class UIManager extends StateContainer<UIState> {
 			clearTimeout(this.controlsHideTimeout);
 		}
 
-		// Remove resize listener
+		// SDKCORE-MED-06: Remove resize listener using stored bound reference
 		if (typeof window !== "undefined") {
-			window.removeEventListener("resize", this.detectMobileView.bind(this));
+			window.removeEventListener("resize", this.boundDetectMobileView);
 		}
 
 		this.events.removeAllListeners();

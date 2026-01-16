@@ -91,6 +91,12 @@ func (h *RoomHandler) List(c *gin.Context) {
 }
 
 func (h *RoomHandler) Get(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
@@ -103,10 +109,22 @@ func (h *RoomHandler) Get(c *gin.Context) {
 		return
 	}
 
+	// Verify tenant ownership
+	if room.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+
 	c.JSON(http.StatusOK, room)
 }
 
 func (h *RoomHandler) Update(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
@@ -122,6 +140,17 @@ func (h *RoomHandler) Update(c *gin.Context) {
 		return
 	}
 
+	// Verify tenant ownership before update
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+
 	room, err := h.roomService.UpdateRoom(c.Request.Context(), id, req.Name, req.Config)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -132,9 +161,26 @@ func (h *RoomHandler) Update(c *gin.Context) {
 }
 
 func (h *RoomHandler) Delete(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify tenant ownership before delete
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -147,9 +193,26 @@ func (h *RoomHandler) Delete(c *gin.Context) {
 }
 
 func (h *RoomHandler) End(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify tenant ownership before ending
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 

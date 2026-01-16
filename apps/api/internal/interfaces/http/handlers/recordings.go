@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
+	"github.com/Q9Labs/chalk/internal/domain/room"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -13,18 +14,37 @@ import (
 
 type RecordingHandler struct {
 	recordingService *recording.Service
+	roomService      *room.Service
 }
 
-func NewRecordingHandler(recordingService *recording.Service) *RecordingHandler {
+func NewRecordingHandler(recordingService *recording.Service, roomService *room.Service) *RecordingHandler {
 	return &RecordingHandler{
 		recordingService: recordingService,
+		roomService:      roomService,
 	}
 }
 
 func (h *RecordingHandler) Start(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -48,9 +68,26 @@ func (h *RecordingHandler) Start(c *gin.Context) {
 }
 
 func (h *RecordingHandler) Stop(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -91,6 +128,12 @@ func (h *RecordingHandler) List(c *gin.Context) {
 }
 
 func (h *RecordingHandler) Get(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid recording id"})
@@ -107,21 +150,42 @@ func (h *RecordingHandler) Get(c *gin.Context) {
 		return
 	}
 
+	// Verify recording belongs to tenant via room
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
+	if err != nil || existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+
 	c.JSON(http.StatusOK, rec)
 }
 
 func (h *RecordingHandler) Download(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid recording id"})
 		return
 	}
 
-	claims, _ := middleware.GetClaims(c)
-	actorID := ""
-	if claims != nil {
-		actorID = claims.Subject
+	// Verify recording belongs to tenant via room
+	rec, err := h.recordingService.GetRecording(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
 	}
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
+	if err != nil || existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+
+	actorID := claims.Subject
 	downloadURL, err := h.recordingService.GetDownloadURL(c.Request.Context(), id, actorID, c.ClientIP())
 	if err != nil {
 		if errors.Is(err, recording.ErrRecordingNotFound) {
@@ -145,7 +209,6 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 		return
 	}
 
-	rec, _ := h.recordingService.GetRecording(c.Request.Context(), id)
 	response := gin.H{
 		"recording_id": id,
 		"download_url": downloadURL,
@@ -163,9 +226,27 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 }
 
 func (h *RecordingHandler) Archive(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid recording id"})
+		return
+	}
+
+	// Verify recording belongs to tenant via room
+	rec, err := h.recordingService.GetRecording(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
+	if err != nil || existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
 
@@ -195,9 +276,27 @@ func (h *RecordingHandler) Archive(c *gin.Context) {
 }
 
 func (h *RecordingHandler) Delete(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid recording id"})
+		return
+	}
+
+	// Verify recording belongs to tenant via room
+	rec, err := h.recordingService.GetRecording(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
+	if err != nil || existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
 

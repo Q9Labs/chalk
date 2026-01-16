@@ -1,0 +1,37 @@
+platform :ios, '15.1'
+
+# Resolve react_native_pods.rb from node
+def node_require(script)
+  require Pod::Executable.execute_command('node', ['-p',
+    "require.resolve('#{script}', {paths: ['#{__dir__}/..']})"
+  ]).strip
+end
+
+node_require('react-native/scripts/react_native_pods.rb')
+
+prepare_react_native_project!
+
+target 'ChalkExample' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => true,
+    :fabric_enabled => false,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # react-native-webrtc is auto-linked via use_native_modules!
+
+  # ChalkReactNative native modules (permissions, audio session, callkit)
+  pod 'ChalkReactNative', :path => '../../ios'
+
+  post_install do |installer|
+    react_native_post_install(installer)
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      end
+    end
+  end
+end

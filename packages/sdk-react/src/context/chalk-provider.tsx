@@ -8,8 +8,8 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import {
 	ChalkSession,
-	createLogger,
 	type ChalkSessionConfig,
+	createLogger,
 	type JoinOptions,
 } from "@q9labs/chalk-core";
 import type { JSX, ReactNode } from "react";
@@ -19,11 +19,21 @@ import {
 	useContext,
 	useEffect,
 	useMemo,
-	useRef,
 	useState,
 } from "react";
 
 const log = createLogger("ChalkProvider");
+
+// Module-level session cache for HMR persistence
+// Key is apiUrl to allow different sessions for different endpoints
+const sessionCache = new Map<string, ChalkSession>();
+
+// Cleanup orphaned sessions on HMR (Vite specific)
+if (import.meta.hot) {
+	import.meta.hot.dispose(() => {
+		// Don't dispose sessions on HMR - preserve them
+	});
+}
 
 /** ChalkProvider props */
 export interface ChalkProviderProps {
@@ -91,13 +101,20 @@ export function ChalkProvider({
 	userName,
 	debug,
 }: ChalkProviderProps): JSX.Element {
-	const sessionRef = useRef<ChalkSession | null>(null);
 	const [isConnected, setIsConnected] = useState(false);
 	const [rtkMeeting, setRtkMeeting] = useState<RealtimeKitClient | null>(null);
 	const [, forceUpdate] = useState({});
 
-	// Create session on mount
-	if (!sessionRef.current) {
+	// Use cached session for HMR persistence, or create new one
+	const session = useMemo(() => {
+		const cacheKey = apiUrl;
+		const cached = sessionCache.get(cacheKey);
+
+		if (cached) {
+			log.debug("Reusing cached session for HMR");
+			return cached;
+		}
+
 		const config: ChalkSessionConfig = {
 			apiUrl,
 			wsUrl,
@@ -106,10 +123,10 @@ export function ChalkProvider({
 			apiKey,
 			debug,
 		};
-		sessionRef.current = new ChalkSession(config);
-	}
-
-	const session = sessionRef.current;
+		const newSession = new ChalkSession(config);
+		sessionCache.set(cacheKey, newSession);
+		return newSession;
+	}, [apiUrl]); // Only recreate if apiUrl changes
 
 	// Set up session event listeners
 	useEffect(() => {
@@ -147,12 +164,28 @@ export function ChalkProvider({
 		}
 	}, [roomId, userName, isConnected, session]);
 
-	// Cleanup on unmount
+	// Sync initial state from cached session (for HMR)
 	useEffect(() => {
-		return () => {
+		const room = session.room.getRoom();
+		if (room?.status === "connected") {
+			setIsConnected(true);
+			if (room.rtkMeeting) {
+				setRtkMeeting(room.rtkMeeting);
+			}
+		}
+	}, [session]);
+
+	// Cleanup on window unload only (preserve session for HMR)
+	useEffect(() => {
+		const handleBeforeUnload = () => {
+			sessionCache.delete(apiUrl);
 			session.dispose();
 		};
-	}, [session]);
+		window.addEventListener("beforeunload", handleBeforeUnload);
+		return () => {
+			window.removeEventListener("beforeunload", handleBeforeUnload);
+		};
+	}, [session, apiUrl]);
 
 	const join = useCallback(
 		async (joinRoomId: string, options: JoinOptions): Promise<void> => {

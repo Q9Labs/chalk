@@ -5,6 +5,7 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -91,6 +92,13 @@ func (h *TenantHandler) Get(c *gin.Context) {
 		return
 	}
 
+	// Verify tenant ownership - caller can only access their own tenant
+	authTenant, ok := middleware.GetTenant(c)
+	if !ok || authTenant.ID != id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied: tenant mismatch"})
+		return
+	}
+
 	tenant, err := h.queries.GetTenant(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
@@ -119,6 +127,13 @@ func (h *TenantHandler) Update(c *gin.Context) {
 		return
 	}
 
+	// Verify tenant ownership
+	authTenant, ok := middleware.GetTenant(c)
+	if !ok || authTenant.ID != id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied: tenant mismatch"})
+		return
+	}
+
 	tenant, err := h.queries.UpdateTenant(c.Request.Context(), db.UpdateTenantParams{
 		ID:                          id,
 		Name:                        req.Name,
@@ -142,6 +157,13 @@ func (h *TenantHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	// Verify tenant ownership
+	authTenant, ok := middleware.GetTenant(c)
+	if !ok || authTenant.ID != id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied: tenant mismatch"})
+		return
+	}
+
 	if err := h.queries.DeleteTenant(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -159,6 +181,13 @@ func (h *TenantHandler) RotateAPIKey(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant id"})
+		return
+	}
+
+	// Verify tenant ownership
+	authTenant, ok := middleware.GetTenant(c)
+	if !ok || authTenant.ID != id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied: tenant mismatch"})
 		return
 	}
 

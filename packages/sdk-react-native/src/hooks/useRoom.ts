@@ -1,58 +1,32 @@
 /**
  * useRoom hook - Access current room state in React Native
+ * Integrates with @cloudflare/realtimekit-react-native
  */
 
-import type { Room, RoomInfo, RoomStatus } from "@q9labs/chalk-core";
-import { useEffect, useState } from "react";
+import type { RoomInfo, RoomStatus } from "@q9labs/chalk-core";
 import { useChalk } from "../ChalkProvider";
 
 export interface UseRoomResult {
-	room: Room | null;
+	/** Room info from API */
 	roomInfo: RoomInfo | null;
+	/** Whether connected to RTK */
 	isConnected: boolean;
+	/** Current connection status */
 	status: RoomStatus;
+	/** Room ID (if joined) */
+	roomId: string | null;
+	/** Whether recording is active (not supported in RN yet) */
 	isRecording: boolean;
 }
 
 export function useRoom(): UseRoomResult {
-	const { room, isConnected, connectionStatus } = useChalk();
-	const [status, setStatus] = useState<RoomStatus>(connectionStatus);
-	const [isRecording, setIsRecording] = useState(false);
-
-	useEffect(() => {
-		if (!room) {
-			setStatus("disconnected");
-			setIsRecording(false);
-			return;
-		}
-
-		setStatus(room.status);
-		setIsRecording(room.isRecording);
-
-		const unsubStatus = room.on("status-changed", (newStatus) => {
-			setStatus(newStatus);
-		});
-
-		const unsubRecordStart = room.on("recording-started", () => {
-			setIsRecording(true);
-		});
-
-		const unsubRecordStop = room.on("recording-stopped", () => {
-			setIsRecording(false);
-		});
-
-		return () => {
-			unsubStatus();
-			unsubRecordStart();
-			unsubRecordStop();
-		};
-	}, [room]);
+	const { roomInfo, isConnected, connectionStatus } = useChalk();
 
 	return {
-		room,
-		roomInfo: room?.info ?? null,
+		roomInfo: roomInfo?.room ?? null,
 		isConnected,
-		status,
-		isRecording,
+		status: connectionStatus,
+		roomId: roomInfo?.room?.id ?? null,
+		isRecording: false, // Recording state requires separate API integration in RN
 	};
 }

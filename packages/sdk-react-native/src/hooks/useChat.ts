@@ -1,9 +1,10 @@
 /**
  * useChat hook - Chat messaging functionality
+ * Note: Chat requires WebSocket integration (not yet implemented in RN SDK)
  */
 
 import type { ChatMessage } from "@q9labs/chalk-core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useChalk } from "../ChalkProvider";
 
 export interface UseChatResult {
@@ -12,32 +13,25 @@ export interface UseChatResult {
 }
 
 export function useChat(): UseChatResult {
-	const { room } = useChalk();
+	const { roomInfo } = useChalk();
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
-
-	useEffect(() => {
-		if (!room) {
-			setMessages([]);
-			return;
-		}
-
-		// Initialize with existing messages
-		setMessages(room.messages);
-
-		const unsub = room.on("chat-message", (message) => {
-			setMessages((prev) => [...prev, message]);
-		});
-
-		return unsub;
-	}, [room]);
 
 	const sendMessage = useCallback(
 		(content: string) => {
-			if (room) {
-				room.sendMessage(content);
-			}
+			if (!roomInfo) return;
+
+			// TODO: Implement WebSocket chat
+			// For now, add message to local state only
+			const localMessage: ChatMessage = {
+				id: `local-${Date.now()}`,
+				senderId: roomInfo.participantId,
+				senderName: "You",
+				content,
+				timestamp: new Date(),
+			};
+			setMessages((prev) => [...prev, localMessage]);
 		},
-		[room],
+		[roomInfo],
 	);
 
 	return {

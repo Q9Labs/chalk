@@ -2,7 +2,9 @@ package http
 
 import (
 	"context"
+	"time"
 
+	"github.com/Q9Labs/chalk/internal/config"
 	"github.com/Q9Labs/chalk/internal/domain/participant"
 	"github.com/Q9Labs/chalk/internal/domain/recording"
 	"github.com/Q9Labs/chalk/internal/domain/room"
@@ -42,6 +44,7 @@ type RouterConfig struct {
 	RedisClient *redis.Client
 	StorageR2   storage.StorageClient
 	StorageS3   storage.StorageClient
+	AppConfig   *config.Config
 }
 
 func NewRouter(cfg RouterConfig) *Router {
@@ -51,7 +54,14 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	queries := db.New(cfg.Pool)
 
-	jwtService := auth.NewJWTService(auth.DefaultJWTConfig())
+	// Use JWT config from application config - fail fast handled in config.Load()
+	jwtConfig := auth.JWTConfig{
+		SecretKey:          cfg.AppConfig.JWT.SigningKey,
+		AccessTokenExpiry:  time.Duration(cfg.AppConfig.JWT.ExpiryMinutes) * time.Minute,
+		RefreshTokenExpiry: 7 * 24 * time.Hour,
+		Issuer:             "chalk",
+	}
+	jwtService := auth.NewJWTService(jwtConfig)
 	apiKeyService := auth.NewAPIKeyService()
 
 	wsHub := websocket.NewHub(cfg.RedisClient)
@@ -126,23 +136,24 @@ func (r *Router) setupRoutes() {
 			roomsGroup.DELETE("/:id", rooms.Delete)
 			roomsGroup.POST("/:id/end", rooms.End)
 
-			participants := handlers.NewParticipantHandler(r.participantService)
+			participants := handlers.NewParticipantHandler(r.participantService, r.roomService)
 			roomsGroup.POST("/:id/participants", participants.Add)
 			roomsGroup.POST("/:id/participants/bulk", participants.BulkAdd)
 			roomsGroup.GET("/:id/participants", participants.List)
 			roomsGroup.DELETE("/:id/participants/:pid", participants.Remove)
 			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
 
-			recordings := handlers.NewRecordingHandler(r.recordingService)
-			roomsGroup.POST("/:id/recordings/start", recordings.Start)
-			roomsGroup.POST("/:id/recordings/stop", recordings.Stop)
-			roomsGroup.POST("/:id/recordings/:rid/archive", recordings.Archive)
+			// API-HIGH-05: Recording start/stop/archive require host role
+			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService)
+			roomsGroup.POST("/:id/recordings/start", authMw.RequireHost(), recordings.Start)
+			roomsGroup.POST("/:id/recordings/stop", authMw.RequireHost(), recordings.Stop)
+			roomsGroup.POST("/:id/recordings/:rid/archive", authMw.RequireHost(), recordings.Archive)
 		}
 
 		recordingsGroup := v1.Group("/recordings")
 		recordingsGroup.Use(authMw.RequireJWT())
 		{
-			recordings := handlers.NewRecordingHandler(r.recordingService)
+			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService)
 			recordingsGroup.GET("", recordings.List)
 			recordingsGroup.GET("/:id", recordings.Get)
 			recordingsGroup.GET("/:id/download", recordings.Download)

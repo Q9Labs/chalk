@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -93,8 +94,9 @@ func (c *R2Client) Download(ctx context.Context, key string) (io.ReadCloser, err
 	})
 
 	if err != nil {
+		// API-MED-05: Use errors.As to properly detect smithy API errors
 		var ae smithy.APIError
-		if ae.Error() == "NoSuchKey" {
+		if errors.As(err, &ae) && ae.ErrorCode() == "NoSuchKey" {
 			return nil, fmt.Errorf("file not found: %s", key)
 		}
 		return nil, fmt.Errorf("download from R2 failed: %w", err)
@@ -158,8 +160,9 @@ func (c *R2Client) Exists(ctx context.Context, key string) (bool, error) {
 	})
 
 	if err != nil {
+		// API-MED-05: Use errors.As to properly detect smithy API errors
 		var ae smithy.APIError
-		if ae.Error() == "NotFound" {
+		if errors.As(err, &ae) && (ae.ErrorCode() == "NotFound" || ae.ErrorCode() == "NoSuchKey") {
 			return false, nil
 		}
 		return false, fmt.Errorf("head object failed: %w", err)

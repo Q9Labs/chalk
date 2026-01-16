@@ -4,16 +4,31 @@
  */
 
 import { createLogger } from "@q9labs/chalk-core";
-import React, { useEffect } from "react";
-import { Platform } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+	DeviceEventEmitter,
+	NativeEventEmitter,
+	NativeModules,
+	Platform,
+} from "react-native";
 
 const log = createLogger("AudioSession");
+
+interface AudioSessionModuleType {
+	configureForCall: () => Promise<void>;
+	setOutputRoute: (route: string) => Promise<void>;
+	getAvailableRoutes: () => Promise<string[]>;
+	getCurrentRoute: () => Promise<string>;
+	setSpeakerphone: (enabled: boolean) => Promise<void>;
+}
+
+const AudioSessionModule = NativeModules.AudioSessionModule as
+	| AudioSessionModuleType
+	| undefined;
 
 interface AudioSessionProps {
 	/** Whether audio should be routed to speaker (loud speaker) */
 	useSpeaker?: boolean;
-	/** Whether to enable speakerphone automatically (reserved for future use) */
-	_enableSpeakerphone?: boolean;
 	children?: React.ReactNode;
 }
 
@@ -26,7 +41,7 @@ interface AudioSessionProps {
  * ```tsx
  * function CallScreen() {
  *   return (
- *     <AudioSession useSpeaker={true} enableSpeakerphone={true}>
+ *     <AudioSession useSpeaker={true}>
  *       <VideoGrid />
  *       <Controls />
  *     </AudioSession>
@@ -37,61 +52,26 @@ interface AudioSessionProps {
 export function AudioSession({
 	useSpeaker = false,
 	children,
-}: Omit<AudioSessionProps, "_enableSpeakerphone">) {
+}: AudioSessionProps) {
 	useEffect(() => {
-		if (Platform.OS === "ios") {
-			configureIOSAudioSession(useSpeaker);
-		} else if (Platform.OS === "android") {
-			configureAndroidAudioFocus();
-		}
+		configureAudioSession(useSpeaker);
 	}, [useSpeaker]);
 
 	return <>{children}</>;
 }
 
-/**
- * Configure iOS audio session for WebRTC
- * Requires linking with native AVAudioSession bindings
- */
-async function configureIOSAudioSession(useSpeaker: boolean): Promise<void> {
-	try {
-		// This would typically call into native code via NativeModules
-		// For now, we document the expected behavior
-		log.info(`iOS audio mode: ${useSpeaker ? "SPEAKER" : "EARPIECE"}`);
-
-		// Expected native implementation would do:
-		// const audioSession = AVAudioSession.sharedInstance();
-		// audioSession.setCategory("AVAudioSessionCategoryPlayAndRecord")
-		// audioSession.setMode("AVAudioSessionModeVoiceChat")
-		// audioSession.setActive(true)
-		// if (useSpeaker) {
-		//   audioSession.overrideOutputAudioPort("Speaker")
-		// }
-	} catch (err) {
-		log.error("iOS config error", err);
+async function configureAudioSession(useSpeaker: boolean): Promise<void> {
+	if (!AudioSessionModule) {
+		log.warn("AudioSessionModule not available - native module not linked");
+		return;
 	}
-}
 
-/**
- * Configure Android audio focus management
- * Ensures audio focus is maintained during calls
- */
-async function configureAndroidAudioFocus(): Promise<void> {
 	try {
-		// This would typically call into native code via NativeModules
-		// For now, we document the expected behavior
-		log.info("Android audio focus configured");
-
-		// Expected native implementation would do:
-		// final audioManager = context.getSystemService(Context.AUDIO_SERVICE)
-		// audioManager.requestAudioFocus(
-		//   audioFocusRequest,
-		//   AudioManager.AUDIOFOCUS_GAIN
-		// )
-		// audioManager.setMicrophoneMute(false)
-		// audioManager.setSpeakerphoneOn(useSpeaker)
+		await AudioSessionModule.configureForCall();
+		await AudioSessionModule.setSpeakerphone(useSpeaker);
+		log.info(`Audio configured: speaker=${useSpeaker}`);
 	} catch (err) {
-		log.error("Android config error", err);
+		log.error("Audio config error", err);
 	}
 }
 
@@ -100,47 +80,125 @@ async function configureAndroidAudioFocus(): Promise<void> {
  * Use this in your call screen components
  */
 export function useSpeakerphone() {
-	const [isSpeakerOn, setIsSpeakerOn] = React.useState(false);
+	const [isSpeakerOn, setIsSpeakerOn] = useState(false);
 
-	const toggle = React.useCallback(async () => {
+	const toggle = useCallback(async () => {
 		const newState = !isSpeakerOn;
-		setIsSpeakerOn(newState);
 
-		if (Platform.OS === "ios") {
-			await configureIOSAudioSession(newState);
-		} else if (Platform.OS === "android") {
-			// Android would use AudioManager.setSpeakerphoneOn(newState)
-			log.debug(`Android speakerphone: ${newState}`);
+		if (!AudioSessionModule) {
+			log.warn("AudioSessionModule not available");
+			setIsSpeakerOn(newState);
+			return;
+		}
+
+		try {
+			await AudioSessionModule.setSpeakerphone(newState);
+			setIsSpeakerOn(newState);
+			log.debug(`Speakerphone: ${newState}`);
+		} catch (err) {
+			log.error("Speakerphone toggle error", err);
 		}
 	}, [isSpeakerOn]);
 
-	return { isSpeakerOn, toggle };
-}
+	const setSpeaker = useCallback(async (enabled: boolean) => {
+		if (!AudioSessionModule) {
+			log.warn("AudioSessionModule not available");
+			setIsSpeakerOn(enabled);
+			return;
+		}
 
-/**
- * Hook to check if Bluetooth audio is available
- */
-export function useBluetoothAudio() {
-	const [isBluetoothAvailable] = React.useState(false);
-	const [isBluetoothConnected] = React.useState(false);
-
-	React.useEffect(() => {
-		if (Platform.OS === "android") {
-			checkBluetoothStatus();
-			const interval = setInterval(checkBluetoothStatus, 3000);
-			return () => clearInterval(interval);
+		try {
+			await AudioSessionModule.setSpeakerphone(enabled);
+			setIsSpeakerOn(enabled);
+		} catch (err) {
+			log.error("Speakerphone set error", err);
 		}
 	}, []);
 
+	return { isSpeakerOn, toggle, setSpeaker };
+}
+
+/**
+ * Hook to check if Bluetooth audio is available and manage Bluetooth routing
+ */
+export function useBluetoothAudio() {
+	const [isBluetoothAvailable, setIsBluetoothAvailable] = useState(false);
+	const [isBluetoothConnected, setIsBluetoothConnected] = useState(false);
+
+	useEffect(() => {
+		if (!AudioSessionModule) {
+			return;
+		}
+
+		// Check initial state
+		checkBluetoothStatus();
+
+		// Subscribe to route change events
+		const eventEmitter =
+			Platform.OS === "ios"
+				? new NativeEventEmitter(NativeModules.AudioSessionModule)
+				: DeviceEventEmitter;
+
+		const subscription = eventEmitter.addListener(
+			"onRouteChange",
+			(event: { route: string; availableRoutes?: string[] }) => {
+				log.debug("Route changed", event);
+				setIsBluetoothConnected(event.route === "bluetooth");
+				if (event.availableRoutes) {
+					setIsBluetoothAvailable(event.availableRoutes.includes("bluetooth"));
+				}
+			},
+		);
+
+		return () => subscription.remove();
+	}, []);
+
 	async function checkBluetoothStatus() {
+		if (!AudioSessionModule) {
+			return;
+		}
+
 		try {
-			// This would check Bluetooth audio device availability
-			// via native code or react-native-device-info
-			log.debug("Checking Bluetooth status");
+			const routes = await AudioSessionModule.getAvailableRoutes();
+			const currentRoute = await AudioSessionModule.getCurrentRoute();
+
+			setIsBluetoothAvailable(routes.includes("bluetooth"));
+			setIsBluetoothConnected(currentRoute === "bluetooth");
 		} catch (err) {
 			log.error("Bluetooth status check error", err);
 		}
 	}
 
-	return { isBluetoothAvailable, isBluetoothConnected };
+	const connectBluetooth = useCallback(async () => {
+		if (!AudioSessionModule) {
+			return;
+		}
+
+		try {
+			await AudioSessionModule.setOutputRoute("bluetooth");
+			setIsBluetoothConnected(true);
+		} catch (err) {
+			log.error("Bluetooth connect error", err);
+		}
+	}, []);
+
+	const disconnectBluetooth = useCallback(async () => {
+		if (!AudioSessionModule) {
+			return;
+		}
+
+		try {
+			await AudioSessionModule.setOutputRoute("speaker");
+			setIsBluetoothConnected(false);
+		} catch (err) {
+			log.error("Bluetooth disconnect error", err);
+		}
+	}, []);
+
+	return {
+		isBluetoothAvailable,
+		isBluetoothConnected,
+		connectBluetooth,
+		disconnectBluetooth,
+	};
 }

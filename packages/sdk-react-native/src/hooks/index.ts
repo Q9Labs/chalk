@@ -16,3 +16,15 @@ export {
 export { type UseRecordingResult, useRecording } from "./useRecording";
 export { type UseRoomResult, useRoom } from "./useRoom";
 export { type UseScreenShareResult, useScreenShare } from "./useScreenShare";
+export { type UseCallKitResult, useCallKit } from "./useCallKit";
+export {
+	type UseForegroundServiceResult,
+	useForegroundService,
+} from "./useForegroundService";
+export {
+	type ActiveReaction,
+	type UseInteractionsReturn,
+	useInteractions,
+	useHandRaise,
+} from "./useInteractions";
+export { type UseLocalStreamResult, useLocalStream } from "./useLocalStream";

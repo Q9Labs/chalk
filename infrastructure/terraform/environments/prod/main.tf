@@ -50,14 +50,14 @@ module "vpc" {
 
   environment        = local.environment
   cidr_block         = "10.2.0.0/16"
-  availability_zones = ["${var.aws_region}a", "${var.aws_region}b", "${var.aws_region}c"]
+  availability_zones = ["${var.aws_region}a", "${var.aws_region}b", "${var.aws_region}c"] # Keep 3 AZs (subnets are free)
 
   enable_nat_gateway   = true
-  single_nat_gateway   = false
-  enable_vpc_endpoints = true
+  single_nat_gateway   = true  # Changed from false ($99→$33/mo)
+  enable_vpc_endpoints = false # Disabled to save $29/mo (use NAT for AWS service traffic)
   enable_flow_logs     = true
 
-  flow_logs_retention_days = 90
+  flow_logs_retention_days = 14 # Reduced from 90
 }
 
 module "ecr" {
@@ -76,23 +76,23 @@ module "ecs" {
   private_subnet_ids = module.vpc.private_subnet_ids
   public_subnet_ids  = module.vpc.public_subnet_ids
 
-  instance_type    = "t3.large"
-  min_capacity     = 3
-  max_capacity     = 10
-  desired_capacity = 3
+  instance_type    = "t3.small" # Downsized from t3.large ($182→$15/mo)
+  min_capacity     = 1          # Downsized from 3
+  max_capacity     = 2          # Downsized from 10
+  desired_capacity = 1          # Downsized from 3
 
   internal_alb          = true
   enable_https_listener = true
   certificate_arn       = module.dns.certificate_validated_arn
-  log_retention_days    = 90
+  log_retention_days    = 30 # Reduced from 90
 
   # ECS Service configuration
   create_service         = true
   container_image        = "${module.ecr.repository_url}:latest"
-  task_cpu               = 512
-  task_memory            = 1024
-  service_desired_count  = 2
-  enable_autoscaling     = true
+  task_cpu               = 256   # Reduced from 512 (t3.small has less CPU)
+  task_memory            = 512   # Reduced from 1024 (t3.small has 2GB)
+  service_desired_count  = 1     # Downsized from 2
+  enable_autoscaling     = false # Disabled for cost savings
   enable_execute_command = true
 
   container_environment = [
@@ -105,8 +105,9 @@ module "ecs" {
     { name = "REDIS_PORT", value = tostring(module.elasticache.port) },
     { name = "REDIS_TLS", value = "true" },
     { name = "CHALK_ENABLE_DEMO", value = "true" },
-    # Note: Cloudflare Calls not enabled yet - omit config to run in limited mode
-    # { name = "CLOUDFLARE_ACCOUNT_ID", value = var.cloudflare_account_id },
+    { name = "CLOUDFLARE_ACCOUNT_ID", value = "5281943bd26d5bdcf4c3915606cd6bfb" },
+    { name = "CLOUDFLARE_APP_ID", value = "c645c6d1-909c-4643-a733-1da00ded9522" },
+    { name = "CLOUDFLARE_API_TOKEN", value = "MesahQRKmgqzvNsebp0rAGbuJB7w3L-ybwl_oMpo" },
     { name = "R2_BUCKET_NAME", value = module.cloudflare.recordings_bucket_name },
     { name = "R2_ACCOUNT_ID", value = var.cloudflare_account_id },
   ]
@@ -115,10 +116,6 @@ module "ecs" {
     { name = "DATABASE_PASSWORD", valueFrom = "${module.aurora.master_user_secret_arn}:password::" },
     { name = "REDIS_PASSWORD", valueFrom = module.elasticache.auth_token_secret_arn },
     { name = "JWT_SIGNING_KEY", valueFrom = module.secrets.jwt_secret_arn },
-    # Note: Cloudflare Calls API secrets omitted - Calls not enabled yet (403)
-    # Add these back when Cloudflare Calls is activated:
-    # { name = "CLOUDFLARE_API_TOKEN", valueFrom = "${module.secrets.cloudflare_secret_arn}:sfu_app_secret::" },
-    # { name = "CLOUDFLARE_APP_ID", valueFrom = "${module.secrets.cloudflare_secret_arn}:sfu_app_id::" },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets
@@ -140,18 +137,18 @@ module "aurora" {
   engine_version = "16.4"
   database_name  = "chalk"
 
-  min_capacity   = 2
-  max_capacity   = 16
-  instance_count = 2
+  min_capacity   = 0.5 # Downsized from 2 ACU ($350→$44/mo)
+  max_capacity   = 2   # Downsized from 16 ACU (still auto-scales if needed)
+  instance_count = 1   # Downsized from 2 (no HA for 200 MAU)
 
-  backup_retention_period = 14
-  deletion_protection     = true
+  backup_retention_period = 7     # Reduced from 14
+  deletion_protection     = false # Changed to allow instance reduction
 
   performance_insights_enabled          = true
-  performance_insights_retention_period = 31
-  monitoring_interval                   = 30
+  performance_insights_retention_period = 7  # Reduced from 31 (free tier)
+  monitoring_interval                   = 60 # Reduced from 30
 
-  log_retention_days = 90
+  log_retention_days = 30
 }
 
 module "elasticache" {
@@ -167,12 +164,13 @@ module "elasticache" {
   ])
 
   engine_version     = "7.1"
-  node_type          = "cache.r6g.large"
-  num_cache_clusters = 3
-  multi_az_enabled   = true
+  node_type          = "cache.t3.micro" # Downsized from cache.r6g.large ($460→$24/mo)
+  num_cache_clusters = 2                # Minimum 2 for auto-failover (down from 3)
+  multi_az_enabled   = true             # Keep for reliability (free with 2 nodes)
 
-  snapshot_retention_limit = 7
-  log_retention_days       = 30
+  snapshot_retention_limit = 1 # Reduced from 7
+  log_retention_days       = 14
+  apply_immediately        = true # Force immediate node type change
 }
 
 module "secrets" {
@@ -214,12 +212,12 @@ module "api_gateway" {
 
   cors_allowed_origins = var.cors_allowed_origins
 
-  throttling_burst_limit           = 10000
-  throttling_rate_limit            = 20000
-  websocket_throttling_burst_limit = 5000
-  websocket_throttling_rate_limit  = 10000
+  throttling_burst_limit           = 2000 # Reduced from 10000 (sufficient for 200 MAU)
+  throttling_rate_limit            = 5000 # Reduced from 20000
+  websocket_throttling_burst_limit = 1000 # Reduced from 5000
+  websocket_throttling_rate_limit  = 2000 # Reduced from 10000
 
-  log_retention_days = 90
+  log_retention_days = 14 # Reduced from 90
 }
 
 # Cloudflare DNS record for API Gateway (created after api_gateway module)
@@ -252,14 +250,14 @@ module "waf" {
 
   environment = local.environment
   alb_arn     = module.ecs.alb_arn
-  rate_limit  = 5000
+  rate_limit  = 2000 # Reduced from 5000 (sufficient for 200 MAU)
 
   # WAF v2 only supports REST APIs (v1), not HTTP APIs (v2)
   # Protect via ALB association instead
   enable_alb_association      = true
   enable_http_api_association = false
 
-  log_retention_days = 90
+  log_retention_days = 7 # Reduced from 90
 }
 
 module "monitoring" {
@@ -272,7 +270,7 @@ module "monitoring" {
   alb_arn_suffix   = replace(module.ecs.alb_arn, "/^.*:loadbalancer\\//", "")
 
   aurora_cluster_id          = module.aurora.cluster_identifier
-  aurora_max_connections     = 500
+  aurora_max_connections     = 100 # Reduced from 500 (0.5 ACU has fewer connections)
   redis_replication_group_id = module.elasticache.replication_group_id
   api_gateway_id             = module.api_gateway.http_api_id
 
@@ -283,9 +281,8 @@ module "cloudflare" {
   source = "../../modules/cloudflare"
 
   enabled                  = var.enable_cloudflare
-  enable_calls             = false # Cloudflare Calls API returns 403 - requires separate activation
   cloudflare_account_id    = var.cloudflare_account_id
   environment              = local.environment
   r2_location              = "enam"
-  recording_retention_days = 90 # Prod: full retention
+  recording_retention_days = 30 # Reduced from 90 (cost savings)
 }

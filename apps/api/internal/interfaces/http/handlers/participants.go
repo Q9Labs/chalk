@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/Q9Labs/chalk/internal/domain/participant"
+	"github.com/Q9Labs/chalk/internal/domain/room"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
@@ -13,11 +14,13 @@ import (
 
 type ParticipantHandler struct {
 	participantService *participant.Service
+	roomService        *room.Service
 }
 
-func NewParticipantHandler(participantService *participant.Service) *ParticipantHandler {
+func NewParticipantHandler(participantService *participant.Service, roomService *room.Service) *ParticipantHandler {
 	return &ParticipantHandler{
 		participantService: participantService,
+		roomService:        roomService,
 	}
 }
 
@@ -45,9 +48,26 @@ type AddParticipantResponse struct {
 }
 
 func (h *ParticipantHandler) Add(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to the caller's tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -57,16 +77,9 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
-	// Get tenant ID from JWT for auto-creating rooms
-	claims, _ := middleware.GetClaims(c)
-	var tenantID uuid.UUID
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-
 	output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
 		RoomID:         roomID,
-		TenantID:       tenantID,
+		TenantID:       claims.TenantID,
 		DisplayName:    req.DisplayName,
 		ExternalUserID: req.ExternalUserID,
 		Role:           req.Role,
@@ -80,7 +93,12 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
-	p, _ := h.participantService.GetParticipant(c.Request.Context(), output.ParticipantID)
+	// API-HIGH-08: Handle GetParticipant error instead of ignoring
+	p, err := h.participantService.GetParticipant(c.Request.Context(), output.ParticipantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve participant: " + err.Error()})
+		return
+	}
 
 	roomName := ""
 	if output.Room.Name != nil {
@@ -104,9 +122,26 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 }
 
 func (h *ParticipantHandler) List(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -130,9 +165,26 @@ func (h *ParticipantHandler) List(c *gin.Context) {
 }
 
 func (h *ParticipantHandler) Remove(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -161,9 +213,26 @@ func (h *ParticipantHandler) Remove(c *gin.Context) {
 }
 
 func (h *ParticipantHandler) RefreshToken(c *gin.Context) {
-	_, err := uuid.Parse(c.Param("id"))
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -201,9 +270,26 @@ type BulkAddRequest struct {
 }
 
 func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
 
@@ -222,6 +308,7 @@ func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
 	for _, p := range req.Participants {
 		output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
 			RoomID:         roomID,
+			TenantID:       claims.TenantID,
 			DisplayName:    p.DisplayName,
 			ExternalUserID: p.ExternalUserID,
 			Role:           p.Role,

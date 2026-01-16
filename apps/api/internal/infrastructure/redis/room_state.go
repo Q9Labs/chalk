@@ -31,7 +31,12 @@ func (r *RoomState) AddParticipant(ctx context.Context, roomID, participantID uu
 		return fmt.Errorf("failed to marshal participant metadata: %w", err)
 	}
 
-	return r.client.GetClient().HSet(ctx, key, participantID.String(), data).Err()
+	// API-MED-09: Set TTL on participant hash after adding
+	pipe := r.client.GetClient().Pipeline()
+	pipe.HSet(ctx, key, participantID.String(), data)
+	pipe.Expire(ctx, key, participantTTL)
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
 func (r *RoomState) RemoveParticipant(ctx context.Context, roomID, participantID uuid.UUID) error {
@@ -81,6 +86,10 @@ func (r *RoomState) GetRecordingState(ctx context.Context, roomID uuid.UUID) (*d
 	key := fmt.Sprintf(roomRecordingKey, roomID.String())
 	data, err := r.client.Get(ctx, key)
 	if err != nil {
+		// API-MED-10: Treat redis.Nil as "no recording" instead of error
+		if err.Error() == "redis: nil" {
+			return &domain.RecordingState{IsRecording: false, RecordingID: nil}, nil
+		}
 		return nil, err
 	}
 

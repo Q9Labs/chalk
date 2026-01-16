@@ -1,8 +1,22 @@
 import { createLogger } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
+import {
+	Alert,
+	Linking,
+	NativeModules,
+	PermissionsAndroid,
+	Platform,
+} from "react-native";
 
 const log = createLogger("usePermissions");
+
+/**
+ * Get the PermissionsModule from NativeModules at runtime
+ * Must be accessed dynamically because NativeModules is a Proxy
+ */
+function getPermissionsModule() {
+	return NativeModules.PermissionsModule;
+}
 
 /**
  * Permission status for each permission type
@@ -153,14 +167,34 @@ export function usePermissions(): UsePermissionsResult {
 				return state;
 			}
 
-			// iOS: Permissions are checked at request time by the system
-			// We can't check them proactively without react-native-permissions
-			// Return current state (will be updated after first request)
-			return permissions;
+			// iOS: Use native module to check AVFoundation permissions
+			const PermissionsModule = getPermissionsModule();
+			log.debug("Checking iOS permissions, module available:", !!PermissionsModule);
+			if (PermissionsModule?.checkPermissions) {
+				try {
+					const result = await PermissionsModule.checkPermissions();
+					log.debug("iOS permission result:", result);
+
+					const state: PermissionsState = {
+						camera: result.camera as PermissionStatus,
+						microphone: result.microphone as PermissionStatus,
+						notifications: "granted", // iOS notifications handled separately
+						bluetooth: "unavailable",
+					};
+
+					setPermissions(state);
+					return state;
+				} catch (error) {
+					log.error("iOS permission check failed", error);
+				}
+			}
+
+			// Fallback: return initial state (unavailable)
+			return initialState;
 		} finally {
 			setIsChecking(false);
 		}
-	}, [permissions]);
+	}, []); // No dependencies - check permissions once on mount
 
 	/**
 	 * Request camera and microphone permissions
@@ -193,9 +227,29 @@ export function usePermissions(): UsePermissionsResult {
 			}
 		}
 
-		// iOS: Permissions are requested automatically by react-native-webrtc
-		// when getUserMedia is called. The system will show the permission dialog.
-		// We assume they'll be granted since we can't check proactively.
+		// iOS: Request permissions via native module
+		const PermissionsModule = getPermissionsModule();
+		if (PermissionsModule?.requestCameraPermission) {
+			try {
+				const [cameraStatus, micStatus] = await Promise.all([
+					PermissionsModule.requestCameraPermission(),
+					PermissionsModule.requestMicrophonePermission(),
+				]);
+
+				setPermissions((prev) => ({
+					...prev,
+					camera: cameraStatus as PermissionStatus,
+					microphone: micStatus as PermissionStatus,
+				}));
+
+				return cameraStatus === "granted" && micStatus === "granted";
+			} catch (error) {
+				log.error("iOS permission request failed", error);
+				return false;
+			}
+		}
+
+		// Fallback: assume permissions will be requested by WebRTC
 		setPermissions((prev) => ({
 			...prev,
 			camera: "granted",

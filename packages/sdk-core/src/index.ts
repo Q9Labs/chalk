@@ -21,6 +21,8 @@
 
 // Main client
 export { ChalkClient } from "./client.ts";
+// API client (for React Native SDK which uses its own RTK integration)
+export { APIClient } from "./api-client.ts";
 // Event emitter (for advanced use cases)
 export { EventEmitter } from "./events.ts";
 // Room
@@ -103,11 +105,8 @@ export { StateContainer } from "./state/state-container.ts";
 export { ChalkSession } from "./session/chalk-session.ts";
 export type { ChalkSessionConfig, ChalkSessionEvents } from "./session/chalk-session.ts";
 
-// Individual managers
+// Individual managers (non-Effect)
 export {
-  RoomManager,
-  ParticipantManager,
-  MediaManager,
   ScreenShareManager,
   ChatManager,
   RecordingManager,

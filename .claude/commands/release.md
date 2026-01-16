@@ -1,1 +1,0 @@
-Release new version of @q9labs/* packages to GitHub Packages. Follow the release skill at `.claude/skills/release/SKILL.md`. Check current state, bump all package versions, commit, tag, push, monitor workflow, and verify all 5 packages publish successfully.

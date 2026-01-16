@@ -4,6 +4,7 @@
  */
 
 import RealtimeKitClient from "@cloudflare/realtimekit";
+import { Effect, pipe } from "effect";
 import { APIClient } from "./api-client.ts";
 import { EventEmitter } from "./events.ts";
 import { Room } from "./room.ts";
@@ -17,6 +18,11 @@ import type {
 } from "./types.ts";
 import { createLogger, initLogging, type Logger } from "./utils/logger.ts";
 import { WSClient } from "./ws-client.ts";
+import {
+  createOperationLock,
+  type OperationLock,
+} from "./effect/connection.ts";
+import { ConnectionError, TimeoutError } from "./effect/errors.ts";
 
 interface ChalkClientEvents {
   "token-expired": ChalkError;
@@ -29,7 +35,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private readonly debug: boolean;
   private currentRoom: Room | null = null;
   private currentWsClient: WSClient | null = null;
-  private isJoining = false; // Prevent concurrent joins
+  // Effect: OperationLock for serializing join operations
+  private readonly joinLock: OperationLock = createOperationLock();
   private readonly log: Logger;
 
   constructor(config: ChalkClientConfig) {
@@ -83,6 +90,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
   /**
    * Validate JWT token expiration
+   * SDKCORE-MED-03: Use Buffer.from for Node.js/SSR compatibility
    */
   private isTokenExpired(token: string): boolean {
     try {
@@ -90,22 +98,78 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       if (parts.length !== 3 || !parts[1]) {
         return true; // Invalid JWT format
       }
-      const payload = JSON.parse(atob(parts[1]));
+      // Decode base64 - works in both browser and Node.js
+      let decoded: string;
+      if (typeof atob === 'function') {
+        decoded = atob(parts[1]);
+      } else if (typeof Buffer !== 'undefined') {
+        decoded = Buffer.from(parts[1], 'base64').toString('utf-8');
+      } else {
+        // Fallback: assume not expired if we can't decode
+        return false;
+      }
+      const payload = JSON.parse(decoded);
       return Date.now() >= payload.exp * 1000;
     } catch {
       return true; // Invalid token format = treat as expired
     }
   }
 
+  /**
+   * Effect-based RTK initialization
+   * Uses Effect.tryPromise with proper error typing
+   */
+  private _initRealtimeKitEffect(authToken: string, audio: boolean, video: boolean) {
+    return Effect.tryPromise({
+      try: () =>
+        RealtimeKitClient.init({
+          authToken,
+          defaults: { audio, video },
+        }),
+      catch: (error) =>
+        new ConnectionError({
+          code: "CONNECTION_FAILED",
+          message: error instanceof Error ? error.message : "RealtimeKit init failed",
+          recoverable: true,
+          cause: error,
+        }),
+    });
+  }
+
+  /**
+   * Effect-based RTK join with timeout
+   * Uses Effect.timeoutOption for clean timeout handling
+   */
+  private _joinRealtimeKitEffect(rtkClient: RealtimeKitClient, timeoutMs = 10000) {
+    return pipe(
+      Effect.tryPromise({
+        try: () => rtkClient.join(),
+        catch: (error) =>
+          new ConnectionError({
+            code: "CONNECTION_FAILED",
+            message: error instanceof Error ? error.message : "RTK join failed",
+            recoverable: true,
+            cause: error,
+          }),
+      }),
+      Effect.timeout(`${timeoutMs} millis`),
+      Effect.flatMap((option) =>
+        option !== null
+          ? Effect.succeed(option)
+          : Effect.fail(
+              new TimeoutError({
+                message: `Room join timed out after ${timeoutMs}ms`,
+                operation: "joinRTKRoom",
+                timeoutMs,
+              })
+            )
+      )
+    );
+  }
+
   async joinRoom(roomId: string, config: RoomConfig): Promise<Room> {
-    // Prevent concurrent room joins
-    if (this.isJoining) {
-      throw new Error("Already joining a room. Please wait for the current operation to complete.");
-    }
-
-    try {
-      this.isJoining = true;
-
+    // Effect: Use OperationLock for serialized join (prevents concurrent joins)
+    return this.joinLock.withLock(async () => {
       // Clean up existing room before joining new one
       if (this.currentRoom) {
         this.log.info("Leaving existing room before joining new one");
@@ -149,7 +213,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
             tokens.rtcToken = newToken;
             this.log.info("Token refreshed successfully");
           } catch (refreshError) {
-            throw new Error("Token expired and refresh failed: " + 
+            throw new Error("Token expired and refresh failed: " +
               (refreshError instanceof Error ? refreshError.message : String(refreshError)));
           }
         } else {
@@ -183,23 +247,21 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         });
       }
 
-      // RealtimeKit path (media)
+      // Effect: RTK initialization with typed errors
       this.log.debug("Initializing RealtimeKit");
-
-      let rtkClient: RealtimeKitClient;
-      try {
-        rtkClient = await RealtimeKitClient.init({
-          authToken: tokens.rtcToken,
-          defaults: {
-            audio: config.audio ?? false,
-            video: config.video ?? false,
-          },
-        });
-      } catch (initError) {
-        const errorMsg = initError instanceof Error ? initError.message : String(initError);
-        this.log.error("RealtimeKit init failed", { error: errorMsg });
-        throw new Error(`RealtimeKit initialization failed: ${errorMsg}`);
-      }
+      const rtkClient = await Effect.runPromise(
+        this._initRealtimeKitEffect(
+          tokens.rtcToken,
+          config.audio ?? false,
+          config.video ?? false
+        )
+      ).catch((error) => {
+        if (error instanceof ConnectionError) {
+          this.log.error("RealtimeKit init failed", { error: error.message });
+          throw new Error(`RealtimeKit initialization failed: ${error.message}`);
+        }
+        throw error;
+      });
 
       if (!rtkClient) {
         this.log.error("RealtimeKit init returned null/undefined client");
@@ -213,28 +275,23 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       room._setInfo(roomInfo);
       room._setTokens(tokens);
 
-      // CRITICAL: Add timeout to WebSocket join
+      // Effect: RTK join with timeout handling
       this.log.debug("Joining RealtimeKit room");
-      try {
-        let timeoutId: NodeJS.Timeout;
-        const joinPromise = rtkClient.join();
-        const timeout = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new Error("WebSocket connection timeout after 10 seconds"));
-          }, 10000);
-        });
+      await Effect.runPromise(this._joinRealtimeKitEffect(rtkClient, 10000)).catch(
+        (error) => {
+          if (error instanceof TimeoutError) {
+            this.log.error("RTK join timed out", { timeoutMs: error.timeoutMs });
+            throw new Error(`Failed to join room: ${error.message}`);
+          }
+          if (error instanceof ConnectionError) {
+            this.log.error("Failed to join RealtimeKit room", { error: error.message });
+            throw new Error(`Failed to join room: ${error.message}`);
+          }
+          throw error;
+        }
+      );
 
-        await Promise.race([
-          joinPromise.finally(() => clearTimeout(timeoutId)),
-          timeout
-        ]);
-
-        this.log.info("Joined RealtimeKit room", { roomId });
-      } catch (joinError) {
-        const errorMsg = joinError instanceof Error ? joinError.message : String(joinError);
-        this.log.error("Failed to join RealtimeKit room", { error: errorMsg });
-        throw new Error(`Failed to join room: ${errorMsg}`);
-      }
+      this.log.info("Joined RealtimeKit room", { roomId });
 
       if (wsClient) {
         room.attachWsClient(wsClient);
@@ -248,10 +305,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
       this.currentRoom = room;
       return room;
-      
-    } finally {
-      this.isJoining = false;
-    }
+    });
   }
 
   /**
@@ -392,8 +446,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       this.currentWsClient.disconnect();
       this.currentWsClient = null;
     }
-
-    this.isJoining = false; // Reset join flag
+    // Note: OperationLock handles serialization automatically, no reset needed
     this.log.info("Disconnected");
   }
 }

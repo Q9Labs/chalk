@@ -5,10 +5,11 @@
 import { EventEmitter } from "./events.ts";
 import { camelToSnake, snakeToCamel } from "./transforms.ts";
 import { createLogger, type Logger } from "./utils/logger.ts";
+import { ChalkError, ChalkErrorCode } from "./errors/chalk-error.ts";
 import type {
 	ApiResponse,
 	ChalkClientConfig,
-	ChalkError,
+	ChalkError as ChalkErrorType,
 	CreateRoomResponse,
 	JoinRoomResponse,
 	Recording,
@@ -18,7 +19,7 @@ import type {
 } from "./types.ts";
 
 interface APIClientEvents {
-	"token-expired": ChalkError;
+	"token-expired": ChalkErrorType;
 }
 
 export class APIClient extends EventEmitter<APIClientEvents> {
@@ -27,6 +28,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	private readonly tokenProvider?: TokenProvider;
 	private token?: string;
 	private isRefreshingToken = false;
+	// SDKCORE-MED-02: Queue for serializing concurrent refresh requests
+	private refreshPromise: Promise<string | null> | null = null;
 	private readonly log: Logger = createLogger("API");
 
 	constructor(config: ChalkClientConfig) {
@@ -115,6 +118,14 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				return this.handle401<T>(method, path, body);
 			}
 
+			// SDKCORE-MED-01: Handle empty/204 responses before parsing JSON
+			if (response.status === 204 || response.headers.get("content-length") === "0") {
+				return {
+					success: true,
+					data: undefined as T,
+				};
+			}
+
 			const rawData = await response.json();
 			const data = snakeToCamel<T>(rawData);
 
@@ -162,7 +173,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		this.log.debug("Received 401, attempting token refresh");
 
 		if (!this.tokenProvider) {
-			const error: ChalkError = {
+			const error: ChalkErrorType = {
 				code: "TOKEN_EXPIRED",
 				message: "Authentication token expired. No tokenProvider configured.",
 			};
@@ -170,49 +181,57 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			return { success: false, error };
 		}
 
-		if (this.isRefreshingToken) {
+		// SDKCORE-MED-02: Serialize concurrent refresh requests
+		// If a refresh is already in progress, wait for it instead of failing
+		if (this.isRefreshingToken && this.refreshPromise) {
+			this.log.debug("Waiting for existing token refresh");
+			const token = await this.refreshPromise;
+			if (token) {
+				return this.request<T>(method, path, body, true);
+			}
 			return {
 				success: false,
 				error: {
 					code: "TOKEN_EXPIRED",
-					message: "Token refresh already in progress",
+					message: "Token refresh failed",
 				},
 			};
 		}
 
 		this.isRefreshingToken = true;
 
-		try {
-			const newToken = await this.tokenProvider();
-
-			// Only proceed if we got a valid token
-			if (!newToken) {
-				this.log.warn("Token refresh returned empty token");
-				const error: ChalkError = {
-					code: "TOKEN_EXPIRED",
-					message: "Token refresh failed: no token returned",
-				};
-				this.emit("token-expired", error);
-				return { success: false, error };
+		// Create a promise that other concurrent requests can await
+		this.refreshPromise = (async (): Promise<string | null> => {
+			try {
+				const newToken = await this.tokenProvider!();
+				if (!newToken) {
+					return null;
+				}
+				this.token = newToken;
+				return newToken;
+			} catch {
+				return null;
+			} finally {
+				this.isRefreshingToken = false;
+				this.refreshPromise = null;
 			}
+		})();
 
-			this.token = newToken;
-			this.log.debug("Token refreshed successfully");
-			return this.request<T>(method, path, body, true);
-		} catch (error) {
-			this.log.error("Token refresh failed", { error });
-			const chalkError: ChalkError = {
+		const newToken = await this.refreshPromise;
+
+		// Only proceed if we got a valid token
+		if (!newToken) {
+			this.log.warn("Token refresh returned empty token");
+			const error: ChalkErrorType = {
 				code: "TOKEN_EXPIRED",
-				message:
-					error instanceof Error
-						? error.message
-						: "Failed to refresh authentication token",
+				message: "Token refresh failed: no token returned",
 			};
-			this.emit("token-expired", chalkError);
-			return { success: false, error: chalkError };
-		} finally {
-			this.isRefreshingToken = false;
+			this.emit("token-expired", error);
+			return { success: false, error };
 		}
+
+		this.log.debug("Token refreshed successfully");
+		return this.request<T>(method, path, body, true);
 	}
 
 	// Room endpoints
@@ -286,12 +305,21 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	private transformJoinResponse(
 		data: TransformedJoinRoomApiResponse,
 	): JoinRoomResponse {
+		// SDKCORE-HIGH-01: Remove authToken fallback - authToken is RTC-only
+		// Demo mode returns 'token', standard mode returns 'accessToken'
+		const accessToken = data.token ?? data.accessToken;
+		if (!accessToken) {
+			throw new ChalkError(
+				ChalkErrorCode.AUTH_FAILED,
+				"Missing access token in join response - server did not provide valid authentication",
+			);
+		}
+
 		return {
 			participantId: data.participantId,
 			role: data.role ?? "participant",
 			tokens: {
-				// Demo mode returns 'token', standard mode returns 'accessToken'
-				accessToken: data.token ?? data.accessToken ?? data.authToken,
+				accessToken,
 				refreshToken: data.refreshToken,
 				rtcToken: data.authToken,
 				expiresAt: data.expiresAt,
