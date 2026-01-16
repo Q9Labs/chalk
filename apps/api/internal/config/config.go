@@ -74,11 +74,11 @@ type StorageConfig struct {
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	// Database config - prefer URL, fallback to parts
-	dbURL := getEnv("DATABASE_URL", "")
+	dbURL := getEnv("DATABASE_URL", "postgres://postgres:hello123@localhost:5432/chalk?sslmode=disable")
 	dbHost := getEnv("DATABASE_HOST", "localhost")
 	dbPort := getEnv("DATABASE_PORT", "5432")
-	dbName := getEnv("DATABASE_NAME", "my_app_db")
-	dbUser := getEnv("DATABASE_USER", "bilal123")
+	dbName := getEnv("DATABASE_NAME", "chalk")
+	dbUser := getEnv("DATABASE_USER", "postgres")
 	dbPassword := getEnv("DATABASE_PASSWORD", "hello123")
 	dbSSLMode := getEnv("DATABASE_SSLMODE", "disable")
 
@@ -111,7 +111,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: getEnv("PORT", "8081"),
+			Port: getEnv("PORT", "8080"),
 			Env:  getEnv("ENV", "development"),
 		},
 		Database: DatabaseConfig{

@@ -252,13 +252,15 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	return (
 		<div
 			className={cn(
-				" relative min-h-screen w-full text-white overflow-hidden p-6 flex flex-col justify-between",
+				"chalk-root relative min-h-screen w-full overflow-hidden p-6 flex flex-col justify-between",
 				className,
 			)}
 			data-chalk-theme={theme === "system" ? undefined : theme}
 		>
 			<div className="absolute top-6 left-8 z-10">
-				<h1 className="text-white/40 text-sm font-medium">{roomName || "Video Call Screen"}</h1>
+				<h1 className="text-sm font-semibold text-(--chalk-text-secondary)/80">
+					{roomName || "Video Call Screen"}
+				</h1>
 			</div>
 
 			{/* Layout Switcher */}
@@ -266,11 +268,21 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				<button
 					onClick={() => setLayout("grid")}
 					className={cn(
-						"px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+						"px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border",
 						layout === "grid"
-							? "bg-white/20 text-white"
-							: "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+							? "border-transparent"
+							: "border-(--chalk-pill-border) hover:border-transparent"
 					)}
+					style={{
+						background:
+							layout === "grid"
+								? "var(--chalk-pill-bg-active)"
+								: "var(--chalk-pill-bg)",
+						color:
+							layout === "grid"
+								? "var(--chalk-pill-text-active)"
+								: "var(--chalk-pill-text)",
+					}}
 					aria-label="Grid layout"
 				>
 					Grid
@@ -278,11 +290,21 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				<button
 					onClick={() => setLayout("spotlight")}
 					className={cn(
-						"px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+						"px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border",
 						layout === "spotlight"
-							? "bg-white/20 text-white"
-							: "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+							? "border-transparent"
+							: "border-(--chalk-pill-border) hover:border-transparent"
 					)}
+					style={{
+						background:
+							layout === "spotlight"
+								? "var(--chalk-pill-bg-active)"
+								: "var(--chalk-pill-bg)",
+						color:
+							layout === "spotlight"
+								? "var(--chalk-pill-text-active)"
+								: "var(--chalk-pill-text)",
+					}}
 					aria-label="Spotlight layout"
 				>
 					Spotlight
@@ -290,11 +312,21 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				<button
 					onClick={() => setLayout("sidebar")}
 					className={cn(
-						"px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+						"px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border",
 						layout === "sidebar"
-							? "bg-white/20 text-white"
-							: "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+							? "border-transparent"
+							: "border-(--chalk-pill-border) hover:border-transparent"
 					)}
+					style={{
+						background:
+							layout === "sidebar"
+								? "var(--chalk-pill-bg-active)"
+								: "var(--chalk-pill-bg)",
+						color:
+							layout === "sidebar"
+								? "var(--chalk-pill-text-active)"
+								: "var(--chalk-pill-text)",
+					}}
 					aria-label="Sidebar layout"
 				>
 					Sidebar

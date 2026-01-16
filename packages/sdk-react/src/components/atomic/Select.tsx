@@ -97,7 +97,7 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
               'flex items-center justify-between gap-2 rounded-xl border transition-colors focus:outline-none focus:ring-2 focus:border-transparent',
               'disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap',
               sizeClasses[size],
-              fullWidth ? 'w-full' : 'w-auto',
+              fullWidth ? 'w-[350px]' : 'w-auto',
               className
             )}
             style={{

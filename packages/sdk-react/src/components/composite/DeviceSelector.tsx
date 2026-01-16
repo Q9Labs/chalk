@@ -70,8 +70,8 @@ export const DeviceSelector = React.memo(({
         )}
       </div>
 
-      <div className="flex items-start gap-2">
-        <div className="flex-1">
+      <div className="">
+        <div className="flex">
           <Select
             options={options}
             value={selectedDeviceId}
@@ -80,7 +80,6 @@ export const DeviceSelector = React.memo(({
             placeholder={devices.length === 0 ? "No devices found" : "Select device"}
             fullWidth
           />
-        </div>
 
         {type === 'audioinput' && (
           <div className="h-10 w-10 flex items-center justify-center bg-chalk-bg-subtle rounded-md shrink-0">
@@ -95,7 +94,7 @@ export const DeviceSelector = React.memo(({
           <div className="shrink-0">
              <audio ref={audioRef} className="hidden" />
               <IconButton
-                icon={<Volume2 className={cn("w-4 h-4", isPlayingTestSound && "text-chalk-accent", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />}
+                icon={<Volume2 className={cn("w- h-4", isPlayingTestSound && "text-chalk-accent", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />}
                 onClick={playTestSound}
 
                disabled={disabled}
@@ -105,6 +104,8 @@ export const DeviceSelector = React.memo(({
           </div>
         )}
       </div>
+        </div>
+
 
       {type === 'videoinput' && previewTrack && (
         <div className="mt-2 aspect-video w-full overflow-hidden rounded-md bg-black relative">

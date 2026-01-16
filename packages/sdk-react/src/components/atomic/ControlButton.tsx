@@ -42,7 +42,7 @@ export const ControlButton = React.memo(
 					disabled={disabled}
 					data-tour={dataTour}
 					className={cn(
-						"group relative flex items-center justify-center transition-all duration-300 ease-out",
+						"group relative flex items-center justify-center text-white transition-all duration-300 ease-out",
 						size === "md" ? "h-[44px] w-[44px] rounded-full" : "h-14 w-14 rounded-full",
 						disabled && "cursor-not-allowed opacity-50",
 						// Default state (Purple Gradient)
@@ -67,7 +67,7 @@ export const ControlButton = React.memo(
 				return (
 					<div className="flex flex-col items-center gap-1">
 						{button}
-						<span className="text-[var(--chalk-font-size-xs)] text-[var(--chalk-text-secondary)]">
+						<span className="text-[var(--chalk-font-size-xs)] text-white/80">
 							{label}
 						</span>
 					</div>
