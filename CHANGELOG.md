@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.21] - 2026-01-17
+## [0.0.22] - 2026-01-17
+
+### Fixed
+
+- **SDK CI/CD workflow** - Added `NPM_TOKEN` env var to `bun install` steps for GitHub Packages authentication
+
+## [0.0.21] - 2026-01-17 (failed publish)
 
 ### Added
 
