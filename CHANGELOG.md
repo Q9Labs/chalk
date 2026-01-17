@@ -7,15 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.24] - 2026-01-17
+## [0.0.25] - 2026-01-17
 
 ### Fixed
 
 - **SDK CI/CD workflow** - Added `NPM_TOKEN` env var to `bun install` steps for GitHub Packages authentication
 - **Workspace dependencies** - Changed `@q9labs/chalk-core` and `@q9labs/chalk-whiteboard` internal deps to use `workspace:*` protocol
-- **Bun version mismatch** - Pinned bun to v1.3.2 in CI to match lockfile format
+- **Lockfile platform mismatch** - Removed `--frozen-lockfile` from CI (bun resolves platform-specific deps at install time)
 
-## [0.0.21-0.0.23] - 2026-01-17 (failed publishes due to CI issues)
+## [0.0.21-0.0.24] - 2026-01-17 (failed publishes due to CI issues)
 
 ### Added
 
