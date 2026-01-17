@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Web build OOM in CI** - Increased Node.js heap size to 4GB (`NODE_OPTIONS=--max-old-space-size=4096`) to prevent SSR build from running out of memory
 - **Web prerender failure** - Skip ChalkProvider during SSR/prerendering to avoid authentication errors
-- **ChalkProvider authentication in CI builds** - Added `VITE_CHALK_API_KEY` secret to web workflow build step so the API key is available at Vite's build time
+- **ChalkProvider authentication in CI builds** - Added `VITE_CHALK_API_KEY` secret to web workflow build step and included `VITE_*` in Turbo's cache key so env vars invalidate the build cache
 
 ### Changed
 

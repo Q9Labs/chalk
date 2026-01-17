@@ -14,7 +14,7 @@
 				"!**/*.spec.*"
 			],
 			"outputs": ["dist/**", ".output/**"],
-			"env": ["DATABASE_URL", "API_URL", "CLOUDFLARE_API_TOKEN"]
+			"env": ["DATABASE_URL", "API_URL", "CLOUDFLARE_API_TOKEN", "VITE_*"]
 		},
 		"dev": {
 			"cache": false,
