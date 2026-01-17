@@ -58,6 +58,7 @@ jobs:
         run: bun run build --filter=web 2>&1 | tee build.log
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Check build exit code
         if: failure()
