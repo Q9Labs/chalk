@@ -40,10 +40,13 @@ jobs:
           cache: true
           cache-dependency-path: bun.lock
 
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@q9labs:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+
       - name: Install dependencies
         run: bun install
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Type check
         run: bun run check-types
@@ -66,10 +69,13 @@ jobs:
           cache: true
           cache-dependency-path: bun.lock
 
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@q9labs:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+
       - name: Install dependencies
         run: bun install
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build SDK packages
         run: bunx turbo build --filter="@q9labs/*"
@@ -105,10 +111,13 @@ jobs:
           cache: true
           cache-dependency-path: bun.lock
 
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@q9labs:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+
       - name: Install dependencies
         run: bun install
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build SDK packages
         run: bunx turbo build --filter="@q9labs/*"
@@ -116,29 +125,29 @@ jobs:
       - name: Publish @q9labs/chalk-core
         run: |
           cd packages/sdk-core
-          bun publish
+          npm publish
         continue-on-error: false
 
       - name: Publish @q9labs/chalk-react
         run: |
           cd packages/sdk-react
-          bun publish
+          npm publish
         continue-on-error: false
 
       - name: Publish @q9labs/chalk-react-native
         run: |
           cd packages/sdk-react-native
-          bun publish
+          npm publish
         continue-on-error: false
 
       - name: Publish @q9labs/chalk-ui
         run: |
           cd packages/ui
-          bun publish
+          npm publish
         continue-on-error: false
 
       - name: Publish @q9labs/chalk-whiteboard
         run: |
           cd packages/chalk-whiteboard
-          bun publish
+          npm publish
         continue-on-error: false
