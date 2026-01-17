@@ -59,11 +59,6 @@ output "dashboard_url" {
 }
 
 # Cloudflare outputs
-output "cloudflare_sfu_app_id" {
-  description = "Cloudflare Calls SFU App ID for RealtimeKit"
-  value       = module.cloudflare.sfu_app_id
-}
-
 output "cloudflare_recordings_bucket" {
   description = "R2 bucket name for recordings"
   value       = module.cloudflare.recordings_bucket_name

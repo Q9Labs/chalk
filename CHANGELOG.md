@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CI/CD performance optimization** - Added caching to all workflows
+  - SDK/Web workflows: Bun dependency caching (~60-90s savings per job)
+  - Infrastructure workflow: Terraform provider caching (~30s savings per job)
+
+### Fixed
+
+- **Infrastructure CI/CD failure** - Removed invalid `cloudflare_sfu_app_id` output that referenced non-existent module attribute
+
+## [0.0.28] - 2026-01-17
+
+### Fixed
+
+- **GitHub Packages publish auth** - Changed from `NPM_TOKEN` to `GITHUB_TOKEN` for publishing. The workflow already has `packages: write` permission, so `GITHUB_TOKEN` works correctly.
+
 ## [0.0.27] - 2026-01-17
 
 ### Fixed
