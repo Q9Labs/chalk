@@ -20,6 +20,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
 jobs:
   lint-and-test:
     name: Lint & Test
@@ -111,39 +116,29 @@ jobs:
       - name: Publish @q9labs/chalk-core
         run: |
           cd packages/sdk-core
-          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" >> .npmrc
-          bun publish --access public
-        continue-on-error: true
+          bun publish
+        continue-on-error: false
 
       - name: Publish @q9labs/chalk-react
         run: |
           cd packages/sdk-react
-          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" >> .npmrc
-          bun publish --access public
-        continue-on-error: true
+          bun publish
+        continue-on-error: false
 
       - name: Publish @q9labs/chalk-react-native
         run: |
           cd packages/sdk-react-native
-          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" >> .npmrc
-          bun publish --access public
-        continue-on-error: true
+          bun publish
+        continue-on-error: false
 
       - name: Publish @q9labs/chalk-ui
         run: |
           cd packages/ui
-          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" >> .npmrc
-          bun publish --access public
-        continue-on-error: true
+          bun publish
+        continue-on-error: false
 
       - name: Publish @q9labs/chalk-whiteboard
         run: |
           cd packages/chalk-whiteboard
-          echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" >> .npmrc
-          bun publish --access public
-        continue-on-error: true
+          bun publish
+        continue-on-error: false
