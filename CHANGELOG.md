@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **CI runner optimization** - Switched non-Docker/Terraform jobs from Blacksmith to `ubuntu-latest` to reduce costs
+  - `sdk.yml`: All 3 jobs → `ubuntu-latest`
+  - `web.yml`: All 2 jobs → `ubuntu-latest`
+  - `api.yml`: 4 of 5 jobs → `ubuntu-latest` (kept `docker` on Blacksmith)
+  - `infra.yml`: All 5 jobs remain on Blacksmith (Terraform)
+
 ## [0.0.20] - 2026-01-16
 
 ### Added

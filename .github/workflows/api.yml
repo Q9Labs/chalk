@@ -47,7 +47,7 @@ permissions:
 jobs:
   lint-and-test:
     name: Lint & Test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     if: ${{ !inputs.skip_tests }}
     defaults:
       run:
@@ -84,7 +84,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs: lint-and-test
     if: always() && (needs.lint-and-test.result == 'success' || needs.lint-and-test.result == 'skipped')
     steps:
@@ -163,7 +163,7 @@ jobs:
 
   deploy:
     name: Deploy to ECS
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs: docker
     if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || inputs.force_deploy
     environment: ${{ inputs.environment || 'prod' }}
@@ -225,7 +225,7 @@ jobs:
 
   health-check:
     name: Health Check
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs: deploy
     if: needs.deploy.result == 'success'
     steps:
