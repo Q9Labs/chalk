@@ -52,7 +52,7 @@ permissions:
 jobs:
   validate:
     name: Validate
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,7 +79,7 @@ jobs:
   # Production deployment
   plan-prod:
     name: Plan (Prod)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs: validate
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
@@ -197,7 +197,7 @@ jobs:
   # Development deployment
   plan-dev:
     name: Plan (Dev)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs: validate
     if: |
       github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'

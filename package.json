@@ -5,7 +5,8 @@
 	"workspaces": [
 		"packages/*",
 		"packages/sdk-react-native/example",
-		"apps/web"
+		"apps/web",
+		"apps/mobile"
 	],
 	"scripts": {
 		"build": "turbo build",

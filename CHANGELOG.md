@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-01-17
+
+### Fixed
+
+- **npm peer dependency conflict** - Removed `react-native` and `typescript` from required peerDependencies in `@q9labs/chalk-ui`. Web consumers no longer get ERESOLVE errors.
+
 ## [0.0.26] - 2026-01-17
 
 ### Fixed

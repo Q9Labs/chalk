@@ -1,0 +1,21 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": ["./*"],
+      "@q9labs/chalk-core": ["../../packages/sdk-core/src"],
+      "@q9labs/chalk-core/*": ["../../packages/sdk-core/src/*"],
+      "@q9labs/chalk-react-native": ["../../packages/sdk-react-native/src"],
+      "@q9labs/chalk-react-native/*": ["../../packages/sdk-react-native/src/*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "../../packages/sdk-core/src/**/*.ts",
+    "../../packages/sdk-react-native/src/**/*.ts"
+  ]
+}

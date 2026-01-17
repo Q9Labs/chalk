@@ -10,9 +10,10 @@
 		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@q9labs/chalk-core": "0.0.17",
-		"@q9labs/chalk-react": "0.0.17",
-		"@q9labs/chalk-whiteboard": "0.0.17",
+		"@q9labs/chalk-core": "workspace:*",
+		"@q9labs/chalk-react": "workspace:*",
+		"@q9labs/chalk-ui": "workspace:*",
+		"@q9labs/chalk-whiteboard": "workspace:*",
 		"next": "14.2.35",
 		"react": "^18",
 		"react-dom": "^18"
