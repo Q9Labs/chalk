@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-01-17
+
+### Added
+
+- **Pre-built CSS exports for external consumers** - SDK packages now export compiled CSS with all Tailwind utilities
+  - `@q9labs/chalk-ui/styles.css` - UI components CSS (34KB minified)
+  - `@q9labs/chalk-react/styles.css` - React SDK CSS with variables, animations, and utilities (62KB minified)
+  - Enables Next.js compatibility without `transpilePackages` or Tailwind config
+  - Consumer usage: `import '@q9labs/chalk-ui/styles.css'`
+
 ### Fixed
 
 - **Web build OOM in CI** - Increased Node.js heap size to 4GB (`NODE_OPTIONS=--max-old-space-size=4096`) to prevent SSR build from running out of memory

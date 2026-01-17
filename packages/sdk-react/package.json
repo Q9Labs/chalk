@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -33,7 +33,7 @@
   "scripts": {
     "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:fix-use-client && bun run build:types && bun run build:styles",
     "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
-    "build:styles": "mkdir -p ./dist/styles && cp ./src/styles/*.css ./dist/styles/",
+    "build:styles": "bunx @tailwindcss/cli -i ./src/styles/index.css -o ./dist/styles/bundled.css --minify && cp ./src/styles/variables.css ./src/styles/animations.css ./src/styles/base.css ./dist/styles/",
     "build:types": "tsc --project tsconfig.json",
     "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
     "test": "bun test --preload ./src/__tests__/setup.ts",
