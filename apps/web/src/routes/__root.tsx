@@ -9,6 +9,9 @@ import {
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+// SSR check - ChalkProvider requires browser APIs
+const isServer = typeof window === "undefined";
+
 import "../../../../packages/sdk-react/src/styles/base.css";
 import appCss from "../styles.css?url";
 
@@ -93,6 +96,29 @@ function RootComponent() {
 		[apiKey, apiUrl],
 	);
 
+	const content = (
+		<div
+			className={` overflow-hidden bg-background text-foreground ${theme}`}
+		>
+			<div className="fixed top-4 right-4 z-50">
+				<button
+					type="button"
+					onClick={toggleTheme}
+					className="p-2 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+					aria-label="Toggle theme"
+				>
+					{theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+				</button>
+			</div>
+			<Outlet />
+		</div>
+	);
+
+	// ChalkProvider requires browser APIs - skip during SSR/prerender
+	if (isServer) {
+		return content;
+	}
+
 	return (
 		<ChalkProvider
 			debug={false}
@@ -100,21 +126,7 @@ function RootComponent() {
 			wsUrl={wsUrl}
 			tokenProvider={tokenProvider}
 		>
-			<div
-				className={` overflow-hidden bg-background text-foreground ${theme}`}
-			>
-				<div className="fixed top-4 right-4 z-50">
-					<button
-						type="button"
-						onClick={toggleTheme}
-						className="p-2 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
-						aria-label="Toggle theme"
-					>
-						{theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
-					</button>
-				</div>
-				<Outlet />
-			</div>
+			{content}
 		</ChalkProvider>
 	);
 }

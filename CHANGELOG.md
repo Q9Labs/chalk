@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Web build OOM in CI** - Increased Node.js heap size to 4GB (`NODE_OPTIONS=--max-old-space-size=4096`) to prevent SSR build from running out of memory
+- **Web prerender failure** - Skip ChalkProvider during SSR/prerendering to avoid authentication errors
 
 ### Changed
 
