@@ -112,48 +112,48 @@ jobs:
         run: |
           cd packages/sdk-core
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
           bun publish --access public
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @q9labs/chalk-react
         run: |
           cd packages/sdk-react
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
           bun publish --access public
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @q9labs/chalk-react-native
         run: |
           cd packages/sdk-react-native
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
           bun publish --access public
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @q9labs/chalk-ui
         run: |
           cd packages/ui
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
           bun publish --access public
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @q9labs/chalk-whiteboard
         run: |
           cd packages/chalk-whiteboard
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
           bun publish --access public
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
