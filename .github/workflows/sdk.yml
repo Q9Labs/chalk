@@ -107,7 +107,7 @@ jobs:
           cd packages/sdk-core
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
-          npm publish --access public
+          bun publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
@@ -117,7 +117,7 @@ jobs:
           cd packages/sdk-react
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
-          npm publish --access public
+          bun publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
@@ -127,7 +127,7 @@ jobs:
           cd packages/sdk-react-native
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
-          npm publish --access public
+          bun publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
@@ -137,7 +137,7 @@ jobs:
           cd packages/ui
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
-          npm publish --access public
+          bun publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
@@ -147,7 +147,7 @@ jobs:
           cd packages/chalk-whiteboard
           echo "@q9labs:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
-          npm publish --access public
+          bun publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true

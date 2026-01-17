@@ -2,9 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
-
-@source "../../../packages/ui/src/**/*.{ts,tsx}";
-@source "../../../packages/sdk-react/src/**/*.{ts,tsx}";
+@import "@q9labs/chalk-ui/styles.css";
+@import "@q9labs/chalk-react/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 

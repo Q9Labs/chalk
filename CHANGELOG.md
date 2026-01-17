@@ -7,12 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.25] - 2026-01-17
+## [0.0.26] - 2026-01-17
+
+### Fixed
+
+- **npm install EUNSUPPORTEDPROTOCOL error** - CI was using `npm publish` which doesn't understand `workspace:` protocol. Changed to `bun publish` which correctly replaces `workspace:^` → `^0.0.26` during publish.
+
+## [0.0.25] - 2026-01-17 (broken - use 0.0.26)
 
 ### Fixed
 
 - **SDK CI/CD workflow** - Added `NPM_TOKEN` env var to `bun install` steps for GitHub Packages authentication
-- **Workspace dependencies** - Changed `@q9labs/chalk-core` and `@q9labs/chalk-whiteboard` internal deps to use `workspace:*` protocol
+- **Workspace dependencies** - Changed deps to use `workspace:*` protocol (broken for consumers, fixed in 0.0.26)
 - **Lockfile platform mismatch** - Removed `--frozen-lockfile` from CI (bun resolves platform-specific deps at install time)
 
 ## [0.0.21-0.0.24] - 2026-01-17 (failed publishes due to CI issues)
