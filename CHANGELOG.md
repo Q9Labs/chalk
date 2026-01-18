@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Mobile UI support in MeetingRoom** - Integrated MobilePanel for full-screen chat, participants, and transcription on mobile devices
+  - Uses `useIsMobile()` hook for responsive detection
+  - Full-screen swipe-to-dismiss panels replace desktop sidebar on mobile
+  - Adjusted padding and hidden layout switcher on mobile
+  - Grid layout forced on mobile for optimal viewing
+
 ### Changed
 
 - **CI/CD performance optimization** - Added caching to all workflows

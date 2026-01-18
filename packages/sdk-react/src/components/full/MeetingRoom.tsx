@@ -1,12 +1,14 @@
 import type React from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
+import { useIsMobile } from "../../hooks/useMediaQuery";
 import { AudioRenderer } from "../atomic";
 import {
 	ChatPanel,
 	ConnectionLostOverlay,
 	ControlBar,
 	InviteModal,
+	MobilePanel,
 	NotificationStack,
 	ParticipantList,
 	ReactionPicker,
@@ -165,6 +167,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	const [showTour, setShowTour] = useState(false);
 	const [isIdle, setIsIdle] = useState(false);
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const isMobile = useIsMobile();
 
 	const resetIdleTimer = useCallback(() => {
 		setIsIdle(false);
@@ -252,19 +255,20 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	return (
 		<div
 			className={cn(
-				"chalk-root relative min-h-screen w-full overflow-hidden p-6 flex flex-col justify-between",
+				"chalk-root relative min-h-screen w-full overflow-hidden flex flex-col justify-between",
+				isMobile ? "p-2" : "p-6",
 				className,
 			)}
 			data-chalk-theme={theme === "system" ? undefined : theme}
 		>
-			<div className="absolute top-6 left-8 z-10">
+			<div className={cn("absolute z-10", isMobile ? "top-3 left-3" : "top-6 left-8")}>
 				<h1 className="text-sm font-semibold text-(--chalk-text-secondary)/80">
 					{roomName || "Video Call Screen"}
 				</h1>
 			</div>
 
-			{/* Layout Switcher */}
-			<div className="absolute top-6 right-8 z-10 flex gap-2">
+			{/* Layout Switcher - hidden on mobile */}
+			<div className={cn("absolute top-6 right-8 z-10 gap-2", isMobile ? "hidden" : "flex")}>
 				<button
 					onClick={() => setLayout("grid")}
 					className={cn(
@@ -334,7 +338,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			</div>
 
 			{/* Main content area */}
-			<div className="flex-1 min-h-0 relative pt-8 flex flex-row gap-4">
+			<div className={cn("flex-1 min-h-0 relative flex flex-row gap-4", isMobile ? "pt-6" : "pt-8")}>
 				<div
 					className="flex-1 min-h-0 h-full relative"
 					data-tour="video-grid"
@@ -346,7 +350,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 							participants={allParticipants}
 						/>
 					) : (
-						<VideoGrid participants={allParticipants} layout={layout} />
+						<VideoGrid participants={allParticipants} layout={isMobile ? "grid" : layout} />
 					)}
 
 					<div className="absolute top-4 right-4 z-50">
@@ -354,7 +358,8 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					</div>
 				</div>
 
-				{activePanel && (
+				{/* Desktop sidebar panels */}
+				{!isMobile && activePanel && (
 					<div className="w-[340px] shrink-0 rounded-xl overflow-hidden flex flex-col shadow-2xl transition-all duration-300 ease-in-out self-stretch">
 						{activePanel === "chat" && (
 							<ChatPanel
@@ -381,6 +386,34 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					</div>
 				)}
 			</div>
+
+			{/* Mobile full-screen panels */}
+			{isMobile && activePanel === "chat" && (
+				<MobilePanel title="Chat" onClose={() => setActivePanel(null)}>
+					<ChatPanel
+						messages={chatMessages}
+						onSendMessage={onSendMessage || (() => {})}
+						onClose={() => setActivePanel(null)}
+					/>
+				</MobilePanel>
+			)}
+			{isMobile && activePanel === "participants" && (
+				<MobilePanel title="Participants" onClose={() => setActivePanel(null)}>
+					<ParticipantList
+						participants={allParticipants}
+						onClose={() => setActivePanel(null)}
+						onAddPeople={handleAddPeople}
+					/>
+				</MobilePanel>
+			)}
+			{isMobile && activePanel === "transcription" && (
+				<MobilePanel title="Transcription" onClose={() => setActivePanel(null)}>
+					<TranscriptionPanel
+						transcripts={transcripts}
+						onClose={() => setActivePanel(null)}
+					/>
+				</MobilePanel>
+			)}
 
 			{/* Auto-hide control bar */}
 			<div

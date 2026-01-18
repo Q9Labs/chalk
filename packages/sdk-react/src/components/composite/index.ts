@@ -38,5 +38,6 @@ export * from './MediaPreview';
 // Controls
 export * from './ControlBar';
 export * from './MobileControlSheet';
+export * from './MobilePanel';
 export * from './ReactionPicker';
 export * from './RecordingControls';
