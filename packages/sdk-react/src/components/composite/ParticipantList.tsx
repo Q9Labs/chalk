@@ -33,7 +33,7 @@ export interface ParticipantListProps {
   searchable?: boolean;
   onClose?: () => void;
   className?: string;
-  variant?: 'default' | 'sidebar';
+  variant?: 'default' | 'sidebar' | 'mobile';
   title?: string;
 }
 
@@ -254,9 +254,55 @@ export const ParticipantList = React.memo(({
     </div>
   );
 
+  // Mobile variant - fills container, no header (MobilePanel provides it)
+  if (variant === 'mobile') {
+    return (
+      <div
+        className={cn(
+          "flex flex-col h-full w-full overflow-hidden font-sans relative",
+          className
+        )}
+        style={{ backgroundColor: '#151515' }}
+        data-tour="participants-panel"
+        role="complementary"
+        aria-label="Participants list"
+      >
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {onAddPeople && (
+            <button
+              onClick={onAddPeople}
+              className="w-full bg-primary hover:bg-primary/80 text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-4 font-medium text-sm shadow-lg min-h-[48px]"
+            >
+              <Users className="w-4 h-4" />
+              <span>Add people</span>
+            </button>
+          )}
+
+          {/* Section Label */}
+          <div className="mb-3 px-1">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-gray-500 font-semibold">
+              IN THE MEETING ({participants.length})
+            </p>
+          </div>
+
+          {/* Participants List */}
+          <div className="space-y-1">
+            {filteredParticipants.length === 0 ? (
+              <div className="p-8 text-center text-sm text-gray-500">
+                No participants found
+              </div>
+            ) : (
+              filteredParticipants.map(renderParticipantRow)
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (variant === 'sidebar') {
     return (
-      <div 
+      <div
         className={cn(
           "flex flex-col h-full w-full overflow-hidden font-sans relative",
           !prefersReducedMotion && "chalk-animate-slide-right",

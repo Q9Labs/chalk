@@ -41,7 +41,7 @@ export type ControlBarButton =
 
 export interface ControlBarProps {
 	position?: "bottom" | "top";
-	variant?: "floating" | "fixed" | "minimal";
+	variant?: "floating" | "fixed" | "minimal" | "mobile";
 	showLabels?: boolean;
 	buttons?: ControlBarButton[];
 
@@ -98,6 +98,7 @@ export const ControlBar = React.memo(
 		isWhiteboardOpen = false,
 		meetingDuration = 0,
 		showLabels = false,
+		variant = "floating",
 
 		onToggleMute,
 		onToggleVideo,
@@ -280,6 +281,82 @@ export const ControlBar = React.memo(
 					return null;
 			}
 		};
+
+		// Mobile variant: Minimal floating bar with Mic, Video, More, Leave
+		if (variant === "mobile") {
+			return (
+				<div
+					className={cn(
+						"flex items-center justify-center gap-3 px-4 py-3 rounded-full mx-auto",
+						className,
+					)}
+					style={{
+						background: "rgba(0, 0, 0, 0.7)",
+						backdropFilter: "blur(12px)",
+						WebkitBackdropFilter: "blur(12px)",
+						paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+					}}
+					role="toolbar"
+					aria-label="Meeting controls"
+				>
+					{/* Mic toggle */}
+					<button
+						type="button"
+						onClick={onToggleMute}
+						className={cn(
+							"flex items-center justify-center w-12 h-12 rounded-full transition-all active:scale-95",
+							isMuted ? "bg-red-500/20" : "bg-white/10"
+						)}
+						aria-label={isMuted ? "Unmute" : "Mute"}
+						aria-pressed={!isMuted}
+					>
+						{isMuted ? (
+							<MicOff className="w-6 h-6 text-red-500" />
+						) : (
+							<Mic className="w-6 h-6 text-white" />
+						)}
+					</button>
+
+					{/* Video toggle */}
+					<button
+						type="button"
+						onClick={onToggleVideo}
+						className={cn(
+							"flex items-center justify-center w-12 h-12 rounded-full transition-all active:scale-95",
+							!isVideoEnabled ? "bg-red-500/20" : "bg-white/10"
+						)}
+						aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
+						aria-pressed={isVideoEnabled}
+					>
+						{isVideoEnabled ? (
+							<Video className="w-6 h-6 text-white" />
+						) : (
+							<VideoOff className="w-6 h-6 text-red-500" />
+						)}
+					</button>
+
+					{/* More button */}
+					<button
+						type="button"
+						onClick={onOpenMore}
+						className="flex items-center justify-center w-12 h-12 rounded-full bg-white/10 transition-all active:scale-95"
+						aria-label="More options"
+					>
+						<MoreHorizontal className="w-6 h-6 text-white" />
+					</button>
+
+					{/* Leave button */}
+					<button
+						type="button"
+						onClick={onLeave}
+						className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 transition-all active:scale-95"
+						aria-label="Leave meeting"
+					>
+						<PhoneOff className="w-5 h-5 text-white" />
+					</button>
+				</div>
+			);
+		}
 
 		return (
 			<div

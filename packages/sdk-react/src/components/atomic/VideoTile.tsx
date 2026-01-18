@@ -23,7 +23,7 @@ export interface VideoTileProps {
   mirror?: boolean;
   showName?: boolean;
   showStatus?: boolean;
-  aspectRatio?: '16:9' | '4:3' | '1:1';
+  aspectRatio?: '16:9' | '4:3' | '1:1' | 'fill';
   onClick?: () => void;
   onDoubleClick?: () => void;
   pinned?: boolean;
@@ -43,6 +43,7 @@ const aspectRatioClasses = {
   '16:9': 'aspect-video',
   '4:3': 'aspect-[4/3]',
   '1:1': 'aspect-square',
+  'fill': '', // No aspect ratio - fill container
 };
 
 export const VideoTile = React.memo(({

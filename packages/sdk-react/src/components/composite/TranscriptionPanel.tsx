@@ -30,7 +30,7 @@ export interface TranscriptionPanelProps {
   onExport?: (format: 'txt' | 'srt' | 'vtt') => void;
   onClose?: () => void;
   position?: 'right' | 'bottom';
-  variant?: 'default' | 'sidebar';
+  variant?: 'default' | 'sidebar' | 'mobile';
   className?: string;
 }
 
@@ -100,9 +100,97 @@ export const TranscriptionPanel = React.memo(({
     return colors[Math.abs(hash) % colors.length];
   };
 
+  // Mobile variant - no header (MobilePanel provides it)
+  if (variant === 'mobile') {
+    return (
+      <div
+        className={cn(
+          "flex flex-col h-full w-full overflow-hidden font-sans relative",
+          className
+        )}
+        style={{ background: '#151515' }}
+        data-tour="transcription-panel"
+        role="complementary"
+        aria-label="Live transcription"
+      >
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {searchable && (
+            <div className="mb-4">
+              <Input
+                placeholder="Search transcript..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                icon={<Search className="w-4 h-4" />}
+                iconPosition="left"
+                className="w-full"
+                size="sm"
+              />
+            </div>
+          )}
+
+          <div
+            ref={containerRef}
+            className="rounded-2xl overflow-hidden p-4 space-y-3 relative"
+            style={{
+              backgroundColor: '#0f0707ff',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              minHeight: '200px'
+            }}
+            onScroll={handleScroll}
+          >
+            {isLive && (
+              <div className="flex items-center gap-2 mb-3">
+                <StatusBadge status="transcribing" size="sm" pulse />
+                <span className="text-xs text-gray-400">Live transcription</span>
+              </div>
+            )}
+
+            {filteredTranscripts.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 py-8">
+                <p className="text-sm">Transcription will appear here</p>
+              </div>
+            ) : (
+              filteredTranscripts.map((entry) => (
+                <TranscriptLine
+                  key={entry.id}
+                  speaker={entry.speaker}
+                  speakerId={entry.speakerId}
+                  text={entry.text}
+                  timestamp={entry.timestamp}
+                  isInterim={entry.isInterim}
+                  confidence={showConfidence ? entry.confidence : undefined}
+                  showTimestamp={showTimestamps}
+                  showSpeaker={showSpeakerNames}
+                  speakerColor={getSpeakerColor(entry.speakerId)}
+                />
+              ))
+            )}
+            <div ref={endRef} />
+
+            {!autoScroll && (
+              <div className="sticky bottom-0 flex justify-center pb-2 pointer-events-none">
+                <button
+                  onClick={() => {
+                    setAutoScroll(true);
+                    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="bg-[#151515] text-white px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto hover:bg-[#252525] transition-colors"
+                >
+                  <ArrowDown className="w-3 h-3" />
+                  New content
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (variant === 'sidebar') {
     return (
-      <div 
+      <div
         className={cn(
           "flex flex-col h-full w-full overflow-hidden font-sans relative",
           !prefersReducedMotion && "chalk-animate-slide-right",

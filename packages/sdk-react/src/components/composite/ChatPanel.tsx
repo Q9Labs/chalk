@@ -21,6 +21,8 @@ export interface ChatPanelProps {
   placeholder?: string;
   className?: string;
   title?: string;
+  /** Variant for different layouts */
+  variant?: 'sidebar' | 'mobile';
 }
 
 const chatStyles = {
@@ -110,6 +112,7 @@ export const ChatPanel = React.memo(({
   disabled = false,
   placeholder = "Type a message...",
   title = "Chat",
+  variant = 'sidebar',
   className
 }: ChatPanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -161,7 +164,7 @@ export const ChatPanel = React.memo(({
     <div
       className={cn(
         "flex flex-col h-full w-full",
-        !prefersReducedMotion && "animate-in slide-in-from-right-5 duration-300",
+        !prefersReducedMotion && variant !== 'mobile' && "animate-in slide-in-from-right-5 duration-300",
         className
       )}
       style={chatStyles.container}
@@ -169,30 +172,32 @@ export const ChatPanel = React.memo(({
       role="complementary"
       aria-label="Chat panel"
     >
-      {/* Header - "Chat" with three-dot menu */}
-      <div
-        className="flex items-center justify-between"
-        style={chatStyles.header}
-      >
-        <h2 style={chatStyles.title}>{title}</h2>
-        <div className="flex items-center gap-2">
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex items-center justify-center transition-opacity hover:opacity-70"
-              style={chatStyles.moreButton}
-              aria-label="More options"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="5" r="2" />
-                <circle cx="12" cy="12" r="2" />
-                <circle cx="12" cy="19" r="2" />
-              </svg>
-            </button>
-          )}
+      {/* Header - Only show for sidebar variant (mobile uses MobilePanel header) */}
+      {variant === 'sidebar' && (
+        <div
+          className="flex items-center justify-between"
+          style={chatStyles.header}
+        >
+          <h2 style={chatStyles.title}>{title}</h2>
+          <div className="flex items-center gap-2">
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex items-center justify-center transition-opacity hover:opacity-70"
+                style={chatStyles.moreButton}
+                aria-label="More options"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="5" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="12" cy="19" r="2" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Messages area */}
       <div

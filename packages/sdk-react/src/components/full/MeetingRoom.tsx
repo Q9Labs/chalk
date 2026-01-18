@@ -8,6 +8,7 @@ import {
 	ConnectionLostOverlay,
 	ControlBar,
 	InviteModal,
+	MobileControlSheet,
 	MobilePanel,
 	NotificationStack,
 	ParticipantList,
@@ -166,6 +167,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	const [showInviteModal, setShowInviteModal] = useState(false);
 	const [showTour, setShowTour] = useState(false);
 	const [isIdle, setIsIdle] = useState(false);
+	const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const isMobile = useIsMobile();
 
@@ -338,7 +340,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			</div>
 
 			{/* Main content area */}
-			<div className={cn("flex-1 min-h-0 relative flex flex-row gap-4", isMobile ? "pt-6" : "pt-8")}>
+			<div className={cn("flex-1 min-h-0 relative flex flex-row gap-4", isMobile ? "pt-6 pb-20" : "pt-8")}>
 				<div
 					className="flex-1 min-h-0 h-full relative"
 					data-tour="video-grid"
@@ -350,7 +352,11 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 							participants={allParticipants}
 						/>
 					) : (
-						<VideoGrid participants={allParticipants} layout={isMobile ? "grid" : layout} />
+						<VideoGrid
+							participants={allParticipants}
+							layout={layout}
+							variant={isMobile ? "mobile" : "desktop"}
+						/>
 					)}
 
 					<div className="absolute top-4 right-4 z-50">
@@ -393,26 +399,61 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					<ChatPanel
 						messages={chatMessages}
 						onSendMessage={onSendMessage || (() => {})}
-						onClose={() => setActivePanel(null)}
+						variant="mobile"
 					/>
 				</MobilePanel>
 			)}
 			{isMobile && activePanel === "participants" && (
-				<MobilePanel title="Participants" onClose={() => setActivePanel(null)}>
+				<MobilePanel title="People" onClose={() => setActivePanel(null)}>
 					<ParticipantList
 						participants={allParticipants}
-						onClose={() => setActivePanel(null)}
+						variant="mobile"
 						onAddPeople={handleAddPeople}
 					/>
 				</MobilePanel>
 			)}
 			{isMobile && activePanel === "transcription" && (
-				<MobilePanel title="Transcription" onClose={() => setActivePanel(null)}>
+				<MobilePanel title="Transcript" onClose={() => setActivePanel(null)}>
 					<TranscriptionPanel
 						transcripts={transcripts}
-						onClose={() => setActivePanel(null)}
+						variant="mobile"
 					/>
 				</MobilePanel>
+			)}
+
+			{/* Mobile Control Sheet */}
+			{isMobile && (
+				<MobileControlSheet
+					isOpen={isMobileSheetOpen}
+					onClose={() => setIsMobileSheetOpen(false)}
+					isMuted={isMuted}
+					isVideoEnabled={isVideoEnabled}
+					isScreenSharing={isScreenSharing}
+					isRecording={isRecording}
+					isChatOpen={activePanel === "chat"}
+					isParticipantsOpen={activePanel === "participants"}
+					isTranscriptionEnabled={activePanel === "transcription"}
+					isHandRaised={isHandRaised}
+					isWhiteboardOpen={isWhiteboardOpen}
+					onToggleMute={onToggleMute}
+					onToggleVideo={onToggleVideo}
+					onToggleScreenShare={enableScreenShare ? onToggleScreenShare : undefined}
+					onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
+					onToggleChat={enableChat ? () => { togglePanel("chat"); setIsMobileSheetOpen(false); } : undefined}
+					onToggleParticipants={() => { togglePanel("participants"); setIsMobileSheetOpen(false); }}
+					onToggleTranscription={enableTranscription ? () => { togglePanel("transcription"); onToggleTranscription?.(); setIsMobileSheetOpen(false); } : undefined}
+					onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
+					onToggleWhiteboard={enableWhiteboard ? onToggleWhiteboard : undefined}
+					onOpenReactions={enableReactions ? () => { setIsReactionPickerOpen(true); setIsMobileSheetOpen(false); } : undefined}
+					onLeave={onLeave}
+					enableScreenShare={enableScreenShare}
+					enableRecording={enableRecording}
+					enableHandRaise={enableHandRaise}
+					enableReactions={enableReactions}
+					enableWhiteboard={enableWhiteboard}
+					enableTranscription={enableTranscription}
+					enableChat={enableChat}
+				/>
 			)}
 
 			{/* Auto-hide control bar */}
@@ -420,10 +461,13 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				className={cn(
 					"w-full z-20 transition-all duration-300",
 					isIdle && !activePanel ? "opacity-0 translate-y-2" : "opacity-100",
+					isMobile && "absolute bottom-4 left-0 right-0 flex justify-center",
 				)}
+				style={isMobile ? { paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}
 			>
 				<div className="relative">
 					<ControlBar
+						variant={isMobile ? "mobile" : "floating"}
 						isMuted={isMuted}
 						isVideoEnabled={isVideoEnabled}
 						isScreenSharing={isScreenSharing}
@@ -458,9 +502,10 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						onOpenReactions={
 							enableReactions ? () => setIsReactionPickerOpen(true) : undefined
 						}
-						className="w-full"
+						onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
+						className={isMobile ? "" : "w-full"}
 					/>
-					{enableReactions && (
+					{enableReactions && !isMobile && (
 						<ReactionPicker
 							isOpen={isReactionPickerOpen}
 							onClose={() => setIsReactionPickerOpen(false)}
