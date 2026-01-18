@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Infrastructure CI/CD failure** - Removed invalid `cloudflare_sfu_app_id` output that referenced non-existent module attribute
+- **API workflow force_deploy not working** - Jobs with `needs` dependencies skip before evaluating `if` conditions unless using `always()`. Added explicit checks for `docker` and `deploy` jobs so `force_deploy` works correctly from manual triggers
 
 ## [0.0.28] - 2026-01-17
 
