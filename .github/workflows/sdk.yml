@@ -33,43 +33,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@q9labs'
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.2"
 
-      - name: Configure npm for GitHub Packages
-        run: |
-          echo "@q9labs:registry=https://npm.pkg.github.com" >> ~/.npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
-
       - name: Install dependencies
         run: bun install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build SDK packages
         run: bunx turbo build --filter="@q9labs/*"
 
       - name: Publish @q9labs/chalk-core
-        run: |
-          cd packages/sdk-core
-          npm publish
+        run: npm publish --workspace=packages/sdk-core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-react
-        run: |
-          cd packages/sdk-react
-          npm publish
+        run: npm publish --workspace=packages/sdk-react
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-react-native
-        run: |
-          cd packages/sdk-react-native
-          npm publish
+        run: npm publish --workspace=packages/sdk-react-native
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-ui
-        run: |
-          cd packages/ui
-          npm publish
+        run: npm publish --workspace=packages/ui
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-whiteboard
-        run: |
-          cd packages/chalk-whiteboard
-          npm publish
+        run: npm publish --workspace=packages/chalk-whiteboard
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
