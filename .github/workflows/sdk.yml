@@ -30,6 +30,8 @@ jobs:
     name: Build & Publish
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,33 +50,21 @@ jobs:
 
       - name: Install dependencies
         run: bun install
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build SDK packages
         run: bunx turbo build --filter="@q9labs/*"
 
       - name: Publish @q9labs/chalk-core
         run: npm publish --workspace=packages/sdk-core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-react
         run: npm publish --workspace=packages/sdk-react
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-react-native
         run: npm publish --workspace=packages/sdk-react-native
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-ui
         run: npm publish --workspace=packages/ui
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @q9labs/chalk-whiteboard
         run: npm publish --workspace=packages/chalk-whiteboard
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
