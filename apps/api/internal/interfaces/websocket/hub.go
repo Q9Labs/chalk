@@ -22,6 +22,24 @@ type RedisInterface interface {
 	Exists(ctx context.Context, keys ...string) (int64, error)
 }
 
+// TranscriptService interface for persisting transcripts
+type TranscriptService interface {
+	CreateTranscript(ctx context.Context, input TranscriptInput) error
+}
+
+// TranscriptInput matches the domain service input
+type TranscriptInput struct {
+	RoomID                  uuid.UUID
+	ParticipantID           *uuid.UUID
+	CloudflareParticipantID string
+	SpeakerName             string
+	Text                    string
+	Confidence              *float32
+	Language                string
+	ExternalID              string
+	Timestamp               time.Time
+}
+
 type Hub struct {
 	clients         map[uuid.UUID]*Client
 	rooms           map[uuid.UUID]map[uuid.UUID]*Client
@@ -31,7 +49,8 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 
-	redisClient RedisInterface
+	redisClient       RedisInterface
+	transcriptService TranscriptService
 
 	mu sync.RWMutex
 
@@ -58,6 +77,16 @@ func NewHub(redisClient RedisInterface) *Hub {
 		ctx:             context.Background(),
 		stop:            make(chan struct{}),
 	}
+}
+
+// SetTranscriptService sets the transcript service for persisting transcripts
+func (h *Hub) SetTranscriptService(ts TranscriptService) {
+	h.transcriptService = ts
+}
+
+// GetTranscriptService returns the transcript service (may be nil)
+func (h *Hub) GetTranscriptService() TranscriptService {
+	return h.transcriptService
 }
 
 // Run starts the hub's main loop

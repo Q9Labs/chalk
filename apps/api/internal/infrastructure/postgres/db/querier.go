@@ -23,6 +23,7 @@ type Querier interface {
 	CountAuditLogsByAction(ctx context.Context, action string) (int64, error)
 	CountAuditLogsByTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountTenants(ctx context.Context) (int64, error)
+	CountTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	// Audit Log Queries
 	// Logging operations for compliance and debugging
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
@@ -39,12 +40,16 @@ type Querier interface {
 	// Tenant Queries
 	// CRUD operations and tenant-specific queries
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
+	// Transcript Queries
+	// CRUD operations for meeting transcriptions
+	CreateTranscript(ctx context.Context, arg CreateTranscriptParams) (Transcript, error)
 	DeactivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	DeleteOldAuditLogs(ctx context.Context, createdAt time.Time) error
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
 	DeleteRecording(ctx context.Context, id uuid.UUID) error
 	DeleteRoom(ctx context.Context, id uuid.UUID) error
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
+	DeleteTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) error
 	EndRoom(ctx context.Context, id uuid.UUID) (Room, error)
 	GetActiveRecordingByRoom(ctx context.Context, roomID uuid.UUID) (Recording, error)
 	GetAuditLog(ctx context.Context, id uuid.UUID) (AuditLog, error)
@@ -63,6 +68,8 @@ type Querier interface {
 	GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetTenantByAPIKeyHash(ctx context.Context, apiKeyHash string) (Tenant, error)
 	GetTotalRecordingStorageByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	GetTranscript(ctx context.Context, id uuid.UUID) (Transcript, error)
+	GetTranscriptByExternalID(ctx context.Context, externalID *string) (Transcript, error)
 	ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoomsByTenantParams) ([]Room, error)
 	ListActiveRoomsWithParticipantCount(ctx context.Context, arg ListActiveRoomsWithParticipantCountParams) ([]ListActiveRoomsWithParticipantCountRow, error)
@@ -87,6 +94,7 @@ type Querier interface {
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]Room, error)
 	ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantParams) ([]Room, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
+	ListTranscriptsByRoom(ctx context.Context, arg ListTranscriptsByRoomParams) ([]Transcript, error)
 	MarkRecordingDeleted(ctx context.Context, id uuid.UUID) (Recording, error)
 	MarkRecordingFailed(ctx context.Context, id uuid.UUID) (Recording, error)
 	ParticipantLeave(ctx context.Context, id uuid.UUID) (Participant, error)

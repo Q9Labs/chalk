@@ -178,6 +178,8 @@ func (c *Client) handleMessage(msg *Message) {
 		c.handleWhiteboardOpen()
 	case MessageTypeWhiteboardClose:
 		c.handleWhiteboardClose()
+	case MessageTypeTranscript:
+		c.handleTranscript(msg)
 	default:
 		log.Printf("[WS] Unknown message type: %s", msg.Type)
 	}
@@ -453,4 +455,60 @@ func (c *Client) handleWhiteboardClose() {
 	log.Printf("[WB-CLOSE] Broadcasting whiteboard.closed to room=%s, msgSize=%d bytes", c.roomID, len(msgData))
 	c.hub.BroadcastToRoom(c.roomID, msgData, "")
 	log.Printf("[WB-CLOSE] Broadcast complete")
+}
+
+// handleTranscript persists a transcript from the client SDK
+func (c *Client) handleTranscript(msg *Message) {
+	var payload TranscriptPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		log.Printf("[TRANSCRIPT] Failed to parse payload: %v", err)
+		c.sendErrorMessage("invalid_payload", "Failed to parse transcript")
+		return
+	}
+
+	// Skip interim transcripts - only store final ones
+	if payload.IsInterim {
+		log.Printf("[TRANSCRIPT] Skipping interim transcript from participant=%s", c.participantID)
+		return
+	}
+
+	log.Printf("[TRANSCRIPT] Received transcript from participant=%s: %s", c.participantID, payload.Text)
+
+	// Check if transcript service is available
+	ts := c.hub.GetTranscriptService()
+	if ts == nil {
+		log.Printf("[TRANSCRIPT] Warning: Transcript service not configured, skipping persistence")
+		return
+	}
+
+	// Parse timestamp from ISO 8601 string
+	timestamp, err := time.Parse(time.RFC3339, payload.Timestamp)
+	if err != nil {
+		timestamp = time.Now()
+	}
+
+	// Persist the transcript
+	err = ts.CreateTranscript(context.Background(), TranscriptInput{
+		RoomID:                  c.roomID,
+		ParticipantID:           &c.participantID,
+		CloudflareParticipantID: payload.ParticipantID,
+		SpeakerName:             payload.SpeakerName,
+		Text:                    payload.Text,
+		Confidence:              payload.Confidence,
+		ExternalID:              payload.ID,
+		Timestamp:               timestamp,
+	})
+	if err != nil {
+		log.Printf("[TRANSCRIPT] Failed to persist transcript: %v", err)
+		return
+	}
+
+	// Send ack back to client
+	ackMsg, _ := NewMessage(MessageTypeTranscriptAck, TranscriptAckPayload{
+		ID:        payload.ID,
+		Timestamp: time.Now(),
+	})
+	ackData, _ := json.Marshal(ackMsg)
+	c.Send(ackData)
+	log.Printf("[TRANSCRIPT] Persisted and acknowledged transcript id=%s", payload.ID)
 }

@@ -73,9 +73,35 @@ func (s *Service) CreateRoom(ctx context.Context, input CreateRoomInput) (*Creat
 	if activeRooms >= int64(tenant.MaxConcurrentRooms) {
 		return nil, fmt.Errorf("maximum concurrent room limit reached: %w", err)
 	}
-	cfMeeting, err := s.cfClient.CreateMeeting(ctx, cloudflare.CreateMeetingRequest{
-		Title: input.Name,
-	})
+
+	// Parse tenant transcription config
+	var tenantConfig struct {
+		TranscriptionEnabled         bool     `json:"transcription_enabled"`
+		TranscriptionLanguage        string   `json:"transcription_language"`
+		TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
+		TranscriptionKeywords        []string `json:"transcription_keywords"`
+	}
+	if tenant.TenantConfig != nil {
+		_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
+	}
+
+	// Build Cloudflare request with AI config if transcription enabled
+	cfReq := cloudflare.CreateMeetingRequest{Title: input.Name}
+	if tenantConfig.TranscriptionEnabled {
+		lang := tenantConfig.TranscriptionLanguage
+		if lang == "" {
+			lang = "en-US"
+		}
+		cfReq.AIConfig = &cloudflare.AIConfig{
+			Transcription: &cloudflare.TranscriptionConfig{
+				Language:        lang,
+				ProfanityFilter: tenantConfig.TranscriptionProfanityFilter,
+				Keywords:        tenantConfig.TranscriptionKeywords,
+			},
+		}
+	}
+
+	cfMeeting, err := s.cfClient.CreateMeeting(ctx, cfReq)
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare meeting creation failed: %w", err)
 	}

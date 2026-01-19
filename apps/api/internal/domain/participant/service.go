@@ -94,9 +94,13 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			return nil, ErrTenantNotFound
 		}
 
-		// Check if tenant allows early join (auto-creation)
+		// Check if tenant allows early join (auto-creation) and get transcription config
 		var tenantConfig struct {
-			AllowEarlyJoin bool `json:"allow_early_join"`
+			AllowEarlyJoin               bool     `json:"allow_early_join"`
+			TranscriptionEnabled         bool     `json:"transcription_enabled"`
+			TranscriptionLanguage        string   `json:"transcription_language"`
+			TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
+			TranscriptionKeywords        []string `json:"transcription_keywords"`
 		}
 		if tenant.TenantConfig != nil {
 			_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
@@ -112,9 +116,22 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			roomName = "Auto-created Room"
 		}
 
-		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cloudflare.CreateMeetingRequest{
-			Title: roomName,
-		})
+		cfReq := cloudflare.CreateMeetingRequest{Title: roomName}
+		if tenantConfig.TranscriptionEnabled {
+			lang := tenantConfig.TranscriptionLanguage
+			if lang == "" {
+				lang = "en-US"
+			}
+			cfReq.AIConfig = &cloudflare.AIConfig{
+				Transcription: &cloudflare.TranscriptionConfig{
+					Language:        lang,
+					ProfanityFilter: tenantConfig.TranscriptionProfanityFilter,
+					Keywords:        tenantConfig.TranscriptionKeywords,
+				},
+			}
+		}
+
+		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cfReq)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create room: %w", err)
 		}
@@ -139,9 +156,13 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			return nil, ErrTenantNotFound
 		}
 
-		// Check if tenant allows early join (reactivation)
+		// Check if tenant allows early join (reactivation) and get transcription config
 		var tenantConfig struct {
-			AllowEarlyJoin bool `json:"allow_early_join"`
+			AllowEarlyJoin               bool     `json:"allow_early_join"`
+			TranscriptionEnabled         bool     `json:"transcription_enabled"`
+			TranscriptionLanguage        string   `json:"transcription_language"`
+			TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
+			TranscriptionKeywords        []string `json:"transcription_keywords"`
 		}
 		if tenant.TenantConfig != nil {
 			_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
@@ -156,9 +177,21 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		if room.Name != nil {
 			roomName = *room.Name
 		}
-		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cloudflare.CreateMeetingRequest{
-			Title: roomName,
-		})
+		cfReq := cloudflare.CreateMeetingRequest{Title: roomName}
+		if tenantConfig.TranscriptionEnabled {
+			lang := tenantConfig.TranscriptionLanguage
+			if lang == "" {
+				lang = "en-US"
+			}
+			cfReq.AIConfig = &cloudflare.AIConfig{
+				Transcription: &cloudflare.TranscriptionConfig{
+					Language:        lang,
+					ProfanityFilter: tenantConfig.TranscriptionProfanityFilter,
+					Keywords:        tenantConfig.TranscriptionKeywords,
+				},
+			}
+		}
+		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cfReq)
 		if err != nil {
 			return nil, fmt.Errorf("failed to reactivate room: %w", err)
 		}

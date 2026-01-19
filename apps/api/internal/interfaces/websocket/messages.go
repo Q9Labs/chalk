@@ -54,6 +54,10 @@ const (
 	MessageTypePermissionGrant   MessageType = "permission.grant"
 	MessageTypePermissionRevoke  MessageType = "permission.revoke"
 	MessageTypePermissionChanged MessageType = "permission.changed"
+
+	// Transcript messages
+	MessageTypeTranscript    MessageType = "transcript"
+	MessageTypeTranscriptAck MessageType = "transcript.ack"
 )
 
 // Message is the top-level WebSocket message structure
@@ -250,6 +254,23 @@ type WhiteboardOpenedPayload struct {
 type WhiteboardClosedPayload struct {
 	ParticipantID uuid.UUID `json:"participant_id"`
 	Timestamp     time.Time `json:"timestamp"`
+}
+
+// TranscriptPayload - client sends transcript from Cloudflare AI
+type TranscriptPayload struct {
+	ID            string    `json:"id"`             // External ID from Cloudflare
+	ParticipantID string    `json:"participantId"`  // Cloudflare participant ID
+	SpeakerName   string    `json:"speakerName"`
+	Text          string    `json:"text"`
+	Timestamp     string    `json:"timestamp"`      // ISO 8601 string
+	IsInterim     bool      `json:"isInterim"`
+	Confidence    *float32  `json:"confidence,omitempty"`
+}
+
+// TranscriptAckPayload - server acknowledges transcript receipt
+type TranscriptAckPayload struct {
+	ID        string    `json:"id"`        // External ID that was saved
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // NewMessage creates a new message with the given type and payload

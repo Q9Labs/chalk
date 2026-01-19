@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Transcription support** - Native transcription for Chalk conferences using Cloudflare RealtimeKit AI
+  - Per-tenant transcription config (enable/disable, language, profanity filter, keywords)
+  - Automatic passing of `ai_config` to Cloudflare when creating meetings
+  - Transcripts stored in database per room/participant with deduplication
+  - Client SDK automatically sends final transcripts to backend via WebSocket
+  - REST API endpoint: `GET /api/v1/rooms/:id/transcripts` for retrieving transcripts
+  - New database migration: `006_transcription.sql`
+
 ## [0.0.34] - 2026-01-19
 
 ### Added

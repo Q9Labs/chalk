@@ -38,9 +38,11 @@ type AIConfig struct {
 }
 
 // TranscriptionConfig holds transcription settings
+// Presence of this config enables transcription (no separate "enabled" field)
 type TranscriptionConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Language string `json:"language,omitempty"` // e.g., "en-US"
+	Language        string   `json:"language,omitempty"`        // e.g., "en-US"
+	ProfanityFilter bool     `json:"profanity_filter,omitempty"`
+	Keywords        []string `json:"keywords,omitempty"`
 }
 
 // StorageConfig holds custom cloud storage configuration for recordings

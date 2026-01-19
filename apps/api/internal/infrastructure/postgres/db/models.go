@@ -86,6 +86,20 @@ type Tenant struct {
 	TenantConfig     []byte `db:"tenant_config" json:"tenant_config"`
 }
 
+type Transcript struct {
+	ID                      uuid.UUID   `db:"id" json:"id"`
+	RoomID                  uuid.UUID   `db:"room_id" json:"room_id"`
+	ParticipantID           pgtype.UUID `db:"participant_id" json:"participant_id"`
+	CloudflareParticipantID *string     `db:"cloudflare_participant_id" json:"cloudflare_participant_id"`
+	SpeakerName             string      `db:"speaker_name" json:"speaker_name"`
+	Text                    string      `db:"text" json:"text"`
+	Confidence              *float32    `db:"confidence" json:"confidence"`
+	Language                *string     `db:"language" json:"language"`
+	ExternalID              *string     `db:"external_id" json:"external_id"`
+	Timestamp               time.Time   `db:"timestamp" json:"timestamp"`
+	CreatedAt               time.Time   `db:"created_at" json:"created_at"`
+}
+
 type WhiteboardPermission struct {
 	ID            uuid.UUID   `db:"id" json:"id"`
 	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`

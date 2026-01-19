@@ -8,6 +8,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/domain/participant"
 	"github.com/Q9Labs/chalk/internal/domain/recording"
 	"github.com/Q9Labs/chalk/internal/domain/room"
+	"github.com/Q9Labs/chalk/internal/domain/transcript"
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
@@ -36,6 +37,7 @@ type Router struct {
 	roomService        *room.Service
 	participantService *participant.Service
 	recordingService   *recording.Service
+	transcriptService  *transcript.Service
 }
 
 type RouterConfig struct {
@@ -72,6 +74,10 @@ func NewRouter(cfg RouterConfig) *Router {
 	roomService := room.NewService(queries, cfg.CFClient, roomState, wsHub)
 	participantService := participant.NewService(queries, cfg.CFClient, roomState, jwtService, wsHub)
 	recordingService := recording.NewService(queries, cfg.CFClient, cfg.StorageR2, cfg.StorageS3, roomState, wsHub)
+	transcriptService := transcript.NewService(queries)
+
+	// Wire transcript service to WebSocket hub for real-time transcript persistence
+	wsHub.SetTranscriptService(&transcriptServiceAdapter{svc: transcriptService})
 
 	r := &Router{
 		engine:             engine,
@@ -88,10 +94,31 @@ func NewRouter(cfg RouterConfig) *Router {
 		roomService:        roomService,
 		participantService: participantService,
 		recordingService:   recordingService,
+		transcriptService:  transcriptService,
 	}
 
 	r.setupRoutes()
 	return r
+}
+
+// transcriptServiceAdapter adapts the domain transcript service to the websocket interface
+type transcriptServiceAdapter struct {
+	svc *transcript.Service
+}
+
+func (a *transcriptServiceAdapter) CreateTranscript(ctx context.Context, input websocket.TranscriptInput) error {
+	_, err := a.svc.CreateTranscript(ctx, transcript.CreateTranscriptInput{
+		RoomID:                  input.RoomID,
+		ParticipantID:           input.ParticipantID,
+		CloudflareParticipantID: input.CloudflareParticipantID,
+		SpeakerName:             input.SpeakerName,
+		Text:                    input.Text,
+		Confidence:              input.Confidence,
+		Language:                input.Language,
+		ExternalID:              input.ExternalID,
+		Timestamp:               input.Timestamp,
+	})
+	return err
 }
 
 func (r *Router) setupRoutes() {
@@ -149,6 +176,10 @@ func (r *Router) setupRoutes() {
 			roomsGroup.POST("/:id/recordings/start", authMw.RequireHost(), recordings.Start)
 			roomsGroup.POST("/:id/recordings/stop", authMw.RequireHost(), recordings.Stop)
 			roomsGroup.POST("/:id/recordings/:rid/archive", authMw.RequireHost(), recordings.Archive)
+
+			// Transcripts
+			transcripts := handlers.NewTranscriptHandler(r.transcriptService, r.roomService)
+			roomsGroup.GET("/:id/transcripts", transcripts.List)
 		}
 
 		recordingsGroup := v1.Group("/recordings")
