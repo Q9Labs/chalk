@@ -1,14 +1,2 @@
-/**
- * @q9labs/chalk-ui Styles
- *
- * This package uses Tailwind CSS utility classes.
- * Consumers should configure their Tailwind to include this package:
- *
- * tailwind.config.ts:
- *   content: [
- *     "./node_modules/@q9labs/chalk-ui/dist/**/*.js",
- *   ]
- */
-
-/* Placeholder to ensure file is valid CSS */
+/* @q9labs/chalk-ui - Tailwind utilities included via content config */
 .chalk-ui-loaded {}
