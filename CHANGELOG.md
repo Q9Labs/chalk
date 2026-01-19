@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Client SDK automatically sends final transcripts to backend via WebSocket
   - REST API endpoint: `GET /api/v1/rooms/:id/transcripts` for retrieving transcripts
   - New database migration: `006_transcription.sql`
+
+## [0.0.36] - 2026-01-19
+
+### Fixed
+
+- **CSS @layer compatibility** - Fixed pre-built CSS exports breaking in Next.js and other PostCSS environments
+  - `@q9labs/chalk-react`: Now copies hand-crafted `bundled.css` without Tailwind's `@layer` wrappers
+  - `@q9labs/chalk-ui`: Simplified CSS output without `@layer` directives
+  - Consumers no longer get `@layer base is used but no matching @tailwind base` errors
+
 ## [0.0.35] - 2026-01-19
 
 ### Fixed

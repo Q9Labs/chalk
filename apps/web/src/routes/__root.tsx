@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
 
-import "../../../../packages/sdk-react/src/styles/base.css";
+// import "../../../../packages/sdk-react/src/styles/base.css";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -97,9 +97,7 @@ function RootComponent() {
 	);
 
 	const content = (
-		<div
-			className={` overflow-hidden bg-background text-foreground ${theme}`}
-		>
+		<div className={` overflow-hidden bg-background text-foreground ${theme}`}>
 			<div className="fixed top-4 right-4 z-50">
 				<button
 					type="button"

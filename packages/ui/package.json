@@ -1,6 +1,6 @@
 {
 	"name": "@q9labs/chalk-ui",
-	"version": "0.0.35",
+	"version": "0.0.36",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
@@ -27,7 +27,7 @@
 	"scripts": {
 		"build": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @chalk/core && bun run build:types && bun run build:css",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-		"build:css": "bunx @tailwindcss/cli -i ./src/styles/index.css -o ./dist/styles.css --minify",
+		"build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
 		"dev": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @chalk/core --watch",
 		"test": "bun test",
 		"check-types": "tsc --noEmit",

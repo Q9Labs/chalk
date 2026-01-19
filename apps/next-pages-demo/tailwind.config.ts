@@ -5,6 +5,7 @@ const config: Config = {
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./node_modules/@q9labs/chalk-ui/dist/**/*.js",
     "./node_modules/@q9labs/chalk-react/dist/**/*.js",
   ],
   safelist: [

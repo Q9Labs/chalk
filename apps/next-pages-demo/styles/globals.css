@@ -5,6 +5,7 @@
 @tailwind utilities;
 
 /* Import Chalk SDK pre-built styles */
+@import "@q9labs/chalk-ui/styles.css";
 @import "@q9labs/chalk-react/styles.css";
 
 :root {
