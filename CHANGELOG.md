@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-01-19
+
+### Fixed
+
+- **npm EUNSUPPORTEDPROTOCOL** - Switched SDK publish workflow from `npm publish` to `bun publish` to properly replace `workspace:^` references with actual version numbers
+
 ## [0.0.34] - 2026-01-19
 
 ### Added
