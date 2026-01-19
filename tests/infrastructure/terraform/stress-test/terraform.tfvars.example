@@ -1,0 +1,11 @@
+# Copy this file to terraform.tfvars and fill in values
+# terraform.tfvars is gitignored - do not commit secrets
+
+aws_region = "us-east-1"
+
+# Docker image for API (must be pushed to GHCR first)
+api_image = "ghcr.io/q9labs/chalk-api:latest"
+
+# Aurora database credentials (use strong passwords in production)
+db_username = "chalk_stress"
+db_password = "CHANGE_ME_strong_password_here"

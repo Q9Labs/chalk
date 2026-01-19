@@ -1,10 +1,7 @@
-# CLAUDE.md
+# Chalk
 
-## Project Overview
-
-**Chalk** - Ultra low-latency video conferencing for education (Cloudflare RealtimeKit).
-Monorepo: **Turbo** + **Bun**.
-Packages → GitHub Packages `@q9labs/*`.
+Ultra low-latency video conferencing for education (Cloudflare RealtimeKit).
+Monorepo: Turbo + Bun. Packages → GitHub Packages `@q9labs/*`.
 
 ## Commands
 
@@ -12,61 +9,22 @@ Packages → GitHub Packages `@q9labs/*`.
 bun install                    # Install deps
 bun run dev|build|test|lint    # All packages
 bun run check-types            # Type check
+cd apps/api && go run ./cmd/main.go
 ```
 
-Per-package: `cd packages/sdk-core && bun run dev|build|test`
+## Where to Write Code
 
-**API (Go 1.22+):**
+**Packages first, then demo in apps:**
 
-```bash
-cd apps/api && go run ./cmd/main.go    # Run
-cd apps/api && go test ./...           # Test
-```
+- **sdk-core**: Client logic, WebRTC, room management
+- **sdk-react**: React hooks, components
+- **sdk-react-native**: React Native bindings
+- **ui**: Shared UI primitives
+- **chalk-whiteboard**: Whiteboard features
+- **api**: Go backend (`apps/api`)
+- **terraform**: AWS IaC (`infrastructure/terraform`)
 
-## Structure
+**Demo apps (`apps/web`, `apps/next-pages-demo`, `apps/mobile`) are for testing only.**
+After packages → export → use in demo apps for user testing.
 
-| Path                        | Purpose                                                |
-| --------------------------- | ------------------------------------------------------ |
-| `packages/sdk-core`         | Vanilla JS SDK - WebRTC client, room mgmt              |
-| `packages/sdk-react`        | React hooks (useRoom, useParticipants, useMedia, etc.) |
-| `packages/sdk-react-native` | React Native bindings                                  |
-| `packages/chalk-whiteboard` | Chalk Whiteboard with Excalidraw                       |
-| `packages/ui`               | UI components (Base UI + Tailwind v4)                  |
-| `apps/web`                  | Demo app (Vite + React 19 + TanStack Router)           |
-| `apps/api`                  | Go backend (Gin + PostgreSQL + sqlc)                   |
-| `infrastructure/terraform`  | AWS IaC (VPC, ECS, Aurora, ElastiCache)                |
-
-## SDK Architecture
-
-Layered: `chalk-core` → `chalk-react` → `chalk-react-native` + `chalk-ui` + `chalk-whiteboard`
-
-| Feature       | Description                                            |
-| ------------- | ------------------------------------------------------ |
-| OpenAPI types | `apps/api/openapi.yaml` → `src/generated/api-types.ts` |
-| TokenProvider | JWT refresh callback (replaces deprecated apiKey)      |
-| Transforms    | Auto snake_case ↔ camelCase                           |
-| Result<T>     | Type-safe errors without exceptions                    |
-
-## Backend (Go)
-
-Clean Architecture:
-
-- `cmd/main.go` - Entry point
-- `internal/domain/` - Business logic (RoomService, ParticipantService, RecordingService)
-- `internal/interfaces/http/` - Handlers + middleware (JWT, API key)
-- `internal/infrastructure/` - postgres (sqlc), cloudflare, redis, auth, storage
-
-## Authentication
-
-| Type                     | Usage                              | Endpoints                                 |
-| ------------------------ | ---------------------------------- | ----------------------------------------- |
-| API Key (`ck_live_*`)    | Server-to-server, tenant API       | `/api/v1/auth/token`, `/api/v1/tenants`   |
-| JWT (15min + 7d refresh) | Room ops, participants, recordings | `/api/v1/rooms/*`, `/api/v1/recordings/*` |
-
-## CI/CD
-
-| Workflow    | Trigger                       | Jobs                                                    |
-| ----------- | ----------------------------- | ------------------------------------------------------- |
-| `api.yml`   | `apps/api/**`                 | lint → test → build → docker (GHCR)                     |
-| `sdk.yml`   | `packages/**`                 | type-check → lint → test → build → publish              |
-| `infra.yml` | `infrastructure/terraform/**` | validate → plan → apply (dev/staging auto, prod manual) |
+Never add client-side business logic to demo apps.

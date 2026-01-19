@@ -1,0 +1,16 @@
+config:
+  target: "wss://api-stress.chalk.example.com"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 300
+      arrivalRate: 20
+      name: "Sustained load"
+    - duration: 60
+      arrivalRate: 50
+      name: "Spike"
+  ws:
+    rejectUnauthorized: false
+  variables:
+    token: "{{ $processEnvironment.WS_TOKEN }}"

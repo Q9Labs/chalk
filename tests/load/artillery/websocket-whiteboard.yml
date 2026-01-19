@@ -1,0 +1,47 @@
+config:
+  target: "wss://api-stress.chalk.example.com"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+    - duration: 300
+      arrivalRate: 15
+  ws:
+    rejectUnauthorized: false
+
+scenarios:
+  - name: "Whiteboard collaborator"
+    engine: ws
+    flow:
+      - connect: "/ws?token={{ token }}"
+      - think: 1
+
+      - wait:
+          json: { type: "connected" }
+
+      # Open whiteboard
+      - send:
+          json:
+            type: "whiteboard.open"
+            payload: {}
+
+      # Simulate drawing updates
+      - loop:
+          - send:
+              json:
+                type: "whiteboard.update"
+                payload:
+                  elements: '[{"type":"rectangle","x":{{ $randomNumber(0,1000) }},"y":{{ $randomNumber(0,1000) }}}]'
+                  seq: "{{ $loopCount }}"
+          - think: 0.2
+        count: 100
+
+      # Send cursor updates
+      - loop:
+          - send:
+              json:
+                type: "whiteboard.cursor"
+                payload:
+                  x: "{{ $randomNumber(0,1920) }}"
+                  y: "{{ $randomNumber(0,1080) }}"
+          - think: 0.05
+        count: 200
