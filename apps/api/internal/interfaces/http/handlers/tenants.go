@@ -221,6 +221,11 @@ type UpdateTenantConfigRequest struct {
 	EmptyRoomTimeoutMinutes    *int32  `json:"empty_room_timeout_minutes"`
 	RecordingRetentionDays     *int32  `json:"recording_retention_days"`
 	DuplicateParticipantPolicy *string `json:"duplicate_participant_policy"`
+	// Transcription settings
+	TranscriptionEnabled         *bool     `json:"transcription_enabled"`
+	TranscriptionLanguage        *string   `json:"transcription_language"`
+	TranscriptionProfanityFilter *bool     `json:"transcription_profanity_filter"`
+	TranscriptionKeywords        *[]string `json:"transcription_keywords"`
 }
 
 // TenantConfig represents the tenant_config JSONB structure
@@ -231,6 +236,11 @@ type TenantConfig struct {
 	EmptyRoomTimeoutMinutes    int32  `json:"empty_room_timeout_minutes"`
 	RecordingRetentionDays     int32  `json:"recording_retention_days"`
 	DuplicateParticipantPolicy string `json:"duplicate_participant_policy"`
+	// Transcription settings
+	TranscriptionEnabled         bool     `json:"transcription_enabled"`
+	TranscriptionLanguage        string   `json:"transcription_language"`
+	TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
+	TranscriptionKeywords        []string `json:"transcription_keywords,omitempty"`
 }
 
 // PATCH /api/v1/tenants/:id/config
@@ -263,10 +273,12 @@ func (h *TenantHandler) UpdateConfig(c *gin.Context) {
 
 	// Parse existing config with defaults
 	config := TenantConfig{
-		AllowEarlyJoin:             true, // default
-		EmptyRoomTimeoutMinutes:    30,   // default
-		RecordingRetentionDays:     30,   // default
+		AllowEarlyJoin:             true,    // default
+		EmptyRoomTimeoutMinutes:    30,      // default
+		RecordingRetentionDays:     30,      // default
 		DuplicateParticipantPolicy: "reject",
+		TranscriptionEnabled:       true,    // default ON
+		TranscriptionLanguage:      "en-US", // default
 	}
 	if tenant.TenantConfig != nil {
 		_ = json.Unmarshal(tenant.TenantConfig, &config)
@@ -290,6 +302,18 @@ func (h *TenantHandler) UpdateConfig(c *gin.Context) {
 	}
 	if req.DuplicateParticipantPolicy != nil {
 		config.DuplicateParticipantPolicy = *req.DuplicateParticipantPolicy
+	}
+	if req.TranscriptionEnabled != nil {
+		config.TranscriptionEnabled = *req.TranscriptionEnabled
+	}
+	if req.TranscriptionLanguage != nil {
+		config.TranscriptionLanguage = *req.TranscriptionLanguage
+	}
+	if req.TranscriptionProfanityFilter != nil {
+		config.TranscriptionProfanityFilter = *req.TranscriptionProfanityFilter
+	}
+	if req.TranscriptionKeywords != nil {
+		config.TranscriptionKeywords = *req.TranscriptionKeywords
 	}
 
 	// Serialize updated config

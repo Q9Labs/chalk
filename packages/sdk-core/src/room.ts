@@ -979,6 +979,11 @@ export class Room extends EventEmitter<RoomEvents> {
           this._transcripts.push(transcript);
           this.emit("transcript", transcript);
           this.log.debug("Transcript received", { speaker: transcript.speakerName });
+
+          // Send final transcripts to backend for persistence
+          if (!transcript.isInterim) {
+            this.wsClient?.sendTranscript(transcript);
+          }
         }
       });
       this.log.debug("Transcript handler registered");

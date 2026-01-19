@@ -584,4 +584,31 @@ export class WSClient extends EventEmitter<WSEvents> {
 		this.log.debug("Whiteboard close sending");
 		this.send({ type: "whiteboard.close", payload: {} });
 	}
+
+	sendTranscript(transcript: {
+		id: string;
+		participantId: string;
+		speakerName: string;
+		text: string;
+		timestamp: Date;
+		isInterim?: boolean;
+		confidence?: number;
+	}): void {
+		if (transcript.isInterim) {
+			return; // Don't send interim transcripts
+		}
+		this.log.debug("Transcript sending", { id: transcript.id, speakerName: transcript.speakerName });
+		this.send({
+			type: "transcript",
+			payload: {
+				id: transcript.id,
+				participantId: transcript.participantId,
+				speakerName: transcript.speakerName,
+				text: transcript.text,
+				timestamp: transcript.timestamp.toISOString(),
+				isInterim: transcript.isInterim,
+				confidence: transcript.confidence,
+			},
+		});
+	}
 }
