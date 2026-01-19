@@ -2,7 +2,12 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
-@import "@q9labs/chalk-ui/styles.css";
+
+/* Scan package sources for Tailwind classes (monorepo only) */
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
+@source "../../../packages/sdk-react/src/**/*.{ts,tsx}";
+
+/* Package CSS (variables, animations, custom classes) */
 @import "@q9labs/chalk-react/styles.css";
 
 @custom-variant dark (&:is(.dark *));
