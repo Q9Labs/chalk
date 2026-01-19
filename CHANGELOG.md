@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-01-19
+
 ### Added
+
+- **Stress testing framework** - Comprehensive load testing infrastructure for Chalk API
+  - k6 test scenarios: smoke, room-creation, participant-churn, large-room, ws-storm
+  - Artillery WebSocket scenarios for chat and whiteboard load testing
+  - Custom Go WebRTC client with Prometheus metrics for media stress testing
+  - Terraform infrastructure for isolated stress test environment (ECS, Aurora, ElastiCache)
+  - Execution scripts with auto-appending results to persistent markdown report
+  - Scripts run from any directory (use `SCRIPT_DIR` / `PROJECT_ROOT` detection)
+  - Prerequisites validation (k6, jq, terraform) with helpful error messages
+  - Directory: `tests/load/` (k6, artillery, webrtc-client), `tests/infrastructure/terraform/stress-test/`
 
 - **Mobile UI support in MeetingRoom** - Integrated MobilePanel for full-screen chat, participants, and transcription on mobile devices
   - Uses `useIsMobile()` hook for responsive detection
@@ -26,55 +38,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Infrastructure CI/CD failure** - Removed invalid `cloudflare_sfu_app_id` output that referenced non-existent module attribute
 - **API workflow force_deploy not working** - Jobs with `needs` dependencies skip before evaluating `if` conditions unless using `always()`. Added explicit checks for `docker` and `deploy` jobs so `force_deploy` works correctly from manual triggers
 
-## [0.0.28] - 2026-01-17
+## [0.0.21-0.0.28] - 2026-01-17
 
-### Fixed
-
-- **GitHub Packages publish auth** - Changed from `NPM_TOKEN` to `GITHUB_TOKEN` for publishing. The workflow already has `packages: write` permission, so `GITHUB_TOKEN` works correctly.
-
-## [0.0.27] - 2026-01-17
-
-### Fixed
-
-- **npm peer dependency conflict** - Removed `react-native` and `typescript` from required peerDependencies in `@q9labs/chalk-ui`. Web consumers no longer get ERESOLVE errors.
-
-## [0.0.26] - 2026-01-17
-
-### Fixed
-
-- **npm install EUNSUPPORTEDPROTOCOL error** - CI was using `npm publish` which doesn't understand `workspace:` protocol. Changed to `bun publish` which correctly replaces `workspace:^` → `^0.0.26` during publish.
-
-## [0.0.25] - 2026-01-17 (broken - use 0.0.26)
-
-### Fixed
-
-- **SDK CI/CD workflow** - Added `NPM_TOKEN` env var to `bun install` steps for GitHub Packages authentication
-- **Workspace dependencies** - Changed deps to use `workspace:*` protocol (broken for consumers, fixed in 0.0.26)
-- **Lockfile platform mismatch** - Removed `--frozen-lockfile` from CI (bun resolves platform-specific deps at install time)
-
-## [0.0.21-0.0.24] - 2026-01-17 (failed publishes due to CI issues)
+_Versions 0.0.21-0.0.25 had CI/publish issues. First stable version: 0.0.26._
 
 ### Added
 
-- **Pre-built CSS exports for external consumers** - SDK packages now export compiled CSS with all Tailwind utilities
-  - `@q9labs/chalk-ui/styles.css` - UI components CSS (34KB minified)
-  - `@q9labs/chalk-react/styles.css` - React SDK CSS with variables, animations, and utilities (62KB minified)
-  - Enables Next.js compatibility without `transpilePackages` or Tailwind config
-  - Consumer usage: `import '@q9labs/chalk-ui/styles.css'`
-
-### Fixed
-
-- **Web build OOM in CI** - Increased Node.js heap size to 4GB (`NODE_OPTIONS=--max-old-space-size=4096`) to prevent SSR build from running out of memory
-- **Web prerender failure** - Skip ChalkProvider during SSR/prerendering to avoid authentication errors
-- **ChalkProvider authentication in CI builds** - Added `VITE_CHALK_API_KEY` secret to web workflow build step and included `VITE_*` in Turbo's cache key so env vars invalidate the build cache
+- **Pre-built CSS exports** - `@q9labs/chalk-ui/styles.css` and `@q9labs/chalk-react/styles.css` for Next.js compatibility
 
 ### Changed
 
-- **CI runner optimization** - Switched non-Docker/Terraform jobs from Blacksmith to `ubuntu-latest` to reduce costs
-  - `sdk.yml`: All 3 jobs → `ubuntu-latest`
-  - `web.yml`: All 2 jobs → `ubuntu-latest`
-  - `api.yml`: 4 of 5 jobs → `ubuntu-latest` (kept `docker` on Blacksmith)
-  - `infra.yml`: All 5 jobs remain on Blacksmith (Terraform)
+- **CI runner optimization** - Switched non-Docker/Terraform jobs to `ubuntu-latest`
+
+### Fixed
+
+- **GitHub Packages publish auth** - Changed to `GITHUB_TOKEN` for publishing
+- **Web build OOM** - Increased Node.js heap to 4GB for SSR builds
+- **Web prerender failure** - Skip ChalkProvider during SSR
+- **SDK CI/CD workflow** - Fixed GitHub Packages auth, workspace protocol, lockfile handling
+- **npm peer dependency conflict** - Removed `react-native` and `typescript` from required peerDependencies
+- **npm EUNSUPPORTEDPROTOCOL** - Changed to `bun publish` to handle `workspace:` protocol
 
 ## [0.0.20] - 2026-01-16
 
