@@ -64,7 +64,7 @@
 				"Auto-scrolls to bottom on new message, keyboard-aware",
 				"Export from index.ts"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sdk-composite-device-selector",

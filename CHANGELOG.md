@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`DeviceSelector` component** - Modal device picker for React Native SDK
+  - Modal with list of available camera or microphone devices
+  - Each row shows device name with checkmark if selected
+  - Tap selects device and closes modal
+  - Header: "Select Camera" or "Select Microphone" based on type
+  - Pure StyleSheet implementation with no external dependencies
+
 - **`ChatPanel` component** - Chat message panel for React Native SDK
   - FlatList of messages with sender name, content, and timestamp
   - Local user messages right-aligned blue, others left-aligned gray

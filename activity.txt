@@ -90,3 +90,26 @@
 --- Iteration 4 completed at $(date) ---
 
 --- Iteration 1 completed at Tue Jan 20 14:34:50 PKT 2026 ---
+
+## sdk-composite-chat-panel - 2026-01-20T15:00:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/composite/ChatPanel.tsx
+- Updated packages/sdk-react-native/src/components/composite/index.ts
+- Updated packages/sdk-react-native/src/components/index.ts
+- Updated packages/sdk-react-native/src/index.ts
+- Updated CHANGELOG.md
+**Decisions**:
+- Added localUserId prop (not in original spec) to identify local user messages for right-alignment
+- Used KeyboardAvoidingView for keyboard-aware behavior
+- FlatList with scrollToEnd on new messages
+- MessageBubble sub-component for clean separation
+- SendIcon drawn with View components (no icon library)
+- Time formatted as "h:mm AM/PM"
+**Gotchas**: None
+**Next**: sdk-composite-device-selector (DeviceSelector for camera/mic picker)
+
+--- Iteration 5 completed at $(date) ---
+
+--- Iteration 2 completed at Tue Jan 20 14:37:21 PKT 2026 ---

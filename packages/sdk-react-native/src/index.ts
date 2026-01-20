@@ -74,6 +74,7 @@ export {
 	Avatar,
 	ChatPanel,
 	ControlBar,
+	DeviceSelector,
 	ParticipantTile,
 	ScreenShareView,
 	useBluetoothAudio,

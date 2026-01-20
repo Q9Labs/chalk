@@ -9,7 +9,7 @@
 export { Avatar } from "./atomic/index";
 
 // Composite components
-export { ChatPanel, ControlBar } from "./composite/index";
+export { ChatPanel, ControlBar, DeviceSelector } from "./composite/index";
 
 // Existing components
 export {

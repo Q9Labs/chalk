@@ -4,3 +4,4 @@
 
 export { ChatPanel } from "./ChatPanel";
 export { ControlBar } from "./ControlBar";
+export { DeviceSelector } from "./DeviceSelector";
