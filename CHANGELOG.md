@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Mobile app test harness cleanup** - Removed test harness screens from mobile demo app
+  - Deleted `apps/mobile/app/(tabs)/` - tabs navigation and test screens
+  - Deleted `apps/mobile/app/hooks/` - individual hook test screens
+  - Deleted `apps/mobile/app/components/` - component test screens
+  - Deleted `apps/mobile/app/e2e/` - end-to-end flow test screens
+  - Deleted `apps/mobile/components/test/` - test utilities
+  - Updated `_layout.tsx` to use Stack with single index route
+  - Added placeholder `index.tsx` for landing page (to be implemented)
+
 ### Added
 
 - **`VideoConference` component** - Turnkey orchestrator component for React Native SDK

@@ -18,7 +18,7 @@ import { storage } from "@/lib/storage";
 export { ErrorBoundary } from "expo-router";
 
 export const unstable_settings = {
-	initialRouteName: "(tabs)",
+	initialRouteName: "index",
 };
 
 SplashScreen.preventAutoHideAsync();
@@ -64,19 +64,7 @@ function RootLayoutNav() {
 		>
 			<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
 				<Stack>
-					<Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-					<Stack.Screen
-						name="hooks/[hook]"
-						options={{ headerBackTitle: "Back" }}
-					/>
-					<Stack.Screen
-						name="components/[component]"
-						options={{ headerBackTitle: "Back" }}
-					/>
-					<Stack.Screen
-						name="e2e/[flow]"
-						options={{ headerBackTitle: "Back" }}
-					/>
+					<Stack.Screen name="index" options={{ headerShown: false }} />
 				</Stack>
 			</ThemeProvider>
 		</ChalkProvider>

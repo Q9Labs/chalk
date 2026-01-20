@@ -137,7 +137,7 @@
 				"Error handling: shows error state with retry option",
 				"Export from index.ts"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "mobile-cleanup-test-harness",
@@ -150,7 +150,7 @@
 				"Delete apps/mobile/components/test/ directory",
 				"Keep: _layout.tsx, +not-found.tsx, lib/, constants/"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "mobile-update-layout",

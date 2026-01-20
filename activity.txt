@@ -200,3 +200,47 @@
 --- Iteration 9 completed at $(date) ---
 
 --- Iteration 6 completed at Tue Jan 20 14:48:44 PKT 2026 ---
+
+## sdk-full-video-conference - 2026-01-20T19:00:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/full/VideoConference.tsx
+- Updated packages/sdk-react-native/src/components/full/index.ts
+- Updated CHANGELOG.md
+**Decisions**:
+- State machine with 5 states: lobby, joining, connected, error, ended
+- Error state includes retry button (returns to lobby) and cancel button (calls onLeave)
+- Loading state shows ActivityIndicator with "Joining room..." text
+- joinRoom called with audio:true, video:true defaults
+- Error icon uses exclamation mark in red circle, consistent with error UI pattern
+**Gotchas**: None
+**Next**: mobile-cleanup-test-harness (remove test harness from mobile demo app)
+
+--- Iteration 10 completed at $(date) ---
+
+--- Iteration 1 completed at Tue Jan 20 14:54:25 PKT 2026 ---
+
+## mobile-cleanup-test-harness - 2026-01-20T20:00:00Z
+
+**Status**: completed
+**Changes**:
+- Deleted apps/mobile/app/(tabs)/ - tabs navigation and test screens
+- Deleted apps/mobile/app/hooks/ - individual hook test screens
+- Deleted apps/mobile/app/components/ - component test screens
+- Deleted apps/mobile/app/e2e/ - end-to-end flow test screens
+- Deleted apps/mobile/components/test/ - TestScreen utility
+- Updated apps/mobile/app/_layout.tsx to use Stack with single index route
+- Created apps/mobile/app/index.tsx placeholder
+- Updated CHANGELOG.md
+**Decisions**:
+- Updated _layout.tsx to remove references to deleted screens (otherwise app won't compile)
+- Changed initialRouteName from "(tabs)" to "index"
+- Created minimal index.tsx placeholder so app has a valid entry point
+- Kept lib/, constants/, +not-found.tsx as required
+**Gotchas**:
+- expo export command needs to be run from node_modules/.bin/expo directly in this monorepo setup
+- bunx expo silently fails with exit code 1 and no output
+**Next**: mobile-update-layout (update root layout for new navigation structure)
+
+--- Iteration 11 completed at $(date) ---
