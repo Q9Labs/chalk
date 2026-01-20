@@ -163,7 +163,7 @@
 				"Keep ChalkProvider wrapper with tokenProvider",
 				"Header hidden for call screen"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "mobile-landing-page",

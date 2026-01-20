@@ -246,3 +246,23 @@
 --- Iteration 11 completed at $(date) ---
 
 --- Iteration 2 completed at Tue Jan 20 15:00:53 PKT 2026 ---
+
+## mobile-update-layout - 2026-01-20T20:30:00Z
+
+**Status**: completed
+**Changes**:
+- Updated apps/mobile/app/_layout.tsx with Stack screens for index, call, settings
+- Created apps/mobile/app/call.tsx placeholder screen
+- Created apps/mobile/app/settings.tsx placeholder screen
+- Updated CHANGELOG.md
+**Decisions**:
+- Kept index header visible with "Chalk" title for branding
+- Call screen header hidden for fullscreen video experience
+- Settings screen header shows "Settings" title
+- Created minimal placeholder screens so expo-router can resolve routes
+**Gotchas**: None
+**Next**: mobile-landing-page (create landing page with Start/Join Meeting buttons)
+
+--- Iteration 12 completed at $(date) ---
+
+--- Iteration 3 completed at Tue Jan 20 15:02:42 PKT 2026 ---

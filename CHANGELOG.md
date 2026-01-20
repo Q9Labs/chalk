@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Mobile app landing page** - Created landing page for mobile app
+  - App branding with Chalk logo and tagline
+  - "Start Meeting" button generates UUID and navigates to /call?roomId=xxx&create=true
+  - "Join Meeting" button reveals TextInput for room ID entry
+  - Settings gear icon in header navigates to /settings
+  - Dark theme consistent with mobile app design
+
 - **Mobile app navigation structure** - Updated root layout for new consumer flow
   - Stack navigator with index, call, settings screens
   - Header hidden for call screen (fullscreen video experience)
