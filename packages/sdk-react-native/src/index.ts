@@ -81,6 +81,7 @@ export {
 	ScreenShareView,
 	useBluetoothAudio,
 	useSpeakerphone,
+	VideoConference,
 	VideoGrid,
 	VideoView,
 } from "./components/index";

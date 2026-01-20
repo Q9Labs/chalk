@@ -12,7 +12,7 @@ export { Avatar } from "./atomic/index";
 export { ChatPanel, ControlBar, DeviceSelector } from "./composite/index";
 
 // Full (turnkey) components
-export { MeetingRoom, PreJoinLobby } from "./full/index";
+export { MeetingRoom, PreJoinLobby, VideoConference } from "./full/index";
 
 // Existing components
 export {

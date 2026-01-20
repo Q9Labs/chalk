@@ -177,7 +177,7 @@
 				"Join Meeting: show TextInput for room ID, navigate to /call?roomId=xxx",
 				"Settings icon in header → /settings"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "mobile-call-screen",

@@ -266,3 +266,22 @@
 --- Iteration 12 completed at $(date) ---
 
 --- Iteration 3 completed at Tue Jan 20 15:02:42 PKT 2026 ---
+
+## mobile-landing-page - 2026-01-20T21:00:00Z
+
+**Status**: completed
+**Changes**:
+- Updated apps/mobile/app/index.tsx with full landing page implementation
+- Updated CHANGELOG.md
+**Decisions**:
+- Settings icon drawn with Views (gear shape) to avoid icon library dependency
+- Logo uses white chalk stick at -30deg angle with blue chalk line beneath
+- Join Meeting reveals inline TextInput with Cancel/Join buttons (no modal)
+- UUID generated client-side using standard v4 format
+- Stack.Screen options used to inject headerRight for settings icon
+**Gotchas**: None
+**Next**: mobile-call-screen (create call screen using VideoConference component)
+
+--- Iteration 13 completed at $(date) ---
+
+--- Iteration 4 completed at Tue Jan 20 15:04:42 PKT 2026 ---
