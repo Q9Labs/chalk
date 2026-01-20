@@ -154,3 +154,25 @@
 --- Iteration 7 completed at $(date) ---
 
 --- Iteration 4 completed at Tue Jan 20 14:41:36 PKT 2026 ---
+
+## sdk-full-prejoin-lobby - 2026-01-20T17:00:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/full/PreJoinLobby.tsx
+- Created packages/sdk-react-native/src/components/full/index.ts
+- Updated packages/sdk-react-native/src/components/index.ts
+- Updated packages/sdk-react-native/src/index.ts
+- Updated CHANGELOG.md
+**Decisions**:
+- Added initialName prop for pre-filling display name
+- Camera/Mic icons drawn with View components (consistent with ControlBar pattern)
+- Dark theme (gray-900 background) for video preview context
+- Permission request button shown when permissions denied
+- Device selectors reuse existing DeviceSelector modal component
+**Gotchas**: None
+**Next**: sdk-full-meeting-room (MeetingRoom turnkey component with VideoGrid, ControlBar, ChatPanel)
+
+--- Iteration 8 completed at $(date) ---
+
+--- Iteration 5 completed at Tue Jan 20 14:45:11 PKT 2026 ---

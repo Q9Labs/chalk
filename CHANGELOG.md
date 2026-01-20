@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`MeetingRoom` component** - Turnkey meeting room screen for React Native SDK
+  - VideoGrid showing all participants with responsive layout
+  - ControlBar at bottom wired to useMedia toggles
+  - ChatPanel in @gorhom/bottom-sheet, toggled via chat button
+  - ScreenShareView shown prominently when screen share is active
+  - Uses useParticipants, useMedia, useChat, and useScreenShare hooks
+  - onLeave callback when user leaves the meeting
+
 - **`PreJoinLobby` component** - Turnkey pre-call setup screen for React Native SDK
   - Camera preview using VideoView or Avatar fallback
   - Device selector buttons for camera and microphone

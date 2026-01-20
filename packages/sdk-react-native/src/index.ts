@@ -75,6 +75,7 @@ export {
 	ChatPanel,
 	ControlBar,
 	DeviceSelector,
+	MeetingRoom,
 	ParticipantTile,
 	PreJoinLobby,
 	ScreenShareView,

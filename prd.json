@@ -103,7 +103,7 @@
 				"Join button disabled until permissions granted AND name entered",
 				"Export from index.ts"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sdk-full-meeting-room",
