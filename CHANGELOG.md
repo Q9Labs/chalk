@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`@gorhom/bottom-sheet` dependency** - Added as peer dependency to React Native SDK for turnkey components
+  - Also added `react-native-gesture-handler` as peer dependency (required by bottom-sheet)
+  - Build script updated to externalize both packages
+
 - **`DeviceSelector` component** - Modal device picker for React Native SDK
   - Modal with list of available camera or microphone devices
   - Each row shows device name with checkmark if selected
