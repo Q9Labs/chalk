@@ -64,7 +64,9 @@ function RootLayoutNav() {
 		>
 			<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
 				<Stack>
-					<Stack.Screen name="index" options={{ headerShown: false }} />
+					<Stack.Screen name="index" options={{ title: "Chalk" }} />
+					<Stack.Screen name="call" options={{ headerShown: false }} />
+					<Stack.Screen name="settings" options={{ title: "Settings" }} />
 				</Stack>
 			</ThemeProvider>
 		</ChalkProvider>

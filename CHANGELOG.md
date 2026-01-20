@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Mobile app navigation structure** - Updated root layout for new consumer flow
+  - Stack navigator with index, call, settings screens
+  - Header hidden for call screen (fullscreen video experience)
+  - ChalkProvider wrapper preserved with tokenProvider
+
 - **Mobile app test harness cleanup** - Removed test harness screens from mobile demo app
   - Deleted `apps/mobile/app/(tabs)/` - tabs navigation and test screens
   - Deleted `apps/mobile/app/hooks/` - individual hook test screens
