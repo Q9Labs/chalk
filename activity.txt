@@ -8,3 +8,42 @@
 --- Iteration 2 completed at Tue Jan 20 13:04:28 PKT 2026 ---
 
 --- Iteration 3 completed at Tue Jan 20 13:04:32 PKT 2026 ---
+
+## sdk-atomic-avatar - 2026-01-20T13:45:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/atomic/Avatar.tsx
+- Created packages/sdk-react-native/src/components/atomic/index.ts
+- Updated packages/sdk-react-native/src/components/index.ts
+- Updated packages/sdk-react-native/src/index.ts
+**Decisions**:
+- Used 10-color palette for deterministic background colors
+- Hash function uses bit shift for fast, simple string hashing
+- Font size scales at 40% of avatar size for readability
+- Initials limited to 2 characters, extracted from whitespace-split words
+**Gotchas**: None
+**Next**: sdk-atomic-audio-indicator (AudioIndicator component with animated bars)
+
+--- Iteration 1 completed at Tue Jan 20 13:55:22 PKT 2026 ---
+
+## sdk-atomic-audio-indicator - 2026-01-20T14:10:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/atomic/AudioIndicator.tsx
+- Updated packages/sdk-react-native/src/components/atomic/index.ts
+- Added react-native-reanimated to peerDependencies and devDependencies
+- Updated build script to externalize react-native-reanimated
+**Decisions**:
+- Used 3 bars with base heights 0.4, 0.7, 0.5 for visual variety
+- Phase offsets (0, 100, 50ms) create staggered animation start
+- Animation amplitude scales with level (0-1) for responsive feedback
+- Duration shortens with higher levels (faster pulse when louder)
+- Nullish coalescing on array access for TypeScript strictness
+**Gotchas**:
+- `as const` on arrays creates literal types incompatible with SharedValue<number>
+- Must use `readonly number[]` instead of const assertion for reanimated compatibility
+**Next**: sdk-atomic-status-badge (StatusBadge for muted/speaking/hand-raised states)
+
+--- Iteration 2 completed at Tue Jan 20 14:03:52 PKT 2026 ---

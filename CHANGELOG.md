@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`StatusBadge` component** - Circular status badges for React Native SDK
+  - Three types: muted (red mic-off), speaking (green waveform), hand-raised (yellow hand)
+  - Pure StyleSheet implementation with no external dependencies
+  - Configurable size prop
+
 - **`AudioIndicator` component** - Animated speaking visualization for React Native SDK
   - 3 vertical bars that animate based on audio level using react-native-reanimated
   - Green when active, gray when inactive
