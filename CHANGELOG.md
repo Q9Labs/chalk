@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`VideoConference` component** - Turnkey orchestrator component for React Native SDK
+  - State machine: lobby → joining → connected → ended
+  - Combines PreJoinLobby and MeetingRoom into single entry point
+  - Props: roomId (string), displayName (optional string), onLeave (() => void)
+  - Error handling with retry option
+  - Loading state during room join
+
 - **`MeetingRoom` component** - Turnkey meeting room screen for React Native SDK
   - VideoGrid showing all participants with responsive layout
   - ControlBar at bottom wired to useMedia toggles

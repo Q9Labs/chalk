@@ -5,3 +5,4 @@
 
 export { MeetingRoom } from "./MeetingRoom";
 export { PreJoinLobby } from "./PreJoinLobby";
+export { VideoConference } from "./VideoConference";

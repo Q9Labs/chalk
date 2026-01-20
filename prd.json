@@ -123,7 +123,7 @@
 				"Chat button opens/closes bottom sheet",
 				"Export from index.ts"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sdk-full-video-conference",
