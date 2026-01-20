@@ -3,3 +3,4 @@
  */
 
 export { Avatar } from "./Avatar";
+export { AudioIndicator } from "./AudioIndicator";

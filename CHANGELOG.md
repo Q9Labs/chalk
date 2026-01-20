@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`AudioIndicator` component** - Animated speaking visualization for React Native SDK
+  - 3 vertical bars that animate based on audio level using react-native-reanimated
+  - Green when active, gray when inactive
+  - Configurable size prop
+
 - **`demoMode` config option** - Separated demo API endpoint selection from debug logging
   - `debug` now only controls console logging output
   - `demoMode` controls whether to use `demoJoin` vs `addParticipant` API endpoints
