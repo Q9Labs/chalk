@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`ControlBar` component** - Horizontal meeting control bar for React Native SDK
+  - 5 buttons: mic, video, screen-share, chat, leave
+  - Active states show filled icons, inactive show outlined with slash
+  - Pure StyleSheet implementation with no external icon dependencies
+  - Configurable callbacks for all controls
+
 - **`StatusBadge` component** - Circular status badges for React Native SDK
   - Three types: muted (red mic-off), speaking (green waveform), hand-raised (yellow hand)
   - Pure StyleSheet implementation with no external dependencies

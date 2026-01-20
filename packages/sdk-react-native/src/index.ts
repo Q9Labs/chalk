@@ -72,6 +72,7 @@ export {
 export {
 	AudioSession,
 	Avatar,
+	ControlBar,
 	ParticipantTile,
 	ScreenShareView,
 	useBluetoothAudio,

@@ -36,7 +36,7 @@
 				"Small circular badge with icon: muted=red mic-off, speaking=green waveform, hand-raised=yellow hand",
 				"Export from index.ts"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sdk-composite-control-bar",

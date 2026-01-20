@@ -47,3 +47,23 @@
 **Next**: sdk-atomic-status-badge (StatusBadge for muted/speaking/hand-raised states)
 
 --- Iteration 2 completed at Tue Jan 20 14:03:52 PKT 2026 ---
+
+## sdk-atomic-status-badge - 2026-01-20T14:30:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/atomic/StatusBadge.tsx
+- Updated packages/sdk-react-native/src/components/atomic/index.ts
+- Updated CHANGELOG.md
+**Decisions**:
+- Pure StyleSheet implementation using View components to draw icons
+- No external icon library - hand-drawn shapes for mic, waveform bars, hand
+- Three sub-components (MutedIcon, SpeakingIcon, HandRaisedIcon) for separation
+- Icon sizes scale proportionally with badge size
+- Muted icon includes diagonal slash overlay for "crossed out" effect
+**Gotchas**: None
+**Next**: sdk-composite-control-bar (ControlBar with meeting controls)
+
+--- Iteration 3 completed at $(date) ---
+
+--- Iteration 3 completed at Tue Jan 20 14:10:32 PKT 2026 ---

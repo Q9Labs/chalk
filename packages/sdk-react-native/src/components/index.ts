@@ -8,6 +8,9 @@
 // Atomic components
 export { Avatar } from "./atomic/index";
 
+// Composite components
+export { ControlBar } from "./composite/index";
+
 // Existing components
 export {
 	AudioSession,
