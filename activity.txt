@@ -67,3 +67,26 @@
 --- Iteration 3 completed at $(date) ---
 
 --- Iteration 3 completed at Tue Jan 20 14:10:32 PKT 2026 ---
+
+## sdk-composite-control-bar - 2026-01-20T14:45:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/composite/ControlBar.tsx
+- Created packages/sdk-react-native/src/components/composite/index.ts
+- Updated packages/sdk-react-native/src/components/index.ts
+- Updated packages/sdk-react-native/src/index.ts
+- Updated CHANGELOG.md
+**Decisions**:
+- Drew all icons using View components (no icon library dependency)
+- 5 buttons: mic, video, screen-share, chat, leave (red)
+- Active state = filled icon, inactive = outlined with diagonal slash
+- Screen share and chat use filled background when active instead of slash
+- Leave button always red, uses rotated phone icon
+- Semi-transparent dark background with rounded corners for the bar
+**Gotchas**: None
+**Next**: sdk-composite-chat-panel (ChatPanel with messages list and input)
+
+--- Iteration 4 completed at $(date) ---
+
+--- Iteration 1 completed at Tue Jan 20 14:34:50 PKT 2026 ---

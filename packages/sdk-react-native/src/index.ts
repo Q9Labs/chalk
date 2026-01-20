@@ -72,6 +72,7 @@ export {
 export {
 	AudioSession,
 	Avatar,
+	ChatPanel,
 	ControlBar,
 	ParticipantTile,
 	ScreenShareView,

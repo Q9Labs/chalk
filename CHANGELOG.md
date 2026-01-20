@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`ChatPanel` component** - Chat message panel for React Native SDK
+  - FlatList of messages with sender name, content, and timestamp
+  - Local user messages right-aligned blue, others left-aligned gray
+  - Bottom TextInput with send button
+  - Auto-scrolls to bottom on new messages
+  - Keyboard-aware layout using KeyboardAvoidingView
+
 - **`ControlBar` component** - Horizontal meeting control bar for React Native SDK
   - 5 buttons: mic, video, screen-share, chat, leave
   - Active states show filled icons, inactive show outlined with slash

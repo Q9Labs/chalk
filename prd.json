@@ -50,7 +50,7 @@
 				"StyleSheet only, no external UI library",
 				"Export from index.ts"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sdk-composite-chat-panel",
