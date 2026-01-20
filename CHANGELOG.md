@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`demoMode` config option** - Separated demo API endpoint selection from debug logging
+  - `debug` now only controls console logging output
+  - `demoMode` controls whether to use `demoJoin` vs `addParticipant` API endpoints
+  - Available in `ChalkClientConfig`, `ChalkSessionConfig`, and both React/React Native providers
+
 - **Transcription support** - Native transcription for Chalk conferences using Cloudflare RealtimeKit AI
   - Per-tenant transcription config (enable/disable, language, profanity filter, keywords)
   - Automatic passing of `ai_config` to Cloudflare when creating meetings

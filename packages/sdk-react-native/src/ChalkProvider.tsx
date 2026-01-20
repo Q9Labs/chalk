@@ -41,6 +41,9 @@ try {
 	useRealtimeKitClientHook = rtkRN.useRealtimeKitClient;
 } catch {
 	// RTK RN not available - will use fallback mode
+	console.log(
+		"RealtimeKit React Native not available - will use fallback mode",
+	);
 }
 
 const log = createLogger("ChalkProvider");
@@ -73,6 +76,8 @@ export interface ChalkProviderProps {
 	wsUrl?: string;
 	/** Enable debug logging */
 	debug?: boolean;
+	/** Use demo API endpoints (demoJoin instead of addParticipant) */
+	demoMode?: boolean;
 }
 
 export function ChalkProvider({
@@ -83,6 +88,7 @@ export function ChalkProvider({
 	apiUrl,
 	wsUrl,
 	debug,
+	demoMode,
 }: ChalkProviderProps) {
 	const [apiClient, setApiClient] = useState<APIClient | null>(null);
 	const [rtcManager, setRtcManager] = useState<RTCManager | null>(null);
@@ -159,7 +165,7 @@ export function ChalkProvider({
 			log.info("Joining room", { roomId });
 
 			// Call API to get auth tokens
-			const response = debug
+			const response = demoMode
 				? await apiClient.demoJoin(roomId, config.displayName)
 				: await apiClient.addParticipant(
 						roomId,
@@ -222,7 +228,7 @@ export function ChalkProvider({
 
 			return response.data;
 		},
-		[apiClient, rtcManager, debug, initRtk],
+		[apiClient, rtcManager, demoMode, initRtk],
 	);
 
 	const leaveRoom = useCallback(async () => {

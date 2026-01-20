@@ -33,6 +33,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private readonly wsUrl: string;
   private readonly tokenProvider?: TokenProvider;
   private readonly debug: boolean;
+  private readonly demoMode: boolean;
   private currentRoom: Room | null = null;
   private currentWsClient: WSClient | null = null;
   // Effect: OperationLock for serializing join operations
@@ -42,6 +43,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   constructor(config: ChalkClientConfig) {
     super();
     this.debug = config.debug ?? false;
+    this.demoMode = config.demoMode ?? false;
     this.wsUrl = config.wsUrl ?? this.deriveWsUrl(config.apiUrl);
     this.tokenProvider = config.tokenProvider;
 
@@ -179,7 +181,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
       this.log.info("Joining room", { roomId });
 
-      const response = this.debug
+      const response = this.demoMode
         ? await this.apiClient.demoJoin(roomId, config.displayName)
         : await this.apiClient.addParticipant(
             roomId,

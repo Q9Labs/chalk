@@ -136,6 +136,12 @@ export interface ChalkClientConfig {
 	 * @default false
 	 */
 	debug?: boolean;
+
+	/**
+	 * Use demo API endpoints (demoJoin instead of addParticipant)
+	 * @default false
+	 */
+	demoMode?: boolean;
 }
 
 // ============================================================================

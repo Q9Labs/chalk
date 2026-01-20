@@ -54,6 +54,8 @@ export interface ChalkProviderProps {
 	userName?: string;
 	/** Enable debug logging */
 	debug?: boolean;
+	/** Use demo API endpoints (demoJoin instead of addParticipant) */
+	demoMode?: boolean;
 }
 
 /** Context value providing access to ChalkSession */
@@ -100,6 +102,7 @@ export function ChalkProvider({
 	roomId,
 	userName,
 	debug,
+	demoMode,
 }: ChalkProviderProps): JSX.Element {
 	const [isConnected, setIsConnected] = useState(false);
 	const [rtkMeeting, setRtkMeeting] = useState<RealtimeKitClient | null>(null);
@@ -122,6 +125,7 @@ export function ChalkProvider({
 			tokenProvider,
 			apiKey,
 			debug,
+			demoMode,
 		};
 		const newSession = new ChalkSession(config);
 		sessionCache.set(cacheKey, newSession);

@@ -47,6 +47,8 @@ export interface ChalkSessionConfig {
 	apiKey?: string;
 	/** Enable debug logging */
 	debug?: boolean;
+	/** Use demo API endpoints (demoJoin instead of addParticipant) */
+	demoMode?: boolean;
 }
 
 /** ChalkSession events */
@@ -214,6 +216,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			tokenProvider: config.tokenProvider,
 			apiKey: config.apiKey,
 			debug,
+			demoMode: config.demoMode,
 		});
 
 		// Create managed runtime for Effect services
