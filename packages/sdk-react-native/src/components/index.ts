@@ -5,6 +5,10 @@
  * @public
  */
 
+// Atomic components
+export { Avatar } from "./atomic/index";
+
+// Existing components
 export {
 	AudioSession,
 	useBluetoothAudio,

@@ -71,6 +71,7 @@ export {
 // Components
 export {
 	AudioSession,
+	Avatar,
 	ParticipantTile,
 	ScreenShareView,
 	useBluetoothAudio,

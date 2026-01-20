@@ -1,103 +1,10 @@
-# React Native SDK - End-to-End Verification Activity Log
 
-## Setup Requirements (MUST be running before verification)
+--- Iteration 1 completed at Tue Jan 20 12:48:44 PKT 2026 ---
 
-1. **Metro bundler**: cd packages/sdk-react-native/example && bun start
-2. **iOS Simulator**: Must be booted (xcrun simctl list devices | grep Booted)
-3. **IDB PATH**: Ensure ~/bin/idb exists or PATH includes Python bin directory
+--- Iteration 2 completed at Tue Jan 20 12:48:56 PKT 2026 ---
 
-## iOS Simulator Skill Usage
+--- Iteration 1 completed at Tue Jan 20 13:04:20 PKT 2026 ---
 
-Scripts are located at: ~/.claude/skills/ios-simulator/scripts/
+--- Iteration 2 completed at Tue Jan 20 13:04:28 PKT 2026 ---
 
-Key commands:
-- Launch app: python3 scripts/app_launcher.py --launch com.q9labs.chalk-example
-- Tap by text: python3 scripts/navigator.py --find-text "Button Text" --tap
-- Grant permissions: python3 scripts/privacy_manager.py --bundle-id com.q9labs.chalk-example --grant camera,microphone
-- Screenshot: xcrun simctl io booted screenshot /path/to/output.png
-- Map screen: python3 scripts/screen_mapper.py --verbose
-
-Always prefix python scripts with: PATH="$HOME/bin:$PATH"
-
-## Metro Log Location
-
-Logs are at: /tmp/metro-output.log
-Use: tail -50 /tmp/metro-output.log to check recent output
-
----
-
-
---- Iteration 1 completed at Thu Jan 15 20:21:20 PKT 2026 ---
-
-## Iteration 2 - verify-001 - Thu Jan 16 2026 08:30
-**Status**: completed
-**What I did**: Verified app builds and launches on iOS simulator
-**Verification**: 
-- Metro bundler was already running on port 8081 (PID 87156)
-- Launched app with app_launcher.py --launch com.q9labs.chalk-example
-- Screenshot confirmed HomeScreen shows "Chalk Video" title, "Create & Join Room" button
-- SDK version v0.1.0 displayed at bottom
-**Next**: verify-002 - navigation to PreCallScreen
-
---- Iteration 1 completed at Thu Jan 15 20:31:45 PKT 2026 ---
-
---- Iteration 2 completed at Thu Jan 15 20:49:04 PKT 2026 ---
-
-## Iteration 3 - verify-001 - Thu Jan 15 2026 20:58 PKT
-**Status**: completed
-**What I did**: Fixed native module linking issues and verified app builds/launches
-**Issue Found**: `Cannot read property 'RTCManager' of undefined` - native WebRTC module wasn't linked
-**Root Cause**: `@cloudflare/react-native-webrtc` wasn't in node_modules due to bun symlink issue
-**Fix Applied**:
-1. Ran `bun install` in example app to ensure dependencies were resolved
-2. Ran `pod install` which properly linked RTKWebRTC (125.6422.07) and react-native-webrtc (125.0.3)
-3. Rebuilt iOS app with `bun run ios`
-**Gotcha**: The `ScreenCapturePickerView` duplicate registration error still appears in logs but doesn't crash the app
-**Verification**:
-- HomeScreen shows "Chalk Video" title ✓
-- "Create & Join Room" button visible ✓
-- SDK v0.1.0 displayed ✓
-**Next**: verify-002 - navigation to PreCallScreen
-
---- Iteration 3 completed at Thu Jan 15 20:58 PKT 2026 ---
-
-## Iteration 4 - verify-002 - Thu Jan 15 2026 21:05 PKT
-**Status**: completed
-**What I did**: Fixed multiple crashes and verified PreCallScreen navigation
-**Issues Fixed**:
-1. `bubblingEventTypes of null` error - RTCView incompatible with Bridgeless mode (React Native 0.76 default)
-   - Fix: Added `bridgelessEnabled` returning NO in AppDelegate.mm
-2. `enumerateDevices` native crash on simulator - nil object insertion in NSDict
-   - Fix: Added `isIOSSimulator` detection in RTCManager.ts to return mock devices on simulator
-**Code Changes**:
-- `AppDelegate.mm`: Added `- (BOOL)bridgelessEnabled { return NO; }` to disable Bridgeless mode
-- `RTCManager.ts`: Added simulator detection and mock device fallback for `enumerateDevices()`
-**Verification**:
-- "Join Room" title shown ✓
-- Room ID displayed (test-1768493097791) ✓
-- Camera: granted (green) ✓
-- Microphone: granted (green) ✓
-- "Join Call" button visible and enabled (green) ✓
-**Gotcha**: `@cloudflare/react-native-webrtc` doesn't fully support RN 0.76 New Architecture yet
-**Next**: verify-003 - CallScreen UI and controls
-
---- Iteration 4 completed at Thu Jan 15 21:05 PKT 2026 ---
-
---- Iteration 3 completed at Thu Jan 15 21:08:59 PKT 2026 ---
-
-## Iteration 5 - verify-004 - Thu Jan 16 2026 09:10 PKT
-**Status**: completed
-**What I did**: Verified mute/unmute control works on CallScreen
-**Verification**:
-- Initial state: "Unmute" button shown (audio muted, mic icon with strikethrough)
-- Tapped "Unmute" → Changed to "Mute" (audio unmuted, normal mic icon) ✓
-- Tapped "Mute" → Changed back to "Unmute" (audio muted again) ✓
-- Toggle works bidirectionally
-**Gotchas**: None - the control worked as expected on first try
-**Next**: verify-005 - video toggle control
-
---- Iteration 5 completed at Thu Jan 16 09:10 PKT 2026 ---
-
---- Iteration 4 completed at Thu Jan 15 21:11:15 PKT 2026 ---
-
---- Iteration 5 completed at Thu Jan 15 21:12:47 PKT 2026 ---
+--- Iteration 3 completed at Tue Jan 20 13:04:32 PKT 2026 ---
