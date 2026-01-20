@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`PreJoinLobby` component** - Turnkey pre-call setup screen for React Native SDK
+  - Camera preview using VideoView or Avatar fallback
+  - Device selector buttons for camera and microphone
+  - Display name TextInput
+  - Join button disabled until permissions granted and name entered
+  - Uses usePermissions, useDevices, and useLocalStream hooks
+  - Pure StyleSheet implementation
+
 - **`@gorhom/bottom-sheet` dependency** - Added as peer dependency to React Native SDK for turnkey components
   - Also added `react-native-gesture-handler` as peer dependency (required by bottom-sheet)
   - Build script updated to externalize both packages

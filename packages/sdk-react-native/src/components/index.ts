@@ -11,6 +11,9 @@ export { Avatar } from "./atomic/index";
 // Composite components
 export { ChatPanel, ControlBar, DeviceSelector } from "./composite/index";
 
+// Full (turnkey) components
+export { PreJoinLobby } from "./full/index";
+
 // Existing components
 export {
 	AudioSession,

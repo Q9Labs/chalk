@@ -78,7 +78,7 @@
 				"Header: 'Select Camera' or 'Select Microphone' based on type",
 				"Export from index.ts"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sdk-add-bottom-sheet-dep",
@@ -88,7 +88,7 @@
 				"Add react-native-gesture-handler to peerDependencies",
 				"bun install from repo root succeeds"
 			],
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sdk-full-prejoin-lobby",

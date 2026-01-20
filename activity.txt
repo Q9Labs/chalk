@@ -113,3 +113,44 @@
 --- Iteration 5 completed at $(date) ---
 
 --- Iteration 2 completed at Tue Jan 20 14:37:21 PKT 2026 ---
+
+## sdk-composite-device-selector - 2026-01-20T15:30:00Z
+
+**Status**: completed
+**Changes**:
+- Created packages/sdk-react-native/src/components/composite/DeviceSelector.tsx
+- Updated packages/sdk-react-native/src/components/composite/index.ts
+- Updated packages/sdk-react-native/src/components/index.ts
+- Updated packages/sdk-react-native/src/index.ts
+- Updated CHANGELOG.md
+**Decisions**:
+- Added visible and onClose props for controlled modal state (not in original spec)
+- Used React Native Modal with transparent overlay for backdrop tap to close
+- CheckIcon drawn with two rotated View components forming checkmark shape
+- Close button (X) drawn with two rotated lines
+- Device row highlights blue when selected, shows checkmark on right
+- Falls back to truncated deviceId if label is empty
+**Gotchas**: None
+**Next**: sdk-add-bottom-sheet-dep (add @gorhom/bottom-sheet dependency)
+
+--- Iteration 6 completed at $(date) ---
+
+--- Iteration 3 completed at Tue Jan 20 14:39:21 PKT 2026 ---
+
+## sdk-add-bottom-sheet-dep - 2026-01-20T16:00:00Z
+
+**Status**: completed
+**Changes**:
+- Updated packages/sdk-react-native/package.json
+- Added @gorhom/bottom-sheet to devDependencies and peerDependencies
+- Added react-native-gesture-handler to peerDependencies
+- Updated build script to externalize both packages
+**Decisions**:
+- Put @gorhom/bottom-sheet in devDependencies (not dependencies) since consuming apps provide it via peerDeps
+- Added version constraints: bottom-sheet >=5.0.0, gesture-handler >=2.0.0
+**Gotchas**: None
+**Next**: sdk-full-prejoin-lobby (PreJoinLobby turnkey component)
+
+--- Iteration 7 completed at $(date) ---
+
+--- Iteration 4 completed at Tue Jan 20 14:41:36 PKT 2026 ---

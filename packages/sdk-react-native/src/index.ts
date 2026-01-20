@@ -76,6 +76,7 @@ export {
 	ControlBar,
 	DeviceSelector,
 	ParticipantTile,
+	PreJoinLobby,
 	ScreenShareView,
 	useBluetoothAudio,
 	useSpeakerphone,
