@@ -113,31 +113,43 @@ resource "aws_apigatewayv2_api" "http" {
   tags = local.tags
 }
 
-resource "aws_apigatewayv2_integration" "http_alb" {
+resource "aws_apigatewayv2_integration" "http_alb_root" {
   api_id             = aws_apigatewayv2_api.http.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
   # Use HTTP URL for ALB - TLS terminates at API Gateway (Cloudflare→APIGW is HTTPS)
   # VPC_LINK doesn't support WebSocket upgrade, so we use INTERNET connection
-  integration_uri = "http://${var.alb_dns_name}"
+  integration_uri = "http://${var.alb_dns_name}/"
 
   connection_type = "INTERNET"
 
-  # Use version 2.0 payload format which passes the full path automatically
-  payload_format_version = "2.0"
+  payload_format_version = "1.0"
+  timeout_milliseconds   = 30000
+}
+
+resource "aws_apigatewayv2_integration" "http_alb_proxy" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  # Include {proxy} to forward the path from the route
+  integration_uri = "http://${var.alb_dns_name}/{proxy}"
+
+  connection_type = "INTERNET"
+
+  payload_format_version = "1.0"
   timeout_milliseconds   = 30000
 }
 
 resource "aws_apigatewayv2_route" "http_default" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "ANY /{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.http_alb.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.http_alb_proxy.id}"
 }
 
 resource "aws_apigatewayv2_route" "http_root" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "ANY /"
-  target    = "integrations/${aws_apigatewayv2_integration.http_alb.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.http_alb_root.id}"
 }
 
 resource "aws_apigatewayv2_stage" "http" {
