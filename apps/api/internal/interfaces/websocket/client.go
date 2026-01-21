@@ -93,7 +93,11 @@ func (c *Client) readPump(ctx context.Context) {
 			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
 				return
 			}
-			log.Printf("WebSocket read error for participant %s: %v", c.participantID, err)
+			if ctx.Err() != nil {
+				log.Printf("WebSocket context canceled for participant %s in room %s: %v", c.participantID, c.roomID, ctx.Err())
+				return
+			}
+			log.Printf("WebSocket read error for participant %s in room %s: %v", c.participantID, c.roomID, err)
 			return
 		}
 
@@ -115,6 +119,10 @@ func (c *Client) writePump(ctx context.Context) {
 
 	for {
 		select {
+		case <-ctx.Done():
+			log.Printf("WebSocket writePump context canceled for participant %s in room %s: %v", c.participantID, c.roomID, ctx.Err())
+			return
+
 		case <-c.done:
 			return
 

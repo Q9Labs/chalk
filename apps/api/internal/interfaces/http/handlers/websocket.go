@@ -141,7 +141,10 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	h.hub.Register(client)
 
 	// Start read and write pumps
-	ctx, cancel := context.WithCancel(c.Request.Context())
+	// IMPORTANT: Use context.Background() instead of c.Request.Context()
+	// The HTTP request context gets canceled when the upgrade completes,
+	// which would immediately terminate the WebSocket connection.
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client.Start(ctx)
 

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **WebSocket disconnect bug** - Fixed premature WebSocket disconnection (~628ms after connection)
+  - Root cause: WebSocket context was derived from `c.Request.Context()` (HTTP request lifecycle)
+  - When HTTP upgrade completed, context canceled, terminating `conn.Read(ctx)` immediately
+  - Fix: Use `context.Background()` to decouple WebSocket lifetime from HTTP request
+  - Added context cancellation logging to readPump/writePump for future debugging
+
+- **SDK WebSocket error logging** - Improved error visibility for debugging connection issues
+  - `onclose`: Now logs close code with human-readable description, wasClean flag, and connection state
+  - `onerror`: Extracts ErrorEvent details (message, filename, lineno, error) when available
+  - Connection errors now include full stack traces and context (roomId, URL)
+
 ### Changed
 
 - **Mobile call screen** - Created call screen using VideoConference component

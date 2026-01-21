@@ -140,7 +140,11 @@ export class WSClient extends EventEmitter<WSEvents> {
 			const separator = this.wsUrl.includes("?") ? "&" : "?";
 			url = `${this.wsUrl}${separator}token=${encodeURIComponent(this.token)}&room=${encodeURIComponent(this.roomId)}`;
 		}
-		this.log.info("Connecting", { url: this.wsUrl });
+		this.log.info("Connecting", {
+			url: this.wsUrl,
+			roomId: this.roomId,
+			attempt: this.reconnectAttempt + 1,
+		});
 
 		try {
 			// Also pass token via subprotocol as fallback
@@ -148,7 +152,15 @@ export class WSClient extends EventEmitter<WSEvents> {
 			this.ws = new WebSocket(url, protocols);
 			this.setupEventHandlers();
 		} catch (error) {
-			this.log.error("Connection error", { error });
+			// Capture the actual error details
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			const errorStack = error instanceof Error ? error.stack : undefined;
+			this.log.error("Connection error", {
+				message: errorMessage,
+				stack: errorStack,
+				url: this.wsUrl,
+				roomId: this.roomId,
+			});
 			this.handleConnectionFailure();
 		}
 	}
@@ -165,7 +177,33 @@ export class WSClient extends EventEmitter<WSEvents> {
 		};
 
 		this.ws.onclose = (event) => {
-			this.log.info("Disconnected", { code: event.code, reason: event.reason });
+			// Map WebSocket close codes to human-readable reasons
+			const closeCodeMap: Record<number, string> = {
+				1000: "Normal closure",
+				1001: "Going away (page navigation or server shutdown)",
+				1002: "Protocol error",
+				1003: "Unsupported data type",
+				1005: "No status received (abnormal closure)",
+				1006: "Abnormal closure (connection lost without close frame)",
+				1007: "Invalid frame payload data",
+				1008: "Policy violation",
+				1009: "Message too big",
+				1010: "Missing expected extension",
+				1011: "Internal server error",
+				1012: "Service restart",
+				1013: "Try again later",
+				1014: "Bad gateway",
+				1015: "TLS handshake failure",
+			};
+			const codeDescription = closeCodeMap[event.code] ?? "Unknown close code";
+
+			this.log.info("Disconnected", {
+				code: event.code,
+				codeDescription,
+				reason: event.reason || "(no reason provided)",
+				wasClean: event.wasClean,
+				state: this.state,
+			});
 			this.stopHeartbeat();
 
 			if (this.state === "connected") {
@@ -173,15 +211,31 @@ export class WSClient extends EventEmitter<WSEvents> {
 				this.handleConnectionFailure();
 			} else {
 				this.state = "disconnected";
-				this.emit("disconnected", { reason: event.reason });
+				this.emit("disconnected", { reason: event.reason || codeDescription });
 			}
 		};
 
 		this.ws.onerror = (event) => {
-			this.log.warn("WebSocket error", { event });
+			// Extract error details from ErrorEvent if available
+			const errorEvent = event as ErrorEvent;
+			const errorMessage = errorEvent.message || "Unknown WebSocket error";
+			const errorDetails: Record<string, unknown> = {
+				message: errorMessage,
+				type: event.type,
+				readyState: this.ws?.readyState,
+				readyStateDesc: this.ws ? ["CONNECTING", "OPEN", "CLOSING", "CLOSED"][this.ws.readyState] : "null",
+			};
+
+			// Include filename/lineno if available (ErrorEvent properties)
+			if (errorEvent.filename) errorDetails.filename = errorEvent.filename;
+			if (errorEvent.lineno) errorDetails.lineno = errorEvent.lineno;
+			if (errorEvent.error) errorDetails.error = String(errorEvent.error);
+
+			this.log.warn("WebSocket error", errorDetails);
 			this.emit("error", {
 				code: "WS_ERROR",
-				message: "WebSocket connection error",
+				message: `WebSocket error: ${errorMessage}`,
+				details: errorDetails,
 			});
 		};
 
