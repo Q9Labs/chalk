@@ -209,9 +209,10 @@ module "api_gateway" {
   alb_listener_arn   = module.ecs.https_listener_arn != null ? module.ecs.https_listener_arn : module.ecs.http_listener_arn
   alb_dns_name       = module.ecs.alb_dns_name
 
-  domain_name           = var.api_domain_name
-  websocket_domain_name = var.api_domain_name # Same domain, mapped to /ws path
-  certificate_arn       = module.dns.certificate_validated_arn
+  domain_name     = var.api_domain_name
+  certificate_arn = module.dns.certificate_validated_arn
+  # Note: WebSocket uses separate subdomain (chalk-ws) routed directly to ALB
+  # because API Gateway doesn't allow mixing WebSocket/HTTP APIs on same domain
 
   cors_allowed_origins = var.cors_allowed_origins
 
