@@ -1,0 +1,214 @@
+================================================================================
+WEBSOCKET DISCONNECT INVESTIGATION REPORT
+================================================================================
+Date: 2026-01-21
+Incident Time: 04:40:08.287 - 04:40:08.915 UTC
+Room: room-8555
+Duration of connection: ~628ms before failure
+================================================================================
+
+1. INCIDENT TIMELINE (from client logs)
+--------------------------------------------------------------------------------
+04:40:08.287  WebSocket    Connecting       wss://chalk-api.q9labs.ai/ws
+04:40:08.289  Session      Room Joined      Room: room-8555
+04:40:08.289  Chalk        Join Complete    Ready to connect
+04:40:08.915  WebSocket    FAILED           Connection dropped / Error event
+
+
+2. LOG LOCATIONS (AWS us-east-1)
+--------------------------------------------------------------------------------
+ECS Container Logs:    /aws/ecs/chalk-prod
+API Gateway HTTP:      /aws/apigateway/chalk-prod-http-api
+API Gateway WS:        /aws/apigateway/chalk-prod-websocket-api (0 bytes stored!)
+Redis Logs:            /aws/elasticache/chalk-prod-redis/engine-log
+Aurora DB Logs:        /aws/rds/cluster/chalk-prod-aurora/postgresql
+VPC Flow Logs:         /aws/vpc/chalk-prod/flow-logs
+
+Access logs via:
+  aws logs filter-log-events \
+    --log-group-name "/aws/ecs/chalk-prod" \
+    --start-time <epoch_ms> \
+    --end-time <epoch_ms> \
+    --region us-east-1
+
+
+3. SERVER-SIDE LOGS AT INCIDENT TIME
+--------------------------------------------------------------------------------
+04:39:57  [GIN] 204  OPTIONS  /api/v1/rooms/room-8555/participants
+04:40:01  [Hub] WARNING: Room 7bae1173-1918-4931-8ecb-871163345f37 not found in hub.rooms!
+04:40:01  [GIN] 201  POST     /api/v1/rooms/room-8555/participants (3.4s latency!)
+
+KEY OBSERVATION: The POST to join room took 3.4 SECONDS. This is extremely slow
+and suggests database/network latency issues.
+
+
+4. ECS DEPLOYMENT CONTEXT
+--------------------------------------------------------------------------------
+A rolling deployment completed BEFORE the user connected:
+
+04:34:41 UTC  New task (877aea09...) started
+04:35:13 UTC  New task registered in ALB target group
+04:35:42 UTC  Old task (dab3d149...) stopped
+04:36:45 UTC  Deployment completed, steady state reached
+
+The user connected at 04:40:08 UTC - 3+ minutes AFTER deployment completed.
+Therefore, the deployment itself is NOT the direct cause.
+
+HOWEVER: A shutdown log appeared at 04:41:25 UTC:
+  "2026/01/21 04:41:25 Shutting down server..."
+
+This is from the OLD task (dab3d149...) which should have been terminated
+at 04:35:42 UTC. The 6-minute gap is suspicious and may indicate:
+  - ECS SIGTERM delay
+  - Connection draining taking longer than expected
+  - Task not properly terminated
+
+
+5. CODE ANALYSIS: WEBSOCKET CONNECTION FLOW
+--------------------------------------------------------------------------------
+File: apps/api/internal/interfaces/http/handlers/websocket.go
+
+1. Client sends JWT token via Sec-WebSocket-Protocol header
+2. Handler validates JWT and extracts room_id, participant_id, tenant_id
+3. websocket.Accept() upgrades HTTP to WebSocket
+4. NewClient() creates client struct with hub reference
+5. hub.Register(client) sends client to registration channel
+6. client.Start(ctx) launches read/write goroutines
+7. client.Wait() blocks until done channel is closed
+
+POTENTIAL ISSUE on line 144-145:
+  ctx, cancel := context.WithCancel(c.Request.Context())
+  defer cancel()
+
+The context is derived from the HTTP request context (c.Request.Context()).
+If the request context is canceled (e.g., ALB timeout, API Gateway timeout),
+the WebSocket context will also be canceled, causing immediate disconnect.
+
+
+6. HUB BROADCAST WARNING ANALYSIS
+--------------------------------------------------------------------------------
+File: apps/api/internal/interfaces/websocket/hub.go (line 215)
+
+The warning "Room 7bae1173-1918-4931-8ecb-871163345f37 not found in hub.rooms!"
+occurs in BroadcastToRoom() when:
+  - A message is being broadcast to a room that doesn't exist in the hub's map
+
+The UUID (7bae1173...) is the INTERNAL room UUID from the database,
+while "room-8555" is the EXTERNAL room ID.
+
+This warning appearing AT THE SAME TIMESTAMP as the participant join suggests:
+  - Redis pub/sub is pushing a message for a room that has no local subscribers
+  - Or a race condition where broadcast happens before client registration completes
+
+
+7. ARCHITECTURE OVERVIEW
+--------------------------------------------------------------------------------
+Client --> Cloudflare (Proxy) --> API Gateway --> ALB --> ECS Task
+                                     |
+                                     v
+                              WebSocket Connection
+                                     |
+                              Hub (in-memory)
+                                     |
+                              Redis Pub/Sub (cross-instance)
+
+Key components:
+  - Cloudflare: Proxied (IPs 104.21.41.78, 172.67.162.125)
+  - API Gateway: HTTP API (chalk-prod-http-api)
+  - ALB: Internal, HTTPS enabled
+  - ECS: Single task (t3.small, 256 CPU, 512MB memory)
+  - Redis: ElastiCache cluster (chalk-prod-redis)
+
+
+8. ROOT CAUSE HYPOTHESES (Ranked by likelihood)
+--------------------------------------------------------------------------------
+
+HYPOTHESIS 1: API Gateway / ALB WebSocket Timeout (HIGH PROBABILITY)
+  The API Gateway or ALB has idle timeout settings that may be closing the
+  WebSocket connection. Default ALB idle timeout is 60 seconds, but the
+  connection dropped in <1 second.
+
+  Check: API Gateway WebSocket throttling settings:
+    - websocket_throttling_burst_limit = 1000
+    - websocket_throttling_rate_limit = 2000
+
+  The WebSocket API log group has 0 bytes stored, suggesting WS connections
+  may not be routing through API Gateway correctly.
+
+HYPOTHESIS 2: Cloudflare WebSocket Timeout (MEDIUM PROBABILITY)
+  Cloudflare has its own WebSocket timeout (typically 100 seconds idle).
+  However, connection failed in <1 second, which rules out idle timeout.
+  Could be:
+    - Rate limiting at Cloudflare level
+    - WebSocket upgrade blocked
+
+HYPOTHESIS 3: Context Cancellation Race (MEDIUM PROBABILITY)
+  The WebSocket handler uses c.Request.Context() which may be canceled
+  if the original HTTP request times out or the client disconnects during
+  upgrade.
+
+HYPOTHESIS 4: Hub Registration Race Condition (LOW PROBABILITY)
+  The hub.Register() is asynchronous (channel-based). If the client
+  attempts to receive messages before registration completes, it may fail.
+  However, the code handles this with buffered channels.
+
+HYPOTHESIS 5: Memory/Resource Exhaustion (LOW PROBABILITY)
+  ECS task is small (256 CPU, 512MB). Under load, goroutine creation
+  for WebSocket pumps could fail. Check Container Insights for memory usage.
+
+
+9. RECOMMENDED INVESTIGATION STEPS
+--------------------------------------------------------------------------------
+
+STEP 1: Check API Gateway configuration
+  - Verify WebSocket connections are routed through HTTP API, not a separate WS API
+  - The empty /aws/apigateway/chalk-prod-websocket-api log group is suspicious
+
+STEP 2: Add more granular logging
+  - Log WebSocket upgrade success/failure with reason
+  - Log context cancellation in client.go readPump/writePump
+  - Log client registration confirmation
+
+STEP 3: Check Cloudflare analytics
+  - WebSocket connections stats
+  - Any rate limiting or blocking events
+
+STEP 4: Review API Gateway VPC Link
+  - Ensure VPC link is healthy
+  - Check security group rules allow WebSocket traffic
+
+STEP 5: Test WebSocket directly to ALB (bypassing Cloudflare/API Gateway)
+  - This isolates the issue to either infrastructure or application layer
+
+
+10. FILES TO EXAMINE FOR FIX
+--------------------------------------------------------------------------------
+apps/api/internal/interfaces/http/handlers/websocket.go    - Connection handling
+apps/api/internal/interfaces/websocket/client.go           - Read/write pumps
+apps/api/internal/interfaces/websocket/hub.go              - Hub registration
+infrastructure/terraform/modules/api-gateway/main.tf       - API Gateway config
+infrastructure/terraform/modules/ecs/service.tf            - ECS task definition
+
+
+11. QUICK WINS TO IMPLEMENT
+--------------------------------------------------------------------------------
+
+1. Add error logging for WebSocket upgrade failures:
+   File: websocket.go, after line 127:
+   Add: log.Printf("WebSocket upgrade failed for room=%s: %v", claims.RoomID, err)
+
+2. Log context cancellation in client pumps:
+   File: client.go, in readPump/writePump:
+   Add select case for ctx.Done() with logging
+
+3. Verify WebSocket subprotocol acceptance:
+   The handler specifies Subprotocols: []string{"chalk"}
+   Ensure client is also requesting "chalk" subprotocol
+
+4. Check ALB target group health check:
+   Ensure WebSocket connections aren't being terminated by health check failures
+
+
+================================================================================
+END OF INVESTIGATION REPORT
+================================================================================

@@ -119,7 +119,8 @@ resource "aws_apigatewayv2_integration" "http_alb" {
   integration_method = "ANY"
   # Use HTTP URL for ALB - TLS terminates at API Gateway (Cloudflare→APIGW is HTTPS)
   # VPC_LINK doesn't support WebSocket upgrade, so we use INTERNET connection
-  integration_uri = "http://${var.alb_dns_name}/{proxy}"
+  # Path is automatically appended by HTTP API when using HTTP_PROXY type
+  integration_uri = "http://${var.alb_dns_name}"
 
   connection_type = "INTERNET"
 
