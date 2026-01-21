@@ -3,13 +3,15 @@
  * Combines VideoGrid, ControlBar, ChatPanel in BottomSheet, and ScreenShareView
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+	Modal,
 	StyleSheet,
+	Text,
+	TouchableOpacity,
 	View,
 	type ViewStyle,
 } from "react-native";
-import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { useChat } from "../../hooks/useChat";
 import { useMedia } from "../../hooks/useMedia";
 import { useParticipants } from "../../hooks/useParticipants";
@@ -19,6 +21,26 @@ import { ChatPanel } from "../composite/ChatPanel";
 import { ControlBar } from "../composite/ControlBar";
 import { ScreenShareView } from "../ScreenShareView";
 import { VideoGrid } from "../VideoGrid";
+
+// Lazy load BottomSheet to avoid crash before GestureHandlerRootView mounts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let BottomSheetComponent: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let BottomSheetViewComponent: any = null;
+let bottomSheetLoaded = false;
+
+function loadBottomSheet() {
+	if (bottomSheetLoaded) return;
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const bottomSheet = require("@gorhom/bottom-sheet");
+		BottomSheetComponent = bottomSheet.default;
+		BottomSheetViewComponent = bottomSheet.BottomSheetView;
+		bottomSheetLoaded = true;
+	} catch {
+		// Bottom sheet not available - will use fallback
+	}
+}
 
 // Dynamic require for MediaStream constructor (not available as type-only import)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,8 +79,16 @@ export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
 	const { messages, sendMessage } = useChat();
 
 	const [isChatOpen, setIsChatOpen] = useState(false);
-	const bottomSheetRef = useRef<BottomSheet>(null);
+	const [useBottomSheet, setUseBottomSheet] = useState(false);
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const bottomSheetRef = useRef<any>(null);
 	const snapPoints = useMemo(() => ["50%", "90%"], []);
+
+	// Load BottomSheet lazily after component mounts (after GestureHandlerRootView)
+	useEffect(() => {
+		loadBottomSheet();
+		setUseBottomSheet(bottomSheetLoaded && BottomSheetComponent !== null);
+	}, []);
 
 	// Find participant who is screen sharing (if any)
 	const screenSharer = useMemo(
@@ -140,25 +170,53 @@ export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
 				/>
 			</View>
 
-			{/* Chat panel in bottom sheet */}
-			<BottomSheet
-				ref={bottomSheetRef}
-				index={-1}
-				snapPoints={snapPoints}
-				enablePanDownToClose
-				onChange={handleBottomSheetChange}
-				backgroundStyle={styles.bottomSheetBackground}
-				handleIndicatorStyle={styles.bottomSheetHandle}
-			>
-				<BottomSheetView style={styles.bottomSheetContent}>
-					<ChatPanel
-						messages={messages}
-						onSend={sendMessage}
-						localUserId={localParticipant?.id ?? roomInfo?.participantId}
-						style={styles.chatPanel}
-					/>
-				</BottomSheetView>
-			</BottomSheet>
+			{/* Chat panel - use BottomSheet if available, otherwise Modal */}
+			{useBottomSheet && BottomSheetComponent ? (
+				<BottomSheetComponent
+					ref={bottomSheetRef}
+					index={-1}
+					snapPoints={snapPoints}
+					enablePanDownToClose
+					onChange={handleBottomSheetChange}
+					backgroundStyle={styles.bottomSheetBackground}
+					handleIndicatorStyle={styles.bottomSheetHandle}
+				>
+					{BottomSheetViewComponent && (
+						<BottomSheetViewComponent style={styles.bottomSheetContent}>
+							<ChatPanel
+								messages={messages}
+								onSend={sendMessage}
+								localUserId={localParticipant?.id ?? roomInfo?.participantId}
+								style={styles.chatPanel}
+							/>
+						</BottomSheetViewComponent>
+					)}
+				</BottomSheetComponent>
+			) : (
+				<Modal
+					visible={isChatOpen}
+					animationType="slide"
+					transparent
+					onRequestClose={() => setIsChatOpen(false)}
+				>
+					<View style={styles.modalOverlay}>
+						<View style={styles.modalContent}>
+							<View style={styles.modalHeader}>
+								<Text style={styles.modalTitle}>Chat</Text>
+								<TouchableOpacity onPress={() => setIsChatOpen(false)}>
+									<Text style={styles.modalClose}>Close</Text>
+								</TouchableOpacity>
+							</View>
+							<ChatPanel
+								messages={messages}
+								onSend={sendMessage}
+								localUserId={localParticipant?.id ?? roomInfo?.participantId}
+								style={styles.chatPanel}
+							/>
+						</View>
+					</View>
+				</Modal>
+			)}
 		</View>
 	);
 }
@@ -211,5 +269,36 @@ const styles = StyleSheet.create({
 	},
 	chatPanel: {
 		flex: 1,
+	},
+	// Modal fallback styles
+	modalOverlay: {
+		flex: 1,
+		backgroundColor: "rgba(0, 0, 0, 0.5)",
+		justifyContent: "flex-end",
+	},
+	modalContent: {
+		backgroundColor: "#ffffff",
+		borderTopLeftRadius: 16,
+		borderTopRightRadius: 16,
+		height: "60%",
+		paddingTop: 8,
+	},
+	modalHeader: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		paddingHorizontal: 16,
+		paddingVertical: 12,
+		borderBottomWidth: 1,
+		borderBottomColor: "#e5e7eb",
+	},
+	modalTitle: {
+		fontSize: 18,
+		fontWeight: "600",
+		color: "#111827",
+	},
+	modalClose: {
+		fontSize: 16,
+		color: "#2563eb",
 	},
 });

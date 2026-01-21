@@ -1,14 +1,14 @@
+import { Stack, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-	View,
-	Text,
-	StyleSheet,
-	TouchableOpacity,
-	TextInput,
 	KeyboardAvoidingView,
 	Platform,
+	StyleSheet,
+	Text,
+	TextInput,
+	TouchableOpacity,
+	View,
 } from "react-native";
-import { useRouter, Stack } from "expo-router";
 
 function generateUUID() {
 	return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {

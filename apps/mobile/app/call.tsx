@@ -1,56 +1,82 @@
 /**
- * Call Screen - Video conference screen
- * Reads roomId and create flag from search params
- * If create=true, creates room first then joins via VideoConference
+ * Call Screen - Uses VideoConference from SDK
  */
 
-import { VideoConference, useChalk } from "@q9labs/chalk-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+	ActivityIndicator,
+	StyleSheet,
+	Text,
+	TouchableOpacity,
+	View,
+} from "react-native";
+
+// Lazy load SDK components to catch any import errors
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let VideoConferenceComponent: React.ComponentType<any> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let useChalkHook: (() => any) | null = null;
+
+try {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	const sdk = require("@q9labs/chalk-react-native");
+	VideoConferenceComponent = sdk.VideoConference;
+	useChalkHook = sdk.useChalk;
+} catch (err) {
+	console.error("Failed to load SDK components:", err);
+}
 
 export default function CallScreen() {
 	const router = useRouter();
 	const params = useLocalSearchParams<{ roomId?: string; create?: string }>();
-	const { createRoom } = useChalk();
-
-	const [roomId, setRoomId] = useState<string | null>(null);
-	const [isCreating, setIsCreating] = useState(false);
+	const [roomId, setRoomId] = useState<string | null>(params.roomId ?? null);
 	const [error, setError] = useState<string | null>(null);
+	const [isCreating, setIsCreating] = useState(false);
 
-	const shouldCreate = params.create === "true";
-	const initialRoomId = params.roomId;
+	// Get createRoom from SDK if available
+	const chalkContext = useChalkHook?.();
 
-	// Create room if needed, otherwise use provided roomId
+	// Create room if needed
 	useEffect(() => {
-		if (shouldCreate && initialRoomId) {
+		const shouldCreate = params.create === "true" && !roomId;
+		if (shouldCreate && chalkContext?.createRoom && !isCreating) {
 			setIsCreating(true);
-			createRoom()
-				.then((newRoomId) => {
+			chalkContext
+				.createRoom()
+				.then((newRoomId: string) => {
 					setRoomId(newRoomId);
 					setIsCreating(false);
 				})
-				.catch((err) => {
-					setError(err instanceof Error ? err.message : "Failed to create room");
+				.catch((err: Error) => {
+					setError(err.message);
 					setIsCreating(false);
 				});
-		} else if (initialRoomId) {
-			setRoomId(initialRoomId);
-		} else {
-			setError("No room ID provided");
 		}
-	}, [shouldCreate, initialRoomId, createRoom]);
+	}, [params.create, roomId, chalkContext, isCreating]);
 
 	const handleLeave = useCallback(() => {
 		router.back();
 	}, [router]);
 
-	// Loading state while creating room
+	// SDK not available
+	if (!VideoConferenceComponent || !useChalkHook) {
+		return (
+			<View style={[styles.container, styles.center]}>
+				<Text style={styles.errorText}>SDK components not available</Text>
+				<TouchableOpacity style={styles.button} onPress={handleLeave}>
+					<Text style={styles.buttonText}>Go Back</Text>
+				</TouchableOpacity>
+			</View>
+		);
+	}
+
+	// Creating room
 	if (isCreating) {
 		return (
-			<View style={styles.container}>
+			<View style={[styles.container, styles.center]}>
 				<ActivityIndicator size="large" color="#2563eb" />
-				<Text style={styles.text}>Creating room...</Text>
+				<Text style={styles.loadingText}>Creating room...</Text>
 			</View>
 		);
 	}
@@ -58,38 +84,67 @@ export default function CallScreen() {
 	// Error state
 	if (error) {
 		return (
-			<View style={styles.container}>
+			<View style={[styles.container, styles.center]}>
 				<Text style={styles.errorText}>{error}</Text>
+				<TouchableOpacity style={styles.button} onPress={handleLeave}>
+					<Text style={styles.buttonText}>Go Back</Text>
+				</TouchableOpacity>
 			</View>
 		);
 	}
 
-	// Waiting for roomId
+	// No room ID
 	if (!roomId) {
 		return (
-			<View style={styles.container}>
-				<ActivityIndicator size="large" color="#2563eb" />
+			<View style={[styles.container, styles.center]}>
+				<Text style={styles.errorText}>No room ID provided</Text>
+				<TouchableOpacity style={styles.button} onPress={handleLeave}>
+					<Text style={styles.buttonText}>Go Back</Text>
+				</TouchableOpacity>
 			</View>
 		);
 	}
 
-	return <VideoConference roomId={roomId} onLeave={handleLeave} />;
+	// Render VideoConference
+	return (
+		<VideoConferenceComponent
+			roomId={roomId}
+			onLeave={handleLeave}
+			style={styles.container}
+		/>
+	);
 }
 
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		alignItems: "center",
-		justifyContent: "center",
 		backgroundColor: "#111827",
 	},
-	text: {
-		color: "#f9fafb",
-		fontSize: 16,
+	center: {
+		justifyContent: "center",
+		alignItems: "center",
+		padding: 24,
+	},
+	loadingText: {
 		marginTop: 16,
+		color: "#fff",
+		fontSize: 16,
 	},
 	errorText: {
-		color: "#fca5a5",
+		color: "#ef4444",
 		fontSize: 16,
+		textAlign: "center",
+		marginBottom: 24,
+	},
+	button: {
+		backgroundColor: "#374151",
+		paddingHorizontal: 24,
+		paddingVertical: 12,
+		borderRadius: 8,
+	},
+	buttonText: {
+		color: "#fff",
+		fontSize: 16,
+		fontWeight: "600",
 	},
 });

@@ -1,0 +1,10 @@
+[install]
+# Prevent hoisting of expo/metro packages to avoid project root confusion
+# These packages need to stay in their respective workspace node_modules
+[install.scopes]
+# Don't hoist expo-related packages
+"@expo" = { hoist = false }
+
+[install.peer]
+# Allow peer dependencies to be installed
+optional = true

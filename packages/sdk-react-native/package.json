@@ -38,7 +38,7 @@
 		"@gorhom/bottom-sheet": "^5.2.8",
 		"@types/bun": "latest",
 		"@types/react": "^19.0.0",
-		"react-native-reanimated": "^4.1.1",
+		"react-native-reanimated": "^3.19.5",
 		"typescript": "^5.7.2"
 	},
 	"peerDependencies": {

@@ -24,21 +24,30 @@ import {
 } from "react";
 import { RTCManager } from "./native/RTCManager";
 
-// Dynamic import for RTK RN hooks (may not be available in all environments)
-let useRealtimeKitClientHook:
-	| (() => [
-			RealtimeKitClient | undefined,
-			(options: {
-				authToken: string;
-				defaults?: { audio?: boolean; video?: boolean };
-			}) => void,
-	  ])
-	| null = null;
+// Import RTK RN hook (always import, check availability at runtime)
+type RTKInitOptions = {
+	authToken: string;
+	defaults?: { audio?: boolean; video?: boolean };
+};
+
+type RTKHookResult = [RealtimeKitClient | undefined, (options: RTKInitOptions) => void];
+
+// Stub hook for when RTK RN is not available
+function useRealtimeKitClientStub(): RTKHookResult {
+	return [undefined, () => {}];
+}
+
+// Try to get the real hook, fall back to stub
+let useRealtimeKitClientHook: () => RTKHookResult = useRealtimeKitClientStub;
+let rtkAvailable = false;
 
 try {
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const rtkRN = require("@cloudflare/realtimekit-react-native");
-	useRealtimeKitClientHook = rtkRN.useRealtimeKitClient;
+	if (rtkRN.useRealtimeKitClient) {
+		useRealtimeKitClientHook = rtkRN.useRealtimeKitClient;
+		rtkAvailable = true;
+	}
 } catch {
 	// RTK RN not available - will use fallback mode
 	console.log(
@@ -96,11 +105,8 @@ export function ChalkProvider({
 		useState<RoomStatus>("disconnected");
 	const [roomInfo, setRoomInfo] = useState<JoinRoomResponse | null>(null);
 
-	// RTK client from hook (if available)
-	// We call the hook unconditionally but it may be a no-op
-	const [rtkClient, initRtk] = useRealtimeKitClientHook
-		? useRealtimeKitClientHook()
-		: [undefined, () => {}];
+	// RTK client from hook (always called - may be stub if RTK unavailable)
+	const [rtkClient, initRtk] = useRealtimeKitClientHook();
 
 	// Track if we've joined RTK
 	const hasJoinedRtk = useRef(false);
@@ -197,7 +203,7 @@ export function ChalkProvider({
 			}
 
 			// Initialize RTK with the auth token
-			if (useRealtimeKitClientHook && initRtk) {
+			if (rtkAvailable && initRtk) {
 				log.debug("Initializing RTK with auth token");
 				hasJoinedRtk.current = false; // Reset so useEffect can join
 				initRtk({
