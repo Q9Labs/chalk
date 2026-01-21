@@ -274,9 +274,9 @@ func TestResponse_WithErrors(t *testing.T) {
 }
 
 func TestAIConfig_JSONMarshaling(t *testing.T) {
+	// Presence of TranscriptionConfig enables transcription (no separate "enabled" field)
 	config := AIConfig{
 		Transcription: &TranscriptionConfig{
-			Enabled:  true,
 			Language: "en-US",
 		},
 	}
@@ -287,7 +287,6 @@ func TestAIConfig_JSONMarshaling(t *testing.T) {
 	var parsed AIConfig
 	err = json.Unmarshal(data, &parsed)
 	require.NoError(t, err)
-	assert.NotNil(t, parsed.Transcription)
-	assert.True(t, parsed.Transcription.Enabled)
+	assert.NotNil(t, parsed.Transcription) // Presence indicates enabled
 	assert.Equal(t, "en-US", parsed.Transcription.Language)
 }
