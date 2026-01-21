@@ -168,6 +168,13 @@ func (c *Client) handleMessage(msg *Message) {
 		c.handleHandRaise()
 	case MessageTypeHandLower:
 		c.handleHandLower()
+	case MessageTypePing:
+		// Respond to client ping with pong
+		pongMsg, _ := NewMessage(MessageTypePong, PongPayload{
+			Timestamp: time.Now(),
+		})
+		data, _ := json.Marshal(pongMsg)
+		c.Send(data)
 	case MessageTypePong:
 		// Just acknowledge, no action needed
 	case MessageTypeWhiteboardUpdate:
