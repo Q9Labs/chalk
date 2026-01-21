@@ -27,6 +27,7 @@ func TestHealthHandler_ResponseStructure(t *testing.T) {
 	healthyResponse := map[string]interface{}{
 		"status":   "healthy",
 		"database": "connected",
+		"uptime":   float64(3600.5),
 		"pool": map[string]interface{}{
 			"total_conns":    int32(10),
 			"idle_conns":     int32(5),
@@ -42,6 +43,7 @@ func TestHealthHandler_ResponseStructure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "healthy", parsed["status"])
 	assert.Equal(t, "connected", parsed["database"])
+	assert.NotNil(t, parsed["uptime"])
 	assert.NotNil(t, parsed["pool"])
 }
 
@@ -50,7 +52,7 @@ func TestHealthHandler_UnhealthyResponseStructure(t *testing.T) {
 	unhealthyResponse := map[string]interface{}{
 		"status":   "unhealthy",
 		"database": "disconnected",
-		"error":    "connection refused",
+		"uptime":   float64(3600.5),
 	}
 
 	data, err := json.Marshal(unhealthyResponse)
@@ -61,5 +63,5 @@ func TestHealthHandler_UnhealthyResponseStructure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "unhealthy", parsed["status"])
 	assert.Equal(t, "disconnected", parsed["database"])
-	assert.NotNil(t, parsed["error"])
+	assert.NotNil(t, parsed["uptime"])
 }

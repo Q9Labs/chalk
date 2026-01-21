@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.38] - 2026-01-21
 
+### Added
+
+- **Health endpoint uptime** - `/health` response now includes `uptime` field showing server uptime in seconds
+
 ### Fixed
 
 - **WebSocket disconnect bug** - Fixed premature WebSocket disconnection (~628ms after connection)
@@ -21,9 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Connection errors now include full stack traces and context (roomId, URL)
 
 - **WebSocket infrastructure** - Fixed WebSocket connections not reaching backend
-  - Root cause: VPC Link V2 (HTTP API) doesn't support WebSocket upgrade
-  - Fix: Changed ALB to internet-facing, API Gateway uses INTERNET connection
-  - WebSocket traffic now flows: Cloudflare → API Gateway → ALB → ECS
+  - Root cause 1: VPC Link V2 (HTTP API) doesn't support WebSocket upgrade
+  - Root cause 2: API Gateway doesn't allow mixing WebSocket and HTTP APIs on same custom domain
+  - Fix: Created separate WebSocket subdomain (`chalk-ws.q9labs.ai`) pointing directly to ALB
+  - WebSocket traffic now flows: Cloudflare → ALB → ECS (bypasses API Gateway)
+  - HTTP traffic still flows: Cloudflare → API Gateway → ALB → ECS
 
 ### Changed
 

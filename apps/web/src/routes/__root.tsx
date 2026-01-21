@@ -72,11 +72,18 @@ function RootComponent() {
 	// API URL for backend - use env var or default to production
 	const apiUrl = import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
 	// WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
+	// Note: Production uses separate subdomain because API Gateway doesn't support
+	// mixing HTTP and WebSocket APIs on the same custom domain
 	const wsUrl =
 		import.meta.env.VITE_WS_URL ||
 		(apiUrl
 			? (() => {
 					const api = new URL(apiUrl);
+					// Production: use dedicated WebSocket subdomain (direct to ALB)
+					if (api.host === "chalk-api.q9labs.ai") {
+						return "wss://chalk-ws.q9labs.ai/ws";
+					}
+					// Local/other: derive from API URL
 					const wsProtocol = api.protocol === "https:" ? "wss:" : "ws:";
 					return `${wsProtocol}//${api.host}/ws`;
 				})()

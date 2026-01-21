@@ -209,8 +209,9 @@ module "api_gateway" {
   alb_listener_arn   = module.ecs.https_listener_arn != null ? module.ecs.https_listener_arn : module.ecs.http_listener_arn
   alb_dns_name       = module.ecs.alb_dns_name
 
-  domain_name     = var.api_domain_name
-  certificate_arn = module.dns.certificate_validated_arn
+  domain_name           = var.api_domain_name
+  websocket_domain_name = var.api_domain_name # Same domain, mapped to /ws path
+  certificate_arn       = module.dns.certificate_validated_arn
 
   cors_allowed_origins = var.cors_allowed_origins
 
@@ -245,6 +246,17 @@ resource "cloudflare_dns_record" "frontend" {
   type    = "CNAME"
   ttl     = 1
   proxied = true
+}
+
+# Cloudflare DNS record for WebSocket (direct to ALB, bypasses API Gateway)
+# API Gateway doesn't support mixing WebSocket and HTTP APIs on the same domain
+resource "cloudflare_dns_record" "websocket" {
+  zone_id = module.dns.cloudflare_zone_id
+  name    = "chalk-ws"
+  content = module.ecs.alb_dns_name
+  type    = "CNAME"
+  ttl     = 1
+  proxied = true # Cloudflare supports WebSocket proxying
 }
 
 module "waf" {

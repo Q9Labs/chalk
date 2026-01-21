@@ -59,10 +59,15 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: ok
+                    example: healthy
                   database:
                     type: string
                     example: connected
+                  uptime:
+                    type: number
+                    format: double
+                    description: Server uptime in seconds
+                    example: 3600.5
 
   # ============================================================================
   # AUTH ENDPOINTS
