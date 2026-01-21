@@ -43,12 +43,17 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSock
 	}
 
 	// Production/staging origins (always allowed)
+	// Include patterns with and without scheme for compatibility
 	origins = append(origins,
 		"https://chalk.q9labs.ai",
+		"chalk.q9labs.ai", // Some requests may not include scheme
 		"https://collabdash-dev.vercel.app",
+		"collabdash-dev.vercel.app",
 		// Allow localhost for development/testing even in production
 		"http://localhost:*",
+		"localhost:*",
 		"http://127.0.0.1:*",
+		"127.0.0.1:*",
 	)
 
 	return &WebSocketHandler{
