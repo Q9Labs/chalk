@@ -7,7 +7,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"test": "vitest run",
-		"postinstall": "mkdir -p public/vendor && cp ../../node_modules/@excalidraw/excalidraw/dist/prod/index.css public/vendor/excalidraw.css 2>/dev/null || true"
+		"postinstall": "mkdir -p public/vendor && cp ../../node_modules/@excalidraw/excalidraw/dist/prod/index.css public/vendor/excalidraw.css 2>/dev/null || true && cp -r ../../node_modules/@excalidraw/excalidraw/dist/prod/fonts public/vendor/fonts 2>/dev/null || true"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.0.0",

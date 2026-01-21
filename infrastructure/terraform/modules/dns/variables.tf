@@ -42,6 +42,12 @@ variable "cloudflare_proxy_enabled" {
   default     = true
 }
 
+variable "certificate_san_domains" {
+  description = "Additional domains for the SSL certificate (Subject Alternative Names)"
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)

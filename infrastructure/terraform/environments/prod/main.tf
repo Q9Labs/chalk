@@ -192,6 +192,9 @@ module "dns" {
   api_domain           = var.api_domain_name
   api_subdomain        = "chalk-api"
 
+  # Include WebSocket subdomain in certificate for direct ALB access
+  certificate_san_domains = ["chalk-ws.${var.cloudflare_zone_name}"]
+
   # These are set to null initially - CNAME records created separately below
   api_gateway_domain_target = null
   frontend_subdomain        = null
@@ -251,13 +254,14 @@ resource "cloudflare_dns_record" "frontend" {
 
 # Cloudflare DNS record for WebSocket (direct to ALB, bypasses API Gateway)
 # API Gateway doesn't support mixing WebSocket and HTTP APIs on the same domain
+# Note: proxied=false to avoid Cloudflare WebSocket issues; ALB handles SSL
 resource "cloudflare_dns_record" "websocket" {
   zone_id = module.dns.cloudflare_zone_id
   name    = "chalk-ws"
   content = module.ecs.alb_dns_name
   type    = "CNAME"
-  ttl     = 1
-  proxied = true # Cloudflare supports WebSocket proxying
+  ttl     = 300 # Non-proxied requires explicit TTL
+  proxied = false
 }
 
 module "waf" {

@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - WebSocket traffic now flows: Cloudflare → ALB → ECS (bypasses API Gateway)
   - HTTP traffic still flows: Cloudflare → API Gateway → ALB → ECS
 
+- **Excalidraw fonts 404** - Fixed missing font files for whiteboard component
+  - CSS referenced relative font paths (`./fonts/Assistant/*.woff2`) that weren't being copied
+  - Updated `postinstall` to copy fonts directory alongside CSS
+
+- **Excalidraw CSS loading for SDK consumers** - WhiteboardPanel now loads CSS from CDN by default
+  - Changed default `excalidrawCssPath` from `/vendor/excalidraw.css` to jsDelivr CDN
+  - Fonts load automatically via relative paths in the CDN-hosted CSS
+  - Consumers can still self-host by passing a custom `excalidrawCssPath` prop
+  - Exported `EXCALIDRAW_CSS_CDN` constant for reference
+
 ### Changed
 
 - **Mobile call screen** - Created call screen using VideoConference component

@@ -87,12 +87,20 @@ type BinaryFiles = Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SyncEngine = any;
 
+/** CDN URL for Excalidraw CSS - includes fonts via relative paths */
+const EXCALIDRAW_CSS_CDN =
+	"https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.0/dist/prod/index.css";
+
 export interface WhiteboardPanelProps {
 	/** Called when whiteboard should close */
 	onClose?: () => void;
 	/** Custom CSS class */
 	className?: string;
-	/** Path to Excalidraw CSS (defaults to /vendor/excalidraw.css) */
+	/**
+	 * URL or path to Excalidraw CSS.
+	 * Defaults to jsDelivr CDN which includes fonts automatically.
+	 * Set to a local path (e.g., "/vendor/excalidraw.css") if self-hosting.
+	 */
 	excalidrawCssPath?: string;
 	/** Theme override */
 	theme?: "light" | "dark" | "auto";
@@ -107,7 +115,7 @@ export interface WhiteboardPanelProps {
 function WhiteboardPanelBase({
 	onClose,
 	className,
-	excalidrawCssPath = "/vendor/excalidraw.css",
+	excalidrawCssPath = EXCALIDRAW_CSS_CDN,
 	theme = "auto",
 }: WhiteboardPanelProps): React.JSX.Element {
 	const {
@@ -402,8 +410,8 @@ function WhiteboardPanelBase({
 								{loadError}
 							</span>
 							<span className="text-xs text-[var(--chalk-text-tertiary,#6b7280)]">
-								Make sure @excalidraw/excalidraw is installed and the CSS is
-								available at {excalidrawCssPath}
+								Make sure @excalidraw/excalidraw is installed as a peer
+								dependency
 							</span>
 						</div>
 					</div>
