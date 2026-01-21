@@ -81,7 +81,9 @@ module "ecs" {
   max_capacity     = 2          # Downsized from 10
   desired_capacity = 1          # Downsized from 3
 
-  internal_alb          = true
+  # ALB must be internet-facing for WebSocket support
+  # VPC Link V2 (HTTP API) doesn't support WebSocket upgrade
+  internal_alb          = false
   enable_https_listener = true
   certificate_arn       = module.dns.certificate_validated_arn
   log_retention_days    = 30 # Reduced from 90

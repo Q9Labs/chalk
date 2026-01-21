@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `onerror`: Extracts ErrorEvent details (message, filename, lineno, error) when available
   - Connection errors now include full stack traces and context (roomId, URL)
 
+- **WebSocket infrastructure** - Fixed WebSocket connections not reaching backend
+  - Root cause: VPC Link V2 (HTTP API) doesn't support WebSocket upgrade
+  - Fix: Changed ALB to internet-facing, API Gateway uses INTERNET connection
+  - WebSocket traffic now flows: Cloudflare → API Gateway → ALB → ECS
+
 ### Changed
 
 - **Mobile call screen** - Created call screen using VideoConference component

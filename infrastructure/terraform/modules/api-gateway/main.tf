@@ -117,19 +117,14 @@ resource "aws_apigatewayv2_integration" "http_alb" {
   api_id             = aws_apigatewayv2_api.http.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
-  integration_uri    = var.alb_listener_arn
+  # Use HTTP URL for ALB - TLS terminates at API Gateway (Cloudflare→APIGW is HTTPS)
+  # VPC_LINK doesn't support WebSocket upgrade, so we use INTERNET connection
+  integration_uri = "http://${var.alb_dns_name}/{proxy}"
 
-  connection_type = "VPC_LINK"
-  connection_id   = aws_apigatewayv2_vpc_link.main.id
+  connection_type = "INTERNET"
 
   payload_format_version = "1.0"
   timeout_milliseconds   = 30000
-
-  # TLS verification must use the domain matching the ACM certificate on the ALB
-  # The ALB has cert for var.domain_name, not the internal DNS name
-  tls_config {
-    server_name_to_verify = var.domain_name
-  }
 }
 
 resource "aws_apigatewayv2_route" "http_default" {
