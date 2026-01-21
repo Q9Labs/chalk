@@ -1,4 +1,7 @@
 import "@/styles/globals.css";
+// Import Chalk SDK styles in JS (required for Next.js - CSS @import from node_modules doesn't work)
+import "@q9labs/chalk-ui/styles.css";
+import "@q9labs/chalk-react/styles.css";
 import { ChalkProvider } from "@q9labs/chalk-react";
 import type { AppProps } from "next/app";
 

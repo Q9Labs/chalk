@@ -46,6 +46,9 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSock
 	origins = append(origins,
 		"https://chalk.q9labs.ai",
 		"https://collabdash-dev.vercel.app",
+		// Allow localhost for development/testing even in production
+		"http://localhost:*",
+		"http://127.0.0.1:*",
 	)
 
 	return &WebSocketHandler{

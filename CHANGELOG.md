@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - WebSocket traffic now flows: Cloudflare → ALB → ECS (bypasses API Gateway)
   - HTTP traffic still flows: Cloudflare → API Gateway → ALB → ECS
 
+- **WebSocket localhost origins** - Allow localhost WebSocket connections in production
+  - Previously localhost origins were only allowed when `ENV != "production"`
+  - Now localhost:* is always allowed for development/testing
+
 - **Excalidraw fonts 404** - Fixed missing font files for whiteboard component
   - CSS referenced relative font paths (`./fonts/Assistant/*.woff2`) that weren't being copied
   - Updated `postinstall` to copy fonts directory alongside CSS
@@ -40,6 +44,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fonts load automatically via relative paths in the CDN-hosted CSS
   - Consumers can still self-host by passing a custom `excalidrawCssPath` prop
   - Exported `EXCALIDRAW_CSS_CDN` constant for reference
+
+- **Next.js CSS import pattern** - Fixed CSS imports in next-pages-demo
+  - Moved `@import` statements from CSS to JS imports in `_app.tsx`
+  - Next.js requires CSS from node_modules to be imported in JS, not via CSS `@import`
+  - Added `@q9labs/chalk-ui` to `transpilePackages`
+
+### Added
+
+- **SDK README** - Added setup documentation for `@q9labs/chalk-react`
+  - Next.js App Router and Pages Router examples
+  - Vite/CRA setup
+  - Whiteboard configuration (CDN vs self-hosted)
+  - Basic usage examples
 
 ### Changed
 
