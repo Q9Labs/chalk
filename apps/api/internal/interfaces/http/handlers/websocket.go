@@ -49,6 +49,8 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSock
 		"chalk.q9labs.ai", // Some requests may not include scheme
 		"https://collabdash-dev.vercel.app",
 		"collabdash-dev.vercel.app",
+		"https://app.collabdash.io",
+		"app.collabdash.io",
 		// Allow localhost for development/testing even in production
 		"http://localhost:*",
 		"localhost:*",

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Health endpoint uptime** - `/health` response now includes `uptime` field showing server uptime in seconds
+- **app.collabdash.io origin** - Added `https://app.collabdash.io` to CORS allowed origins (HTTP, WebSocket, API Gateway)
 
 ### Fixed
 
