@@ -144,5 +144,5 @@ func (h *WhatsNewHandler) setCache(ctx context.Context, response *WhatsNewRespon
 		return
 	}
 
-	h.redisClient.Set(ctx, whatsNewCacheKey, string(data), h.cacheTTL)
+	_ = h.redisClient.Set(ctx, whatsNewCacheKey, string(data), h.cacheTTL)
 }
