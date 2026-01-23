@@ -34,15 +34,15 @@ export const Toast = React.memo<ToastProps>(({
 
   const icons = {
     info: <InformationCircleIcon size={20} className="text-primary" />,
-    success: <CheckmarkCircle02Icon size={20} className="text-[var(--chart-3,var(--chalk-success))]" />,
-    warning: <Alert02Icon size={20} className="text-[var(--chart-1,var(--chalk-warning))]" />,
+    success: <CheckmarkCircle02Icon size={20} className="text-success" />,
+    warning: <Alert02Icon size={20} className="text-warning" />,
     error: <CancelCircleIcon size={20} className="text-destructive" />,
   };
 
   const borderColors = {
     info: 'border-l-primary',
-    success: 'border-l-[var(--chart-3,var(--chalk-success))]',
-    warning: 'border-l-[var(--chart-1,var(--chalk-warning))]',
+    success: 'border-l-success',
+    warning: 'border-l-warning',
     error: 'border-l-destructive',
   };
 

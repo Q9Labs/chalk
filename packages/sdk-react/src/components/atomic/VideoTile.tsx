@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { cn } from '../../utils/cn';
 import { MicrophoneOff01Icon, Monitor01Icon, HandIcon } from '../../utils/icons';
 import { Avatar } from './Avatar';
-import { NameTag } from './NameTag';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
-import { getParticipantGradient, getParticipantBorder } from '../../utils/colorGenerator';
+import { getParticipantGradient } from '../../utils/colorGenerator';
 
 export interface VideoTileProps {
   participant: {
@@ -136,95 +135,103 @@ export const VideoTile = React.memo(({
   const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError;
 
   const participantGradient = useMemo(() => getParticipantGradient(participant.id), [participant.id]);
-  const participantBorder = useMemo(() => getParticipantBorder(participant.id), [participant.id]);
 
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-[32px] transition-all duration-300',
+        'relative overflow-hidden rounded-2xl border-0 outline-none',
         aspectRatioClasses[aspectRatio],
-        (participant.isSpeaking || pinned) && 'ring-2 ring-ring',
-        onClick && 'cursor-pointer hover:scale-[1.01]',
+        pinned && 'ring-2 ring-primary/50',
+        onClick && 'cursor-pointer',
         className
       )}
-      style={{
-        background: `var(--card, ${participantGradient})`,
-        border: `2px solid var(--border, ${participantBorder})`,
-      }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       data-tour={participant.isLocal ? 'local-video' : 'video-grid'}
       role="region"
       aria-label={`Video tile for ${participant.displayName}`}
     >
-      {showVideo ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className={cn(
-            'h-full w-full object-cover',
-            mirror && 'scale-x-[-1]'
-          )}
-        />
-      ) : showAvatar ? (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative">
-            <Avatar
-              name={participant.displayName}
-              src={participant.avatarUrl}
-              size="2xl"
-            />
-          </div>
+      {/* Video element (always rendered, visibility controlled by CSS) */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={cn(
+          'h-full w-full object-cover',
+          mirror && 'scale-x-[-1]',
+          !showVideo && 'hidden'
+        )}
+      />
+
+      {/* Avatar background when video is off */}
+      {!showVideo && showAvatar && (
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ background: participantGradient }}
+        >
+          <Avatar
+            name={participant.displayName}
+            src={participant.avatarUrl}
+            size="xl"
+            className="opacity-90"
+          />
         </div>
-      ) : null}
+      )}
 
       {children}
 
-      {/* Smoother gradient overlay for name/status */}
-      <div
-        className="absolute inset-x-0 bottom-0 p-6 pointer-events-none"
-        style={{
-          background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.02) 20%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.55) 100%)'
-        }}
-      >
-        <div className="flex items-center justify-between">
-          {showName && (
-            <NameTag
-              name={participant.displayName}
-              size="lg"
-              className="font-bold text-lg text-white/90"
-            />
-          )}
-          <div className="flex-1" />
-          {showStatus && (
-            <div className="flex items-center gap-2">
-              {/* Muted indicator - glass style */}
-              {participant.isMuted && (
-                <div className="rounded-full bg-muted/60 p-2 text-muted-foreground backdrop-blur-md border border-border">
-                  <MicrophoneOff01Icon size={16} />
-                </div>
-              )}
-              {/* Hand raised indicator with wave animation */}
-              {participant.isHandRaised && (
-                <div className={cn(
-                  "rounded-full bg-secondary p-2 text-secondary-foreground backdrop-blur-md",
-                  !prefersReducedMotion && "chalk-animate-hand-bounce"
-                )}>
-                  <HandIcon size={16} />
-                </div>
-              )}
-              {/* Screen sharing indicator */}
-              {participant.isScreenSharing && (
-                <div className="rounded-full bg-chart-3 p-2 text-primary-foreground backdrop-blur-md">
-                  <Monitor01Icon size={16} />
-                </div>
-              )}
-            </div>
-          )}
+      {/* Compact bottom-left info chip */}
+      {(showName || showStatus) && (
+        <div className="absolute bottom-3 left-3 right-3 pointer-events-none">
+          <div
+            className="inline-flex items-center gap-2 px-2 py-1.5 rounded-full backdrop-blur-md"
+            style={{
+              background: 'rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {/* Small avatar when video is off */}
+            {!showVideo && showAvatar && (
+              <Avatar
+                name={participant.displayName}
+                src={participant.avatarUrl}
+                size="sm"
+              />
+            )}
+
+            {/* Name */}
+            {showName && (
+              <span className="text-sm font-medium text-white truncate max-w-[120px]">
+                {participant.displayName}
+              </span>
+            )}
+
+            {/* Status icons inline */}
+            {showStatus && (
+              <div className="flex items-center gap-1 ml-auto">
+                {participant.isMuted && (
+                  <div className="rounded-full bg-red-500/80 p-1">
+                    <MicrophoneOff01Icon size={12} className="text-white" />
+                  </div>
+                )}
+                {participant.isHandRaised && (
+                  <div className={cn(
+                    "rounded-full bg-amber-500/80 p-1",
+                    !prefersReducedMotion && "chalk-animate-hand-bounce"
+                  )}>
+                    <HandIcon size={12} className="text-white" />
+                  </div>
+                )}
+                {participant.isScreenSharing && (
+                  <div className="rounded-full bg-primary/80 p-1">
+                    <Monitor01Icon size={12} className="text-white" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 });

@@ -39,8 +39,8 @@ export const ReactionPicker = React.memo(({
       <div
         className={cn(
           "absolute z-50 p-2 w-64 rounded-lg shadow-xl",
-          "bg-[var(--popover,var(--chalk-bg-panel))]",
-          "border border-[var(--border,var(--chalk-border-subtle))]",
+          "bg-popover",
+          "border border-border/50",
           !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200",
           position === 'top' ? "bottom-full mb-2" : "top-full mt-2",
           "left-1/2 -translate-x-1/2",
@@ -50,8 +50,8 @@ export const ReactionPicker = React.memo(({
         aria-label="Reaction picker"
       >
         {recentReactions.length > 0 && (
-          <div className="mb-2 pb-2 border-b border-[var(--border,var(--chalk-border-subtle))]">
-            <div className="text-xs px-1 mb-1 text-[var(--muted-foreground,var(--chalk-text-muted))]">Recent</div>
+          <div className="mb-2 pb-2 border-b border-border/50">
+            <div className="text-xs px-1 mb-1 text-muted-foreground">Recent</div>
             <div className="flex gap-1 overflow-x-auto pb-1">
               {recentReactions.map((emoji, i) => (
                 <button
@@ -59,7 +59,7 @@ export const ReactionPicker = React.memo(({
                   onClick={() => handleSelect(emoji)}
                   className={cn(
                     "w-8 h-8 flex items-center justify-center rounded text-xl transition-colors",
-                    "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]"
+                    "hover:bg-accent"
                   )}
                   aria-label={`React with ${emoji}`}
                 >
@@ -77,7 +77,7 @@ export const ReactionPicker = React.memo(({
               onClick={() => handleSelect(emoji)}
               className={cn(
                 "w-8 h-8 flex items-center justify-center rounded text-xl transition-colors",
-                "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]"
+                "hover:bg-accent"
               )}
               aria-label={`React with ${emoji}`}
             >

@@ -226,12 +226,8 @@ function WhiteboardPanelBase({
 						[],
 					);
 
-					// Get background color from CSS variables
-					const rootStyles = getComputedStyle(document.documentElement);
-					const backgroundColor =
-						rootStyles.getPropertyValue("--chalk-bg-stage").trim() ||
-						rootStyles.getPropertyValue("--background").trim() ||
-						(resolvedTheme === "dark" ? "#0f1115" : "#ffffff");
+					// Canvas background - always dark for better drawing experience
+					const backgroundColor = "#121212";
 
 					return React.createElement(Excalidraw, {
 						excalidrawAPI: (api: unknown) => {
@@ -240,7 +236,7 @@ function WhiteboardPanelBase({
 						initialData: {
 							appState: {
 								viewBackgroundColor: backgroundColor,
-								theme: resolvedTheme,
+								theme: "dark", // Always dark for consistent drawing experience
 							},
 						},
 						onChange: handleChange,
@@ -330,13 +326,13 @@ function WhiteboardPanelBase({
 		<div
 			className={cn(
 				"fixed inset-0 z-50 flex flex-col",
-				"bg-[var(--chalk-bg-primary,#0f1219)]",
+				"bg-background",
 				className,
 			)}
 		>
 			{/* Header */}
-			<div className="h-14 bg-[var(--chalk-bg-secondary,#1a1f2e)] border-b border-[var(--chalk-border,#2a2f3e)] flex items-center justify-between px-4">
-				<h1 className="text-[var(--chalk-text-primary,#fff)] font-semibold text-lg">
+			<div className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
+				<h1 className="text-foreground font-semibold text-lg">
 					Whiteboard
 				</h1>
 
@@ -347,7 +343,7 @@ function WhiteboardPanelBase({
 							<button
 								type="button"
 								onClick={grantAll}
-								className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
+								className="flex items-center gap-1.5 px-3 py-1.5 bg-success hover:bg-success/90 text-success-foreground text-sm rounded-lg transition-colors"
 							>
 								<UnlockIcon />
 								Enable All
@@ -355,7 +351,7 @@ function WhiteboardPanelBase({
 							<button
 								type="button"
 								onClick={revokeAll}
-								className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors"
+								className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-sm rounded-lg transition-colors"
 							>
 								<LockIcon />
 								Disable All
@@ -368,8 +364,8 @@ function WhiteboardPanelBase({
 						className={cn(
 							"px-3 py-1.5 rounded-lg text-sm",
 							canDraw
-								? "bg-emerald-500/15 text-emerald-400"
-								: "bg-red-500/15 text-red-400",
+								? "bg-success/15 text-success"
+								: "bg-destructive/15 text-destructive",
 						)}
 					>
 						{canDraw ? "You can draw" : "View only"}
@@ -379,7 +375,7 @@ function WhiteboardPanelBase({
 					<button
 						type="button"
 						onClick={onClose}
-						className="p-2 hover:bg-[var(--chalk-bg-tertiary,#2a2f3e)] rounded-lg transition-colors text-[var(--chalk-text-secondary,#9ca3af)] hover:text-[var(--chalk-text-primary,#fff)]"
+						className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
 						aria-label="Close whiteboard"
 					>
 						<XIcon />
@@ -391,9 +387,9 @@ function WhiteboardPanelBase({
 			<div className="flex-1 relative">
 				{/* Loading state */}
 				{!isReady && !loadError && (
-					<div className="absolute inset-0 flex items-center justify-center text-[var(--chalk-text-primary,#fff)] bg-[var(--chalk-bg-primary,#0f1219)] z-10">
+					<div className="absolute inset-0 flex items-center justify-center text-foreground bg-background z-10">
 						<div className="flex flex-col items-center gap-3">
-							<div className="w-8 h-8 border-2 border-[var(--chalk-brand,#6366f1)] border-t-transparent rounded-full animate-spin" />
+							<div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
 							<span>Loading whiteboard...</span>
 						</div>
 					</div>
@@ -401,15 +397,15 @@ function WhiteboardPanelBase({
 
 				{/* Error state */}
 				{loadError && (
-					<div className="absolute inset-0 flex items-center justify-center text-red-400 bg-[var(--chalk-bg-primary,#0f1219)] z-10">
+					<div className="absolute inset-0 flex items-center justify-center text-destructive bg-background z-10">
 						<div className="flex flex-col items-center gap-3 max-w-md text-center px-4">
 							<span className="text-lg font-medium">
 								Failed to load whiteboard
 							</span>
-							<span className="text-sm text-[var(--chalk-text-secondary,#9ca3af)]">
+							<span className="text-sm text-muted-foreground">
 								{loadError}
 							</span>
-							<span className="text-xs text-[var(--chalk-text-tertiary,#6b7280)]">
+							<span className="text-xs text-muted-foreground/70">
 								Make sure @excalidraw/excalidraw is installed as a peer
 								dependency
 							</span>

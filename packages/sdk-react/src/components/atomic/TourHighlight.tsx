@@ -71,7 +71,7 @@ export const TourHighlight = React.memo<TourHighlightProps>(({
       className={cn(
         'fixed ease-out pointer-events-none',
         !prefersReducedMotion && 'transition-all duration-300 chalk-animate-highlight',
-        'border-2 border-[var(--chalk-accent)]',
+        'border-2 border-accent',
         className
       )}
       style={{

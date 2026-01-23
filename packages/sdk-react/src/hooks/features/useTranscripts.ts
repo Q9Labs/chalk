@@ -56,24 +56,39 @@ export function useTranscripts(): UseTranscriptsReturn {
   // Subscribe to transcript events from the room
   useEffect(() => {
     const room = session.chalkClient.room;
-    if (!room) return;
+    console.log("[useTranscripts] Setting up transcript subscription", { hasRoom: !!room });
+
+    if (!room) {
+      console.warn("[useTranscripts] No room available");
+      return;
+    }
 
     // Load existing transcripts
     const existing = room.transcripts;
+    console.log("[useTranscripts] Checking existing transcripts", { count: existing.length });
     if (existing.length > 0) {
+      console.log("[useTranscripts] Loading existing transcripts", { transcripts: existing });
       setTranscripts(existing);
       setIsAvailable(true);
     }
 
     // Listen for new transcripts
     const handleTranscript = (transcript: Transcript) => {
+      console.log("[useTranscripts] Received transcript event", {
+        id: transcript.id,
+        speaker: transcript.speakerName,
+        text: transcript.text?.slice(0, 100),
+        isInterim: transcript.isInterim,
+      });
       setIsAvailable(true);
       setTranscripts((prev) => [...prev, transcript]);
     };
 
+    console.log("[useTranscripts] Subscribing to room transcript event");
     room.on("transcript", handleTranscript);
 
     return () => {
+      console.log("[useTranscripts] Unsubscribing from room transcript event");
       room.off("transcript", handleTranscript);
     };
   }, [session]);

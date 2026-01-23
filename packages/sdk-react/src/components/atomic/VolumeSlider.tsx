@@ -46,11 +46,9 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
         onClick={onMuteToggle}
         className={cn(
           'flex items-center justify-center rounded-full transition-colors',
-          'hover:bg-[var(--accent,var(--chalk-bg-tertiary))]',
+          'hover:bg-accent',
           size === 'sm' ? 'p-1' : 'p-1.5',
-          muted
-            ? 'text-[var(--muted-foreground,var(--chalk-text-muted))]'
-            : 'text-[var(--foreground,var(--chalk-text-primary))]'
+          muted ? 'text-muted-foreground' : 'text-foreground'
         )}
         aria-label={muted ? 'Unmute' : 'Mute'}
       >
@@ -76,23 +74,20 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
       >
         <Slider.Track
           className={cn(
-            'relative grow rounded-full',
-            'bg-[var(--muted,var(--chalk-bg-tertiary))]',
+            'relative grow rounded-full bg-muted',
             isVertical ? 'w-2 h-full' : 'h-2 w-full'
           )}
         >
           <Slider.Indicator
             className={cn(
-              'absolute rounded-full',
-              'bg-[var(--primary,var(--chalk-accent))]',
+              'absolute rounded-full bg-primary',
               isVertical ? 'w-full bottom-0' : 'h-full left-0'
             )}
           />
           <Slider.Thumb
             className={cn(
-              'block rounded-full shadow-sm',
-              'bg-[var(--primary,var(--chalk-accent))]',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring,var(--chalk-accent))]',
+              'block rounded-full shadow-sm bg-primary',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               'disabled:pointer-events-none disabled:opacity-50',
               size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'
             )}
@@ -101,7 +96,7 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
       </Slider.Root>
 
       {showValue && (
-        <span className="text-xs text-[var(--muted-foreground,var(--chalk-text-secondary))] min-w-[2rem] text-center">
+        <span className="text-xs text-muted-foreground min-w-[2rem] text-center">
           {Math.round(value)}%
         </span>
       )}

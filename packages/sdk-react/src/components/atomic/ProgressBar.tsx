@@ -24,8 +24,8 @@ export const ProgressBar = React.memo<ProgressBarProps>(({
 
   const variantColors = {
     default: 'bg-primary',
-    success: 'bg-[var(--chart-3,var(--chalk-success))]',
-    warning: 'bg-[var(--chart-1,var(--chalk-warning))]',
+    success: 'bg-success',
+    warning: 'bg-warning',
     danger: 'bg-destructive',
   };
 

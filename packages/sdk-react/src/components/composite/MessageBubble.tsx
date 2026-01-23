@@ -55,7 +55,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[var(--primary,var(--chalk-accent))] underline"
+            className="text-primary underline"
           >
             {part}
           </a>
@@ -71,14 +71,14 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     switch (status) {
       case 'sending':
         return (
-          <div className="w-3 h-3 rounded-full animate-spin border-2 border-[var(--muted-foreground,var(--chalk-text-muted))]/40 border-t-transparent" />
+          <div className="w-3 h-3 rounded-full animate-spin border-2 border-muted-foreground/40 border-t-transparent" />
         );
       case 'sent':
-        return <Tick01Icon className="w-3.5 h-3.5 text-[var(--muted-foreground,var(--chalk-text-muted))]" />;
+        return <Tick01Icon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'delivered':
-        return <TickDouble01Icon className="w-3.5 h-3.5 text-[var(--muted-foreground,var(--chalk-text-muted))]" />;
+        return <TickDouble01Icon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'read':
-        return <TickDouble01Icon className="w-3.5 h-3.5 text-[var(--primary,var(--chalk-accent))]" />;
+        return <TickDouble01Icon className="w-3.5 h-3.5 text-primary" />;
       default:
         return null;
     }
@@ -87,13 +87,13 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
   if (isSystem) {
     return (
       <div className={cn('flex flex-col items-center gap-1 py-3', className)}>
-        <div className="px-4 py-2 rounded-full bg-[var(--muted,var(--chalk-bg-tertiary))] text-[var(--muted-foreground,var(--chalk-text-muted))]">
+        <div className="px-4 py-2 rounded-full bg-muted text-muted-foreground">
           <p className="text-xs text-center">
             {renderContent(content)}
           </p>
         </div>
         {showTimestamp && (
-          <span className="text-[11px] text-[var(--muted-foreground,var(--chalk-text-muted))]">
+          <span className="text-[11px] text-muted-foreground">
             {formatTime(timestamp)}
           </span>
         )}
@@ -128,8 +128,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
           className={cn(
             "px-4 py-3 backdrop-blur-sm",
             isLocal
-              ? "bg-[var(--primary,var(--chalk-accent))] text-[var(--primary-foreground,#fff)] rounded-[20px_4px_20px_20px]"
-              : "bg-[var(--card,var(--chalk-bg-tertiary))] text-[var(--card-foreground,var(--chalk-text-primary))] rounded-[4px_20px_20px_20px]"
+              ? "bg-primary text-primary-foreground rounded-[20px_4px_20px_20px]"
+              : "bg-card text-card-foreground rounded-[4px_20px_20px_20px]"
           )}
         >
           <p className="text-sm leading-relaxed break-words">
@@ -142,7 +142,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
             "flex items-center gap-1.5 mt-1 px-1",
             isLocal ? "flex-row-reverse" : "flex-row"
           )}>
-            <span className="text-[11px] text-[var(--muted-foreground,var(--chalk-text-muted))]">
+            <span className="text-[11px] text-muted-foreground">
               {formatTime(timestamp)}
             </span>
             {renderStatus()}

@@ -46,7 +46,7 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
       role="banner"
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <h1 className="text-sm font-medium truncate text-[var(--foreground,var(--chalk-text-primary))]/90">
+        <h1 className="text-sm font-medium truncate text-foreground/90">
           {roomName}
         </h1>
       </div>
@@ -54,7 +54,7 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
       <div className="flex flex-1 justify-center">
         <div className={cn(
           "px-3 py-1.5 rounded-full text-sm font-medium tabular-nums flex items-center gap-2",
-          "bg-[var(--secondary,var(--chalk-bg-tertiary))]/50 text-[var(--foreground,var(--chalk-text-primary))]"
+          "bg-secondary/50 text-foreground"
         )}>
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           {formatDuration(duration)}
@@ -66,14 +66,14 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
         {isTranscribing && <StatusBadge status="transcribing" />}
 
         {onLayoutChange && (
-          <div className="hidden sm:flex rounded-full p-1 gap-1 bg-[var(--secondary,var(--chalk-bg-tertiary))]/50">
+          <div className="hidden sm:flex rounded-full p-1 gap-1 bg-secondary/50">
             <button
               onClick={() => onLayoutChange('grid')}
               className={cn(
                 'p-2 rounded-full transition-colors',
                 layout === 'grid'
-                  ? 'bg-[var(--accent,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]'
-                  : 'text-[var(--muted-foreground,var(--chalk-text-muted))] hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50'
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
               )}
               aria-label="Grid layout"
               aria-pressed={layout === 'grid'}
@@ -85,8 +85,8 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
               className={cn(
                 'p-2 rounded-full transition-colors',
                 layout === 'spotlight'
-                  ? 'bg-[var(--accent,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]'
-                  : 'text-[var(--muted-foreground,var(--chalk-text-muted))] hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50'
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
               )}
               aria-label="Spotlight layout"
               aria-pressed={layout === 'spotlight'}
@@ -98,8 +98,8 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
               className={cn(
                 'p-2 rounded-full transition-colors',
                 layout === 'sidebar'
-                  ? 'bg-[var(--accent,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]'
-                  : 'text-[var(--muted-foreground,var(--chalk-text-muted))] hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50'
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
               )}
               aria-label="Sidebar layout"
               aria-pressed={layout === 'sidebar'}
@@ -114,8 +114,8 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
             onClick={onSettings}
             className={cn(
               "p-2 rounded-full transition-colors",
-              "text-[var(--muted-foreground,var(--chalk-text-muted))]",
-              "hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50"
+              "text-muted-foreground",
+              "hover:text-foreground hover:bg-accent/50"
             )}
             aria-label="Settings"
           >

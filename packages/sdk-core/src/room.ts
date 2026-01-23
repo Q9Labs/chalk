@@ -966,7 +966,10 @@ export class Room extends EventEmitter<RoomEvents> {
   }
 
   private setupTranscriptListener(): void {
-    if (!this.rtkClient) return;
+    if (!this.rtkClient) {
+      this.log.debug("[Transcript] No RTK client available");
+      return;
+    }
 
     // Access RTK ai module for transcription (may not be available in all versions)
     const ai = (this.rtkClient as unknown as { ai?: {
@@ -974,40 +977,64 @@ export class Room extends EventEmitter<RoomEvents> {
       on?: (event: string, handler: (data: unknown) => void) => void;
     } }).ai;
 
+    // Debug: Log what's available on rtkClient for transcription
+    const rtkKeys = Object.keys(this.rtkClient as object);
+    this.log.debug("[Transcript] RTK client keys", { keys: rtkKeys });
+
     if (!ai) {
-      this.log.debug("RTK ai module not available");
+      this.log.warn("[Transcript] RTK ai module not available - transcription will not work");
       return;
     }
 
-    this.log.debug("Setting up transcript listener");
+    this.log.info("[Transcript] Setting up transcript listener");
+    this.log.debug("[Transcript] AI module structure", {
+      hasTranscripts: Array.isArray(ai.transcripts),
+      hasOn: typeof ai.on === "function",
+      aiKeys: Object.keys(ai),
+    });
 
     // Load existing transcripts if available
     if (Array.isArray(ai.transcripts)) {
+      this.log.debug("[Transcript] Found existing transcripts array", { count: ai.transcripts.length });
       for (const t of ai.transcripts) {
+        this.log.debug("[Transcript] Raw existing transcript", { raw: t });
         const transcript = this.mapRTKTranscript(t);
         if (transcript) {
           this._transcripts.push(transcript);
+          this.log.debug("[Transcript] Mapped existing transcript", { speaker: transcript.speakerName, text: transcript.text.slice(0, 50) });
         }
       }
-      this.log.debug("Loaded existing transcripts", { count: this._transcripts.length });
+      this.log.info("[Transcript] Loaded existing transcripts", { count: this._transcripts.length });
+    } else {
+      this.log.debug("[Transcript] No existing transcripts array found");
     }
 
     // Listen for new transcripts
     if (typeof ai.on === "function") {
+      this.log.info("[Transcript] Registering transcript event handler");
       ai.on("transcript", (data: unknown) => {
+        this.log.info("[Transcript] RAW transcript event received", { data });
         const transcript = this.mapRTKTranscript(data);
         if (transcript) {
           this._transcripts.push(transcript);
+          this.log.info("[Transcript] Emitting transcript event", {
+            speaker: transcript.speakerName,
+            text: transcript.text.slice(0, 100),
+            isInterim: transcript.isInterim,
+          });
           this.emit("transcript", transcript);
-          this.log.debug("Transcript received", { speaker: transcript.speakerName });
 
           // Send final transcripts to backend for persistence
           if (!transcript.isInterim) {
             this.wsClient?.sendTranscript(transcript);
           }
+        } else {
+          this.log.warn("[Transcript] Failed to map transcript", { rawData: data });
         }
       });
-      this.log.debug("Transcript handler registered");
+      this.log.info("[Transcript] Transcript handler registered successfully");
+    } else {
+      this.log.warn("[Transcript] ai.on is not a function - cannot listen for transcripts");
     }
   }
 

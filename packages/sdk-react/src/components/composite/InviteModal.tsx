@@ -45,7 +45,7 @@ export const InviteModal = React.memo<InviteModalProps>(({
     <div
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm',
-        'bg-[var(--background,var(--chalk-bg-overlay))]/80',
+        'bg-background/80',
         className
       )}
       role="dialog"
@@ -56,13 +56,13 @@ export const InviteModal = React.memo<InviteModalProps>(({
         ref={modalRef}
         className={cn(
           "w-full max-w-md overflow-hidden rounded-lg shadow-lg",
-          "bg-[var(--card,var(--chalk-bg-primary))]",
-          "border border-[var(--border,var(--chalk-border-color))]",
+          "bg-card",
+          "border border-border",
           !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200"
         )}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border,var(--chalk-border-color))]">
-          <h2 id="invite-modal-title" className="text-lg font-semibold text-[var(--card-foreground,var(--chalk-text-primary))]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 id="invite-modal-title" className="text-lg font-semibold text-card-foreground">
             Invite Participants
           </h2>
           <IconButton
@@ -89,7 +89,7 @@ export const InviteModal = React.memo<InviteModalProps>(({
                 onClick={onCopyLink}
                 className={cn(
                   "w-full flex items-center justify-center gap-2 py-2.5 rounded-md font-medium transition-colors",
-                  "bg-[var(--primary,var(--chalk-primary))] text-[var(--primary-foreground,#fff)]",
+                  "bg-primary text-primary-foreground",
                   "hover:opacity-90"
                 )}
               >
@@ -102,11 +102,11 @@ export const InviteModal = React.memo<InviteModalProps>(({
           {meetingId && (
             <div className={cn(
               "flex items-center justify-between p-3 rounded-md",
-              "bg-[var(--muted,var(--chalk-bg-secondary))]",
-              "border border-[var(--border,var(--chalk-border-color))]"
+              "bg-muted",
+              "border border-border"
             )}>
-              <span className="text-sm text-[var(--muted-foreground,var(--chalk-text-secondary))]">Meeting ID</span>
-              <span className="font-mono font-medium text-[var(--card-foreground,var(--chalk-text-primary))] select-all">
+              <span className="text-sm text-muted-foreground">Meeting ID</span>
+              <span className="font-mono font-medium text-card-foreground select-all">
                 {meetingId}
               </span>
             </div>
@@ -118,9 +118,9 @@ export const InviteModal = React.memo<InviteModalProps>(({
                 onClick={onShareEmail}
                 className={cn(
                   "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors",
-                  "bg-[var(--secondary,var(--chalk-bg-secondary))] text-[var(--secondary-foreground,var(--chalk-text-primary))]",
-                  "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
-                  "border border-[var(--border,var(--chalk-border-color))]"
+                  "bg-secondary text-secondary-foreground",
+                  "hover:bg-accent",
+                  "border border-border"
                 )}
               >
                 <Mail01Icon size={16} />
@@ -132,9 +132,9 @@ export const InviteModal = React.memo<InviteModalProps>(({
                 onClick={onShareCalendar}
                 className={cn(
                   "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors",
-                  "bg-[var(--secondary,var(--chalk-bg-secondary))] text-[var(--secondary-foreground,var(--chalk-text-primary))]",
-                  "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
-                  "border border-[var(--border,var(--chalk-border-color))]"
+                  "bg-secondary text-secondary-foreground",
+                  "hover:bg-accent",
+                  "border border-border"
                 )}
               >
                 <Calendar01Icon size={16} />

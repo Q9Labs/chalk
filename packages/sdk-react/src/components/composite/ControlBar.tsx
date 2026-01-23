@@ -41,7 +41,7 @@ export type ControlBarButton =
 
 export interface ControlBarProps {
 	position?: "bottom" | "top";
-	variant?: "floating" | "fixed" | "minimal" | "mobile";
+	variant?: "floating" | "fixed" | "minimal" | "mobile" | "dock";
 	showLabels?: boolean;
 	buttons?: ControlBarButton[];
 
@@ -123,7 +123,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="mic"
-							icon={isMuted ? <MicrophoneOff01Icon className="text-[#EF4444]" /> : <Microphone01Icon />}
+							icon={isMuted ? <MicrophoneOff01Icon className="text-[#dc2626]" /> : <Microphone01Icon />}
 							label={isMuted ? "Unmute" : "Mute"}
 							onClick={onToggleMute}
 							active={!isMuted}
@@ -135,7 +135,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="video"
-							icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[#EF4444]" />}
+							icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[#dc2626]" />}
 							label={isVideoEnabled ? "Stop Video" : "Start Video"}
 							onClick={onToggleVideo}
 							active={isVideoEnabled}
@@ -349,11 +349,79 @@ export const ControlBar = React.memo(
 					<button
 						type="button"
 						onClick={onLeave}
-						className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 transition-all active:scale-95"
+						className="flex items-center justify-center w-12 h-12 rounded-full bg-[#dc2626] hover:bg-[#b91c1c] transition-all active:scale-95"
 						aria-label="Leave meeting"
 					>
 						<CallEnd01Icon className="w-5 h-5 text-white" />
 					</button>
+				</div>
+			);
+		}
+
+		if (variant === "dock") {
+			return (
+				<div className="relative flex items-end justify-center w-full pointer-events-none">
+					{/* Left: Timer section - Absolute positioned */}
+					<div
+						className="absolute left-6 bottom-3 flex items-center rounded-full px-3 py-1.5 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-lg pointer-events-auto"
+					>
+						<div className="flex items-center gap-2">
+							<div
+								className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"
+							/>
+							<span className="text-xs font-medium tracking-wide tabular-nums text-zinc-900 dark:text-white/90">
+								{formatDuration(meetingDuration)}
+							</span>
+						</div>
+					</div>
+
+					{/* Center: Main Dock */}
+					<div
+						className={cn(
+							"flex items-center justify-between gap-4 px-6 pt-2 pb-2 rounded-t-[2.5rem] rounded-b-none backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.2)] dark:shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.5)] pointer-events-auto",
+							"bg-white/90 dark:bg-zinc-950/90",
+							className,
+						)}
+						role="toolbar"
+						aria-label="Meeting controls"
+					>
+						{/* Middle: Media controls */}
+						<div className="flex items-center gap-1.5">
+							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
+								{renderButton("mic")}
+								{renderButton("video")}
+							</div>
+							
+							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
+								{renderButton("screenshare")}
+								{renderButton("whiteboard")}
+								{renderButton("handraise")}
+							</div>
+
+							<div className="ml-1">
+								<ControlButton
+									key="leave"
+									icon={<CallEnd01Icon size={20} />}
+									label="Leave"
+									onClick={onLeave}
+									danger
+									className="h-10 w-auto px-5 rounded-full hover:scale-105 transition-transform shadow-lg"
+									data-tour="controls-leave"
+								/>
+							</div>
+						</div>
+
+						{/* Divider */}
+						<div className="w-px h-8 bg-black/10 dark:bg-white/10" />
+
+						{/* Right: Interaction controls */}
+						<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
+							{renderButton("participants")}
+							{renderButton("chat")}
+							{renderButton("transcription")}
+							{renderButton("thumbsup")}
+						</div>
+					</div>
 				</div>
 			);
 		}
@@ -397,15 +465,13 @@ export const ControlBar = React.memo(
 					{renderButton("screenshare")}
 					{renderButton("whiteboard")}
 					{renderButton("handraise")}
-					{renderButton("more")}
 					<div className="ml-2">
 						<ControlButton
 							key="leave"
-							icon={<CallEnd01Icon size={24} />}
+							icon={<CallEnd01Icon size={20} />}
 							label="Leave"
 							onClick={onLeave}
 							danger
-							size="lg"
 							data-tour="controls-leave"
 						/>
 					</div>
@@ -413,7 +479,6 @@ export const ControlBar = React.memo(
 
 				{/* Right: Interaction controls */}
 				<div className="flex items-center gap-4">
-					{renderButton("info")}
 					{renderButton("participants")}
 					{renderButton("chat")}
 					{renderButton("transcription")}

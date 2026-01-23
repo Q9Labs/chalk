@@ -24,6 +24,9 @@ export * as composable from "./composite";
 // Level 0: Turnkey - Complete, zero-config experiences
 export * as turnkey from "./full";
 
+// shadcn/ui components
+export * as ui from "./ui";
+
 // ============================================================================
 // Direct exports for convenience
 // ============================================================================

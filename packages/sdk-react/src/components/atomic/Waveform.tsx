@@ -12,7 +12,7 @@ interface WaveformProps {
 
 export const Waveform = React.memo(({
   levels,
-  color = 'var(--chalk-accent)',
+  color = 'var(--accent)',
   animated = true,
   barCount = 5,
   className,

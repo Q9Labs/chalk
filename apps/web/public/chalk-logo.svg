@@ -27,5 +27,5 @@
   </g>
 
   <!-- "chalk" text -->
-  <text x="90" y="52" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="600" letter-spacing="-0.02em" fill="white">chalk</text>
+  <text x="90" y="52" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="600" letter-spacing="-0.02em" fill="currentColor">chalk</text>
 </svg>

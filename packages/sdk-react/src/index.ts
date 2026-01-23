@@ -167,7 +167,7 @@ export type { MeetingJoinedData, MeetingEndData } from "./components/full/VideoC
 export * from "./utils";
 
 // Styles - export path for consumers to import
-export const CHALK_STYLES_PATH = "@q9labs/chalk-react/dist/styles/base.css";
+export const CHALK_STYLES_PATH = "@q9labs/chalk-react/styles.css";
 
 /** CDN URL for Excalidraw CSS (used by WhiteboardPanel by default) */
 export const EXCALIDRAW_CSS_CDN =

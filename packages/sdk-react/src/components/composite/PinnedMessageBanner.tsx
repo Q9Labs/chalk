@@ -19,11 +19,11 @@ export const PinnedMessageBanner = React.memo<PinnedMessageBannerProps>(
 		return (
 			<div
 				className={cn(
-					"flex items-center gap-3 p-3 bg-[var(--chalk-bg-tertiary)] border-b border-[var(--chalk-border-color)] text-sm",
+					"flex items-center gap-3 p-3 bg-muted border-b border-border text-sm",
 					className,
 				)}
 			>
-				<div className="flex-shrink-0 text-[var(--chalk-accent)]">
+				<div className="flex-shrink-0 text-accent-foreground">
 					<Pin01Icon size={16} className="fill-current" />
 				</div>
 
@@ -38,10 +38,10 @@ export const PinnedMessageBanner = React.memo<PinnedMessageBannerProps>(
 						}
 					}}
 				>
-					<div className="font-semibold text-[var(--chalk-text-primary)]">
+					<div className="font-semibold text-foreground">
 						Pinned Message
 					</div>
-					<div className="text-[var(--chalk-text-secondary)] truncate">
+					<div className="text-muted-foreground truncate">
 						<span className="font-medium mr-1">{message.senderName}:</span>
 						{message.content}
 					</div>

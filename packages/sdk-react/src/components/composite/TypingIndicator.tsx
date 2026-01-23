@@ -28,16 +28,16 @@ export const TypingIndicator = React.memo<TypingIndicatorProps>(({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 text-xs text-[var(--chalk-text-muted)] p-2 h-6',
+        'flex items-center gap-2 text-xs text-muted-foreground p-2 h-6',
         className
       )}
       role="status"
     >
       <span className="font-medium">{text}</span>
       <div className="flex gap-1">
-        <div className={cn("w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '0ms' }} />
-        <div className={cn("w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '150ms' }} />
-        <div className={cn("w-1 h-1 bg-[var(--chalk-text-muted)] rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '300ms' }} />
+        <div className={cn("w-1 h-1 bg-muted-foreground rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '0ms' }} />
+        <div className={cn("w-1 h-1 bg-muted-foreground rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '150ms' }} />
+        <div className={cn("w-1 h-1 bg-muted-foreground rounded-full", !prefersReducedMotion && "animate-bounce")} style={{ animationDelay: '300ms' }} />
       </div>
     </div>
   );

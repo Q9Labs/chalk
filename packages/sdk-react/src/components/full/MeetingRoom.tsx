@@ -1,8 +1,10 @@
 import type React from "react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { cn } from "../../utils/cn";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIsMobile } from "../../hooks/useMediaQuery";
+import { cn } from "../../utils/cn";
+import { ColumnIcon, LayoutGridIcon, Maximize01Icon } from "../../utils/icons";
 import { AudioRenderer } from "../atomic";
+import { Toggle, Tooltip, TooltipTrigger, TooltipContent } from "../ui";
 import {
 	ChatPanel,
 	ConnectionLostOverlay,
@@ -19,8 +21,6 @@ import {
 } from "../composite";
 import { GuidedTour } from "./GuidedTour";
 import { WhiteboardPanel } from "./WhiteboardPanel";
-
-const IDLE_TIMEOUT = 3000; // 3 seconds
 
 export interface Participant {
 	id: string;
@@ -166,34 +166,8 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
 	const [showInviteModal, setShowInviteModal] = useState(false);
 	const [showTour, setShowTour] = useState(false);
-	const [isIdle, setIsIdle] = useState(false);
 	const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
-	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const isMobile = useIsMobile();
-
-	const resetIdleTimer = useCallback(() => {
-		setIsIdle(false);
-		if (idleTimerRef.current) {
-			clearTimeout(idleTimerRef.current);
-		}
-		idleTimerRef.current = setTimeout(() => {
-			setIsIdle(true);
-		}, IDLE_TIMEOUT);
-	}, []);
-
-	useEffect(() => {
-		const events = ["mousemove", "mousedown", "keydown", "touchstart"];
-		events.forEach((event) => window.addEventListener(event, resetIdleTimer));
-		resetIdleTimer();
-		return () => {
-			events.forEach((event) =>
-				window.removeEventListener(event, resetIdleTimer),
-			);
-			if (idleTimerRef.current) {
-				clearTimeout(idleTimerRef.current);
-			}
-		};
-	}, [resetIdleTimer]);
 
 	useEffect(() => {
 		if (enableTour && showTourOnFirstVisit) {
@@ -256,117 +230,109 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 
 	return (
 		<div
+			data-chalk
 			className={cn(
-				"chalk-root relative min-h-screen w-full overflow-hidden flex flex-col justify-between",
-				isMobile ? "p-2" : "p-6",
+				"chalk-root relative h-screen w-full overflow-hidden flex flex-col bg-zinc-950 text-white", // Deep background
+				isMobile ? "p-2" : "p-0", // Remove padding on desktop for full immersion
 				className,
 			)}
 			data-chalk-theme={theme === "system" ? undefined : theme}
 		>
-			<div className={cn("absolute z-10", isMobile ? "top-3 left-3" : "top-6 left-8")}>
-				<h1 className="text-sm font-semibold text-(--chalk-text-secondary)/80">
-					{roomName || "Video Call Screen"}
-				</h1>
-			</div>
-
-			{/* Layout Switcher - hidden on mobile */}
-			<div className={cn("absolute top-6 right-8 z-10 gap-2", isMobile ? "hidden" : "flex")}>
-				<button
-					onClick={() => setLayout("grid")}
-					className={cn(
-						"px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border",
-						layout === "grid"
-							? "border-transparent"
-							: "border-(--chalk-pill-border) hover:border-transparent"
-					)}
-					style={{
-						background:
-							layout === "grid"
-								? "var(--chalk-pill-bg-active)"
-								: "var(--chalk-pill-bg)",
-						color:
-							layout === "grid"
-								? "var(--chalk-pill-text-active)"
-								: "var(--chalk-pill-text)",
-					}}
-					aria-label="Grid layout"
-				>
-					Grid
-				</button>
-				<button
-					onClick={() => setLayout("spotlight")}
-					className={cn(
-						"px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border",
-						layout === "spotlight"
-							? "border-transparent"
-							: "border-(--chalk-pill-border) hover:border-transparent"
-					)}
-					style={{
-						background:
-							layout === "spotlight"
-								? "var(--chalk-pill-bg-active)"
-								: "var(--chalk-pill-bg)",
-						color:
-							layout === "spotlight"
-								? "var(--chalk-pill-text-active)"
-								: "var(--chalk-pill-text)",
-					}}
-					aria-label="Spotlight layout"
-				>
-					Spotlight
-				</button>
-				<button
-					onClick={() => setLayout("sidebar")}
-					className={cn(
-						"px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border",
-						layout === "sidebar"
-							? "border-transparent"
-							: "border-(--chalk-pill-border) hover:border-transparent"
-					)}
-					style={{
-						background:
-							layout === "sidebar"
-								? "var(--chalk-pill-bg-active)"
-								: "var(--chalk-pill-bg)",
-						color:
-							layout === "sidebar"
-								? "var(--chalk-pill-text-active)"
-								: "var(--chalk-pill-text)",
-					}}
-					aria-label="Sidebar layout"
-				>
-					Sidebar
-				</button>
-			</div>
-
-			{/* Main content area */}
-			<div className={cn("flex-1 min-h-0 relative flex flex-row gap-4", isMobile ? "pt-6 pb-20" : "pt-8")}>
+			{/* Layout Switcher - hidden on mobile and when panels are open, appears on hover */}
+			{!isMobile && !activePanel && (
 				<div
-					className="flex-1 min-h-0 h-full relative"
-					data-tour="video-grid"
+					className="absolute top-0 right-0 z-20 p-4 group"
+					onMouseEnter={(e) => e.currentTarget.dataset.hovered = "true"}
+					onMouseLeave={(e) => e.currentTarget.dataset.hovered = "false"}
 				>
+					<div className="flex bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Toggle
+										pressed={layout === "grid"}
+										onPressedChange={() => setLayout("grid")}
+										aria-label="Grid layout"
+										className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-8 h-8 p-0"
+									/>
+								}
+							>
+								<LayoutGridIcon className="w-4 h-4" />
+							</TooltipTrigger>
+							<TooltipContent side="bottom">Grid</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Toggle
+										pressed={layout === "spotlight"}
+										onPressedChange={() => setLayout("spotlight")}
+										aria-label="Spotlight layout"
+										className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-8 h-8 p-0"
+									/>
+								}
+							>
+								<Maximize01Icon className="w-4 h-4" />
+							</TooltipTrigger>
+							<TooltipContent side="bottom">Spotlight</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Toggle
+										pressed={layout === "sidebar"}
+										onPressedChange={() => setLayout("sidebar")}
+										aria-label="Sidebar layout"
+										className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-8 h-8 p-0"
+									/>
+								}
+							>
+								<ColumnIcon className="w-4 h-4" />
+							</TooltipTrigger>
+							<TooltipContent side="bottom">Sidebar</TooltipContent>
+						</Tooltip>
+					</div>
+				</div>
+			)}
+
+			{/* Main content area - Split View */}
+			<div
+				className={cn(
+					"flex-1 min-h-0 relative flex flex-row overflow-hidden",
+					isMobile ? "gap-2 pt-2" : "gap-4 px-4 pt-4",
+				)}
+			>
+				{/* Stage / Video Grid */}
+				<div className="flex-1 h-full min-w-0 relative flex flex-col rounded-3xl overflow-hidden">
 					{showScreenShare && screenSharer?.screenShareTrack ? (
 						<ScreenShareView
 							screenShareTrack={screenSharer.screenShareTrack}
 							sharedByName={screenSharer.displayName || "Unknown"}
 							participants={allParticipants}
+							thumbnailPosition={layout === "sidebar" ? "right" : "bottom"}
 						/>
 					) : (
 						<VideoGrid
 							participants={allParticipants}
 							layout={layout}
 							variant={isMobile ? "mobile" : "desktop"}
+							className="p-4" // Add internal padding to the grid
 						/>
 					)}
 
-					<div className="absolute top-4 right-4 z-50">
+					<div className="absolute top-14 right-4 z-50">
 						<NotificationStack notifications={[]} onDismiss={() => {}} />
 					</div>
 				</div>
 
-				{/* Desktop sidebar panels */}
+				{/* Desktop Sidebar - Integrated, pushing content */}
 				{!isMobile && activePanel && (
-					<div className="w-[340px] shrink-0 rounded-xl overflow-hidden flex flex-col shadow-2xl transition-all duration-300 ease-in-out self-stretch">
+					<div 
+						className={cn(
+							"w-[360px] shrink-0 h-full rounded-3xl overflow-hidden flex flex-col bg-zinc-900/80 backdrop-blur-xl border border-white/5 shadow-xl transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+							"animate-in slide-in-from-right-10 fade-in duration-300"
+						)}
+					>
 						{activePanel === "chat" && (
 							<ChatPanel
 								messages={chatMessages}
@@ -414,10 +380,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			)}
 			{isMobile && activePanel === "transcription" && (
 				<MobilePanel title="Transcript" onClose={() => setActivePanel(null)}>
-					<TranscriptionPanel
-						transcripts={transcripts}
-						variant="mobile"
-					/>
+					<TranscriptionPanel transcripts={transcripts} variant="mobile" />
 				</MobilePanel>
 			)}
 
@@ -437,14 +400,43 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					isWhiteboardOpen={isWhiteboardOpen}
 					onToggleMute={onToggleMute}
 					onToggleVideo={onToggleVideo}
-					onToggleScreenShare={enableScreenShare ? onToggleScreenShare : undefined}
-					onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
-					onToggleChat={enableChat ? () => { togglePanel("chat"); setIsMobileSheetOpen(false); } : undefined}
-					onToggleParticipants={() => { togglePanel("participants"); setIsMobileSheetOpen(false); }}
-					onToggleTranscription={enableTranscription ? () => { togglePanel("transcription"); onToggleTranscription?.(); setIsMobileSheetOpen(false); } : undefined}
+					onToggleScreenShare={
+						enableScreenShare ? onToggleScreenShare : undefined
+					}
+					onToggleRecording={
+						enableRecording && canRecord ? onToggleRecording : undefined
+					}
+					onToggleChat={
+						enableChat
+							? () => {
+									togglePanel("chat");
+									setIsMobileSheetOpen(false);
+								}
+							: undefined
+					}
+					onToggleParticipants={() => {
+						togglePanel("participants");
+						setIsMobileSheetOpen(false);
+					}}
+					onToggleTranscription={
+						enableTranscription
+							? () => {
+									togglePanel("transcription");
+									onToggleTranscription?.();
+									setIsMobileSheetOpen(false);
+								}
+							: undefined
+					}
 					onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
 					onToggleWhiteboard={enableWhiteboard ? onToggleWhiteboard : undefined}
-					onOpenReactions={enableReactions ? () => { setIsReactionPickerOpen(true); setIsMobileSheetOpen(false); } : undefined}
+					onOpenReactions={
+						enableReactions
+							? () => {
+									setIsReactionPickerOpen(true);
+									setIsMobileSheetOpen(false);
+								}
+							: undefined
+					}
 					onLeave={onLeave}
 					enableScreenShare={enableScreenShare}
 					enableRecording={enableRecording}
@@ -456,18 +448,11 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				/>
 			)}
 
-			{/* Auto-hide control bar */}
-			<div
-				className={cn(
-					"w-full z-20 transition-all duration-300",
-					isIdle && !activePanel ? "opacity-0 translate-y-2" : "opacity-100",
-					isMobile && "absolute bottom-4 left-0 right-0 flex justify-center",
-				)}
-				style={isMobile ? { paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}
-			>
-				<div className="relative">
+			{/* Bottom Dock Control Bar */}
+			<div className="shrink-0 z-20 w-full flex justify-center mt-[-1px]">
+				<div className="relative w-full">
 					<ControlBar
-						variant={isMobile ? "mobile" : "floating"}
+						variant={isMobile ? "mobile" : "dock"}
 						isMuted={isMuted}
 						isVideoEnabled={isVideoEnabled}
 						isScreenSharing={isScreenSharing}
@@ -487,7 +472,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 							enableRecording && canRecord ? onToggleRecording : undefined
 						}
 						onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
-						onToggleWhiteboard={enableWhiteboard ? onToggleWhiteboard : undefined}
+						onToggleWhiteboard={
+							enableWhiteboard ? onToggleWhiteboard : undefined
+						}
 						onLeave={onLeave}
 						onToggleChat={enableChat ? () => togglePanel("chat") : undefined}
 						onToggleParticipants={() => togglePanel("participants")}
@@ -503,7 +490,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 							enableReactions ? () => setIsReactionPickerOpen(true) : undefined
 						}
 						onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
-						className={isMobile ? "" : "w-full"}
+						className={isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2" : ""}
 					/>
 					{enableReactions && !isMobile && (
 						<ReactionPicker
@@ -514,7 +501,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 								setIsReactionPickerOpen(false);
 							}}
 							position="top"
-							className="bottom-full mb-3 left-1/2 -translate-x-1/2"
+							className="absolute bottom-24 left-1/2 -translate-x-1/2"
 						/>
 					)}
 				</div>
@@ -545,7 +532,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			<InviteModal
 				isOpen={showInviteModal}
 				onClose={() => setShowInviteModal(false)}
-				meetingLink={typeof window !== 'undefined' ? window.location.href : ''}
+				meetingLink={typeof window !== "undefined" ? window.location.href : ""}
 				meetingId={roomName}
 				onCopyLink={handleCopyLink}
 			/>

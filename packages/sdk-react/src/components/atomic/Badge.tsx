@@ -29,8 +29,8 @@ export const Badge = React.memo<BadgeProps>(({
   const variantClasses = {
     default: 'bg-muted text-foreground',
     primary: 'bg-primary text-primary-foreground',
-    success: 'bg-[var(--chart-3,var(--chalk-success))] text-white',
-    warning: 'bg-[var(--chart-1,var(--chalk-warning))] text-white',
+    success: 'bg-success text-white',
+    warning: 'bg-warning text-white',
     danger: 'bg-destructive text-white',
   };
 

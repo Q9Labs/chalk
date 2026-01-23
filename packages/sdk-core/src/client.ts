@@ -24,6 +24,10 @@ import {
 } from "./effect/connection.ts";
 import { ConnectionError, TimeoutError } from "./effect/errors.ts";
 
+// RTK join configuration
+const RTK_JOIN_TIMEOUT_MS = 30000; // 30 seconds per attempt
+const RTK_JOIN_RETRY_DELAYS = [500, 1000, 2000]; // 3 retries with faster backoff
+
 interface ChalkClientEvents {
   "token-expired": ChalkError;
 }
@@ -142,7 +146,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * Effect-based RTK join with timeout
    * Uses Effect.timeoutOption for clean timeout handling
    */
-  private _joinRealtimeKitEffect(rtkClient: RealtimeKitClient, timeoutMs = 10000) {
+  private _joinRealtimeKitEffect(rtkClient: RealtimeKitClient, timeoutMs: number) {
     return pipe(
       Effect.tryPromise({
         try: () => rtkClient.join(),
@@ -167,6 +171,46 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
             )
       )
     );
+  }
+
+  /**
+   * RTK join with retry logic and exponential backoff
+   * Attempts join multiple times before giving up
+   */
+  private async _joinRealtimeKitWithRetry(rtkClient: RealtimeKitClient): Promise<void> {
+    let lastError: Error | null = null;
+
+    // First attempt (no delay)
+    try {
+      await Effect.runPromise(this._joinRealtimeKitEffect(rtkClient, RTK_JOIN_TIMEOUT_MS));
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      this.log.warn("RTK join attempt 1 failed, will retry", { error: lastError.message });
+    }
+
+    // Retry attempts with exponential backoff
+    for (let i = 0; i < RTK_JOIN_RETRY_DELAYS.length; i++) {
+      const delay = RTK_JOIN_RETRY_DELAYS[i]!;
+      const attemptNum = i + 2;
+
+      this.log.info(`Waiting ${delay}ms before RTK join retry attempt ${attemptNum}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      try {
+        await Effect.runPromise(this._joinRealtimeKitEffect(rtkClient, RTK_JOIN_TIMEOUT_MS));
+        this.log.info(`RTK join succeeded on attempt ${attemptNum}`);
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        this.log.warn(`RTK join attempt ${attemptNum} failed`, { error: lastError.message });
+      }
+    }
+
+    // All attempts failed
+    const totalAttempts = 1 + RTK_JOIN_RETRY_DELAYS.length;
+    this.log.error(`RTK join failed after ${totalAttempts} attempts`);
+    throw new Error(`Failed to join room after ${totalAttempts} attempts: ${lastError?.message}`);
   }
 
   async joinRoom(roomId: string, config: RoomConfig): Promise<Room> {
@@ -279,33 +323,27 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       room._setRoomCreated(response.data.roomCreated ?? false);
       room._setTenantConfig(response.data.tenantConfig ?? null);
 
-      // Effect: RTK join with timeout handling
-      this.log.debug("Joining RealtimeKit room");
-      await Effect.runPromise(this._joinRealtimeKitEffect(rtkClient, 10000)).catch(
-        (error) => {
-          if (error instanceof TimeoutError) {
-            this.log.error("RTK join timed out", { timeoutMs: error.timeoutMs });
-            throw new Error(`Failed to join room: ${error.message}`);
-          }
-          if (error instanceof ConnectionError) {
-            this.log.error("Failed to join RealtimeKit room", { error: error.message });
-            throw new Error(`Failed to join room: ${error.message}`);
-          }
-          throw error;
-        }
-      );
-
-      this.log.info("Joined RealtimeKit room", { roomId });
-
+      // Attach WebSocket client to room (sets up event handlers)
       if (wsClient) {
         room.attachWsClient(wsClient);
-        if (tokens.accessToken) {
-          wsClient.connect(tokens.accessToken, roomId);
-        } else {
-          this.log.warn("accessToken missing; WebSocket features disabled");
-        }
         this.currentWsClient = wsClient;
       }
+
+      // Run RTK join and WebSocket connect in parallel
+      this.log.debug("Joining RealtimeKit room");
+      const rtkJoinPromise = this._joinRealtimeKitWithRetry(rtkClient);
+
+      // Start WebSocket connection in parallel (non-blocking)
+      if (wsClient && tokens.accessToken) {
+        this.log.debug("Starting WebSocket connection in parallel");
+        wsClient.connect(tokens.accessToken, roomId);
+      } else if (wsClient) {
+        this.log.warn("accessToken missing; WebSocket features disabled");
+      }
+
+      // Wait for RTK join to complete (WS connects independently)
+      await rtkJoinPromise;
+      this.log.info("Joined RealtimeKit room", { roomId });
 
       this.currentRoom = room;
 

@@ -46,8 +46,8 @@ export const WaitingRoom = React.memo(({
     <div
       className={cn(
         "flex flex-col w-80 overflow-hidden rounded-lg shadow-lg",
-        "bg-[var(--card,var(--chalk-bg-surface))]",
-        "border border-[var(--border,var(--chalk-border-subtle))]",
+        "bg-card",
+        "border border-border/50",
         className
       )}
       role="complementary"
@@ -55,17 +55,17 @@ export const WaitingRoom = React.memo(({
     >
       <div className={cn(
         "flex items-center justify-between p-4",
-        "border-b border-[var(--border,var(--chalk-border-subtle))]",
-        "bg-[var(--muted,var(--chalk-bg-subtle))]/50"
+        "border-b border-border/50",
+        "bg-secondary/50"
       )}>
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-[var(--card-foreground,var(--chalk-text-primary))]">Waiting Room</h2>
+          <h2 className="text-sm font-semibold text-card-foreground">Waiting Room</h2>
           <Badge variant="default" count={participants.length} />
         </div>
         {loading && <Spinner size="sm" />}
       </div>
 
-      <div className="p-2 border-b border-[var(--border,var(--chalk-border-subtle))] flex gap-2">
+      <div className="p-2 border-b border-border/50 flex gap-2">
         {onAdmitAll && (
           <button
             onClick={onAdmitAll}
@@ -85,8 +85,8 @@ export const WaitingRoom = React.memo(({
             disabled={participants.length === 0}
             className={cn(
               "flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors",
-              "bg-[var(--muted,var(--chalk-bg-subtle))] text-[var(--destructive,var(--chalk-danger))]",
-              "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
+              "bg-secondary text-destructive",
+              "hover:bg-accent",
               "disabled:opacity-50 disabled:cursor-not-allowed"
             )}
           >
@@ -97,7 +97,7 @@ export const WaitingRoom = React.memo(({
 
       <div className="max-h-80 overflow-y-auto p-2 space-y-1">
         {participants.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[var(--muted-foreground,var(--chalk-text-muted))]">
+          <div className="p-8 text-center text-sm text-muted-foreground">
             No one is waiting
           </div>
         ) : (
@@ -106,7 +106,7 @@ export const WaitingRoom = React.memo(({
               key={p.id}
               className={cn(
                 "flex items-center justify-between p-2 rounded-md transition-colors",
-                "hover:bg-[var(--muted,var(--chalk-bg-subtle))]"
+                "hover:bg-secondary"
               )}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -116,10 +116,10 @@ export const WaitingRoom = React.memo(({
                   size="sm"
                 />
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium truncate text-[var(--card-foreground,var(--chalk-text-primary))]">
+                  <span className="text-sm font-medium truncate text-card-foreground">
                     {p.displayName}
                   </span>
-                  <span className="text-xs text-[var(--muted-foreground,var(--chalk-text-muted))]">
+                  <span className="text-xs text-muted-foreground">
                     Waiting for {getWaitingTime(p.joinedAt)}
                   </span>
                 </div>
@@ -138,7 +138,7 @@ export const WaitingRoom = React.memo(({
                   icon={<Cancel01Icon className="w-4 h-4" />}
                   size="sm"
                   variant="ghost"
-                  className="text-[var(--destructive,var(--chalk-danger))] hover:bg-[var(--destructive,var(--chalk-danger))]/10"
+                  className="text-destructive hover:bg-destructive/10"
                   onClick={() => onDeny(p.id)}
                   aria-label={`Deny ${p.displayName}`}
                 />

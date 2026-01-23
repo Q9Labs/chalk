@@ -48,16 +48,12 @@ export function DocsSidebar() {
 	const currentPath = location.pathname;
 
 	return (
-		<aside className="w-64 shrink-0 border-r border-border bg-sidebar h-[calc(100vh-64px)] sticky top-16 overflow-y-auto">
+		<aside className="w-64 shrink-0 border-r border-border bg-background/50 backdrop-blur-sm h-[calc(100vh-56px)] sticky top-14 overflow-y-auto">
 			<nav className="p-4 space-y-1">
-				<div className="mb-6">
-					<Link
-						to="/docs"
-						className="flex items-center gap-2 text-lg font-semibold text-foreground hover:text-primary transition-colors"
-					>
-						<BookOpen size={24} className="text-primary" />
-						Chalk Docs
-					</Link>
+				<div className="mb-6 px-3">
+					<span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+						Documentation
+					</span>
 				</div>
 
 				{navigation.map((item) => (

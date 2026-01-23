@@ -53,8 +53,8 @@ export const SettingsPanel = React.memo(({
     <div
       className={cn(
         "flex flex-col h-full w-80 shadow-xl",
-        "bg-[var(--card,var(--chalk-bg-surface))]",
-        "border-l border-[var(--border,var(--chalk-border-subtle))]",
+        "bg-card",
+        "border-l border-border/50",
         !prefersReducedMotion && "animate-in slide-in-from-right duration-300",
         className
       )}
@@ -62,10 +62,10 @@ export const SettingsPanel = React.memo(({
       role="dialog"
       aria-label="Settings"
     >
-      <div className="flex items-center justify-between p-4 border-b border-[var(--border,var(--chalk-border-subtle))]">
+      <div className="flex items-center justify-between p-4 border-b border-border/50">
         <div className="flex items-center gap-2">
-          <Settings01Icon className="w-4 h-4 text-[var(--muted-foreground,var(--chalk-text-secondary))]" />
-          <h2 className="text-sm font-semibold text-[var(--card-foreground,var(--chalk-text-primary))]">Settings</h2>
+          <Settings01Icon className="w-4 h-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-card-foreground">Settings</h2>
         </div>
         {onClose && (
           <IconButton
@@ -78,14 +78,14 @@ export const SettingsPanel = React.memo(({
         )}
       </div>
 
-      <div className="flex border-b border-[var(--border,var(--chalk-border-subtle))]">
+      <div className="flex border-b border-border/50">
         <button
           onClick={() => setActiveTab('audio')}
           className={cn(
             "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
             activeTab === 'audio'
-              ? "text-[var(--primary,var(--chalk-accent))] border-[var(--primary,var(--chalk-accent))]"
-              : "text-[var(--muted-foreground,var(--chalk-text-secondary))] border-transparent hover:text-[var(--foreground,var(--chalk-text-primary))]"
+              ? "text-primary border-primary"
+              : "text-muted-foreground border-transparent hover:text-foreground"
           )}
         >
           <div className="flex items-center justify-center gap-2">
@@ -98,8 +98,8 @@ export const SettingsPanel = React.memo(({
           className={cn(
             "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
             activeTab === 'video'
-              ? "text-[var(--primary,var(--chalk-accent))] border-[var(--primary,var(--chalk-accent))]"
-              : "text-[var(--muted-foreground,var(--chalk-text-secondary))] border-transparent hover:text-[var(--foreground,var(--chalk-text-primary))]"
+              ? "text-primary border-primary"
+              : "text-muted-foreground border-transparent hover:text-foreground"
           )}
         >
           <div className="flex items-center justify-center gap-2">
@@ -113,7 +113,7 @@ export const SettingsPanel = React.memo(({
         {activeTab === 'audio' && (
           <div className={cn("space-y-6", !prefersReducedMotion && "animate-in fade-in duration-200")}>
             <div className="space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground,var(--chalk-text-secondary))]">Microphone</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Microphone</h3>
               <DeviceSelector
                 type="audioinput"
                 devices={audioInputDevices}
@@ -133,8 +133,8 @@ export const SettingsPanel = React.memo(({
               )}
             </div>
 
-            <div className="space-y-4 pt-4 border-t border-[var(--border,var(--chalk-border-subtle))]">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground,var(--chalk-text-secondary))]">Speakers</h3>
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Speakers</h3>
               <DeviceSelector
                 type="audiooutput"
                 devices={audioOutputDevices}
@@ -144,7 +144,7 @@ export const SettingsPanel = React.memo(({
               />
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">Output Volume</label>
+                <label className="text-sm font-medium text-muted-foreground">Output Volume</label>
                 <VolumeSlider
                   value={speakerVolume}
                   onChange={setSpeakerVolume}
@@ -158,7 +158,7 @@ export const SettingsPanel = React.memo(({
         {activeTab === 'video' && (
           <div className={cn("space-y-6", !prefersReducedMotion && "animate-in fade-in duration-200")}>
             <div className="space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground,var(--chalk-text-secondary))]">Camera</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Camera</h3>
               <DeviceSelector
                 type="videoinput"
                 devices={videoInputDevices}

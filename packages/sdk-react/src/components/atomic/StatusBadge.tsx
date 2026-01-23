@@ -14,32 +14,32 @@ const config = {
   recording: {
     icon: CircleIcon,
     text: 'REC',
-    colorClass: 'text-[var(--destructive,var(--chalk-danger))]',
-    bgClass: 'bg-[var(--destructive,var(--chalk-danger))]/10',
+    colorClass: 'text-destructive',
+    bgClass: 'bg-destructive/10',
   },
   live: {
     icon: Radio01Icon,
     text: 'LIVE',
-    colorClass: 'text-[var(--destructive,var(--chalk-danger))]',
-    bgClass: 'bg-[var(--destructive,var(--chalk-danger))]/10',
+    colorClass: 'text-destructive',
+    bgClass: 'bg-destructive/10',
   },
   transcribing: {
     icon: TextIcon,
     text: 'CC',
-    colorClass: 'text-[var(--primary,var(--chalk-accent))]',
-    bgClass: 'bg-[var(--primary,var(--chalk-accent))]/10',
+    colorClass: 'text-primary',
+    bgClass: 'bg-primary/10',
   },
   connecting: {
     icon: Alert02Icon,
     text: 'CONNECTING...',
-    colorClass: 'text-[var(--chart-4,var(--chalk-warning))]',
-    bgClass: 'bg-[var(--chart-4,var(--chalk-warning))]/10',
+    colorClass: 'text-warning',
+    bgClass: 'bg-warning/10',
   },
   reconnecting: {
     icon: Alert02Icon,
     text: 'RECONNECTING...',
-    colorClass: 'text-[var(--chart-4,var(--chalk-warning))]',
-    bgClass: 'bg-[var(--chart-4,var(--chalk-warning))]/10',
+    colorClass: 'text-warning',
+    bgClass: 'bg-warning/10',
   },
 };
 

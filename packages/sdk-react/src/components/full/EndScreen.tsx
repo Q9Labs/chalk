@@ -81,18 +81,18 @@ function EndScreenBase({
   };
 
   return (
-    <div className={cn(
-      "flex flex-col items-center justify-center min-h-screen bg-[var(--chalk-bg-primary)] p-4 font-sans text-[var(--chalk-text-primary)]",
+    <div data-chalk className={cn(
+      "flex flex-col items-center justify-center min-h-screen bg-[var(--background)] p-4 font-sans text-[var(--foreground)]",
       className
     )}>
       <div className={cn(
-        "w-full max-w-lg bg-[var(--chalk-bg-secondary)] rounded-[var(--chalk-border-radius-lg)] border border-[var(--chalk-border-color)] shadow-[var(--chalk-shadow-lg)] overflow-hidden",
+        "w-full max-w-lg bg-[var(--card)] rounded-[var(--chalk-border-radius-lg)] border border-[var(--border)] shadow-[var(--chalk-shadow-lg)] overflow-hidden",
         !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-300"
       )}>
         
         <div className="p-8 text-center space-y-6">
           <div className="flex flex-col items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-[var(--chalk-success)]/10 flex items-center justify-center text-[var(--chalk-success)]">
+            <div className="h-16 w-16 rounded-full bg-[var(--success)]/10 flex items-center justify-center text-[var(--success)]">
               <CheckmarkCircle02Icon size={32} />
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">Meeting Ended</h1>
@@ -102,12 +102,12 @@ function EndScreenBase({
             {roomName && (
               <h2 className="text-xl font-medium">{roomName}</h2>
             )}
-            <div className="flex items-center justify-center gap-4 text-[var(--chalk-text-secondary)] text-sm">
+            <div className="flex items-center justify-center gap-4 text-[var(--muted-foreground)] text-sm">
               <div className="flex items-center gap-1.5">
                 <Clock01Icon size={14} />
                 <span>{formatDuration(duration)}</span>
               </div>
-              <div className="w-1 h-1 rounded-full bg-[var(--chalk-text-muted)]" />
+              <div className="w-1 h-1 rounded-full bg-[var(--muted-foreground)]" />
               <div className="flex items-center gap-1.5">
                 <UserGroupIcon size={14} />
                 <span>{participantCount} participants</span>
@@ -117,7 +117,7 @@ function EndScreenBase({
         </div>
 
         {(showFeedback && onSubmitFeedback) && (
-          <div className="border-t border-[var(--chalk-border-color)] p-6 space-y-4">
+          <div className="border-t border-[var(--border)] p-6 space-y-4">
             {!feedbackSubmitted ? (
               <>
                 <div className="text-center">
@@ -129,8 +129,8 @@ function EndScreenBase({
                         type="button"
                         onClick={() => setRating(star)}
                         className={cn(
-                          "p-1 rounded-full hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-[var(--chalk-focus-ring)]",
-                          star <= rating ? "text-[var(--chalk-warning)] fill-[var(--chalk-warning)]" : "text-[var(--chalk-text-muted)]"
+                          "p-1 rounded-full hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-[var(--ring)]",
+                          star <= rating ? "text-[var(--warning)] fill-[var(--warning)]" : "text-[var(--muted-foreground)]"
                         )}
                         aria-label={`Rate ${star} stars`}
                       >
@@ -155,7 +155,7 @@ function EndScreenBase({
                     <button
                       type="button"
                       onClick={handleFeedbackSubmit}
-                      className="w-full py-2 bg-[var(--chalk-bg-tertiary)] hover:bg-[var(--chalk-bg-tertiary)]/80 text-[var(--chalk-text-primary)] text-sm font-medium rounded-[var(--chalk-border-radius-md)] transition-colors"
+                      className="w-full py-2 bg-[var(--muted)] hover:bg-[var(--muted)]/80 text-[var(--foreground)] text-sm font-medium rounded-[var(--chalk-border-radius-md)] transition-colors"
                     >
                       Submit Feedback
                     </button>
@@ -163,7 +163,7 @@ function EndScreenBase({
                 )}
               </>
             ) : (
-              <div className={cn("text-center py-4 text-[var(--chalk-success)]", !prefersReducedMotion && "animate-in zoom-in")}>
+              <div className={cn("text-center py-4 text-[var(--success)]", !prefersReducedMotion && "animate-in zoom-in")}>
                 <p className="font-medium">Thank you for your feedback!</p>
               </div>
             )}
@@ -171,16 +171,16 @@ function EndScreenBase({
         )}
 
         {(hasRecording || hasTranscription) && (
-          <div className="border-t border-[var(--chalk-border-color)] p-6 space-y-4 bg-[var(--chalk-bg-tertiary)]/30">
+          <div className="border-t border-[var(--border)] p-6 space-y-4 bg-[var(--muted)]/30">
             {hasRecording && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-md bg-[var(--chalk-accent)]/10 text-[var(--chalk-accent)]">
+                  <div className="p-2 rounded-md bg-[var(--accent)]/10 text-[var(--accent)]">
                     <Video01Icon size={18} />
                   </div>
                   <div className="text-sm">
                     <p className="font-medium">Recording ready</p>
-                    <p className="text-[var(--chalk-text-muted)] text-xs">MP4 format</p>
+                    <p className="text-[var(--muted-foreground)] text-xs">MP4 format</p>
                   </div>
                 </div>
                 <IconButton
@@ -196,12 +196,12 @@ function EndScreenBase({
             {hasTranscription && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-md bg-[var(--chalk-success)]/10 text-[var(--chalk-success)]">
+                  <div className="p-2 rounded-md bg-[var(--success)]/10 text-[var(--success)]">
                     <FileTextIcon size={18} />
                   </div>
                   <div className="text-sm">
                     <p className="font-medium">Transcription</p>
-                    <p className="text-[var(--chalk-text-muted)] text-xs">Available formats</p>
+                    <p className="text-[var(--muted-foreground)] text-xs">Available formats</p>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -210,7 +210,7 @@ function EndScreenBase({
                       key={fmt}
                       type="button"
                       onClick={() => onDownloadTranscription?.(fmt as any)}
-                      className="px-2 py-1 text-xs font-medium uppercase rounded border border-[var(--chalk-border-color)] hover:bg-[var(--chalk-bg-tertiary)] transition-colors"
+                      className="px-2 py-1 text-xs font-medium uppercase rounded border border-[var(--border)] hover:bg-[var(--muted)] transition-colors"
                     >
                       {fmt}
                     </button>
@@ -221,36 +221,36 @@ function EndScreenBase({
           </div>
         )}
 
-        <div className="border-t border-[var(--chalk-border-color)] p-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="border-t border-[var(--border)] p-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {onRejoin && (
             <button
               type="button"
               onClick={onRejoin}
-              className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-sm font-medium text-[var(--chalk-text-primary)]"
+              className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--muted)] transition-colors text-sm font-medium text-[var(--foreground)]"
             >
-              <RefreshIcon size={20} className="text-[var(--chalk-text-secondary)]" />
+              <RefreshIcon size={20} className="text-[var(--muted-foreground)]" />
               Rejoin
             </button>
           )}
-          
+
           {onNewMeeting && (
             <button
               type="button"
               onClick={onNewMeeting}
-              className="col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-sm font-medium text-[var(--chalk-text-primary)]"
+              className="col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--muted)] transition-colors text-sm font-medium text-[var(--foreground)]"
             >
-              <PlusSignIcon size={20} className="text-[var(--chalk-text-secondary)]" />
+              <PlusSignIcon size={20} className="text-[var(--muted-foreground)]" />
               New Meeting
             </button>
           )}
-          
+
           {onGoHome && (
             <button
               type="button"
               onClick={onGoHome}
-              className="col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-sm font-medium text-[var(--chalk-text-primary)]"
+              className="col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--muted)] transition-colors text-sm font-medium text-[var(--foreground)]"
             >
-              <Home01Icon size={20} className="text-[var(--chalk-text-secondary)]" />
+              <Home01Icon size={20} className="text-[var(--muted-foreground)]" />
               Home
             </button>
           )}

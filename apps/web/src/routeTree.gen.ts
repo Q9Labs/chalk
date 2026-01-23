@@ -13,6 +13,7 @@ import { Route as DemoRouteImport } from './routes/demo'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs/index'
 import { Route as RoomErrorRouteImport } from './routes/room/error'
+import { Route as RoomEndRouteImport } from './routes/room/end'
 import { Route as RoomRoomIdRouteImport } from './routes/room/$roomId'
 import { Route as DocsSdkReactRouteImport } from './routes/docs/sdk-react'
 import { Route as DocsHooksRouteImport } from './routes/docs/hooks'
@@ -39,6 +40,11 @@ const DocsIndexRoute = DocsIndexRouteImport.update({
 const RoomErrorRoute = RoomErrorRouteImport.update({
   id: '/room/error',
   path: '/room/error',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoomEndRoute = RoomEndRouteImport.update({
+  id: '/room/end',
+  path: '/room/end',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RoomRoomIdRoute = RoomRoomIdRouteImport.update({
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/docs/hooks': typeof DocsHooksRoute
   '/docs/sdk-react': typeof DocsSdkReactRoute
   '/room/$roomId': typeof RoomRoomIdRoute
+  '/room/end': typeof RoomEndRoute
   '/room/error': typeof RoomErrorRoute
   '/docs': typeof DocsIndexRoute
 }
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/docs/hooks': typeof DocsHooksRoute
   '/docs/sdk-react': typeof DocsSdkReactRoute
   '/room/$roomId': typeof RoomRoomIdRoute
+  '/room/end': typeof RoomEndRoute
   '/room/error': typeof RoomErrorRoute
   '/docs': typeof DocsIndexRoute
 }
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/docs/hooks': typeof DocsHooksRoute
   '/docs/sdk-react': typeof DocsSdkReactRoute
   '/room/$roomId': typeof RoomRoomIdRoute
+  '/room/end': typeof RoomEndRoute
   '/room/error': typeof RoomErrorRoute
   '/docs/': typeof DocsIndexRoute
 }
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/docs/hooks'
     | '/docs/sdk-react'
     | '/room/$roomId'
+    | '/room/end'
     | '/room/error'
     | '/docs'
   fileRoutesByTo: FileRoutesByTo
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/docs/hooks'
     | '/docs/sdk-react'
     | '/room/$roomId'
+    | '/room/end'
     | '/room/error'
     | '/docs'
   id:
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/docs/hooks'
     | '/docs/sdk-react'
     | '/room/$roomId'
+    | '/room/end'
     | '/room/error'
     | '/docs/'
   fileRoutesById: FileRoutesById
@@ -169,6 +181,7 @@ export interface RootRouteChildren {
   DocsHooksRoute: typeof DocsHooksRoute
   DocsSdkReactRoute: typeof DocsSdkReactRoute
   RoomRoomIdRoute: typeof RoomRoomIdRoute
+  RoomEndRoute: typeof RoomEndRoute
   RoomErrorRoute: typeof RoomErrorRoute
   DocsIndexRoute: typeof DocsIndexRoute
 }
@@ -201,6 +214,13 @@ declare module '@tanstack/react-router' {
       path: '/room/error'
       fullPath: '/room/error'
       preLoaderRoute: typeof RoomErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/room/end': {
+      id: '/room/end'
+      path: '/room/end'
+      fullPath: '/room/end'
+      preLoaderRoute: typeof RoomEndRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/room/$roomId': {
@@ -265,6 +285,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocsHooksRoute: DocsHooksRoute,
   DocsSdkReactRoute: DocsSdkReactRoute,
   RoomRoomIdRoute: RoomRoomIdRoute,
+  RoomEndRoute: RoomEndRoute,
   RoomErrorRoute: RoomErrorRoute,
   DocsIndexRoute: DocsIndexRoute,
 }

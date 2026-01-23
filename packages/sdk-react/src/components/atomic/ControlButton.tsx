@@ -41,22 +41,22 @@ export const ControlButton = React.memo(
 				data-tour={dataTour}
 				className={cn(
 					"group relative flex items-center justify-center transition-all duration-300 ease-out",
-					"text-[var(--foreground,var(--chalk-text-primary))]",
+					"text-[var(--foreground)]",
 					size === "sm" && "h-9 w-9 rounded-full",
 					size === "md" && "h-11 w-11 rounded-full",
 					size === "lg" && "h-14 w-14 rounded-full",
 					disabled && "cursor-not-allowed opacity-50",
 					// Default state
 					!disabled && !active && !danger && !noBorder &&
-						"bg-[var(--secondary,var(--chalk-bg-secondary))] shadow-lg hover:brightness-110",
+						"bg-[var(--secondary)] shadow-lg hover:brightness-110",
 					// No Border state (Ghost)
 					!disabled && !active && !danger && noBorder &&
-						"bg-[var(--secondary,var(--chalk-bg-secondary))]",
+						"bg-[var(--secondary)]",
 					// Active state
 					!disabled && active &&
-						"bg-[var(--secondary,var(--chalk-bg-secondary))] border-transparent hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
-					// Danger state
-					danger && "bg-[var(--destructive,var(--chalk-danger))] text-[var(--destructive-foreground,#fff)] border-transparent hover:opacity-90",
+						"bg-[var(--secondary)] border-transparent hover:bg-[var(--accent)]",
+					// Danger state - vibrant red for visibility
+					danger && "bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]",
 					className,
 				)}
 				aria-label={label}
@@ -70,7 +70,7 @@ export const ControlButton = React.memo(
 			return (
 				<div className="flex flex-col items-center gap-1">
 					{button}
-					<span className="text-xs text-[var(--muted-foreground,var(--chalk-text-secondary))]">
+					<span className="text-xs text-[var(--muted-foreground)]">
 						{label}
 					</span>
 				</div>

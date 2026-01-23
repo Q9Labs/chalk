@@ -31,10 +31,10 @@ export const AudioIndicator = React.memo(({
         className={cn(
           'rounded-full transition-colors duration-200',
           muted
-            ? 'bg-[var(--chalk-text-muted)]'
+            ? 'bg-muted-foreground'
             : level > 10
-            ? 'bg-[var(--chalk-success)]'
-            : 'bg-[var(--chalk-bg-tertiary)]',
+            ? 'bg-success'
+            : 'bg-muted',
           className
         )}
         style={{ width: width / 2, height: width / 2 }}
@@ -61,7 +61,7 @@ export const AudioIndicator = React.memo(({
               key={i}
               className={cn(
                 'w-[3px] rounded-[1px] transition-all duration-100 ease-out',
-                muted ? 'bg-[var(--chalk-text-muted)]' : 'bg-[var(--chalk-success)]'
+                muted ? 'bg-muted-foreground' : 'bg-success'
               )}
               style={{
                 height: `${h}%`,
@@ -79,7 +79,7 @@ export const AudioIndicator = React.memo(({
     <div
       className={cn(
         'flex items-center justify-center transition-colors',
-        muted ? 'text-[var(--chalk-danger)]' : 'text-[var(--chalk-text-primary)]',
+        muted ? 'text-destructive' : 'text-foreground',
         className
       )}
       role="status"
@@ -88,7 +88,7 @@ export const AudioIndicator = React.memo(({
       <Icon size={width} />
       {!muted && level > 10 && (
         <div
-          className="absolute inset-0 rounded-full bg-[var(--chalk-success)] opacity-20"
+          className="absolute inset-0 rounded-full bg-success opacity-20"
           style={{
             transform: `scale(${1 + level / 200})`,
             transition: 'transform 0.1s ease-out',

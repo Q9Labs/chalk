@@ -1,11 +1,42 @@
+import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@q9labs/chalk-ui";
 import { MDXProvider } from "@mdx-js/react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { Video } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
+
+import { useTheme } from "@/context/theme";
 
 import { Callout } from "./Callout";
 import { CodeBlock } from "./CodeBlock";
 import { DocsSidebar } from "./DocsSidebar";
+
+function ChalkLogo({ className }: { className?: string }) {
+	return (
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" fill="none" className={className}>
+			<g>
+				<g transform="rotate(-15 20 60)">
+					<rect x="8" y="20" width="14" height="50" rx="7" fill="#A8D5A2"/>
+					<ellipse cx="15" cy="20" rx="7" ry="4" fill="#8BC585"/>
+				</g>
+				<g transform="rotate(-8 32 55)">
+					<rect x="22" y="15" width="14" height="52" rx="7" fill="#F5D76E"/>
+					<ellipse cx="29" cy="15" rx="7" ry="4" fill="#E8C85A"/>
+				</g>
+				<g transform="rotate(12 60 30)">
+					<rect x="35" y="8" width="14" height="55" rx="7" fill="#7EC8E3"/>
+					<ellipse cx="42" cy="8" rx="7" ry="4" fill="#5FB8D9"/>
+				</g>
+				<g transform="rotate(5 55 50)">
+					<rect x="48" y="22" width="14" height="48" rx="7" fill="#F0A0A0"/>
+					<ellipse cx="55" cy="70" rx="7" ry="4" fill="#E88888"/>
+				</g>
+			</g>
+			<text x="90" y="52" fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fontSize="38" fontWeight="600" letterSpacing="-0.02em" fill="currentColor">chalk</text>
+		</svg>
+	);
+}
 
 const mdxComponents = {
 	h1: (props: ComponentProps<"h1">) => (
@@ -111,21 +142,61 @@ interface DocsLayoutProps {
 }
 
 export function DocsLayout({ children }: DocsLayoutProps) {
+	const { theme, toggleTheme } = useTheme();
+
+	const handleStartMeeting = () => {
+		const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+		let roomId = "room-";
+		for (let i = 0; i < 8; i++) {
+			roomId += chars.charAt(Math.floor(Math.random() * chars.length));
+		}
+		window.open(`/room/${roomId}`, "_blank", "noopener,noreferrer");
+	};
+
 	return (
-		<div className="min-h-screen bg-background">
-			<header className="h-16 border-b border-border bg-background/95 backdrop-blur sticky top-0 z-40">
-				<div className="h-full flex items-center px-6 gap-4">
-					<Link
-						to="/"
-						className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-					>
-						<ArrowLeft size={18} />
-						<span className="text-sm">Back to App</span>
+		<div className="min-h-screen bg-background relative">
+			{/* Diagonal cross grid pattern - light mode only */}
+			<div
+				className="fixed inset-0 pointer-events-none dark:hidden -z-10"
+				style={{
+					backgroundImage: `
+						linear-gradient(45deg, transparent 49%, #d1d5db 49%, #d1d5db 51%, transparent 51%),
+						linear-gradient(-45deg, transparent 49%, #d1d5db 49%, #d1d5db 51%, transparent 51%)
+					`,
+					backgroundSize: "40px 40px",
+					WebkitMaskImage: "radial-gradient(ellipse 80% 80% at 100% 100%, #000 50%, transparent 90%)",
+					maskImage: "radial-gradient(ellipse 80% 80% at 100% 100%, #000 50%, transparent 90%)",
+				}}
+			/>
+
+			<header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+				<div className="flex h-14 items-center justify-between px-4 sm:px-8">
+					<Link to="/">
+						<ChalkLogo className="h-8 w-auto" />
 					</Link>
-					<div className="h-6 w-px bg-border" />
-					<span className="text-lg font-semibold text-foreground">
-						Chalk Documentation
-					</span>
+					<nav className="flex items-center gap-2 sm:gap-4">
+						<Link
+							to="/docs"
+							className="text-sm font-medium text-foreground transition-colors hidden sm:block"
+						>
+							Docs
+						</Link>
+						<button
+							type="button"
+							onClick={toggleTheme}
+							className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+							aria-label="Toggle theme"
+						>
+							<HugeiconsIcon
+								icon={theme === "dark" ? Sun01Icon : Moon02Icon}
+								size={18}
+							/>
+						</button>
+						<Button size="sm" onClick={handleStartMeeting}>
+							<Video className="h-4 w-4 mr-2" />
+							Start Meeting
+						</Button>
+					</nav>
 				</div>
 			</header>
 

@@ -49,7 +49,7 @@ export const BackgroundEffectsPicker = React.memo(({
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">
+        <label className="text-sm font-medium text-muted-foreground">
           Background Effects
         </label>
       </div>
@@ -61,17 +61,17 @@ export const BackgroundEffectsPicker = React.memo(({
           disabled={disabled}
           className={cn(
             "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all",
-            "bg-[var(--muted,var(--chalk-bg-subtle))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
+            "bg-secondary hover:bg-accent",
             isSelected('none')
-              ? "border-[var(--primary,var(--chalk-accent))] ring-1 ring-[var(--ring,var(--chalk-accent))] ring-offset-1 ring-offset-[var(--background,var(--chalk-bg-surface))]"
+              ? "border-primary ring-1 ring-ring ring-offset-1 ring-offset-background"
               : "border-transparent",
             disabled && "opacity-50 cursor-not-allowed"
           )}
           aria-label="No background effect"
           aria-pressed={isSelected('none')}
         >
-          <Cancel01Icon className="w-6 h-6 mb-1 text-[var(--muted-foreground,var(--chalk-text-secondary))]" />
-          <span className="text-[10px] font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">None</span>
+          <Cancel01Icon className="w-6 h-6 mb-1 text-muted-foreground" />
+          <span className="text-[10px] font-medium text-muted-foreground">None</span>
         </button>
 
         {effects.map((effect) => (
@@ -82,9 +82,9 @@ export const BackgroundEffectsPicker = React.memo(({
             disabled={disabled}
             className={cn(
               "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all",
-              "bg-[var(--muted,var(--chalk-bg-subtle))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
+              "bg-secondary hover:bg-accent",
               isSelected(effect.id)
-                ? "border-[var(--primary,var(--chalk-accent))] ring-1 ring-[var(--ring,var(--chalk-accent))] ring-offset-1 ring-offset-[var(--background,var(--chalk-bg-surface))]"
+                ? "border-primary ring-1 ring-ring ring-offset-1 ring-offset-background"
                 : "border-transparent",
               disabled && "opacity-50 cursor-not-allowed"
             )}
@@ -103,8 +103,8 @@ export const BackgroundEffectsPicker = React.memo(({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-[var(--accent,var(--chalk-bg-tertiary))]">
-                <Image01Icon className="w-6 h-6 text-[var(--muted-foreground,var(--chalk-text-muted))]" />
+              <div className="w-full h-full flex items-center justify-center bg-accent">
+                <Image01Icon className="w-6 h-6 text-muted-foreground" />
               </div>
             )}
           </button>
@@ -117,14 +117,14 @@ export const BackgroundEffectsPicker = React.memo(({
             disabled={disabled}
             className={cn(
               "relative aspect-video rounded-md border-2 border-dashed overflow-hidden flex flex-col items-center justify-center transition-all",
-              "border-[var(--border,var(--chalk-border-color))]",
-              "hover:bg-[var(--muted,var(--chalk-bg-subtle))] hover:border-[var(--muted-foreground,var(--chalk-text-secondary))]",
+              "border-border",
+              "hover:bg-secondary hover:border-muted-foreground",
               disabled && "opacity-50 cursor-not-allowed"
             )}
             aria-label="Upload custom background"
           >
-            <Upload01Icon className="w-5 h-5 mb-1 text-[var(--muted-foreground,var(--chalk-text-secondary))]" />
-            <span className="text-[10px] font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">Upload</span>
+            <Upload01Icon className="w-5 h-5 mb-1 text-muted-foreground" />
+            <span className="text-[10px] font-medium text-muted-foreground">Upload</span>
             <input
               ref={fileInputRef}
               type="file"

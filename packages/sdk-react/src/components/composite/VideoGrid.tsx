@@ -296,7 +296,7 @@ export const VideoGrid = React.memo(({
 
     return (
       <div
-        className={cn("flex flex-col h-full gap-1", className)}
+        className={cn("flex flex-col h-full gap-2", className)}
         data-tour="video-grid"
       >
         <div className="flex-1 min-h-0 relative">
@@ -312,21 +312,21 @@ export const VideoGrid = React.memo(({
         </div>
 
         {otherParticipants.length > 0 && (
-          <div className="h-28 flex gap-1 overflow-x-auto">
+          <div className="h-40 flex gap-2 overflow-x-auto py-1">
             {otherParticipants.map((p) => (
-              <div key={p.id} className="w-44 flex-shrink-0">
+              <div key={p.id} className="h-full aspect-video flex-shrink-0">
                 <VideoTile
                   participant={mapToVideoTileParticipant(p)}
                   videoTrack={p.videoTrack}
                   onClick={() => onParticipantClick?.(p.id)}
                   onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
                   className="w-full h-full"
-                  showName={false}
+                  showName={true}
                 />
               </div>
             ))}
             {overflowCount > 0 && (
-              <div className="w-44 flex-shrink-0 aspect-video rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] flex items-center justify-center text-[var(--chalk-text-muted)]">
+              <div className="h-full aspect-video flex-shrink-0 rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center text-muted-foreground">
                 +{overflowCount} more
               </div>
             )}
@@ -342,10 +342,10 @@ export const VideoGrid = React.memo(({
 
     return (
       <div
-        className={cn("flex h-full gap-1", className)}
+        className={cn("flex h-full gap-2", className)}
         data-tour="video-grid"
       >
-        <div className="flex-1 relative">
+        <div className="flex-1 min-w-0 relative">
           {mainParticipant && (
             <VideoTile
               participant={mapToVideoTileParticipant(mainParticipant)}
@@ -358,7 +358,7 @@ export const VideoGrid = React.memo(({
         </div>
 
         {otherParticipants.length > 0 && (
-          <div className="w-48 flex flex-col gap-1 overflow-y-auto">
+          <div className="w-64 flex flex-col gap-2 overflow-y-auto">
             {otherParticipants.map((p) => (
               <div key={p.id} className="w-full aspect-video flex-shrink-0">
                 <VideoTile
@@ -367,12 +367,12 @@ export const VideoGrid = React.memo(({
                   onClick={() => onParticipantClick?.(p.id)}
                   onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
                   className="w-full h-full"
-                  showName={false}
+                  showName={true}
                 />
               </div>
             ))}
             {overflowCount > 0 && (
-              <div className="w-full aspect-video rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] flex items-center justify-center text-[var(--chalk-text-muted)] flex-shrink-0">
+              <div className="w-full aspect-video rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center text-muted-foreground flex-shrink-0">
                 +{overflowCount} more
               </div>
             )}
@@ -389,10 +389,10 @@ export const VideoGrid = React.memo(({
 
     return (
       <div
-        className={cn("flex h-full gap-1", className)}
+        className={cn("flex h-full gap-2", className)}
         data-tour="video-grid"
       >
-        <div className="flex-1 relative">
+        <div className="flex-1 min-w-0 relative">
           {screenSharer && (
             <VideoTile
               participant={mapToVideoTileParticipant(screenSharer)}
@@ -406,7 +406,7 @@ export const VideoGrid = React.memo(({
         </div>
 
         {otherParticipants.length > 0 && (
-          <div className="w-48 flex flex-col gap-1 overflow-y-auto">
+          <div className="w-64 flex flex-col gap-2 overflow-y-auto">
             {otherParticipants.map((p) => (
               <div key={p.id} className="w-full aspect-video flex-shrink-0">
                 <VideoTile
@@ -415,12 +415,12 @@ export const VideoGrid = React.memo(({
                   onClick={() => onParticipantClick?.(p.id)}
                   onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
                   className="w-full h-full"
-                  showName
+                  showName={true}
                 />
               </div>
             ))}
             {overflowCount > 0 && (
-              <div className="w-full aspect-video rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] flex items-center justify-center text-[var(--chalk-text-muted)] flex-shrink-0">
+              <div className="w-full aspect-video rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center text-muted-foreground flex-shrink-0">
                 +{overflowCount} more
               </div>
             )}
@@ -433,17 +433,17 @@ export const VideoGrid = React.memo(({
   // Default grid layout
   const gridLayout = getGridLayout(visibleParticipants.length);
 
-  // Single participant: full bleed
+  // Single participant: full bleed with minimal padding
   if (visibleParticipants.length === 1) {
     const p = visibleParticipants[0]!;
     return (
-      <div className={cn("h-full w-full flex items-center justify-center p-8", className)} data-tour="video-grid">
+      <div className={cn("h-full w-full flex items-center justify-center", className)} data-tour="video-grid">
         <VideoTile
           participant={mapToVideoTileParticipant(p)}
           videoTrack={p.videoTrack}
           onClick={() => onParticipantClick?.(p.id)}
           onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
-          className="w-full h-full max-w-[90%] max-h-[85vh] shadow-2xl"
+          className="w-full h-full"
         />
       </div>
     );
@@ -452,7 +452,7 @@ export const VideoGrid = React.memo(({
   return (
     <div
       className={cn(
-        "grid gap-4 w-full h-full place-items-center p-4",
+        "grid gap-2 w-full h-full place-items-center",
         gridLayout.cols,
         gridLayout.rows,
         className
@@ -471,8 +471,8 @@ export const VideoGrid = React.memo(({
         />
       ))}
       {overflowCount > 0 && (
-        <div className="rounded-[var(--chalk-border-radius-lg)] bg-[var(--chalk-bg-tile)] aspect-video flex items-center justify-center w-full h-full">
-          <span className="text-xl font-medium text-[var(--chalk-text-muted)]">+{overflowCount} more</span>
+        <div className="rounded-2xl bg-[var(--chalk-bg-tile)] aspect-video flex items-center justify-center w-full h-full">
+          <span className="text-xl font-medium text-muted-foreground">+{overflowCount} more</span>
         </div>
       )}
     </div>

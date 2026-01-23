@@ -127,14 +127,14 @@ export const ScreenShareView = React.memo(({
   return (
     <div
       className={cn(
-        "flex h-full w-full gap-4",
+        "flex h-full w-full gap-2",
         thumbnailPosition === 'bottom' ? "flex-col" : "flex-row",
         className
       )}
     >
       <div
         ref={containerRef}
-        className="relative flex-1 min-h-0 min-w-0 rounded-lg overflow-hidden bg-card border border-border group"
+        className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-black group"
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -147,7 +147,7 @@ export const ScreenShareView = React.memo(({
           playsInline
           muted
           className={cn(
-            "w-full h-full object-contain bg-black transition-transform duration-150",
+            "w-full h-full object-contain transition-transform duration-150",
             zoom > 1 && isDragging && "cursor-grabbing",
             zoom > 1 && !isDragging && "cursor-grab"
           )}
@@ -217,17 +217,17 @@ export const ScreenShareView = React.memo(({
       {showThumbnails && participants.length > 0 && (
         <div
           className={cn(
-            "flex gap-2 overflow-auto p-1",
+            "flex gap-2 overflow-auto",
             thumbnailPosition === 'bottom'
-              ? "h-32 w-full flex-row"
-              : "w-64 h-full flex-col"
+              ? "h-36 w-full flex-row items-center px-2"
+              : "w-56 h-full flex-col py-2"
           )}
         >
           {participants.map((p) => (
              <div
                 key={p.id}
                 className={cn(
-                  "shrink-0 rounded-lg overflow-hidden border border-border bg-card relative",
+                  "shrink-0 rounded-xl overflow-hidden relative",
                    thumbnailPosition === 'bottom' ? "aspect-video h-full" : "aspect-video w-full"
                 )}
              >

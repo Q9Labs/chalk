@@ -31,7 +31,7 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center bg-[var(--chalk-bg-overlay)] backdrop-blur-sm transition-opacity duration-300',
+        'fixed inset-0 z-50 flex items-center justify-center bg-popover/80 backdrop-blur-sm transition-opacity duration-300',
         className
       )}
       role="alertdialog"
@@ -39,10 +39,10 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
       aria-labelledby="connection-status-title"
       aria-describedby="connection-status-desc"
     >
-      <div className="flex flex-col items-center justify-center p-8 bg-[var(--chalk-bg-primary)] rounded-[var(--chalk-border-radius-lg)] shadow-[var(--chalk-shadow-xl)] max-w-sm w-full border border-[var(--chalk-border-color)]">
+      <div className="flex flex-col items-center justify-center p-8 bg-background rounded-[var(--chalk-border-radius-lg)] shadow-[var(--chalk-shadow-xl)] max-w-sm w-full border border-border">
         
         {status === 'failed' ? (
-          <div className="mb-6 p-4 rounded-full bg-[var(--chalk-bg-secondary)] text-[var(--chalk-danger)]">
+          <div className="mb-6 p-4 rounded-full bg-card text-destructive">
             <WifiOffIcon size={48} strokeWidth={1.5} />
           </div>
         ) : (
@@ -53,14 +53,14 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
 
         <h2 
           id="connection-status-title"
-          className="text-xl font-semibold text-[var(--chalk-text-primary)] mb-2 text-center"
+          className="text-xl font-semibold text-foreground mb-2 text-center"
         >
           {status === 'failed' ? 'Connection Failed' : 'Connecting'}
         </h2>
 
         <p 
           id="connection-status-desc"
-          className="text-[var(--chalk-text-secondary)] text-center mb-8"
+          className="text-muted-foreground text-center mb-8"
         >
           {message || defaultMessages[status]}
         </p>
@@ -70,7 +70,7 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
             {onRetry && (
               <button
                 onClick={onRetry}
-                className="w-full py-2.5 px-4 bg-[var(--chalk-primary)] hover:bg-[var(--chalk-primary-hover)] text-white rounded-[var(--chalk-border-radius-md)] font-medium transition-colors"
+                className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-white rounded-[var(--chalk-border-radius-md)] font-medium transition-colors"
               >
                 Try Again
               </button>
@@ -78,7 +78,7 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
             {onLeave && (
               <button
                 onClick={onLeave}
-                className="w-full py-2.5 px-4 bg-[var(--chalk-bg-secondary)] hover:bg-[var(--chalk-bg-tertiary)] text-[var(--chalk-text-primary)] rounded-[var(--chalk-border-radius-md)] font-medium transition-colors"
+                className="w-full py-2.5 px-4 bg-card hover:bg-muted text-foreground rounded-[var(--chalk-border-radius-md)] font-medium transition-colors"
               >
                 Leave Meeting
               </button>

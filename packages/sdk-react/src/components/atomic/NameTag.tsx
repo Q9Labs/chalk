@@ -10,7 +10,7 @@ export interface NameTagProps {
 }
 
 const roleColors = {
-  host: 'var(--chalk-accent)',
+  host: 'var(--accent)',
   'co-host': '#8b5cf6',
   participant: 'transparent',
 };

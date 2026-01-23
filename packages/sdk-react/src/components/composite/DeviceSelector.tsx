@@ -64,7 +64,7 @@ export const DeviceSelector = React.memo(({
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-center justify-between">
         {label && (
-          <label className="text-sm font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">
+          <label className="text-sm font-medium text-muted-foreground">
             {label}
           </label>
         )}
@@ -81,7 +81,7 @@ export const DeviceSelector = React.memo(({
         />
 
         {type === 'audioinput' && (
-          <div className="h-10 w-10 flex items-center justify-center rounded-md shrink-0 bg-[var(--muted,var(--chalk-bg-subtle))]">
+          <div className="h-10 w-10 flex items-center justify-center rounded-md shrink-0 bg-secondary">
             <AudioIndicator
               level={audioLevel}
               size="sm"
@@ -95,7 +95,7 @@ export const DeviceSelector = React.memo(({
             <IconButton
               icon={<VolumeHighIcon className={cn(
                 "w-4 h-4",
-                isPlayingTestSound && "text-[var(--primary,var(--chalk-accent))]",
+                isPlayingTestSound && "text-primary",
                 isPlayingTestSound && !prefersReducedMotion && "animate-pulse"
               )} />}
               onClick={playTestSound}

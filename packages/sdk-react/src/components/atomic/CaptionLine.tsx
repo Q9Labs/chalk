@@ -41,7 +41,7 @@ export const CaptionLine = React.memo<CaptionLineProps>(({
         }}
       >
         {speaker && (
-          <span className="text-[var(--chalk-accent)] font-bold mr-2">
+          <span className="text-accent font-bold mr-2">
             {speaker}:
           </span>
         )}

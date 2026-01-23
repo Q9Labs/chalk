@@ -18,7 +18,7 @@ import {
 	Edit02Icon as Edit02IconSvg,
 	FileIcon as FileTextIconSvg,
 	GridIcon as GridIconSvg,
-	HandPointingDownIcon as HandIconSvg,
+	WavingHand01Icon as HandIconSvg,
 	Home01Icon as Home01IconSvg,
 	Image01Icon as Image01IconSvg,
 	InformationCircleIcon as InformationCircleIconSvg,
@@ -32,6 +32,7 @@ import {
 	Message01Icon as Message01IconSvg,
 	Mic01Icon as Microphone01IconSvg,
 	MicOff01Icon as MicrophoneOff01IconSvg,
+	Moon02Icon as Moon02IconSvg,
 	ComputerVideoIcon as Monitor01IconSvg,
 	ComputerRemoveIcon as MonitorOffIconSvg,
 	MoreHorizontalIcon as MoreHorizontalIconSvg,
@@ -50,6 +51,7 @@ import {
 	SmileIcon as SmileIconSvg,
 	SquareIcon as SquareIconSvg,
 	StarIcon as StarIconSvg,
+	Sun02Icon as Sun02IconSvg,
 	TextIcon as TextIconSvg,
 	ThumbsUpIcon as ThumbsUpIconSvg,
 	Tick01Icon as Tick01IconSvg,
@@ -110,6 +112,7 @@ export const Maximize01Icon = createIcon(Maximize01IconSvg);
 export const Message01Icon = createIcon(Message01IconSvg);
 export const Microphone01Icon = createIcon(Microphone01IconSvg);
 export const MicrophoneOff01Icon = createIcon(MicrophoneOff01IconSvg);
+export const Moon02Icon = createIcon(Moon02IconSvg);
 export const Monitor01Icon = createIcon(Monitor01IconSvg);
 export const MonitorOffIcon = createIcon(MonitorOffIconSvg);
 export const MoreHorizontalIcon = createIcon(MoreHorizontalIconSvg);
@@ -128,6 +131,7 @@ export const Shield01Icon = createIcon(Shield01IconSvg);
 export const SmileIcon = createIcon(SmileIconSvg);
 export const SquareIcon = createIcon(SquareIconSvg);
 export const StarIcon = createIcon(StarIconSvg);
+export const Sun02Icon = createIcon(Sun02IconSvg);
 export const TextIcon = createIcon(TextIconSvg);
 export const ThumbsUpIcon = createIcon(ThumbsUpIconSvg);
 export const Tick01Icon = createIcon(Tick01IconSvg);

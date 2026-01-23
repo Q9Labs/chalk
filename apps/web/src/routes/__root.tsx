@@ -6,8 +6,8 @@ import {
 	Outlet,
 	Scripts,
 } from "@tanstack/react-router";
-import { Moon, Sun } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { ThemeProvider } from "../context/theme";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -31,6 +31,11 @@ export const Route = createRootRoute({
 		],
 		links: [
 			{
+				rel: "icon",
+				type: "image/svg+xml",
+				href: "/chalk-icon.svg",
+			},
+			{
 				rel: "stylesheet",
 				href: appCss,
 			},
@@ -46,6 +51,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 		<html lang="en">
 			<head>
 				<HeadContent />
+				{import.meta.env.DEV && (
+					<script
+						src="//unpkg.com/react-grab/dist/index.global.js"
+						crossOrigin="anonymous"
+					/>
+				)}
 			</head>
 			<body>
 				{children}
@@ -56,19 +67,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
-	const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-	useEffect(() => {
-		const root = window.document.documentElement;
-		root.classList.remove("light", "dark");
-		root.classList.add(theme);
-		root.setAttribute("data-chalk-theme", theme);
-	}, [theme]);
-
-	const toggleTheme = () => {
-		setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-	};
-
 	// API URL for backend - use env var or default to production
 	const apiUrl = import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
 	// WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
@@ -104,19 +102,11 @@ function RootComponent() {
 	);
 
 	const content = (
-		<div className={` overflow-hidden bg-background text-foreground ${theme}`}>
-			<div className="fixed top-4 right-4 z-50">
-				<button
-					type="button"
-					onClick={toggleTheme}
-					className="p-2 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
-					aria-label="Toggle theme"
-				>
-					{theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
-				</button>
+		<ThemeProvider>
+			<div className="overflow-hidden bg-background text-foreground">
+				<Outlet />
 			</div>
-			<Outlet />
-		</div>
+		</ThemeProvider>
 	);
 
 	// ChalkProvider requires browser APIs - skip during SSR/prerender

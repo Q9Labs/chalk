@@ -73,7 +73,7 @@ export const RecordingControls = React.memo(({
   };
 
   return (
-    <div className={cn("flex items-center gap-3 px-3 py-1.5 bg-[var(--chalk-bg-secondary)] rounded-full border border-[var(--chalk-border-subtle)]", className)}>
+    <div className={cn("flex items-center gap-3 px-3 py-1.5 bg-card rounded-full border border-border/50", className)}>
       {renderBadge()}
       
       <div className="font-mono text-sm min-w-[3rem]">
@@ -81,7 +81,7 @@ export const RecordingControls = React.memo(({
       </div>
       
       {canRecord && (
-        <div className="flex items-center gap-1 border-l border-[var(--chalk-border-subtle)] pl-2">
+        <div className="flex items-center gap-1 border-l border-border/50 pl-2">
           {!isRecording ? (
              <IconButton 
                 icon={<PlayIcon size={16} className="fill-current" />} 

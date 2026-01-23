@@ -42,7 +42,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(({
         'py-1 px-2 mb-1 rounded-[var(--chalk-border-radius-sm)]',
         'text-[var(--chalk-font-size-md)] leading-relaxed',
         !prefersReducedMotion && 'chalk-animate-transcript-in transition-all duration-200',
-        isInterim ? 'italic text-[var(--chalk-text-muted)]' : 'text-[var(--chalk-text-secondary)]',
+        isInterim ? 'italic text-muted-foreground' : 'text-muted-foreground',
         className
       )}
       style={{ opacity }}
@@ -51,7 +51,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(({
       data-speaker-id={speakerId}
     >
       {showTimestamp && (
-        <span className="text-[var(--chalk-text-muted)] text-[var(--chalk-font-size-sm)] mr-2 select-none">
+        <span className="text-muted-foreground text-[var(--chalk-font-size-sm)] mr-2 select-none">
           [{timeString}]
         </span>
       )}
@@ -59,7 +59,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(({
       {showSpeaker && (
         <span
           className="font-[var(--chalk-font-weight-semibold)] mr-2"
-          style={{ color: speakerColor || 'var(--chalk-text-primary)' }}
+          style={{ color: speakerColor || 'var(--foreground)' }}
         >
           {speaker}:
         </span>

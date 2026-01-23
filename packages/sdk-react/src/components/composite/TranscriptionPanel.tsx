@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { Cancel01Icon, Search01Icon, ArrowDown01Icon } from '../../utils/icons';
+import { Cancel01Icon, Search01Icon, ArrowDown01Icon, FileTextIcon } from '../../utils/icons';
 import {
   TranscriptLine,
   IconButton,
@@ -34,13 +34,14 @@ export interface TranscriptionPanelProps {
   className?: string;
 }
 
+// Colors that work well on both light and dark backgrounds
 const SPEAKER_COLORS = [
-  '#FFFFFF',
-  '#FFFFFF',
-  '#F59E0B',
-  '#EC4899',
-  '#8B5CF6',
-  '#3B82F6',
+  '#1bb6a6', // teal (brand)
+  '#3B82F6', // blue
+  '#8B5CF6', // purple
+  '#EC4899', // pink
+  '#F59E0B', // amber
+  '#10B981', // emerald
 ];
 
 export const TranscriptionPanel = React.memo(({
@@ -106,7 +107,7 @@ export const TranscriptionPanel = React.memo(({
       <div
         className={cn(
           "flex flex-col h-full w-full overflow-hidden font-sans relative",
-          "bg-[var(--card,var(--chalk-bg-secondary))]",
+          "bg-card",
           className
         )}
         data-tour="transcription-panel"
@@ -132,19 +133,19 @@ export const TranscriptionPanel = React.memo(({
             ref={containerRef}
             className={cn(
               "rounded-2xl overflow-hidden p-4 space-y-3 relative min-h-[200px]",
-              "bg-[var(--muted,var(--chalk-bg-tertiary))]/50 backdrop-blur-xl"
+              "bg-muted/50 backdrop-blur-xl"
             )}
             onScroll={handleScroll}
           >
             {isLive && (
               <div className="flex items-center gap-2 mb-3">
                 <StatusBadge status="transcribing" size="sm" pulse />
-                <span className="text-xs text-[var(--muted-foreground,var(--chalk-text-muted))]">Live transcription</span>
+                <span className="text-xs text-muted-foreground">Live transcription</span>
               </div>
             )}
 
             {filteredTranscripts.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center py-8 text-[var(--muted-foreground,var(--chalk-text-muted))]">
+              <div className="h-full flex flex-col items-center justify-center text-center py-8 text-muted-foreground">
                 <p className="text-sm">Transcription will appear here</p>
               </div>
             ) : (
@@ -174,8 +175,8 @@ export const TranscriptionPanel = React.memo(({
                   }}
                   className={cn(
                     "px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto transition-colors",
-                    "bg-[var(--secondary,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]",
-                    "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]"
+                    "bg-secondary text-foreground",
+                    "hover:bg-accent"
                   )}
                 >
                   <ArrowDown01Icon className="w-3 h-3" />
@@ -194,7 +195,7 @@ export const TranscriptionPanel = React.memo(({
       <div
         className={cn(
           "flex flex-col h-full w-full overflow-hidden font-sans relative",
-          "bg-[var(--card,var(--chalk-bg-secondary))]",
+          "bg-transparent",
           !prefersReducedMotion && "animate-in slide-in-from-right duration-300",
           className
         )}
@@ -204,13 +205,18 @@ export const TranscriptionPanel = React.memo(({
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-5">
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold tracking-tight text-[var(--card-foreground,var(--chalk-text-primary))]">Transcription</h2>
-            {isLive && <StatusBadge status="transcribing" size="sm" pulse />}
+            <h2 className="text-2xl font-bold tracking-tight text-card-foreground">Transcription</h2>
+            {isLive && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#1bb6a6]/15 text-[#1bb6a6]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#1bb6a6] animate-pulse" />
+                Live
+              </span>
+            )}
           </div>
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 transition-colors text-[var(--muted-foreground,var(--chalk-text-secondary))] hover:text-[var(--foreground,var(--chalk-text-primary))]"
+              className="p-1 transition-colors text-muted-foreground hover:text-foreground"
               aria-label="Close"
             >
               <Cancel01Icon className="w-5 h-5" />
@@ -237,13 +243,16 @@ export const TranscriptionPanel = React.memo(({
             ref={containerRef}
             className={cn(
               "rounded-2xl overflow-hidden p-4 space-y-3 relative min-h-[300px]",
-              "bg-[var(--muted,var(--chalk-bg-tertiary))]/50 backdrop-blur-xl"
+              "bg-muted/30 backdrop-blur-sm border border-border/30"
             )}
             onScroll={handleScroll}
           >
             {filteredTranscripts.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center text-[var(--muted-foreground,var(--chalk-text-muted))]">
-                <p className="text-sm">Transcription will appear here</p>
+              <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-[#1bb6a6]/10 text-[#1bb6a6]">
+                  <FileTextIcon className="w-6 h-6" />
+                </div>
+                <p className="text-sm text-muted-foreground">Transcription will appear here</p>
               </div>
             ) : (
               filteredTranscripts.map((entry) => (
@@ -272,8 +281,8 @@ export const TranscriptionPanel = React.memo(({
                   }}
                   className={cn(
                     "px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto transition-colors",
-                    "bg-[var(--secondary,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]",
-                    "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]"
+                    "bg-secondary text-foreground",
+                    "hover:bg-accent"
                   )}
                 >
                   <ArrowDown01Icon className="w-3 h-3" />
@@ -291,8 +300,8 @@ export const TranscriptionPanel = React.memo(({
     <div
       className={cn(
         "flex flex-col shadow-xl",
-        "bg-[var(--card,var(--chalk-bg-surface))]",
-        "border-[var(--border,var(--chalk-border-subtle))]",
+        "bg-card",
+        "border-border/50",
         position === 'right'
           ? cn("h-full w-80 border-l", !prefersReducedMotion && "animate-in slide-in-from-right duration-300")
           : cn("w-full h-64 border-t", !prefersReducedMotion && "animate-in slide-in-from-bottom duration-300"),
@@ -302,9 +311,9 @@ export const TranscriptionPanel = React.memo(({
       role="complementary"
       aria-label="Live transcription"
     >
-      <div className="flex items-center justify-between p-4 border-b border-[var(--border,var(--chalk-border-subtle))]">
+      <div className="flex items-center justify-between p-4 border-b border-border/50">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-[var(--card-foreground,var(--chalk-text-primary))]">Transcription</h2>
+          <h2 className="text-sm font-semibold text-card-foreground">Transcription</h2>
           {isLive && <StatusBadge status="transcribing" size="sm" pulse />}
         </div>
         <div className="flex items-center gap-1">
@@ -355,7 +364,7 @@ export const TranscriptionPanel = React.memo(({
         onScroll={handleScroll}
       >
         {filteredTranscripts.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center opacity-60 text-[var(--muted-foreground,var(--chalk-text-muted))]">
+          <div className="h-full flex flex-col items-center justify-center text-center opacity-60 text-muted-foreground">
             <p className="text-sm">Transcription will appear here</p>
           </div>
         ) : (
@@ -385,7 +394,7 @@ export const TranscriptionPanel = React.memo(({
               }}
               className={cn(
                 "px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto transition-colors",
-                "bg-[var(--primary,var(--chalk-accent))] text-[var(--primary-foreground,#fff)]",
+                "bg-primary text-primary-foreground",
                 "hover:opacity-90"
               )}
             >

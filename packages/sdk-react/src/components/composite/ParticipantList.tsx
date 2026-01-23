@@ -8,6 +8,7 @@ import {
   Input,
   Badge
 } from '../atomic';
+import { Button } from '../ui';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
@@ -79,11 +80,11 @@ export const ParticipantList = React.memo(({
   }, [participants, searchQuery]);
 
   const renderParticipantRow = (participant: Participant) => (
-    <div 
+    <div
       key={participant.id}
       className={cn(
-        "group flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors relative",
-        variant === 'sidebar' && "hover:bg-white/5"
+        "group flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors relative",
+        variant === 'sidebar' && "hover:bg-muted/50"
       )}
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -106,14 +107,14 @@ export const ParticipantList = React.memo(({
           <div className="flex items-center gap-1.5">
             <span className={cn(
               "text-sm font-normal truncate",
-              variant === 'sidebar' ? "text-white" : "text-chalk-text-primary"
+              variant === 'sidebar' ? "text-card-foreground" : "text-chalk-text-primary"
             )}>
               {participant.displayName}
             </span>
             {participant.isLocal && (
               <span className={cn(
                 "text-xs",
-                variant === 'sidebar' ? "text-gray-500" : "text-chalk-text-muted"
+                variant === 'sidebar' ? "text-muted-foreground" : "text-chalk-text-muted"
               )}>(you)</span>
             )}
           </div>
@@ -121,8 +122,8 @@ export const ParticipantList = React.memo(({
             {participant.role && participant.role !== 'participant' && (
               <span className={cn(
                 "text-[11px] tracking-normal font-normal",
-                variant === 'sidebar' 
-                  ? "text-gray-400" 
+                variant === 'sidebar'
+                  ? "text-muted-foreground"
                   : "text-chalk-text-secondary bg-chalk-bg-subtle px-1.5 py-0.5 rounded"
               )}>
                 {variant === 'sidebar' && participant.role === 'host' ? 'Meeting Host' : participant.role}
@@ -135,8 +136,8 @@ export const ParticipantList = React.memo(({
       <div className="flex items-center gap-1">
         {variant === 'sidebar' ? (
           participant.isMuted ? (
-            <div className="bg-red-500/20 p-1.5 rounded-full">
-              <MicrophoneOff01Icon className="w-3.5 h-3.5 text-red-500" />
+            <div className="bg-[#dc2626]/20 p-1.5 rounded-full">
+              <MicrophoneOff01Icon className="w-3.5 h-3.5 text-[#dc2626]" />
             </div>
           ) : null
         ) : (
@@ -155,13 +156,13 @@ export const ParticipantList = React.memo(({
               variant="ghost"
               className={cn(
                 variant === 'sidebar'
-                  ? "opacity-70 hover:opacity-100 text-gray-400 hover:text-white"
+                  ? "opacity-70 hover:opacity-100 text-muted-foreground hover:text-foreground"
                   : "opacity-0 group-hover:opacity-100 focus:opacity-100"
               )}
               onClick={() => setActiveMenuId(activeMenuId === participant.id ? null : participant.id)}
               aria-label={`Options for ${participant.displayName}`}
             />
-            
+
             {activeMenuId === participant.id && (
               <>
                 <div
@@ -169,9 +170,9 @@ export const ParticipantList = React.memo(({
                   onClick={() => setActiveMenuId(null)}
                 />
                 <div className={cn(
-                  "absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg z-20 overflow-hidden py-1",
+                  "absolute right-0 top-full mt-1 w-48 rounded-lg shadow-xl z-20 overflow-hidden py-1",
                   variant === 'sidebar'
-                    ? "bg-[#151515] border border-white/10"
+                    ? "bg-popover/95 backdrop-blur-xl border border-border/50"
                     : "bg-chalk-bg-surface border border-chalk-border-subtle"
                 )}>
                   {onMuteParticipant && (
@@ -183,7 +184,7 @@ export const ParticipantList = React.memo(({
                       className={cn(
                         "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
                         variant === 'sidebar'
-                          ? "text-gray-200 hover:bg-white/10"
+                          ? "text-popover-foreground hover:bg-muted/50"
                           : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
                       )}
                     >
@@ -201,7 +202,7 @@ export const ParticipantList = React.memo(({
                       className={cn(
                         "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
                         variant === 'sidebar'
-                          ? "text-gray-200 hover:bg-white/10"
+                          ? "text-popover-foreground hover:bg-muted/50"
                           : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
                       )}
                     >
@@ -219,7 +220,7 @@ export const ParticipantList = React.memo(({
                       className={cn(
                         "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
                         variant === 'sidebar'
-                          ? "text-gray-200 hover:bg-white/10"
+                          ? "text-popover-foreground hover:bg-muted/50"
                           : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
                       )}
                     >
@@ -237,7 +238,7 @@ export const ParticipantList = React.memo(({
                       className={cn(
                         "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
                         variant === 'sidebar'
-                          ? "text-red-400 hover:bg-red-500/20"
+                          ? "text-[#dc2626] hover:bg-[#dc2626]/10"
                           : "text-chalk-error-main hover:bg-chalk-error-subtle"
                       )}
                     >
@@ -259,28 +260,27 @@ export const ParticipantList = React.memo(({
     return (
       <div
         className={cn(
-          "flex flex-col h-full w-full overflow-hidden font-sans relative",
+          "flex flex-col h-full w-full overflow-hidden font-sans relative bg-card",
           className
         )}
-        style={{ backgroundColor: '#151515' }}
         data-tour="participants-panel"
         role="complementary"
         aria-label="Participants list"
       >
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {onAddPeople && (
-            <button
+            <Button
               onClick={onAddPeople}
-              className="w-full bg-primary hover:bg-primary/80 text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-4 font-medium text-sm shadow-lg min-h-[48px]"
+              className="w-full bg-[#1bb6a6] hover:bg-[#0d9488] text-white rounded-full py-3 px-4 mb-4 shadow-lg shadow-[#1bb6a6]/25 min-h-[48px]"
             >
               <UserGroupIcon className="w-4 h-4" />
               <span>Add people</span>
-            </button>
+            </Button>
           )}
 
           {/* Section Label */}
           <div className="mb-3 px-1">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-gray-500 font-semibold">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
               IN THE MEETING ({participants.length})
             </p>
           </div>
@@ -288,7 +288,7 @@ export const ParticipantList = React.memo(({
           {/* Participants List */}
           <div className="space-y-1">
             {filteredParticipants.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-500">
+              <div className="p-8 text-center text-sm text-muted-foreground">
                 No participants found
               </div>
             ) : (
@@ -304,22 +304,21 @@ export const ParticipantList = React.memo(({
     return (
       <div
         className={cn(
-          "flex flex-col h-full w-full overflow-hidden font-sans relative",
+          "flex flex-col h-full w-full overflow-hidden font-sans relative bg-transparent",
           !prefersReducedMotion && "chalk-animate-slide-right",
           className
         )}
-        style={{ backgroundColor: '#151515' }}
         data-tour="participants-panel"
         role="complementary"
         aria-label="Participants list"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-5">
-          <h2 className="text-2xl font-bold text-white tracking-tight">{title === 'Participants' ? 'People' : title}</h2>
+          <h2 className="text-2xl font-bold text-card-foreground tracking-tight">{title === 'Participants' ? 'People' : title}</h2>
           {onClose && (
             <button
               onClick={onClose}
-              className="text-white/80 hover:text-white transition-colors p-1"
+              className="text-muted-foreground hover:text-foreground transition-colors p-1"
               aria-label="Close"
             >
               <Cancel01Icon className="w-5 h-5" />
@@ -329,47 +328,40 @@ export const ParticipantList = React.memo(({
 
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {onAddPeople && (
-            <button
+            <Button
               onClick={onAddPeople}
-              className="w-full bg-primary hover:bg-primary/80 text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-6 font-medium text-sm shadow-lg"
+              className="w-full bg-[#1bb6a6] hover:bg-[#0d9488] text-white rounded-full py-3 px-4 mb-6 shadow-lg shadow-[#1bb6a6]/25"
             >
               <UserGroupIcon className="w-4 h-4" />
               <span>Add people</span>
-            </button>
+            </Button>
           )}
 
           {/* Section Label */}
           <div className="mb-3 px-1">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-gray-500 font-semibold">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
               IN THE MEETING
             </p>
           </div>
 
           {/* Participants Container with Glass Effect */}
-          <div 
-            className="rounded-2xl overflow-hidden"
-            style={{
-              backgroundColor: '#151515',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)'
-            }}
-          >
+          <div className="rounded-2xl overflow-hidden bg-muted/30 backdrop-blur-sm border border-border/30">
             {/* Collapsible Header */}
-            <button 
+            <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full px-4 py-3.5 flex items-center justify-between group focus:outline-none cursor-pointer hover:bg-white/5 transition-colors"
+              className="w-full px-4 py-3.5 flex items-center justify-between group focus:outline-none cursor-pointer hover:bg-muted/50 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <span className="text-white font-semibold text-sm">Participants</span>
+                <span className="text-card-foreground font-semibold text-sm">Participants</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-white/60 text-sm font-medium">
+                <span className="text-muted-foreground text-sm font-medium">
                   {participants.length}
                 </span>
                 {isExpanded ? (
-                  <ArrowUp01Icon className="w-4 h-4 text-white/60" />
+                  <ArrowUp01Icon className="w-4 h-4 text-muted-foreground" />
                 ) : (
-                  <ArrowDown01Icon className="w-4 h-4 text-white/60" />
+                  <ArrowDown01Icon className="w-4 h-4 text-muted-foreground" />
                 )}
               </div>
             </button>
@@ -378,7 +370,7 @@ export const ParticipantList = React.memo(({
             {isExpanded && (
               <div className="px-3 pb-3">
                 {filteredParticipants.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-gray-500">
+                  <div className="p-8 text-center text-sm text-muted-foreground">
                     No participants found
                   </div>
                 ) : (

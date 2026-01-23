@@ -9,32 +9,28 @@ interface ColorPalette {
   border: string;
 }
 
-// Curated color palettes that work well for video tiles
+// Curated color palettes that work well for video tiles - teal-themed
 const COLOR_PALETTES: ColorPalette[] = [
-  // Purple
-  { primary: '#3E006D', secondary: '#1a0a2e', border: 'rgba(98, 0, 177, 0.3)' },
-  // Blue
-  { primary: '#0D47A1', secondary: '#0a1929', border: 'rgba(13, 71, 161, 0.3)' },
-  // Teal
-  { primary: '#00695C', secondary: '#0a1f1c', border: 'rgba(0, 105, 92, 0.3)' },
-  // Green
-  { primary: '#2E7D32', secondary: '#0f1f10', border: 'rgba(46, 125, 50, 0.3)' },
-  // Orange
-  { primary: '#E65100', secondary: '#1f1209', border: 'rgba(230, 81, 0, 0.3)' },
-  // Red
-  { primary: '#C62828', secondary: '#1f0a0a', border: 'rgba(198, 40, 40, 0.3)' },
-  // Pink
-  { primary: '#AD1457', secondary: '#1f0a14', border: 'rgba(173, 20, 87, 0.3)' },
-  // Indigo
-  { primary: '#283593', secondary: '#0a0f1f', border: 'rgba(40, 53, 147, 0.3)' },
+  // Brand Teal (primary)
+  { primary: '#1bb6a6', secondary: '#0a1f1c', border: 'rgba(27, 182, 166, 0.3)' },
+  // Teal 600
+  { primary: '#0d9488', secondary: '#0a1917', border: 'rgba(13, 148, 136, 0.3)' },
   // Cyan
-  { primary: '#00838F', secondary: '#0a1a1f', border: 'rgba(0, 131, 143, 0.3)' },
-  // Amber
-  { primary: '#FF6F00', secondary: '#1f1609', border: 'rgba(255, 111, 0, 0.3)' },
-  // Deep Purple
-  { primary: '#4A148C', secondary: '#140a1f', border: 'rgba(74, 20, 140, 0.3)' },
-  // Light Blue
-  { primary: '#0277BD', secondary: '#0a161f', border: 'rgba(2, 119, 189, 0.3)' },
+  { primary: '#06b6d4', secondary: '#0a1a1f', border: 'rgba(6, 182, 212, 0.3)' },
+  // Emerald
+  { primary: '#10b981', secondary: '#0a1f16', border: 'rgba(16, 185, 129, 0.3)' },
+  // Sky
+  { primary: '#0ea5e9', secondary: '#0a161f', border: 'rgba(14, 165, 233, 0.3)' },
+  // Blue
+  { primary: '#3b82f6', secondary: '#0a1429', border: 'rgba(59, 130, 246, 0.3)' },
+  // Indigo
+  { primary: '#6366f1', secondary: '#0f0a29', border: 'rgba(99, 102, 241, 0.3)' },
+  // Violet
+  { primary: '#8b5cf6', secondary: '#140a29', border: 'rgba(139, 92, 246, 0.3)' },
+  // Teal Light
+  { primary: '#2dd4bf', secondary: '#0a1f1c', border: 'rgba(45, 212, 191, 0.3)' },
+  // Green
+  { primary: '#22c55e', secondary: '#0f1f10', border: 'rgba(34, 197, 94, 0.3)' },
 ];
 
 /**

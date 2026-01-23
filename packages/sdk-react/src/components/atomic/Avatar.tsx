@@ -19,16 +19,16 @@ const sizeMap = {
 };
 
 const gradientPairs = [
-  ['#667eea', '#764ba2'], // Purple-violet
-  ['#f093fb', '#f5576c'], // Pink-rose
-  ['#4facfe', '#00f2fe'], // Blue-cyan
-  ['#43e97b', '#38f9d7'], // Green-teal
-  ['#fa709a', '#fee140'], // Pink-yellow
-  ['#a8edea', '#fed6e3'], // Mint-pink
-  ['#ff9a9e', '#fecfef'], // Peach-pink
-  ['#667eea', '#764ba2'], // Indigo-purple
-  ['#ffecd2', '#fcb69f'], // Cream-coral
-  ['#a1c4fd', '#c2e9fb'], // Light blue
+  ['#1bb6a6', '#0d9488'], // Brand teal
+  ['#0d9488', '#115e59'], // Teal deep
+  ['#06b6d4', '#0891b2'], // Cyan
+  ['#10b981', '#059669'], // Emerald
+  ['#2dd4bf', '#14b8a6'], // Teal light
+  ['#0ea5e9', '#0284c7'], // Sky
+  ['#3b82f6', '#2563eb'], // Blue
+  ['#6366f1', '#4f46e5'], // Indigo
+  ['#22c55e', '#16a34a'], // Green
+  ['#8b5cf6', '#7c3aed'], // Violet
 ];
 
 function hashString(str: string): number {
@@ -48,10 +48,10 @@ function getGradient(name: string): string {
 }
 
 const statusColorMap = {
-  online: 'var(--chart-3, var(--chalk-success))',
-  away: 'var(--chart-5, var(--chalk-warning))',
-  busy: 'var(--destructive, var(--chalk-danger))',
-  offline: 'var(--muted-foreground, var(--chalk-text-muted))',
+  online: 'var(--success)',
+  away: 'var(--warning)',
+  busy: 'var(--destructive)',
+  offline: 'var(--muted-foreground)',
 };
 
 export const Avatar = React.memo(({ name, src, size = 'md', status, className }: AvatarProps) => {

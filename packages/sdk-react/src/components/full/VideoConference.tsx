@@ -36,7 +36,6 @@ import { usePanels } from "../../hooks/ui/usePanels";
 import { useSoundEffects } from "../../hooks/useSoundEffects";
 
 import { EndScreen } from "./EndScreen";
-import { LoadingScreen } from "./LoadingScreen";
 import { MeetingRoom } from "./MeetingRoom";
 import { PreJoinLobby } from "./PreJoinLobby";
 
@@ -402,7 +401,7 @@ function VideoConferenceBase({
 		};
 	}, [session, phase, onEnd, buildEndData, onLeave, onError]);
 
-	if (phase === "lobby") {
+	if (phase === "lobby" || phase === "joining") {
 		return (
 			<PreJoinLobby
 				roomName={roomId}
@@ -420,15 +419,11 @@ function VideoConferenceBase({
 				onAudioOutputChange={media.selectSpeaker}
 				initialVideoEnabled={defaults.videoEnabled ?? true}
 				initialAudioEnabled={defaults.audioEnabled ?? true}
-				isLoading={isJoining}
+				isLoading={phase === "joining" || isJoining}
 				error={error ?? undefined}
 				className={className}
 			/>
 		);
-	}
-
-	if (phase === "joining") {
-		return <LoadingScreen message="Joining room..." className={className} />;
 	}
 
 	if (phase === "end") {

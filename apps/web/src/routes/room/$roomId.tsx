@@ -45,10 +45,6 @@ function RoomPage() {
 		}
 	}, []);
 
-	const handleLeave = useCallback(() => {
-		navigate({ to: "/" });
-	}, [navigate]);
-
 	const handleError = useCallback(
 		(error: unknown) => {
 			log.error("Room error", error);
@@ -67,14 +63,13 @@ function RoomPage() {
 			<VideoConference
 				roomId={roomId}
 				userName={storedUserName || "Guest"}
-				onLeave={handleLeave}
 				onError={handleError}
 				onJoin={(data) => {
 					console.log("Joined: ", data);
 				}}
 				onEnd={(data) => {
 					localStorage.setItem("data", JSON.stringify(data));
-					console.log("Room ended: ", data);
+					navigate({ to: "/room/end", search: { roomId } });
 				}}
 				sounds={true}
 				debug={true}

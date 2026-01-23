@@ -77,9 +77,9 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
       toastOptions={{
         classNames: {
           toast: cn(
-            'bg-[var(--card,var(--chalk-bg-panel))]',
-            'text-[var(--card-foreground,var(--chalk-text-primary))]',
-            'border-[var(--border,var(--chalk-border-color))]'
+            'bg-card',
+            'text-card-foreground',
+            'border-border'
           ),
         },
       }}

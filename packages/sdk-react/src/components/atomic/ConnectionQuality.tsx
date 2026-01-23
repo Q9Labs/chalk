@@ -16,10 +16,10 @@ const labels = {
 };
 
 const colors = {
-  1: 'var(--chalk-danger)',
-  2: 'var(--chalk-warning)',
-  3: 'var(--chalk-success)',
-  4: 'var(--chalk-success)',
+  1: 'var(--destructive)',
+  2: 'var(--warning)',
+  3: 'var(--success)',
+  4: 'var(--success)',
 };
 
 export const ConnectionQuality = React.memo(({ quality, showLabel = false, size = 'md', className }: ConnectionQualityProps) => {
@@ -42,13 +42,13 @@ export const ConnectionQuality = React.memo(({ quality, showLabel = false, size 
           style={{
             width: barWidth,
             height: (barHeight / 4) * level,
-            backgroundColor: level <= clampedQuality ? color : 'var(--chalk-bg-tertiary)',
+            backgroundColor: level <= clampedQuality ? color : 'var(--muted)',
             borderRadius: '1px',
           }}
         />
       ))}
       {showLabel && (
-        <span className="ml-1 text-xs text-[var(--chalk-text-secondary)]">
+        <span className="ml-1 text-xs text-muted-foreground">
           {labels[clampedQuality]}
         </span>
       )}

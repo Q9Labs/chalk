@@ -43,8 +43,8 @@ export const Thumbnail = React.memo(({
   return (
     <div
       className={cn(
-        'relative shrink-0 overflow-hidden rounded-[var(--chalk-border-radius-sm)] bg-[var(--chalk-bg-secondary)] transition-all duration-200',
-        active && 'ring-2 ring-[var(--chalk-accent)]',
+        'relative shrink-0 overflow-hidden rounded-[var(--chalk-border-radius-sm)] bg-card transition-all duration-200',
+        active && 'ring-2 ring-accent',
         onClick && 'cursor-pointer hover:opacity-90',
         sizeClasses[size],
         className
