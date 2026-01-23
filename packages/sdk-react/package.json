@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.39",
+  "version": "0.0.40",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -49,6 +49,7 @@
     "@q9labs/chalk-core": "workspace:^",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "react-markdown": "^10.1.0",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.4.0",
     "tw-animate-css": "^1.3.0"

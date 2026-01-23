@@ -305,6 +305,21 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes chalk-typing-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes chalk-interim-pulse {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: oklch(0.60 0.10 185 / 5%); }
+}
+
+@keyframes chalk-search-highlight {
+  0%, 100% { box-shadow: 0 0 0 2px oklch(0.80 0.15 85 / 50%); }
+  50% { box-shadow: 0 0 0 4px oklch(0.80 0.15 85 / 30%); }
+}
+
 @keyframes chalk-control-hover {
   from { transform: scale(1); }
   to { transform: scale(1.04); }
@@ -374,6 +389,17 @@
 .chalk-animate-ripple { animation: chalk-ripple-expand 2s ease-out infinite; }
 .chalk-animate-spin-slow { animation: chalk-spin-slow 8s linear infinite; }
 .chalk-animate-spin-reverse-slow { animation: chalk-spin-reverse-slow 12s linear infinite; }
+.chalk-animate-typing-dot { animation: chalk-typing-dot 1.4s ease-in-out infinite; }
+.chalk-animate-interim-pulse { animation: chalk-interim-pulse 2s ease-in-out infinite; }
+.chalk-animate-search-highlight { animation: chalk-search-highlight 2s ease-in-out infinite; }
+
+/* Low confidence text styling */
+.chalk-low-confidence {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--warning);
+  text-underline-offset: 3px;
+}
 
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {

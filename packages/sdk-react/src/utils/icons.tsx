@@ -49,6 +49,7 @@ import {
 	Share01Icon as Share01IconSvg,
 	Shield01Icon as Shield01IconSvg,
 	SmileIcon as SmileIconSvg,
+	SparklesIcon as SparklesIconSvg,
 	SquareIcon as SquareIconSvg,
 	StarIcon as StarIconSvg,
 	Sun02Icon as Sun02IconSvg,
@@ -129,6 +130,7 @@ export const Settings01Icon = createIcon(Settings01IconSvg);
 export const Share01Icon = createIcon(Share01IconSvg);
 export const Shield01Icon = createIcon(Shield01IconSvg);
 export const SmileIcon = createIcon(SmileIconSvg);
+export const SparklesIcon = createIcon(SparklesIconSvg);
 export const SquareIcon = createIcon(SquareIconSvg);
 export const StarIcon = createIcon(StarIconSvg);
 export const Sun02Icon = createIcon(Sun02IconSvg);

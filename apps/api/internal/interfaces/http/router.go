@@ -11,6 +11,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/domain/transcript"
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
+	"github.com/Q9Labs/chalk/internal/infrastructure/github"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
@@ -33,6 +34,8 @@ type Router struct {
 	wsHub         *websocket.Hub
 	storageR2     storage.StorageClient
 	storageS3     storage.StorageClient
+	githubClient  *github.Client
+	appConfig     *config.Config
 
 	roomService        *room.Service
 	participantService *participant.Service
@@ -76,6 +79,13 @@ func NewRouter(cfg RouterConfig) *Router {
 	recordingService := recording.NewService(queries, cfg.CFClient, cfg.StorageR2, cfg.StorageS3, roomState, wsHub)
 	transcriptService := transcript.NewService(queries)
 
+	// GitHub client for What's New feature
+	githubClient := github.NewClient(
+		cfg.AppConfig.GitHub.Token,
+		cfg.AppConfig.GitHub.Owner,
+		cfg.AppConfig.GitHub.Repo,
+	)
+
 	// Wire transcript service to WebSocket hub for real-time transcript persistence
 	wsHub.SetTranscriptService(&transcriptServiceAdapter{svc: transcriptService})
 
@@ -91,6 +101,8 @@ func NewRouter(cfg RouterConfig) *Router {
 		wsHub:              wsHub,
 		storageR2:          cfg.StorageR2,
 		storageS3:          cfg.StorageS3,
+		githubClient:       githubClient,
+		appConfig:          cfg.AppConfig,
 		roomService:        roomService,
 		participantService: participantService,
 		recordingService:   recordingService,
@@ -139,6 +151,10 @@ func (r *Router) setupRoutes() {
 
 		demoHandler := handlers.NewDemoHandler(r.queries, r.roomService, r.participantService)
 		v1.POST("/demo/join", demoHandler.Join)
+
+		// What's New - public endpoint for release info
+		whatsNew := handlers.NewWhatsNewHandler(r.githubClient, r.redisClient, r.storageR2, r.appConfig.GitHub.CacheTTL)
+		v1.GET("/whats-new", whatsNew.Get)
 
 		tenants := handlers.NewTenantHandler(r.queries, r.apiKeyService)
 		tenantsGroup := v1.Group("/tenants")

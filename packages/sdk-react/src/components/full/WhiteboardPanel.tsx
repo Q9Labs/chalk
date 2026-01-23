@@ -187,13 +187,16 @@ function WhiteboardPanelBase({
 						import("@q9labs/chalk-whiteboard").catch(() => null),
 					]);
 
-				// Inject Excalidraw CSS if not already present
+				// Check if Excalidraw CSS is already loaded (via global import or previous mount)
 				const cssId = "excalidraw-styles";
 				const existingLink = document.getElementById(cssId) as HTMLLinkElement | null;
-				if (existingLink) {
-					// CSS already loaded from previous mount
+				const hasGlobalStyles = document.querySelector('style[data-href*="excalidraw"], link[href*="excalidraw"]');
+
+				if (existingLink || hasGlobalStyles) {
+					// CSS already loaded globally or from previous mount
 					setCssLoaded(true);
 				} else {
+					// Dynamically inject CSS from CDN
 					const link = document.createElement("link");
 					link.id = cssId;
 					link.rel = "stylesheet";
@@ -304,13 +307,14 @@ function WhiteboardPanelBase({
 		};
 	}, [canDraw, excalidrawCssPath, resolvedTheme, sendCursor, sendUpdate]);
 
-	// Notify others on mount/unmount
+	// Notify others when visibility changes
 	useEffect(() => {
-		notifyOpen();
-		return () => {
+		if (isVisible) {
+			notifyOpen();
+		} else {
 			notifyClose();
-		};
-	}, [notifyOpen, notifyClose]);
+		}
+	}, [isVisible, notifyOpen, notifyClose]);
 
 	// Request initial sync
 	useEffect(() => {

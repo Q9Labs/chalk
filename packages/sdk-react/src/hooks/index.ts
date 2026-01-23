@@ -74,6 +74,12 @@ export {
 } from "./ui/useNotifications";
 export { type UsePanelsReturn, usePanels } from "./ui/usePanels";
 export {
+	type UseWhatsNewReturn,
+	type UseWhatsNewOptions,
+	type WhatsNewData,
+	useWhatsNew,
+} from "./ui/useWhatsNew";
+export {
 	type AnnouncementPoliteness,
 	type UseAnnouncerOptions,
 	type UseAnnouncerReturn,

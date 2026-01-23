@@ -14,6 +14,7 @@ type Config struct {
 	Cloudflare CloudflareConfig
 	JWT        JWTConfig
 	Storage    StorageConfig
+	GitHub     GitHubConfig
 }
 
 // ServerConfig holds server configuration
@@ -69,6 +70,14 @@ type StorageConfig struct {
 	S3AccessKeyID     string
 	S3SecretAccessKey string
 	S3BucketName      string
+}
+
+// GitHubConfig holds GitHub API configuration for What's New feature
+type GitHubConfig struct {
+	Token    string // GITHUB_TOKEN (optional, unauthenticated if empty)
+	Owner    string // GITHUB_OWNER
+	Repo     string // GITHUB_REPO
+	CacheTTL int    // WHATS_NEW_CACHE_TTL (minutes)
 }
 
 // Load loads configuration from environment variables
@@ -149,6 +158,12 @@ func Load() (*Config, error) {
 			S3AccessKeyID:     getEnv("S3_ACCESS_KEY_ID", ""),
 			S3SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
 			S3BucketName:      getEnv("S3_BUCKET_NAME", "chalk-recordings-archive"),
+		},
+		GitHub: GitHubConfig{
+			Token:    getEnv("GITHUB_TOKEN", ""),
+			Owner:    getEnv("GITHUB_OWNER", "Q9Labs"),
+			Repo:     getEnv("GITHUB_REPO", "chalk"),
+			CacheTTL: getEnvInt("WHATS_NEW_CACHE_TTL", 15),
 		},
 	}
 

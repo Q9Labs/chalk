@@ -17,9 +17,13 @@ export interface UseTranscriptsReturn {
   /** Clear all transcripts (local only) */
   clearTranscripts: () => void;
   /** Export transcripts to various formats */
-  exportTranscripts: (format: "txt" | "srt" | "vtt") => string;
+  exportTranscripts: (format: "txt" | "srt" | "vtt" | "json") => string;
   /** Search transcripts by text or speaker */
   searchTranscripts: (query: string) => Transcript[];
+  /** Copy all transcripts to clipboard as plain text */
+  copyToClipboard: () => Promise<void>;
+  /** Download transcript file */
+  downloadTranscript: (format: "txt" | "srt" | "vtt" | "json", roomId?: string) => void;
 }
 
 /**
@@ -101,7 +105,7 @@ export function useTranscripts(): UseTranscriptsReturn {
   }, []);
 
   const exportTranscripts = useCallback(
-    (format: "txt" | "srt" | "vtt"): string => {
+    (format: "txt" | "srt" | "vtt" | "json"): string => {
       switch (format) {
         case "txt":
           return transcripts
@@ -138,11 +142,57 @@ export function useTranscripts(): UseTranscriptsReturn {
           return header + content;
         }
 
+        case "json":
+          return JSON.stringify(
+            transcripts.map((t) => ({
+              id: t.id,
+              participantId: t.participantId,
+              speakerName: t.speakerName,
+              text: t.text,
+              timestamp: t.timestamp.toISOString(),
+              isInterim: t.isInterim,
+              confidence: t.confidence,
+            })),
+            null,
+            2
+          );
+
         default:
           return "";
       }
     },
     [transcripts]
+  );
+
+  const copyToClipboard = useCallback(async (): Promise<void> => {
+    const text = exportTranscripts("txt");
+    await navigator.clipboard.writeText(text);
+  }, [exportTranscripts]);
+
+  const downloadTranscript = useCallback(
+    (format: "txt" | "srt" | "vtt" | "json", roomId = "meeting"): void => {
+      const content = exportTranscripts(format);
+      const date = new Date().toISOString().split("T")[0];
+      const filename = `transcript_${roomId}_${date}.${format}`;
+
+      const mimeTypes = {
+        txt: "text/plain",
+        srt: "text/plain",
+        vtt: "text/vtt",
+        json: "application/json",
+      };
+
+      const blob = new Blob([content], { type: mimeTypes[format] });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+    [exportTranscripts]
   );
 
   const searchTranscripts = useCallback(
@@ -165,8 +215,10 @@ export function useTranscripts(): UseTranscriptsReturn {
       clearTranscripts,
       exportTranscripts,
       searchTranscripts,
+      copyToClipboard,
+      downloadTranscript,
     }),
-    [transcripts, isAvailable, clearTranscripts, exportTranscripts, searchTranscripts]
+    [transcripts, isAvailable, clearTranscripts, exportTranscripts, searchTranscripts, copyToClipboard, downloadTranscript]
   );
 }
 

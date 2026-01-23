@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-01-24
+
+### Changed
+
+- **Transcript panel redesign** - Complete UI overhaul for the transcription experience
+  - **Speaker experience**: Avatars with initials, role badges (Host/You), speaker grouping with turn separators
+  - **Search & navigation**: Cmd/Ctrl+F shortcut, text highlighting, match counter (N of M), prev/next navigation
+  - **Real-time polish**: Typing dots for interim transcripts, subtle pulse animation, slide-in entry animations
+  - **Export dropdown**: Download as TXT/SRT/VTT/JSON, copy all to clipboard
+  - **Empty state**: Illustration with animated dots waiting indicator
+  - **Low confidence visualization**: Dotted underlines with warning icon for uncertain text
+  - **Click-to-copy timestamps**: Click timestamp to copy to clipboard
+  - `useTranscripts` hook: Added `copyToClipboard()`, `downloadTranscript()`, JSON export format
+
 ## [0.0.39] - 2026-01-23
 
 ### Added
