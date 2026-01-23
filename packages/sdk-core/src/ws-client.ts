@@ -411,6 +411,11 @@ export class WSClient extends EventEmitter<WSEvents> {
 					});
 					break;
 				}
+				case "transcript.ack": {
+					const data = payload as { id: string; timestamp: string };
+					this.log.debug("Transcript acknowledged", { id: data.id });
+					break;
+				}
 				default:
 					this.log.warn("Unknown message type", { type: rawMessage.type });
 			}

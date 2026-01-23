@@ -7,6 +7,7 @@
 import type { Transcript } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
+import { useRoom } from "../room/useRoom";
 
 export interface UseTranscriptsReturn {
   /** All transcripts from the session */
@@ -50,16 +51,18 @@ export interface UseTranscriptsReturn {
  */
 export function useTranscripts(): UseTranscriptsReturn {
   const session = useSession();
+  const { isConnected } = useRoom();
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [isAvailable, setIsAvailable] = useState(false);
 
   // Subscribe to transcript events from the room
+  // Re-run when connection status changes (room becomes available after join)
   useEffect(() => {
     const room = session.chalkClient.room;
-    console.log("[useTranscripts] Setting up transcript subscription", { hasRoom: !!room });
+    console.log("[useTranscripts] Setting up transcript subscription", { hasRoom: !!room, isConnected });
 
-    if (!room) {
-      console.warn("[useTranscripts] No room available");
+    if (!room || !isConnected) {
+      console.log("[useTranscripts] No room available or not connected");
       return;
     }
 
@@ -91,7 +94,7 @@ export function useTranscripts(): UseTranscriptsReturn {
       console.log("[useTranscripts] Unsubscribing from room transcript event");
       room.off("transcript", handleTranscript);
     };
-  }, [session]);
+  }, [session, isConnected]);
 
   const clearTranscripts = useCallback(() => {
     setTranscripts([]);

@@ -189,7 +189,21 @@ function VideoConferenceBase({
 	const { session } = useChalkSession();
 
 	const { play } = useSoundEffects({ enabled: sounds });
-	const { transcripts } = useTranscripts();
+	const { transcripts: rawTranscripts } = useTranscripts();
+
+	// Map transcripts from SDK format to UI format
+	const transcripts = useMemo(() =>
+		rawTranscripts.map(t => ({
+			id: t.id,
+			speaker: t.speakerName,
+			speakerId: t.participantId,
+			text: t.text,
+			timestamp: t.timestamp,
+			isInterim: t.isInterim,
+			confidence: t.confidence,
+		})),
+		[rawTranscripts]
+	);
 
 	useEffect(() => {
 		refreshDevices();
@@ -234,14 +248,14 @@ function VideoConferenceBase({
 		(): MeetingEndData => ({
 			roomId,
 			duration: meetingDuration,
-			transcripts,
+			transcripts: rawTranscripts,
 			recordingId: recording.recordingId,
 			participantCount,
 		}),
 		[
 			roomId,
 			meetingDuration,
-			transcripts,
+			rawTranscripts,
 			recording.recordingId,
 			participantCount,
 		],
@@ -492,6 +506,7 @@ function VideoConferenceBase({
 			roomName={roomId}
 			localParticipant={localMeetingParticipant}
 			participants={allParticipants}
+			transcripts={transcripts}
 			isMuted={!media.isAudioEnabled}
 			isVideoEnabled={media.isVideoEnabled}
 			isScreenSharing={screenShare.isLocalSharing}

@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Transcription pipeline** - Fixed end-to-end transcription from Cloudflare RTK to UI
+  - Fixed field mapping in `room.ts` - Cloudflare sends `transcript`, `isPartialTranscript`, `peerId`, `name`, `date` but SDK expected `text`, `isInterim`, `participantId`, `speakerName`, `timestamp`
+  - Connected `useTranscripts` hook output to `MeetingRoom` component via `VideoConference`
+  - Backend persistence: Final transcripts sent to Go API via WebSocket for database storage
+
+### Changed
+
+- **WhiteboardPanel state persistence** - Close no longer destroys whiteboard state
+  - Added `isVisible` prop to control visibility without unmounting
+  - MeetingRoom now keeps WhiteboardPanel mounted (hidden) instead of conditional render
+  - Drawings persist locally when closing and reopening whiteboard
+
+- **WhiteboardPanel branding** - Removed Excalidraw branding from UI
+  - Added `renderTopRightUI: () => null` to hide help button and social links
+
+### Fixed
+
+- **WhiteboardPanel CSS flash** - Added CSS load tracking to prevent unstyled flash
+  - Loader now shows until both Excalidraw and CSS are fully loaded
+  - CSS load state tracked via `onload` handler
+
+### Changed
+
+- **WhiteboardPanel header** - Redesigned with floating glassmorphism pills
+  - Removed solid header bar for cleaner canvas-first experience
+  - Top-left: Title pill with pencil icon
+  - Top-right: Actions pill with permission controls (host) and close button
+  - Bottom-left: Status pill showing "You can draw" or "View only" with teal/red indicator dot
+  - Matches MeetingRoom aesthetic (backdrop-blur-md, bg-black/50, border-white/10)
+
 ### Added
 
 - **Meeting End page** - Post-meeting summary screen at `/room/end`

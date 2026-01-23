@@ -516,8 +516,11 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			/>
 
 			{/* Whiteboard overlay */}
-			{enableWhiteboard && isWhiteboardOpen && (
-				<WhiteboardPanel onClose={onToggleWhiteboard} />
+			{enableWhiteboard && (
+				<WhiteboardPanel
+					isVisible={isWhiteboardOpen}
+					onClose={onToggleWhiteboard}
+				/>
 			)}
 
 			{enableTour && (

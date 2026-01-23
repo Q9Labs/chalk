@@ -7,6 +7,7 @@ import {
 	Cancel01Icon,
 	Sun02Icon,
 	Moon02Icon,
+	ArrowDown01Icon,
 } from "../../utils/icons";
 import { memo, useEffect, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
@@ -90,8 +91,10 @@ function PreJoinLobbyBase({
 		}
 		return initialTheme === "dark";
 	});
+	const [openDropdown, setOpenDropdown] = useState<"audio" | "video" | null>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const dropdownRef = useRef<HTMLDivElement>(null);
 
 	// Local media state (used when no external track is provided)
 	const [localVideoTrack, setLocalVideoTrack] =
@@ -100,9 +103,38 @@ function PreJoinLobbyBase({
 		useState<MediaStreamTrack | null>(null);
 	const [localAudioLevel, setLocalAudioLevel] = useState(0);
 
+	// Local device enumeration (used when parent doesn't provide devices)
+	const [localVideoDevices, setLocalVideoDevices] = useState<MediaDeviceInfo[]>([]);
+	const [localAudioInputDevices, setLocalAudioInputDevices] = useState<MediaDeviceInfo[]>([]);
+
 	// Use provided track or local track
 	const activeVideoTrack = videoTrack ?? localVideoTrack;
 	const activeAudioLevel = audioLevel || localAudioLevel;
+
+	// Use provided devices or locally enumerated devices
+	const effectiveVideoDevices = videoDevices.length > 0 ? videoDevices : localVideoDevices;
+	const effectiveAudioInputDevices = audioInputDevices.length > 0 ? audioInputDevices : localAudioInputDevices;
+
+	// Enumerate devices
+	const enumerateDevices = async () => {
+		try {
+			const devices = await navigator.mediaDevices.enumerateDevices();
+			setLocalVideoDevices(devices.filter((d) => d.kind === "videoinput"));
+			setLocalAudioInputDevices(devices.filter((d) => d.kind === "audioinput"));
+		} catch {
+			// Ignore enumeration errors
+		}
+	};
+
+	// Enumerate devices on mount (labels may be empty until permissions granted)
+	useEffect(() => {
+		enumerateDevices();
+		// Also listen for device changes
+		navigator.mediaDevices?.addEventListener("devicechange", enumerateDevices);
+		return () => {
+			navigator.mediaDevices?.removeEventListener("devicechange", enumerateDevices);
+		};
+	}, []);
 
 	// Request local video when enabled (only if no external track provided)
 	useEffect(() => {
@@ -128,7 +160,11 @@ function PreJoinLobbyBase({
 					return;
 				}
 				const track = stream.getVideoTracks()[0];
-				if (track) setLocalVideoTrack(track);
+				if (track) {
+					setLocalVideoTrack(track);
+					// Enumerate devices after getting permission
+					enumerateDevices();
+				}
 			})
 			.catch(() => {
 				// Permission denied or error - just disable video
@@ -163,7 +199,11 @@ function PreJoinLobbyBase({
 					return;
 				}
 				const track = stream.getAudioTracks()[0];
-				if (track) setLocalAudioTrack(track);
+				if (track) {
+					setLocalAudioTrack(track);
+					// Enumerate devices after getting permission
+					enumerateDevices();
+				}
 			})
 			.catch(() => {
 				if (!cancelled) setIsAudioEnabled(false);
@@ -183,19 +223,33 @@ function PreJoinLobbyBase({
 		}
 
 		const audioContext = new AudioContext();
+		// Resume context if suspended (browser autoplay policy)
+		if (audioContext.state === "suspended") {
+			audioContext.resume();
+		}
 		const stream = new MediaStream([track]);
 		const source = audioContext.createMediaStreamSource(stream);
 		const analyser = audioContext.createAnalyser();
 		analyser.fftSize = 256;
+		analyser.smoothingTimeConstant = 0.5;
 		source.connect(analyser);
 
 		const dataArray = new Uint8Array(analyser.frequencyBinCount);
 		let animationId: number;
 
 		const updateLevel = () => {
+			// Use frequency data for responsive visual feedback
 			analyser.getByteFrequencyData(dataArray);
-			const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-			setLocalAudioLevel(average / 255);
+			// Get peak value from lower frequencies (voice range ~80-1000Hz)
+			let peak = 0;
+			const voiceRange = Math.min(32, dataArray.length); // Focus on lower frequencies
+			for (let i = 0; i < voiceRange; i++) {
+				const value = dataArray[i] ?? 0;
+				if (value > peak) peak = value;
+			}
+			// Normalize and apply curve for better visual response
+			const normalized = peak / 255;
+			setLocalAudioLevel(Math.min(1, normalized * 1.5));
 			animationId = requestAnimationFrame(updateLevel);
 		};
 		updateLevel();
@@ -253,6 +307,18 @@ function PreJoinLobbyBase({
 		if (userName && !displayName) setDisplayName(userName);
 	}, [userName]);
 
+	// Close dropdown when clicking outside
+	useEffect(() => {
+		if (!openDropdown) return;
+		const handleClickOutside = (e: MouseEvent) => {
+			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+				setOpenDropdown(null);
+			}
+		};
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, [openDropdown]);
+
 	const handleJoin = () => {
 		if (!displayName.trim()) return;
 
@@ -266,8 +332,8 @@ function PreJoinLobbyBase({
 		});
 	};
 
-	const hasVideoDevices = videoDevices.length > 0;
-	const hasAudioInput = audioInputDevices.length > 0;
+	const hasVideoDevices = effectiveVideoDevices.length > 0;
+	const hasAudioInput = effectiveAudioInputDevices.length > 0;
 	const hasAudioOutput = audioOutputDevices.length > 0;
 
 	const toggleVideo = () => setIsVideoEnabled(!isVideoEnabled);
@@ -311,13 +377,14 @@ function PreJoinLobbyBase({
 				{showSettings && (
 					<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm">
 						<div
-							className="rounded-2xl border p-6 w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200"
+							className="rounded-2xl border p-6 w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200 overflow-visible"
 							style={{
 								background: "var(--chalk-lobby-glass-bg)",
 								borderColor: "var(--chalk-lobby-glass-border)",
 								backdropFilter: "blur(20px)",
 								boxShadow: "var(--chalk-shadow-xl)",
 							}}
+							onClick={(e) => e.stopPropagation()}
 						>
 							<button
 								onClick={() => setShowSettings(false)}
@@ -335,10 +402,10 @@ function PreJoinLobbyBase({
 									<DeviceSelector
 										type="videoinput"
 										label="Camera"
-										devices={videoDevices}
+										devices={effectiveVideoDevices}
 										selectedDeviceId={selectedVideoDevice}
 										onChange={onVideoDeviceChange}
-										disabled={isLoading || !isVideoEnabled}
+										disabled={isLoading}
 									/>
 								)}
 
@@ -346,11 +413,11 @@ function PreJoinLobbyBase({
 									<DeviceSelector
 										type="audioinput"
 										label="Microphone"
-										devices={audioInputDevices}
+										devices={effectiveAudioInputDevices}
 										selectedDeviceId={selectedAudioInput}
 										onChange={onAudioInputChange}
-										audioLevel={isAudioEnabled ? audioLevel : 0}
-										disabled={isLoading || !isAudioEnabled}
+										audioLevel={isAudioEnabled ? activeAudioLevel : 0}
+										disabled={isLoading}
 									/>
 								)}
 
@@ -462,10 +529,13 @@ function PreJoinLobbyBase({
 
 										{/* Horizontal audio level bar */}
 										{isAudioEnabled && (
-											<div className="w-16 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
+											<div className="w-16 h-1.5 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
 												<div
-													className="h-full bg-[#1bb6a6] rounded-full transition-all duration-75"
-													style={{ width: `${normalizedAudioLevel}%` }}
+													className="h-full bg-[#1bb6a6] rounded-full"
+													style={{
+														width: `${normalizedAudioLevel}%`,
+														transition: "width 50ms ease-out"
+													}}
 												/>
 											</div>
 										)}
@@ -504,9 +574,9 @@ function PreJoinLobbyBase({
 								)}
 
 								{/* Floating Control Bar - Bottom Center */}
-								<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+								<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20" ref={dropdownRef}>
 									<div
-										className="flex items-center gap-2 px-2 py-2 rounded-full"
+										className="flex items-center gap-2 px-2 py-2 rounded-full relative"
 										style={{
 											background: "var(--chalk-lobby-glass-bg)",
 											backdropFilter: "blur(20px)",
@@ -514,41 +584,79 @@ function PreJoinLobbyBase({
 											boxShadow: "var(--chalk-shadow-md)",
 										}}
 									>
-										{/* Mic toggle */}
-										<button
-											onClick={toggleAudio}
-											title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
-											className={cn(
-												"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200",
-												!isAudioEnabled
-													? "bg-red-500 text-white hover:bg-red-600"
-													: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+										{/* Mic toggle with dropdown */}
+										<div className="flex items-center gap-0.5">
+											<button
+												onClick={toggleAudio}
+												title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
+												className={cn(
+													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200",
+													!isAudioEnabled
+														? "bg-red-500 text-white hover:bg-red-600"
+														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+												)}
+											>
+												{isAudioEnabled ? (
+													<Microphone01Icon size={20} />
+												) : (
+													<MicrophoneOff01Icon size={20} />
+												)}
+											</button>
+											{hasAudioInput && (
+												<button
+													onClick={(e) => {
+														e.stopPropagation();
+														setOpenDropdown(openDropdown === "audio" ? null : "audio");
+													}}
+													title="Select microphone"
+													className={cn(
+														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200",
+														openDropdown === "audio"
+															? "bg-[#1bb6a6] text-white"
+															: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+													)}
+												>
+													<ArrowDown01Icon size={14} />
+												</button>
 											)}
-										>
-											{isAudioEnabled ? (
-												<Microphone01Icon size={20} />
-											) : (
-												<MicrophoneOff01Icon size={20} />
-											)}
-										</button>
+										</div>
 
-										{/* Video toggle */}
-										<button
-											onClick={toggleVideo}
-											title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
-											className={cn(
-												"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200",
-												!isVideoEnabled
-													? "bg-red-500 text-white hover:bg-red-600"
-													: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+										{/* Video toggle with dropdown */}
+										<div className="flex items-center gap-0.5">
+											<button
+												onClick={toggleVideo}
+												title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
+												className={cn(
+													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200",
+													!isVideoEnabled
+														? "bg-red-500 text-white hover:bg-red-600"
+														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+												)}
+											>
+												{isVideoEnabled ? (
+													<Video01Icon size={20} />
+												) : (
+													<VideoOffIcon size={20} />
+												)}
+											</button>
+											{hasVideoDevices && (
+												<button
+													onClick={(e) => {
+														e.stopPropagation();
+														setOpenDropdown(openDropdown === "video" ? null : "video");
+													}}
+													title="Select camera"
+													className={cn(
+														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200",
+														openDropdown === "video"
+															? "bg-[#1bb6a6] text-white"
+															: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+													)}
+												>
+													<ArrowDown01Icon size={14} />
+												</button>
 											)}
-										>
-											{isVideoEnabled ? (
-												<Video01Icon size={20} />
-											) : (
-												<VideoOffIcon size={20} />
-											)}
-										</button>
+										</div>
 
 										{/* Divider */}
 										<div className="w-px h-6 bg-black/10 dark:bg-white/20 mx-1" />
@@ -649,6 +757,58 @@ function PreJoinLobbyBase({
 							onDismiss={() => {}}
 							duration={0}
 						/>
+					</div>
+				)}
+
+				{/* Device Dropdowns - rendered outside overflow container */}
+				{openDropdown && (
+					<div
+						ref={dropdownRef}
+						className="fixed z-[100] w-64 rounded-xl border border-white/10 shadow-2xl"
+						style={{
+							bottom: "6rem",
+							left: "50%",
+							transform: openDropdown === "audio" ? "translateX(-75%)" : "translateX(-25%)",
+							background: "rgba(30, 30, 30, 0.95)",
+							backdropFilter: "blur(20px)",
+						}}
+					>
+						<div className="px-4 py-3 text-xs font-semibold text-white/60 uppercase tracking-wide border-b border-white/10">
+							{openDropdown === "audio" ? "Microphone" : "Camera"}
+						</div>
+						<div className="py-2 max-h-[240px] overflow-y-auto">
+							{(openDropdown === "audio" ? effectiveAudioInputDevices : effectiveVideoDevices).map((device) => {
+								const isSelected = openDropdown === "audio"
+									? selectedAudioInput === device.deviceId
+									: selectedVideoDevice === device.deviceId;
+								return (
+									<button
+										key={device.deviceId}
+										onClick={() => {
+											if (openDropdown === "audio") {
+												onAudioInputChange(device.deviceId);
+											} else {
+												onVideoDeviceChange(device.deviceId);
+											}
+											setOpenDropdown(null);
+										}}
+										className={cn(
+											"w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-3",
+											isSelected
+												? "bg-[#1bb6a6]/20 text-[#1bb6a6]"
+												: "text-white/90 hover:bg-white/10",
+										)}
+									>
+										{isSelected && (
+											<span className="w-1.5 h-1.5 rounded-full bg-[#1bb6a6] shrink-0" />
+										)}
+										<span className={cn("truncate", !isSelected && "ml-[18px]")}>
+											{device.label || `${openDropdown === "audio" ? "Microphone" : "Camera"} ${device.deviceId.slice(0, 5)}`}
+										</span>
+									</button>
+								);
+							})}
+						</div>
 					</div>
 				)}
 			</div>

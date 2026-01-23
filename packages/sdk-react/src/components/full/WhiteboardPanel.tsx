@@ -72,6 +72,23 @@ const UnlockIcon = () => (
 	</svg>
 );
 
+const PencilIcon = () => (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		width="14"
+		height="14"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		strokeWidth="2"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+	>
+		<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+		<path d="m15 5 4 4" />
+	</svg>
+);
+
 /** Excalidraw element type (simplified for our needs) */
 interface ExcalidrawElement {
 	id: string;
@@ -94,6 +111,8 @@ const EXCALIDRAW_CSS_CDN =
 export interface WhiteboardPanelProps {
 	/** Called when whiteboard should close */
 	onClose?: () => void;
+	/** Controls visibility without unmounting (preserves state) */
+	isVisible?: boolean;
 	/** Custom CSS class */
 	className?: string;
 	/**
@@ -114,6 +133,7 @@ export interface WhiteboardPanelProps {
  */
 function WhiteboardPanelBase({
 	onClose,
+	isVisible = true,
 	className,
 	excalidrawCssPath = EXCALIDRAW_CSS_CDN,
 	theme = "auto",
@@ -136,6 +156,7 @@ function WhiteboardPanelBase({
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const [isReady, setIsReady] = useState(false);
+	const [cssLoaded, setCssLoaded] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
 
 	// Determine theme
@@ -168,11 +189,16 @@ function WhiteboardPanelBase({
 
 				// Inject Excalidraw CSS if not already present
 				const cssId = "excalidraw-styles";
-				if (!document.getElementById(cssId)) {
+				const existingLink = document.getElementById(cssId) as HTMLLinkElement | null;
+				if (existingLink) {
+					// CSS already loaded from previous mount
+					setCssLoaded(true);
+				} else {
 					const link = document.createElement("link");
 					link.id = cssId;
 					link.rel = "stylesheet";
 					link.href = excalidrawCssPath;
+					link.onload = () => setCssLoaded(true);
 					document.head.appendChild(link);
 				}
 
@@ -233,10 +259,11 @@ function WhiteboardPanelBase({
 						excalidrawAPI: (api: unknown) => {
 							excalidrawRef.current = api;
 						},
+						theme: "dark",
 						initialData: {
 							appState: {
 								viewBackgroundColor: backgroundColor,
-								theme: "dark", // Always dark for consistent drawing experience
+								theme: "dark",
 							},
 						},
 						onChange: handleChange,
@@ -252,6 +279,7 @@ function WhiteboardPanelBase({
 								toggleTheme: false,
 							},
 						},
+						renderTopRightUI: () => null,
 					});
 				};
 
@@ -325,69 +353,70 @@ function WhiteboardPanelBase({
 	return (
 		<div
 			className={cn(
-				"fixed inset-0 z-50 flex flex-col",
+				"fixed inset-0 z-50",
 				"bg-background",
+				!isVisible && "hidden",
 				className,
 			)}
 		>
-			{/* Header */}
-			<div className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
-				<h1 className="text-foreground font-semibold text-lg">
-					Whiteboard
-				</h1>
+			{/* Excalidraw Container */}
+			<div className="h-full w-full relative">
+				{/* Top-left title pill */}
+				<div className="absolute top-4 left-4 z-10 rounded-full px-3 py-1.5 bg-black/50 backdrop-blur-md border border-white/10 flex items-center gap-2">
+					<PencilIcon />
+					<span className="text-white/90 text-sm font-medium">Whiteboard</span>
+				</div>
 
-				<div className="flex items-center gap-3">
-					{/* Permission controls (host only) */}
+				{/* Top-right actions pill */}
+				<div className="absolute top-4 right-4 z-10 rounded-lg p-1 bg-black/40 backdrop-blur-md border border-white/10 flex items-center gap-1">
 					{canGrant && (
-						<div className="flex items-center gap-2">
+						<>
 							<button
 								type="button"
 								onClick={grantAll}
-								className="flex items-center gap-1.5 px-3 py-1.5 bg-success hover:bg-success/90 text-success-foreground text-sm rounded-lg transition-colors"
+								className="w-8 h-8 rounded-md flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+								aria-label="Enable drawing for all"
+								title="Enable All"
 							>
 								<UnlockIcon />
-								Enable All
 							</button>
 							<button
 								type="button"
 								onClick={revokeAll}
-								className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-sm rounded-lg transition-colors"
+								className="w-8 h-8 rounded-md flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+								aria-label="Disable drawing for all"
+								title="Disable All"
 							>
 								<LockIcon />
-								Disable All
 							</button>
-						</div>
+							<div className="w-px h-5 bg-white/10 mx-0.5" />
+						</>
 					)}
-
-					{/* Permission indicator */}
-					<div
-						className={cn(
-							"px-3 py-1.5 rounded-lg text-sm",
-							canDraw
-								? "bg-success/15 text-success"
-								: "bg-destructive/15 text-destructive",
-						)}
-					>
-						{canDraw ? "You can draw" : "View only"}
-					</div>
-
-					{/* Close button */}
 					<button
 						type="button"
 						onClick={onClose}
-						className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+						className="w-8 h-8 rounded-md flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
 						aria-label="Close whiteboard"
 					>
 						<XIcon />
 					</button>
 				</div>
-			</div>
 
-			{/* Excalidraw Container */}
-			<div className="flex-1 relative">
+				{/* Bottom-left status pill */}
+				<div className="absolute bottom-4 left-4 z-10 rounded-full px-3 py-1.5 bg-black/50 backdrop-blur-md border border-white/10 flex items-center gap-2">
+					<div
+						className={cn(
+							"w-2 h-2 rounded-full",
+							canDraw ? "bg-[#1bb6a6]" : "bg-red-500",
+						)}
+					/>
+					<span className="text-white/90 text-sm">
+						{canDraw ? "You can draw" : "View only"}
+					</span>
+				</div>
 				{/* Loading state */}
-				{!isReady && !loadError && (
-					<div className="absolute inset-0 flex items-center justify-center text-foreground bg-background z-10">
+				{(!isReady || !cssLoaded) && !loadError && (
+					<div className="absolute inset-0 flex items-center justify-center text-foreground bg-background z-20">
 						<div className="flex flex-col items-center gap-3">
 							<div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
 							<span>Loading whiteboard...</span>
@@ -397,7 +426,7 @@ function WhiteboardPanelBase({
 
 				{/* Error state */}
 				{loadError && (
-					<div className="absolute inset-0 flex items-center justify-center text-destructive bg-background z-10">
+					<div className="absolute inset-0 flex items-center justify-center text-destructive bg-background z-20">
 						<div className="flex flex-col items-center gap-3 max-w-md text-center px-4">
 							<span className="text-lg font-medium">
 								Failed to load whiteboard

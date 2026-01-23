@@ -177,6 +177,10 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 		}, nil
 	}
 
+	// DEBUG: Log request being sent to Cloudflare
+	reqJSON, _ := json.Marshal(req)
+	fmt.Printf("[CLOUDFLARE] AddParticipant request: %s\n", string(reqJSON))
+
 	path := fmt.Sprintf("/meetings/%s/participants", meetingID)
 	resp, err := c.doRequest(ctx, "POST", path, req)
 	if err != nil {
@@ -189,6 +193,9 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
+
+	// DEBUG: Log response from Cloudflare
+	fmt.Printf("[CLOUDFLARE] AddParticipant response (status %d): %s\n", resp.StatusCode, string(bodyBytes))
 
 	// Log response for debugging
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {

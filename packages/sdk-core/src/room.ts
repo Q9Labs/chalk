@@ -967,9 +967,13 @@ export class Room extends EventEmitter<RoomEvents> {
 
   private setupTranscriptListener(): void {
     if (!this.rtkClient) {
-      this.log.debug("[Transcript] No RTK client available");
+      this.log.warn("TRANSCRIPTION: No RTK client available");
       return;
     }
+
+    // DEBUG: Dump ALL RTK client keys at top level
+    const rtkKeys = Object.keys(this.rtkClient as object);
+    this.log.info("TRANSCRIPTION: RTK client top-level keys", { keys: rtkKeys.join(", ") });
 
     // Access RTK ai module for transcription (may not be available in all versions)
     const ai = (this.rtkClient as unknown as { ai?: {
@@ -977,64 +981,145 @@ export class Room extends EventEmitter<RoomEvents> {
       on?: (event: string, handler: (data: unknown) => void) => void;
     } }).ai;
 
-    // Debug: Log what's available on rtkClient for transcription
-    const rtkKeys = Object.keys(this.rtkClient as object);
-    this.log.debug("[Transcript] RTK client keys", { keys: rtkKeys });
-
     if (!ai) {
-      this.log.warn("[Transcript] RTK ai module not available - transcription will not work");
+      this.log.error("TRANSCRIPTION: RTK 'ai' module NOT FOUND - transcription disabled");
+      this.log.info("TRANSCRIPTION: Available modules on RTK client", {
+        keys: rtkKeys,
+        hasAi: "ai" in (this.rtkClient as object),
+      });
       return;
     }
 
-    this.log.info("[Transcript] Setting up transcript listener");
-    this.log.debug("[Transcript] AI module structure", {
-      hasTranscripts: Array.isArray(ai.transcripts),
+    // DEBUG: Dump ALL ai module keys
+    const aiKeys = Object.keys(ai);
+    this.log.info("TRANSCRIPTION: AI module found!", {
+      aiKeys: aiKeys.join(", "),
+      hasTranscripts: "transcripts" in ai,
+      transcriptsType: typeof ai.transcripts,
+      transcriptsIsArray: Array.isArray(ai.transcripts),
       hasOn: typeof ai.on === "function",
-      aiKeys: Object.keys(ai),
+      hasAddListener: typeof (ai as Record<string, unknown>).addListener === "function",
+      hasAddEventListener: typeof (ai as Record<string, unknown>).addEventListener === "function",
     });
+
+    // Try to find any event-related methods
+    for (const key of aiKeys) {
+      const val = (ai as Record<string, unknown>)[key];
+      this.log.debug(`TRANSCRIPTION: ai.${key}`, {
+        type: typeof val,
+        isFunction: typeof val === "function",
+        isArray: Array.isArray(val),
+        preview: typeof val === "object" && val !== null ? Object.keys(val as object).slice(0, 5) : String(val).slice(0, 50),
+      });
+    }
+
+    // DEBUG: Inspect what events are already registered on _events
+    const events = (ai as Record<string, unknown>)._events;
+    if (events && typeof events === "object") {
+      this.log.info("TRANSCRIPTION: _events already registered", {
+        eventNames: Object.keys(events as object),
+      });
+    }
+
+    // DEBUG: Look for enable/start methods on ai module (maybe transcription needs to be started)
+    const aiProto = Object.getPrototypeOf(ai);
+    const protoMethods = aiProto ? Object.getOwnPropertyNames(aiProto).filter(n => typeof (ai as Record<string, unknown>)[n] === "function") : [];
+    this.log.info("TRANSCRIPTION: AI module methods (from prototype)", {
+      methods: protoMethods.join(", "),
+    });
+
+    // Check if there's an enable/start method
+    const aiAny = ai as Record<string, unknown>;
+    if (typeof aiAny.enable === "function") {
+      this.log.info("TRANSCRIPTION: Found ai.enable() - calling it!");
+      try {
+        (aiAny.enable as () => void)();
+      } catch (e) {
+        this.log.warn("TRANSCRIPTION: ai.enable() failed", { error: String(e) });
+      }
+    }
+    if (typeof aiAny.start === "function") {
+      this.log.info("TRANSCRIPTION: Found ai.start() - calling it!");
+      try {
+        (aiAny.start as () => void)();
+      } catch (e) {
+        this.log.warn("TRANSCRIPTION: ai.start() failed", { error: String(e) });
+      }
+    }
+    if (typeof aiAny.startTranscription === "function") {
+      this.log.info("TRANSCRIPTION: Found ai.startTranscription() - calling it!");
+      try {
+        (aiAny.startTranscription as () => void)();
+      } catch (e) {
+        this.log.warn("TRANSCRIPTION: ai.startTranscription() failed", { error: String(e) });
+      }
+    }
 
     // Load existing transcripts if available
     if (Array.isArray(ai.transcripts)) {
-      this.log.debug("[Transcript] Found existing transcripts array", { count: ai.transcripts.length });
+      this.log.info("TRANSCRIPTION: Found existing transcripts", { count: ai.transcripts.length });
       for (const t of ai.transcripts) {
-        this.log.debug("[Transcript] Raw existing transcript", { raw: t });
+        this.log.debug("TRANSCRIPTION: Raw existing transcript", { raw: JSON.stringify(t) });
         const transcript = this.mapRTKTranscript(t);
         if (transcript) {
           this._transcripts.push(transcript);
-          this.log.debug("[Transcript] Mapped existing transcript", { speaker: transcript.speakerName, text: transcript.text.slice(0, 50) });
         }
       }
-      this.log.info("[Transcript] Loaded existing transcripts", { count: this._transcripts.length });
     } else {
-      this.log.debug("[Transcript] No existing transcripts array found");
+      this.log.info("TRANSCRIPTION: No existing transcripts array (ai.transcripts is not an array)");
     }
 
-    // Listen for new transcripts
-    if (typeof ai.on === "function") {
-      this.log.info("[Transcript] Registering transcript event handler");
-      ai.on("transcript", (data: unknown) => {
-        this.log.info("[Transcript] RAW transcript event received", { data });
-        const transcript = this.mapRTKTranscript(data);
-        if (transcript) {
-          this._transcripts.push(transcript);
-          this.log.info("[Transcript] Emitting transcript event", {
-            speaker: transcript.speakerName,
-            text: transcript.text.slice(0, 100),
-            isInterim: transcript.isInterim,
-          });
-          this.emit("transcript", transcript);
+    // Try multiple event registration methods
+    const eventNames = ["transcript", "transcription", "transcriptUpdate", "newTranscript", "message"];
 
-          // Send final transcripts to backend for persistence
-          if (!transcript.isInterim) {
-            this.wsClient?.sendTranscript(transcript);
-          }
-        } else {
-          this.log.warn("[Transcript] Failed to map transcript", { rawData: data });
+    if (typeof ai.on === "function") {
+      this.log.info("TRANSCRIPTION: ai.on() method available - registering handlers");
+      for (const eventName of eventNames) {
+        try {
+          ai.on(eventName, (data: unknown) => {
+            this.log.info(`TRANSCRIPTION: Event '${eventName}' FIRED!`, {
+              dataType: typeof data,
+              dataKeys: data && typeof data === "object" ? Object.keys(data as object) : null,
+              rawData: JSON.stringify(data).slice(0, 500),
+            });
+            const transcript = this.mapRTKTranscript(data);
+            if (transcript) {
+              this._transcripts.push(transcript);
+              this.log.info("TRANSCRIPTION: Emitting to React", {
+                speaker: transcript.speakerName,
+                text: transcript.text.slice(0, 50),
+                isInterim: transcript.isInterim,
+              });
+              this.emit("transcript", transcript);
+
+              // Send final transcripts to backend for persistence
+              if (!transcript.isInterim) {
+                this.log.info("TRANSCRIPTION: Sending to backend for persistence", { id: transcript.id });
+                this.wsClient?.sendTranscript(transcript);
+              }
+            } else {
+              this.log.warn("TRANSCRIPTION: Failed to map transcript data");
+            }
+          });
+          this.log.debug(`TRANSCRIPTION: Registered handler for '${eventName}'`);
+        } catch (e) {
+          this.log.debug(`TRANSCRIPTION: Failed to register handler for '${eventName}'`, { error: String(e) });
         }
-      });
-      this.log.info("[Transcript] Transcript handler registered successfully");
+      }
+      this.log.info("TRANSCRIPTION: All event handlers registered");
     } else {
-      this.log.warn("[Transcript] ai.on is not a function - cannot listen for transcripts");
+      this.log.error("TRANSCRIPTION: ai.on() NOT AVAILABLE", {
+        aiOnType: typeof ai.on,
+        aiType: typeof ai,
+      });
+    }
+
+    // Also try to hook into any observable/signal patterns
+    if (aiAny.transcripts$ && typeof (aiAny.transcripts$ as { subscribe?: unknown }).subscribe === "function") {
+      this.log.info("TRANSCRIPTION: Found transcripts$ observable, subscribing...");
+      (aiAny.transcripts$ as { subscribe: (cb: (data: unknown) => void) => void }).subscribe((data: unknown) => {
+        this.log.info("TRANSCRIPTION: transcripts$ emitted", { data });
+      });
     }
   }
 
@@ -1043,20 +1128,24 @@ export class Room extends EventEmitter<RoomEvents> {
 
     const raw = data as Record<string, unknown>;
 
-    // Handle various RTK transcript formats
-    const participantId = (raw.participantId as string) ?? (raw.userId as string) ?? (raw.peerId as string) ?? "";
-    const speakerName = (raw.participantName as string) ?? (raw.displayName as string) ?? (raw.name as string) ?? "Unknown";
-    const text = (raw.text as string) ?? (raw.transcript as string) ?? (raw.content as string) ?? "";
+    // Handle Cloudflare RealtimeKit transcript format:
+    // { id, name, peerId, userId, customParticipantId, transcript, isPartialTranscript, date }
+    const participantId = (raw.peerId as string) ?? (raw.userId as string) ?? (raw.participantId as string) ?? (raw.customParticipantId as string) ?? "";
+    const speakerName = (raw.name as string) ?? (raw.participantName as string) ?? (raw.displayName as string) ?? "Unknown";
+    const text = (raw.transcript as string) ?? (raw.text as string) ?? (raw.content as string) ?? "";
 
     if (!text) return null;
+
+    // isPartialTranscript: true means interim, false means final
+    const isInterim = raw.isPartialTranscript === true;
 
     return {
       id: (raw.id as string) ?? crypto.randomUUID(),
       participantId,
       speakerName,
       text,
-      timestamp: raw.timestamp ? new Date(raw.timestamp as string | number) : new Date(),
-      isInterim: (raw.isInterim as boolean) ?? (raw.isFinal === false),
+      timestamp: raw.date ? new Date(raw.date as string | number) : (raw.timestamp ? new Date(raw.timestamp as string | number) : new Date()),
+      isInterim,
       confidence: raw.confidence as number | undefined,
     };
   }
