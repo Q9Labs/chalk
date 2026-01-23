@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.0.41] - 2026-01-24
+
+### Added
+
+- **What's New dialog** - Shows users recent release notes with auto-open on updates
+  - Backend: `GET /api/v1/whats-new` endpoint proxying GitHub Releases API with Redis caching
+  - React SDK: `useWhatsNew` hook for fetch + localStorage state management
+  - React SDK: `WhatsNewDialog` composite component with markdown rendering
+  - React SDK: `WhatsNewTrigger` atomic button with notification badge
+  - Terraform: GitHub token secret for API authentication
+  - Release body format: `<!-- whats-new -->` tags for user-visible content, `<!-- image: KEY -->` for R2 images
+  - First-time visitors: No auto-open; only shows after user has dismissed once
+
 ## [0.0.40] - 2026-01-24
 
 ### Changed
