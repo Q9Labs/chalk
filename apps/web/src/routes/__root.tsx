@@ -1,12 +1,17 @@
 import { createTokenProvider } from "@q9labs/chalk-core";
-import { ChalkProvider } from "@q9labs/chalk-react";
+import {
+	ChalkProvider,
+	useWhatsNew,
+	WhatsNewDialog,
+	WhatsNewTrigger,
+} from "@q9labs/chalk-react";
 import {
 	createRootRoute,
 	HeadContent,
 	Outlet,
 	Scripts,
 } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { ThemeProvider } from "../context/theme";
 
 // SSR check - ChalkProvider requires browser APIs
@@ -105,6 +110,7 @@ function RootComponent() {
 		<ThemeProvider>
 			<div className="overflow-hidden bg-background text-foreground">
 				<Outlet />
+				<WhatsNew apiBaseUrl={apiUrl} />
 			</div>
 		</ThemeProvider>
 	);
@@ -124,5 +130,34 @@ function RootComponent() {
 		>
 			{content}
 		</ChalkProvider>
+	);
+}
+
+function WhatsNew({ apiBaseUrl }: { apiBaseUrl: string }) {
+	const { isOpen, open, close, data, hasSeen, markAsSeen, shouldAutoOpen } =
+		useWhatsNew({ apiBaseUrl });
+
+	// Auto-open for returning users with unseen updates
+	useEffect(() => {
+		if (shouldAutoOpen) open();
+	}, [shouldAutoOpen, open]);
+
+	const handleClose = () => {
+		close();
+		markAsSeen();
+	};
+
+	return (
+		<>
+			{/* Floating trigger button */}
+			<div className="fixed bottom-4 right-4 z-40">
+				<WhatsNewTrigger hasUnseen={!hasSeen && !!data} onClick={open} />
+			</div>
+
+			{/* Dialog */}
+			{isOpen && data && (
+				<WhatsNewDialog isOpen={isOpen} onClose={handleClose} data={data} />
+			)}
+		</>
 	);
 }
