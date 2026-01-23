@@ -1,0 +1,12 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-mira",
+  "tailwind": {
+    "cssVariables": true
+  },
+  "iconLibrary": "hugeicons",
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/utils"
+  }
+}

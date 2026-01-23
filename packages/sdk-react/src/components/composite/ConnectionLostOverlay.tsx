@@ -1,5 +1,5 @@
 import React from 'react';
-import { WifiOff } from 'lucide-react';
+import { WifiOffIcon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { Spinner } from '../atomic/Spinner';
 
@@ -43,7 +43,7 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
         
         {status === 'failed' ? (
           <div className="mb-6 p-4 rounded-full bg-[var(--chalk-bg-secondary)] text-[var(--chalk-danger)]">
-            <WifiOff size={48} strokeWidth={1.5} />
+            <WifiOffIcon size={48} strokeWidth={1.5} />
           </div>
         ) : (
           <div className="mb-6">

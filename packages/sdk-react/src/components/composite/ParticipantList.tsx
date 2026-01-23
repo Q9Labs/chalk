@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { X, MoreVertical, Search, Mic, MicOff, UserX, Crown, ChevronDown, ChevronUp, Shield, Users } from 'lucide-react';
-import { 
-  Avatar, 
-  AudioIndicator, 
-  HandRaiseIndicator, 
+import { Cancel01Icon, MoreVerticalIcon, Search01Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Crown01Icon, ArrowDown01Icon, ArrowUp01Icon, Shield01Icon, UserGroupIcon } from '../../utils/icons';
+import {
+  Avatar,
+  AudioIndicator,
+  HandRaiseIndicator,
   IconButton,
   Input,
   Badge
@@ -136,7 +136,7 @@ export const ParticipantList = React.memo(({
         {variant === 'sidebar' ? (
           participant.isMuted ? (
             <div className="bg-red-500/20 p-1.5 rounded-full">
-              <MicOff className="w-3.5 h-3.5 text-red-500" />
+              <MicrophoneOff01Icon className="w-3.5 h-3.5 text-red-500" />
             </div>
           ) : null
         ) : (
@@ -150,7 +150,7 @@ export const ParticipantList = React.memo(({
         {canManageParticipants && !participant.isLocal && (
           <div className="relative">
             <IconButton
-              icon={<MoreVertical className="w-4 h-4" />}
+              icon={<MoreVerticalIcon className="w-4 h-4" />}
               size="sm"
               variant="ghost"
               className={cn(
@@ -187,7 +187,7 @@ export const ParticipantList = React.memo(({
                           : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
                       )}
                     >
-                      {participant.isMuted ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                      {participant.isMuted ? <Microphone01Icon className="w-4 h-4" /> : <MicrophoneOff01Icon className="w-4 h-4" />}
                       {participant.isMuted ? "Unmute" : "Mute"}
                     </button>
                   )}
@@ -205,7 +205,7 @@ export const ParticipantList = React.memo(({
                           : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
                       )}
                     >
-                      <Crown className="w-4 h-4" />
+                      <Crown01Icon className="w-4 h-4" />
                       Make Host
                     </button>
                   )}
@@ -223,7 +223,7 @@ export const ParticipantList = React.memo(({
                           : "text-chalk-text-primary hover:bg-chalk-bg-subtle"
                       )}
                     >
-                      <Shield className="w-4 h-4" />
+                      <Shield01Icon className="w-4 h-4" />
                       Make Co-Host
                     </button>
                   )}
@@ -241,7 +241,7 @@ export const ParticipantList = React.memo(({
                           : "text-chalk-error-main hover:bg-chalk-error-subtle"
                       )}
                     >
-                      <UserX className="w-4 h-4" />
+                      <UserRemove01Icon className="w-4 h-4" />
                       Remove
                     </button>
                   )}
@@ -273,7 +273,7 @@ export const ParticipantList = React.memo(({
               onClick={onAddPeople}
               className="w-full bg-primary hover:bg-primary/80 text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-4 font-medium text-sm shadow-lg min-h-[48px]"
             >
-              <Users className="w-4 h-4" />
+              <UserGroupIcon className="w-4 h-4" />
               <span>Add people</span>
             </button>
           )}
@@ -322,7 +322,7 @@ export const ParticipantList = React.memo(({
               className="text-white/80 hover:text-white transition-colors p-1"
               aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <Cancel01Icon className="w-5 h-5" />
             </button>
           )}
         </div>
@@ -333,7 +333,7 @@ export const ParticipantList = React.memo(({
               onClick={onAddPeople}
               className="w-full bg-primary hover:bg-primary/80 text-white rounded-full py-3 px-4 flex items-center justify-center gap-2.5 transition-all mb-6 font-medium text-sm shadow-lg"
             >
-              <Users className="w-4 h-4" />
+              <UserGroupIcon className="w-4 h-4" />
               <span>Add people</span>
             </button>
           )}
@@ -367,9 +367,9 @@ export const ParticipantList = React.memo(({
                   {participants.length}
                 </span>
                 {isExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-white/60" />
+                  <ArrowUp01Icon className="w-4 h-4 text-white/60" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-white/60" />
+                  <ArrowDown01Icon className="w-4 h-4 text-white/60" />
                 )}
               </div>
             </button>
@@ -413,7 +413,7 @@ export const ParticipantList = React.memo(({
         </div>
         {onClose && (
           <IconButton 
-            icon={<X className="w-4 h-4" />} 
+            icon={<Cancel01Icon className="w-4 h-4" />} 
             size="sm" 
             variant="ghost" 
             onClick={onClose}
@@ -428,7 +428,7 @@ export const ParticipantList = React.memo(({
             placeholder="Search participants..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            icon={<Search className="w-4 h-4" />}
+            icon={<Search01Icon className="w-4 h-4" />}
             iconPosition="left"
             className="w-full"
           />

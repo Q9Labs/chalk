@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { ArrowLeft, X } from 'lucide-react';
+import { Dialog } from '@base-ui/react/dialog';
+import { ArrowLeft02Icon, Cancel01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
@@ -10,6 +11,8 @@ export interface MobilePanelProps {
   /** Show back arrow instead of X button */
   showBackButton?: boolean;
   className?: string;
+  /** Controlled open state - when provided, panel acts as controlled component */
+  isOpen?: boolean;
 }
 
 const SWIPE_THRESHOLD = 100;
@@ -21,12 +24,12 @@ export const MobilePanel = React.memo(({
   children,
   showBackButton = true,
   className,
+  isOpen = true,
 }: MobilePanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartRef = useRef<{ x: number; time: number } | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
@@ -64,55 +67,68 @@ export const MobilePanel = React.memo(({
     touchStartRef.current = null;
   }, [translateX, onClose]);
 
-  return (
-    <div
-      ref={panelRef}
-      className={cn(
-        "fixed inset-0 z-50 flex flex-col",
-        !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out",
-        !isDragging && translateX === 0 && !prefersReducedMotion && "animate-in slide-in-from-right duration-300",
-        className,
-      )}
-      style={{
-        transform: translateX > 0 ? `translateX(${translateX}px)` : undefined,
-        backgroundColor: '#151515',
-        // Safe area insets for iOS
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        paddingLeft: 'env(safe-area-inset-left)',
-        paddingRight: 'env(safe-area-inset-right)',
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex items-center justify-center w-11 h-11 -ml-2 rounded-full active:bg-white/10 transition-colors"
-          aria-label={showBackButton ? 'Go back' : 'Close'}
-        >
-          {showBackButton ? (
-            <ArrowLeft className="w-6 h-6 text-white" />
-          ) : (
-            <X className="w-6 h-6 text-white" />
-          )}
-        </button>
-        <h2 className="text-lg font-semibold text-white flex-1 text-center mr-11">
-          {title}
-        </h2>
-      </div>
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  }, [onClose]);
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {children}
-      </div>
-    </div>
+  return (
+    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Backdrop
+          className={cn(
+            "fixed inset-0 bg-black/50 z-40",
+            !prefersReducedMotion && "transition-opacity duration-300"
+          )}
+        />
+        <Dialog.Popup
+          className={cn(
+            "fixed inset-0 z-50 flex flex-col bg-card",
+            !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out",
+            !isDragging && translateX === 0 && !prefersReducedMotion && "animate-in slide-in-from-right duration-300",
+            className,
+          )}
+          style={{
+            transform: translateX > 0 ? `translateX(${translateX}px)` : undefined,
+            // Safe area insets for iOS
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            paddingLeft: 'env(safe-area-inset-left)',
+            paddingRight: 'env(safe-area-inset-right)',
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <Dialog.Title className="sr-only">{title}</Dialog.Title>
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center justify-center w-11 h-11 -ml-2 rounded-full active:bg-muted transition-colors"
+              aria-label={showBackButton ? 'Go back' : 'Close'}
+            >
+              {showBackButton ? (
+                <ArrowLeft02Icon className="w-6 h-6 text-foreground" />
+              ) : (
+                <Cancel01Icon className="w-6 h-6 text-foreground" />
+              )}
+            </button>
+            <h2 className="text-lg font-semibold text-foreground flex-1 text-center mr-11">
+              {title}
+            </h2>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
+            {children}
+          </div>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 });
 

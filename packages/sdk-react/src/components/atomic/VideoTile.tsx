@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { cn } from '../../utils/cn';
-import { MicOff, Monitor, Hand } from 'lucide-react';
+import { MicrophoneOff01Icon, Monitor01Icon, HandIcon } from '../../utils/icons';
 import { Avatar } from './Avatar';
 import { NameTag } from './NameTag';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
@@ -167,13 +167,13 @@ export const VideoTile = React.memo(({
       className={cn(
         'relative overflow-hidden rounded-[32px] shadow-2xl transition-all duration-300',
         aspectRatioClasses[aspectRatio],
-        (participant.isSpeaking || pinned) && 'ring-2 ring-[#151515]',
+        (participant.isSpeaking || pinned) && 'ring-2 ring-ring',
         onClick && 'cursor-pointer hover:scale-[1.01]',
         className
       )}
       style={{
-        background: participantGradient,
-        border: `2px solid ${participantBorder}`,
+        background: `var(--card, ${participantGradient})`,
+        border: `2px solid var(--border, ${participantBorder})`,
       }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -224,21 +224,21 @@ export const VideoTile = React.memo(({
           {showStatus && (
             <div className="flex items-center gap-2">
               {participant.isMuted && (
-                <div className="rounded-full bg-black/40 p-2 text-white backdrop-blur-md border border-white/10">
-                  <MicOff size={16} />
+                <div className="rounded-full bg-muted/60 p-2 text-muted-foreground backdrop-blur-md border border-border">
+                  <MicrophoneOff01Icon size={16} />
                 </div>
               )}
               {participant.isHandRaised && (
                 <div className={cn(
-                  "rounded-full bg-[#151515] p-2 text-white backdrop-blur-md",
+                  "rounded-full bg-secondary p-2 text-secondary-foreground backdrop-blur-md",
                   !prefersReducedMotion && "chalk-animate-hand-bounce"
                 )}>
-                  <Hand size={16} />
+                  <HandIcon size={16} />
                 </div>
               )}
               {participant.isScreenSharing && (
-                <div className="rounded-full bg-green-500 p-2 text-white backdrop-blur-md">
-                  <Monitor size={16} />
+                <div className="rounded-full bg-chart-3 p-2 text-primary-foreground backdrop-blur-md">
+                  <Monitor01Icon size={16} />
                 </div>
               )}
             </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, LayoutGrid, Maximize2, Columns } from 'lucide-react';
+import { Settings01Icon, LayoutGridIcon, Maximize01Icon, ColumnIcon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { StatusBadge } from '../atomic/StatusBadge';
 
@@ -19,7 +19,7 @@ const formatDuration = (seconds: number): string => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  
+
   if (h > 0) {
     return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }
@@ -46,13 +46,16 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
       role="banner"
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <h1 className="text-sm font-medium text-white/90 truncate">
+        <h1 className="text-sm font-medium truncate text-[var(--foreground,var(--chalk-text-primary))]/90">
           {roomName}
         </h1>
       </div>
 
       <div className="flex flex-1 justify-center">
-        <div className="bg-white/10 px-3 py-1.5 rounded-full text-sm font-medium tabular-nums text-white flex items-center gap-2">
+        <div className={cn(
+          "px-3 py-1.5 rounded-full text-sm font-medium tabular-nums flex items-center gap-2",
+          "bg-[var(--secondary,var(--chalk-bg-tertiary))]/50 text-[var(--foreground,var(--chalk-text-primary))]"
+        )}>
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           {formatDuration(duration)}
         </div>
@@ -63,45 +66,45 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
         {isTranscribing && <StatusBadge status="transcribing" />}
 
         {onLayoutChange && (
-          <div className="hidden sm:flex bg-white/10 rounded-full p-1 gap-1">
+          <div className="hidden sm:flex rounded-full p-1 gap-1 bg-[var(--secondary,var(--chalk-bg-tertiary))]/50">
             <button
               onClick={() => onLayoutChange('grid')}
               className={cn(
                 'p-2 rounded-full transition-colors',
                 layout === 'grid'
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/50 hover:text-white hover:bg-white/10'
+                  ? 'bg-[var(--accent,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]'
+                  : 'text-[var(--muted-foreground,var(--chalk-text-muted))] hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50'
               )}
               aria-label="Grid layout"
               aria-pressed={layout === 'grid'}
             >
-              <LayoutGrid size={16} />
+              <LayoutGridIcon size={16} />
             </button>
             <button
               onClick={() => onLayoutChange('spotlight')}
               className={cn(
                 'p-2 rounded-full transition-colors',
                 layout === 'spotlight'
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/50 hover:text-white hover:bg-white/10'
+                  ? 'bg-[var(--accent,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]'
+                  : 'text-[var(--muted-foreground,var(--chalk-text-muted))] hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50'
               )}
               aria-label="Spotlight layout"
               aria-pressed={layout === 'spotlight'}
             >
-              <Maximize2 size={16} />
+              <Maximize01Icon size={16} />
             </button>
             <button
               onClick={() => onLayoutChange('sidebar')}
               className={cn(
                 'p-2 rounded-full transition-colors',
                 layout === 'sidebar'
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/50 hover:text-white hover:bg-white/10'
+                  ? 'bg-[var(--accent,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]'
+                  : 'text-[var(--muted-foreground,var(--chalk-text-muted))] hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50'
               )}
               aria-label="Sidebar layout"
               aria-pressed={layout === 'sidebar'}
             >
-              <Columns size={16} />
+              <ColumnIcon size={16} />
             </button>
           </div>
         )}
@@ -109,10 +112,14 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
         {onSettings && (
           <button
             onClick={onSettings}
-            className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+            className={cn(
+              "p-2 rounded-full transition-colors",
+              "text-[var(--muted-foreground,var(--chalk-text-muted))]",
+              "hover:text-[var(--foreground,var(--chalk-text-primary))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]/50"
+            )}
             aria-label="Settings"
           >
-            <Settings size={18} />
+            <Settings01Icon size={18} />
           </button>
         )}
       </div>

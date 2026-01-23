@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Info, CheckCircle, AlertTriangle, XCircle, X } from 'lucide-react';
+import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon, Cancel01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
@@ -33,36 +33,37 @@ export const Toast = React.memo<ToastProps>(({
   }, [duration, onDismiss]);
 
   const icons = {
-    info: <Info size={20} className="text-[var(--chalk-accent)]" />,
-    success: <CheckCircle size={20} className="text-[var(--chalk-success)]" />,
-    warning: <AlertTriangle size={20} className="text-[var(--chalk-warning)]" />,
-    error: <XCircle size={20} className="text-[var(--chalk-danger)]" />,
+    info: <InformationCircleIcon size={20} className="text-primary" />,
+    success: <CheckmarkCircle02Icon size={20} className="text-[var(--chart-3,var(--chalk-success))]" />,
+    warning: <Alert02Icon size={20} className="text-[var(--chart-1,var(--chalk-warning))]" />,
+    error: <CancelCircleIcon size={20} className="text-destructive" />,
   };
 
-  const bgColors = {
-    info: 'bg-[var(--chalk-bg-secondary)] border-l-4 border-l-[var(--chalk-accent)]',
-    success: 'bg-[var(--chalk-bg-secondary)] border-l-4 border-l-[var(--chalk-success)]',
-    warning: 'bg-[var(--chalk-bg-secondary)] border-l-4 border-l-[var(--chalk-warning)]',
-    error: 'bg-[var(--chalk-bg-secondary)] border-l-4 border-l-[var(--chalk-danger)]',
+  const borderColors = {
+    info: 'border-l-primary',
+    success: 'border-l-[var(--chart-3,var(--chalk-success))]',
+    warning: 'border-l-[var(--chart-1,var(--chalk-warning))]',
+    error: 'border-l-destructive',
   };
 
   return (
     <div
       className={cn(
-        'flex items-start gap-3 p-4 rounded-[var(--chalk-border-radius-md)] shadow-[var(--chalk-shadow-lg)] min-w-[300px] max-w-md border border-[var(--chalk-border-color)]',
+        'flex items-start gap-3 p-4 rounded-md shadow-lg min-w-[300px] max-w-md',
+        'bg-card border border-border border-l-4',
         !prefersReducedMotion && 'chalk-animate-toast-in',
-        bgColors[type],
+        borderColors[type],
         className
       )}
       role={type === 'error' || type === 'warning' ? 'alert' : 'status'}
     >
       <div className="flex-shrink-0 mt-0.5">{icons[type]}</div>
       <div className="flex-1">
-        <p className="text-sm font-medium text-[var(--chalk-text-primary)]">{message}</p>
+        <p className="text-sm font-medium text-foreground">{message}</p>
         {action && (
           <button
             onClick={action.onClick}
-            className="mt-2 text-sm font-semibold text-[var(--chalk-text-primary)] hover:underline focus:outline-none"
+            className="mt-2 text-sm font-semibold text-foreground hover:underline focus:outline-none"
           >
             {action.label}
           </button>
@@ -71,10 +72,10 @@ export const Toast = React.memo<ToastProps>(({
       {onDismiss && (
         <button
           onClick={onDismiss}
-          className="flex-shrink-0 text-[var(--chalk-text-muted)] hover:text-[var(--chalk-text-primary)] transition-colors"
+          className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Close"
         >
-          <X size={16} />
+          <Cancel01Icon size={16} />
         </button>
       )}
     </div>

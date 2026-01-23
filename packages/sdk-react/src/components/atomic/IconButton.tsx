@@ -18,9 +18,9 @@ const sizeClasses = {
 };
 
 const variantClasses = {
-  default: 'bg-[var(--chalk-bg-tertiary)] text-[var(--chalk-text-primary)] hover:bg-[var(--chalk-bg-secondary)] shadow-sm',
-  ghost: 'bg-transparent text-[var(--chalk-text-secondary)] hover:bg-[var(--chalk-bg-tertiary)] hover:text-[var(--chalk-text-primary)]',
-  outline: 'border border-[var(--chalk-border-color)] bg-transparent text-[var(--chalk-text-primary)] hover:bg-[var(--chalk-bg-tertiary)]',
+  default: 'bg-secondary text-foreground hover:bg-accent shadow-sm',
+  ghost: 'bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground',
+  outline: 'border border-border bg-transparent text-foreground hover:bg-accent',
 };
 
 export const IconButton = React.memo(React.forwardRef<HTMLButtonElement, IconButtonProps>(
@@ -43,7 +43,7 @@ export const IconButton = React.memo(React.forwardRef<HTMLButtonElement, IconBut
         onClick={onClick}
         disabled={disabled}
         className={cn(
-          'inline-flex items-center justify-center rounded-[var(--chalk-border-radius-md)] transition-colors duration-200',
+          'inline-flex items-center justify-center rounded-md transition-colors duration-200',
           sizeClasses[size],
           variantClasses[variant],
           disabled && 'cursor-not-allowed opacity-50',

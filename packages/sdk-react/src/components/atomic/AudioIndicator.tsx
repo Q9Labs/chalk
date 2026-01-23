@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff } from 'lucide-react';
+import { Microphone01Icon, MicrophoneOff01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 
 interface AudioIndicatorProps {
@@ -74,7 +74,7 @@ export const AudioIndicator = React.memo(({
     );
   }
 
-  const Icon = muted ? MicOff : Mic;
+  const Icon = muted ? MicrophoneOff01Icon : Microphone01Icon;
   return (
     <div
       className={cn(

@@ -23,10 +23,10 @@ export const ProgressBar = React.memo<ProgressBarProps>(({
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
 
   const variantColors = {
-    default: 'bg-[var(--chalk-accent)]',
-    success: 'bg-[var(--chalk-success)]',
-    warning: 'bg-[var(--chalk-warning)]',
-    danger: 'bg-[var(--chalk-danger)]',
+    default: 'bg-primary',
+    success: 'bg-[var(--chart-3,var(--chalk-success))]',
+    warning: 'bg-[var(--chart-1,var(--chalk-warning))]',
+    danger: 'bg-destructive',
   };
 
   const sizeClasses = {
@@ -39,12 +39,12 @@ export const ProgressBar = React.memo<ProgressBarProps>(({
     <div className={cn('w-full', className)}>
       <div className="flex justify-between mb-1">
         {showLabel && (
-          <span className="text-[var(--chalk-text-secondary)] font-medium">
+          <span className="text-muted-foreground font-medium">
             {Math.round(percentage)}%
           </span>
         )}
       </div>
-      <div className={cn('w-full bg-[var(--chalk-bg-tertiary)] rounded-full overflow-hidden', sizeClasses[size])}>
+      <div className={cn('w-full bg-muted rounded-full overflow-hidden', sizeClasses[size])}>
         <div
           role="progressbar"
           aria-valuenow={value}

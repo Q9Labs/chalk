@@ -24,42 +24,42 @@ export const Input = React.memo(forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className={cn('flex flex-col gap-1.5', fullWidth && 'w-full')}>
         {label && (
-          <label className="text-sm font-medium text-[var(--chalk-text-secondary)]">
+          <label className="text-sm font-medium text-muted-foreground">
             {label}
           </label>
         )}
         <div className="relative">
           {icon && iconPosition === 'left' && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--chalk-text-muted)] pointer-events-none">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
               {icon}
             </div>
           )}
-          
+
           <input
             ref={ref}
             className={cn(
-              'rounded-[var(--chalk-border-radius-md)] border bg-[var(--chalk-bg-secondary)] text-[var(--chalk-text-primary)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--chalk-accent)] focus:border-transparent',
-              'placeholder:text-[var(--chalk-text-muted)]',
+              'rounded-md border border-input bg-card text-foreground transition-colors',
+              'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
+              'placeholder:text-muted-foreground',
               'disabled:cursor-not-allowed disabled:opacity-50',
-              'border-[var(--chalk-border-color)]',
               sizeClasses[size],
               fullWidth ? 'w-full' : 'w-auto',
               icon && iconPosition === 'left' && iconPadding,
               icon && iconPosition === 'right' && iconPaddingRight,
-              error && 'border-[var(--chalk-danger)] focus:ring-[var(--chalk-danger)]',
+              error && 'border-destructive focus:ring-destructive',
               className
             )}
             {...props}
           />
 
           {icon && iconPosition === 'right' && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--chalk-text-muted)] pointer-events-none">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
               {icon}
             </div>
           )}
         </div>
         {error && (
-          <span className="text-sm text-[var(--chalk-danger)]">{error}</span>
+          <span className="text-sm text-destructive">{error}</span>
         )}
       </div>
     );

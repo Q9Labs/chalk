@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2 } from 'lucide-react';
+import { VolumeHighIcon } from '../../utils/icons';
 import { Select, AudioIndicator, Thumbnail, IconButton } from '../atomic';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
@@ -51,11 +51,11 @@ export const DeviceSelector = React.memo(({
       }
     }
   };
-  
+
   useEffect(() => {
     if (type === 'audiooutput' && selectedDeviceId && audioRef.current) {
       if ('setSinkId' in audioRef.current && typeof (audioRef.current as any).setSinkId === 'function') {
-         (audioRef.current as any).setSinkId(selectedDeviceId).catch((e: any) => log.warn('Failed to set sink ID', e));
+        (audioRef.current as any).setSinkId(selectedDeviceId).catch((e: any) => log.warn('Failed to set sink ID', e));
       }
     }
   }, [type, selectedDeviceId]);
@@ -64,27 +64,26 @@ export const DeviceSelector = React.memo(({
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-center justify-between">
         {label && (
-          <label className="text-sm font-medium text-chalk-text-secondary">
+          <label className="text-sm font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">
             {label}
           </label>
         )}
       </div>
 
-      <div className="">
-        <div className="flex">
-          <Select
-            options={options}
-            value={selectedDeviceId}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled || devices.length === 0}
-            placeholder={devices.length === 0 ? "No devices found" : "Select device"}
-            fullWidth
-          />
+      <div className="flex gap-2">
+        <Select
+          options={options}
+          value={selectedDeviceId}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled || devices.length === 0}
+          placeholder={devices.length === 0 ? "No devices found" : "Select device"}
+          fullWidth
+        />
 
         {type === 'audioinput' && (
-          <div className="h-10 w-10 flex items-center justify-center bg-chalk-bg-subtle rounded-md shrink-0">
-            <AudioIndicator 
-              level={audioLevel} 
+          <div className="h-10 w-10 flex items-center justify-center rounded-md shrink-0 bg-[var(--muted,var(--chalk-bg-subtle))]">
+            <AudioIndicator
+              level={audioLevel}
               size="sm"
             />
           </div>
@@ -92,20 +91,21 @@ export const DeviceSelector = React.memo(({
 
         {type === 'audiooutput' && (
           <div className="shrink-0">
-             <audio ref={audioRef} className="hidden" />
-              <IconButton
-                icon={<Volume2 className={cn("w- h-4", isPlayingTestSound && "text-chalk-accent", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />}
-                onClick={playTestSound}
-
-               disabled={disabled}
-               size="md"
-               aria-label="Test speakers"
-             />
+            <audio ref={audioRef} className="hidden" />
+            <IconButton
+              icon={<VolumeHighIcon className={cn(
+                "w-4 h-4",
+                isPlayingTestSound && "text-[var(--primary,var(--chalk-accent))]",
+                isPlayingTestSound && !prefersReducedMotion && "animate-pulse"
+              )} />}
+              onClick={playTestSound}
+              disabled={disabled}
+              size="md"
+              aria-label="Test speakers"
+            />
           </div>
         )}
       </div>
-        </div>
-
 
       {type === 'videoinput' && previewTrack && (
         <div className="mt-2 aspect-video w-full overflow-hidden rounded-md bg-black relative">

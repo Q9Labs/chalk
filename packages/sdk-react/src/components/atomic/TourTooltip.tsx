@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ArrowLeft01Icon, ArrowRight01Icon, Cancel01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
@@ -49,7 +49,7 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
   }, [onNext, onPrev, onSkip, step]);
 
   const arrowClasses = cn(
-    'absolute w-4 h-4 bg-[var(--chalk-bg-secondary)] rotate-45 border-[var(--chalk-border-color)]',
+    'absolute w-4 h-4 bg-popover rotate-45 border-border',
     {
       'top-[-8px] left-1/2 -translate-x-1/2 border-t border-l': placement === 'bottom',
       'bottom-[-8px] left-1/2 -translate-x-1/2 border-b border-r': placement === 'top',
@@ -64,32 +64,32 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
       role="dialog"
       aria-label={title}
       className={cn(
-        'relative z-50 min-w-[320px] max-w-sm rounded-[var(--chalk-border-radius-lg)]',
-        'bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-color)]',
-        'shadow-[var(--chalk-shadow-lg)] p-[var(--chalk-spacing-lg)]',
-        'text-[var(--chalk-text-primary)]',
+        'relative z-50 min-w-[320px] max-w-sm rounded-lg',
+        'bg-popover border border-border',
+        'shadow-lg p-6',
+        'text-popover-foreground',
         !prefersReducedMotion && 'chalk-animate-scale-in',
         className
       )}
     >
       <div className={arrowClasses} />
 
-      <div className="flex justify-between items-start mb-[var(--chalk-spacing-md)]">
-        <h3 className="font-[var(--chalk-font-weight-semibold)] text-[var(--chalk-font-size-lg)]">
+      <div className="flex justify-between items-start mb-4">
+        <h3 className="font-semibold text-lg">
           {title}
         </h3>
         {showSkip && (
           <button
             onClick={onSkip}
-            className="text-[var(--chalk-text-muted)] hover:text-[var(--chalk-text-primary)] transition-colors p-1"
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
             aria-label="Skip tour"
           >
-            <X size={16} />
+            <Cancel01Icon size={16} />
           </button>
         )}
       </div>
 
-      <div className="mb-[var(--chalk-spacing-lg)] text-[var(--chalk-text-secondary)] text-[var(--chalk-font-size-md)] leading-relaxed">
+      <div className="mb-6 text-muted-foreground text-base leading-relaxed">
         {description}
       </div>
 
@@ -102,8 +102,8 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
                 className={cn(
                   'w-2 h-2 rounded-full transition-colors',
                   i + 1 === step
-                    ? 'bg-[var(--chalk-accent)]'
-                    : 'bg-[var(--chalk-bg-tertiary)]'
+                    ? 'bg-primary'
+                    : 'bg-muted'
                 )}
               />
             ))}
@@ -112,18 +112,18 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
           <div />
         )}
 
-        <div className="flex gap-[var(--chalk-spacing-sm)]">
+        <div className="flex gap-2">
           {step > 1 && (
             <button
               onClick={onPrev}
               className={cn(
-                'flex items-center justify-center p-[var(--chalk-spacing-sm)] rounded-[var(--chalk-border-radius-md)]',
-                'text-[var(--chalk-text-secondary)] hover:bg-[var(--chalk-bg-tertiary)] hover:text-[var(--chalk-text-primary)]',
-                'transition-colors text-[var(--chalk-font-size-sm)]'
+                'flex items-center justify-center p-2 rounded-md',
+                'text-muted-foreground hover:bg-muted hover:text-foreground',
+                'transition-colors text-sm'
               )}
               aria-label="Previous step"
             >
-              <ChevronLeft size={16} className="mr-1" />
+              <ArrowLeft01Icon size={16} className="mr-1" />
               Back
             </button>
           )}
@@ -131,9 +131,9 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
           <button
             onClick={onNext}
             className={cn(
-              'flex items-center justify-center py-[var(--chalk-spacing-sm)] px-[var(--chalk-spacing-md)] rounded-[var(--chalk-border-radius-md)]',
-              'bg-[var(--chalk-accent)] text-white hover:bg-[var(--chalk-accent-hover)]',
-              'transition-colors text-[var(--chalk-font-size-sm)] font-[var(--chalk-font-weight-medium)]'
+              'flex items-center justify-center py-2 px-4 rounded-md',
+              'bg-primary text-primary-foreground hover:bg-primary/90',
+              'transition-colors text-sm font-medium'
             )}
             aria-label={step === totalSteps ? 'Finish tour' : 'Next step'}
           >
@@ -141,7 +141,7 @@ export const TourTooltip = React.memo<TourTooltipProps>(({
               'Finish'
             ) : (
               <>
-                Next <ChevronRight size={16} className="ml-1" />
+                Next <ArrowRight01Icon size={16} className="ml-1" />
               </>
             )}
           </button>

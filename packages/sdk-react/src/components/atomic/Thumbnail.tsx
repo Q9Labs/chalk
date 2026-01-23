@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { cn } from '../../utils/cn';
-import { MicOff } from 'lucide-react';
+import { MicrophoneOff01Icon } from '../../utils/icons';
 
 export interface ThumbnailProps {
   videoTrack?: MediaStreamTrack | null;
@@ -69,7 +69,7 @@ export const Thumbnail = React.memo(({
       
       {muted && (
         <div className="absolute bottom-1 right-1 rounded-full bg-black/50 p-0.5 text-white backdrop-blur-sm">
-          <MicOff size={10} />
+          <MicrophoneOff01Icon size={10} />
         </div>
       )}
     </div>

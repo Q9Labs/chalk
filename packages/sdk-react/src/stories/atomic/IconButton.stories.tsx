@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { IconButton } from '../../components/atomic/IconButton';
-import { Settings, X, MoreVertical } from 'lucide-react';
+import { Settings01Icon, Cancel01Icon, MoreVerticalIcon } from '../../utils/icons';
 
 const meta: Meta<typeof IconButton> = {
   title: 'Atomic/IconButton',
@@ -24,14 +24,14 @@ type Story = StoryObj<typeof IconButton>;
 
 export const Default: Story = {
   args: {
-    icon: <Settings size={18} />,
+    icon: <Settings01Icon size={18} />,
     'aria-label': 'Settings',
   },
 };
 
 export const Ghost: Story = {
   args: {
-    icon: <X size={18} />,
+    icon: <Cancel01Icon size={18} />,
     variant: 'ghost',
     'aria-label': 'Close',
   },
@@ -39,7 +39,7 @@ export const Ghost: Story = {
 
 export const Outline: Story = {
   args: {
-    icon: <MoreVertical size={18} />,
+    icon: <MoreVerticalIcon size={18} />,
     variant: 'outline',
     'aria-label': 'More',
   },

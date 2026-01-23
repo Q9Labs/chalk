@@ -1,11 +1,11 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { X, Search, ArrowDown } from 'lucide-react';
-import { 
-  TranscriptLine, 
-  IconButton, 
-  Input, 
+import { Cancel01Icon, Search01Icon, ArrowDown01Icon } from '../../utils/icons';
+import {
+  TranscriptLine,
+  IconButton,
+  Input,
   StatusBadge,
-  Select 
+  Select
 } from '../atomic';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
@@ -33,6 +33,15 @@ export interface TranscriptionPanelProps {
   variant?: 'default' | 'sidebar' | 'mobile';
   className?: string;
 }
+
+const SPEAKER_COLORS = [
+  '#FFFFFF',
+  '#FFFFFF',
+  '#F59E0B',
+  '#EC4899',
+  '#8B5CF6',
+  '#3B82F6',
+];
 
 export const TranscriptionPanel = React.memo(({
   transcripts,
@@ -85,30 +94,21 @@ export const TranscriptionPanel = React.memo(({
   };
 
   const getSpeakerColor = (speakerId: string) => {
-    const colors = [
-      '#FFFFFF',
-      '#FFFFFF',
-      '#F59E0B',
-      '#EC4899',
-      '#8B5CF6',
-      '#3B82F6',
-    ];
     let hash = 0;
     for (let i = 0; i < speakerId.length; i++) {
       hash = speakerId.charCodeAt(i) + ((hash << 5) - hash);
     }
-    return colors[Math.abs(hash) % colors.length];
+    return SPEAKER_COLORS[Math.abs(hash) % SPEAKER_COLORS.length];
   };
 
-  // Mobile variant - no header (MobilePanel provides it)
   if (variant === 'mobile') {
     return (
       <div
         className={cn(
           "flex flex-col h-full w-full overflow-hidden font-sans relative",
+          "bg-[var(--card,var(--chalk-bg-secondary))]",
           className
         )}
-        style={{ background: '#151515' }}
         data-tour="transcription-panel"
         role="complementary"
         aria-label="Live transcription"
@@ -120,7 +120,7 @@ export const TranscriptionPanel = React.memo(({
                 placeholder="Search transcript..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search className="w-4 h-4" />}
+                icon={<Search01Icon className="w-4 h-4" />}
                 iconPosition="left"
                 className="w-full"
                 size="sm"
@@ -130,24 +130,21 @@ export const TranscriptionPanel = React.memo(({
 
           <div
             ref={containerRef}
-            className="rounded-2xl overflow-hidden p-4 space-y-3 relative"
-            style={{
-              backgroundColor: '#0f0707ff',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              minHeight: '200px'
-            }}
+            className={cn(
+              "rounded-2xl overflow-hidden p-4 space-y-3 relative min-h-[200px]",
+              "bg-[var(--muted,var(--chalk-bg-tertiary))]/50 backdrop-blur-xl"
+            )}
             onScroll={handleScroll}
           >
             {isLive && (
               <div className="flex items-center gap-2 mb-3">
                 <StatusBadge status="transcribing" size="sm" pulse />
-                <span className="text-xs text-gray-400">Live transcription</span>
+                <span className="text-xs text-[var(--muted-foreground,var(--chalk-text-muted))]">Live transcription</span>
               </div>
             )}
 
             {filteredTranscripts.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 py-8">
+              <div className="h-full flex flex-col items-center justify-center text-center py-8 text-[var(--muted-foreground,var(--chalk-text-muted))]">
                 <p className="text-sm">Transcription will appear here</p>
               </div>
             ) : (
@@ -175,9 +172,13 @@ export const TranscriptionPanel = React.memo(({
                     setAutoScroll(true);
                     endRef.current?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="bg-[#151515] text-white px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto hover:bg-[#252525] transition-colors"
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto transition-colors",
+                    "bg-[var(--secondary,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]",
+                    "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]"
+                  )}
                 >
-                  <ArrowDown className="w-3 h-3" />
+                  <ArrowDown01Icon className="w-3 h-3" />
                   New content
                 </button>
               </div>
@@ -193,29 +194,26 @@ export const TranscriptionPanel = React.memo(({
       <div
         className={cn(
           "flex flex-col h-full w-full overflow-hidden font-sans relative",
-          !prefersReducedMotion && "chalk-animate-slide-right",
+          "bg-[var(--card,var(--chalk-bg-secondary))]",
+          !prefersReducedMotion && "animate-in slide-in-from-right duration-300",
           className
         )}
-        style={{
-          background: '#151515'
-        }}
         data-tour="transcription-panel"
         role="complementary"
         aria-label="Live transcription"
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-5">
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-white tracking-tight">Transcription</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-[var(--card-foreground,var(--chalk-text-primary))]">Transcription</h2>
             {isLive && <StatusBadge status="transcribing" size="sm" pulse />}
           </div>
           {onClose && (
             <button
               onClick={onClose}
-              className="text-white/80 hover:text-white transition-colors p-1"
+              className="p-1 transition-colors text-[var(--muted-foreground,var(--chalk-text-secondary))] hover:text-[var(--foreground,var(--chalk-text-primary))]"
               aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <Cancel01Icon className="w-5 h-5" />
             </button>
           )}
         </div>
@@ -227,7 +225,7 @@ export const TranscriptionPanel = React.memo(({
                 placeholder="Search transcript..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search className="w-4 h-4" />}
+                icon={<Search01Icon className="w-4 h-4" />}
                 iconPosition="left"
                 className="w-full"
                 size="sm"
@@ -235,20 +233,16 @@ export const TranscriptionPanel = React.memo(({
             </div>
           )}
 
-          {/* Transcripts Container with Glass Effect */}
-          <div 
+          <div
             ref={containerRef}
-            className="rounded-2xl overflow-hidden p-4 space-y-3 relative"
-            style={{
-              backgroundColor: '#0f0707ff',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              minHeight: '300px'
-            }}
+            className={cn(
+              "rounded-2xl overflow-hidden p-4 space-y-3 relative min-h-[300px]",
+              "bg-[var(--muted,var(--chalk-bg-tertiary))]/50 backdrop-blur-xl"
+            )}
             onScroll={handleScroll}
           >
             {filteredTranscripts.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center text-gray-500">
+              <div className="h-full flex flex-col items-center justify-center text-center text-[var(--muted-foreground,var(--chalk-text-muted))]">
                 <p className="text-sm">Transcription will appear here</p>
               </div>
             ) : (
@@ -276,9 +270,13 @@ export const TranscriptionPanel = React.memo(({
                     setAutoScroll(true);
                     endRef.current?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="bg-[#151515] text-white px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto hover:bg-[#252525] transition-colors"
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto transition-colors",
+                    "bg-[var(--secondary,var(--chalk-bg-tertiary))] text-[var(--foreground,var(--chalk-text-primary))]",
+                    "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]"
+                  )}
                 >
-                  <ArrowDown className="w-3 h-3" />
+                  <ArrowDown01Icon className="w-3 h-3" />
                   New content
                 </button>
               </div>
@@ -290,19 +288,23 @@ export const TranscriptionPanel = React.memo(({
   }
 
   return (
-    <div 
+    <div
       className={cn(
-        "flex flex-col bg-chalk-bg-surface border-chalk-border-subtle shadow-xl",
-        position === 'right' ? cn("h-full w-80 border-l", !prefersReducedMotion && "chalk-animate-slide-right") : cn("w-full h-64 border-t", !prefersReducedMotion && "chalk-animate-slide-up"),
+        "flex flex-col shadow-xl",
+        "bg-[var(--card,var(--chalk-bg-surface))]",
+        "border-[var(--border,var(--chalk-border-subtle))]",
+        position === 'right'
+          ? cn("h-full w-80 border-l", !prefersReducedMotion && "animate-in slide-in-from-right duration-300")
+          : cn("w-full h-64 border-t", !prefersReducedMotion && "animate-in slide-in-from-bottom duration-300"),
         className
       )}
       data-tour="transcription-panel"
       role="complementary"
       aria-label="Live transcription"
     >
-      <div className="flex items-center justify-between p-4 border-b border-chalk-border-subtle">
+      <div className="flex items-center justify-between p-4 border-b border-[var(--border,var(--chalk-border-subtle))]">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-chalk-text-primary">Transcription</h2>
+          <h2 className="text-sm font-semibold text-[var(--card-foreground,var(--chalk-text-primary))]">Transcription</h2>
           {isLive && <StatusBadge status="transcribing" size="sm" pulse />}
         </div>
         <div className="flex items-center gap-1">
@@ -322,10 +324,10 @@ export const TranscriptionPanel = React.memo(({
             </div>
           )}
           {onClose && (
-            <IconButton 
-              icon={<X className="w-4 h-4" />} 
-              size="sm" 
-              variant="ghost" 
+            <IconButton
+              icon={<Cancel01Icon className="w-4 h-4" />}
+              size="sm"
+              variant="ghost"
               onClick={onClose}
               aria-label="Close transcription"
             />
@@ -339,7 +341,7 @@ export const TranscriptionPanel = React.memo(({
             placeholder="Search transcript..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            icon={<Search className="w-4 h-4" />}
+            icon={<Search01Icon className="w-4 h-4" />}
             iconPosition="left"
             className="w-full"
             size="sm"
@@ -347,13 +349,13 @@ export const TranscriptionPanel = React.memo(({
         </div>
       )}
 
-      <div 
+      <div
         ref={containerRef}
         className="flex-1 overflow-y-auto p-4 space-y-1 relative"
         onScroll={handleScroll}
       >
         {filteredTranscripts.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-chalk-text-muted opacity-60">
+          <div className="h-full flex flex-col items-center justify-center text-center opacity-60 text-[var(--muted-foreground,var(--chalk-text-muted))]">
             <p className="text-sm">Transcription will appear here</p>
           </div>
         ) : (
@@ -381,9 +383,13 @@ export const TranscriptionPanel = React.memo(({
                 setAutoScroll(true);
                 endRef.current?.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="bg-chalk-accent text-white px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto hover:bg-chalk-accent-hover transition-colors"
+              className={cn(
+                "px-3 py-1 rounded-full text-xs shadow-lg flex items-center gap-1 pointer-events-auto transition-colors",
+                "bg-[var(--primary,var(--chalk-accent))] text-[var(--primary-foreground,#fff)]",
+                "hover:opacity-90"
+              )}
             >
-              <ArrowDown className="w-3 h-3" />
+              <ArrowDown01Icon className="w-3 h-3" />
               New content
             </button>
           </div>

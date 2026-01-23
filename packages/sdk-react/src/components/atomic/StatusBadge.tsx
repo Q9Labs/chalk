@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
-import { Circle, Radio, Type, AlertCircle } from 'lucide-react';
+import { CircleIcon, Radio01Icon, TextIcon, Alert02Icon } from '../../utils/icons';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface StatusBadgeProps {
@@ -12,53 +12,51 @@ export interface StatusBadgeProps {
 
 const config = {
   recording: {
-    icon: Circle,
+    icon: CircleIcon,
     text: 'REC',
-    color: 'var(--chalk-danger)',
-    bg: 'rgba(239, 68, 68, 0.1)',
+    colorClass: 'text-[var(--destructive,var(--chalk-danger))]',
+    bgClass: 'bg-[var(--destructive,var(--chalk-danger))]/10',
   },
   live: {
-    icon: Radio,
+    icon: Radio01Icon,
     text: 'LIVE',
-    color: 'var(--chalk-danger)',
-    bg: 'rgba(239, 68, 68, 0.1)',
+    colorClass: 'text-[var(--destructive,var(--chalk-danger))]',
+    bgClass: 'bg-[var(--destructive,var(--chalk-danger))]/10',
   },
   transcribing: {
-    icon: Type,
+    icon: TextIcon,
     text: 'CC',
-    color: 'var(--chalk-accent)',
-    bg: 'rgba(59, 130, 246, 0.1)',
+    colorClass: 'text-[var(--primary,var(--chalk-accent))]',
+    bgClass: 'bg-[var(--primary,var(--chalk-accent))]/10',
   },
   connecting: {
-    icon: AlertCircle,
+    icon: Alert02Icon,
     text: 'CONNECTING...',
-    color: 'var(--chalk-warning)',
-    bg: 'rgba(234, 179, 8, 0.1)',
+    colorClass: 'text-[var(--chart-4,var(--chalk-warning))]',
+    bgClass: 'bg-[var(--chart-4,var(--chalk-warning))]/10',
   },
   reconnecting: {
-    icon: AlertCircle,
+    icon: Alert02Icon,
     text: 'RECONNECTING...',
-    color: 'var(--chalk-warning)',
-    bg: 'rgba(234, 179, 8, 0.1)',
+    colorClass: 'text-[var(--chart-4,var(--chalk-warning))]',
+    bgClass: 'bg-[var(--chart-4,var(--chalk-warning))]/10',
   },
 };
 
 export const StatusBadge = React.memo(({ status, pulse = false, size = 'md', className }: StatusBadgeProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const { icon: Icon, text, color, bg } = config[status];
+  const { icon: Icon, text, colorClass, bgClass } = config[status];
 
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-[var(--chalk-border-radius-sm)] font-medium',
+        'inline-flex items-center gap-1.5 rounded-sm font-medium',
         size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs',
-        pulse && !prefersReducedMotion && 'chalk-animate-pulse',
+        pulse && !prefersReducedMotion && 'animate-pulse',
+        colorClass,
+        bgClass,
         className
       )}
-      style={{
-        backgroundColor: bg,
-        color: color,
-      }}
       role="status"
       aria-label={status}
     >

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **React SDK shadcn migration (Tier 2)** - Migrated composite components to shadcn design patterns
+  - **ControlButton**: Updated to use shadcn CSS vars with fallbacks, `--destructive` for danger state
+  - **StatusBadge**: Converted inline styles to Tailwind classes with shadcn var fallbacks
+  - **VolumeSlider**: Replaced native range input with `@base-ui/react/slider` for better styling
+  - **InviteModal**: Updated card/border/input styling to use shadcn `--card`, `--border` vars
+  - **SettingsPanel**: Migrated tabs and form sections to shadcn patterns
+  - **ChatPanel**: Refactored inline styles to CSS vars, improved scroll area styling
+  - **TranscriptionPanel**: Updated all three variants (mobile, sidebar, default) to shadcn vars
+  - **NotificationStack**: Integrated Sonner toast library for notification queue management
+  - **DeviceSelector**: Updated label and indicator styling to shadcn vars
+  - **MeetingHeader**: Converted layout toggle buttons to shadcn accent patterns
+  - **MessageBubble**: Replaced inline styles with Tailwind classes and CSS vars
+  - **WaitingRoom**: Added Spinner component for loading state, updated card styling
+  - **BackgroundEffectsPicker**: Converted toggle-group pattern to shadcn vars
+  - **ReactionPicker**: Updated popover styling with `--popover` and `--accent` vars
+  - All components maintain backward compatibility with existing APIs
+  - Added `toast` export from NotificationStack for programmatic toast triggering
+
 ## [0.0.39] - 2026-01-21
 
 ### Fixed

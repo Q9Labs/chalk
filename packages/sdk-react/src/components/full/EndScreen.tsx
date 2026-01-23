@@ -1,10 +1,10 @@
 import { useState, memo } from 'react';
-import { 
-  CheckCircle, Star, Clock, Users, Download, 
-  FileText, RotateCcw, Plus, Home, Video 
-} from 'lucide-react';
-import { 
-  Textarea, 
+import {
+  CheckmarkCircle02Icon, StarIcon, Clock01Icon, UserGroupIcon, Download01Icon,
+  FileTextIcon, RefreshIcon, PlusSignIcon, Home01Icon, Video01Icon
+} from '../../utils/icons';
+import {
+  Textarea,
   IconButton
 } from '../atomic';
 import { cn } from '../../utils/cn';
@@ -93,7 +93,7 @@ function EndScreenBase({
         <div className="p-8 text-center space-y-6">
           <div className="flex flex-col items-center gap-4">
             <div className="h-16 w-16 rounded-full bg-[var(--chalk-success)]/10 flex items-center justify-center text-[var(--chalk-success)]">
-              <CheckCircle size={32} />
+              <CheckmarkCircle02Icon size={32} />
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">Meeting Ended</h1>
           </div>
@@ -104,12 +104,12 @@ function EndScreenBase({
             )}
             <div className="flex items-center justify-center gap-4 text-[var(--chalk-text-secondary)] text-sm">
               <div className="flex items-center gap-1.5">
-                <Clock size={14} />
+                <Clock01Icon size={14} />
                 <span>{formatDuration(duration)}</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-[var(--chalk-text-muted)]" />
               <div className="flex items-center gap-1.5">
-                <Users size={14} />
+                <UserGroupIcon size={14} />
                 <span>{participantCount} participants</span>
               </div>
             </div>
@@ -134,7 +134,7 @@ function EndScreenBase({
                         )}
                         aria-label={`Rate ${star} stars`}
                       >
-                        <Star 
+                        <StarIcon 
                           size={28} 
                           fill={star <= rating ? "currentColor" : "none"} 
                         />
@@ -176,7 +176,7 @@ function EndScreenBase({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-md bg-[var(--chalk-accent)]/10 text-[var(--chalk-accent)]">
-                    <Video size={18} />
+                    <Video01Icon size={18} />
                   </div>
                   <div className="text-sm">
                     <p className="font-medium">Recording ready</p>
@@ -184,7 +184,7 @@ function EndScreenBase({
                   </div>
                 </div>
                 <IconButton
-                  icon={<Download size={18} />}
+                  icon={<Download01Icon size={18} />}
                   onClick={handleDownloadRecording}
                   aria-label="Download Recording"
                   variant="outline"
@@ -197,7 +197,7 @@ function EndScreenBase({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-md bg-[var(--chalk-success)]/10 text-[var(--chalk-success)]">
-                    <FileText size={18} />
+                    <FileTextIcon size={18} />
                   </div>
                   <div className="text-sm">
                     <p className="font-medium">Transcription</p>
@@ -228,7 +228,7 @@ function EndScreenBase({
               onClick={onRejoin}
               className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-sm font-medium text-[var(--chalk-text-primary)]"
             >
-              <RotateCcw size={20} className="text-[var(--chalk-text-secondary)]" />
+              <RefreshIcon size={20} className="text-[var(--chalk-text-secondary)]" />
               Rejoin
             </button>
           )}
@@ -239,7 +239,7 @@ function EndScreenBase({
               onClick={onNewMeeting}
               className="col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-sm font-medium text-[var(--chalk-text-primary)]"
             >
-              <Plus size={20} className="text-[var(--chalk-text-secondary)]" />
+              <PlusSignIcon size={20} className="text-[var(--chalk-text-secondary)]" />
               New Meeting
             </button>
           )}
@@ -250,7 +250,7 @@ function EndScreenBase({
               onClick={onGoHome}
               className="col-span-1 flex flex-col items-center justify-center gap-2 p-3 rounded-[var(--chalk-border-radius-md)] hover:bg-[var(--chalk-bg-tertiary)] transition-colors text-sm font-medium text-[var(--chalk-text-primary)]"
             >
-              <Home size={20} className="text-[var(--chalk-text-secondary)]" />
+              <Home01Icon size={20} className="text-[var(--chalk-text-secondary)]" />
               Home
             </button>
           )}

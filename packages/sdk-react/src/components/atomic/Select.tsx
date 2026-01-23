@@ -1,5 +1,5 @@
 import React, { useId, useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
+import { ArrowDown01Icon, Tick01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 
 export interface SelectOption {
@@ -44,7 +44,6 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
     const selectedOption = options.find(opt => opt.value === value);
     const displayText = selectedOption?.label || placeholder || 'Select...';
 
-    // Close on outside click
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
         if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -58,7 +57,6 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
       }
     }, [isOpen]);
 
-    // Close on escape
     useEffect(() => {
       const handleEscape = (event: KeyboardEvent) => {
         if (event.key === 'Escape') setIsOpen(false);
@@ -80,8 +78,7 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
         {label && (
           <label
             htmlFor={selectId}
-            className="text-sm font-medium"
-            style={{ color: 'var(--muted-foreground, var(--chalk-text-secondary, #a1a1aa))' }}
+            className="text-sm font-medium text-muted-foreground"
           >
             {label}
           </label>
@@ -94,53 +91,38 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
             disabled={disabled}
             onClick={() => !disabled && setIsOpen(!isOpen)}
             className={cn(
-              'flex items-center justify-between gap-2 rounded-xl border transition-colors focus:outline-none focus:ring-2 focus:border-transparent',
+              'flex items-center justify-between gap-2 rounded-xl border border-border bg-card transition-colors',
+              'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
               'disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap',
+              selectedOption ? 'text-foreground' : 'text-muted-foreground',
+              error && 'border-destructive',
               sizeClasses[size],
               fullWidth ? 'w-[350px]' : 'w-auto',
               className
             )}
-            style={{
-              backgroundColor: 'var(--card, var(--chalk-bg-secondary, #1a1a1a))',
-              color: selectedOption
-                ? 'var(--foreground, var(--chalk-text-primary, #ffffff))'
-                : 'var(--muted-foreground, var(--chalk-text-muted, #71717a))',
-              borderColor: error
-                ? 'var(--destructive, var(--chalk-danger, #ef4444))'
-                : 'var(--border, var(--chalk-border-color, rgba(255,255,255,0.1)))',
-            }}
             aria-haspopup="listbox"
             aria-expanded={isOpen}
             aria-invalid={!!error}
             aria-errormessage={error ? `${selectId}-error` : undefined}
           >
             <span className="truncate">{displayText}</span>
-            <ChevronDown
+            <ArrowDown01Icon
               size={iconSizes[size]}
               className={cn(
-                'shrink-0 transition-transform',
+                'shrink-0 text-muted-foreground transition-transform',
                 isOpen && 'rotate-180'
               )}
-              style={{ color: 'var(--muted-foreground, var(--chalk-text-muted, #71717a))' }}
             />
           </button>
 
-          {/* Dropdown */}
           {isOpen && (
             <div
-              className="absolute z-50 mt-1 w-full rounded-xl border py-1 shadow-lg overflow-hidden"
+              className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-popover py-1 shadow-lg overflow-hidden"
               role="listbox"
               aria-labelledby={selectId}
-              style={{
-                backgroundColor: 'var(--popover, var(--card, var(--chalk-bg-secondary, #1a1a1a)))',
-                borderColor: 'var(--border, var(--chalk-border-color, rgba(255,255,255,0.1)))',
-              }}
             >
               {options.length === 0 ? (
-                <div
-                  className="px-3 py-2 text-sm"
-                  style={{ color: 'var(--muted-foreground, var(--chalk-text-muted, #71717a))' }}
-                >
+                <div className="px-3 py-2 text-sm text-muted-foreground">
                   No options available
                 </div>
               ) : (
@@ -154,33 +136,16 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
                     onClick={() => !option.disabled && handleSelect(option.value)}
                     className={cn(
                       'flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors whitespace-nowrap overflow-hidden',
+                      'hover:bg-accent',
                       'disabled:cursor-not-allowed disabled:opacity-50',
+                      option.value === value ? 'bg-accent text-primary' : 'text-foreground'
                     )}
-                    style={{
-                      backgroundColor: option.value === value
-                        ? 'var(--accent, var(--muted, var(--chalk-bg-tertiary, #262626)))'
-                        : 'transparent',
-                      color: option.value === value
-                        ? 'var(--primary, var(--chalk-accent, #151515))'
-                        : 'var(--foreground, var(--chalk-text-primary, #ffffff))',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (option.value !== value) {
-                        e.currentTarget.style.backgroundColor = 'var(--accent, var(--muted, var(--chalk-bg-tertiary, #262626)))';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (option.value !== value) {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }
-                    }}
                   >
                     <span className="truncate">{option.label}</span>
                     {option.value === value && (
-                      <Check
+                      <Tick01Icon
                         size={14}
-                        className="shrink-0"
-                        style={{ color: 'var(--primary, var(--chalk-accent, #151515))' }}
+                        className="shrink-0 text-primary"
                       />
                     )}
                   </button>
@@ -192,8 +157,7 @@ export const Select = React.memo(React.forwardRef<HTMLButtonElement, SelectProps
         {error && (
           <span
             id={`${selectId}-error`}
-            className="text-sm"
-            style={{ color: 'var(--destructive, var(--chalk-danger, #ef4444))' }}
+            className="text-sm text-destructive"
           >
             {error}
           </span>

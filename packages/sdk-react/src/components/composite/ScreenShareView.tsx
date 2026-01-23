@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
 import { VideoTile } from '../atomic';
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { ZoomInIcon, ZoomOutIcon, Maximize01Icon } from '../../utils/icons';
 import { createLogger } from '@q9labs/chalk-core';
 import type { Participant } from './VideoGrid';
 
@@ -134,7 +134,7 @@ export const ScreenShareView = React.memo(({
     >
       <div
         ref={containerRef}
-        className="relative flex-1 min-h-0 min-w-0 rounded-lg overflow-hidden bg-[var(--chalk-bg-secondary)] border border-[var(--chalk-border-subtle)] group"
+        className="relative flex-1 min-h-0 min-w-0 rounded-lg overflow-hidden bg-card border border-border group"
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -157,7 +157,7 @@ export const ScreenShareView = React.memo(({
           }}
         />
 
-        <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-sm font-medium">
+        <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-sm font-medium">
           Shared by {sharedByName}
         </div>
 
@@ -167,29 +167,29 @@ export const ScreenShareView = React.memo(({
             <button
               onClick={handleZoomOut}
               disabled={zoom <= MIN_ZOOM}
-              className="p-2 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Zoom out"
             >
-              <ZoomOut size={18} />
+              <ZoomOutIcon size={18} />
             </button>
-            <span className="px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-sm font-medium min-w-[3rem] text-center">
+            <span className="px-2 py-1 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-sm font-medium min-w-[3rem] text-center">
               {Math.round(zoom * 100)}%
             </span>
             <button
               onClick={handleZoomIn}
               disabled={zoom >= MAX_ZOOM}
-              className="p-2 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Zoom in"
             >
-              <ZoomIn size={18} />
+              <ZoomInIcon size={18} />
             </button>
             {zoom > 1 && (
               <button
                 onClick={handleResetZoom}
-                className="p-2 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors ml-1"
+                className="p-2 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors ml-1"
                 aria-label="Reset zoom"
               >
-                <Maximize2 size={18} />
+                <Maximize01Icon size={18} />
               </button>
             )}
           </div>
@@ -197,7 +197,7 @@ export const ScreenShareView = React.memo(({
 
         {/* Zoom indicator when zoomed */}
         {zoom > 1 && (
-          <div className="absolute bottom-4 right-4 px-2 py-1 rounded bg-black/60 backdrop-blur-sm text-white text-xs">
+          <div className="absolute bottom-4 right-4 px-2 py-1 rounded bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-xs">
             Drag to pan • Scroll to zoom
           </div>
         )}
@@ -206,7 +206,7 @@ export const ScreenShareView = React.memo(({
            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={onStopShare}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md font-medium shadow-lg transition-colors"
+                className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-md font-medium shadow-lg transition-colors"
               >
                 Stop Sharing
               </button>
@@ -227,7 +227,7 @@ export const ScreenShareView = React.memo(({
              <div
                 key={p.id}
                 className={cn(
-                  "shrink-0 rounded-lg overflow-hidden border border-[var(--chalk-border-subtle)] bg-[var(--chalk-bg-secondary)] relative",
+                  "shrink-0 rounded-lg overflow-hidden border border-border bg-card relative",
                    thumbnailPosition === 'bottom' ? "aspect-video h-full" : "aspect-video w-full"
                 )}
              >

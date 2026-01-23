@@ -1,4 +1,4 @@
-import { ChevronRight, Pin, X } from "lucide-react";
+import { ArrowRight01Icon, Pin01Icon, Cancel01Icon } from "../../utils/icons";
 import React from "react";
 import { cn } from "../../utils/cn";
 import { IconButton } from "../atomic/IconButton";
@@ -24,7 +24,7 @@ export const PinnedMessageBanner = React.memo<PinnedMessageBannerProps>(
 				)}
 			>
 				<div className="flex-shrink-0 text-[var(--chalk-accent)]">
-					<Pin size={16} className="fill-current" />
+					<Pin01Icon size={16} className="fill-current" />
 				</div>
 
 				<div
@@ -50,7 +50,7 @@ export const PinnedMessageBanner = React.memo<PinnedMessageBannerProps>(
 				<div className="flex items-center gap-1">
 					{onJumpToMessage && (
 						<IconButton
-							icon={<ChevronRight size={16} />}
+							icon={<ArrowRight01Icon size={16} />}
 							variant="ghost"
 							size="sm"
 							onClick={onJumpToMessage}
@@ -59,7 +59,7 @@ export const PinnedMessageBanner = React.memo<PinnedMessageBannerProps>(
 					)}
 					{onUnpin && (
 						<IconButton
-							icon={<X size={16} />}
+							icon={<Cancel01Icon size={16} />}
 							variant="ghost"
 							size="sm"
 							onClick={onUnpin}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loading01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
@@ -11,7 +11,7 @@ export interface SpinnerProps {
 
 export const Spinner = React.memo<SpinnerProps>(({
   size = 'md',
-  color = 'var(--chalk-brand)',
+  color,
   className,
 }) => {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -23,9 +23,14 @@ export const Spinner = React.memo<SpinnerProps>(({
   };
 
   return (
-    <Loader2
-      className={cn(!prefersReducedMotion && 'animate-spin', sizeClasses[size], className)}
-      style={{ color }}
+    <Loading01Icon
+      className={cn(
+        !prefersReducedMotion && 'animate-spin',
+        'text-primary',
+        sizeClasses[size],
+        className
+      )}
+      style={color ? { color } : undefined}
       role="status"
       aria-label="Loading"
     />

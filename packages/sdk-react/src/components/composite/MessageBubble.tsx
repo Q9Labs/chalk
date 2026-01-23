@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
 import { Avatar } from '../atomic/Avatar';
-import { Check, CheckCheck } from 'lucide-react';
+import { Tick01Icon, TickDouble01Icon } from '../../utils/icons';
 
 export interface MessageBubbleProps {
   content: string;
@@ -19,31 +19,7 @@ export interface MessageBubbleProps {
   className?: string;
 }
 
-const styles = {
-  senderBubble: {
-    background: '#0056D2', // Blue from Chat UI image
-    color: '#FFFFFF',
-    borderRadius: '20px 4px 20px 20px', // top-left, TOP-RIGHT (tail), bottom-right, bottom-left
-  } as React.CSSProperties,
-
-  receiverBubble: {
-    background: '#1F1F1F', // Dark Gray from Chat UI image
-    backdropFilter: 'blur(12px)',
-    WebkitBackdropFilter: 'blur(12px)',
-    color: '#FFFFFF',
-    borderRadius: '4px 20px 20px 20px', // TOP-LEFT (tail), top-right, bottom-right, bottom-left
-  } as React.CSSProperties,
-
-  systemBubble: {
-    background: '#1F1F1F',
-    color: '#9CA3AF',
-  } as React.CSSProperties,
-
-  timestamp: {
-    color: '#6B7280',
-    fontSize: '11px',
-  } as React.CSSProperties,
-};
+const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
 export const MessageBubble = React.memo<MessageBubbleProps>(({
   content,
@@ -69,18 +45,17 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
   };
 
   const renderContent = (text: string) => {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = text.split(urlRegex);
+    const parts = text.split(URL_REGEX);
 
     return parts.map((part, index) => {
-      if (part.match(urlRegex)) {
+      if (part.match(URL_REGEX)) {
         return (
           <a
             key={index}
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--chalk-accent)', textDecoration: 'underline' }}
+            className="text-[var(--primary,var(--chalk-accent))] underline"
           >
             {part}
           </a>
@@ -90,43 +65,35 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     });
   };
 
-  // Render read receipt status (blue double-ticks like reference)
   const renderStatus = () => {
     if (!isLocal) return null;
 
     switch (status) {
       case 'sending':
         return (
-          <div
-            className="w-3 h-3 rounded-full animate-spin"
-            style={{ border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'transparent' }}
-          />
+          <div className="w-3 h-3 rounded-full animate-spin border-2 border-[var(--muted-foreground,var(--chalk-text-muted))]/40 border-t-transparent" />
         );
       case 'sent':
-        return <Check className="w-3.5 h-3.5" style={{ color: 'var(--chalk-text-muted)' }} />;
+        return <Tick01Icon className="w-3.5 h-3.5 text-[var(--muted-foreground,var(--chalk-text-muted))]" />;
       case 'delivered':
-        return <CheckCheck className="w-3.5 h-3.5" style={{ color: 'var(--chalk-text-muted)' }} />;
+        return <TickDouble01Icon className="w-3.5 h-3.5 text-[var(--muted-foreground,var(--chalk-text-muted))]" />;
       case 'read':
-        return <CheckCheck className="w-3.5 h-3.5" style={{ color: 'var(--chalk-accent)' }} />;
+        return <TickDouble01Icon className="w-3.5 h-3.5 text-[var(--primary,var(--chalk-accent))]" />;
       default:
         return null;
     }
   };
 
-  // System message (join/leave notifications)
   if (isSystem) {
     return (
       <div className={cn('flex flex-col items-center gap-1 py-3', className)}>
-        <div
-          className="px-4 py-2 rounded-full"
-          style={styles.systemBubble}
-        >
-          <p style={{ fontSize: '12px', textAlign: 'center' }}>
+        <div className="px-4 py-2 rounded-full bg-[var(--muted,var(--chalk-bg-tertiary))] text-[var(--muted-foreground,var(--chalk-text-muted))]">
+          <p className="text-xs text-center">
             {renderContent(content)}
           </p>
         </div>
         {showTimestamp && (
-          <span style={styles.timestamp}>
+          <span className="text-[11px] text-[var(--muted-foreground,var(--chalk-text-muted))]">
             {formatTime(timestamp)}
           </span>
         )}
@@ -134,44 +101,17 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     );
   }
 
-  // SENDER (you) = isLocal=true = RIGHT side, blue, tail top-right
-  // RECEIVER (others) = isLocal=false = LEFT side, glassmorphism, tail top-left
-  const bubbleStyle: React.CSSProperties = isLocal ? styles.senderBubble : styles.receiverBubble;
-
-  // Use inline styles to guarantee positioning works regardless of Tailwind
-  const containerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'flex-end',
-    gap: '12px',
-    width: '100%',
-    padding: '0 16px',
-    marginBottom: isLastInGroup ? '16px' : '4px',
-    // KEY: This controls LEFT vs RIGHT positioning
-    justifyContent: isLocal ? 'flex-end' : 'flex-start',
-    flexDirection: 'row',
-  };
-
-  const contentStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: isLocal ? 'flex-end' : 'flex-start',
-    maxWidth: '70%',
-  };
-
-  const timestampContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginTop: '4px',
-    padding: '0 4px',
-    flexDirection: isLocal ? 'row-reverse' : 'row',
-  };
-
   return (
-    <div style={containerStyle} className={className}>
-      {/* Avatar for RECEIVER messages (left side) */}
+    <div
+      className={cn(
+        "flex items-end gap-3 w-full px-4",
+        isLastInGroup ? "mb-4" : "mb-1",
+        isLocal ? "justify-end" : "justify-start",
+        className
+      )}
+    >
       {!isLocal && (
-        <div style={{ flexShrink: 0, width: '40px' }}>
+        <div className="shrink-0 w-10">
           {showAvatar && isLastInGroup && (
             <Avatar
               name={senderName}
@@ -183,30 +123,26 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
         </div>
       )}
 
-      {/* Message content */}
-      <div style={contentStyle}>
-        {/* Message bubble with asymmetric talk-bubble shape */}
+      <div className={cn("flex flex-col max-w-[70%]", isLocal ? "items-end" : "items-start")}>
         <div
-          style={{
-            ...bubbleStyle,
-            padding: '12px 16px',
-          }}
+          className={cn(
+            "px-4 py-3 backdrop-blur-sm",
+            isLocal
+              ? "bg-[var(--primary,var(--chalk-accent))] text-[var(--primary-foreground,#fff)] rounded-[20px_4px_20px_20px]"
+              : "bg-[var(--card,var(--chalk-bg-tertiary))] text-[var(--card-foreground,var(--chalk-text-primary))] rounded-[4px_20px_20px_20px]"
+          )}
         >
-          <p style={{
-            color: isLocal ? '#FFFFFF' : '#E5E5E5',
-            fontSize: '14px',
-            lineHeight: '1.5',
-            margin: 0,
-            wordBreak: 'break-word',
-          }}>
+          <p className="text-sm leading-relaxed break-words">
             {renderContent(content)}
           </p>
         </div>
 
-        {/* Timestamp and status */}
         {showTimestamp && isLastInGroup && (
-          <div style={timestampContainerStyle}>
-            <span style={styles.timestamp}>
+          <div className={cn(
+            "flex items-center gap-1.5 mt-1 px-1",
+            isLocal ? "flex-row-reverse" : "flex-row"
+          )}>
+            <span className="text-[11px] text-[var(--muted-foreground,var(--chalk-text-muted))]">
               {formatTime(timestamp)}
             </span>
             {renderStatus()}
@@ -214,9 +150,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
         )}
       </div>
 
-      {/* Avatar for SENDER messages (right side) */}
       {isLocal && (
-        <div style={{ flexShrink: 0, width: '40px' }}>
+        <div className="shrink-0 w-10">
           {showAvatar && isLastInGroup && (
             <Avatar
               name={senderName}

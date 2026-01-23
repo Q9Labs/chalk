@@ -1,12 +1,12 @@
 import {
-	ChevronDown,
-	Mic,
-	MicOff,
-	MoreVertical,
-	Video,
-	VideoOff,
-	X,
-} from "lucide-react";
+	ArrowDown01Icon,
+	Microphone01Icon,
+	MicrophoneOff01Icon,
+	MoreVerticalIcon,
+	Video01Icon,
+	VideoOffIcon,
+	Cancel01Icon,
+} from "../../utils/icons";
 import { memo, useEffect, useState } from "react";
 import { cn } from "../../utils/cn";
 import {
@@ -126,7 +126,7 @@ function PreJoinLobbyBase({
 							onClick={() => setShowSettings(false)}
 							className="absolute top-4 right-4 p-2 hover:bg-(--chalk-bg-tertiary) rounded-full transition-colors text-(--chalk-text-muted) hover:text-(--chalk-text-primary)"
 						>
-							<X size={20} />
+							<Cancel01Icon size={20} />
 						</button>
 
 						<h2 className="text-xl font-semibold text-(--chalk-text-primary) mb-6">
@@ -201,7 +201,7 @@ function PreJoinLobbyBase({
 					<span className="font-medium text-sm text-(--chalk-text-primary)">
 						{displayName || "Guest"}
 					</span>
-					<ChevronDown size={14} className="text-(--chalk-text-muted)" />
+					<ArrowDown01Icon size={14} className="text-(--chalk-text-muted)" />
 				</div>
 			</div>
 
@@ -261,7 +261,7 @@ function PreJoinLobbyBase({
 						</VideoTile>
 						<div className="mt-5 flex items-center justify-center gap-4">
 							<ControlButton
-								icon={isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+								icon={isAudioEnabled ? <Microphone01Icon size={20} /> : <MicrophoneOff01Icon size={20} />}
 								label={isAudioEnabled ? "Mute" : "Unmute"}
 								onClick={toggleAudio}
 								className={cn(
@@ -274,7 +274,7 @@ function PreJoinLobbyBase({
 							/>
 							<ControlButton
 								icon={
-									isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />
+									isVideoEnabled ? <Video01Icon size={20} /> : <VideoOffIcon size={20} />
 								}
 								label={isVideoEnabled ? "Stop Video" : "Start Video"}
 								onClick={toggleVideo}
@@ -287,7 +287,7 @@ function PreJoinLobbyBase({
 								size="lg"
 							/>
 							<ControlButton
-								icon={<MoreVertical size={18} />}
+								icon={<MoreVerticalIcon size={18} />}
 								label="Settings"
 								size="lg"
 								onClick={toggleSettings}
@@ -334,7 +334,7 @@ function PreJoinLobbyBase({
 
 							{/* <button className="w-full h-11 bg-(--chalk-bg-tertiary) hover:bg-(--chalk-bg-subtle) text-(--chalk-text-primary) rounded-full font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.99]">
 								Other ways to join
-								<ChevronDown size={16} className="text-(--chalk-text-muted)" />
+								<ArrowDown01Icon size={16} className="text-(--chalk-text-muted)" />
 							</button> */}
 						</div>
 

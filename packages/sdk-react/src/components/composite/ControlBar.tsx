@@ -1,23 +1,23 @@
 import {
-	Circle,
-	FileText,
-	Hand,
-	Info,
-	MessageSquare,
-	Mic,
-	MicOff,
-	Monitor,
-	MonitorOff,
-	MoreHorizontal,
-	PenTool,
-	PhoneOff,
-	Settings,
-	Smile,
-	ThumbsUp,
-	Users,
-	Video,
-	VideoOff,
-} from "lucide-react";
+	CircleIcon,
+	FileTextIcon,
+	HandIcon,
+	InformationCircleIcon,
+	Message01Icon,
+	Microphone01Icon,
+	MicrophoneOff01Icon,
+	Monitor01Icon,
+	MonitorOffIcon,
+	MoreHorizontalIcon,
+	Edit02Icon,
+	CallEnd01Icon,
+	Settings01Icon,
+	SmileIcon,
+	ThumbsUpIcon,
+	UserGroupIcon,
+	Video01Icon,
+	VideoOffIcon,
+} from "../../utils/icons";
 import React from "react";
 import { cn } from "../../utils/cn";
 import { ControlButton } from "../atomic";
@@ -123,7 +123,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="mic"
-							icon={isMuted ? <MicOff className="text-[#EF4444]" /> : <Mic />}
+							icon={isMuted ? <MicrophoneOff01Icon className="text-[#EF4444]" /> : <Microphone01Icon />}
 							label={isMuted ? "Unmute" : "Mute"}
 							onClick={onToggleMute}
 							active={!isMuted}
@@ -135,7 +135,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="video"
-							icon={isVideoEnabled ? <Video /> : <VideoOff className="text-[#EF4444]" />}
+							icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[#EF4444]" />}
 							label={isVideoEnabled ? "Stop Video" : "Start Video"}
 							onClick={onToggleVideo}
 							active={isVideoEnabled}
@@ -147,7 +147,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="screenshare"
-							icon={isScreenSharing ? <MonitorOff /> : <Monitor />}
+							icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />}
 							label={isScreenSharing ? "Stop Share" : "Share Screen"}
 							onClick={onToggleScreenShare}
 							active={isScreenSharing}
@@ -159,7 +159,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="record"
-							icon={<Circle className={isRecording ? "fill-current" : ""} />}
+							icon={<CircleIcon className={isRecording ? "fill-current" : ""} />}
 							label={isRecording ? "Stop Recording" : "Record"}
 							onClick={onToggleRecording}
 							active={isRecording}
@@ -171,7 +171,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="chat"
-							icon={<MessageSquare />}
+							icon={<Message01Icon />}
 							label="Chat"
 							onClick={onToggleChat}
 							active={isChatOpen}
@@ -183,7 +183,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="participants"
-							icon={<Users />}
+							icon={<UserGroupIcon />}
 							label="People"
 							onClick={onToggleParticipants}
 							active={isParticipantsOpen}
@@ -195,7 +195,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="transcription"
-							icon={<FileText />}
+							icon={<FileTextIcon />}
 							label="Transcript"
 							onClick={onToggleTranscription}
 							active={isTranscriptionEnabled}
@@ -206,7 +206,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="handraise"
-							icon={<Hand />}
+							icon={<HandIcon />}
 							label={isHandRaised ? "Lower Hand" : "Raise Hand"}
 							onClick={onToggleHandRaise}
 							active={isHandRaised}
@@ -217,7 +217,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="reactions"
-							icon={<Smile />}
+							icon={<SmileIcon />}
 							label="Reactions"
 							onClick={onOpenReactions}
 							showLabel={showLabels}
@@ -227,7 +227,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="whiteboard"
-							icon={<PenTool />}
+							icon={<Edit02Icon />}
 							label="Whiteboard"
 							onClick={onToggleWhiteboard}
 							active={isWhiteboardOpen}
@@ -238,7 +238,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="settings"
-							icon={<Settings size={20} />}
+							icon={<Settings01Icon size={20} />}
 							label="Settings"
 							onClick={onOpenSettings}
 							noBorder
@@ -249,7 +249,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="more"
-							icon={<MoreHorizontal />}
+							icon={<MoreHorizontalIcon />}
 							label="More"
 							onClick={onOpenMore}
 							showLabel={showLabels}
@@ -261,7 +261,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="info"
-							icon={<Info size={20} />}
+							icon={<InformationCircleIcon size={20} />}
 							label="Info"
 							onClick={onOpenInfo}
 							noBorder
@@ -271,7 +271,7 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="thumbsup"
-							icon={<ThumbsUp size={20} className="text-[#FFD700]" />}
+							icon={<ThumbsUpIcon size={20} className="text-[#FFD700]" />}
 							label="Reactions"
 							onClick={onOpenReactions}
 							noBorder
@@ -311,9 +311,9 @@ export const ControlBar = React.memo(
 						aria-pressed={!isMuted}
 					>
 						{isMuted ? (
-							<MicOff className="w-6 h-6 text-red-500" />
+							<MicrophoneOff01Icon className="w-6 h-6 text-red-500" />
 						) : (
-							<Mic className="w-6 h-6 text-white" />
+							<Microphone01Icon className="w-6 h-6 text-white" />
 						)}
 					</button>
 
@@ -329,9 +329,9 @@ export const ControlBar = React.memo(
 						aria-pressed={isVideoEnabled}
 					>
 						{isVideoEnabled ? (
-							<Video className="w-6 h-6 text-white" />
+							<Video01Icon className="w-6 h-6 text-white" />
 						) : (
-							<VideoOff className="w-6 h-6 text-red-500" />
+							<VideoOffIcon className="w-6 h-6 text-red-500" />
 						)}
 					</button>
 
@@ -342,7 +342,7 @@ export const ControlBar = React.memo(
 						className="flex items-center justify-center w-12 h-12 rounded-full bg-white/10 transition-all active:scale-95"
 						aria-label="More options"
 					>
-						<MoreHorizontal className="w-6 h-6 text-white" />
+						<MoreHorizontalIcon className="w-6 h-6 text-white" />
 					</button>
 
 					{/* Leave button */}
@@ -352,7 +352,7 @@ export const ControlBar = React.memo(
 						className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 transition-all active:scale-95"
 						aria-label="Leave meeting"
 					>
-						<PhoneOff className="w-5 h-5 text-white" />
+						<CallEnd01Icon className="w-5 h-5 text-white" />
 					</button>
 				</div>
 			);
@@ -401,7 +401,7 @@ export const ControlBar = React.memo(
 					<div className="ml-2">
 						<ControlButton
 							key="leave"
-							icon={<PhoneOff size={24} />}
+							icon={<CallEnd01Icon size={24} />}
 							label="Leave"
 							onClick={onLeave}
 							danger

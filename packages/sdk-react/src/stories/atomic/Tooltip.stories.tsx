@@ -2,7 +2,7 @@ import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Tooltip } from '../../components/atomic/Tooltip';
 import { IconButton } from '../../components/atomic/IconButton';
-import { Info } from 'lucide-react';
+import { InformationCircleIcon } from '../../utils/icons';
 
 const meta: Meta<typeof Tooltip> = {
   title: 'Atomic/Tooltip',
@@ -23,7 +23,7 @@ export const Default: Story = {
   args: {
     content: 'This is a tooltip',
     children: (
-      <IconButton icon={<Info size={18} />} aria-label="Info" variant="outline" />
+      <IconButton icon={<InformationCircleIcon size={18} />} aria-label="Info" variant="outline" />
     ),
   },
 };

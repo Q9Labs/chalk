@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hand } from 'lucide-react';
+import { HandIcon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
@@ -47,7 +47,7 @@ export const HandRaiseIndicator = React.memo(({
       role="status"
       aria-label="Hand raised"
     >
-      <Hand size={sizeMap[size]} fill="currentColor" />
+      <HandIcon size={sizeMap[size]} fill="currentColor" />
     </div>
   );
 });

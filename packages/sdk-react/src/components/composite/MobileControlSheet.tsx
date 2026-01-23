@@ -1,22 +1,23 @@
 import React, { useCallback, useRef, useState } from 'react';
+import { Dialog } from '@base-ui/react/dialog';
 import { cn } from '../../utils/cn';
 import {
-  Circle,
-  FileText,
-  Hand,
-  MessageSquare,
-  Mic,
-  MicOff,
-  Monitor,
-  MonitorOff,
-  PenTool,
-  PhoneOff,
-  Settings,
-  Smile,
-  Users,
-  Video,
-  VideoOff,
-} from 'lucide-react';
+  CircleIcon,
+  FileTextIcon,
+  HandIcon,
+  Message01Icon,
+  Microphone01Icon,
+  MicrophoneOff01Icon,
+  Monitor01Icon,
+  MonitorOffIcon,
+  Edit02Icon,
+  CallEnd01Icon,
+  Settings01Icon,
+  SmileIcon,
+  UserGroupIcon,
+  Video01Icon,
+  VideoOffIcon,
+} from '../../utils/icons';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 export interface MobileControlSheetProps {
@@ -135,11 +136,17 @@ export const MobileControlSheet = React.memo(({
     onClose();
   }, [onClose]);
 
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  }, [onClose]);
+
   // Build control items dynamically based on enabled features
   const controlItems = [
     {
       key: 'mic',
-      icon: isMuted ? <MicOff className="w-6 h-6 text-red-500" /> : <Mic className="w-6 h-6" />,
+      icon: isMuted ? <MicrophoneOff01Icon className="w-6 h-6 text-destructive" /> : <Microphone01Icon className="w-6 h-6" />,
       label: isMuted ? 'Unmute' : 'Mute',
       active: !isMuted,
       action: onToggleMute,
@@ -147,7 +154,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'video',
-      icon: isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6 text-red-500" />,
+      icon: isVideoEnabled ? <Video01Icon className="w-6 h-6" /> : <VideoOffIcon className="w-6 h-6 text-destructive" />,
       label: isVideoEnabled ? 'Stop Video' : 'Start Video',
       active: isVideoEnabled,
       action: onToggleVideo,
@@ -155,7 +162,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'screenshare',
-      icon: isScreenSharing ? <MonitorOff className="w-6 h-6" /> : <Monitor className="w-6 h-6" />,
+      icon: isScreenSharing ? <MonitorOffIcon className="w-6 h-6" /> : <Monitor01Icon className="w-6 h-6" />,
       label: isScreenSharing ? 'Stop Share' : 'Share Screen',
       active: isScreenSharing,
       action: onToggleScreenShare,
@@ -163,7 +170,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'chat',
-      icon: <MessageSquare className="w-6 h-6" />,
+      icon: <Message01Icon className="w-6 h-6" />,
       label: 'Chat',
       active: isChatOpen,
       action: onToggleChat,
@@ -171,7 +178,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'participants',
-      icon: <Users className="w-6 h-6" />,
+      icon: <UserGroupIcon className="w-6 h-6" />,
       label: 'People',
       active: isParticipantsOpen,
       action: onToggleParticipants,
@@ -179,7 +186,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'handraise',
-      icon: <Hand className="w-6 h-6" />,
+      icon: <HandIcon className="w-6 h-6" />,
       label: isHandRaised ? 'Lower Hand' : 'Raise Hand',
       active: isHandRaised,
       action: onToggleHandRaise,
@@ -187,7 +194,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'reactions',
-      icon: <Smile className="w-6 h-6" />,
+      icon: <SmileIcon className="w-6 h-6" />,
       label: 'Reactions',
       active: false,
       action: onOpenReactions,
@@ -195,7 +202,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'whiteboard',
-      icon: <PenTool className="w-6 h-6" />,
+      icon: <Edit02Icon className="w-6 h-6" />,
       label: 'Whiteboard',
       active: isWhiteboardOpen,
       action: onToggleWhiteboard,
@@ -203,7 +210,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'record',
-      icon: <Circle className={cn("w-6 h-6", isRecording && "fill-red-500 text-red-500")} />,
+      icon: <CircleIcon className={cn("w-6 h-6", isRecording && "fill-destructive text-destructive")} />,
       label: isRecording ? 'Stop Recording' : 'Record',
       active: isRecording,
       action: onToggleRecording,
@@ -211,7 +218,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'transcription',
-      icon: <FileText className="w-6 h-6" />,
+      icon: <FileTextIcon className="w-6 h-6" />,
       label: 'Transcript',
       active: isTranscriptionEnabled,
       action: onToggleTranscription,
@@ -219,7 +226,7 @@ export const MobileControlSheet = React.memo(({
     },
     {
       key: 'settings',
-      icon: <Settings className="w-6 h-6" />,
+      icon: <Settings01Icon className="w-6 h-6" />,
       label: 'Settings',
       active: false,
       action: onOpenSettings,
@@ -228,85 +235,83 @@ export const MobileControlSheet = React.memo(({
   ].filter((item) => item.enabled);
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className={cn(
-          "fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-200",
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        onClick={onClose}
-        aria-hidden="true"
-      />
+    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
+      <Dialog.Portal>
+        {/* Backdrop */}
+        <Dialog.Backdrop
+          className={cn(
+            "fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-200",
+            isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+        />
 
-      {/* Sheet */}
-      <div
-        className={cn(
-          "fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl",
-          !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out",
-          isOpen ? "translate-y-0" : "translate-y-full",
-          className
-        )}
-        style={{
-          backgroundColor: '#1a1a1a',
-          transform: isOpen && translateY > 0 ? `translateY(${translateY}px)` : undefined,
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="More controls"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        {/* Drag Handle */}
-        <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 bg-white/30 rounded-full" />
-        </div>
+        {/* Sheet */}
+        <Dialog.Popup
+          className={cn(
+            "fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-card text-card-foreground",
+            !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out",
+            isOpen ? "translate-y-0" : "translate-y-full",
+            className
+          )}
+          style={{
+            transform: isOpen && translateY > 0 ? `translateY(${translateY}px)` : undefined,
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <Dialog.Title className="sr-only">More controls</Dialog.Title>
 
-        {/* Control Grid - 3 columns with 44px min touch targets */}
-        <div className="grid grid-cols-3 gap-2 px-4 pt-2 pb-4">
-          {controlItems.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => handleAction(item.action)}
-              className={cn(
-                "flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-xl min-h-[88px] active:scale-95 transition-all",
-                item.active
-                  ? "bg-white/15 text-white"
-                  : "bg-white/5 text-white/70 hover:bg-white/10"
-              )}
-              aria-label={item.label}
-              aria-pressed={item.active}
-            >
-              {/* Icon container - ensures 44px touch target */}
-              <div className="flex items-center justify-center w-11 h-11">
-                {item.icon}
-              </div>
-              <span className="text-xs font-medium truncate max-w-full">
-                {item.label}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Leave Button - Full width, prominent */}
-        {onLeave && (
-          <div className="px-4 pb-4">
-            <button
-              type="button"
-              onClick={() => handleAction(onLeave)}
-              className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl bg-red-500 hover:bg-red-600 active:scale-[0.98] transition-all min-h-[56px]"
-              aria-label="Leave meeting"
-            >
-              <PhoneOff className="w-6 h-6 text-white" />
-              <span className="text-base font-semibold text-white">Leave Meeting</span>
-            </button>
+          {/* Drag Handle */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
           </div>
-        )}
-      </div>
-    </>
+
+          {/* Control Grid - 3 columns with 44px min touch targets */}
+          <div className="grid grid-cols-3 gap-2 px-4 pt-2 pb-4">
+            {controlItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => handleAction(item.action)}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-xl min-h-[88px] active:scale-95 transition-all",
+                  item.active
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                )}
+                aria-label={item.label}
+                aria-pressed={item.active}
+              >
+                {/* Icon container - ensures 44px touch target */}
+                <div className="flex items-center justify-center w-11 h-11">
+                  {item.icon}
+                </div>
+                <span className="text-xs font-medium truncate max-w-full">
+                  {item.label}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Leave Button - Full width, prominent */}
+          {onLeave && (
+            <div className="px-4 pb-4">
+              <button
+                type="button"
+                onClick={() => handleAction(onLeave)}
+                className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl bg-destructive hover:bg-destructive/90 active:scale-[0.98] transition-all min-h-[56px]"
+                aria-label="Leave meeting"
+              >
+                <CallEnd01Icon className="w-6 h-6 text-destructive-foreground" />
+                <span className="text-base font-semibold text-destructive-foreground">Leave Meeting</span>
+              </button>
+            </div>
+          )}
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 });
 

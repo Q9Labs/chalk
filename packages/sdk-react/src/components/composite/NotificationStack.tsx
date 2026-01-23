@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Toaster, toast } from 'sonner';
 import { cn } from '../../utils/cn';
-import { Toast } from '../atomic/Toast';
 
 export interface Notification {
   id: string;
@@ -21,6 +21,13 @@ export interface NotificationStackProps {
   className?: string;
 }
 
+const positionMap = {
+  'top-right': 'top-right' as const,
+  'top-left': 'top-left' as const,
+  'bottom-right': 'bottom-right' as const,
+  'bottom-left': 'bottom-left' as const,
+};
+
 export const NotificationStack = React.memo<NotificationStackProps>(({
   notifications,
   onDismiss,
@@ -28,38 +35,58 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
   maxVisible = 5,
   className,
 }) => {
-  const visibleNotifications = notifications.slice(0, maxVisible);
+  useEffect(() => {
+    const activeIds = new Set<string>();
 
-  const positionClasses = {
-    'top-right': 'top-4 right-4 items-end',
-    'top-left': 'top-4 left-4 items-start',
-    'bottom-right': 'bottom-4 right-4 items-end',
-    'bottom-left': 'bottom-4 left-4 items-start',
-  };
+    notifications.slice(0, maxVisible).forEach((notification) => {
+      if (activeIds.has(notification.id)) return;
+      activeIds.add(notification.id);
+
+      const toastOptions = {
+        id: notification.id,
+        duration: notification.duration ?? 5000,
+        onDismiss: () => onDismiss(notification.id),
+        action: notification.action ? {
+          label: notification.action.label,
+          onClick: notification.action.onClick,
+        } : undefined,
+      };
+
+      switch (notification.type) {
+        case 'success':
+          toast.success(notification.message, toastOptions);
+          break;
+        case 'error':
+          toast.error(notification.message, toastOptions);
+          break;
+        case 'warning':
+          toast.warning(notification.message, toastOptions);
+          break;
+        default:
+          toast.info(notification.message, toastOptions);
+      }
+    });
+  }, [notifications, maxVisible, onDismiss]);
 
   return (
-    <div
-      className={cn(
-        'fixed flex flex-col gap-2 z-50 pointer-events-none p-4',
-        positionClasses[position],
-        className
-      )}
-      role="region"
-      aria-label="Notifications"
-    >
-      {visibleNotifications.map((notification) => (
-        <div key={notification.id} className="pointer-events-auto transition-all duration-300 ease-in-out">
-          <Toast
-            message={notification.message}
-            type={notification.type}
-            duration={notification.duration}
-            action={notification.action}
-            onDismiss={() => onDismiss(notification.id)}
-          />
-        </div>
-      ))}
-    </div>
+    <Toaster
+      richColors
+      position={positionMap[position]}
+      visibleToasts={maxVisible}
+      className={cn(className)}
+      toastOptions={{
+        classNames: {
+          toast: cn(
+            'bg-[var(--card,var(--chalk-bg-panel))]',
+            'text-[var(--card-foreground,var(--chalk-text-primary))]',
+            'border-[var(--border,var(--chalk-border-color))]'
+          ),
+        },
+      }}
+    />
   );
 });
 
 NotificationStack.displayName = 'NotificationStack';
+
+export { toast };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { VideoTile, AudioIndicator, ControlButton } from '../atomic';
 
@@ -52,7 +52,7 @@ export const MediaPreview = React.memo(({
                 "p-1 rounded-full",
                 !isAudioEnabled && "text-red-500"
              )}>
-                {isAudioEnabled ? <Mic size={14} className="text-white" /> : <MicOff size={14} />}
+                {isAudioEnabled ? <Microphone01Icon size={14} className="text-white" /> : <MicrophoneOff01Icon size={14} />}
              </div>
              {isAudioEnabled && (
                 <div className="w-24">
@@ -65,14 +65,14 @@ export const MediaPreview = React.memo(({
 
       <div className="flex justify-center gap-4">
         <ControlButton
-          icon={isAudioEnabled ? <Mic /> : <MicOff />}
+          icon={isAudioEnabled ? <Microphone01Icon /> : <MicrophoneOff01Icon />}
           label={isAudioEnabled ? "Mute" : "Unmute"}
           danger={!isAudioEnabled}
           onClick={onToggleAudio}
           className="w-32"
         />
         <ControlButton
-          icon={isVideoEnabled ? <Video /> : <VideoOff />}
+          icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon />}
           label={isVideoEnabled ? "Stop Video" : "Start Video"}
           danger={!isVideoEnabled}
           onClick={onToggleVideo}

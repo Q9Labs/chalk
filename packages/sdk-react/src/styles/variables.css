@@ -1,23 +1,105 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
 :root {
-  /* Colors - Light mode default */
-  --chalk-bg-primary: #f8fafc;    /* Header */
-  --chalk-bg-secondary: #ffffff;  /* Cards/Modals */
-  --chalk-bg-tertiary: #f1f5f9;   /* Hover states */
-  --chalk-bg-subtle: #eef2f7;     /* Subtle fills */
+  /* shadcn theme variables - Light mode */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.13 0.028 261.692);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.028 261.692);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0.028 261.692);
+  --primary: oklch(0.60 0.10 185);
+  --primary-foreground: oklch(0.98 0.01 181);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.003 264.542);
+  --muted-foreground: oklch(0.551 0.027 264.364);
+  --accent: oklch(0.967 0.003 264.542);
+  --accent-foreground: oklch(0.21 0.034 264.665);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.928 0.006 264.531);
+  --input: oklch(0.928 0.006 264.531);
+  --ring: oklch(0.707 0.022 261.325);
+  --chart-1: oklch(0.85 0.13 181);
+  --chart-2: oklch(0.78 0.13 182);
+  --chart-3: oklch(0.70 0.12 183);
+  --chart-4: oklch(0.60 0.10 185);
+  --chart-5: oklch(0.51 0.09 186);
+  --radius: 0.875rem;
+  --sidebar: oklch(0.985 0.002 247.839);
+  --sidebar-foreground: oklch(0.13 0.028 261.692);
+  --sidebar-primary: oklch(0.60 0.10 185);
+  --sidebar-primary-foreground: oklch(0.98 0.01 181);
+  --sidebar-accent: oklch(0.967 0.003 264.542);
+  --sidebar-accent-foreground: oklch(0.21 0.034 264.665);
+  --sidebar-border: oklch(0.928 0.006 264.531);
+  --sidebar-ring: oklch(0.707 0.022 261.325);
+
+  /* Legacy chalk variables - Light mode (mapped to shadcn where possible) */
+  --chalk-bg-primary: #f8fafc;
+  --chalk-bg-secondary: #ffffff;
+  --chalk-bg-tertiary: #f1f5f9;
+  --chalk-bg-subtle: #eef2f7;
   --chalk-bg-subtle-50: rgba(238, 242, 247, 0.5);
-  --chalk-bg-surface: #f3f5f9;    /* App background */
-  --chalk-bg-stage: #0f172a;      /* Video stage */
-  --chalk-bg-tile: #111827;       /* Video tile surface */
-  --chalk-bg-panel: #ffffff;      /* Side panels */
-  --chalk-bg-controls: rgba(255, 255, 255, 0.92); /* Floating controls */
+  --chalk-bg-surface: #f3f5f9;
+  --chalk-bg-stage: #0f172a;
+  --chalk-bg-tile: #111827;
+  --chalk-bg-panel: #ffffff;
+  --chalk-bg-controls: rgba(255, 255, 255, 0.92);
   --chalk-bg-overlay: rgba(15, 23, 42, 0.18);
   --chalk-text-primary: #0f172a;
   --chalk-text-secondary: #475569;
   --chalk-text-muted: #64748b;
-  /* Brand */
-  --chalk-brand: #0066E6;          /* Bright Blue */
+  --chalk-brand: #0066E6;
   --chalk-brand-hover: #0066E6;
-  --chalk-accent: #0066E6;         /* Purple/Magenta */
+  --chalk-accent: #0066E6;
   --chalk-accent-hover: #0066E6;
   --chalk-primary: var(--chalk-brand);
   --chalk-primary-hover: var(--chalk-brand-hover);
@@ -79,26 +161,80 @@
   --chalk-transition-fast: 150ms ease;
   --chalk-transition-normal: 250ms ease;
   --chalk-transition-slow: 350ms ease;
+
+  /* Easing functions */
+  --chalk-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --chalk-ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Duration tokens */
+  --chalk-duration-fast: 150ms;
+  --chalk-duration-normal: 200ms;
+  --chalk-duration-slow: 300ms;
 }
 
-/* Dark mode overrides */
+.dark,
 [data-chalk-theme="dark"] {
-  --chalk-bg-primary: #000000;
-  --chalk-bg-secondary: #1A1A1A;
-  --chalk-bg-tertiary: #242424;
-  --chalk-bg-subtle: #1C1C1C;
-  --chalk-bg-subtle-50: rgba(28, 28, 28, 0.5);
-  --chalk-bg-surface: #000000;
-  --chalk-bg-stage: #000000;
-  --chalk-bg-tile: #1A1A1A;
-  --chalk-bg-panel: #1A1A1A;
+  /* shadcn theme variables - Dark mode */
+  --background: oklch(0.13 0.028 261.692);
+  --foreground: oklch(0.985 0.002 247.839);
+  --card: oklch(0.21 0.034 264.665);
+  --card-foreground: oklch(0.985 0.002 247.839);
+  --popover: oklch(0.21 0.034 264.665);
+  --popover-foreground: oklch(0.985 0.002 247.839);
+  --primary: oklch(0.70 0.12 183);
+  --primary-foreground: oklch(0.28 0.04 193);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.278 0.033 256.848);
+  --muted-foreground: oklch(0.707 0.022 261.325);
+  --accent: oklch(0.278 0.033 256.848);
+  --accent-foreground: oklch(0.985 0.002 247.839);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --chart-1: oklch(0.85 0.13 181);
+  --chart-2: oklch(0.78 0.13 182);
+  --chart-3: oklch(0.70 0.12 183);
+  --chart-4: oklch(0.60 0.10 185);
+  --chart-5: oklch(0.51 0.09 186);
+  --sidebar: oklch(0.21 0.034 264.665);
+  --sidebar-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-primary: oklch(0.78 0.13 182);
+  --sidebar-primary-foreground: oklch(0.28 0.04 193);
+  --sidebar-accent: oklch(0.278 0.033 256.848);
+  --sidebar-accent-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+
+  /* Legacy chalk variables - Dark mode */
+  --chalk-bg-primary: #0A0A0C;
+  --chalk-bg-secondary: #12121A;
+  --chalk-bg-tertiary: #1A1A24;
+  --chalk-bg-subtle: #14141C;
+  --chalk-bg-subtle-50: rgba(20, 20, 28, 0.5);
+  --chalk-bg-surface: #0A0A0C;
+  --chalk-bg-stage: #0A0A0C;
+  --chalk-bg-tile: #141418;
+  --chalk-bg-panel: #12121A;
   --chalk-bg-controls: rgba(26, 26, 26, 0.92);
   --chalk-bg-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Glass effects */
+  --chalk-bg-glass: rgba(18, 18, 26, 0.72);
+  --chalk-bg-control: rgba(28, 28, 38, 0.85);
+  --chalk-bg-control-hover: rgba(38, 38, 52, 0.92);
+
   --chalk-text-primary: #FFFFFF;
   --chalk-text-secondary: #A0A0A0;
   --chalk-text-muted: #707070;
-  --chalk-border-color: rgba(255, 255, 255, 0.1);
-  --chalk-border-subtle: rgba(255, 255, 255, 0.05);
+
+  /* Borders */
+  --chalk-border-color: rgba(255, 255, 255, 0.10);
+  --chalk-border-subtle: rgba(255, 255, 255, 0.06);
+  --chalk-border-medium: rgba(255, 255, 255, 0.10);
+
+  /* Pills */
   --chalk-pill-bg: rgba(255, 255, 255, 0.08);
   --chalk-pill-bg-hover: rgba(255, 255, 255, 0.16);
   --chalk-pill-text: rgba(255, 255, 255, 0.72);
@@ -107,14 +243,48 @@
   --chalk-pill-bg-active: rgba(255, 255, 255, 0.18);
   --chalk-pill-text-active: #ffffff;
   --chalk-pill-dot-ring: rgba(255, 255, 255, 0.6);
+
+  /* Semantic colors */
   --chalk-error-subtle: rgba(217, 48, 37, 0.2);
   --chalk-success-subtle: rgba(30, 142, 62, 0.2);
+
+  /* Speaking indicator */
+  --chalk-accent-speaking: #22C55E;
+  --chalk-accent-speaking-glow: rgba(34, 197, 94, 0.4);
+
+  /* Layered shadow system */
   --chalk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --chalk-shadow-md: 0 6px 16px rgba(0, 0, 0, 0.35);
   --chalk-shadow-lg: 0 16px 30px rgba(0, 0, 0, 0.45);
   --chalk-shadow-xl: 0 26px 60px rgba(0, 0, 0, 0.55);
+
+  /* Elevation shadows */
+  --chalk-shadow-1: 0 1px 2px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15);
+  --chalk-shadow-2: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.18), 0 8px 16px rgba(0,0,0,0.12);
+  --chalk-shadow-3: 0 4px 8px rgba(0,0,0,0.2), 0 8px 16px rgba(0,0,0,0.18), 0 16px 32px rgba(0,0,0,0.12);
+  --chalk-shadow-4: 0 8px 16px rgba(0,0,0,0.2), 0 16px 32px rgba(0,0,0,0.18), 0 24px 48px rgba(0,0,0,0.12);
+
+  /* Component shadows */
   --chalk-shadow-panel: 0 18px 40px rgba(0, 0, 0, 0.45);
-  --chalk-shadow-controls: 0 12px 30px rgba(0, 0, 0, 0.5);
-  --chalk-shadow-tile: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --chalk-shadow-tile: 0 4px 12px rgba(0,0,0,0.15), 0 8px 24px rgba(0,0,0,0.1);
   --chalk-shadow-tile-hover: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --chalk-shadow-controls: 0 8px 24px rgba(0,0,0,0.25), 0 16px 48px rgba(0,0,0,0.15);
+
+  /* Control button shadows */
+  --chalk-shadow-control: 0 1px 2px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+  --chalk-shadow-control-hover: 0 2px 4px rgba(0,0,0,0.35), 0 8px 16px rgba(0,0,0,0.25);
+
+  /* Glow shadows */
+  --chalk-glow-brand: 0 0 20px rgba(37, 99, 235, 0.3);
+  --chalk-glow-success: 0 0 20px rgba(34, 197, 94, 0.3);
+  --chalk-glow-danger: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }

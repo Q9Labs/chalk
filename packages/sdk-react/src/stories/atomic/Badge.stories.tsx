@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Badge } from '../../components/atomic/Badge';
-import { Mail } from 'lucide-react';
+import { Mail01Icon } from '../../utils/icons';
 
 const meta: Meta<typeof Badge> = {
   title: 'Atomic/Badge',
@@ -21,7 +21,7 @@ type Story = StoryObj<typeof Badge>;
 export const Default: Story = {
   args: {
     count: 5,
-    children: <Mail size={24} />,
+    children: <Mail01Icon size={24} />,
   },
 };
 
@@ -38,7 +38,7 @@ export const MaxValue: Story = {
     count: 150,
     max: 99,
     variant: 'danger',
-    children: <Mail size={24} />,
+    children: <Mail01Icon size={24} />,
   },
 };
 
@@ -46,6 +46,6 @@ export const Dot: Story = {
   args: {
     dot: true,
     variant: 'success',
-    children: <Mail size={24} />,
+    children: <Mail01Icon size={24} />,
   },
 };

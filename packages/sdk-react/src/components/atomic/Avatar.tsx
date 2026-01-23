@@ -48,10 +48,10 @@ function getGradient(name: string): string {
 }
 
 const statusColorMap = {
-  online: 'var(--chalk-success)',
-  away: 'var(--chalk-warning)',
-  busy: 'var(--chalk-danger)',
-  offline: 'var(--chalk-text-muted)',
+  online: 'var(--chart-3, var(--chalk-success))',
+  away: 'var(--chart-5, var(--chalk-warning))',
+  busy: 'var(--destructive, var(--chalk-danger))',
+  offline: 'var(--muted-foreground, var(--chalk-text-muted))',
 };
 
 export const Avatar = React.memo(({ name, src, size = 'md', status, className }: AvatarProps) => {
@@ -81,11 +81,11 @@ export const Avatar = React.memo(({ name, src, size = 'md', status, className }:
         <img
           src={src}
           alt={name}
-          className="h-full w-full rounded-[var(--chalk-border-radius-full)] object-cover"
+          className="h-full w-full rounded-full object-cover"
         />
       ) : (
         <div
-          className="flex h-full w-full items-center justify-center rounded-[var(--chalk-border-radius-full)] text-white font-medium"
+          className="flex h-full w-full items-center justify-center rounded-full text-primary-foreground font-medium"
           style={{ fontSize, background: gradient }}
         >
           {initials}
@@ -93,7 +93,7 @@ export const Avatar = React.memo(({ name, src, size = 'md', status, className }:
       )}
       {status && (
         <span
-          className="absolute bottom-0 right-0 block rounded-full ring-2 ring-[var(--chalk-bg-primary)]"
+          className="absolute bottom-0 right-0 block rounded-full ring-2 ring-background"
           style={{
             width: Math.max(8, pxSize / 4),
             height: Math.max(8, pxSize / 4),

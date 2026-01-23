@@ -18,9 +18,9 @@ export const Textarea = React.memo(forwardRef<HTMLTextAreaElement, TextareaProps
     return (
       <div className="flex flex-col gap-1.5 w-full">
         {label && (
-          <label 
+          <label
             htmlFor={textareaId}
-            className="text-sm font-medium text-[var(--chalk-text-secondary)]"
+            className="text-sm font-medium text-muted-foreground"
           >
             {label}
           </label>
@@ -32,24 +32,24 @@ export const Textarea = React.memo(forwardRef<HTMLTextAreaElement, TextareaProps
           maxLength={maxLength}
           onChange={onChange}
           className={cn(
-            'flex min-h-[80px] w-full rounded-[var(--chalk-border-radius-md)] border bg-[var(--chalk-bg-secondary)] px-3 py-2 text-[var(--chalk-font-size-sm)] text-[var(--chalk-text-primary)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--chalk-accent)] focus:border-transparent',
-            'placeholder:text-[var(--chalk-text-muted)]',
+            'flex min-h-[80px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground transition-colors',
+            'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
+            'placeholder:text-muted-foreground',
             'disabled:cursor-not-allowed disabled:opacity-50',
-            'border-[var(--chalk-border-color)]',
             resize === 'none' && 'resize-none',
             resize === 'vertical' && 'resize-y',
             resize === 'horizontal' && 'resize-x',
             resize === 'both' && 'resize',
-            error && 'border-[var(--chalk-danger)] focus:ring-[var(--chalk-danger)]',
+            error && 'border-destructive focus:ring-destructive',
             className
           )}
           aria-invalid={!!error}
           aria-errormessage={error ? `${textareaId}-error` : undefined}
           {...props}
         />
-        <div className="flex justify-between items-center text-xs text-[var(--chalk-text-muted)]">
+        <div className="flex justify-between items-center text-xs text-muted-foreground">
           {error && (
-            <span id={`${textareaId}-error`} className="text-[var(--chalk-danger)]">
+            <span id={`${textareaId}-error`} className="text-destructive">
               {error}
             </span>
           )}

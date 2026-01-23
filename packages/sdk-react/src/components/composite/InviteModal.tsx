@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { X, Copy, Mail, Calendar, Link as LinkIcon } from 'lucide-react';
+import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { Input } from '../atomic/Input';
 import { IconButton } from '../atomic/IconButton';
@@ -29,7 +29,6 @@ export const InviteModal = React.memo<InviteModalProps>(({
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
 
-
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -45,26 +44,29 @@ export const InviteModal = React.memo<InviteModalProps>(({
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--chalk-bg-overlay)] backdrop-blur-sm',
+        'fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm',
+        'bg-[var(--background,var(--chalk-bg-overlay))]/80',
         className
       )}
       role="dialog"
       aria-modal="true"
       aria-labelledby="invite-modal-title"
     >
-      <div 
+      <div
         ref={modalRef}
         className={cn(
-          "w-full max-w-md bg-[var(--chalk-bg-primary)] rounded-[var(--chalk-border-radius-lg)] shadow-[var(--chalk-shadow-xl)] border border-[var(--chalk-border-color)] overflow-hidden",
+          "w-full max-w-md overflow-hidden rounded-lg shadow-lg",
+          "bg-[var(--card,var(--chalk-bg-primary))]",
+          "border border-[var(--border,var(--chalk-border-color))]",
           !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200"
         )}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--chalk-border-color)]">
-          <h2 id="invite-modal-title" className="text-lg font-semibold text-[var(--chalk-text-primary)]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border,var(--chalk-border-color))]">
+          <h2 id="invite-modal-title" className="text-lg font-semibold text-[var(--card-foreground,var(--chalk-text-primary))]">
             Invite Participants
           </h2>
           <IconButton
-            icon={<X size={20} />}
+            icon={<Cancel01Icon size={20} />}
             variant="ghost"
             onClick={onClose}
             aria-label="Close"
@@ -78,46 +80,64 @@ export const InviteModal = React.memo<InviteModalProps>(({
               value={meetingLink}
               readOnly
               fullWidth
-              icon={<LinkIcon size={16} />}
+              icon={<Link01Icon size={16} />}
               iconPosition="left"
               onClick={(e) => (e.target as HTMLInputElement).select()}
             />
             {onCopyLink && (
               <button
                 onClick={onCopyLink}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-[var(--chalk-primary)] hover:bg-[var(--chalk-primary-hover)] text-white rounded-[var(--chalk-border-radius-md)] font-medium transition-colors"
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 py-2.5 rounded-md font-medium transition-colors",
+                  "bg-[var(--primary,var(--chalk-primary))] text-[var(--primary-foreground,#fff)]",
+                  "hover:opacity-90"
+                )}
               >
-                <Copy size={18} />
+                <Copy01Icon size={18} />
                 Copy Link
               </button>
             )}
           </div>
 
           {meetingId && (
-             <div className="flex items-center justify-between p-3 bg-[var(--chalk-bg-secondary)] rounded-[var(--chalk-border-radius-md)] border border-[var(--chalk-border-color)]">
-               <span className="text-sm text-[var(--chalk-text-secondary)]">Meeting ID</span>
-               <span className="font-mono font-medium text-[var(--chalk-text-primary)] select-all">
-                 {meetingId}
-               </span>
-             </div>
+            <div className={cn(
+              "flex items-center justify-between p-3 rounded-md",
+              "bg-[var(--muted,var(--chalk-bg-secondary))]",
+              "border border-[var(--border,var(--chalk-border-color))]"
+            )}>
+              <span className="text-sm text-[var(--muted-foreground,var(--chalk-text-secondary))]">Meeting ID</span>
+              <span className="font-mono font-medium text-[var(--card-foreground,var(--chalk-text-primary))] select-all">
+                {meetingId}
+              </span>
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             {onShareEmail && (
               <button
                 onClick={onShareEmail}
-                className="flex items-center justify-center gap-2 py-2 px-4 bg-[var(--chalk-bg-secondary)] hover:bg-[var(--chalk-bg-tertiary)] text-[var(--chalk-text-primary)] rounded-[var(--chalk-border-radius-md)] text-sm font-medium transition-colors border border-[var(--chalk-border-color)]"
+                className={cn(
+                  "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors",
+                  "bg-[var(--secondary,var(--chalk-bg-secondary))] text-[var(--secondary-foreground,var(--chalk-text-primary))]",
+                  "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
+                  "border border-[var(--border,var(--chalk-border-color))]"
+                )}
               >
-                <Mail size={16} />
+                <Mail01Icon size={16} />
                 Email
               </button>
             )}
             {onShareCalendar && (
               <button
                 onClick={onShareCalendar}
-                className="flex items-center justify-center gap-2 py-2 px-4 bg-[var(--chalk-bg-secondary)] hover:bg-[var(--chalk-bg-tertiary)] text-[var(--chalk-text-primary)] rounded-[var(--chalk-border-radius-md)] text-sm font-medium transition-colors border border-[var(--chalk-border-color)]"
+                className={cn(
+                  "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors",
+                  "bg-[var(--secondary,var(--chalk-bg-secondary))] text-[var(--secondary-foreground,var(--chalk-text-primary))]",
+                  "hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
+                  "border border-[var(--border,var(--chalk-border-color))]"
+                )}
               >
-                <Calendar size={16} />
+                <Calendar01Icon size={16} />
                 Calendar
               </button>
             )}

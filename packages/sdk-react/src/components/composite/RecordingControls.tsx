@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
 import { StatusBadge, IconButton } from '../atomic';
-import { Play, Pause, Square, Circle } from 'lucide-react';
+import { PlayIcon, PauseIcon, SquareIcon, CircleIcon } from '../../utils/icons';
 
 export interface RecordingControlsProps {
   isRecording: boolean;
@@ -58,7 +58,7 @@ export const RecordingControls = React.memo(({
     if (isRecording && isPaused) {
       return (
         <div className="inline-flex items-center gap-1.5 rounded-[var(--chalk-border-radius-sm)] font-medium px-2 py-1 text-xs bg-yellow-500/10 text-yellow-500">
-           <Circle size={12} className="fill-current" />
+           <CircleIcon size={12} className="fill-current" />
            <span>PAUSED</span>
         </div>
       );
@@ -84,7 +84,7 @@ export const RecordingControls = React.memo(({
         <div className="flex items-center gap-1 border-l border-[var(--chalk-border-subtle)] pl-2">
           {!isRecording ? (
              <IconButton 
-                icon={<Play size={16} className="fill-current" />} 
+                icon={<PlayIcon size={16} className="fill-current" />} 
                 onClick={onStart} 
                 variant="ghost" 
                 size="sm"
@@ -95,7 +95,7 @@ export const RecordingControls = React.memo(({
              <>
                {onPause && (
                   <IconButton 
-                    icon={isPaused ? <Play size={16} className="fill-current" /> : <Pause size={16} className="fill-current" />} 
+                    icon={isPaused ? <PlayIcon size={16} className="fill-current" /> : <PauseIcon size={16} className="fill-current" />} 
                     onClick={onPause} 
                     variant="ghost" 
                     size="sm"
@@ -103,7 +103,7 @@ export const RecordingControls = React.memo(({
                   />
                )}
                <IconButton 
-                  icon={<Square size={16} className="fill-current" />} 
+                  icon={<SquareIcon size={16} className="fill-current" />} 
                   onClick={onStop} 
                   variant="ghost" 
                   size="sm"

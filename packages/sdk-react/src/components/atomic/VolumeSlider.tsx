@@ -1,5 +1,6 @@
 import React from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Slider } from '@base-ui/react/slider';
+import { VolumeHighIcon, VolumeMute01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 
 export interface VolumeSliderProps {
@@ -23,8 +24,11 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
   orientation = 'horizontal',
   className,
 }) => {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(Number(e.target.value));
+  const handleValueChange = (newValue: number | number[]) => {
+    const val = Array.isArray(newValue) ? newValue[0] : newValue;
+    if (val !== undefined) {
+      onChange(val);
+    }
   };
 
   const isVertical = orientation === 'vertical';
@@ -41,57 +45,63 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
         type="button"
         onClick={onMuteToggle}
         className={cn(
-          'flex items-center justify-center rounded-full hover:bg-[var(--chalk-bg-tertiary)] transition-colors',
+          'flex items-center justify-center rounded-full transition-colors',
+          'hover:bg-[var(--accent,var(--chalk-bg-tertiary))]',
           size === 'sm' ? 'p-1' : 'p-1.5',
-          muted ? 'text-[var(--chalk-text-muted)]' : 'text-[var(--chalk-text-primary)]'
+          muted
+            ? 'text-[var(--muted-foreground,var(--chalk-text-muted))]'
+            : 'text-[var(--foreground,var(--chalk-text-primary))]'
         )}
         aria-label={muted ? 'Unmute' : 'Mute'}
       >
         {muted || value === 0 ? (
-          <VolumeX size={size === 'sm' ? 14 : 18} />
+          <VolumeMute01Icon size={size === 'sm' ? 14 : 18} />
         ) : (
-          <Volume2 size={size === 'sm' ? 14 : 18} />
+          <VolumeHighIcon size={size === 'sm' ? 14 : 18} />
         )}
       </button>
 
-      <div
+      <Slider.Root
+        value={muted ? 0 : value}
+        onValueChange={handleValueChange}
+        disabled={muted}
+        min={0}
+        max={100}
+        step={1}
+        orientation={orientation}
         className={cn(
-          'relative flex items-center',
-          isVertical ? 'h-full w-2 py-2' : 'w-full h-2'
+          'relative flex items-center touch-none select-none',
+          isVertical ? 'h-full w-2 flex-col' : 'w-full h-2'
         )}
       >
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={muted ? 0 : value}
-          onChange={handleChange}
-          disabled={muted}
-          role="slider"
-          aria-valuenow={muted ? 0 : value}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-orientation={orientation}
+        <Slider.Track
           className={cn(
-            'appearance-none bg-transparent cursor-pointer disabled:cursor-not-allowed',
-            isVertical
-              ? 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90 w-[var(--slider-length)] h-2'
-              : 'w-full h-full',
-            '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--chalk-accent)] [&::-webkit-slider-thumb]:mt-[-2px] [&::-webkit-slider-thumb]:shadow-sm',
-            '[&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:border-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[var(--chalk-accent)] [&::-moz-range-thumb]:shadow-sm',
-            '[&::-webkit-slider-runnable-track]:w-full [&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:bg-[var(--chalk-bg-tertiary)] [&::-webkit-slider-runnable-track]:rounded-full',
-            '[&::-moz-range-track]:w-full [&::-moz-range-track]:h-2 [&::-moz-range-track]:bg-[var(--chalk-bg-tertiary)] [&::-moz-range-track]:rounded-full'
+            'relative grow rounded-full',
+            'bg-[var(--muted,var(--chalk-bg-tertiary))]',
+            isVertical ? 'w-2 h-full' : 'h-2 w-full'
           )}
-          style={
-            isVertical
-              ? ({ '--slider-length': '8rem' } as React.CSSProperties)
-              : undefined
-          }
-        />
-      </div>
+        >
+          <Slider.Indicator
+            className={cn(
+              'absolute rounded-full',
+              'bg-[var(--primary,var(--chalk-accent))]',
+              isVertical ? 'w-full bottom-0' : 'h-full left-0'
+            )}
+          />
+          <Slider.Thumb
+            className={cn(
+              'block rounded-full shadow-sm',
+              'bg-[var(--primary,var(--chalk-accent))]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring,var(--chalk-accent))]',
+              'disabled:pointer-events-none disabled:opacity-50',
+              size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'
+            )}
+          />
+        </Slider.Track>
+      </Slider.Root>
 
       {showValue && (
-        <span className="text-xs text-[var(--chalk-text-secondary)] min-w-[2rem] text-center">
+        <span className="text-xs text-[var(--muted-foreground,var(--chalk-text-secondary))] min-w-[2rem] text-center">
           {Math.round(value)}%
         </span>
       )}

@@ -19,22 +19,22 @@ export const Skeleton = React.memo<SkeletonProps>(({
 }) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const variantClasses = {
-    text: 'rounded-[var(--chalk-border-radius-sm)]',
+    text: 'rounded-sm',
     circular: 'rounded-full',
     rectangular: 'rounded-none',
-    rounded: 'rounded-[var(--chalk-border-radius-md)]',
+    rounded: 'rounded-md',
   };
 
   const animationClasses = {
-    pulse: !prefersReducedMotion ? 'chalk-animate-pulse' : '',
-    wave: !prefersReducedMotion ? 'chalk-animate-pulse' : '',
+    pulse: !prefersReducedMotion ? 'animate-pulse' : '',
+    wave: !prefersReducedMotion ? 'animate-pulse' : '',
     none: '',
   };
 
   return (
     <div
       className={cn(
-        'bg-[var(--chalk-bg-tertiary)]',
+        'bg-muted',
         variantClasses[variant],
         animationClasses[animation],
         className

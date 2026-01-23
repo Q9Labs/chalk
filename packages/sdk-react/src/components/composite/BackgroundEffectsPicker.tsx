@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Ban, Upload, Image as ImageIcon } from 'lucide-react';
+import { Cancel01Icon, Upload01Icon, Image01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 
 export interface BackgroundEffect {
@@ -7,7 +7,7 @@ export interface BackgroundEffect {
   type: 'none' | 'blur' | 'image';
   name: string;
   thumbnail?: string;
-  value?: string; 
+  value?: string;
 }
 
 export interface BackgroundEffectsPickerProps {
@@ -43,31 +43,35 @@ export const BackgroundEffectsPicker = React.memo(({
     }
   };
 
+  const isSelected = (id: string) =>
+    selectedEffectId === id || (id === 'none' && !selectedEffectId && !effects.find(e => e.id === selectedEffectId));
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-chalk-text-secondary">
+        <label className="text-sm font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">
           Background Effects
         </label>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="group" aria-label="Background effects">
         <button
           type="button"
           onClick={() => onSelect('none')}
           disabled={disabled}
           className={cn(
-            "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all bg-chalk-bg-subtle hover:bg-chalk-bg-tertiary",
-            selectedEffectId === 'none' || (!selectedEffectId && !effects.find(e => e.id === selectedEffectId))
-              ? "border-chalk-accent ring-1 ring-chalk-accent ring-offset-1 ring-offset-chalk-bg-surface" 
+            "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all",
+            "bg-[var(--muted,var(--chalk-bg-subtle))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
+            isSelected('none')
+              ? "border-[var(--primary,var(--chalk-accent))] ring-1 ring-[var(--ring,var(--chalk-accent))] ring-offset-1 ring-offset-[var(--background,var(--chalk-bg-surface))]"
               : "border-transparent",
             disabled && "opacity-50 cursor-not-allowed"
           )}
           aria-label="No background effect"
-          aria-pressed={selectedEffectId === 'none'}
+          aria-pressed={isSelected('none')}
         >
-          <Ban className="w-6 h-6 text-chalk-text-secondary mb-1" />
-          <span className="text-[10px] font-medium text-chalk-text-secondary">None</span>
+          <Cancel01Icon className="w-6 h-6 mb-1 text-[var(--muted-foreground,var(--chalk-text-secondary))]" />
+          <span className="text-[10px] font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">None</span>
         </button>
 
         {effects.map((effect) => (
@@ -77,29 +81,30 @@ export const BackgroundEffectsPicker = React.memo(({
             onClick={() => onSelect(effect.id)}
             disabled={disabled}
             className={cn(
-              "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all bg-chalk-bg-subtle hover:bg-chalk-bg-tertiary",
-              selectedEffectId === effect.id
-                ? "border-chalk-accent ring-1 ring-chalk-accent ring-offset-1 ring-offset-chalk-bg-surface" 
+              "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all",
+              "bg-[var(--muted,var(--chalk-bg-subtle))] hover:bg-[var(--accent,var(--chalk-bg-tertiary))]",
+              isSelected(effect.id)
+                ? "border-[var(--primary,var(--chalk-accent))] ring-1 ring-[var(--ring,var(--chalk-accent))] ring-offset-1 ring-offset-[var(--background,var(--chalk-bg-surface))]"
                 : "border-transparent",
               disabled && "opacity-50 cursor-not-allowed"
             )}
             aria-label={`Select ${effect.name}`}
-            aria-pressed={selectedEffectId === effect.id}
+            aria-pressed={isSelected(effect.id)}
           >
             {effect.type === 'blur' ? (
               <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-300 to-gray-400">
-                 <ImageIcon className="w-6 h-6 text-white mb-1 opacity-50 blur-[1px]" />
-                 <span className="text-[10px] font-medium text-white drop-shadow-md">Blur</span>
+                <Image01Icon className="w-6 h-6 text-white mb-1 opacity-50 blur-[1px]" />
+                <span className="text-[10px] font-medium text-white drop-shadow-md">Blur</span>
               </div>
             ) : effect.thumbnail || effect.value ? (
-              <img 
-                src={effect.thumbnail || effect.value} 
-                alt={effect.name} 
+              <img
+                src={effect.thumbnail || effect.value}
+                alt={effect.name}
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-chalk-bg-tertiary">
-                <ImageIcon className="w-6 h-6 text-chalk-text-muted" />
+              <div className="w-full h-full flex items-center justify-center bg-[var(--accent,var(--chalk-bg-tertiary))]">
+                <Image01Icon className="w-6 h-6 text-[var(--muted-foreground,var(--chalk-text-muted))]" />
               </div>
             )}
           </button>
@@ -111,18 +116,20 @@ export const BackgroundEffectsPicker = React.memo(({
             onClick={handleUploadClick}
             disabled={disabled}
             className={cn(
-              "relative aspect-video rounded-md border-2 border-dashed border-chalk-border-color overflow-hidden flex flex-col items-center justify-center transition-all hover:bg-chalk-bg-subtle hover:border-chalk-text-secondary",
+              "relative aspect-video rounded-md border-2 border-dashed overflow-hidden flex flex-col items-center justify-center transition-all",
+              "border-[var(--border,var(--chalk-border-color))]",
+              "hover:bg-[var(--muted,var(--chalk-bg-subtle))] hover:border-[var(--muted-foreground,var(--chalk-text-secondary))]",
               disabled && "opacity-50 cursor-not-allowed"
             )}
             aria-label="Upload custom background"
           >
-            <Upload className="w-5 h-5 text-chalk-text-secondary mb-1" />
-            <span className="text-[10px] font-medium text-chalk-text-secondary">Upload</span>
-            <input 
+            <Upload01Icon className="w-5 h-5 mb-1 text-[var(--muted-foreground,var(--chalk-text-secondary))]" />
+            <span className="text-[10px] font-medium text-[var(--muted-foreground,var(--chalk-text-secondary))]">Upload</span>
+            <input
               ref={fileInputRef}
-              type="file" 
-              accept="image/*" 
-              className="hidden" 
+              type="file"
+              accept="image/*"
+              className="hidden"
               onChange={handleFileChange}
               disabled={disabled}
               tabIndex={-1}
