@@ -26,3 +26,4 @@ export * from './TranscriptLine';
 export * from './VideoTile';
 export * from './VolumeSlider';
 export * from './Waveform';
+export * from './WhatsNewTrigger';

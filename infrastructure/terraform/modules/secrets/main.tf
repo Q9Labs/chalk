@@ -95,6 +95,14 @@ resource "random_password" "api_key_salt" {
   special = false
 }
 
+resource "aws_secretsmanager_secret" "github_token" {
+  name        = "chalk/${var.environment}/github-token"
+  description = "GitHub PAT for What's New releases API"
+  kms_key_id  = aws_kms_key.secrets.arn
+
+  tags = local.tags
+}
+
 resource "aws_iam_policy" "secrets_read" {
   name        = "${local.name}-secrets-read"
   description = "Policy to read Chalk secrets"
@@ -111,7 +119,8 @@ resource "aws_iam_policy" "secrets_read" {
         Resource = [
           aws_secretsmanager_secret.jwt_secret.arn,
           aws_secretsmanager_secret.cloudflare_api.arn,
-          aws_secretsmanager_secret.api_config.arn
+          aws_secretsmanager_secret.api_config.arn,
+          aws_secretsmanager_secret.github_token.arn
         ]
       },
       {

@@ -112,12 +112,15 @@ module "ecs" {
     { name = "CLOUDFLARE_API_TOKEN", value = "MesahQRKmgqzvNsebp0rAGbuJB7w3L-ybwl_oMpo" },
     { name = "R2_BUCKET_NAME", value = module.cloudflare.recordings_bucket_name },
     { name = "R2_ACCOUNT_ID", value = var.cloudflare_account_id },
+    { name = "GITHUB_OWNER", value = "Q9Labs" },
+    { name = "GITHUB_REPO", value = "chalk" },
   ]
 
   container_secrets = [
     { name = "DATABASE_PASSWORD", valueFrom = "${module.aurora.master_user_secret_arn}:password::" },
     { name = "REDIS_PASSWORD", valueFrom = module.elasticache.auth_token_secret_arn },
     { name = "JWT_SIGNING_KEY", valueFrom = module.secrets.jwt_secret_arn },
+    { name = "GITHUB_TOKEN", valueFrom = module.secrets.github_token_arn },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets

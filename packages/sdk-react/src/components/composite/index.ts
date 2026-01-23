@@ -41,3 +41,4 @@ export * from './MobileControlSheet';
 export * from './MobilePanel';
 export * from './ReactionPicker';
 export * from './RecordingControls';
+export * from './WhatsNewDialog';
