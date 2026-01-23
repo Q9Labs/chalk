@@ -148,6 +148,10 @@ export {
 	useTranscription,
 	useWhiteboard,
 	useWhiteboardPermissions,
+	useWhatsNew,
+	type UseWhatsNewReturn,
+	type UseWhatsNewOptions,
+	type WhatsNewData,
 	// Logging
 	useLogger,
 	type UseLoggerReturn,

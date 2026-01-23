@@ -61,6 +61,7 @@ export type {
 	// SidePanelsWrapperProps removed - component does not exist
 	TourOverlayProps,
 	TranscriptionPanelProps,
+	WhatsNewDialogProps,
 	TypingIndicatorProps,
 	VideoGridProps,
 	WaitingParticipant,
@@ -92,6 +93,7 @@ export {
 	TypingIndicator,
 	VideoGrid,
 	WaitingRoom,
+	WhatsNewDialog,
 } from "./composite";
 export { EndScreen } from "./full/EndScreen";
 export { GuidedTour } from "./full/GuidedTour";
