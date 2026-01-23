@@ -9,6 +9,7 @@ import type {
 	ChalkError,
 	Participant,
 	ReactionEmoji,
+	Transcript,
 } from "@q9labs/chalk-core";
 import { createLogger } from "@q9labs/chalk-core";
 import type React from "react";
@@ -21,6 +22,7 @@ import { useChalkSession } from "../../context/chalk-provider";
 import { useChat } from "../../hooks/features/useChat";
 import { useInteractions } from "../../hooks/features/useInteractions";
 import { useRecording } from "../../hooks/features/useRecording";
+import { useTranscripts } from "../../hooks/features/useTranscripts";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useActiveSpeaker } from "../../hooks/participants/useActiveSpeaker";
 import { useParticipants } from "../../hooks/participants/useParticipants";
@@ -90,9 +92,41 @@ interface Theme {
 	borderRadius?: "rounded" | "sharp";
 }
 
+/** Data provided when successfully joined a meeting */
+export interface MeetingJoinedData {
+	/** Room ID */
+	roomId: string;
+	/** Local participant ID */
+	participantId: string;
+	/** Assigned role (may differ from requested if first_participant_is_host is enabled) */
+	role: string;
+	/** Display name used */
+	displayName: string;
+	/** Whether recording is active (e.g., from force_recording) */
+	isRecording: boolean;
+	/** Timestamp when joined */
+	joinedAt: Date;
+}
+
+/** Data provided when meeting ends (via leave or disconnect) */
+export interface MeetingEndData {
+	/** Room ID of the meeting */
+	roomId: string;
+	/** Meeting duration in seconds */
+	duration: number;
+	/** All transcripts from the session */
+	transcripts: Transcript[];
+	/** Recording ID if recording was active, null otherwise */
+	recordingId: string | null;
+	/** Number of participants in the meeting */
+	participantCount: number;
+}
+
 export interface VideoConferenceProps {
 	roomId: string;
 	userName: string;
+	/** Participant role - host gets recording controls, force_recording triggers */
+	role?: "host" | "participant";
 	features?: Features;
 	defaults?: Defaults;
 	theme?: Theme;
@@ -100,8 +134,11 @@ export interface VideoConferenceProps {
 	sounds?: boolean;
 	debug?: boolean;
 	slots?: Slots;
-	onJoin?: (roomId: string) => void;
+	/** Callback when user successfully joins the room */
+	onJoin?: (data: MeetingJoinedData) => void;
 	onLeave?: () => void;
+	/** Fires when meeting ends (leave or disconnect) with meeting data */
+	onEnd?: (data: MeetingEndData) => void;
 	onError?: (error: ChalkError) => void;
 	onAddPeople?: () => void;
 	className?: string;
@@ -110,6 +147,7 @@ export interface VideoConferenceProps {
 function VideoConferenceBase({
 	roomId,
 	userName,
+	role,
 	features = {},
 	defaults = {},
 	theme: _theme,
@@ -119,6 +157,7 @@ function VideoConferenceBase({
 	slots: _slots,
 	onJoin,
 	onLeave,
+	onEnd,
 	onError,
 	onAddPeople,
 	className,
@@ -151,6 +190,7 @@ function VideoConferenceBase({
 	const { session } = useChalkSession();
 
 	const { play } = useSoundEffects({ enabled: sounds });
+	const { transcripts } = useTranscripts();
 
 	useEffect(() => {
 		refreshDevices();
@@ -191,6 +231,23 @@ function VideoConferenceBase({
 		[featureContext],
 	);
 
+	const buildEndData = useCallback(
+		(): MeetingEndData => ({
+			roomId,
+			duration: meetingDuration,
+			transcripts,
+			recordingId: recording.recordingId,
+			participantCount,
+		}),
+		[
+			roomId,
+			meetingDuration,
+			transcripts,
+			recording.recordingId,
+			participantCount,
+		],
+	);
+
 	const handleJoin = useCallback(
 		async (settings: {
 			displayName: string;
@@ -217,19 +274,25 @@ function VideoConferenceBase({
 			try {
 				await join(roomId, {
 					userName: settings.displayName,
+					role,
 					videoEnabled: settings.videoEnabled,
 					audioEnabled: settings.audioEnabled,
 				});
 				setPhase("meeting");
 				play("join");
-				onJoin?.(roomId);
+				onJoin?.({
+					roomId,
+					participantId: localParticipant?.id ?? "",
+					role: localParticipant?.role ?? role ?? "participant",
+					displayName: settings.displayName,
+					isRecording: recording.isRecording,
+					joinedAt: new Date(),
+				});
 			} catch (err) {
 				const chalkError = err as ChalkError;
 				// If already connected, transition to meeting instead of lobby
 				if (chalkError.message?.includes("Already connected")) {
-					log.warn(
-						"Already connected, transitioning to meeting",
-					);
+					log.warn("Already connected, transitioning to meeting");
 					setPhase("meeting");
 					return;
 				}
@@ -238,21 +301,23 @@ function VideoConferenceBase({
 				setPhase("lobby");
 			}
 		},
-		[join, roomId, play, onJoin, onError, isJoining, isConnected],
+		[join, roomId, role, localParticipant, recording.isRecording, play, onJoin, onError, isJoining, isConnected],
 	);
 
 	const handleLeave = useCallback(async () => {
 		try {
 			await leave();
 			play("leave");
+			onEnd?.(buildEndData());
 			setPhase("end");
 			onLeave?.();
 		} catch (err) {
 			log.error("Leave failed:", err);
+			onEnd?.(buildEndData());
 			setPhase("end");
 			onLeave?.();
 		}
-	}, [leave, play, onLeave]);
+	}, [leave, play, onEnd, buildEndData, onLeave]);
 
 	const handleRejoin = useCallback(() => {
 		setPhase("lobby");
@@ -316,6 +381,7 @@ function VideoConferenceBase({
 	useEffect(() => {
 		const handleDisconnect = session.on("disconnected", () => {
 			if (phase === "meeting") {
+				onEnd?.(buildEndData());
 				setPhase("end");
 				onLeave?.();
 			}
@@ -334,7 +400,7 @@ function VideoConferenceBase({
 			handleDisconnect();
 			handleError();
 		};
-	}, [session, phase, onLeave, onError]);
+	}, [session, phase, onEnd, buildEndData, onLeave, onError]);
 
 	if (phase === "lobby") {
 		return (

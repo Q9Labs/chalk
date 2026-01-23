@@ -20,6 +20,7 @@ import { RoomInstanceService, setRoom } from "./room-instance";
 /** Options for joining a room */
 export interface JoinOptions {
   userName: string;
+  role?: "host" | "participant";
   audioEnabled?: boolean;
   videoEnabled?: boolean;
   metadata?: Record<string, unknown>;

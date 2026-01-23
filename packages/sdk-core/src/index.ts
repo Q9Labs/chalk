@@ -183,6 +183,7 @@ export type {
 	RoomInfo,
 	RoomStatus,
 	ScreenShareOptions,
+	TenantConfig,
 	TokenProvider,
 	TokenSet,
 	Track,

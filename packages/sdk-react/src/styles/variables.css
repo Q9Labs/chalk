@@ -207,7 +207,7 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 
-  /* Legacy chalk variables - Dark mode */
+  /* Legacy chalk variables - Dark mode with richer, less flat tones */
   --chalk-bg-primary: #0A0A0C;
   --chalk-bg-secondary: #12121A;
   --chalk-bg-tertiary: #1A1A24;

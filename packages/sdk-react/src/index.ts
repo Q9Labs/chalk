@@ -158,6 +158,7 @@ export {
 // ============================================================================
 
 export * from "./components";
+export type { MeetingJoinedData, MeetingEndData } from "./components/full/VideoConference";
 
 // ============================================================================
 // Utils

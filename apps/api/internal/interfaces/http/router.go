@@ -172,10 +172,11 @@ func (r *Router) setupRoutes() {
 			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
 
 			// API-HIGH-05: Recording start/stop/archive require host role
-			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService)
+			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService, r.cfClient)
 			roomsGroup.POST("/:id/recordings/start", authMw.RequireHost(), recordings.Start)
 			roomsGroup.POST("/:id/recordings/stop", authMw.RequireHost(), recordings.Stop)
 			roomsGroup.POST("/:id/recordings/:rid/archive", authMw.RequireHost(), recordings.Archive)
+			roomsGroup.POST("/:id/recordings/sync", recordings.SyncFromCloudflare)
 
 			// Transcripts
 			transcripts := handlers.NewTranscriptHandler(r.transcriptService, r.roomService)
@@ -185,11 +186,12 @@ func (r *Router) setupRoutes() {
 		recordingsGroup := v1.Group("/recordings")
 		recordingsGroup.Use(authMw.RequireJWT())
 		{
-			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService)
+			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService, r.cfClient)
 			recordingsGroup.GET("", recordings.List)
 			recordingsGroup.GET("/:id", recordings.Get)
 			recordingsGroup.GET("/:id/download", recordings.Download)
 			recordingsGroup.POST("/:id/archive", recordings.Archive)
+			recordingsGroup.POST("/:id/recover", recordings.Recover)
 			recordingsGroup.DELETE("/:id", recordings.Delete)
 		}
 
@@ -230,6 +232,10 @@ func (r *Router) APIKeyService() *auth.APIKeyService {
 
 func (r *Router) RoomService() *room.Service {
 	return r.roomService
+}
+
+func (r *Router) RecordingService() *recording.Service {
+	return r.recordingService
 }
 
 func (r *Router) Queries() *db.Queries {

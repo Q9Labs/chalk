@@ -701,6 +701,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			// Actually join via ChalkClient
 			const room = await this.client.joinRoom(roomId, {
 				displayName: options.userName,
+				role: options.role,
 				audio: options.audioEnabled,
 				video: options.videoEnabled,
 				metadata: options.metadata,

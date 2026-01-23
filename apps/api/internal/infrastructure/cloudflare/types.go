@@ -75,10 +75,11 @@ const (
 
 // AddParticipantRequest is the request body for adding a participant
 type AddParticipantRequest struct {
-	Name             string `json:"name"`
-	Picture          string `json:"picture,omitempty"`          // URL to avatar
-	PresetName       string `json:"preset_name"`                // group_call_host, group_call_participant
-	ClientSpecificID string `json:"client_specific_id,omitempty"` // External user ID
+	Name                 string `json:"name"`
+	Picture              string `json:"picture,omitempty"`             // URL to avatar
+	PresetName           string `json:"preset_name"`                   // group_call_host, group_call_participant
+	ClientSpecificID     string `json:"client_specific_id,omitempty"`  // External user ID
+	TranscriptionEnabled bool   `json:"transcription_enabled,omitempty"` // Enable transcription for this participant
 }
 
 // Participant represents a Cloudflare RealtimeKit participant

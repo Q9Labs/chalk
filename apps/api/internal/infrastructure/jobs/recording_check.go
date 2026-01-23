@@ -10,13 +10,18 @@ import (
 	"github.com/google/uuid"
 )
 
-type RecordingChecker struct {
-	db       *db.Queries
-	cfClient *cloudflare.Client
+type RecordingRecoverer interface {
+	RecoverRecording(ctx context.Context, recordingID uuid.UUID, downloadURL string, fileSize int64, durationSeconds int32) error
 }
 
-func NewRecordingChecker(queries *db.Queries, cf *cloudflare.Client) *RecordingChecker {
-	return &RecordingChecker{db: queries, cfClient: cf}
+type RecordingChecker struct {
+	db        *db.Queries
+	cfClient  *cloudflare.Client
+	recoverer RecordingRecoverer
+}
+
+func NewRecordingChecker(queries *db.Queries, cf *cloudflare.Client, recoverer RecordingRecoverer) *RecordingChecker {
+	return &RecordingChecker{db: queries, cfClient: cf, recoverer: recoverer}
 }
 
 func (c *RecordingChecker) CheckStalledRecordings(ctx context.Context) error {
@@ -56,16 +61,48 @@ func (c *RecordingChecker) checkRecording(ctx context.Context, rec db.Recording)
 	}
 
 	switch cfRec.Status {
-	case "ready":
-		log.Printf("Recording %s ready in CF but webhook missed! Manual processing needed.", rec.ID)
-		// TODO: Trigger manual download and upload to R2
-		// For now, just log - the webhook handler should pick it up on retry
-	case "failed":
+	case cloudflare.RecordingStatusCompleted:
+		log.Printf("Recording %s ready in CF but webhook missed, recovering...", rec.ID)
+		c.recoverRecording(ctx, rec, cfRec)
+	case cloudflare.RecordingStatusFailed:
 		log.Printf("Recording %s failed in CF", rec.ID)
 		c.markFailed(ctx, rec.ID)
 	default:
 		log.Printf("Recording %s status in CF: %s", rec.ID, cfRec.Status)
 	}
+}
+
+func (c *RecordingChecker) recoverRecording(ctx context.Context, rec db.Recording, cfRec *cloudflare.Recording) {
+	if c.recoverer == nil {
+		log.Printf("Recording %s: no recoverer configured, skipping", rec.ID)
+		return
+	}
+
+	if cfRec.DownloadURL == nil || *cfRec.DownloadURL == "" {
+		log.Printf("Recording %s: no download URL available from Cloudflare", rec.ID)
+		c.markFailed(ctx, rec.ID)
+		return
+	}
+
+	var fileSize int64
+	if cfRec.FileSize != nil {
+		fileSize = *cfRec.FileSize
+	}
+
+	var durationSeconds int32
+	if cfRec.StartedTime != nil && cfRec.StoppedTime != nil {
+		durationSeconds = int32(cfRec.StoppedTime.Sub(*cfRec.StartedTime).Seconds())
+	}
+
+	recoveryCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer cancel()
+
+	if err := c.recoverer.RecoverRecording(recoveryCtx, rec.ID, *cfRec.DownloadURL, fileSize, durationSeconds); err != nil {
+		log.Printf("Failed to recover recording %s: %v", rec.ID, err)
+		return
+	}
+
+	log.Printf("Successfully recovered recording %s", rec.ID)
 }
 
 func (c *RecordingChecker) markFailed(ctx context.Context, id uuid.UUID) {

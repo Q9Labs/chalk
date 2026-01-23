@@ -1,12 +1,12 @@
-export { SyncEngine, type SendMessage } from "./sync-engine";
+export { type SendMessage, SyncEngine } from "./sync-engine";
 export {
-	type WhiteboardState,
-	type WhiteboardUpdate,
-	type WhiteboardCursor,
-	type WhiteboardPermissions,
-	type WhiteboardConfig,
-	type ExcalidrawElement,
 	type AppState,
 	type BinaryFiles,
 	DEFAULT_CONFIG,
+	type ExcalidrawElement,
+	type WhiteboardConfig,
+	type WhiteboardCursor,
+	type WhiteboardPermissions,
+	type WhiteboardState,
+	type WhiteboardUpdate,
 } from "./types";

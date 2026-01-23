@@ -147,7 +147,7 @@ func main() {
 	}
 
 	// Start background jobs
-	recChecker := jobs.NewRecordingChecker(router.Queries(), cfClient)
+	recChecker := jobs.NewRecordingChecker(router.Queries(), cfClient, router.RecordingService())
 	go recChecker.Run(ctx, 30*time.Minute)
 	log.Println("Started recording checker (30min interval)")
 

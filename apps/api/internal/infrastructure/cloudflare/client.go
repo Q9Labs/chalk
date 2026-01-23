@@ -425,3 +425,64 @@ func (c *Client) GetActiveRecording(ctx context.Context, meetingID string) (*Rec
 
 	return &result.Data, nil
 }
+
+// RecordingsListResponse is the response from Cloudflare's list recordings endpoint
+type RecordingsListResponse struct {
+	Success    bool        `json:"success"`
+	Errors     []APIError  `json:"errors,omitempty"`
+	Messages   []string    `json:"messages,omitempty"`
+	Result     []Recording `json:"result,omitempty"`
+	ResultInfo *struct {
+		Page       int `json:"page"`
+		PerPage    int `json:"per_page"`
+		TotalPages int `json:"total_pages"`
+		Count      int `json:"count"`
+		Total      int `json:"total_count"`
+	} `json:"result_info,omitempty"`
+}
+
+// ListRecordingsByMeeting retrieves all recordings for a meeting
+func (c *Client) ListRecordingsByMeeting(ctx context.Context, meetingID string) ([]Recording, error) {
+	if !c.IsConfigured() {
+		return nil, fmt.Errorf("cloudflare not configured")
+	}
+
+	// Try to get active recording first
+	activeRec, err := c.GetActiveRecording(ctx, meetingID)
+	if err == nil && activeRec != nil {
+		return []Recording{*activeRec}, nil
+	}
+
+	// Try listing all recordings with meeting_id filter
+	path := fmt.Sprintf("/recordings?meeting_id=%s", meetingID)
+	resp, err := c.doRequest(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		// No recordings found - return empty list
+		return []Recording{}, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result RecordingsListResponse
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w (body: %.500s)", err, string(bodyBytes))
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+	}
+
+	return result.Result, nil
+}

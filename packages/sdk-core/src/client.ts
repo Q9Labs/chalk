@@ -186,7 +186,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         : await this.apiClient.addParticipant(
             roomId,
             config.displayName,
-            undefined,
+            config.role,
             config.metadata,
           );
 
@@ -276,6 +276,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       room._setLocalParticipant(localParticipant);
       room._setInfo(roomInfo);
       room._setTokens(tokens);
+      room._setRoomCreated(response.data.roomCreated ?? false);
+      room._setTenantConfig(response.data.tenantConfig ?? null);
 
       // Effect: RTK join with timeout handling
       this.log.debug("Joining RealtimeKit room");

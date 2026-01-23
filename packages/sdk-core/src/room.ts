@@ -17,6 +17,7 @@ import type {
   RoomInfo,
   RoomStatus,
   ScreenShareOptions,
+  TenantConfig,
   TokenSet,
 } from "./types.ts";
 import { ChalkErrorCode } from "./types.ts";
@@ -95,6 +96,8 @@ export class Room extends EventEmitter<RoomEvents> {
   private _tokens: TokenSet | null = null;
   private _whiteboardPermissions: Map<string, boolean> = new Map();
   private _whiteboardDefaultAccess = true; // tenant config, default: everyone can draw
+  private _roomCreated = false;
+  private _tenantConfig: TenantConfig | null = null;
 
   private rtkClient?: RealtimeKitClient;
   private wsClient?: WSClient;
@@ -273,6 +276,16 @@ export class Room extends EventEmitter<RoomEvents> {
     return this._currentRecording !== null;
   }
 
+  /** Whether this room was just created (not pre-existing) */
+  get roomCreated(): boolean {
+    return this._roomCreated;
+  }
+
+  /** Tenant configuration for this room */
+  get tenantConfig(): TenantConfig | null {
+    return this._tenantConfig;
+  }
+
   // Internal methods
   _setStatus(status: RoomStatus): void {
     if (this._status !== status) {
@@ -292,6 +305,14 @@ export class Room extends EventEmitter<RoomEvents> {
 
   _setTokens(tokens: TokenSet): void {
     this._tokens = tokens;
+  }
+
+  _setRoomCreated(created: boolean): void {
+    this._roomCreated = created;
+  }
+
+  _setTenantConfig(config: TenantConfig | null): void {
+    this._tenantConfig = config;
   }
 
   get tokens(): TokenSet | null {

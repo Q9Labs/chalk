@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/netip"
 	"time"
 
@@ -25,6 +26,7 @@ type CloudflareClient interface {
 	StartRecording(ctx context.Context, meetingID string, req cloudflare.StartRecordingRequest) (*cloudflare.Recording, error)
 	StopRecording(ctx context.Context, recordingID string) (*cloudflare.Recording, error)
 	GetRecording(ctx context.Context, recordingID string) (*cloudflare.Recording, error)
+	ListRecordingsByMeeting(ctx context.Context, meetingID string) ([]cloudflare.Recording, error)
 }
 
 type StorageClient interface {
@@ -322,6 +324,119 @@ func (s *Service) GetTotalStorageByTenant(ctx context.Context, tenantID uuid.UUI
 		return 0, fmt.Errorf("failed to get total storage: %w", err)
 	}
 	return total, nil
+}
+
+// RecoverRecording downloads a ready recording from Cloudflare and uploads it to R2.
+// Used when the webhook was missed but the recording is ready in Cloudflare.
+func (s *Service) RecoverRecording(ctx context.Context, recordingID uuid.UUID, downloadURL string, fileSize int64, durationSeconds int32) error {
+	recording, err := s.db.GetRecording(ctx, recordingID)
+	if err != nil {
+		return fmt.Errorf("get recording: %w", err)
+	}
+
+	if recording.Status != "processing" {
+		return fmt.Errorf("recording not in processing state: %s", recording.Status)
+	}
+
+	if s.r2Client == nil {
+		return fmt.Errorf("R2 storage client not configured")
+	}
+
+	resp, err := s.streamDownload(ctx, downloadURL)
+	if err != nil {
+		return fmt.Errorf("download from cloudflare: %w", err)
+	}
+	defer resp.Body.Close()
+
+	storageKey := fmt.Sprintf("recordings/%s/%s.webm", recording.RoomID, recording.ID)
+
+	if err := s.r2Client.Upload(ctx, storageKey, resp.Body, "video/webm"); err != nil {
+		return fmt.Errorf("upload to R2: %w", err)
+	}
+
+	_, err = s.CompleteRecording(ctx, recordingID, "r2", storageKey, fileSize, durationSeconds)
+	if err != nil {
+		return fmt.Errorf("complete recording: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) streamDownload(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download failed: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+
+	return resp, nil
+}
+
+// SyncResult contains the result of syncing recordings from Cloudflare
+type SyncResult struct {
+	Synced   []db.Recording
+	Existing []db.Recording
+	Errors   []string
+}
+
+// SyncRecordingsFromCloudflare imports recordings from Cloudflare that don't exist in our DB.
+// This handles auto-started recordings (record_on_start) that bypassed our API.
+func (s *Service) SyncRecordingsFromCloudflare(ctx context.Context, roomID uuid.UUID) (*SyncResult, error) {
+	room, err := s.db.GetRoom(ctx, roomID)
+	if err != nil {
+		return nil, ErrRoomNotFound
+	}
+
+	cfRecordings, err := s.cfClient.ListRecordingsByMeeting(ctx, room.CloudflareMeetingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recordings from Cloudflare: %w", err)
+	}
+
+	result := &SyncResult{}
+
+	for _, cfRec := range cfRecordings {
+		existing, _ := s.db.GetRecordingByCloudflareID(ctx, &cfRec.ID)
+		if existing.ID != uuid.Nil {
+			result.Existing = append(result.Existing, existing)
+			continue
+		}
+
+		status := "processing"
+		if cfRec.Status == cloudflare.RecordingStatusCompleted {
+			status = "processing" // Will be recovered separately
+		} else if cfRec.Status == cloudflare.RecordingStatusFailed {
+			status = "failed"
+		} else if cfRec.Status == cloudflare.RecordingStatusRecording {
+			status = "recording"
+		}
+
+		recording, err := s.db.CreateRecording(ctx, db.CreateRecordingParams{
+			RoomID:                roomID,
+			CloudflareRecordingID: &cfRec.ID,
+		})
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to create recording %s: %v", cfRec.ID, err))
+			continue
+		}
+
+		if status != "recording" {
+			recording, _ = s.db.StopRecording(ctx, recording.ID)
+		}
+
+		result.Synced = append(result.Synced, recording)
+	}
+
+	return result, nil
 }
 
 func strPtr(s string) *string {

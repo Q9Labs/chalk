@@ -184,6 +184,12 @@ export interface RoomConfig {
 	displayName: string;
 
 	/**
+	 * Participant role - determines permissions like recording control
+	 * @default 'participant'
+	 */
+	role?: "host" | "participant";
+
+	/**
 	 * Enable microphone on join
 	 * @default false
 	 */
@@ -645,6 +651,14 @@ export interface CreateRoomResponse {
 	name?: string;
 }
 
+/** Tenant configuration returned from the API */
+export interface TenantConfig {
+	transcriptionEnabled: boolean;
+	firstParticipantIsHost: boolean;
+	forceRecording: boolean;
+	allowEarlyJoin: boolean;
+}
+
 /**
  * Response from joining a room (internal API response format)
  * @internal
@@ -660,6 +674,14 @@ export interface JoinRoomResponse {
 	 */
 	tokens: TokenSet;
 	room: RoomInfo;
+	/**
+	 * Whether the room was just created (not pre-existing)
+	 */
+	roomCreated?: boolean;
+	/**
+	 * Tenant configuration for this room
+	 */
+	tenantConfig?: TenantConfig;
 	/**
 	 * Whether the SDK should auto-start recording (tenant has force_recording enabled)
 	 */
@@ -699,6 +721,8 @@ export interface TransformedJoinRoomApiResponse {
 	authToken: string;
 	token?: string;
 	expiresAt?: number;
+	roomCreated?: boolean;
+	tenantConfig?: TenantConfig;
 	shouldStartRecording?: boolean;
 	room: {
 		id: string;

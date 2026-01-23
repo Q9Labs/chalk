@@ -15,7 +15,7 @@ import (
 // TestRecordingHandler_Start_InvalidRoomID tests handler requires authentication
 func TestRecordingHandler_Start_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.POST("/rooms/:id/recordings/start", handler.Start)
 
 	req := httptest.NewRequest("POST", "/rooms/invalid-uuid/recordings/start", nil)
@@ -33,7 +33,7 @@ func TestRecordingHandler_Start_InvalidRoomID(t *testing.T) {
 // TestRecordingHandler_Start_EmptyRoomID tests empty room ID param returns 400
 func TestRecordingHandler_Start_EmptyRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.POST("/rooms/:id/recordings/start", handler.Start)
 
 	req := httptest.NewRequest("POST", "/rooms//recordings/start", nil)
@@ -48,7 +48,7 @@ func TestRecordingHandler_Start_EmptyRoomID(t *testing.T) {
 // TestRecordingHandler_Stop_InvalidRoomID tests invalid UUID param returns 400
 func TestRecordingHandler_Stop_InvalidRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.POST("/rooms/:id/recordings/stop", handler.Stop)
 
 	req := httptest.NewRequest("POST", "/rooms/invalid-uuid/recordings/stop", nil)
@@ -66,7 +66,7 @@ func TestRecordingHandler_Stop_InvalidRoomID(t *testing.T) {
 // TestRecordingHandler_Stop_SpecialCharRoomID tests special char room IDs are rejected
 func TestRecordingHandler_Stop_SpecialCharRoomID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.POST("/rooms/:id/recordings/stop", handler.Stop)
 
 	req := httptest.NewRequest("POST", "/rooms/room!@#$/recordings/stop", nil)
@@ -80,7 +80,7 @@ func TestRecordingHandler_Stop_SpecialCharRoomID(t *testing.T) {
 // TestRecordingHandler_Get_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Get_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.GET("/recordings/:id", handler.Get)
 
 	req := httptest.NewRequest("GET", "/recordings/not-a-uuid", nil)
@@ -109,7 +109,7 @@ func TestRecordingHandler_Get_InvalidUUIDFormats(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewRecordingHandler(nil, nil)
+			handler := NewRecordingHandler(nil, nil, nil)
 			router.GET("/recordings/:id", handler.Get)
 
 			req := httptest.NewRequest("GET", "/recordings/"+tc.recordingID, nil)
@@ -129,7 +129,7 @@ func TestRecordingHandler_Get_InvalidUUIDFormats(t *testing.T) {
 // TestRecordingHandler_Download_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Download_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.GET("/recordings/:id/download", handler.Download)
 
 	req := httptest.NewRequest("GET", "/recordings/invalid-recording-id/download", nil)
@@ -147,7 +147,7 @@ func TestRecordingHandler_Download_InvalidRecordingID(t *testing.T) {
 // TestRecordingHandler_Download_AtSymbolInID tests @ symbol in ID is rejected
 func TestRecordingHandler_Download_AtSymbolInID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.GET("/recordings/:id/download", handler.Download)
 
 	req := httptest.NewRequest("GET", "/recordings/id-with-@symbol/download", nil)
@@ -161,7 +161,7 @@ func TestRecordingHandler_Download_AtSymbolInID(t *testing.T) {
 // TestRecordingHandler_Delete_InvalidRecordingID tests invalid UUID param returns 400
 func TestRecordingHandler_Delete_InvalidRecordingID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewRecordingHandler(nil, nil)
+	handler := NewRecordingHandler(nil, nil, nil)
 	router.DELETE("/recordings/:id", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/recordings/bad-id", nil)

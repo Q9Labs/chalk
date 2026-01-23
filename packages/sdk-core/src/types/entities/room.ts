@@ -77,6 +77,9 @@ export interface JoinOptions {
 	/** Display name for the participant */
 	userName: string;
 
+	/** Role for the participant (host gets recording controls, etc.) */
+	role?: "host" | "participant";
+
 	/** Enable audio on join */
 	audioEnabled?: boolean;
 

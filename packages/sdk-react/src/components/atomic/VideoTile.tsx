@@ -32,9 +32,6 @@ export interface VideoTileProps {
   showAvatar?: boolean;
 }
 
-/**
- * Check if a track is usable (live and enabled)
- */
 function isTrackUsable(track: MediaStreamTrack | null | undefined): boolean {
   return !!track && track.readyState === 'live' && track.enabled;
 }
@@ -43,7 +40,7 @@ const aspectRatioClasses = {
   '16:9': 'aspect-video',
   '4:3': 'aspect-[4/3]',
   '1:1': 'aspect-square',
-  'fill': '', // No aspect ratio - fill container
+  'fill': '',
 };
 
 export const VideoTile = React.memo(({
@@ -63,25 +60,17 @@ export const VideoTile = React.memo(({
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [trackError, setTrackError] = useState<string | null>(null);
-  // Track ID used to detect when the actual track changes (not just reference)
   const [, setCurrentTrackId] = useState<string | null>(null);
-  // Force re-render counter for track state changes
   const [, forceUpdate] = useState(0);
 
-  // Memoized track attachment function
   const attachTrack = useCallback((videoEl: HTMLVideoElement, track: MediaStreamTrack) => {
-    // Create new MediaStream with the track
     const stream = new MediaStream([track]);
     videoEl.srcObject = stream;
 
-    // Use play() with retry logic for autoplay restrictions
     const attemptPlay = () => {
       videoEl.play().catch((err) => {
-        // AbortError is common during rapid track changes - ignore it
         if (err.name === 'AbortError') return;
-
         const errorMsg = err instanceof Error ? err.message : 'Play failed';
-        // Only set error for non-transient issues
         if (!errorMsg.includes('interrupted')) {
           setTrackError(errorMsg);
         }
@@ -91,15 +80,12 @@ export const VideoTile = React.memo(({
     attemptPlay();
   }, []);
 
-  // Effect to handle track changes and lifecycle
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
-    // Clear previous error state
     setTrackError(null);
 
-    // Check if we should display video
     const shouldShowVideo = participant.isVideoEnabled && videoTrack;
 
     if (!shouldShowVideo) {
@@ -108,35 +94,27 @@ export const VideoTile = React.memo(({
       return;
     }
 
-    // Validate track is usable
     if (!isTrackUsable(videoTrack)) {
-      // Track exists but not usable - don't show error immediately, it might recover
-      // This handles React StrictMode double-mount where track temporarily becomes unavailable
       videoEl.srcObject = null;
       setCurrentTrackId(null);
       return;
     }
 
-    // Track the current track ID to detect actual track changes
     const trackId = videoTrack.id;
     setCurrentTrackId(trackId);
 
-    // Attach the track
     attachTrack(videoEl, videoTrack);
 
-    // Handle track ending
     const handleEnded = () => {
       setTrackError('Track ended');
       forceUpdate(n => n + 1);
     };
 
-    // Handle track mute/unmute (some browsers use this instead of ended)
     const handleMute = () => {
       forceUpdate(n => n + 1);
     };
 
     const handleUnmute = () => {
-      // Re-attach track when it becomes unmuted
       if (isTrackUsable(videoTrack)) {
         attachTrack(videoEl, videoTrack);
         setTrackError(null);
@@ -154,18 +132,16 @@ export const VideoTile = React.memo(({
     };
   }, [videoTrack, participant.isVideoEnabled, attachTrack]);
 
-  // Compute display state
   const isTrackValid = isTrackUsable(videoTrack);
   const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError;
 
-  // Generate consistent color for this participant
   const participantGradient = useMemo(() => getParticipantGradient(participant.id), [participant.id]);
   const participantBorder = useMemo(() => getParticipantBorder(participant.id), [participant.id]);
 
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-[32px] shadow-2xl transition-all duration-300',
+        'relative overflow-hidden rounded-[32px] transition-all duration-300',
         aspectRatioClasses[aspectRatio],
         (participant.isSpeaking || pinned) && 'ring-2 ring-ring',
         onClick && 'cursor-pointer hover:scale-[1.01]',
@@ -206,10 +182,11 @@ export const VideoTile = React.memo(({
 
       {children}
 
-      <div 
+      {/* Smoother gradient overlay for name/status */}
+      <div
         className="absolute inset-x-0 bottom-0 p-6 pointer-events-none"
         style={{
-          background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.4) 100%)'
+          background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.02) 20%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.55) 100%)'
         }}
       >
         <div className="flex items-center justify-between">
@@ -223,11 +200,13 @@ export const VideoTile = React.memo(({
           <div className="flex-1" />
           {showStatus && (
             <div className="flex items-center gap-2">
+              {/* Muted indicator - glass style */}
               {participant.isMuted && (
                 <div className="rounded-full bg-muted/60 p-2 text-muted-foreground backdrop-blur-md border border-border">
                   <MicrophoneOff01Icon size={16} />
                 </div>
               )}
+              {/* Hand raised indicator with wave animation */}
               {participant.isHandRaised && (
                 <div className={cn(
                   "rounded-full bg-secondary p-2 text-secondary-foreground backdrop-blur-md",
@@ -236,6 +215,7 @@ export const VideoTile = React.memo(({
                   <HandIcon size={16} />
                 </div>
               )}
+              {/* Screen sharing indicator */}
               {participant.isScreenSharing && (
                 <div className="rounded-full bg-chart-3 p-2 text-primary-foreground backdrop-blur-md">
                   <Monitor01Icon size={16} />

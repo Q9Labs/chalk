@@ -1,4 +1,4 @@
-import type { ExcalidrawElement, BinaryFiles, WhiteboardConfig } from "./types";
+import type { BinaryFiles, ExcalidrawElement, WhiteboardConfig } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 
 export type SendMessage = (type: string, payload: unknown) => void;

@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
 	"github.com/Q9Labs/chalk/internal/domain/room"
+	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -15,12 +18,14 @@ import (
 type RecordingHandler struct {
 	recordingService *recording.Service
 	roomService      *room.Service
+	cfClient         *cloudflare.Client
 }
 
-func NewRecordingHandler(recordingService *recording.Service, roomService *room.Service) *RecordingHandler {
+func NewRecordingHandler(recordingService *recording.Service, roomService *room.Service, cfClient *cloudflare.Client) *RecordingHandler {
 	return &RecordingHandler{
 		recordingService: recordingService,
 		roomService:      roomService,
+		cfClient:         cfClient,
 	}
 }
 
@@ -312,5 +317,135 @@ func (h *RecordingHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "recording deleted",
 		"id":      id,
+	})
+}
+
+// Recover manually triggers recovery of a stalled recording from Cloudflare.
+// Use this when the webhook was missed (e.g., local development without a tunnel).
+func (h *RecordingHandler) Recover(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid recording id"})
+		return
+	}
+
+	rec, err := h.recordingService.GetRecording(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
+	if err != nil || existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
+		return
+	}
+
+	if rec.Status != "processing" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":  "recording not in processing state",
+			"status": rec.Status,
+		})
+		return
+	}
+
+	if rec.CloudflareRecordingID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recording has no Cloudflare ID"})
+		return
+	}
+
+	cfRec, err := h.cfClient.GetRecording(c.Request.Context(), *rec.CloudflareRecordingID)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Cloudflare: " + err.Error()})
+		return
+	}
+
+	if cfRec.Status != cloudflare.RecordingStatusCompleted {
+		c.JSON(http.StatusOK, gin.H{
+			"message":          "recording not ready in Cloudflare yet",
+			"cloudflare_status": cfRec.Status,
+			"recording_id":     id,
+		})
+		return
+	}
+
+	if cfRec.DownloadURL == nil || *cfRec.DownloadURL == "" {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Cloudflare recording has no download URL"})
+		return
+	}
+
+	var fileSize int64
+	if cfRec.FileSize != nil {
+		fileSize = *cfRec.FileSize
+	}
+
+	var durationSeconds int32
+	if cfRec.StartedTime != nil && cfRec.StoppedTime != nil {
+		durationSeconds = int32(cfRec.StoppedTime.Sub(*cfRec.StartedTime).Seconds())
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Minute)
+	defer cancel()
+
+	if err := h.recordingService.RecoverRecording(ctx, id, *cfRec.DownloadURL, fileSize, durationSeconds); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "recovery failed: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "recording recovered successfully",
+		"recording_id": id,
+		"file_size":    fileSize,
+		"duration":     durationSeconds,
+	})
+}
+
+// SyncFromCloudflare imports recordings from Cloudflare that don't exist in our DB.
+// Use this for rooms with record_on_start where recordings were auto-started.
+func (h *RecordingHandler) SyncFromCloudflare(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	roomID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+
+	result, err := h.recordingService.SyncRecordingsFromCloudflare(c.Request.Context(), roomID)
+	if err != nil {
+		if errors.Is(err, recording.ErrRoomNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "sync failed: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "sync completed",
+		"synced":   len(result.Synced),
+		"existing": len(result.Existing),
+		"errors":   result.Errors,
+		"recordings": result.Synced,
 	})
 }

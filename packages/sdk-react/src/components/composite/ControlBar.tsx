@@ -371,10 +371,10 @@ export const ControlBar = React.memo(
 				<div
 					className="flex items-center rounded-full px-5 py-2.5 backdrop-blur-md border"
 					style={{
-						background: "var(--chalk-pill-bg)",
+						background: "var(--chalk-bg-glass, var(--chalk-pill-bg))",
 						color: "var(--chalk-pill-text)",
-						borderColor: "var(--chalk-pill-border)",
-						boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+						borderColor: "var(--chalk-border-subtle, var(--chalk-pill-border))",
+						boxShadow: "var(--chalk-shadow-2, 0 10px 30px rgba(0,0,0,0.25))",
 					}}
 				>
 					<div className="flex items-center gap-3">
@@ -406,7 +406,6 @@ export const ControlBar = React.memo(
 							onClick={onLeave}
 							danger
 							size="lg"
-							className="h-12 w-12 rounded-full bg-[#EF4444] hover:bg-[#DC2626] transition-colors shadow-lg"
 							data-tour="controls-leave"
 						/>
 					</div>

@@ -48,6 +48,10 @@ func (m *mockCloudflareClient) GetRecording(ctx context.Context, recordingID str
 	}, nil
 }
 
+func (m *mockCloudflareClient) ListRecordingsByMeeting(ctx context.Context, meetingID string) ([]cloudflare.Recording, error) {
+	return nil, nil
+}
+
 type mockStorageClient struct {
 	getPresignedURLFn func(ctx context.Context, key string, expiry time.Duration) (string, error)
 	downloadFn        func(ctx context.Context, key string) (io.ReadCloser, error)

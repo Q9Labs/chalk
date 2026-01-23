@@ -69,6 +69,13 @@ function RoomPage() {
 				userName={storedUserName || "Guest"}
 				onLeave={handleLeave}
 				onError={handleError}
+				onJoin={(data) => {
+					console.log("Joined: ", data);
+				}}
+				onEnd={(data) => {
+					localStorage.setItem("data", JSON.stringify(data));
+					console.log("Room ended: ", data);
+				}}
 				sounds={true}
 				debug={true}
 				features={{
@@ -78,7 +85,7 @@ function RoomPage() {
 					whiteboard: true,
 					reactions: true,
 					handRaise: true,
-					tour: true,
+					tour: false,
 				}}
 				defaults={{
 					videoEnabled: false,

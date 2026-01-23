@@ -36,15 +36,24 @@ type RoomResponse struct {
 	Status string `json:"status"`
 }
 
+type TenantConfigResponse struct {
+	TranscriptionEnabled   bool `json:"transcription_enabled"`
+	FirstParticipantIsHost bool `json:"first_participant_is_host"`
+	ForceRecording         bool `json:"force_recording"`
+	AllowEarlyJoin         bool `json:"allow_early_join"`
+}
+
 type AddParticipantResponse struct {
-	Participant          db.Participant `json:"participant"`
-	Room                 RoomResponse   `json:"room"`
-	AccessToken          string         `json:"access_token"`
-	RefreshToken         string         `json:"refresh_token"`
-	TokenType            string         `json:"token_type"`
-	ExpiresIn            int            `json:"expires_in"`
-	AuthToken            string         `json:"auth_token"`
-	ShouldStartRecording bool           `json:"should_start_recording,omitempty"`
+	Participant          db.Participant       `json:"participant"`
+	Room                 RoomResponse         `json:"room"`
+	RoomCreated          bool                 `json:"room_created"`
+	TenantConfig         TenantConfigResponse `json:"tenant_config"`
+	AccessToken          string               `json:"access_token"`
+	RefreshToken         string               `json:"refresh_token"`
+	TokenType            string               `json:"token_type"`
+	ExpiresIn            int                  `json:"expires_in"`
+	AuthToken            string               `json:"auth_token"`
+	ShouldStartRecording bool                 `json:"should_start_recording,omitempty"`
 }
 
 func (h *ParticipantHandler) Add(c *gin.Context) {
@@ -117,6 +126,13 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 			ID:     output.Room.ID.String(),
 			Name:   roomName,
 			Status: output.Room.Status,
+		},
+		RoomCreated: output.RoomCreated,
+		TenantConfig: TenantConfigResponse{
+			TranscriptionEnabled:   output.TenantConfig.TranscriptionEnabled,
+			FirstParticipantIsHost: output.TenantConfig.FirstParticipantIsHost,
+			ForceRecording:         output.TenantConfig.ForceRecording,
+			AllowEarlyJoin:         output.TenantConfig.AllowEarlyJoin,
 		},
 		AccessToken:          output.TokenPair.AccessToken,
 		RefreshToken:         output.TokenPair.RefreshToken,

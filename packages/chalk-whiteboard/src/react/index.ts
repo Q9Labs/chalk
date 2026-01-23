@@ -9,8 +9,8 @@
 
 // Re-export types for convenience
 export type {
-	ExcalidrawElement,
 	BinaryFiles,
+	ExcalidrawElement,
 	WhiteboardConfig,
 	WhiteboardCursor,
 } from "../types";

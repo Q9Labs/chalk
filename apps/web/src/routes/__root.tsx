@@ -127,6 +127,7 @@ function RootComponent() {
 	return (
 		<ChalkProvider
 			debug={true}
+			demoMode={false}
 			apiUrl={apiUrl}
 			wsUrl={wsUrl}
 			tokenProvider={tokenProvider}

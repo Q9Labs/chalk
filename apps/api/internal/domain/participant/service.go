@@ -72,16 +72,27 @@ type JoinRoomInput struct {
 	Role           string
 }
 
+// TenantConfigOutput contains tenant configuration relevant to the room
+type TenantConfigOutput struct {
+	TranscriptionEnabled   bool `json:"transcription_enabled"`
+	FirstParticipantIsHost bool `json:"first_participant_is_host"`
+	ForceRecording         bool `json:"force_recording"`
+	AllowEarlyJoin         bool `json:"allow_early_join"`
+}
+
 type JoinRoomOutput struct {
 	ParticipantID        uuid.UUID
 	TokenPair            *auth.TokenPair
 	CFAuthToken          string
 	Room                 *db.Room
-	ShouldStartRecording bool // True if tenant has force_recording and this is first host
+	RoomCreated          bool              // True if room was just created (not pre-existing)
+	TenantConfig         TenantConfigOutput // Tenant configuration for this room
+	ShouldStartRecording bool              // True if tenant has force_recording and this is first host
 }
 
 func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomOutput, error) {
 	room, err := s.db.GetRoom(ctx, input.RoomID)
+	roomCreated := false
 
 	// Room doesn't exist - auto-create if tenant allows early join
 	if err != nil {
@@ -147,6 +158,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			return nil, fmt.Errorf("failed to create room in database: %w", err)
 		}
 		room = newRoom
+		roomCreated = true
 	}
 
 	// Room exists but is ended - reactivate it
@@ -204,6 +216,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		if err != nil {
 			return nil, fmt.Errorf("failed to reactivate room in database: %w", err)
 		}
+		roomCreated = true // Room was reactivated (new CF meeting)
 	}
 
 	activeParticipantsCount, err := s.db.CountActiveParticipantsByRoom(ctx, input.RoomID)
@@ -241,18 +254,44 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		clientSpecificID = uuid.New().String()
 	}
 
+	// Parse tenant config for all relevant settings
+	var tenantCfg struct {
+		TranscriptionEnabled   bool `json:"transcription_enabled"`
+		FirstParticipantIsHost bool `json:"first_participant_is_host"`
+		ForceRecording         bool `json:"force_recording"`
+		AllowEarlyJoin         bool `json:"allow_early_join"`
+	}
+	if tenant.TenantConfig != nil {
+		_ = json.Unmarshal(tenant.TenantConfig, &tenantCfg)
+	}
+
+	// Build tenant config output for response
+	tenantConfigOutput := TenantConfigOutput{
+		TranscriptionEnabled:   tenantCfg.TranscriptionEnabled,
+		FirstParticipantIsHost: tenantCfg.FirstParticipantIsHost,
+		ForceRecording:         tenantCfg.ForceRecording,
+		AllowEarlyJoin:         tenantCfg.AllowEarlyJoin,
+	}
+
+	// Determine role - first participant becomes host if tenant config allows
+	role := input.Role
+	if role == "" {
+		if tenantCfg.FirstParticipantIsHost && activeParticipantsCount == 0 {
+			role = "host"
+			presetName = cloudflare.PresetHost
+		} else {
+			role = "participant"
+		}
+	}
+
 	cfParticipant, err := s.cfClient.AddParticipant(ctx, room.CloudflareMeetingID, cloudflare.AddParticipantRequest{
-		Name:             input.DisplayName,
-		PresetName:       presetName,
-		ClientSpecificID: clientSpecificID,
+		Name:                 input.DisplayName,
+		PresetName:           presetName,
+		ClientSpecificID:     clientSpecificID,
+		TranscriptionEnabled: tenantCfg.TranscriptionEnabled,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare add participant failed: %w", err)
-	}
-
-	role := input.Role
-	if role == "" {
-		role = "participant"
 	}
 
 	participant, err := s.db.CreateParticipant(ctx, db.CreateParticipantParams{
@@ -308,16 +347,11 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 
 	// Check if force recording should trigger
 	shouldStartRecording := false
-	if role == "host" && tenant.TenantConfig != nil {
-		var tenantConfig struct {
-			ForceRecording bool `json:"force_recording"`
-		}
-		if err := json.Unmarshal(tenant.TenantConfig, &tenantConfig); err == nil && tenantConfig.ForceRecording {
-			// Check if no active recording
-			_, recErr := s.db.GetActiveRecordingByRoom(ctx, input.RoomID)
-			if recErr != nil { // No active recording
-				shouldStartRecording = true
-			}
+	if role == "host" && tenantCfg.ForceRecording {
+		// Check if no active recording
+		_, recErr := s.db.GetActiveRecordingByRoom(ctx, input.RoomID)
+		if recErr != nil { // No active recording
+			shouldStartRecording = true
 		}
 	}
 
@@ -326,6 +360,8 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		TokenPair:            tokenPair,
 		CFAuthToken:          cfParticipant.Token,
 		Room:                 &room,
+		RoomCreated:          roomCreated,
+		TenantConfig:         tenantConfigOutput,
 		ShouldStartRecording: shouldStartRecording,
 	}, nil
 }
