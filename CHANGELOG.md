@@ -7,37 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **Transcription pipeline** - Fixed end-to-end transcription from Cloudflare RTK to UI
-  - Fixed field mapping in `room.ts` - Cloudflare sends `transcript`, `isPartialTranscript`, `peerId`, `name`, `date` but SDK expected `text`, `isInterim`, `participantId`, `speakerName`, `timestamp`
-  - Connected `useTranscripts` hook output to `MeetingRoom` component via `VideoConference`
-  - Backend persistence: Final transcripts sent to Go API via WebSocket for database storage
-
-### Changed
-
-- **WhiteboardPanel state persistence** - Close no longer destroys whiteboard state
-  - Added `isVisible` prop to control visibility without unmounting
-  - MeetingRoom now keeps WhiteboardPanel mounted (hidden) instead of conditional render
-  - Drawings persist locally when closing and reopening whiteboard
-
-- **WhiteboardPanel branding** - Removed Excalidraw branding from UI
-  - Added `renderTopRightUI: () => null` to hide help button and social links
-
-### Fixed
-
-- **WhiteboardPanel CSS flash** - Added CSS load tracking to prevent unstyled flash
-  - Loader now shows until both Excalidraw and CSS are fully loaded
-  - CSS load state tracked via `onload` handler
-
-### Changed
-
-- **WhiteboardPanel header** - Redesigned with floating glassmorphism pills
-  - Removed solid header bar for cleaner canvas-first experience
-  - Top-left: Title pill with pencil icon
-  - Top-right: Actions pill with permission controls (host) and close button
-  - Bottom-left: Status pill showing "You can draw" or "View only" with teal/red indicator dot
-  - Matches MeetingRoom aesthetic (backdrop-blur-md, bg-black/50, border-white/10)
+## [0.0.39] - 2026-01-23
 
 ### Added
 
@@ -47,52 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Action buttons: Rejoin, New Meeting, Home
   - Follows app theme system (light/dark mode support)
   - Room page now navigates here on meeting end
-
-### Changed
-
-- **Favicon** - Updated to Chalk icon (colorful chalk sticks)
-
-### Fixed
-
-- **PreJoinLobby theme toggle** - Now syncs with document.documentElement so theme changes work when used within apps that have ThemeProvider
-- **Light mode support for panels** - Fixed ParticipantList, ChatPanel, and TranscriptionPanel for light mode:
-  - ParticipantList: Replaced hardcoded dark background with semantic `bg-card`
-  - TranscriptionPanel: Updated speaker colors from white to colors visible on both light/dark backgrounds
-- **Whiteboard canvas** - Now defaults to dark background (#121212) for better drawing experience regardless of app theme
-
-### Changed
-
-- **MeetingRoom UI revamp** - Aligned with PreJoinLobby design patterns
-  - Layout switcher: Replaced text buttons with icon buttons (Grid, Spotlight, Sidebar) with tooltips
-  - Active layout state uses brand teal (#1bb6a6) background
-  - Hand icon: Changed from pointing down to waving hand (raised hand gesture)
-  - Muted state: Updated red color from #EF4444 to #dc2626 (darker, more cohesive)
-  - Removed "More" and "Info" buttons from desktop ControlBar
-  - Side panels: Applied glassmorphism (bg-card/80 backdrop-blur-xl) with rounded-2xl corners
-
-- **Teal-themed color palette** - Updated video tile accents and avatars
-  - colorGenerator: Replaced mixed color palettes with teal/cyan spectrum
-  - Avatar gradients: Updated pairs to teal-themed options (brand teal, emerald, cyan, etc.)
-
-- **Panel UI modernization** - ChatPanel, TranscriptionPanel, ParticipantsPanel
-  - Transparent backgrounds to work with glassmorphic parent container
-  - ChatPanel: Teal-themed empty state icon, improved input field with focus ring
-  - TranscriptionPanel: Custom teal "Live" badge, styled empty state
-  - ParticipantList: Semantic color tokens, teal "Add people" button with shadow
-
-### Fixed
-
-- **RTK room join reliability** - Increased timeout and added retry logic
-  - Timeout increased from 10s to 30s per attempt
-  - Added exponential backoff retries (500ms, 1s, 2s delays) for up to 4 total attempts
-  - Reduces user-facing errors from transient network issues during room join
-
-- **Faster room join** - Parallelized WebSocket and RTK connections
-  - WebSocket now connects in parallel with RTK join instead of sequentially
-  - Reduced retry delays from (2s, 4s, 8s) to (500ms, 1s, 2s)
-  - Saves 100-500ms on typical join, up to 10s on retries
-
-### Added
 
 - **shadcn/ui components** - Added base-nova style shadcn components
   - Button, Card, Input, Badge, Tooltip, Toggle, ToggleGroup
@@ -127,6 +51,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **WhiteboardPanel state persistence** - Close no longer destroys whiteboard state
+  - Added `isVisible` prop to control visibility without unmounting
+  - MeetingRoom now keeps WhiteboardPanel mounted (hidden) instead of conditional render
+  - Drawings persist locally when closing and reopening whiteboard
+
+- **WhiteboardPanel branding** - Removed Excalidraw branding from UI
+  - Added `renderTopRightUI: () => null` to hide help button and social links
+
+- **WhiteboardPanel header** - Redesigned with floating glassmorphism pills
+  - Removed solid header bar for cleaner canvas-first experience
+  - Top-left: Title pill with pencil icon
+  - Top-right: Actions pill with permission controls (host) and close button
+  - Bottom-left: Status pill showing "You can draw" or "View only" with teal/red indicator dot
+  - Matches MeetingRoom aesthetic (backdrop-blur-md, bg-black/50, border-white/10)
+
+- **Favicon** - Updated to Chalk icon (colorful chalk sticks)
+
+- **MeetingRoom UI revamp** - Aligned with PreJoinLobby design patterns
+  - Layout switcher: Replaced text buttons with icon buttons (Grid, Spotlight, Sidebar) with tooltips
+  - Active layout state uses brand teal (#1bb6a6) background
+  - Hand icon: Changed from pointing down to waving hand (raised hand gesture)
+  - Muted state: Updated red color from #EF4444 to #dc2626 (darker, more cohesive)
+  - Removed "More" and "Info" buttons from desktop ControlBar
+  - Side panels: Applied glassmorphism (bg-card/80 backdrop-blur-xl) with rounded-2xl corners
+
+- **Teal-themed color palette** - Updated video tile accents and avatars
+  - colorGenerator: Replaced mixed color palettes with teal/cyan spectrum
+  - Avatar gradients: Updated pairs to teal-themed options (brand teal, emerald, cyan, etc.)
+
+- **Panel UI modernization** - ChatPanel, TranscriptionPanel, ParticipantsPanel
+  - Transparent backgrounds to work with glassmorphic parent container
+  - ChatPanel: Teal-themed empty state icon, improved input field with focus ring
+  - TranscriptionPanel: Custom teal "Live" badge, styled empty state
+  - ParticipantList: Semantic color tokens, teal "Add people" button with shadow
+
 - **Landing page redesign** - Consumer-ready landing page replacing developer-focused design
   - Hero section with inline meeting join flow and `/public/devices-with-video.png` illustration
   - Trust bar with encryption, HD video, browser-based, and free messaging
@@ -159,13 +118,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Transcription pipeline** - Fixed end-to-end transcription from Cloudflare RTK to UI
+  - Fixed field mapping in `room.ts` - Cloudflare sends `transcript`, `isPartialTranscript`, `peerId`, `name`, `date` but SDK expected `text`, `isInterim`, `participantId`, `speakerName`, `timestamp`
+  - Connected `useTranscripts` hook output to `MeetingRoom` component via `VideoConference`
+  - Backend persistence: Final transcripts sent to Go API via WebSocket for database storage
+
+- **WhiteboardPanel CSS flash** - Added CSS load tracking to prevent unstyled flash
+  - Loader now shows until both Excalidraw and CSS are fully loaded
+  - CSS load state tracked via `onload` handler
+
+- **PreJoinLobby theme toggle** - Now syncs with document.documentElement so theme changes work when used within apps that have ThemeProvider
+
+- **Light mode support for panels** - Fixed ParticipantList, ChatPanel, and TranscriptionPanel for light mode:
+  - ParticipantList: Replaced hardcoded dark background with semantic `bg-card`
+  - TranscriptionPanel: Updated speaker colors from white to colors visible on both light/dark backgrounds
+
+- **Whiteboard canvas** - Now defaults to dark background (#121212) for better drawing experience regardless of app theme
+
+- **RTK room join reliability** - Increased timeout and added retry logic
+  - Timeout increased from 10s to 30s per attempt
+  - Added exponential backoff retries (500ms, 1s, 2s delays) for up to 4 total attempts
+  - Reduces user-facing errors from transient network issues during room join
+
+- **Faster room join** - Parallelized WebSocket and RTK connections
+  - WebSocket now connects in parallel with RTK join instead of sequentially
+  - Reduced retry delays from (2s, 4s, 8s) to (500ms, 1s, 2s)
+  - Saves 100-500ms on typical join, up to 10s on retries
+
 - **Recording recovery for missed webhooks** - Recordings are now automatically recovered when Cloudflare webhook is missed
   - Root cause: `RecordingChecker` job detected ready recordings in Cloudflare but only logged a TODO instead of downloading them
   - Symptom: Recordings stuck in "processing" status forever, video files never persisted to R2
   - Fix: Added `RecoverRecording` method to recording service that downloads from Cloudflare and uploads to R2
   - The background job now automatically recovers stalled recordings older than 1 hour
 
-## [0.0.39] - 2026-01-21
+- **WebSocket heartbeat timeout** - Server now responds to client ping messages with pong
+  - Root cause: SDK client sends pings expecting pong response, but server only sent pings (didn't respond to them)
+  - Symptom: "Heartbeat timeout - no pong received" after 75 seconds
+  - Fix: Added `ping` message handler in WebSocket client that responds with `pong`
+
+## [0.0.38] - 2026-01-21
 
 ### Fixed
 
