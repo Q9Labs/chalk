@@ -135,6 +135,12 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
       })
     );
 
+    unsubscribers.push(
+      session.interactions.on('reaction', () => {
+        play('reaction');
+      })
+    );
+
     // Subscribe to recording manager events
     unsubscribers.push(
       session.recording.on('started', () => {

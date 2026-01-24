@@ -63,7 +63,7 @@ export const ReactionPicker = React.memo(({
 
   // Handle escape key
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || typeof window === 'undefined') return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };

@@ -11,7 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CI install performance** - Added proper dependency caching to GitHub Actions
+  - Cache `~/.bun/install/cache` (Bun's global package cache)
+  - Cache `node_modules` directories across monorepo
+  - Skip `bun install` entirely on cache hits
+  - Expected improvement: 3.4 min → ~20-30 seconds on cache hits
+
 ### Fixed
+
+- **sdk-react: Reactions not displaying** - `activeReactions` from `useInteractions` hook was never rendered
+  - Added `activeReactions` prop to `MeetingRoom` component
+  - Render `ReactionBubble` components in floating container over video grid
+  - Pass `activeReactions` from `VideoConference` to `MeetingRoom`
+
+- **sdk-react: Sound effects not playing** - `autoSubscribe` was disabled by default
+  - Enable `autoSubscribe: true` in `VideoConference`'s `useSoundEffects` hook
+  - Add missing reaction event listener in `useSoundEffects` auto-subscribe
+
+- **sdk-react: SSR crash in ReactionPicker** - Direct `document` access during server rendering
+  - Add `typeof window === 'undefined'` guard to escape key listener effect
 
 ## [0.0.43] - 2025-01-24
 

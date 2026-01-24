@@ -189,7 +189,7 @@ function VideoConferenceBase({
 
 	const { session } = useChalkSession();
 
-	const { play } = useSoundEffects({ enabled: sounds });
+	const { play } = useSoundEffects({ enabled: sounds, autoSubscribe: true });
 	const { transcripts: rawTranscripts } = useTranscripts();
 
 	// Map transcripts from SDK format to UI format
@@ -554,6 +554,7 @@ function VideoConferenceBase({
 			roomName={roomId}
 			localParticipant={localMeetingParticipant}
 			participants={allParticipants}
+			activeReactions={interactions.activeReactions}
 			transcripts={transcripts}
 			isMuted={!media.isAudioEnabled}
 			isVideoEnabled={media.isVideoEnabled}

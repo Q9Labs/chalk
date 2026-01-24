@@ -38,10 +38,26 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-          cache: true
-          cache-dependency-path: bun.lock
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Cache node_modules
+        id: cache-nm
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            apps/*/node_modules
+          key: ${{ runner.os }}-nm-${{ hashFiles('bun.lock') }}
 
       - name: Install dependencies
+        if: steps.cache-nm.outputs.cache-hit != 'true'
         run: bun install --frozen-lockfile
 
       - name: Build packages

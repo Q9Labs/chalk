@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { ColumnIcon, LayoutGridIcon, Maximize01Icon } from "../../utils/icons";
-import { AudioRenderer } from "../atomic";
+import { AudioRenderer, ReactionBubble } from "../atomic";
 import { Toggle, Tooltip, TooltipTrigger, TooltipContent } from "../ui";
 import {
 	ChatPanel,
@@ -60,10 +60,19 @@ export interface TranscriptEntry {
 	confidence?: number;
 }
 
+export interface ActiveReaction {
+	id: string;
+	participantId: string;
+	participantName: string;
+	emoji: string;
+	timestamp: Date;
+}
+
 export interface MeetingRoomProps {
 	roomName: string;
 	localParticipant: Participant;
 	participants: Participant[];
+	activeReactions?: readonly ActiveReaction[];
 	isMuted?: boolean;
 	isVideoEnabled?: boolean;
 	isScreenSharing?: boolean;
@@ -115,6 +124,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	roomName,
 	localParticipant,
 	participants,
+	activeReactions = [],
 	isMuted = false,
 	isVideoEnabled = false,
 	isScreenSharing = false,
@@ -345,6 +355,19 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					<div className="absolute top-14 right-4 z-50">
 						<NotificationStack notifications={[]} onDismiss={() => {}} />
 					</div>
+
+					{/* Floating reactions */}
+					{activeReactions.length > 0 && (
+						<div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 flex gap-2 pointer-events-none">
+							{activeReactions.map((reaction) => (
+								<ReactionBubble
+									key={reaction.id}
+									emoji={reaction.emoji}
+									participantName={reaction.participantName}
+								/>
+							))}
+						</div>
+					)}
 				</div>
 
 				{/* Desktop Sidebar - Integrated, pushing content */}
