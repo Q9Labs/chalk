@@ -15,6 +15,7 @@ import (
 )
 
 const whatsNewCacheKey = "whats-new:latest"
+const whatsNewReleasesCacheKey = "whats-new:releases"
 
 // WhatsNewHandler handles the What's New endpoint
 type WhatsNewHandler struct {
@@ -31,6 +32,12 @@ type WhatsNewResponse struct {
 	Title       string `json:"title"`
 	Content     string `json:"content"`
 	ImageURL    string `json:"image_url,omitempty"`
+	ReleaseType string `json:"release_type,omitempty"`
+}
+
+// ReleasesResponse wraps multiple releases
+type ReleasesResponse struct {
+	Releases []WhatsNewResponse `json:"releases"`
 }
 
 // NewWhatsNewHandler creates a new WhatsNewHandler
@@ -80,7 +87,13 @@ func (h *WhatsNewHandler) Get(c *gin.Context) {
 
 	// Generate presigned URL for hero image
 	if release.ImageKey != "" && h.storageR2 != nil {
-		url, err := h.storageR2.GetPresignedURL(ctx, release.ImageKey, time.Hour)
+		// Strip bucket name prefix if accidentally included in image key
+		imageKey := release.ImageKey
+		bucketPrefix := "chalk-miscellaneous/"
+		if len(imageKey) > len(bucketPrefix) && imageKey[:len(bucketPrefix)] == bucketPrefix {
+			imageKey = imageKey[len(bucketPrefix):]
+		}
+		url, err := h.storageR2.GetPresignedURL(ctx, imageKey, time.Hour)
 		if err == nil {
 			response.ImageURL = url
 		}
@@ -88,6 +101,70 @@ func (h *WhatsNewHandler) Get(c *gin.Context) {
 
 	// Cache the response
 	h.setCache(ctx, response)
+
+	c.JSON(http.StatusOK, response)
+}
+
+// GetReleases handles GET /api/v1/whats-new/releases
+func (h *WhatsNewHandler) GetReleases(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Try cache first
+	cached, err := h.getReleasesFromCache(ctx)
+	if err == nil && cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+
+	// Fetch from GitHub
+	releases, err := h.githubClient.GetReleases(ctx, 10)
+	if err != nil {
+		if errors.Is(err, github.ErrNoRelease) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no releases found"})
+			return
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch release info"})
+		return
+	}
+
+	// Build response with presigned image URLs
+	response := &ReleasesResponse{
+		Releases: make([]WhatsNewResponse, 0, len(releases)),
+	}
+
+	for _, release := range releases {
+		// Skip releases without <!-- whats-new --> tags
+		if !release.HasWhatsNew {
+			continue
+		}
+
+		item := WhatsNewResponse{
+			Version:     release.Version,
+			PublishedAt: release.PublishedAt.Format(time.RFC3339),
+			Title:       release.Title,
+			Content:     h.processContent(ctx, release.Content),
+			ReleaseType: string(release.ReleaseType),
+		}
+
+		// Generate presigned URL for hero image
+		if release.ImageKey != "" && h.storageR2 != nil {
+			// Strip bucket name prefix if accidentally included in image key
+			imageKey := release.ImageKey
+			bucketPrefix := "chalk-miscellaneous/"
+			if len(imageKey) > len(bucketPrefix) && imageKey[:len(bucketPrefix)] == bucketPrefix {
+				imageKey = imageKey[len(bucketPrefix):]
+			}
+			url, err := h.storageR2.GetPresignedURL(ctx, imageKey, time.Hour)
+			if err == nil {
+				item.ImageURL = url
+			}
+		}
+
+		response.Releases = append(response.Releases, item)
+	}
+
+	// Cache the response
+	h.setReleasesCache(ctx, response)
 
 	c.JSON(http.StatusOK, response)
 }
@@ -145,4 +222,37 @@ func (h *WhatsNewHandler) setCache(ctx context.Context, response *WhatsNewRespon
 	}
 
 	_ = h.redisClient.Set(ctx, whatsNewCacheKey, string(data), h.cacheTTL)
+}
+
+// getReleasesFromCache retrieves cached releases response from Redis
+func (h *WhatsNewHandler) getReleasesFromCache(ctx context.Context) (*ReleasesResponse, error) {
+	if h.redisClient == nil {
+		return nil, errors.New("no redis client")
+	}
+
+	data, err := h.redisClient.Get(ctx, whatsNewReleasesCacheKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ReleasesResponse
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// setReleasesCache stores releases response in Redis
+func (h *WhatsNewHandler) setReleasesCache(ctx context.Context, response *ReleasesResponse) {
+	if h.redisClient == nil {
+		return
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		return
+	}
+
+	_ = h.redisClient.Set(ctx, whatsNewReleasesCacheKey, string(data), h.cacheTTL)
 }
