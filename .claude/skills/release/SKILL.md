@@ -1,123 +1,163 @@
-# SDK Package Release
+---
+name: release
+description: Create GitHub releases and publish SDK packages. Use when user says "/release".
+---
 
-**Scope:** Publish `@q9labs/*` packages to GitHub Packages.
-You may stage and commit the worktree changes to ensure all changes are pushed
+# Release Skill
 
-## Packages
-
-| Package                      | Path                                     |
-| ---------------------------- | ---------------------------------------- |
-| `@q9labs/chalk-core`         | `packages/sdk-core/package.json`         |
-| `@q9labs/chalk-react`        | `packages/sdk-react/package.json`        |
-| `@q9labs/chalk-react-native` | `packages/sdk-react-native/package.json` |
-| `@q9labs/chalk-ui`           | `packages/ui/package.json`               |
-| `@q9labs/chalk-whiteboard`   | `packages/chalk-whiteboard/package.json` |
-
-## Release Process
-
-### Step 1: Check State
+## Phase 1: Gather (parallel)
 
 ```bash
-# Current versions
-grep '"version"' packages/*/package.json packages/sdk-*/package.json
-
-# Last published tag
-git tag -l 'v*' | tail -1
-
-# Commits since last tag
-git log --oneline $(git tag -l 'v*' | tail -1)..HEAD --count
-
-# Pending changes
-git status --short
+# Run in parallel (macOS/BSD compatible)
+awk '/## \[Unreleased\]/,/## \[0\.[0-9]+\.[0-9]+\]/{if(/## \[0\.[0-9]+\.[0-9]+\]/)exit; print}' CHANGELOG.md
+grep '"version"' packages/*/package.json | head -5
+git tag -l 'v*' | sort -V | tail -1
 ```
 
-### Step 2: Stage Changes
+**Abort if:** Unreleased section is empty → "No unreleased changes to publish."
 
+---
+
+## Phase 2: Analyze, Present, and Ask
+
+**Show the user your analysis, then ask in one interaction:**
+
+1. **Categorize changes** (show as table):
+
+| User-Facing (`<!-- whats-new -->`) | Technical (outside tags)                         |
+| ---------------------------------- | ------------------------------------------------ |
+| Added, Changed, Fixed              | Developer Experience, Refactoring, Infrastructure |
+
+2. **Suggest version:**
+
+| Change Type     | Bump  |
+| --------------- | ----- |
+| Breaking change | Major |
+| New feature     | Minor |
+| Bug fix only    | Patch |
+
+3. **Generate 3 codename options** — Latin-esque (e.g., "Nexus Primus", "Lumina Invicta")
+
+4. **Generate image prompt** (show to user):
+
+> Abstract minimalist illustration for video conferencing software release.
+> Soft gradients in [PALETTE]. Flowing organic shapes with subtle geometric elements.
+> Modern, clean, tech aesthetic, grainy, illustrative. No text, no people, no icons.
+> Aspect ratio 4:3 landscape.
+
+| Theme               | Palette               |
+| ------------------- | --------------------- |
+| Video, Meetings     | teal, cyan, emerald   |
+| Transcription       | blue, indigo, violet  |
+| Recording, Export   | coral, peach, gold    |
+| Collaboration       | purple, magenta, pink |
+| Performance         | lime, mint, emerald   |
+| UI, Design          | teal, purple, cyan    |
+
+5. **AskUserQuestion** (after showing above):
+   - Version: confirm or override
+   - Codename: pick from 3
+   - Image key: "Skip" or "Provide key" (user pastes in Other field)
+
+R2 upload command (show before asking):
 ```bash
-# SDK packages only (for release commits)
-git add packages/
-
-# Or specific files
-git add packages/sdk-core/ packages/sdk-react/ packages/chalk-whiteboard/
+aws s3 cp hero.png s3://chalk-recordings/whats-new/vX.X.X/hero.png \
+  --endpoint-url https://5281943bd26d5bdcf4c3915606cd6bfb.r2.cloudflarestorage.com
 ```
 
-### Step 3: Bump Versions
+---
 
-All packages must have matching versions. Edit each `package.json`:
+## Phase 3: Execute (Haiku Agent)
 
-```bash
-# Use Edit tool to change "version": "X.X.X" in each file
-# packages/sdk-core/package.json
-# packages/sdk-react/package.json
-# packages/sdk-react-native/package.json
-# packages/ui/package.json
-# packages/chalk-whiteboard/package.json
+Spawn `model="haiku"`, `subagent_type="code-writer"` with this exact prompt structure:
+
+````markdown
+Execute release vX.X.X - [CODENAME]
+
+## Inputs
+- **version**: `X.X.X`
+- **title**: `vX.X.X - [CODENAME]`
+- **imageKey**: `[KEY or empty]`
+- **date**: `YYYY-MM-DD`
+
+## Release Body (save to scratchpad/release-notes.md)
+
+```markdown
+<!-- image: [IMAGE_KEY] -->
+
+<!-- whats-new -->
+## Features
+
+- **[Feature Name]** — [1-sentence user-friendly description]
+
+## Improvements
+
+- **[Enhancement]** — [1-sentence description]
+
+## Bug Fixes
+
+- [Fix description]
+<!-- /whats-new -->
+
+## Technical Notes
+
+- [Technical change 1]
+- [Technical change 2]
 ```
 
-### Step 4: Commit & Tag
+## Steps
 
+### 1. Edit package.json (5 files)
+Change `"version": "[OLD]"` to `"version": "[NEW]"` in:
+- `packages/sdk-core/package.json`
+- `packages/sdk-react/package.json`
+- `packages/sdk-react-native/package.json`
+- `packages/ui/package.json`
+- `packages/chalk-whiteboard/package.json`
+
+### 2. Edit CHANGELOG.md
+Replace `## [Unreleased]` section with:
+```
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [X.X.X] - YYYY-MM-DD
+```
+
+### 3. Git
 ```bash
-# Commit version bump
-git add packages/*/package.json
-git commit -m "chore: bump packages to vX.X.X"
-# Create tag
+git add packages/*/package.json CHANGELOG.md
+git commit -m "chore: release vX.X.X"
 git tag vX.X.X
-
-# Push both
 git push origin master && git push origin vX.X.X
 ```
 
-### Step 5: Monitor Workflow
-
+### 4. GitHub Release
 ```bash
-# Find the tag-triggered run
-gh run list --workflow=sdk.yml --limit=3
-
-# Watch until completion
-gh run watch <run-id> --exit-status
+gh release create vX.X.X --verify-tag --title "[TITLE]" --notes-file [SCRATCHPAD]/release-notes.md
 ```
 
-### Step 6: Verify Publish
-
+### 5. Verify
 ```bash
-# Check all packages published
-gh run view <run-id> --log 2>&1 | grep -E "@q9labs.*@X.X.X"
-
-# Expected output (5 lines):
-# + @q9labs/chalk-core@X.X.X
-# + @q9labs/chalk-react@X.X.X
-# + @q9labs/chalk-react-native@X.X.X
-# + @q9labs/chalk-ui@X.X.X
-# + @q9labs/chalk-whiteboard@X.X.X
+gh run list --workflow=sdk.yml --limit=1
+gh run watch [RUN_ID] --exit-status
 ```
 
-## Workflow Trigger
+Report: release URL + workflow status
+````
 
-| Trigger     | Condition      | Jobs                                |
-| ----------- | -------------- | ----------------------------------- |
-| Tag push    | `refs/tags/v*` | lint-and-test → build → **publish** |
-| Branch push | `packages/**`  | lint-and-test → build (no publish)  |
-
-Workflow: `.github/workflows/sdk.yml`
+---
 
 ## Troubleshooting
 
-| Issue                                            | Check                                                                        |
-| ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| Workflow shows success but package not published | All publish steps have `continue-on-error: true` - check logs for npm errors |
-| `npm ERR! 403`                                   | `NPM_TOKEN` secret expired or missing `packages:write` scope                 |
-| Tag exists but no publish run                    | Tag must be pushed: `git push origin vX.X.X`                                 |
-| Version already exists                           | Bump to new version, can't republish same version                            |
-
-## Client Installation
-
-Clients need GitHub PAT with `read:packages` scope:
-
-```bash
-# .npmrc
-@q9labs:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=ghp_TOKEN
-
-# Then install
-npm install @q9labs/chalk-core @q9labs/chalk-react
-```
+| Issue                    | Solution                                               |
+| ------------------------ | ------------------------------------------------------ |
+| Tag already exists       | `git tag -d vX.X.X && git push origin :vX.X.X`         |
+| 403 on npm publish       | Check `NPM_TOKEN` secret has `packages:write`          |
+| Workflow success, no pkg | Check logs — `continue-on-error: true` masks errors    |
+| Release not in What's New| Clear Redis: `redis-cli DEL whats-new:latest`          |

@@ -55,6 +55,7 @@ export interface ControlBarProps {
 	isHandRaised?: boolean;
 	isWhiteboardOpen?: boolean;
 	meetingDuration?: number;
+	unreadChatCount?: number;
 
 	onToggleMute?: () => void;
 	onToggleVideo?: () => void;
@@ -97,6 +98,7 @@ export const ControlBar = React.memo(
 		isHandRaised = false,
 		isWhiteboardOpen = false,
 		meetingDuration = 0,
+		unreadChatCount = 0,
 		showLabels = false,
 		variant = "floating",
 
@@ -151,6 +153,7 @@ export const ControlBar = React.memo(
 							label={isScreenSharing ? "Stop Share" : "Share Screen"}
 							onClick={onToggleScreenShare}
 							active={isScreenSharing}
+							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
 							showLabel={showLabels}
 							data-tour="controls-screenshare"
 						/>
@@ -169,15 +172,22 @@ export const ControlBar = React.memo(
 					);
 				case "chat":
 					return (
-						<ControlButton
-							key="chat"
-							icon={<Message01Icon />}
-							label="Chat"
-							onClick={onToggleChat}
-							active={isChatOpen}
-							showLabel={showLabels}
-							data-tour="controls-chat"
-						/>
+						<div key="chat" className="relative">
+							<ControlButton
+								icon={<Message01Icon />}
+								label="Chat"
+								onClick={onToggleChat}
+								active={isChatOpen}
+								activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+								showLabel={showLabels}
+								data-tour="controls-chat"
+							/>
+							{unreadChatCount > 0 && !isChatOpen && (
+								<span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold text-white bg-[#dc2626] rounded-full shadow-sm">
+									{unreadChatCount > 99 ? "99+" : unreadChatCount}
+								</span>
+							)}
+						</div>
 					);
 				case "participants":
 					return (
@@ -187,6 +197,7 @@ export const ControlBar = React.memo(
 							label="People"
 							onClick={onToggleParticipants}
 							active={isParticipantsOpen}
+							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
 							showLabel={showLabels}
 							data-tour="controls-participants"
 						/>
@@ -199,6 +210,7 @@ export const ControlBar = React.memo(
 							label="Transcript"
 							onClick={onToggleTranscription}
 							active={isTranscriptionEnabled}
+							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
 							showLabel={showLabels}
 						/>
 					);
@@ -210,6 +222,7 @@ export const ControlBar = React.memo(
 							label={isHandRaised ? "Lower Hand" : "Raise Hand"}
 							onClick={onToggleHandRaise}
 							active={isHandRaised}
+							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
 							showLabel={showLabels}
 						/>
 					);
@@ -231,6 +244,7 @@ export const ControlBar = React.memo(
 							label="Whiteboard"
 							onClick={onToggleWhiteboard}
 							active={isWhiteboardOpen}
+							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
 							showLabel={showLabels}
 						/>
 					);

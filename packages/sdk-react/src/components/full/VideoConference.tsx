@@ -14,10 +14,11 @@ import type {
 import { createLogger } from "@q9labs/chalk-core";
 import type React from "react";
 import type { ComponentType, ReactNode } from "react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const log = createLogger("VideoConference");
 
+import { toast } from "sonner";
 import { useChalkSession } from "../../context/chalk-provider";
 import { useChat } from "../../hooks/features/useChat";
 import { useInteractions } from "../../hooks/features/useInteractions";
@@ -173,7 +174,7 @@ function VideoConferenceBase({
 	const { activeSpeaker } = useActiveSpeaker();
 	const media = useMedia();
 	const screenShare = useScreenShare();
-	const { messages, sendMessage: sendChatMessage } = useChat();
+	const { messages, sendMessage: sendChatMessage, unreadCount, markAsRead } = useChat();
 	const recording = useRecording();
 	const interactions = useInteractions();
 	const whiteboard = useWhiteboard();
@@ -224,6 +225,51 @@ function VideoConferenceBase({
 
 		return () => clearInterval(interval);
 	}, [phase, joinStartTime]);
+
+	// Track previous message count and chat open state for notifications
+	const prevMessageCountRef = useRef(messages.length);
+	const isChatOpenRef = useRef(false);
+
+	// Callback to mark as read and track chat open state
+	const handleChatOpen = useCallback(() => {
+		isChatOpenRef.current = true;
+		markAsRead();
+	}, [markAsRead]);
+
+	// Track when chat is closed (unread count increases means chat is closed)
+	useEffect(() => {
+		if (unreadCount > 0) {
+			isChatOpenRef.current = false;
+		}
+	}, [unreadCount]);
+
+	// Show notification for new chat messages from other participants
+	useEffect(() => {
+		if (phase !== "meeting") return;
+
+		const prevCount = prevMessageCountRef.current;
+		const newCount = messages.length;
+
+		if (newCount > prevCount) {
+			// Get the new messages
+			const newMessages = messages.slice(prevCount);
+
+			// Find the last message from another participant
+			const lastRemoteMessage = [...newMessages]
+				.reverse()
+				.find((m) => m.senderId !== localParticipant?.id);
+
+			// Show notification if chat panel is not open and message is from someone else
+			if (lastRemoteMessage && !isChatOpenRef.current) {
+				play("message");
+				toast.info(`${lastRemoteMessage.senderName}: ${lastRemoteMessage.content}`, {
+					duration: 4000,
+				});
+			}
+		}
+
+		prevMessageCountRef.current = newCount;
+	}, [messages, localParticipant?.id, phase, play]);
 
 	const featureContext = useMemo(
 		(): FeatureContext => ({
@@ -360,13 +406,15 @@ function VideoConferenceBase({
 
 	const handleToggleHandRaise = useCallback(() => {
 		interactions.toggleHand();
-	}, [interactions]);
+		play('handRaise');
+	}, [interactions, play]);
 
 	const handleSendReaction = useCallback(
 		(emoji: string) => {
 			interactions.sendReaction(emoji as ReactionEmoji);
+			play('reaction');
 		},
-		[interactions],
+		[interactions, play],
 	);
 
 	const handleSendMessage = useCallback(
@@ -517,7 +565,9 @@ function VideoConferenceBase({
 			meetingDuration={meetingDuration}
 			canRecord={isFeatureEnabled(features.recording)}
 			chatMessages={chatMessages}
+			unreadChatCount={unreadCount}
 			onSendMessage={handleSendMessage}
+			onChatOpen={handleChatOpen}
 			enableChat={isFeatureEnabled(features.chat)}
 			enableRecording={isFeatureEnabled(features.recording)}
 			enableScreenShare={isFeatureEnabled(features.screenShare)}

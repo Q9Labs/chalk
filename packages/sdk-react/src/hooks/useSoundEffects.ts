@@ -6,6 +6,7 @@ export type SoundEffect =
   | 'leave'
   | 'message'
   | 'handRaise'
+  | 'reaction'
   | 'recordingStart'
   | 'recordingStop'
   | 'click'
@@ -25,6 +26,7 @@ export interface UseSoundEffectsReturn {
   playLeave: () => void;
   playMessage: () => void;
   playHandRaise: () => void;
+  playReaction: () => void;
   playRecordingStart: () => void;
   playRecordingStop: () => void;
   playClick: () => void;
@@ -43,6 +45,7 @@ const SOUND_FILES: Record<SoundEffect, string> = {
   leave: 'leave.mp3',
   message: 'message.mp3',
   handRaise: 'hand-raise.mp3',
+  reaction: 'reaction.mp3',
   recordingStart: 'recording-start.mp3',
   recordingStop: 'recording-stop.mp3',
   click: 'click.mp3',
@@ -162,6 +165,7 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
     playLeave: useCallback(() => play('leave'), [play]),
     playMessage: useCallback(() => play('message'), [play]),
     playHandRaise: useCallback(() => play('handRaise'), [play]),
+    playReaction: useCallback(() => play('reaction'), [play]),
     playRecordingStart: useCallback(() => play('recordingStart'), [play]),
     playRecordingStop: useCallback(() => play('recordingStop'), [play]),
     playClick: useCallback(() => play('click'), [play]),

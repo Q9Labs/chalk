@@ -11,6 +11,7 @@ export * from './Input';
 export * from './NameTag';
 export * from './ProgressBar';
 export * from './ReactionBubble';
+export * from './ReleaseBadge';
 export * from './Select';
 export * from './Skeleton';
 export * from './Spinner';

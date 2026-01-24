@@ -59,6 +59,7 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(r2Endpoint)
 		o.Region = "auto"
+		o.UsePathStyle = true // R2 requires path-style, not virtual-hosted
 	})
 
 	return &R2Client{

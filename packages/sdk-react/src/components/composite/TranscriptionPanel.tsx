@@ -635,11 +635,11 @@ export const TranscriptionPanel = React.memo(({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
+        <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col">
           <div
             ref={containerRef}
             className={cn(
-              "rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px]",
+              "rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px] flex-1",
               "bg-muted/30 backdrop-blur-sm border border-border/30"
             )}
             onScroll={handleScroll}

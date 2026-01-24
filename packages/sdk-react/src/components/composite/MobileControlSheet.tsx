@@ -165,6 +165,7 @@ export const MobileControlSheet = React.memo(({
       icon: isScreenSharing ? <MonitorOffIcon className="w-6 h-6" /> : <Monitor01Icon className="w-6 h-6" />,
       label: isScreenSharing ? 'Stop Share' : 'Share Screen',
       active: isScreenSharing,
+      activeClassName: 'bg-teal-500 text-white',
       action: onToggleScreenShare,
       enabled: enableScreenShare && !!onToggleScreenShare,
     },
@@ -173,6 +174,7 @@ export const MobileControlSheet = React.memo(({
       icon: <Message01Icon className="w-6 h-6" />,
       label: 'Chat',
       active: isChatOpen,
+      activeClassName: 'bg-teal-500 text-white',
       action: onToggleChat,
       enabled: enableChat && !!onToggleChat,
     },
@@ -181,6 +183,7 @@ export const MobileControlSheet = React.memo(({
       icon: <UserGroupIcon className="w-6 h-6" />,
       label: 'People',
       active: isParticipantsOpen,
+      activeClassName: 'bg-teal-500 text-white',
       action: onToggleParticipants,
       enabled: !!onToggleParticipants,
     },
@@ -189,6 +192,7 @@ export const MobileControlSheet = React.memo(({
       icon: <HandIcon className="w-6 h-6" />,
       label: isHandRaised ? 'Lower Hand' : 'Raise Hand',
       active: isHandRaised,
+      activeClassName: 'bg-teal-500 text-white',
       action: onToggleHandRaise,
       enabled: enableHandRaise && !!onToggleHandRaise,
     },
@@ -205,6 +209,7 @@ export const MobileControlSheet = React.memo(({
       icon: <Edit02Icon className="w-6 h-6" />,
       label: 'Whiteboard',
       active: isWhiteboardOpen,
+      activeClassName: 'bg-teal-500 text-white',
       action: onToggleWhiteboard,
       enabled: enableWhiteboard && !!onToggleWhiteboard,
     },
@@ -221,6 +226,7 @@ export const MobileControlSheet = React.memo(({
       icon: <FileTextIcon className="w-6 h-6" />,
       label: 'Transcript',
       active: isTranscriptionEnabled,
+      activeClassName: 'bg-teal-500 text-white',
       action: onToggleTranscription,
       enabled: enableTranscription && !!onToggleTranscription,
     },
@@ -277,9 +283,11 @@ export const MobileControlSheet = React.memo(({
                 onClick={() => handleAction(item.action)}
                 className={cn(
                   "flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-xl min-h-[88px] active:scale-95 transition-all",
-                  item.active
-                    ? "bg-accent text-accent-foreground"
-                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                  item.active && (item as any).activeClassName
+                    ? (item as any).activeClassName
+                    : item.active
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted"
                 )}
                 aria-label={item.label}
                 aria-pressed={item.active}

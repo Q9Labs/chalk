@@ -5,6 +5,7 @@ export * from './ConnectionLostOverlay';
 // Headers & Info
 export * from './MeetingHeader';
 export * from './InviteModal';
+export * from './InviteToast';
 
 // Chat Components
 export * from './MessageBubble';

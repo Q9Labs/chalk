@@ -1518,6 +1518,10 @@ export class Room extends EventEmitter<RoomEvents> {
       this.wsClient.raiseHand();
     }
 
+    this.emit("participant-updated", {
+      participantId: this._localParticipant.id,
+      participant: this._localParticipant,
+    });
     this.emit("hand-raised", { participantId: this._localParticipant.id });
   }
 
@@ -1531,6 +1535,10 @@ export class Room extends EventEmitter<RoomEvents> {
       this.wsClient.lowerHand();
     }
 
+    this.emit("participant-updated", {
+      participantId: this._localParticipant.id,
+      participant: this._localParticipant,
+    });
     this.emit("hand-lowered", { participantId: this._localParticipant.id });
   }
 

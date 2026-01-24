@@ -61,10 +61,11 @@ export function getParticipantColor(participantId?: string): ColorPalette {
 
 /**
  * Generate a gradient background string for a video tile
+ * Uses a clean 2-stop gradient to prevent muddy middle bands
  */
 export function getParticipantGradient(participantId?: string): string {
   const colors = getParticipantColor(participantId);
-  return `linear-gradient(180deg, ${colors.primary} 0%, ${colors.secondary} 50%, #000000 100%)`;
+  return `linear-gradient(180deg, ${colors.primary} 0%, var(--chalk-tile-gradient-end, #000000) 100%)`;
 }
 
 /**

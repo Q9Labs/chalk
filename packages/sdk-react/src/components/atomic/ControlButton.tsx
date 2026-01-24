@@ -13,6 +13,8 @@ interface ControlButtonProps {
 	noBorder?: boolean;
 	onClick?: () => void;
 	className?: string;
+	/** Custom styles when active (overrides default active styles) */
+	activeClassName?: string;
 	"data-tour"?: string;
 	ref?: React.Ref<HTMLButtonElement>;
 }
@@ -29,6 +31,7 @@ export const ControlButton = React.memo(
 		noBorder = false,
 		onClick,
 		className,
+		activeClassName,
 		"data-tour": dataTour,
 		ref,
 	}: ControlButtonProps) => {
@@ -53,8 +56,10 @@ export const ControlButton = React.memo(
 					!disabled && !active && !danger && noBorder &&
 						"bg-[var(--secondary)]",
 					// Active state
-					!disabled && active &&
+					!disabled && active && !activeClassName &&
 						"bg-[var(--secondary)] border-transparent hover:bg-[var(--accent)]",
+					// Custom active state
+					!disabled && active && activeClassName && activeClassName,
 					// Danger state - vibrant red for visibility
 					danger && "bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]",
 					className,

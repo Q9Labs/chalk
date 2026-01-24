@@ -10,6 +10,7 @@ import {
 	ConnectionLostOverlay,
 	ControlBar,
 	InviteModal,
+	InviteToast,
 	MobileControlSheet,
 	MobilePanel,
 	NotificationStack,
@@ -75,7 +76,9 @@ export interface MeetingRoomProps {
 	isTranscribing?: boolean;
 	transcripts?: TranscriptEntry[];
 	chatMessages?: ChatMessage[];
+	unreadChatCount?: number;
 	onSendMessage?: (content: string) => void;
+	onChatOpen?: () => void;
 	enableChat?: boolean;
 	enableRecording?: boolean;
 	enableScreenShare?: boolean;
@@ -89,6 +92,8 @@ export interface MeetingRoomProps {
 	defaultParticipantsOpen?: boolean;
 	defaultTranscriptionOpen?: boolean;
 	showTourOnFirstVisit?: boolean;
+	/** Show the invite toast on join. Default: true */
+	showInviteToastOnJoin?: boolean;
 	onToggleMute?: () => void;
 	onToggleVideo?: () => void;
 	onToggleScreenShare?: () => void;
@@ -121,7 +126,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	canRecord = false,
 	transcripts = [],
 	chatMessages = [],
+	unreadChatCount = 0,
 	onSendMessage,
+	onChatOpen,
 	enableChat = true,
 	enableRecording = true,
 	enableScreenShare = true,
@@ -135,6 +142,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	defaultParticipantsOpen = false,
 	defaultTranscriptionOpen = false,
 	showTourOnFirstVisit = true,
+	showInviteToastOnJoin = true,
 	onToggleMute,
 	onToggleVideo,
 	onToggleScreenShare,
@@ -165,6 +173,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	);
 	const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
 	const [showInviteModal, setShowInviteModal] = useState(false);
+	const [showInviteToast, setShowInviteToast] = useState(showInviteToastOnJoin);
 	const [showTour, setShowTour] = useState(false);
 	const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
 	const isMobile = useIsMobile();
@@ -178,8 +187,21 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 		}
 	}, [enableTour, showTourOnFirstVisit]);
 
+	// Mark chat as read if opened by default
+	useEffect(() => {
+		if (defaultChatOpen) {
+			onChatOpen?.();
+		}
+	}, []);
+
 	const togglePanel = (panel: "chat" | "participants" | "transcription") => {
-		setActivePanel((current) => (current === panel ? null : panel));
+		setActivePanel((current) => {
+			const newPanel = current === panel ? null : panel;
+			if (newPanel === "chat") {
+				onChatOpen?.();
+			}
+			return newPanel;
+		});
 	};
 
 	useEffect(() => {
@@ -327,9 +349,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 
 				{/* Desktop Sidebar - Integrated, pushing content */}
 				{!isMobile && activePanel && (
-					<div 
+					<div
 						className={cn(
-							"w-[360px] shrink-0 h-full rounded-3xl overflow-hidden flex flex-col bg-zinc-900/80 backdrop-blur-xl border border-white/5 shadow-xl transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+							"w-[360px] shrink-0 h-full rounded-3xl overflow-hidden flex flex-col bg-card/80 backdrop-blur-xl border border-border/50 shadow-xl transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
 							"animate-in slide-in-from-right-10 fade-in duration-300"
 						)}
 					>
@@ -460,6 +482,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						isWhiteboardOpen={isWhiteboardOpen}
 						isRecording={isRecording}
 						meetingDuration={meetingDuration}
+						unreadChatCount={unreadChatCount}
 						isChatOpen={activePanel === "chat"}
 						isParticipantsOpen={activePanel === "participants"}
 						isTranscriptionEnabled={activePanel === "transcription"}
@@ -538,6 +561,12 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				meetingLink={typeof window !== "undefined" ? window.location.href : ""}
 				meetingId={roomName}
 				onCopyLink={handleCopyLink}
+			/>
+
+			<InviteToast
+				isVisible={showInviteToast && !showTour}
+				onDismiss={() => setShowInviteToast(false)}
+				meetingLink={typeof window !== "undefined" ? window.location.href : ""}
 			/>
 
 			{/* Hidden audio renderer for remote participant audio */}

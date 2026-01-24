@@ -134,29 +134,46 @@ function RootComponent() {
 }
 
 function WhatsNew({ apiBaseUrl }: { apiBaseUrl: string }) {
-	const { isOpen, open, close, data, hasSeen, markAsSeen, shouldAutoOpen } =
-		useWhatsNew({ apiBaseUrl });
+	const {
+		isOpen,
+		open,
+		close,
+		releases,
+		currentIndex,
+		next,
+		prev,
+		markAllAsSeen,
+		later,
+		hasSeen,
+		shouldAutoOpen,
+	} = useWhatsNew({ apiBaseUrl });
 
 	// Auto-open for returning users with unseen updates
 	useEffect(() => {
 		if (shouldAutoOpen) open();
 	}, [shouldAutoOpen, open]);
 
-	const handleClose = () => {
-		close();
-		markAsSeen();
-	};
-
 	return (
 		<>
-			{/* Floating trigger button */}
-			<div className="fixed bottom-4 right-4 z-40">
-				<WhatsNewTrigger hasUnseen={!hasSeen && !!data} onClick={open} />
-			</div>
+			{/* Floating trigger button - only show when there are unseen releases */}
+			{releases.length > 0 && (
+				<div className="fixed bottom-4 right-4 z-40">
+					<WhatsNewTrigger hasUnseen={!hasSeen} onClick={open} />
+				</div>
+			)}
 
 			{/* Dialog */}
-			{isOpen && data && (
-				<WhatsNewDialog isOpen={isOpen} onClose={handleClose} data={data} />
+			{isOpen && releases.length > 0 && (
+				<WhatsNewDialog
+					isOpen={isOpen}
+					onClose={close}
+					releases={releases}
+					currentIndex={currentIndex}
+					onNext={next}
+					onPrev={prev}
+					onSkipAll={markAllAsSeen}
+					onLater={later}
+				/>
 			)}
 		</>
 	);
