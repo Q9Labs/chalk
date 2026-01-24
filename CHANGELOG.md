@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+## [0.0.43] - 2025-01-24
+
+### Changed
+
 - **Logging optimizations** - Reduced noise and improved error context
   - Skip `/health` endpoint logging (reduces ~50% log volume)
   - 4xx responses logged as `warn` level with error message
