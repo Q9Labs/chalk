@@ -100,5 +100,5 @@ variable "axiom_token" {
 variable "axiom_dataset" {
   description = "Axiom dataset name"
   type        = string
-  default     = "chalk-api"
+  default     = "chalk-api-prod"
 }
