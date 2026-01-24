@@ -75,3 +75,30 @@ variable "enable_cloudflare" {
   type        = bool
   default     = true
 }
+
+variable "r2_access_key_id" {
+  description = "Cloudflare R2 Access Key ID"
+  type        = string
+  sensitive   = true
+  default     = "" # Set via -var or TF_VAR_r2_access_key_id
+}
+
+variable "r2_secret_access_key" {
+  description = "Cloudflare R2 Secret Access Key"
+  type        = string
+  sensitive   = true
+  default     = "" # Set via -var or TF_VAR_r2_secret_access_key
+}
+
+variable "axiom_token" {
+  description = "Axiom ingest token for structured logging"
+  type        = string
+  sensitive   = true
+  default     = "" # Set via -var or TF_VAR_axiom_token
+}
+
+variable "axiom_dataset" {
+  description = "Axiom dataset name"
+  type        = string
+  default     = "chalk-api"
+}

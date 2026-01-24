@@ -114,6 +114,7 @@ module "ecs" {
     { name = "R2_ACCOUNT_ID", value = var.cloudflare_account_id },
     { name = "GITHUB_OWNER", value = "Q9Labs" },
     { name = "GITHUB_REPO", value = "chalk" },
+    { name = "AXIOM_DATASET", value = var.axiom_dataset },
   ]
 
   container_secrets = [
@@ -121,6 +122,9 @@ module "ecs" {
     { name = "REDIS_PASSWORD", valueFrom = module.elasticache.auth_token_secret_arn },
     { name = "JWT_SIGNING_KEY", valueFrom = module.secrets.jwt_secret_arn },
     { name = "GITHUB_TOKEN", valueFrom = module.secrets.github_token_arn },
+    { name = "R2_ACCESS_KEY_ID", valueFrom = "${module.secrets.r2_credentials_arn}:access_key_id::" },
+    { name = "R2_SECRET_ACCESS_KEY", valueFrom = "${module.secrets.r2_credentials_arn}:secret_access_key::" },
+    { name = "AXIOM_TOKEN", valueFrom = "${module.secrets.axiom_secret_arn}:token::" },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets
@@ -184,6 +188,10 @@ module "secrets" {
   environment           = local.environment
   cloudflare_app_id     = var.cloudflare_app_id
   cloudflare_app_secret = var.cloudflare_app_secret
+  r2_access_key_id      = var.r2_access_key_id
+  r2_secret_access_key  = var.r2_secret_access_key
+  axiom_token           = var.axiom_token
+  axiom_dataset         = var.axiom_dataset
 }
 
 # DNS and SSL certificates (must come before api_gateway)

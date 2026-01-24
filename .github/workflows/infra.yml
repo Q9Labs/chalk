@@ -142,12 +142,20 @@ jobs:
           echo "Then update the backend config in environments/prod/main.tf"
           exit 1
 
+      - name: Fetch secrets from SSM
+        id: ssm
+        run: |
+          AXIOM_TOKEN=$(aws ssm get-parameter --name "/chalk/prod/axiom-token" --with-decryption --query "Parameter.Value" --output text)
+          echo "::add-mask::$AXIOM_TOKEN"
+          echo "axiom_token=$AXIOM_TOKEN" >> $GITHUB_OUTPUT
+
       - name: Terraform Plan
         id: plan
         run: |
           terraform plan \
             -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -var="axiom_token=${{ steps.ssm.outputs.axiom_token }}" \
             -out=tfplan \
             -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
         continue-on-error: true

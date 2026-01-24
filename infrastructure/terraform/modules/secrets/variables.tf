@@ -36,6 +36,33 @@ variable "turn_app_key" {
   sensitive   = true
 }
 
+variable "r2_access_key_id" {
+  description = "Cloudflare R2 Access Key ID"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "r2_secret_access_key" {
+  description = "Cloudflare R2 Secret Access Key"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "axiom_token" {
+  description = "Axiom ingest token for structured logging"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "axiom_dataset" {
+  description = "Axiom dataset name"
+  type        = string
+  default     = "chalk-api"
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)

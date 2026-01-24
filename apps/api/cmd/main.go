@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
@@ -12,6 +12,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/config"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/jobs"
+	"github.com/Q9Labs/chalk/internal/infrastructure/logging"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
@@ -24,17 +25,20 @@ func main() {
 	ctx := context.Background()
 
 	// Load .env file (ignore error if not found - production uses real env vars)
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
+	_ = godotenv.Load()
+
+	// Initialize structured logging (Axiom if configured, stdout otherwise)
+	logging.Init()
+	defer logging.Close()
 
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		slog.Error("failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Starting server in %s mode", cfg.Server.Env)
+	slog.Info("starting server", "env", cfg.Server.Env)
 
 	// API-MED-03: Database connection using config from environment (including port)
 	dbPort := 5432
@@ -59,26 +63,29 @@ func main() {
 	}
 	pool, err := postgres.NewPool(ctx, dbCfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
-	log.Println("Connected to database")
+	slog.Info("connected to database")
 
 	// Run database migrations
 	if err := pool.RunMigrations(ctx); err != nil {
-		log.Fatalf("Failed to run database migrations: %v", err)
+		slog.Error("failed to run database migrations", "error", err)
+		os.Exit(1)
 	}
-	log.Println("Database migrations completed")
+	slog.Info("database migrations completed")
 
 	// Initialize Redis client
 	redisClient, err := redis.NewClient(ctx, cfg.Redis.URL)
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		slog.Error("failed to connect to Redis", "error", err)
+		os.Exit(1)
 	}
 	defer redisClient.Close()
 
-	log.Println("Connected to Redis")
+	slog.Info("connected to Redis")
 
 	// Initialize Cloudflare RealtimeKit client
 	cfClient := cloudflare.NewClient(cloudflare.Config{
@@ -87,7 +94,7 @@ func main() {
 		APIToken:  cfg.Cloudflare.APIToken,
 	})
 
-	log.Println("Initialized Cloudflare RealtimeKit client")
+	slog.Info("initialized Cloudflare RealtimeKit client")
 
 	// Initialize R2 storage client (optional)
 	var storageR2 storage.StorageClient
@@ -100,10 +107,10 @@ func main() {
 			PublicURL:       cfg.Storage.R2PublicURL,
 		})
 		if err != nil {
-			log.Printf("Warning: Failed to initialize R2 client: %v", err)
+			slog.Warn("failed to initialize R2 client", "error", err)
 		} else {
 			storageR2 = r2Client
-			log.Println("Initialized R2 storage client")
+			slog.Info("initialized R2 storage client")
 		}
 	}
 
@@ -117,10 +124,10 @@ func main() {
 			BucketName:      cfg.Storage.S3BucketName,
 		})
 		if err != nil {
-			log.Printf("Warning: Failed to initialize S3 client: %v", err)
+			slog.Warn("failed to initialize S3 client", "error", err)
 		} else {
 			storageS3 = s3Client
-			log.Println("Initialized S3 storage client")
+			slog.Info("initialized S3 storage client")
 		}
 	}
 
@@ -143,24 +150,24 @@ func main() {
 			storage.DefaultLifecycleConfig(),
 		)
 		go lifecycleMgr.Start(ctx)
-		log.Println("Started recording lifecycle manager")
+		slog.Info("started recording lifecycle manager")
 	}
 
 	// Start background jobs
 	recChecker := jobs.NewRecordingChecker(router.Queries(), cfClient, router.RecordingService())
 	go recChecker.Run(ctx, 30*time.Minute)
-	log.Println("Started recording checker (30min interval)")
+	slog.Info("started recording checker", "interval", "30m")
 
 	roomCleanup := jobs.NewRoomCleanup(router.Queries(), router.RoomService())
 	go roomCleanup.Run(ctx, 10*time.Minute, 30) // Check every 10min, cleanup rooms empty for 30min
-	log.Println("Started room cleanup (10min interval, 30min timeout)")
+	slog.Info("started room cleanup", "interval", "10m", "timeout", "30m")
 
 	// Graceful shutdown
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
-		log.Println("Shutting down server...")
+		slog.Info("shutting down server")
 		router.Close()
 		pool.Close()
 		os.Exit(0)
@@ -168,8 +175,9 @@ func main() {
 
 	// Start server
 	addr := ":" + cfg.Server.Port
-	log.Printf("Starting server on %s", addr)
+	slog.Info("starting server", "addr", addr)
 	if err := router.Run(addr); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		slog.Error("failed to start server", "error", err)
+		os.Exit(1)
 	}
 }

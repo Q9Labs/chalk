@@ -103,6 +103,38 @@ resource "aws_secretsmanager_secret" "github_token" {
   tags = local.tags
 }
 
+resource "aws_secretsmanager_secret" "r2_credentials" {
+  name        = "chalk/${var.environment}/r2-credentials"
+  description = "Cloudflare R2 storage credentials"
+  kms_key_id  = aws_kms_key.secrets.arn
+
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "r2_credentials" {
+  secret_id = aws_secretsmanager_secret.r2_credentials.id
+  secret_string = jsonencode({
+    access_key_id     = var.r2_access_key_id
+    secret_access_key = var.r2_secret_access_key
+  })
+}
+
+resource "aws_secretsmanager_secret" "axiom" {
+  name        = "chalk/${var.environment}/axiom"
+  description = "Axiom logging credentials"
+  kms_key_id  = aws_kms_key.secrets.arn
+
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "axiom" {
+  secret_id = aws_secretsmanager_secret.axiom.id
+  secret_string = jsonencode({
+    token   = var.axiom_token
+    dataset = var.axiom_dataset
+  })
+}
+
 resource "aws_iam_policy" "secrets_read" {
   name        = "${local.name}-secrets-read"
   description = "Policy to read Chalk secrets"
@@ -120,7 +152,9 @@ resource "aws_iam_policy" "secrets_read" {
           aws_secretsmanager_secret.jwt_secret.arn,
           aws_secretsmanager_secret.cloudflare_api.arn,
           aws_secretsmanager_secret.api_config.arn,
-          aws_secretsmanager_secret.github_token.arn
+          aws_secretsmanager_secret.github_token.arn,
+          aws_secretsmanager_secret.r2_credentials.arn,
+          aws_secretsmanager_secret.axiom.arn
         ]
       },
       {

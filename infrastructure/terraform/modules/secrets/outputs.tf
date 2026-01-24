@@ -28,9 +28,19 @@ output "github_token_arn" {
   value       = aws_secretsmanager_secret.github_token.arn
 }
 
+output "r2_credentials_arn" {
+  description = "R2 credentials secret ARN"
+  value       = aws_secretsmanager_secret.r2_credentials.arn
+}
+
 output "secrets_read_policy_arn" {
   description = "IAM policy ARN for reading secrets"
   value       = aws_iam_policy.secrets_read.arn
+}
+
+output "axiom_secret_arn" {
+  description = "Axiom credentials secret ARN"
+  value       = aws_secretsmanager_secret.axiom.arn
 }
 
 output "secret_arns" {
@@ -39,6 +49,8 @@ output "secret_arns" {
     aws_secretsmanager_secret.jwt_secret.arn,
     aws_secretsmanager_secret.cloudflare_api.arn,
     aws_secretsmanager_secret.api_config.arn,
-    aws_secretsmanager_secret.github_token.arn
+    aws_secretsmanager_secret.github_token.arn,
+    aws_secretsmanager_secret.r2_credentials.arn,
+    aws_secretsmanager_secret.axiom.arn
   ]
 }

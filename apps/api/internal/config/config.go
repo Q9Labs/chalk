@@ -15,6 +15,7 @@ type Config struct {
 	JWT        JWTConfig
 	Storage    StorageConfig
 	GitHub     GitHubConfig
+	Axiom      AxiomConfig
 }
 
 // ServerConfig holds server configuration
@@ -78,6 +79,12 @@ type GitHubConfig struct {
 	Owner    string // GITHUB_OWNER
 	Repo     string // GITHUB_REPO
 	CacheTTL int    // WHATS_NEW_CACHE_TTL (minutes)
+}
+
+// AxiomConfig holds Axiom logging configuration
+type AxiomConfig struct {
+	Token   string // AXIOM_TOKEN (required for Axiom, falls back to stdout if empty)
+	Dataset string // AXIOM_DATASET (default: chalk-api)
 }
 
 // Load loads configuration from environment variables
@@ -164,6 +171,10 @@ func Load() (*Config, error) {
 			Owner:    getEnv("GITHUB_OWNER", "Q9Labs"),
 			Repo:     getEnv("GITHUB_REPO", "chalk"),
 			CacheTTL: getEnvInt("WHATS_NEW_CACHE_TTL", 15),
+		},
+		Axiom: AxiomConfig{
+			Token:   getEnv("AXIOM_TOKEN", ""),
+			Dataset: getEnv("AXIOM_DATASET", "chalk-api"),
 		},
 	}
 

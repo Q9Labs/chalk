@@ -56,6 +56,8 @@ func NewRouter(cfg RouterConfig) *Router {
 	engine := gin.Default()
 
 	engine.Use(middleware.CORS())
+	engine.Use(middleware.RequestID())
+	engine.Use(middleware.RequestLogger())
 
 	queries := db.New(cfg.Pool)
 
@@ -152,9 +154,10 @@ func (r *Router) setupRoutes() {
 		demoHandler := handlers.NewDemoHandler(r.queries, r.roomService, r.participantService)
 		v1.POST("/demo/join", demoHandler.Join)
 
-		// What's New - public endpoint for release info
+		// What's New - public endpoints for release info
 		whatsNew := handlers.NewWhatsNewHandler(r.githubClient, r.redisClient, r.storageR2, r.appConfig.GitHub.CacheTTL)
 		v1.GET("/whats-new", whatsNew.Get)
+		v1.GET("/whats-new/releases", whatsNew.GetReleases)
 
 		tenants := handlers.NewTenantHandler(r.queries, r.apiKeyService)
 		tenantsGroup := v1.Group("/tenants")
