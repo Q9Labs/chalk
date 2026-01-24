@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+## [0.0.44] - 2026-01-24
+
+### Changed
+
 - **CI install performance** - Added proper dependency caching to GitHub Actions
   - Cache `~/.bun/install/cache` (Bun's global package cache)
   - Cache `node_modules` directories across monorepo
