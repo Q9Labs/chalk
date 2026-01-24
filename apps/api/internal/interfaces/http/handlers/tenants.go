@@ -254,9 +254,6 @@ type TenantConfig struct {
 	AllowedOrigins []string `json:"allowed_origins,omitempty"`
 }
 
-// localhostPortPattern matches localhost or 127.0.0.1 with optional port
-var localhostPortPattern = strings.NewReplacer() // placeholder for pattern check
-
 // validateAllowedOrigins validates a list of CORS origins
 // Rules:
 // - Must be valid URLs with http or https scheme
