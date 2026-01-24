@@ -110,7 +110,7 @@ function RootComponent() {
 		<ThemeProvider>
 			<div className="overflow-hidden bg-background text-foreground">
 				<Outlet />
-				<WhatsNew apiBaseUrl={apiUrl} />
+				<WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
 			</div>
 		</ThemeProvider>
 	);
