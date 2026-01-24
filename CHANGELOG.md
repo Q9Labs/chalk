@@ -11,7 +11,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Logging optimizations** - Reduced noise and improved error context
+  - Skip `/health` endpoint logging (reduces ~50% log volume)
+  - 4xx responses logged as `warn` level with error message
+  - 5xx responses logged as `error` level with stack trace
+  - Stack traces are condensed (function:line format, skip runtime internals)
+
+- **Reactions overhaul** - Enhanced picker with categories and improved animations
+  - ReactionPicker: 6 emoji categories (Smileys, Gestures, Hearts, Celebration, Objects) with 150+ emojis
+  - ReactionPicker: Teal-themed design with header, tabs, scrollable grid, footer hints
+  - ReactionBubble: Randomized float paths (horizontal offset, rotation, scale variation)
+  - ReactionBubble: Bouncy entrance animation with elastic easing
+  - ReactionBubble: Particle burst effects for celebration emojis (🎉, 🔥, ⭐, etc.)
+  - ReactionBubble: Optional participant name badge
+  - New CSS animations: `chalk-reaction-float`, `chalk-reaction-bounce-in`, `chalk-reaction-wiggle`, `chalk-particle-burst`
+
 ### Fixed
+
+- **Hand raise indicator not showing** - Local participant's hand raise state now syncs to UI
+
+### Developer Experience
+
+- **Release skill improvements** - macOS-compatible commands, merged analyze+ask phase, explicit Haiku prompt template
+  - Core: `Room.raiseHand()` and `lowerHand()` now emit `participant-updated` event
+  - This allows React's `useParticipants` to reflect the updated `handRaised` state
 
 ## [0.0.42] - 2026-01-24
 
