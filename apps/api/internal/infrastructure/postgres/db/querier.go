@@ -52,6 +52,8 @@ type Querier interface {
 	DeleteTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) error
 	EndRoom(ctx context.Context, id uuid.UUID) (Room, error)
 	GetActiveRecordingByRoom(ctx context.Context, roomID uuid.UUID) (Recording, error)
+	// Returns all allowed_origins from active tenants' tenant_config JSONB
+	GetAllTenantAllowedOrigins(ctx context.Context) ([]string, error)
 	GetAuditLog(ctx context.Context, id uuid.UUID) (AuditLog, error)
 	GetAuditLogWithDetails(ctx context.Context, id uuid.UUID) (GetAuditLogWithDetailsRow, error)
 	GetParticipant(ctx context.Context, id uuid.UUID) (Participant, error)

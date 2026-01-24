@@ -151,6 +151,35 @@ func (q *Queries) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const getAllTenantAllowedOrigins = `-- name: GetAllTenantAllowedOrigins :many
+SELECT DISTINCT jsonb_array_elements_text(tenant_config->'allowed_origins') AS origin
+FROM tenants
+WHERE is_active = true
+  AND tenant_config->'allowed_origins' IS NOT NULL
+  AND jsonb_array_length(tenant_config->'allowed_origins') > 0
+`
+
+// Returns all allowed_origins from active tenants' tenant_config JSONB
+func (q *Queries) GetAllTenantAllowedOrigins(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, getAllTenantAllowedOrigins)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var origin string
+		if err := rows.Scan(&origin); err != nil {
+			return nil, err
+		}
+		items = append(items, origin)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTenant = `-- name: GetTenant :one
 SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, is_active, created_at, updated_at, whiteboard_config, tenant_config FROM tenants
 WHERE id = $1 LIMIT 1

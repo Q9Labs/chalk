@@ -1,25 +1,32 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	"github.com/Q9Labs/chalk/internal/infrastructure/s3"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type TenantHandler struct {
-	queries       *db.Queries
-	apiKeyService *auth.APIKeyService
+	queries            *db.Queries
+	apiKeyService      *auth.APIKeyService
+	corsOriginsService *s3.CORSOriginsService
 }
 
-func NewTenantHandler(queries *db.Queries, apiKeyService *auth.APIKeyService) *TenantHandler {
+func NewTenantHandler(queries *db.Queries, apiKeyService *auth.APIKeyService, corsOriginsService *s3.CORSOriginsService) *TenantHandler {
 	return &TenantHandler{
-		queries:       queries,
-		apiKeyService: apiKeyService,
+		queries:            queries,
+		apiKeyService:      apiKeyService,
+		corsOriginsService: corsOriginsService,
 	}
 }
 
@@ -226,6 +233,8 @@ type UpdateTenantConfigRequest struct {
 	TranscriptionLanguage        *string   `json:"transcription_language"`
 	TranscriptionProfanityFilter *bool     `json:"transcription_profanity_filter"`
 	TranscriptionKeywords        *[]string `json:"transcription_keywords"`
+	// CORS settings
+	AllowedOrigins *[]string `json:"allowed_origins"`
 }
 
 // TenantConfig represents the tenant_config JSONB structure
@@ -241,6 +250,81 @@ type TenantConfig struct {
 	TranscriptionLanguage        string   `json:"transcription_language"`
 	TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
 	TranscriptionKeywords        []string `json:"transcription_keywords,omitempty"`
+	// CORS settings
+	AllowedOrigins []string `json:"allowed_origins,omitempty"`
+}
+
+// localhostPortPattern matches localhost or 127.0.0.1 with optional port
+var localhostPortPattern = strings.NewReplacer() // placeholder for pattern check
+
+// validateAllowedOrigins validates a list of CORS origins
+// Rules:
+// - Must be valid URLs with http or https scheme
+// - Max 20 origins per tenant
+// - No wildcards except localhost patterns for development
+func validateAllowedOrigins(origins []string) error {
+	if len(origins) > 20 {
+		return &originValidationError{"maximum 20 allowed origins per tenant"}
+	}
+
+	for _, origin := range origins {
+		if err := validateOrigin(origin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateOrigin(origin string) error {
+	// Allow localhost patterns for development
+	if isLocalhostOrigin(origin) {
+		return nil
+	}
+
+	// Must be a valid URL
+	u, err := url.Parse(origin)
+	if err != nil {
+		return &originValidationError{"invalid origin URL: " + origin}
+	}
+
+	// Must have http or https scheme
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return &originValidationError{"origin must use http or https scheme: " + origin}
+	}
+
+	// Must have a host
+	if u.Host == "" {
+		return &originValidationError{"origin must have a host: " + origin}
+	}
+
+	// No wildcards in non-localhost origins
+	if strings.Contains(u.Host, "*") {
+		return &originValidationError{"wildcards not allowed in origin: " + origin}
+	}
+
+	// No path, query, or fragment (origin is scheme://host[:port])
+	if u.Path != "" && u.Path != "/" {
+		return &originValidationError{"origin should not include path: " + origin}
+	}
+
+	return nil
+}
+
+func isLocalhostOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1"
+}
+
+type originValidationError struct {
+	msg string
+}
+
+func (e *originValidationError) Error() string {
+	return e.msg
 }
 
 // PATCH /api/v1/tenants/:id/config
@@ -315,6 +399,13 @@ func (h *TenantHandler) UpdateConfig(c *gin.Context) {
 	if req.TranscriptionKeywords != nil {
 		config.TranscriptionKeywords = *req.TranscriptionKeywords
 	}
+	if req.AllowedOrigins != nil {
+		if err := validateAllowedOrigins(*req.AllowedOrigins); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		config.AllowedOrigins = *req.AllowedOrigins
+	}
 
 	// Serialize updated config
 	configBytes, err := json.Marshal(config)
@@ -331,6 +422,15 @@ func (h *TenantHandler) UpdateConfig(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Trigger async S3 upload if AllowedOrigins changed
+	if req.AllowedOrigins != nil && h.corsOriginsService != nil {
+		go func() {
+			if err := h.corsOriginsService.AggregateAndUpload(context.Background()); err != nil {
+				log.Printf("Failed to upload CORS origins to S3: %v", err)
+			}
+		}()
 	}
 
 	c.JSON(http.StatusOK, updatedTenant)

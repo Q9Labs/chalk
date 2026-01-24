@@ -15,7 +15,7 @@ import (
 // TestTenantHandler_Create_InvalidJSON tests invalid JSON body returns 400
 func TestTenantHandler_Create_InvalidJSON(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.POST("/tenants", handler.Create)
 
 	body := bytes.NewBufferString(`{invalid json}`)
@@ -34,7 +34,7 @@ func TestTenantHandler_Create_InvalidJSON(t *testing.T) {
 // TestTenantHandler_Create_MissingName tests missing required name returns 400
 func TestTenantHandler_Create_MissingName(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.POST("/tenants", handler.Create)
 
 	body := bytes.NewBufferString(`{}`)
@@ -53,7 +53,7 @@ func TestTenantHandler_Create_MissingName(t *testing.T) {
 // TestTenantHandler_Create_EmptyName tests empty name string returns 400
 func TestTenantHandler_Create_EmptyName(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.POST("/tenants", handler.Create)
 
 	body := bytes.NewBufferString(`{"name": ""}`)
@@ -106,7 +106,7 @@ func TestTenantHandler_Create_OptionalLimitFields(t *testing.T) {
 // TestTenantHandler_Get_InvalidTenantID tests invalid UUID param returns 400
 func TestTenantHandler_Get_InvalidTenantID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.GET("/tenants/:id", handler.Get)
 
 	req := httptest.NewRequest("GET", "/tenants/invalid-id", nil)
@@ -124,7 +124,7 @@ func TestTenantHandler_Get_InvalidTenantID(t *testing.T) {
 // TestTenantHandler_Update_InvalidTenantID tests invalid UUID param returns 400
 func TestTenantHandler_Update_InvalidTenantID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.PATCH("/tenants/:id", handler.Update)
 
 	body := bytes.NewBufferString(`{"name": "Updated"}`)
@@ -143,7 +143,7 @@ func TestTenantHandler_Update_InvalidTenantID(t *testing.T) {
 // TestTenantHandler_Update_InvalidJSON tests invalid JSON body returns 400
 func TestTenantHandler_Update_InvalidJSON(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.PATCH("/tenants/:id", handler.Update)
 
 	validID := uuid.New().String()
@@ -182,7 +182,7 @@ func TestTenantHandler_Update_EmptyBody(t *testing.T) {
 // TestTenantHandler_Delete_InvalidTenantID tests invalid UUID param returns 400
 func TestTenantHandler_Delete_InvalidTenantID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.DELETE("/tenants/:id", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/tenants/bad-id", nil)
@@ -200,7 +200,7 @@ func TestTenantHandler_Delete_InvalidTenantID(t *testing.T) {
 // TestTenantHandler_RotateAPIKey_InvalidTenantID tests invalid UUID param returns 400
 func TestTenantHandler_RotateAPIKey_InvalidTenantID(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewTenantHandler(nil, nil)
+	handler := NewTenantHandler(nil, nil, nil)
 	router.POST("/tenants/:id/rotate-key", handler.RotateAPIKey)
 
 	req := httptest.NewRequest("POST", "/tenants/invalid-uuid/rotate-key", nil)
@@ -229,7 +229,7 @@ func TestTenantHandler_Get_UUIDValidation(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewTenantHandler(nil, nil)
+			handler := NewTenantHandler(nil, nil, nil)
 			router.GET("/tenants/:id", handler.Get)
 
 			req := httptest.NewRequest("GET", "/tenants/"+tc.tenantID, nil)

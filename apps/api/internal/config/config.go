@@ -8,14 +8,15 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Server     ServerConfig
-	Database   DatabaseConfig
-	Redis      RedisConfig
-	Cloudflare CloudflareConfig
-	JWT        JWTConfig
-	Storage    StorageConfig
-	GitHub     GitHubConfig
-	Axiom      AxiomConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	Redis       RedisConfig
+	Cloudflare  CloudflareConfig
+	JWT         JWTConfig
+	Storage     StorageConfig
+	GitHub      GitHubConfig
+	Axiom       AxiomConfig
+	CORSOrigins CORSOriginsConfig
 }
 
 // ServerConfig holds server configuration
@@ -85,6 +86,12 @@ type GitHubConfig struct {
 type AxiomConfig struct {
 	Token   string // AXIOM_TOKEN (required for Axiom, falls back to stdout if empty)
 	Dataset string // AXIOM_DATASET (default: chalk-api)
+}
+
+// CORSOriginsConfig holds configuration for CORS origins S3 sync
+type CORSOriginsConfig struct {
+	Bucket string // CORS_ORIGINS_BUCKET
+	Key    string // CORS_ORIGINS_KEY (default: cors/allowed-origins.json)
 }
 
 // Load loads configuration from environment variables
@@ -175,6 +182,10 @@ func Load() (*Config, error) {
 		Axiom: AxiomConfig{
 			Token:   getEnv("AXIOM_TOKEN", ""),
 			Dataset: getEnv("AXIOM_DATASET", "chalk-api"),
+		},
+		CORSOrigins: CORSOriginsConfig{
+			Bucket: getEnv("CORS_ORIGINS_BUCKET", ""),
+			Key:    getEnv("CORS_ORIGINS_KEY", "cors/allowed-origins.json"),
 		},
 	}
 

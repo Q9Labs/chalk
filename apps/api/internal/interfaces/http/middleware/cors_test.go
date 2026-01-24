@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -21,6 +22,8 @@ func TestCORS_AllowedOrigins(t *testing.T) {
 		"http://127.0.0.1",      // 127.0.0.1 without port
 		"https://chalk.q9labs.ai",
 		"https://chalk-5bc.pages.dev",
+		"https://dev.dwd4jsk5p7j52.amplifyapp.com",
+		"https://portal.tuitionhighway.com",
 	}
 
 	for _, origin := range allowedOrigins {
@@ -227,4 +230,69 @@ func TestCORS_PreflightDoesNotCallHandler(t *testing.T) {
 	// Handler should not be called for preflight
 	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestIsOriginAllowedForTenant_PlatformOrigins(t *testing.T) {
+	// Platform origins should always be allowed
+	platformOrigins := []string{
+		"https://chalk.q9labs.ai",
+		"https://chalk-5bc.pages.dev",
+		"https://collabdash-dev.vercel.app",
+		"https://app.collabdash.io",
+		"https://dev.dwd4jsk5p7j52.amplifyapp.com",
+		"https://portal-dev.tuitionhighway.com",
+		"https://portal.tuitionhighway.com",
+		"https://backend.tuitionhighway.com",
+		"https://backend-dev.tuitionhighway.com",
+	}
+
+	for _, origin := range platformOrigins {
+		t.Run(origin, func(t *testing.T) {
+			allowed := IsOriginAllowedForTenant(origin, nil)
+			assert.True(t, allowed, "platform origin should be allowed: %s", origin)
+		})
+	}
+}
+
+func TestIsOriginAllowedForTenant_Localhost(t *testing.T) {
+	localhostOrigins := []string{
+		"http://localhost",
+		"http://localhost:3000",
+		"http://127.0.0.1:8080",
+	}
+
+	for _, origin := range localhostOrigins {
+		t.Run(origin, func(t *testing.T) {
+			allowed := IsOriginAllowedForTenant(origin, nil)
+			assert.True(t, allowed, "localhost origin should be allowed: %s", origin)
+		})
+	}
+}
+
+func TestIsOriginAllowedForTenant_TenantConfig(t *testing.T) {
+	tenantConfig := []byte(`{"allowed_origins": ["https://tenant-app.com", "https://custom-domain.io"]}`)
+	tenant := &db.Tenant{
+		TenantConfig: tenantConfig,
+	}
+
+	// Tenant-configured origins should be allowed
+	assert.True(t, IsOriginAllowedForTenant("https://tenant-app.com", tenant))
+	assert.True(t, IsOriginAllowedForTenant("https://custom-domain.io", tenant))
+
+	// Unknown origins should not be allowed
+	assert.False(t, IsOriginAllowedForTenant("https://unknown-domain.com", tenant))
+}
+
+func TestIsOriginAllowedForTenant_NilTenant(t *testing.T) {
+	// Non-platform, non-localhost origins should fail with nil tenant
+	assert.False(t, IsOriginAllowedForTenant("https://unknown-domain.com", nil))
+}
+
+func TestIsOriginAllowedForTenant_EmptyConfig(t *testing.T) {
+	tenant := &db.Tenant{
+		TenantConfig: []byte(`{}`),
+	}
+
+	// Non-platform origins should fail with empty config
+	assert.False(t, IsOriginAllowedForTenant("https://unknown-domain.com", tenant))
 }

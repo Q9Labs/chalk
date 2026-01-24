@@ -429,3 +429,11 @@ resource "aws_iam_role_policy" "ecs_task" {
     ]
   })
 }
+
+# Attach additional policies to the ECS task role
+resource "aws_iam_role_policy_attachment" "ecs_task_additional" {
+  for_each = toset(var.task_role_policy_arns)
+
+  role       = aws_iam_role.ecs_task.name
+  policy_arn = each.value
+}

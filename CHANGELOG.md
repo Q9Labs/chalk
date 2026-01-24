@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Dynamic tenant CORS origins** - Tenants can configure allowed CORS domains
+  - API: `PATCH /api/v1/tenants/:id/config` now accepts `allowed_origins` array
+  - Validation: Max 20 origins, http/https only, no wildcards (except localhost)
+  - S3 aggregation: Tenant origins uploaded to S3 for Terraform consumption
+  - API Gateway: CORS origins read from S3 bucket (updated via GitHub Actions)
+  - Defense in depth: App-level CORS middleware with tenant-aware checking
+  - WebSocket: Origin validation against tenant config after JWT authentication
+  - New Terraform module: `cors-origins` with S3 bucket and IAM policies
+  - GitHub Actions: `cors-sync.yml` workflow triggered by `repository_dispatch`
+
 ### Changed
 
 ### Fixed

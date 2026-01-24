@@ -16,9 +16,19 @@ locals {
     Environment = var.environment
     Module      = "api-gateway"
   })
+
+  # Use S3 origins if bucket is configured, otherwise use variable
+  cors_origins = var.cors_origins_bucket != null ? jsondecode(data.aws_s3_object.cors_origins[0].body).origins : var.cors_allowed_origins
 }
 
 data "aws_region" "current" {}
+
+# Read CORS origins from S3 bucket (if configured)
+data "aws_s3_object" "cors_origins" {
+  count  = var.cors_origins_bucket != null ? 1 : 0
+  bucket = var.cors_origins_bucket
+  key    = var.cors_origins_key
+}
 
 # IAM role for API Gateway to write to CloudWatch Logs
 resource "aws_iam_role" "api_gateway_cloudwatch" {
@@ -104,9 +114,9 @@ resource "aws_apigatewayv2_api" "http" {
   description   = "HTTP API for Chalk ${var.environment}"
 
   cors_configuration {
-    allow_headers = ["content-type", "authorization", "x-api-key", "x-amz-date"]
+    allow_headers = ["content-type", "authorization", "x-api-key", "x-amz-date", "origin"]
     allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    allow_origins = var.cors_allowed_origins
+    allow_origins = local.cors_origins
     max_age       = 86400
   }
 

@@ -79,3 +79,11 @@ UPDATE tenants
 SET tenant_config = $2
 WHERE id = $1
 RETURNING *;
+
+-- name: GetAllTenantAllowedOrigins :many
+-- Returns all allowed_origins from active tenants' tenant_config JSONB
+SELECT DISTINCT jsonb_array_elements_text(tenant_config->'allowed_origins') AS origin
+FROM tenants
+WHERE is_active = true
+  AND tenant_config->'allowed_origins' IS NOT NULL
+  AND jsonb_array_length(tenant_config->'allowed_origins') > 0;

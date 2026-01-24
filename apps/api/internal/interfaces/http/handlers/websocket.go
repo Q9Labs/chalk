@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
+	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	wsocket "github.com/Q9Labs/chalk/internal/interfaces/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -18,11 +20,12 @@ import (
 type WebSocketHandler struct {
 	jwtService     *auth.JWTService
 	hub            *wsocket.Hub
+	queries        *db.Queries
 	allowedOrigins []string
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
-func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSocketHandler {
+func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub, queries *db.Queries) *WebSocketHandler {
 	// Parse allowed origins from environment
 	originsEnv := os.Getenv("ALLOWED_WS_ORIGINS")
 	var origins []string
@@ -51,6 +54,17 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSock
 		"collabdash-dev.vercel.app",
 		"https://app.collabdash.io",
 		"app.collabdash.io",
+		// TuitionHighway origins
+		"https://dev.dwd4jsk5p7j52.amplifyapp.com",
+		"dev.dwd4jsk5p7j52.amplifyapp.com",
+		"https://portal-dev.tuitionhighway.com",
+		"portal-dev.tuitionhighway.com",
+		"https://portal.tuitionhighway.com",
+		"portal.tuitionhighway.com",
+		"https://backend.tuitionhighway.com",
+		"backend.tuitionhighway.com",
+		"https://backend-dev.tuitionhighway.com",
+		"backend-dev.tuitionhighway.com",
 		// Allow localhost for development/testing even in production
 		"http://localhost:*",
 		"localhost:*",
@@ -61,6 +75,7 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub) *WebSock
 	return &WebSocketHandler{
 		jwtService:     jwtService,
 		hub:            hub,
+		queries:        queries,
 		allowedOrigins: origins,
 	}
 }
@@ -110,6 +125,20 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	if claims.Subject == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing participant_id in token"})
 		return
+	}
+
+	// Tenant-aware origin validation (defense in depth)
+	origin := c.Request.Header.Get("Origin")
+	if origin != "" && h.queries != nil {
+		tenant, err := h.queries.GetTenant(c.Request.Context(), claims.TenantID)
+		if err == nil {
+			if !middleware.IsOriginAllowedForTenant(origin, &tenant) {
+				log.Printf("WebSocket origin %s not allowed for tenant %s", origin, claims.TenantID)
+				c.JSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
+				return
+			}
+		}
+		// If tenant lookup fails, fall through to pattern-based check below
 	}
 
 	// Upgrade connection to WebSocket with origin checking

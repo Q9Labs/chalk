@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/config"
@@ -15,6 +16,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
+	"github.com/Q9Labs/chalk/internal/infrastructure/s3"
 	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/handlers"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
@@ -23,19 +25,20 @@ import (
 )
 
 type Router struct {
-	engine        *gin.Engine
-	pool          *postgres.Pool
-	queries       *db.Queries
-	jwtService    *auth.JWTService
-	apiKeyService *auth.APIKeyService
-	cfClient      *cloudflare.Client
-	redisClient   *redis.Client
-	roomState     *redis.RoomState
-	wsHub         *websocket.Hub
-	storageR2     storage.StorageClient
-	storageS3     storage.StorageClient
-	githubClient  *github.Client
-	appConfig     *config.Config
+	engine             *gin.Engine
+	pool               *postgres.Pool
+	queries            *db.Queries
+	jwtService         *auth.JWTService
+	apiKeyService      *auth.APIKeyService
+	cfClient           *cloudflare.Client
+	redisClient        *redis.Client
+	roomState          *redis.RoomState
+	wsHub              *websocket.Hub
+	storageR2          storage.StorageClient
+	storageS3          storage.StorageClient
+	githubClient       *github.Client
+	appConfig          *config.Config
+	corsOriginsService *s3.CORSOriginsService
 
 	roomService        *room.Service
 	participantService *participant.Service
@@ -88,6 +91,20 @@ func NewRouter(cfg RouterConfig) *Router {
 		cfg.AppConfig.GitHub.Repo,
 	)
 
+	// CORS origins S3 service for tenant-specific origins
+	corsOriginsService, err := s3.NewCORSOriginsService(s3.CORSOriginsConfig{
+		Region:          cfg.AppConfig.Storage.S3Region,
+		AccessKeyID:     cfg.AppConfig.Storage.S3AccessKeyID,
+		SecretAccessKey: cfg.AppConfig.Storage.S3SecretAccessKey,
+		Bucket:          cfg.AppConfig.CORSOrigins.Bucket,
+		Key:             cfg.AppConfig.CORSOrigins.Key,
+		GitHubRepo:      cfg.AppConfig.GitHub.Owner + "/" + cfg.AppConfig.GitHub.Repo,
+		GitHubToken:     cfg.AppConfig.GitHub.Token,
+	}, queries)
+	if err != nil {
+		log.Printf("Warning: failed to initialize CORS origins service: %v", err)
+	}
+
 	// Wire transcript service to WebSocket hub for real-time transcript persistence
 	wsHub.SetTranscriptService(&transcriptServiceAdapter{svc: transcriptService})
 
@@ -105,6 +122,7 @@ func NewRouter(cfg RouterConfig) *Router {
 		storageS3:          cfg.StorageS3,
 		githubClient:       githubClient,
 		appConfig:          cfg.AppConfig,
+		corsOriginsService: corsOriginsService,
 		roomService:        roomService,
 		participantService: participantService,
 		recordingService:   recordingService,
@@ -139,7 +157,7 @@ func (r *Router) setupRoutes() {
 	health := handlers.NewHealthHandler(r.pool)
 	r.engine.GET("/health", health.Check)
 
-	wsHandler := handlers.NewWebSocketHandler(r.jwtService, r.wsHub)
+	wsHandler := handlers.NewWebSocketHandler(r.jwtService, r.wsHub, r.queries)
 	r.engine.GET("/ws", wsHandler.HandleWebSocket)
 
 	authMw := middleware.NewAuthMiddleware(r.jwtService)
@@ -159,7 +177,7 @@ func (r *Router) setupRoutes() {
 		v1.GET("/whats-new", whatsNew.Get)
 		v1.GET("/whats-new/releases", whatsNew.GetReleases)
 
-		tenants := handlers.NewTenantHandler(r.queries, r.apiKeyService)
+		tenants := handlers.NewTenantHandler(r.queries, r.apiKeyService, r.corsOriginsService)
 		tenantsGroup := v1.Group("/tenants")
 		{
 			tenantsGroup.POST("", tenants.Create)

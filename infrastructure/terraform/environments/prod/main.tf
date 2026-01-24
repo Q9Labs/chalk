@@ -68,6 +68,14 @@ module "ecr" {
   image_count_to_keep  = 50
 }
 
+# CORS origins bucket (must be defined before ECS since it references outputs)
+module "cors_origins" {
+  source = "../../modules/cors-origins"
+
+  environment    = local.environment
+  static_origins = var.cors_allowed_origins
+}
+
 module "ecs" {
   source = "../../modules/ecs"
 
@@ -115,7 +123,11 @@ module "ecs" {
     { name = "GITHUB_OWNER", value = "Q9Labs" },
     { name = "GITHUB_REPO", value = "chalk" },
     { name = "AXIOM_DATASET", value = var.axiom_dataset },
+    { name = "CORS_ORIGINS_BUCKET", value = module.cors_origins.bucket_name },
+    { name = "CORS_ORIGINS_KEY", value = module.cors_origins.origins_key },
   ]
+
+  task_role_policy_arns = [module.cors_origins.write_policy_arn]
 
   container_secrets = [
     { name = "DATABASE_PASSWORD", valueFrom = "${module.aurora.master_user_secret_arn}:password::" },
@@ -229,6 +241,8 @@ module "api_gateway" {
   # because API Gateway doesn't allow mixing WebSocket/HTTP APIs on same domain
 
   cors_allowed_origins = var.cors_allowed_origins
+  cors_origins_bucket  = module.cors_origins.bucket_name
+  cors_origins_key     = module.cors_origins.origins_key
 
   throttling_burst_limit           = 2000 # Reduced from 10000 (sufficient for 200 MAU)
   throttling_rate_limit            = 5000 # Reduced from 20000

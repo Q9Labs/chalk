@@ -40,7 +40,7 @@ func TestWebSocketHandler_HandleWebSocket_MissingToken(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	router := setupTestRouter()
 	router.GET("/ws", handler.HandleWebSocket)
@@ -58,7 +58,7 @@ func TestWebSocketHandler_HandleWebSocket_InvalidToken(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	router := setupTestRouter()
 	router.GET("/ws", handler.HandleWebSocket)
@@ -76,7 +76,7 @@ func TestWebSocketHandler_HandleWebSocket_MissingRoomID(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	// Generate a token without room_id
 	claims := auth.Claims{
@@ -103,7 +103,7 @@ func TestWebSocketHandler_HandleWebSocket_MissingParticipantID(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	// Generate a token without subject (participant ID)
 	claims := auth.Claims{
@@ -130,7 +130,7 @@ func TestWebSocketHandler_TokenFromQueryParam(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	claims := auth.Claims{
 		Subject:  uuid.New().String(),
@@ -158,7 +158,7 @@ func TestWebSocketHandler_TokenFromProtocolHeader(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	claims := auth.Claims{
 		Subject:  uuid.New().String(),
@@ -185,7 +185,7 @@ func TestWebSocketHandler_TokenFromProtocolHeader_MultipleProtocols(t *testing.T
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	claims := auth.Claims{
 		Subject:  uuid.New().String(),
@@ -212,7 +212,7 @@ func TestWebSocketHandler_QueryParamTakesPrecedence(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	// Valid token in query
 	claims := auth.Claims{
@@ -242,7 +242,7 @@ func TestNewWebSocketHandler(t *testing.T) {
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
 
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	assert.NotNil(t, handler)
 	assert.Equal(t, jwtService, handler.jwtService)
@@ -253,7 +253,7 @@ func TestWebSocketHandler_EmptySecWebSocketProtocol(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	router := setupTestRouter()
 	router.GET("/ws", handler.HandleWebSocket)
@@ -273,7 +273,7 @@ func TestWebSocketHandler_NoTokenPrefix(t *testing.T) {
 	config := infraAuth.DefaultJWTConfig()
 	jwtService := infraAuth.NewJWTService(config)
 	hub := newTestWSHub()
-	handler := NewWebSocketHandler(jwtService, hub)
+	handler := NewWebSocketHandler(jwtService, hub, nil)
 
 	router := setupTestRouter()
 	router.GET("/ws", handler.HandleWebSocket)

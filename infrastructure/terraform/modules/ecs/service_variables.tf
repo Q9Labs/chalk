@@ -69,3 +69,9 @@ variable "enable_execute_command" {
   type        = bool
   default     = false
 }
+
+variable "task_role_policy_arns" {
+  description = "Additional IAM policy ARNs to attach to the ECS task role"
+  type        = list(string)
+  default     = []
+}

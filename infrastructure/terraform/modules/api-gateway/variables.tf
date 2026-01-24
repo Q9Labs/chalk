@@ -24,9 +24,21 @@ variable "alb_dns_name" {
 }
 
 variable "cors_allowed_origins" {
-  description = "CORS allowed origins"
+  description = "CORS allowed origins (fallback if S3 bucket not configured)"
   type        = list(string)
   default     = ["*"]
+}
+
+variable "cors_origins_bucket" {
+  description = "S3 bucket containing aggregated CORS origins (optional)"
+  type        = string
+  default     = null
+}
+
+variable "cors_origins_key" {
+  description = "S3 key for the origins JSON file"
+  type        = string
+  default     = "cors/allowed-origins.json"
 }
 
 variable "throttling_burst_limit" {
