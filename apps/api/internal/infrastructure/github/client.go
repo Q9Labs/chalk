@@ -228,15 +228,15 @@ func parseSemver(version string) semver {
 	parts := strings.Split(version, ".")
 
 	if len(parts) >= 1 {
-		fmt.Sscanf(parts[0], "%d", &s.major)
+		_, _ = fmt.Sscanf(parts[0], "%d", &s.major)
 	}
 	if len(parts) >= 2 {
-		fmt.Sscanf(parts[1], "%d", &s.minor)
+		_, _ = fmt.Sscanf(parts[1], "%d", &s.minor)
 	}
 	if len(parts) >= 3 {
 		// Handle pre-release suffixes like "1.2.3-beta"
 		patchPart := strings.Split(parts[2], "-")[0]
-		fmt.Sscanf(patchPart, "%d", &s.patch)
+		_, _ = fmt.Sscanf(patchPart, "%d", &s.patch)
 	}
 
 	return s
