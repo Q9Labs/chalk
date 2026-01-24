@@ -13,6 +13,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.0.42] - 2026-01-24
+
+### Changed
+
+- **What's New dialog redesign** - Multi-release navigation with enhanced UX
+  - Backend: `GET /api/v1/whats-new/releases` endpoint fetching up to 10 releases
+  - Backend: Release type derivation (major/minor/patch) from semver comparison
+  - React SDK: `useWhatsNew` hook extended with `releases[]`, `currentIndex`, `next`, `prev`, `markAllAsSeen`, `later`
+  - React SDK: `WhatsNewDialog` redesigned with 40/60 layout (image/content), pagination dots, keyboard navigation
+  - React SDK: `ReleaseBadge` atomic component showing release type (major=red, minor=blue, patch=gray)
+  - Footer: "Later" (close without marking), "Skip All" (mark all seen), "Next/Done" (primary action)
+  - Keyboard: Arrow keys for navigation, Esc to close
+
+### Added
+
+- **Invite toast on join** - Google Meet-style popup prompting users to share meeting link
+  - React SDK: `InviteToast` composite component with auto-dismiss (8s), copy link, close button
+  - React SDK: `MeetingRoom` prop `showInviteToastOnJoin` (default: true)
+  - Hidden during guided tour to avoid UI overlap
+
+- **Sound effects for reactions and hand raise** - Audio feedback for interactions
+  - React SDK: Added `reaction` sound effect type and `playReaction` helper
+  - React SDK: Hand raise and reactions now trigger sounds in VideoConference
+  - Web: Added `reaction.mp3` sound file
+
+- **Structured logging with Axiom integration** - Upgraded to `slog` with Axiom backend for searchable, filterable logs
+  - Backend: `logging` package with graceful fallback to JSON stdout
+  - Backend: Request ID middleware for correlation across services
+  - Backend: Structured fields: `request_id`, `tenant_id`, `room_id`, `participant_id`, `latency_ms`, `status`
+  - Environment: `AXIOM_TOKEN` (required for Axiom), `AXIOM_DATASET` (default: `chalk-api`)
+
+### Fixed
+
+### Developer Experience
+
+- **Consolidated release skill** - Merged SKILL.md and RELEASE_GUIDE.md into single 147-line file with Opus+Haiku architecture
+
 ## [0.0.41] - 2026-01-24
 
 ### Added
