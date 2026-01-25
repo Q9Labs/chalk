@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CORS for tenant domains** - Enable S3-based CORS origins in API Gateway
+  - Set `enable_s3_cors_origins = true` in prod environment
+  - API Gateway now reads CORS origins from S3 (includes TuitionHighway domains)
 - **Terraform formatting** - Fix HCL alignment in cors-origins module
 - **Terraform plan errors** - Fix count/for_each with unknown values at plan time
   - api-gateway: Add `enable_s3_cors_origins` boolean (known at plan time)
