@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.45] - 2026-01-25
+
+### Added
+
+- **sdk-react: Bundled sounds & logos** - Assets now included in SDK distribution
+  - Added `useBundled` option to `useSoundEffects` hook for zero-config usage
+  - 9 sound files bundled at `@q9labs/chalk-react/sounds/*`
+  - 2 logo files bundled at `@q9labs/chalk-react/logos/*`
+  - Exported `SOUND_FILES` and `LOGO_FILES` constants from SDK
+  - Backward compatible: `useBundled: false` (default) uses `/sounds/` path
 - **Dynamic tenant CORS origins** - Tenants can configure allowed CORS domains
   - API: `PATCH /api/v1/tenants/:id/config` now accepts `allowed_origins` array
   - Validation: Max 20 origins, http/https only, no wildcards (except localhost)
@@ -23,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **sdk-react: Toast notifications invisible for SDK consumers** - Sonner toasts were using CSS variables only defined inside `[data-chalk]` scope, but toasts portal to `document.body`. Switched to sonner's built-in dark theme for consistent styling.
 - **CORS for tenant domains** - Enable S3-based CORS origins in API Gateway
   - Set `enable_s3_cors_origins = true` in prod environment
   - API Gateway now reads CORS origins from S3 (includes TuitionHighway domains)

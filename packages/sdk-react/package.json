@@ -1,6 +1,6 @@
 {
   "name": "@q9labs/chalk-react",
-  "version": "0.0.44",
+  "version": "0.0.45",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -22,15 +22,18 @@
     },
     "./styles.css": "./dist/styles/styles.css",
     "./styles/*": "./dist/styles/*",
-    "./dist/styles/*": "./dist/styles/*"
+    "./dist/styles/*": "./dist/styles/*",
+    "./sounds/*": "./dist/assets/sounds/*",
+    "./logos/*": "./dist/assets/logos/*"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:fix-use-client && bun run build:types && bun run build:styles",
+    "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:fix-use-client && bun run build:types && bun run build:styles && bun run build:assets",
     "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
     "build:styles": "mkdir -p ./dist/styles && cp ./src/styles/styles.css ./dist/styles/",
+    "build:assets": "mkdir -p ./dist/assets/sounds ./dist/assets/logos && cp ./src/assets/sounds/*.mp3 ./dist/assets/sounds/ && cp ./src/assets/logos/*.svg ./dist/assets/logos/",
     "build:types": "tsc --project tsconfig.json",
     "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
     "test": "bun test --preload ./src/__tests__/setup.ts",
