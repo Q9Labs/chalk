@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Terraform formatting** - Fix HCL alignment in cors-origins module
+- **Terraform plan errors** - Fix count/for_each with unknown values at plan time
+  - api-gateway: Add `enable_s3_cors_origins` boolean (known at plan time)
+  - ecs: Use count instead of for_each for policy attachments
 
 ## [0.0.44] - 2026-01-24
 

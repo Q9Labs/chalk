@@ -240,9 +240,10 @@ module "api_gateway" {
   # Note: WebSocket uses separate subdomain (chalk-ws) routed directly to ALB
   # because API Gateway doesn't allow mixing WebSocket/HTTP APIs on same domain
 
-  cors_allowed_origins = var.cors_allowed_origins
-  cors_origins_bucket  = module.cors_origins.bucket_name
-  cors_origins_key     = module.cors_origins.origins_key
+  cors_allowed_origins   = var.cors_allowed_origins
+  cors_origins_bucket    = module.cors_origins.bucket_name
+  cors_origins_key       = module.cors_origins.origins_key
+  enable_s3_cors_origins = false # API reads from S3 at runtime; Terraform uses static list
 
   throttling_burst_limit           = 2000 # Reduced from 10000 (sufficient for 200 MAU)
   throttling_rate_limit            = 5000 # Reduced from 20000

@@ -35,6 +35,12 @@ variable "cors_origins_bucket" {
   default     = null
 }
 
+variable "enable_s3_cors_origins" {
+  description = "Whether to read CORS origins from S3 bucket (must be known at plan time)"
+  type        = bool
+  default     = false
+}
+
 variable "cors_origins_key" {
   description = "S3 key for the origins JSON file"
   type        = string

@@ -17,15 +17,15 @@ locals {
     Module      = "api-gateway"
   })
 
-  # Use S3 origins if bucket is configured, otherwise use variable
-  cors_origins = var.cors_origins_bucket != null ? jsondecode(data.aws_s3_object.cors_origins[0].body).origins : var.cors_allowed_origins
+  # Use S3 origins if enabled, otherwise use variable
+  cors_origins = var.enable_s3_cors_origins ? jsondecode(data.aws_s3_object.cors_origins[0].body).origins : var.cors_allowed_origins
 }
 
 data "aws_region" "current" {}
 
-# Read CORS origins from S3 bucket (if configured)
+# Read CORS origins from S3 bucket (if enabled)
 data "aws_s3_object" "cors_origins" {
-  count  = var.cors_origins_bucket != null ? 1 : 0
+  count  = var.enable_s3_cors_origins ? 1 : 0
   bucket = var.cors_origins_bucket
   key    = var.cors_origins_key
 }
