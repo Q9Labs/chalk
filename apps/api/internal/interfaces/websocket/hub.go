@@ -27,6 +27,11 @@ type TranscriptService interface {
 	CreateTranscript(ctx context.Context, input TranscriptInput) error
 }
 
+// ParticipantService interface for marking participants as left
+type ParticipantService interface {
+	LeaveRoom(ctx context.Context, roomID, participantID uuid.UUID) error
+}
+
 // TranscriptInput matches the domain service input
 type TranscriptInput struct {
 	RoomID                  uuid.UUID
@@ -49,8 +54,9 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 
-	redisClient       RedisInterface
-	transcriptService TranscriptService
+	redisClient        RedisInterface
+	transcriptService  TranscriptService
+	participantService ParticipantService
 
 	mu sync.RWMutex
 
@@ -82,6 +88,11 @@ func NewHub(redisClient RedisInterface) *Hub {
 // SetTranscriptService sets the transcript service for persisting transcripts
 func (h *Hub) SetTranscriptService(ts TranscriptService) {
 	h.transcriptService = ts
+}
+
+// SetParticipantService sets the participant service for marking participants as left
+func (h *Hub) SetParticipantService(ps ParticipantService) {
+	h.participantService = ps
 }
 
 // GetTranscriptService returns the transcript service (may be nil)
@@ -172,6 +183,13 @@ func (h *Hub) unregisterClient(client *Client) {
 	}
 
 	h.mu.Unlock()
+
+	// Mark participant as left in database (updates left_at timestamp)
+	if h.participantService != nil {
+		if err := h.participantService.LeaveRoom(h.ctx, client.roomID, client.participantID); err != nil {
+			log.Printf("Failed to mark participant %s as left in database: %v", client.participantID, err)
+		}
+	}
 
 	// Use client.Close() which has proper channel close protection
 	client.Close()

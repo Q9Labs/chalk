@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **"Room is full" false positives after participant disconnect** - WebSocket disconnects now properly decrement active participant count
+  - Root cause: `hub.unregisterClient()` removed participants from memory but never called `LeaveRoom()` to update database
+  - The `CountActiveParticipantsByRoom()` query checks `left_at IS NULL`, so disconnected participants stayed in the count
+  - Fix: Hub now calls participant service's `LeaveRoom()` on WebSocket disconnect, marking `left_at` in database
+
 ## [0.0.45] - 2026-01-25
 
 ### Added

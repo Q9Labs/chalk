@@ -40,9 +40,10 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
 
   return (
     <div
+      data-chalk
       className={cn(
-        'fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm',
-        'bg-black/40',
+        'chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm',
+        'bg-transparent',
         className
       )}
       role="dialog"
@@ -53,47 +54,55 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
       <div
         ref={modalRef}
         className={cn(
-          "w-full max-w-sm overflow-hidden rounded-2xl shadow-2xl",
-          "bg-card",
-          "border border-border",
-          "p-6 space-y-6",
+          "w-full max-w-sm overflow-hidden rounded-2xl relative",
           !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200"
         )}
+        style={{
+          background: "var(--chalk-lobby-glass-bg)",
+          border: "1px solid var(--chalk-lobby-glass-border)",
+          backdropFilter: "blur(20px)",
+          boxShadow: "var(--chalk-shadow-xl)",
+        }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex flex-col items-center text-center space-y-3">
-          <div className="p-3 rounded-full bg-destructive/10 text-destructive">
-            <CallEnd01Icon size={24} />
+        <div className="p-6 space-y-6">
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div 
+              className="p-4 rounded-full"
+              style={{ background: "oklch(from var(--destructive) l c h / 0.15)" }}
+            >
+              <CallEnd01Icon size={28} className="text-(--destructive)" />
+            </div>
+            <div className="space-y-2">
+              <h2 id="leave-modal-title" className="text-2xl font-bold text-(--foreground) tracking-tight">
+                Leave Meeting
+              </h2>
+              <p className="text-(--muted-foreground) text-balance">
+                Are you sure you want to leave the current meeting?
+              </p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <h2 id="leave-modal-title" className="text-xl font-bold text-card-foreground">
-              Leave Meeting
-            </h2>
-            <p className="text-muted-foreground">
-              Are you sure you want to leave the current meeting?
-            </p>
-          </div>
-        </div>
 
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={onConfirm}
-            className={cn(
-              "w-full py-3 rounded-xl font-semibold transition-all active:scale-[0.98]",
-              "bg-destructive text-destructive-foreground hover:opacity-90 shadow-md shadow-destructive/20"
-            )}
-          >
-            Leave Meeting
-          </button>
-          <button
-            onClick={onClose}
-            className={cn(
-              "w-full py-3 rounded-xl font-semibold transition-all",
-              "bg-secondary text-secondary-foreground hover:bg-accent border border-border"
-            )}
-          >
-            Cancel
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={onConfirm}
+              className={cn(
+                "w-full py-3.5 rounded-xl font-bold transition-all active:scale-[0.98] text-white",
+                "bg-(--destructive) hover:opacity-90 shadow-lg shadow-destructive/20"
+              )}
+            >
+              Leave Meeting
+            </button>
+            <button
+              onClick={onClose}
+              className={cn(
+                "w-full py-3.5 rounded-xl font-semibold transition-all text-(--foreground)",
+                "bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 border border-black/5 dark:border-white/5"
+              )}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
     </div>

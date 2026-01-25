@@ -108,6 +108,9 @@ func NewRouter(cfg RouterConfig) *Router {
 	// Wire transcript service to WebSocket hub for real-time transcript persistence
 	wsHub.SetTranscriptService(&transcriptServiceAdapter{svc: transcriptService})
 
+	// Wire participant service to WebSocket hub for marking participants as left on disconnect
+	wsHub.SetParticipantService(participantService)
+
 	r := &Router{
 		engine:             engine,
 		pool:               cfg.Pool,

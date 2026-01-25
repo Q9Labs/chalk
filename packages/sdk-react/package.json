@@ -20,7 +20,12 @@
       "require": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./styles.css": "./dist/styles/styles.css",
+    "./styles.css": {
+      "import": "./dist/styles/styles.css",
+      "require": "./dist/styles/styles.css",
+      "default": "./dist/styles/styles.css"
+    },
+    "./src/styles.css": "./src/styles/styles.css",
     "./styles/*": "./dist/styles/*",
     "./dist/styles/*": "./dist/styles/*",
     "./sounds/*": "./dist/assets/sounds/*",
