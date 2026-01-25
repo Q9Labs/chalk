@@ -147,7 +147,7 @@ export const ScreenShareView = React.memo(({
           playsInline
           muted
           className={cn(
-            "w-full h-full object-contain transition-transform duration-150",
+            "w-full h-full object-contain rounded-xl transition-transform duration-150",
             zoom > 1 && isDragging && "cursor-grabbing",
             zoom > 1 && !isDragging && "cursor-grab"
           )}

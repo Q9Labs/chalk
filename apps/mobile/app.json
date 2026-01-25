@@ -16,7 +16,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hhushhas14.mobile"
+      "bundleIdentifier": "com.hhushhas14.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Chalk needs camera access for video calls.",
+        "NSMicrophoneUsageDescription": "Chalk needs microphone access for audio calls.",
+        "NSBluetoothAlwaysUsageDescription": "Chalk uses Bluetooth to support audio devices during calls."
+      }
     },
     "android": {
       "adaptiveIcon": {

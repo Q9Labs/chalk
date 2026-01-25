@@ -71,18 +71,10 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
   return (
     <Toaster
       richColors
+      theme="dark"
       position={positionMap[position]}
       visibleToasts={maxVisible}
       className={cn(className)}
-      toastOptions={{
-        classNames: {
-          toast: cn(
-            'bg-card',
-            'text-card-foreground',
-            'border-border'
-          ),
-        },
-      }}
     />
   );
 });

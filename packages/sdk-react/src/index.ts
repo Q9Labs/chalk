@@ -173,6 +173,12 @@ export * from "./utils";
 // Styles - export path for consumers to import
 export const CHALK_STYLES_PATH = "@q9labs/chalk-react/styles.css";
 
+// ============================================================================
+// Assets
+// ============================================================================
+
+export { SOUND_FILES, LOGO_FILES } from "./assets";
+
 /** CDN URL for Excalidraw CSS (used by WhiteboardPanel by default) */
 export const EXCALIDRAW_CSS_CDN =
 	"https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.0/dist/prod/index.css";

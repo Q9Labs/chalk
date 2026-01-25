@@ -34,7 +34,7 @@ function loadBottomSheet() {
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const bottomSheet = require("@gorhom/bottom-sheet");
-		BottomSheetComponent = bottomSheet.default;
+		BottomSheetComponent = bottomSheet?.default ?? bottomSheet;
 		BottomSheetViewComponent = bottomSheet.BottomSheetView;
 		bottomSheetLoaded = true;
 	} catch {

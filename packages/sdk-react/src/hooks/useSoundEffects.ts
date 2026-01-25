@@ -19,6 +19,8 @@ export interface UseSoundEffectsOptions {
   volume?: number;
   basePath?: string;
   autoSubscribe?: boolean;
+  /** Use bundled sounds from node_modules (zero-config) */
+  useBundled?: boolean;
 }
 
 export interface UseSoundEffectsReturn {
@@ -50,17 +52,25 @@ const SOUND_FILES: Record<SoundEffect, string> = {
   recordingStop: 'recording-stop.mp3',
   click: 'click.mp3',
   error: 'error.mp3',
-  transcriptionReady: 'transcription-ready.mp3',
-  tourStep: 'tour-step.mp3',
+  // Map missing sounds to existing ones (no dedicated files)
+  transcriptionReady: 'message.mp3',
+  tourStep: 'click.mp3',
 };
+
+const BUNDLED_SOUNDS_PATH = '/node_modules/@q9labs/chalk-react/dist/assets/sounds';
 
 export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundEffectsReturn {
   const {
     enabled: initialEnabled = true,
     volume: initialVolume = 0.5,
-    basePath = '/sounds',
+    basePath,
     autoSubscribe = false,
+    useBundled = false,
   } = options;
+
+  const effectiveBasePath = useBundled
+    ? BUNDLED_SOUNDS_PATH
+    : (basePath ?? '/sounds');
 
   const { session } = useChalkSession();
   const [enabled, setEnabled] = useState(initialEnabled);
@@ -70,7 +80,7 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
   const play = useCallback((sound: SoundEffect) => {
     if (!enabled || typeof window === 'undefined') return;
 
-    const soundPath = `${basePath}/${SOUND_FILES[sound]}`;
+    const soundPath = `${effectiveBasePath}/${SOUND_FILES[sound]}`;
     let audio = audioCache.current.get(sound);
 
     if (!audio) {
@@ -83,7 +93,7 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
     audio.play().catch(() => {
       // Silently fail if autoplay blocked
     });
-  }, [enabled, volume, basePath]);
+  }, [enabled, volume, effectiveBasePath]);
 
   // Auto-subscribe to session events
   useEffect(() => {

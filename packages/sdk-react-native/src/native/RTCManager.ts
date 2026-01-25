@@ -70,10 +70,20 @@ let RealtimeKitClient: {
 	init: (options: RealtimeKitInitOptions) => Promise<RealtimeKitClientInstance>;
 } | null = null;
 
+function unwrapDefaultExport<T>(mod: T | { default?: T } | null | undefined): T | null {
+	if (!mod) return null;
+	// Some RN/Metro builds expose ESM default via `.default`, others export the value directly.
+	const maybeDefault = (mod as { default?: T }).default;
+	return (maybeDefault ?? (mod as T)) || null;
+}
+
 try {
 	// Attempt to load RealtimeKit - this may fail if not installed
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	RealtimeKitClient = require("@cloudflare/realtimekit-react-native").default;
+	RealtimeKitClient = unwrapDefaultExport(
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require("@cloudflare/realtimekit-react-native"),
+	);
 } catch {
 	// RealtimeKit not available, will use fallback mode
 	log.info("RealtimeKit not available, using fallback mode");

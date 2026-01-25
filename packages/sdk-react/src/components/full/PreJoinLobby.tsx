@@ -9,11 +9,12 @@ import {
 	Moon02Icon,
 	ArrowDown01Icon,
 } from "../../utils/icons";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { Avatar, Toast } from "../atomic";
 import { DeviceSelector } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
+import { getParticipantGradient } from "../../utils/colorGenerator";
 
 export interface JoinSettings {
 	displayName: string;
@@ -343,6 +344,9 @@ function PreJoinLobbyBase({
 	// Normalize audio level to 0-100 for the bar width
 	const normalizedAudioLevel = Math.min(100, Math.max(0, activeAudioLevel * 100));
 
+	// Generate consistent gradient based on display name (same as VideoTile)
+	const participantGradient = useMemo(() => getParticipantGradient(displayName), [displayName]);
+
 	return (
 		<div
 			ref={containerRef}
@@ -356,7 +360,7 @@ function PreJoinLobbyBase({
 			{/* Loading Screen Overlay */}
 			<div 
 				className={cn(
-					"absolute inset-0 z-50 transition-all duration-700 ease-in-out pointer-events-none",
+					"absolute inset-0 z-50 transition-all duration-1000 ease-in-out pointer-events-none",
 					isLoading ? "opacity-100 pointer-events-auto" : "opacity-0"
 				)}
 			>
@@ -474,18 +478,18 @@ function PreJoinLobbyBase({
 							{/* Spatial shadow layers for depth */}
 							<div
 								className="absolute -inset-1 rounded-3xl opacity-30 blur-xl"
-								style={{ background: "var(--chalk-lobby-gradient)" }}
+								style={{ background: participantGradient }}
 							/>
 							<div
 								className="absolute -inset-0.5 rounded-2xl opacity-20 blur-md"
-								style={{ background: "var(--chalk-lobby-gradient)" }}
+								style={{ background: participantGradient }}
 							/>
 
 							{/* Main video container */}
 							<div
-								className="relative w-full aspect-video rounded-2xl overflow-hidden border-2 border-white/20 dark:border-white/10"
+								className="relative w-full aspect-video rounded-2xl overflow-hidden"
 								style={{
-									background: "var(--chalk-lobby-gradient)",
+									background: participantGradient,
 									boxShadow:
 										"var(--chalk-shadow-lg), inset 0 1px 0 rgba(255,255,255,0.1)",
 								}}
@@ -542,41 +546,71 @@ function PreJoinLobbyBase({
 									</div>
 								</div>
 
-								{/* Camera Off State - Center */}
+								{/* Camera Off State - Center (matches VideoTile) */}
 								{!isVideoEnabled && (
-									<div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-										{/* Avatar with glow ring */}
-										<div className="relative">
-											{/* Outer glow ring */}
-											<div
-												className="absolute -inset-3 rounded-full chalk-animate-glow-pulse"
-												style={{
-													background:
-														"radial-gradient(circle, var(--chalk-lobby-avatar-glow) 0%, transparent 70%)",
-												}}
-											/>
-											{/* Avatar container with border */}
-											<div
-												className="relative rounded-full p-1"
-												style={{
-													background:
-														"linear-gradient(135deg, rgba(27,182,166,0.3) 0%, rgba(27,182,166,0.1) 100%)",
-												}}
-											>
-												<Avatar
-													name={displayName}
-													size="2xl"
-													className="w-28! h-28! text-4xl"
-												/>
-											</div>
-										</div>
+									<div className="absolute inset-0 flex items-center justify-center">
+										<Avatar
+											name={displayName}
+											size="2xl"
+											className="opacity-90"
+										/>
 									</div>
 								)}
 
 								{/* Floating Control Bar - Bottom Center */}
 								<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20" ref={dropdownRef}>
+									{/* Device Dropdowns - now anchored to the control bar */}
+									{openDropdown && (
+										<div
+											className="absolute bottom-full mb-2 w-64 rounded-xl border border-white/10 shadow-2xl overflow-hidden"
+											style={{
+												left: openDropdown === "audio" ? "0" : "auto",
+												right: openDropdown === "video" ? "0" : "auto",
+												background: "rgba(30, 30, 30, 0.95)",
+												backdropFilter: "blur(20px)",
+											}}
+										>
+											<div className="px-3 py-3 text-xs font-semibold text-white/60 uppercase tracking-wide border-b border-white/10">
+												{openDropdown === "audio" ? "Microphone" : "Camera"}
+											</div>
+											<div className="py-2 max-h-[240px] overflow-y-auto">
+												{(openDropdown === "audio" ? effectiveAudioInputDevices : effectiveVideoDevices).map((device) => {
+													const isSelected = openDropdown === "audio"
+														? selectedAudioInput === device.deviceId
+														: selectedVideoDevice === device.deviceId;
+													return (
+														<button
+															key={device.deviceId}
+															onClick={() => {
+																if (openDropdown === "audio") {
+																	onAudioInputChange(device.deviceId);
+																} else {
+																	onVideoDeviceChange(device.deviceId);
+																}
+																setOpenDropdown(null);
+															}}
+															className={cn(
+																"w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center gap-3",
+																isSelected
+																	? "bg-[#1bb6a6]/20 text-[#1bb6a6]"
+																	: "text-white/90 hover:bg-white/10",
+															)}
+														>
+															{isSelected && (
+																<span className="w-1.5 h-1.5 rounded-full bg-[#1bb6a6] shrink-0" />
+															)}
+															<span className={cn("truncate", !isSelected && "ml-[18px]")}>
+																{device.label || `${openDropdown === "audio" ? "Microphone" : "Camera"} ${device.deviceId.slice(0, 5)}`}
+															</span>
+														</button>
+													);
+												})}
+											</div>
+										</div>
+									)}
+
 									<div
-										className="flex items-center gap-2 px-2 py-2 rounded-full relative"
+										className="flex items-center gap-4 px-3 py-2 rounded-full relative"
 										style={{
 											background: "var(--chalk-lobby-glass-bg)",
 											backdropFilter: "blur(20px)",
@@ -585,7 +619,7 @@ function PreJoinLobbyBase({
 										}}
 									>
 										{/* Mic toggle with dropdown */}
-										<div className="flex items-center gap-0.5">
+										<div className="flex items-center gap-1.5">
 											<button
 												onClick={toggleAudio}
 												title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
@@ -622,7 +656,7 @@ function PreJoinLobbyBase({
 										</div>
 
 										{/* Video toggle with dropdown */}
-										<div className="flex items-center gap-0.5">
+										<div className="flex items-center gap-1.5">
 											<button
 												onClick={toggleVideo}
 												title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
@@ -757,58 +791,6 @@ function PreJoinLobbyBase({
 							onDismiss={() => {}}
 							duration={0}
 						/>
-					</div>
-				)}
-
-				{/* Device Dropdowns - rendered outside overflow container */}
-				{openDropdown && (
-					<div
-						ref={dropdownRef}
-						className="fixed z-[100] w-64 rounded-xl border border-white/10 shadow-2xl"
-						style={{
-							bottom: "6rem",
-							left: "50%",
-							transform: openDropdown === "audio" ? "translateX(-75%)" : "translateX(-25%)",
-							background: "rgba(30, 30, 30, 0.95)",
-							backdropFilter: "blur(20px)",
-						}}
-					>
-						<div className="px-4 py-3 text-xs font-semibold text-white/60 uppercase tracking-wide border-b border-white/10">
-							{openDropdown === "audio" ? "Microphone" : "Camera"}
-						</div>
-						<div className="py-2 max-h-[240px] overflow-y-auto">
-							{(openDropdown === "audio" ? effectiveAudioInputDevices : effectiveVideoDevices).map((device) => {
-								const isSelected = openDropdown === "audio"
-									? selectedAudioInput === device.deviceId
-									: selectedVideoDevice === device.deviceId;
-								return (
-									<button
-										key={device.deviceId}
-										onClick={() => {
-											if (openDropdown === "audio") {
-												onAudioInputChange(device.deviceId);
-											} else {
-												onVideoDeviceChange(device.deviceId);
-											}
-											setOpenDropdown(null);
-										}}
-										className={cn(
-											"w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-3",
-											isSelected
-												? "bg-[#1bb6a6]/20 text-[#1bb6a6]"
-												: "text-white/90 hover:bg-white/10",
-										)}
-									>
-										{isSelected && (
-											<span className="w-1.5 h-1.5 rounded-full bg-[#1bb6a6] shrink-0" />
-										)}
-										<span className={cn("truncate", !isSelected && "ml-[18px]")}>
-											{device.label || `${openDropdown === "audio" ? "Microphone" : "Camera"} ${device.deviceId.slice(0, 5)}`}
-										</span>
-									</button>
-								);
-							})}
-						</div>
 					</div>
 				)}
 			</div>

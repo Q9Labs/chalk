@@ -35,10 +35,12 @@ import { useScreenShare } from "../../hooks/stream/useScreenShare";
 import { useLayout } from "../../hooks/ui/useLayout";
 import { usePanels } from "../../hooks/ui/usePanels";
 import { useSoundEffects } from "../../hooks/useSoundEffects";
+import { cn } from "../../utils/cn";
 
 import { EndScreen } from "./EndScreen";
 import { MeetingRoom } from "./MeetingRoom";
 import { PreJoinLobby } from "./PreJoinLobby";
+import { LeaveConfirmationDialog } from "../composite/LeaveConfirmationDialog";
 
 type Phase = "lobby" | "joining" | "meeting" | "end";
 
@@ -166,6 +168,8 @@ function VideoConferenceBase({
 	const [error, setError] = useState<string | null>(null);
 	const [meetingDuration, setMeetingDuration] = useState(0);
 	const [joinStartTime, setJoinStartTime] = useState<number | null>(null);
+	const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+	const [isExiting, setIsExiting] = useState(false);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
@@ -363,7 +367,17 @@ function VideoConferenceBase({
 		[join, roomId, role, localParticipant, recording.isRecording, play, onJoin, onError, isJoining, isConnected],
 	);
 
-	const handleLeave = useCallback(async () => {
+	const handleLeave = useCallback(() => {
+		setShowLeaveConfirm(true);
+	}, []);
+
+	const initiateLeave = useCallback(async () => {
+		setShowLeaveConfirm(false);
+		setIsExiting(true);
+
+		// Wait for animation to finish (600ms)
+		await new Promise((resolve) => setTimeout(resolve, 600));
+
 		try {
 			await leave();
 			play("leave");
@@ -375,6 +389,8 @@ function VideoConferenceBase({
 			onEnd?.(buildEndData());
 			setPhase("end");
 			onLeave?.();
+		} finally {
+			setIsExiting(false);
 		}
 	}, [leave, play, onEnd, buildEndData, onLeave]);
 
@@ -550,49 +566,57 @@ function VideoConferenceBase({
 	})();
 
 	return (
-		<MeetingRoom
-			roomName={roomId}
-			localParticipant={localMeetingParticipant}
-			participants={allParticipants}
-			activeReactions={interactions.activeReactions}
-			transcripts={transcripts}
-			isMuted={!media.isAudioEnabled}
-			isVideoEnabled={media.isVideoEnabled}
-			isScreenSharing={screenShare.isLocalSharing}
-			isHandRaised={interactions.isHandRaised}
-			isWhiteboardOpen={whiteboard.isOpen}
-			isRecording={recording.isRecording}
-			recordingDuration={recording.durationSeconds}
-			meetingDuration={meetingDuration}
-			canRecord={isFeatureEnabled(features.recording)}
-			chatMessages={chatMessages}
-			unreadChatCount={unreadCount}
-			onSendMessage={handleSendMessage}
-			onChatOpen={handleChatOpen}
-			enableChat={isFeatureEnabled(features.chat)}
-			enableRecording={isFeatureEnabled(features.recording)}
-			enableScreenShare={isFeatureEnabled(features.screenShare)}
-			enableHandRaise={isFeatureEnabled(features.handRaise)}
-			enableReactions={isFeatureEnabled(features.reactions)}
-			enableWhiteboard={isFeatureEnabled(features.whiteboard)}
-			enableTour={isFeatureEnabled(features.tour)}
-			defaultLayout={meetingLayout}
-			defaultChatOpen={defaults.chatOpen ?? activePanel === "chat"}
-			defaultParticipantsOpen={
-				defaults.participantsOpen ?? activePanel === "participants"
-			}
-			onToggleMute={handleToggleMute}
-			onToggleVideo={handleToggleVideo}
-			onToggleScreenShare={handleToggleScreenShare}
-			onToggleRecording={handleToggleRecording}
-			onToggleHandRaise={handleToggleHandRaise}
-			onToggleWhiteboard={whiteboard.toggle}
-			onSendReaction={handleSendReaction}
-			onLeave={handleLeave}
-			onAddPeople={onAddPeople}
-			connectionStatus={connectionStatus}
-			className={className}
-		/>
+		<>
+			<MeetingRoom
+				roomName={roomId}
+				localParticipant={localMeetingParticipant}
+				participants={allParticipants}
+				activeReactions={interactions.activeReactions}
+				transcripts={transcripts}
+				isMuted={!media.isAudioEnabled}
+				isVideoEnabled={media.isVideoEnabled}
+				isScreenSharing={screenShare.isLocalSharing}
+				isHandRaised={interactions.isHandRaised}
+				isWhiteboardOpen={whiteboard.isOpen}
+				isRecording={recording.isRecording}
+				recordingDuration={recording.durationSeconds}
+				meetingDuration={meetingDuration}
+				canRecord={isFeatureEnabled(features.recording)}
+				chatMessages={chatMessages}
+				unreadChatCount={unreadCount}
+				onSendMessage={handleSendMessage}
+				onChatOpen={handleChatOpen}
+				enableChat={isFeatureEnabled(features.chat)}
+				enableRecording={isFeatureEnabled(features.recording)}
+				enableScreenShare={isFeatureEnabled(features.screenShare)}
+				enableHandRaise={isFeatureEnabled(features.handRaise)}
+				enableReactions={isFeatureEnabled(features.reactions)}
+				enableWhiteboard={isFeatureEnabled(features.whiteboard)}
+				enableTour={isFeatureEnabled(features.tour)}
+				defaultLayout={meetingLayout}
+				defaultChatOpen={defaults.chatOpen ?? activePanel === "chat"}
+				defaultParticipantsOpen={
+					defaults.participantsOpen ?? activePanel === "participants"
+				}
+				onToggleMute={handleToggleMute}
+				onToggleVideo={handleToggleVideo}
+				onToggleScreenShare={handleToggleScreenShare}
+				onToggleRecording={handleToggleRecording}
+				onToggleHandRaise={handleToggleHandRaise}
+				onToggleWhiteboard={whiteboard.toggle}
+				onSendReaction={handleSendReaction}
+				onLeave={handleLeave}
+				onAddPeople={onAddPeople}
+				connectionStatus={connectionStatus}
+				className={cn(className, isExiting && "chalk-animate-exit")}
+			/>
+
+			<LeaveConfirmationDialog
+				isOpen={showLeaveConfirm}
+				onClose={() => setShowLeaveConfirm(false)}
+				onConfirm={initiateLeave}
+			/>
+		</>
 	);
 }
 
