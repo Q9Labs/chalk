@@ -19,7 +19,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Database: `post_meeting_transcripts` and `webhook_deliveries` tables
   - New endpoints: `GET /api/v1/transcription/providers`, transcript status APIs
 
+- **Mobile rebuild (apps/mobile2)** - New crash-resistant mobile app replacing apps/mobile
+  - Locked architecture: New Architecture OFF, Hermes ON, Reanimated v3 only
+  - Direct SDK imports (no lazy loading) for simpler debugging
+  - Custom metro resolver blocking node: protocol imports
+  - React-native export condition in sdk-react-native for browser-targeted RN builds
+  - Verification script: `bun run mobile:verify` checks for common crash causes
+  - Root scripts: `mobile:ios`, `mobile:android`, `mobile:start`, `mobile:prebuild`
+
 ### Changed
+
+- **sdk-react: Sounds bundled as data URLs by default** - Zero-config sound effects
+  - Base64 data URLs embedded in bundle (~690KB), no file copying needed
+  - Works out of the box in Next.js and all frameworks
+  - Optional `basePath` prop to use custom sound files instead
+
+- **sdk-react-native: Dual build targets** - Now outputs both Node and React Native builds
+  - `dist/index.js` - Node target (for testing, bundlers)
+  - `dist/react-native/index.js` - Browser target (no node: imports, Metro-compatible)
+  - Package exports include `react-native` condition for automatic resolution
+  - Pinned reanimated peer dep from `>=3.0.0` to `^3.0.0` to block v4
 
 ### Fixed
 
