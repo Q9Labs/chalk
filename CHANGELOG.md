@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Terraform formatting** - Fix HCL alignment in cors-origins module
+
 ## [0.0.44] - 2026-01-24
 
 ### Changed

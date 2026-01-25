@@ -85,7 +85,7 @@ resource "aws_s3_object" "initial_origins" {
   content_type = "application/json"
 
   content = jsonencode({
-    origins = var.static_origins
+    origins    = var.static_origins
     updated_at = timestamp()
   })
 
