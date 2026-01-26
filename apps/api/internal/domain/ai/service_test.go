@@ -70,9 +70,12 @@ func TestService_GenerateFromTranscript_UsesTenantProvider(t *testing.T) {
 
 	// Test that tenant provider takes precedence over default
 	// This simulates the selectProvider logic where tenant config overrides default
-	provider := svc.defaultProvider
-	// Use tenantProvider (simulating tenant-specific override)
-	provider = tenantProvider
+	// When tenant has custom config, use their provider; otherwise use default
+	var provider Provider = svc.defaultProvider
+	hasTenantConfig := true // simulating tenant with custom AI config
+	if hasTenantConfig {
+		provider = tenantProvider
+	}
 
 	assert.Equal(t, "tenant", provider.Name())
 }

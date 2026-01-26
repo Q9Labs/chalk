@@ -77,13 +77,6 @@ func (h *PostMeetingTranscriptionHandler) QueueTranscription(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Provider string `json:"provider"`
-	}
-	_ = c.ShouldBindJSON(&req) // Optional body
-
-	// We need the room ID - get it from recording
-	// For now, accept it in the request or look it up
 	var body struct {
 		RoomID   string `json:"room_id"`
 		Provider string `json:"provider"`
