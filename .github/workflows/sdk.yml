@@ -65,8 +65,8 @@ jobs:
           key: ${{ runner.os }}-nm-${{ hashFiles('bun.lock') }}
 
       - name: Install dependencies
-        if: steps.cache-nm.outputs.cache-hit != 'true'
         run: bun install --frozen-lockfile
+        timeout-minutes: 5
 
       - name: Build SDK packages
         run: bunx turbo build --filter="@q9labs/*"
