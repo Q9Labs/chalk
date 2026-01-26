@@ -235,6 +235,8 @@ type UpdateTenantConfigRequest struct {
 	TranscriptionKeywords        *[]string `json:"transcription_keywords"`
 	// CORS settings
 	AllowedOrigins *[]string `json:"allowed_origins"`
+	// Post-meeting webhook settings
+	PostMeetingWebhook *PostMeetingWebhookConfig `json:"post_meeting_webhook"`
 }
 
 // TenantConfig represents the tenant_config JSONB structure
@@ -431,6 +433,9 @@ func (h *TenantHandler) UpdateConfig(c *gin.Context) {
 			return
 		}
 		config.AllowedOrigins = *req.AllowedOrigins
+	}
+	if req.PostMeetingWebhook != nil {
+		config.PostMeetingWebhook = req.PostMeetingWebhook
 	}
 
 	// Serialize updated config
