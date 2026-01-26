@@ -87,7 +87,7 @@ class TranscriptionResult:
     text: Optional[str] = None
     segments: Optional[list] = None
     language: Optional[str] = None
-    duration_seconds: Optional[float] = None
+    duration_seconds: Optional[int] = None  # API expects int
     word_count: Optional[int] = None
     processing_time_seconds: Optional[float] = None
     error: Optional[str] = None
@@ -159,7 +159,7 @@ class WhisperWorker:
             text=full_text,
             segments=segments_list,
             language=info.language,
-            duration_seconds=round(info.duration, 2),
+            duration_seconds=int(info.duration),  # API expects int
             word_count=word_count,
             processing_time_seconds=round(processing_time, 2),
         )
