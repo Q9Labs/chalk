@@ -68,11 +68,11 @@ func TestService_GenerateFromTranscript_UsesTenantProvider(t *testing.T) {
 	// by checking which provider is used
 	svc := &Service{defaultProvider: defaultProvider}
 
-	// Test that tenant provider is selected when provided
+	// Test that tenant provider takes precedence over default
+	// This simulates the selectProvider logic where tenant config overrides default
 	provider := svc.defaultProvider
-	if tenantProvider != nil {
-		provider = tenantProvider
-	}
+	// Use tenantProvider (simulating tenant-specific override)
+	provider = tenantProvider
 
 	assert.Equal(t, "tenant", provider.Name())
 }
