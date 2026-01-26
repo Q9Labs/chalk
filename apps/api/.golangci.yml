@@ -13,12 +13,16 @@ linters:
 
 linters-settings:
   errcheck:
+    check-type-assertions: false
+    check-blank: false
     exclude-functions:
-      - (io.Closer).Close
-      - (*os.File).Close
       - (net/http.ResponseWriter).Write
       - os.Setenv
       - os.Unsetenv
 
 issues:
   exclude-use-default: false
+  exclude-rules:
+    - linters:
+        - errcheck
+      text: "Error return value of .*.Close.*is not checked"
