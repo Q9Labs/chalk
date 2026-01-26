@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **API CI/CD optimization** - Reduced workflow time from ~4min to ~2min
+  - Split `lint-and-test` into parallel `lint` and `test` jobs
+  - Removed `-v` verbose flag from tests (failures still show full output)
+  - Race detection (`-race`) now conditional: enabled on PRs only, skipped on master push
+  - Added `.golangci.yml` with lean linter config (6 essential linters vs all defaults)
+
 ### Added
 
 - **Cloudflare webhook registration** - API now registers webhooks with Cloudflare RealtimeKit
