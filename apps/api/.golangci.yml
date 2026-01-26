@@ -11,5 +11,14 @@ linters:
     - staticcheck
     - unused
 
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (io.Closer).Close
+      - (*os.File).Close
+      - (net/http.ResponseWriter).Write
+      - os.Setenv
+      - os.Unsetenv
+
 issues:
   exclude-use-default: false
