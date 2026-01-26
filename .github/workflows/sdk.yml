@@ -49,7 +49,16 @@ jobs:
           bun-version: latest
 
       - name: Prune monorepo for SDK packages only
-        run: bunx turbo prune @q9labs/chalk-core @q9labs/chalk-react @q9labs/chalk-react-native @q9labs/chalk-ui @q9labs/chalk-whiteboard
+        run: |
+          bunx turbo prune @q9labs/chalk-core @q9labs/chalk-react @q9labs/chalk-react-native @q9labs/chalk-ui @q9labs/chalk-whiteboard
+          # Fix workspaces to only include pruned packages
+          cd out
+          node -e "
+            const pkg = require('./package.json');
+            const fs = require('fs');
+            pkg.workspaces = ['packages/*'];
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
 
       - name: Install dependencies (pruned)
         run: cd out && bun install --frozen-lockfile

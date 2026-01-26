@@ -40,7 +40,16 @@ jobs:
           bun-version: latest
 
       - name: Prune monorepo for web app only
-        run: bunx turbo prune web
+        run: |
+          bunx turbo prune web
+          # Fix workspaces to only include pruned packages
+          cd out
+          node -e "
+            const pkg = require('./package.json');
+            const fs = require('fs');
+            pkg.workspaces = ['packages/*', 'apps/web'];
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
 
       - name: Install dependencies (pruned)
         run: cd out && bun install --frozen-lockfile
