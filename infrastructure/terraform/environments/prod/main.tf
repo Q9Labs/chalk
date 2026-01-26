@@ -354,7 +354,7 @@ module "whisper" {
   ecr_repository_url    = module.ecr.whisper_repository_url
   worker_image_tag      = "latest"
   min_capacity          = 0
-  desired_capacity      = 0 # Start at 0, scale up after image pushed to ECR
+  desired_capacity      = 1
   max_capacity          = 2
   enable_autoscaling    = true
 }
