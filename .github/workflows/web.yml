@@ -39,41 +39,27 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Cache Bun packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
+      - name: Prune monorepo for web app only
+        run: bunx turbo prune web
 
-      - name: Cache node_modules
-        id: cache-nm
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            packages/*/node_modules
-            apps/*/node_modules
-          key: ${{ runner.os }}-nm-${{ hashFiles('bun.lock') }}
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-        timeout-minutes: 5
+      - name: Install dependencies (pruned)
+        run: cd out && bun install --frozen-lockfile
+        timeout-minutes: 3
 
       - name: Build packages
-        run: bun run build --filter=@q9labs/* 2>&1 | tee packages-build.log
+        run: cd out && bun run build --filter=@q9labs/* 2>&1 | tee packages-build.log
 
       - name: Check packages build
         run: |
           echo "Package build completed. Checking for errors..."
-          if grep -i "error" packages-build.log; then
+          if grep -i "error" out/packages-build.log 2>/dev/null; then
             echo "Errors found in package build!"
           else
             echo "✓ No errors in package build"
           fi
 
       - name: Build web app
-        run: bun run build --filter=web 2>&1 | tee build.log
+        run: cd out && bun run build --filter=web 2>&1 | tee build.log
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
           VITE_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
@@ -83,18 +69,18 @@ jobs:
         if: failure()
         run: |
           echo "Build failed. Last 50 lines of build.log:"
-          tail -50 build.log || cat build.log
+          tail -50 out/build.log || cat out/build.log
 
       - name: Verify build output
         run: |
           echo "Checking build output (SPA mode)..."
-          if [ -d "apps/web/dist/client" ]; then
+          if [ -d "out/apps/web/dist/client" ]; then
             echo "✓ dist/client directory exists"
-            du -sh apps/web/dist/client
-            ls -la apps/web/dist/client/
+            du -sh out/apps/web/dist/client
+            ls -la out/apps/web/dist/client/
           else
             echo "✗ dist/client NOT found"
-            ls -la apps/web/dist/ || ls -la apps/web/
+            ls -la out/apps/web/dist/ || ls -la out/apps/web/
             exit 1
           fi
 
@@ -102,7 +88,7 @@ jobs:
         run: |
           # TanStack Start SPA mode outputs _shell.html
           # Cloudflare Pages needs index.html for SPA fallback
-          cd apps/web/dist/client
+          cd out/apps/web/dist/client
           cp _shell.html index.html
           # Remove _redirects - Cloudflare auto-handles SPA routing
           rm -f _redirects
@@ -111,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: apps/web/dist/client
+          path: out/apps/web/dist/client
           retention-days: 7
 
   deploy:
