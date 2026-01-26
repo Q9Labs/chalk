@@ -265,6 +265,85 @@ ALTER TABLE recordings ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT 
 
 -- Create indexes that depend on columns added above
 CREATE INDEX IF NOT EXISTS idx_rooms_whiteboard_state ON rooms USING GIN (whiteboard_state) WHERE whiteboard_state IS NOT NULL;
+
+-- ============================================================================
+-- MIGRATION 005: Add 'failed' status to recordings
+-- ============================================================================
+ALTER TABLE recordings DROP CONSTRAINT IF EXISTS recordings_status_check;
+ALTER TABLE recordings ADD CONSTRAINT recordings_status_check
+  CHECK (status IN ('recording', 'processing', 'ready', 'archived', 'deleted', 'failed'));
+
+-- ============================================================================
+-- MIGRATION 006: Transcripts table for real-time transcriptions
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS transcripts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    participant_id UUID REFERENCES participants(id) ON DELETE SET NULL,
+    cloudflare_participant_id VARCHAR(255),
+    speaker_name VARCHAR(255) NOT NULL,
+    text TEXT NOT NULL,
+    confidence REAL,
+    language VARCHAR(10),
+    external_id VARCHAR(255),
+    timestamp TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_transcripts_room_id ON transcripts(room_id);
+CREATE INDEX IF NOT EXISTS idx_transcripts_room_timestamp ON transcripts(room_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_transcripts_external_id ON transcripts(external_id);
+
+-- ============================================================================
+-- MIGRATION 007: Post-meeting transcripts (from recordings via Groq/Whisper)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS post_meeting_transcripts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recording_id UUID NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    transcript_text TEXT,
+    transcript_json JSONB,
+    language VARCHAR(10),
+    duration_seconds INT,
+    word_count INT,
+    provider VARCHAR(50),
+    summary TEXT,
+    action_items TEXT[],
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    error_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_recording_id ON post_meeting_transcripts(recording_id);
+CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_room_id ON post_meeting_transcripts(room_id);
+CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_status ON post_meeting_transcripts(status);
+
+-- ============================================================================
+-- MIGRATION 007: Webhook deliveries table for retry support
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    recording_id UUID REFERENCES recordings(id) ON DELETE SET NULL,
+    transcript_id UUID REFERENCES post_meeting_transcripts(id) ON DELETE SET NULL,
+    event_type VARCHAR(100) NOT NULL,
+    webhook_url TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'delivered', 'failed')),
+    attempts INT NOT NULL DEFAULT 0,
+    max_attempts INT NOT NULL DEFAULT 5,
+    last_error TEXT,
+    next_retry_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_tenant_id ON webhook_deliveries(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status ON webhook_deliveries(status);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_next_retry ON webhook_deliveries(next_retry_at) WHERE status IN ('pending', 'failed');
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_room_id ON webhook_deliveries(room_id);
 `
 	_, err := p.Exec(ctx, schema)
 	if err != nil {

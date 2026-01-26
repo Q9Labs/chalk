@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Missing database tables in production** - Embedded migration in `postgres.go` was missing tables from migrations 005-007 (transcripts, post_meeting_transcripts, webhook_deliveries, failed recording status)
 - **post_meeting_webhook config now persists** - PATCH /api/v1/tenants/{id}/config was silently ignoring `post_meeting_webhook` field (missing from request struct and merge logic)
 
 ### Changed
