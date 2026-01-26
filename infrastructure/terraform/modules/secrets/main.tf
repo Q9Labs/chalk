@@ -148,6 +148,7 @@ resource "aws_secretsmanager_secret" "groq_api" {
 }
 
 resource "aws_secretsmanager_secret_version" "groq_api" {
+  count         = var.groq_api_key != "" ? 1 : 0
   secret_id     = aws_secretsmanager_secret.groq_api.id
   secret_string = var.groq_api_key
 }
@@ -161,6 +162,7 @@ resource "aws_secretsmanager_secret" "openrouter_api" {
 }
 
 resource "aws_secretsmanager_secret_version" "openrouter_api" {
+  count         = var.openrouter_api_key != "" ? 1 : 0
   secret_id     = aws_secretsmanager_secret.openrouter_api.id
   secret_string = var.openrouter_api_key
 }
