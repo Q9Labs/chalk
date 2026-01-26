@@ -61,7 +61,7 @@ jobs:
           "
 
       - name: Install dependencies (pruned)
-        run: cd out && bun install --frozen-lockfile
+        run: cd out && bun install
         timeout-minutes: 3
 
       - name: Build SDK packages
