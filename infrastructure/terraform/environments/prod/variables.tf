@@ -117,3 +117,10 @@ variable "openrouter_api_key" {
   sensitive   = true
   default     = "" # Set via -var or TF_VAR_openrouter_api_key
 }
+
+variable "cloudflare_webhook_secret" {
+  description = "Secret for verifying Cloudflare RealtimeKit webhooks"
+  type        = string
+  sensitive   = true
+  default     = "" # Set via -var or TF_VAR_cloudflare_webhook_secret
+}

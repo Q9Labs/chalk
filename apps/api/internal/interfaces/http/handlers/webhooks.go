@@ -50,64 +50,128 @@ type RecordingReadyWebhook struct {
 }
 
 func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
+	startTime := time.Now()
 	signature := c.GetHeader("X-Cloudflare-Signature")
 
+	slog.Info("cloudflare webhook received", "path", c.Request.URL.Path)
+
 	if signature == "" {
+		slog.Warn("webhook rejected: missing signature")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing signature"})
 		return
 	}
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
+		slog.Warn("webhook rejected: invalid body", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or malformed body"})
 		return
 	}
 	if !h.verifySignatureBody(body, signature) {
+		slog.Warn("webhook rejected: invalid signature")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
 		return
 	}
+
+	slog.Debug("webhook signature verified")
 
 	// API-HIGH-07: Reset body for JSON binding after signature verification consumed it
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
 	var webhook RecordingReadyWebhook
 	if err := c.ShouldBindJSON(&webhook); err != nil {
+		slog.Warn("webhook rejected: invalid payload", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload: " + err.Error()})
 		return
 	}
 
+	slog.Info("cloudflare recording webhook parsed",
+		"type", webhook.Type,
+		"cloudflare_recording_id", webhook.RecordingID,
+		"cloudflare_meeting_id", webhook.MeetingID,
+		"size_bytes", webhook.Size,
+		"duration_seconds", webhook.Duration)
+
 	if webhook.Type != "recording.ready" {
+		slog.Warn("webhook rejected: unsupported type", "type", webhook.Type)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported webhook type"})
 		return
 	}
 
 	rec, err := h.recordingService.GetRecordingByCloudflareID(c.Request.Context(), webhook.RecordingID)
 	if err != nil {
+		slog.Error("recording not found for cloudflare ID",
+			"cloudflare_recording_id", webhook.RecordingID,
+			"error", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
 
+	slog.Info("matched recording in database",
+		"recording_id", rec.ID,
+		"room_id", rec.RoomID,
+		"cloudflare_recording_id", webhook.RecordingID)
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Minute)
 	defer cancel()
 
+	downloadStart := time.Now()
+	slog.Info("downloading recording from cloudflare",
+		"recording_id", rec.ID,
+		"url_prefix", webhook.URL[:min(len(webhook.URL), 50)])
+
 	resp, err := streamDownload(ctx, webhook.URL)
 	if err != nil {
+		slog.Error("failed to download recording from cloudflare",
+			"recording_id", rec.ID,
+			"error", err,
+			"duration_ms", time.Since(downloadStart).Milliseconds())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to download recording: " + err.Error()})
 		return
 	}
 	defer resp.Body.Close()
 
+	slog.Info("download stream opened",
+		"recording_id", rec.ID,
+		"duration_ms", time.Since(downloadStart).Milliseconds())
+
 	storageKey := fmt.Sprintf("recordings/%s/%s.webm", rec.RoomID, rec.ID)
 
+	uploadStart := time.Now()
+	slog.Info("uploading recording to r2",
+		"recording_id", rec.ID,
+		"storage_key", storageKey)
+
 	if err := h.recordingService.UploadRecording(ctx, storageKey, resp.Body, "video/webm"); err != nil {
+		slog.Error("failed to upload recording to r2",
+			"recording_id", rec.ID,
+			"storage_key", storageKey,
+			"error", err,
+			"duration_ms", time.Since(uploadStart).Milliseconds())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to R2: " + err.Error()})
 		return
 	}
 
+	slog.Info("recording uploaded to r2",
+		"recording_id", rec.ID,
+		"storage_key", storageKey,
+		"duration_ms", time.Since(uploadStart).Milliseconds())
+
 	completed, err := h.recordingService.CompleteRecording(ctx, rec.ID, "r2", storageKey, webhook.Size, int32(webhook.Duration))
 	if err != nil {
+		slog.Error("failed to complete recording in database",
+			"recording_id", rec.ID,
+			"error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update recording status: " + err.Error()})
 		return
 	}
+
+	slog.Info("recording completed",
+		"recording_id", completed.ID,
+		"room_id", completed.RoomID,
+		"storage_path", storageKey,
+		"size_bytes", webhook.Size,
+		"duration_seconds", webhook.Duration,
+		"total_processing_ms", time.Since(startTime).Milliseconds())
 
 	// Trigger post-meeting processing if configured
 	h.triggerPostMeetingProcessing(ctx, completed.ID, completed.RoomID)

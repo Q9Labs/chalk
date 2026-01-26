@@ -77,6 +77,13 @@ variable "openrouter_api_key" {
   sensitive   = true
 }
 
+variable "cloudflare_webhook_secret" {
+  description = "Secret for verifying Cloudflare RealtimeKit webhooks"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)

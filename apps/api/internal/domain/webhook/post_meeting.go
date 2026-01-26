@@ -50,6 +50,10 @@ func NewPostMeetingService(
 // If transcription is needed, it queues transcription first - webhook will be sent after.
 // If only recording is needed, it sends the webhook immediately.
 func (s *PostMeetingService) TriggerPostMeetingProcessing(ctx context.Context, recordingID, roomID uuid.UUID) {
+	s.logger.Info("post-meeting processing triggered",
+		"recording_id", recordingID,
+		"room_id", roomID)
+
 	// Get room and tenant info
 	room, err := s.queries.GetRoom(ctx, roomID)
 	if err != nil {
@@ -71,11 +75,26 @@ func (s *PostMeetingService) TriggerPostMeetingProcessing(ctx context.Context, r
 	}
 
 	if !config.Enabled || config.URL == "" {
+		s.logger.Debug("post-meeting webhook not enabled for tenant",
+			"tenant_id", room.TenantID,
+			"enabled", config.Enabled,
+			"has_url", config.URL != "")
 		return
 	}
 
 	// Determine processing path
 	needsTranscription := config.IncludeTranscript || config.IncludeSummary || config.IncludeActionItems
+
+	s.logger.Info("post-meeting processing started",
+		"recording_id", recordingID,
+		"room_id", roomID,
+		"tenant_id", room.TenantID,
+		"needs_transcription", needsTranscription,
+		"include_recording", config.IncludeRecording,
+		"include_transcript", config.IncludeTranscript,
+		"include_summary", config.IncludeSummary,
+		"include_action_items", config.IncludeActionItems,
+		"webhook_url", config.URL)
 
 	if needsTranscription && s.transcriptionService != nil {
 		// Queue transcription - webhook will be sent after transcription completes
@@ -84,17 +103,23 @@ func (s *PostMeetingService) TriggerPostMeetingProcessing(ctx context.Context, r
 			provider = config.Transcription.Provider
 		}
 
-		_, err := s.transcriptionService.QueueTranscription(ctx, recordingID, roomID, provider)
+		transcriptID, err := s.transcriptionService.QueueTranscription(ctx, recordingID, roomID, provider)
 		if err != nil {
 			s.logger.Error("failed to queue transcription", "recording_id", recordingID, "error", err)
 			// Fall back to sending webhook without transcript
 			s.sendWebhookWithRecordingOnly(ctx, room, tenant, recordingID, config)
+			return
 		}
 		s.logger.Info("transcription queued for post-meeting processing",
 			"recording_id", recordingID,
-			"room_id", roomID)
+			"room_id", roomID,
+			"transcript_id", transcriptID,
+			"provider", provider)
 	} else if config.IncludeRecording {
 		// No transcript needed - send webhook immediately with just recording
+		s.logger.Info("sending webhook with recording only (no transcription)",
+			"recording_id", recordingID,
+			"room_id", roomID)
 		s.sendWebhookWithRecordingOnly(ctx, room, tenant, recordingID, config)
 	}
 }

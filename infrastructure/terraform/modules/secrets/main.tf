@@ -167,6 +167,24 @@ resource "aws_secretsmanager_secret_version" "openrouter_api" {
   secret_string = var.openrouter_api_key
 }
 
+# =============================================================================
+# Cloudflare Webhook Secret
+# =============================================================================
+
+resource "aws_secretsmanager_secret" "cloudflare_webhook" {
+  name        = "chalk/${var.environment}/cloudflare-webhook"
+  description = "Secret for verifying Cloudflare RealtimeKit webhooks"
+  kms_key_id  = aws_kms_key.secrets.arn
+
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "cloudflare_webhook" {
+  count         = var.cloudflare_webhook_secret != "" ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.cloudflare_webhook.id
+  secret_string = var.cloudflare_webhook_secret
+}
+
 resource "aws_iam_policy" "secrets_read" {
   name        = "${local.name}-secrets-read"
   description = "Policy to read Chalk secrets"
@@ -188,7 +206,8 @@ resource "aws_iam_policy" "secrets_read" {
           aws_secretsmanager_secret.r2_credentials.arn,
           aws_secretsmanager_secret.axiom.arn,
           aws_secretsmanager_secret.groq_api.arn,
-          aws_secretsmanager_secret.openrouter_api.arn
+          aws_secretsmanager_secret.openrouter_api.arn,
+          aws_secretsmanager_secret.cloudflare_webhook.arn
         ]
       },
       {

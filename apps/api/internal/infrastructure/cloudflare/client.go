@@ -493,3 +493,174 @@ func (c *Client) ListRecordingsByMeeting(ctx context.Context, meetingID string) 
 
 	return result.Result, nil
 }
+
+// CreateWebhook registers a webhook endpoint with Cloudflare RealtimeKit
+func (c *Client) CreateWebhook(ctx context.Context, req CreateWebhookRequest) (*Webhook, error) {
+	if !c.IsConfigured() {
+		return nil, fmt.Errorf("cloudflare not configured")
+	}
+
+	resp, err := c.doRequest(ctx, "POST", "/webhooks", req)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result Response[Webhook]
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if result.Result != nil {
+		return result.Result, nil
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+	}
+
+	return &result.Data, nil
+}
+
+// GetWebhook retrieves a webhook by ID
+func (c *Client) GetWebhook(ctx context.Context, webhookID string) (*Webhook, error) {
+	if !c.IsConfigured() {
+		return nil, fmt.Errorf("cloudflare not configured")
+	}
+
+	path := fmt.Sprintf("/webhooks/%s", webhookID)
+	resp, err := c.doRequest(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("webhook not found: %s", webhookID)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result Response[Webhook]
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if result.Result != nil {
+		return result.Result, nil
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+	}
+
+	return &result.Data, nil
+}
+
+// ListWebhooks lists all webhooks for the app
+func (c *Client) ListWebhooks(ctx context.Context) ([]Webhook, error) {
+	if !c.IsConfigured() {
+		return nil, fmt.Errorf("cloudflare not configured")
+	}
+
+	resp, err := c.doRequest(ctx, "GET", "/webhooks", nil)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result WebhooksListResponse
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+	}
+
+	return result.Result, nil
+}
+
+// DeleteWebhook removes a webhook
+func (c *Client) DeleteWebhook(ctx context.Context, webhookID string) error {
+	if !c.IsConfigured() {
+		return fmt.Errorf("cloudflare not configured")
+	}
+
+	path := fmt.Sprintf("/webhooks/%s", webhookID)
+	resp, err := c.doRequest(ctx, "DELETE", path, nil)
+	if err != nil {
+		return fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+
+// UpdateWebhook updates webhook configuration
+func (c *Client) UpdateWebhook(ctx context.Context, webhookID string, req UpdateWebhookRequest) (*Webhook, error) {
+	if !c.IsConfigured() {
+		return nil, fmt.Errorf("cloudflare not configured")
+	}
+
+	path := fmt.Sprintf("/webhooks/%s", webhookID)
+	resp, err := c.doRequest(ctx, "PATCH", path, req)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result Response[Webhook]
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if result.Result != nil {
+		return result.Result, nil
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+	}
+
+	return &result.Data, nil
+}

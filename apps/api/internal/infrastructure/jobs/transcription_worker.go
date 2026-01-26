@@ -101,27 +101,48 @@ func (w *TranscriptionWorker) processPendingJobs(ctx context.Context) {
 	w.logger.Info("processing pending transcripts", "count", len(pending))
 
 	for _, transcript := range pending {
+		start := time.Now()
 		tenantAPIKey := w.getTenantAPIKey(ctx, transcript.RoomID)
 
+		w.logger.Info("starting transcription job",
+			"transcript_id", transcript.ID,
+			"recording_id", transcript.RecordingID,
+			"room_id", transcript.RoomID,
+			"byok", tenantAPIKey != "")
+
 		if err := w.service.ProcessTranscription(ctx, transcript.ID, tenantAPIKey); err != nil {
-			w.logger.Error("transcription failed",
+			w.logger.Error("transcription job failed",
 				"transcript_id", transcript.ID,
 				"recording_id", transcript.RecordingID,
-				"error", err)
+				"error", err,
+				"duration_ms", time.Since(start).Milliseconds())
 			// Still try to send webhook with error info
 			w.sendWebhook(ctx, transcript.RecordingID, transcript.ID)
 			continue
 		}
 
-		w.logger.Info("transcription completed",
+		transcriptionDuration := time.Since(start)
+		w.logger.Info("transcription job completed",
 			"transcript_id", transcript.ID,
-			"recording_id", transcript.RecordingID)
+			"recording_id", transcript.RecordingID,
+			"duration_ms", transcriptionDuration.Milliseconds())
 
 		// Generate AI summary if configured
+		aiStart := time.Now()
 		w.generateAISummary(ctx, transcript)
+		if time.Since(aiStart) > time.Second {
+			w.logger.Info("ai summary generation completed",
+				"transcript_id", transcript.ID,
+				"duration_ms", time.Since(aiStart).Milliseconds())
+		}
 
 		// Send webhook after transcription (and AI) completes
 		w.sendWebhook(ctx, transcript.RecordingID, transcript.ID)
+
+		w.logger.Info("transcription job fully processed",
+			"transcript_id", transcript.ID,
+			"recording_id", transcript.RecordingID,
+			"total_duration_ms", time.Since(start).Milliseconds())
 	}
 }
 

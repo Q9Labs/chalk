@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -71,6 +72,9 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 
 // Upload uploads a file to R2
 func (c *R2Client) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
+	start := time.Now()
+	slog.Debug("r2 upload starting", "key", key, "content_type", contentType)
+
 	uploader := manager.NewUploader(c.client)
 
 	_, err := uploader.Upload(ctx, &s3.PutObjectInput{
@@ -81,14 +85,24 @@ func (c *R2Client) Upload(ctx context.Context, key string, body io.Reader, conte
 	})
 
 	if err != nil {
+		slog.Error("r2 upload failed",
+			"key", key,
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("upload to R2 failed: %w", err)
 	}
 
+	slog.Info("r2 upload completed",
+		"key", key,
+		"duration_ms", time.Since(start).Milliseconds())
 	return nil
 }
 
 // Download returns a reader for the file from R2
 func (c *R2Client) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	start := time.Now()
+	slog.Debug("r2 download starting", "key", key)
+
 	result, err := c.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(c.bucket),
 		Key:    aws.String(key),
@@ -98,11 +112,21 @@ func (c *R2Client) Download(ctx context.Context, key string) (io.ReadCloser, err
 		// API-MED-05: Use errors.As to properly detect smithy API errors
 		var ae smithy.APIError
 		if errors.As(err, &ae) && ae.ErrorCode() == "NoSuchKey" {
+			slog.Warn("r2 download: file not found",
+				"key", key,
+				"duration_ms", time.Since(start).Milliseconds())
 			return nil, fmt.Errorf("file not found: %s", key)
 		}
+		slog.Error("r2 download failed",
+			"key", key,
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("download from R2 failed: %w", err)
 	}
 
+	slog.Debug("r2 download stream opened",
+		"key", key,
+		"duration_ms", time.Since(start).Milliseconds())
 	return result.Body, nil
 }
 

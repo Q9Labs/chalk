@@ -127,6 +127,8 @@ module "ecs" {
     { name = "CORS_ORIGINS_KEY", value = module.cors_origins.origins_key },
     { name = "POST_MEETING_WHISPER_ENABLED", value = "true" },
     { name = "POST_MEETING_WHISPER_REDIS_QUEUE", value = "transcription:jobs" },
+    # Cloudflare webhook registration
+    { name = "API_PUBLIC_URL", value = "https://${var.api_domain_name}" },
   ]
 
   task_role_policy_arns = [module.cors_origins.write_policy_arn]
@@ -142,6 +144,8 @@ module "ecs" {
     # Post-meeting transcription & AI
     { name = "POST_MEETING_GROQ_API_KEY", valueFrom = module.secrets.groq_api_secret_arn },
     { name = "POST_MEETING_OPENROUTER_API_KEY", valueFrom = module.secrets.openrouter_api_secret_arn },
+    # Cloudflare webhook verification
+    { name = "CLOUDFLARE_WEBHOOK_SECRET", valueFrom = module.secrets.cloudflare_webhook_secret_arn },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets
@@ -213,6 +217,9 @@ module "secrets" {
   # Post-meeting transcription & AI
   groq_api_key       = var.groq_api_key
   openrouter_api_key = var.openrouter_api_key
+
+  # Cloudflare webhook verification
+  cloudflare_webhook_secret = var.cloudflare_webhook_secret
 }
 
 # DNS and SSL certificates (must come before api_gateway)

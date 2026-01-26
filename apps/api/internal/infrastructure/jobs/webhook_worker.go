@@ -67,6 +67,14 @@ func (w *WebhookWorker) processPendingDeliveries(ctx context.Context) {
 }
 
 func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookDelivery) {
+	start := time.Now()
+
+	w.logger.Info("webhook delivery starting",
+		"delivery_id", delivery.ID,
+		"url", delivery.WebhookUrl,
+		"attempt", delivery.Attempts+1,
+		"event_type", delivery.EventType)
+
 	// Mark as sending
 	if err := w.queries.MarkWebhookSending(ctx, delivery.ID); err != nil {
 		w.logger.Error("failed to mark webhook sending", "delivery_id", delivery.ID, "error", err)
@@ -112,6 +120,11 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 	// Send request
 	resp, err := w.client.Do(req)
 	if err != nil {
+		w.logger.Error("webhook request failed",
+			"delivery_id", delivery.ID,
+			"url", delivery.WebhookUrl,
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
 		w.scheduleRetry(ctx, delivery, "request failed: "+err.Error())
 		return
 	}
@@ -123,14 +136,21 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 		if err := w.queries.MarkWebhookDelivered(ctx, delivery.ID); err != nil {
 			w.logger.Error("failed to mark webhook delivered", "delivery_id", delivery.ID, "error", err)
 		}
-		w.logger.Info("webhook delivered",
+		w.logger.Info("webhook delivered successfully",
 			"delivery_id", delivery.ID,
 			"url", delivery.WebhookUrl,
-			"status", resp.StatusCode)
+			"status_code", resp.StatusCode,
+			"duration_ms", time.Since(start).Milliseconds())
 	} else {
 		// Read error response (limit to 1KB)
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+		w.logger.Warn("webhook delivery failed with HTTP error",
+			"delivery_id", delivery.ID,
+			"url", delivery.WebhookUrl,
+			"status_code", resp.StatusCode,
+			"response_body", string(body),
+			"duration_ms", time.Since(start).Milliseconds())
 		w.scheduleRetry(ctx, delivery, errMsg)
 	}
 }

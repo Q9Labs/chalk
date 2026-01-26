@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cloudflare webhook registration** - API now registers webhooks with Cloudflare RealtimeKit
+  - New `setup-webhook` CLI command (`go run ./cmd/setup-webhook`) for one-time webhook registration
+  - Startup check logs warning if no webhook is configured (recordings will not be processed)
+  - Webhook CRUD methods added to Cloudflare client (CreateWebhook, ListWebhooks, DeleteWebhook)
+  - New config: `API_PUBLIC_URL`, `CLOUDFLARE_WEBHOOK_SECRET`
+
+- **Comprehensive recording flow logging** - Debug and trace recording processing via Axiom
+  - Webhook handler: signature verification, download/upload timing, completion status
+  - R2 storage: upload/download with duration tracking
+  - Recording service: start/stop with Cloudflare IDs
+  - Transcription service: queue/process with provider and timing
+  - Post-meeting orchestration: decision logging with config details
+  - Workers: webhook delivery timing and retry tracking
+
 - **Whisper GPU infrastructure** - Self-hosted transcription on EC2 GPU instances
 
 ### Changed

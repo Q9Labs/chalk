@@ -150,3 +150,47 @@ const (
 	RecordingStatusCompleted = "COMPLETED"
 	RecordingStatusFailed    = "FAILED"
 )
+
+// Webhook represents a Cloudflare RealtimeKit webhook configuration
+type Webhook struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	URL       string   `json:"url"`
+	Events    []string `json:"events"`
+	Enabled   bool     `json:"enabled"`
+	Secret    string   `json:"secret,omitempty"`
+	CreatedAt string   `json:"created_at,omitempty"`
+	UpdatedAt string   `json:"updated_at,omitempty"`
+}
+
+// CreateWebhookRequest is the request body for creating a webhook
+type CreateWebhookRequest struct {
+	Name    string   `json:"name"`
+	URL     string   `json:"url"`
+	Events  []string `json:"events"`
+	Enabled bool     `json:"enabled"`
+	Secret  string   `json:"secret,omitempty"`
+}
+
+// UpdateWebhookRequest is the request body for updating a webhook
+type UpdateWebhookRequest struct {
+	Name    *string  `json:"name,omitempty"`
+	URL     *string  `json:"url,omitempty"`
+	Events  []string `json:"events,omitempty"`
+	Enabled *bool    `json:"enabled,omitempty"`
+	Secret  *string  `json:"secret,omitempty"`
+}
+
+// WebhookEvent constants
+const (
+	WebhookEventRecordingStatusUpdate = "recording.statusUpdate"
+	WebhookEventMeetingEnded          = "meeting.ended"
+)
+
+// WebhooksListResponse is the response from Cloudflare's list webhooks endpoint
+type WebhooksListResponse struct {
+	Success  bool       `json:"success"`
+	Errors   []APIError `json:"errors,omitempty"`
+	Messages []string   `json:"messages,omitempty"`
+	Result   []Webhook  `json:"result,omitempty"`
+}

@@ -53,6 +53,11 @@ output "openrouter_api_secret_arn" {
   value       = aws_secretsmanager_secret.openrouter_api.arn
 }
 
+output "cloudflare_webhook_secret_arn" {
+  description = "Cloudflare webhook secret ARN"
+  value       = aws_secretsmanager_secret.cloudflare_webhook.arn
+}
+
 output "secret_arns" {
   description = "All secret ARNs"
   value = [
@@ -63,6 +68,7 @@ output "secret_arns" {
     aws_secretsmanager_secret.r2_credentials.arn,
     aws_secretsmanager_secret.axiom.arn,
     aws_secretsmanager_secret.groq_api.arn,
-    aws_secretsmanager_secret.openrouter_api.arn
+    aws_secretsmanager_secret.openrouter_api.arn,
+    aws_secretsmanager_secret.cloudflare_webhook.arn
   ]
 }

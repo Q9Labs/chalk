@@ -12,6 +12,7 @@ type Config struct {
 	Database    DatabaseConfig
 	Redis       RedisConfig
 	Cloudflare  CloudflareConfig
+	API         APIConfig
 	JWT         JWTConfig
 	Storage     StorageConfig
 	GitHub      GitHubConfig
@@ -48,9 +49,15 @@ type RedisConfig struct {
 
 // CloudflareConfig holds Cloudflare RealtimeKit configuration
 type CloudflareConfig struct {
-	AccountID string
-	AppID     string
-	APIToken  string
+	AccountID     string
+	AppID         string
+	APIToken      string
+	WebhookSecret string // CLOUDFLARE_WEBHOOK_SECRET - for verifying incoming webhooks
+}
+
+// APIConfig holds API server configuration
+type APIConfig struct {
+	PublicURL string // API_PUBLIC_URL - public URL for webhook registration
 }
 
 // JWTConfig holds JWT configuration
@@ -169,9 +176,13 @@ func Load() (*Config, error) {
 			TLS:      redisTLS,
 		},
 		Cloudflare: CloudflareConfig{
-			AccountID: getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
-			AppID:     getEnv("CLOUDFLARE_APP_ID", ""),
-			APIToken:  getEnv("CLOUDFLARE_API_TOKEN", ""),
+			AccountID:     getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
+			AppID:         getEnv("CLOUDFLARE_APP_ID", ""),
+			APIToken:      getEnv("CLOUDFLARE_API_TOKEN", ""),
+			WebhookSecret: getEnv("CLOUDFLARE_WEBHOOK_SECRET", ""),
+		},
+		API: APIConfig{
+			PublicURL: getEnv("API_PUBLIC_URL", ""),
 		},
 		JWT: JWTConfig{
 			SigningKey:    getEnv("JWT_SIGNING_KEY", "development-secret-key"),

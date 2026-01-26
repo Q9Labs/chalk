@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/netip"
 	"time"
@@ -66,13 +67,20 @@ func NewService(queries *db.Queries, cf CloudflareClient, r2 StorageClient, s3 S
 }
 
 func (s *Service) StartRecording(ctx context.Context, roomID uuid.UUID) (*db.Recording, error) {
+	slog.Info("starting recording", "room_id", roomID)
+
 	room, err := s.db.GetRoom(ctx, roomID)
 	if err != nil {
+		slog.Warn("start recording failed: room not found", "room_id", roomID, "error", err)
 		return nil, ErrRoomNotFound
 	}
 
 	cfRecording, err := s.cfClient.StartRecording(ctx, room.CloudflareMeetingID, cloudflare.StartRecordingRequest{})
 	if err != nil {
+		slog.Error("cloudflare start recording failed",
+			"room_id", roomID,
+			"cloudflare_meeting_id", room.CloudflareMeetingID,
+			"error", err)
 		return nil, fmt.Errorf("cloudflare start recording failed: %w", err)
 	}
 
@@ -81,8 +89,17 @@ func (s *Service) StartRecording(ctx context.Context, roomID uuid.UUID) (*db.Rec
 		CloudflareRecordingID: strPtr(cfRecording.ID),
 	})
 	if err != nil {
+		slog.Error("create recording in database failed",
+			"room_id", roomID,
+			"cloudflare_recording_id", cfRecording.ID,
+			"error", err)
 		return nil, fmt.Errorf("database insert failed: %w", err)
 	}
+
+	slog.Info("recording started",
+		"recording_id", recording.ID,
+		"room_id", roomID,
+		"cloudflare_recording_id", cfRecording.ID)
 
 	if s.roomState != nil {
 		_ = s.roomState.SetRecordingState(ctx, roomID, true, &recording.ID)
@@ -96,19 +113,33 @@ func (s *Service) StartRecording(ctx context.Context, roomID uuid.UUID) (*db.Rec
 }
 
 func (s *Service) StopRecording(ctx context.Context, roomID uuid.UUID) (*db.Recording, error) {
+	slog.Info("stopping recording", "room_id", roomID)
+
 	activeRecording, err := s.db.GetActiveRecordingByRoom(ctx, roomID)
 	if err != nil {
+		slog.Warn("stop recording failed: no active recording", "room_id", roomID, "error", err)
 		return nil, ErrNoActiveRecording
 	}
 
 	if activeRecording.CloudflareRecordingID != nil {
+		slog.Debug("stopping recording in cloudflare",
+			"recording_id", activeRecording.ID,
+			"cloudflare_recording_id", *activeRecording.CloudflareRecordingID)
 		_, _ = s.cfClient.StopRecording(ctx, *activeRecording.CloudflareRecordingID)
 	}
 
 	recording, err := s.db.StopRecording(ctx, activeRecording.ID)
 	if err != nil {
+		slog.Error("failed to stop recording in database",
+			"recording_id", activeRecording.ID,
+			"error", err)
 		return nil, fmt.Errorf("failed to stop recording in database: %w", err)
 	}
+
+	slog.Info("recording stopped",
+		"recording_id", recording.ID,
+		"room_id", roomID,
+		"status", recording.Status)
 
 	if s.roomState != nil {
 		_ = s.roomState.SetRecordingState(ctx, roomID, false, nil)

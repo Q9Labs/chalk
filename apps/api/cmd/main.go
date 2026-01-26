@@ -103,6 +103,35 @@ func main() {
 
 	slog.Info("initialized Cloudflare RealtimeKit client")
 
+	// Check if Cloudflare webhook is configured (for recording.ready events)
+	if cfClient.IsConfigured() {
+		webhooks, err := cfClient.ListWebhooks(ctx)
+		if err != nil {
+			slog.Warn("failed to check cloudflare webhooks", "error", err)
+		} else if len(webhooks) == 0 {
+			slog.Error("NO CLOUDFLARE WEBHOOK CONFIGURED - recordings will not be processed",
+				"action", "run 'go run ./cmd/setup-webhook' to configure")
+		} else {
+			// Find enabled webhook
+			var activeWebhook *cloudflare.Webhook
+			for i := range webhooks {
+				if webhooks[i].Enabled {
+					activeWebhook = &webhooks[i]
+					break
+				}
+			}
+			if activeWebhook != nil {
+				slog.Info("cloudflare webhook configured",
+					"webhook_id", activeWebhook.ID,
+					"url", activeWebhook.URL,
+					"events", activeWebhook.Events)
+			} else {
+				slog.Warn("cloudflare webhook exists but is disabled",
+					"webhook_count", len(webhooks))
+			}
+		}
+	}
+
 	// Initialize R2 storage client (optional)
 	var storageR2 storage.StorageClient
 	if cfg.Storage.R2AccessKeyID != "" && cfg.Storage.R2SecretAccessKey != "" {
