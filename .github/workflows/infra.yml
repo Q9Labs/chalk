@@ -149,6 +149,10 @@ jobs:
           echo "::add-mask::$AXIOM_TOKEN"
           echo "axiom_token=$AXIOM_TOKEN" >> $GITHUB_OUTPUT
 
+          CF_WEBHOOK_SECRET=$(aws ssm get-parameter --name "/chalk/prod/cloudflare-webhook-secret" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          echo "::add-mask::$CF_WEBHOOK_SECRET"
+          echo "cf_webhook_secret=$CF_WEBHOOK_SECRET" >> $GITHUB_OUTPUT
+
       - name: Terraform Plan
         id: plan
         run: |
@@ -156,6 +160,7 @@ jobs:
             -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
             -var="axiom_token=${{ steps.ssm.outputs.axiom_token }}" \
+            -var="cloudflare_webhook_secret=${{ steps.ssm.outputs.cf_webhook_secret }}" \
             -out=tfplan \
             -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
