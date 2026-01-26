@@ -26,3 +26,18 @@ output "docker_push_commands" {
     docker push ${aws_ecr_repository.api.repository_url}:latest
   EOT
 }
+
+output "whisper_repository_url" {
+  description = "ECR repository URL for whisper worker"
+  value       = aws_ecr_repository.whisper.repository_url
+}
+
+output "whisper_repository_arn" {
+  description = "ECR repository ARN for whisper worker"
+  value       = aws_ecr_repository.whisper.arn
+}
+
+output "whisper_repository_name" {
+  description = "ECR repository name for whisper worker"
+  value       = aws_ecr_repository.whisper.name
+}

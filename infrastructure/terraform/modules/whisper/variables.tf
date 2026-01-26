@@ -20,10 +20,20 @@ variable "subnet_ids" {
   type        = list(string)
 }
 
-variable "redis_url" {
-  description = "Redis URL for job queue"
+variable "redis_auth_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing Redis AUTH token"
   type        = string
-  sensitive   = true
+}
+
+variable "redis_endpoint" {
+  description = "Redis endpoint address"
+  type        = string
+}
+
+variable "redis_port" {
+  description = "Redis port"
+  type        = number
+  default     = 6379
 }
 
 variable "ecr_repository_url" {

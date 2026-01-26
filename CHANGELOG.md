@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Whisper GPU infrastructure** - Self-hosted transcription on EC2 GPU instances
+  - Whisper module instantiated in production environment
+  - ECR repository for whisper-worker Docker image
+  - GitHub Actions workflow for whisper-worker builds
+  - Secrets Manager integration for Redis auth token at runtime
+  - Auto-scaling based on queue depth
+  - Security group rule for Redis access
+
 ### Changed
 
 ### Fixed

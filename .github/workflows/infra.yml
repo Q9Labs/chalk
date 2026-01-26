@@ -79,7 +79,7 @@ jobs:
 
       - name: Validate Modules
         run: |
-          for module in vpc ecs aurora elasticache api-gateway waf monitoring ecr cloudflare cors-origins; do
+          for module in vpc ecs aurora elasticache api-gateway waf monitoring ecr cloudflare cors-origins whisper; do
             echo "Validating module: $module"
             cd infrastructure/terraform/modules/$module
             terraform init -backend=false

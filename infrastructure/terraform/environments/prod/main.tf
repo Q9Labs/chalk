@@ -125,6 +125,8 @@ module "ecs" {
     { name = "AXIOM_DATASET", value = var.axiom_dataset },
     { name = "CORS_ORIGINS_BUCKET", value = module.cors_origins.bucket_name },
     { name = "CORS_ORIGINS_KEY", value = module.cors_origins.origins_key },
+    { name = "POST_MEETING_WHISPER_ENABLED", value = "true" },
+    { name = "POST_MEETING_WHISPER_REDIS_QUEUE", value = "transcription:jobs" },
   ]
 
   task_role_policy_arns = [module.cors_origins.write_policy_arn]
@@ -337,4 +339,34 @@ module "cloudflare" {
   environment              = local.environment
   r2_location              = "enam"
   recording_retention_days = 30 # Reduced from 90 (cost savings)
+}
+
+module "whisper" {
+  source = "../../modules/whisper"
+
+  environment           = local.environment
+  vpc_id                = module.vpc.vpc_id
+  vpc_cidr              = "10.2.0.0/16"
+  subnet_ids            = module.vpc.private_subnet_ids
+  redis_auth_secret_arn = module.elasticache.auth_token_secret_arn
+  redis_endpoint        = module.elasticache.primary_endpoint
+  redis_port            = module.elasticache.port
+  ecr_repository_url    = module.ecr.whisper_repository_url
+  worker_image_tag      = "latest"
+  min_capacity          = 0
+  desired_capacity      = 0 # Start at 0, scale up after image pushed to ECR
+  max_capacity          = 2
+  enable_autoscaling    = true
+}
+
+# Allow whisper workers to access Redis
+# Separate rule to avoid circular dependency (whisper needs elasticache outputs)
+resource "aws_security_group_rule" "redis_from_whisper" {
+  type                     = "ingress"
+  from_port                = 6379
+  to_port                  = 6379
+  protocol                 = "tcp"
+  security_group_id        = module.elasticache.security_group_id
+  source_security_group_id = module.whisper.security_group_id
+  description              = "Redis from Whisper workers"
 }

@@ -131,7 +131,7 @@ resource "aws_iam_role_policy" "whisper_secrets" {
         ]
         Resource = [
           "arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:chalk/whisper/*",
-          "arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:chalk/redis/*"
+          var.redis_auth_secret_arn
         ]
       }
     ]
@@ -162,6 +162,12 @@ resource "aws_iam_role_policy" "whisper_logs" {
 resource "aws_iam_role_policy_attachment" "whisper_ssm" {
   role       = aws_iam_role.whisper.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# ECR read access for pulling container images
+resource "aws_iam_role_policy_attachment" "whisper_ecr" {
+  role       = aws_iam_role.whisper.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
 resource "aws_iam_instance_profile" "whisper" {
@@ -238,6 +244,18 @@ resource "aws_launch_template" "whisper" {
     CWCONFIG
     /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
+    # Fetch Redis auth token from Secrets Manager
+    REDIS_AUTH=$(aws secretsmanager get-secret-value \
+      --secret-id "${var.redis_auth_secret_arn}" \
+      --query SecretString --output text)
+
+    REDIS_URL="rediss://:$REDIS_AUTH@${var.redis_endpoint}:${var.redis_port}"
+
+    # Authenticate with ECR
+    ECR_REGISTRY=$(echo "${var.ecr_repository_url}" | cut -d'/' -f1)
+    aws ecr get-login-password --region ${data.aws_region.current.name} | \
+      docker login --username AWS --password-stdin $ECR_REGISTRY
+
     # Pull and run whisper worker
     docker pull ${var.ecr_repository_url}:${var.worker_image_tag}
 
@@ -245,7 +263,7 @@ resource "aws_launch_template" "whisper" {
       --name whisper-worker \
       --restart always \
       --gpus all \
-      -e REDIS_URL="${var.redis_url}" \
+      -e REDIS_URL="$REDIS_URL" \
       -e AWS_REGION="${data.aws_region.current.name}" \
       -e LOG_LEVEL="${var.log_level}" \
       -v /var/log:/var/log \

@@ -1,0 +1,35 @@
+name: Whisper Worker Build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'infrastructure/whisper-worker/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
+
+      - name: Build and push
+        working-directory: infrastructure/whisper-worker
+        run: |
+          IMAGE=${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:${{ github.sha }}
+          docker build -t $IMAGE -t ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:latest .
+          docker push --all-tags ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper
