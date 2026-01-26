@@ -201,3 +201,21 @@ export type {
 	CreateTokenProviderConfig,
 	TokenStorage,
 } from "./token-provider.ts";
+
+// ============================================================================
+// Webhooks
+// ============================================================================
+
+export {
+	createWebhookHandler,
+	chalkWebhookMiddleware,
+	type WebhookHandlerOptions,
+	type WebhookEvent,
+} from "./webhooks/index.ts";
+export {
+	WebhookPayload,
+	WebhookMeeting,
+	WebhookRecording,
+	WebhookTranscript,
+	WebhookError,
+} from "./webhooks/schemas.ts";

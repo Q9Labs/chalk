@@ -10,6 +10,8 @@ import (
 	"github.com/Q9Labs/chalk/internal/domain/recording"
 	"github.com/Q9Labs/chalk/internal/domain/room"
 	"github.com/Q9Labs/chalk/internal/domain/transcript"
+	postmeetingtranscription "github.com/Q9Labs/chalk/internal/domain/transcription"
+	"github.com/Q9Labs/chalk/internal/domain/webhook"
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/github"
@@ -18,10 +20,13 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/Q9Labs/chalk/internal/infrastructure/s3"
 	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
+	// Import to trigger provider registration
+	_ "github.com/Q9Labs/chalk/internal/infrastructure/transcription"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/handlers"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/Q9Labs/chalk/internal/interfaces/websocket"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type Router struct {
@@ -40,19 +45,23 @@ type Router struct {
 	appConfig          *config.Config
 	corsOriginsService *s3.CORSOriginsService
 
-	roomService        *room.Service
-	participantService *participant.Service
-	recordingService   *recording.Service
-	transcriptService  *transcript.Service
+	roomService                     *room.Service
+	participantService              *participant.Service
+	recordingService                *recording.Service
+	transcriptService               *transcript.Service
+	postMeetingTranscriptionService *postmeetingtranscription.Service
+	postMeetingService              *webhook.PostMeetingService
 }
 
 type RouterConfig struct {
-	Pool        *postgres.Pool
-	CFClient    *cloudflare.Client
-	RedisClient *redis.Client
-	StorageR2   storage.StorageClient
-	StorageS3   storage.StorageClient
-	AppConfig   *config.Config
+	Pool                            *postgres.Pool
+	CFClient                        *cloudflare.Client
+	RedisClient                     *redis.Client
+	StorageR2                       storage.StorageClient
+	StorageS3                       storage.StorageClient
+	AppConfig                       *config.Config
+	PostMeetingTranscriptionService *postmeetingtranscription.Service
+	PostMeetingService              *webhook.PostMeetingService
 }
 
 func NewRouter(cfg RouterConfig) *Router {
@@ -112,24 +121,26 @@ func NewRouter(cfg RouterConfig) *Router {
 	wsHub.SetParticipantService(participantService)
 
 	r := &Router{
-		engine:             engine,
-		pool:               cfg.Pool,
-		queries:            queries,
-		jwtService:         jwtService,
-		apiKeyService:      apiKeyService,
-		cfClient:           cfg.CFClient,
-		redisClient:        cfg.RedisClient,
-		roomState:          roomState,
-		wsHub:              wsHub,
-		storageR2:          cfg.StorageR2,
-		storageS3:          cfg.StorageS3,
-		githubClient:       githubClient,
-		appConfig:          cfg.AppConfig,
-		corsOriginsService: corsOriginsService,
-		roomService:        roomService,
-		participantService: participantService,
-		recordingService:   recordingService,
-		transcriptService:  transcriptService,
+		engine:                          engine,
+		pool:                            cfg.Pool,
+		queries:                         queries,
+		jwtService:                      jwtService,
+		apiKeyService:                   apiKeyService,
+		cfClient:                        cfg.CFClient,
+		redisClient:                     cfg.RedisClient,
+		roomState:                       roomState,
+		wsHub:                           wsHub,
+		storageR2:                       cfg.StorageR2,
+		storageS3:                       cfg.StorageS3,
+		githubClient:                    githubClient,
+		appConfig:                       cfg.AppConfig,
+		corsOriginsService:              corsOriginsService,
+		roomService:                     roomService,
+		participantService:              participantService,
+		recordingService:                recordingService,
+		transcriptService:               transcriptService,
+		postMeetingTranscriptionService: cfg.PostMeetingTranscriptionService,
+		postMeetingService:              cfg.PostMeetingService,
 	}
 
 	r.setupRoutes()
@@ -233,9 +244,34 @@ func (r *Router) setupRoutes() {
 			recordingsGroup.POST("/:id/archive", recordings.Archive)
 			recordingsGroup.POST("/:id/recover", recordings.Recover)
 			recordingsGroup.DELETE("/:id", recordings.Delete)
+
+			// Post-meeting transcription for recordings
+			if r.postMeetingTranscriptionService != nil {
+				pmTranscription := handlers.NewPostMeetingTranscriptionHandler(r.postMeetingTranscriptionService)
+				recordingsGroup.GET("/:id/transcript", pmTranscription.GetTranscriptByRecording)
+				recordingsGroup.POST("/:id/transcribe", pmTranscription.QueueTranscription)
+			}
 		}
 
-		webhooks := handlers.NewWebhookHandler(r.recordingService)
+		// Post-meeting transcription endpoints
+		if r.postMeetingTranscriptionService != nil {
+			transcriptionGroup := v1.Group("/transcription")
+			{
+				pmTranscription := handlers.NewPostMeetingTranscriptionHandler(r.postMeetingTranscriptionService)
+				transcriptionGroup.GET("/providers", pmTranscription.GetProviders)
+
+				transcriptionGroup.Use(authMw.RequireJWT())
+				transcriptionGroup.GET("/:id", pmTranscription.GetTranscript)
+			}
+		}
+
+		// Create post-meeting trigger adapter if service is configured
+		var postMeetingTrigger handlers.PostMeetingTrigger
+		if r.postMeetingService != nil {
+			postMeetingTrigger = &postMeetingTriggerAdapter{svc: r.postMeetingService}
+		}
+
+		webhooks := handlers.NewWebhookHandler(r.recordingService, r.queries, postMeetingTrigger)
 		v1.POST("/webhooks/cloudflare/recording", webhooks.HandleRecordingReady)
 	}
 }
@@ -280,4 +316,21 @@ func (r *Router) RecordingService() *recording.Service {
 
 func (r *Router) Queries() *db.Queries {
 	return r.queries
+}
+
+func (r *Router) PostMeetingTranscriptionService() *postmeetingtranscription.Service {
+	return r.postMeetingTranscriptionService
+}
+
+func (r *Router) PostMeetingService() *webhook.PostMeetingService {
+	return r.postMeetingService
+}
+
+// postMeetingTriggerAdapter adapts the webhook.PostMeetingService to the handlers.PostMeetingTrigger interface
+type postMeetingTriggerAdapter struct {
+	svc *webhook.PostMeetingService
+}
+
+func (a *postMeetingTriggerAdapter) TriggerPostMeetingProcessing(ctx context.Context, recordingID, roomID uuid.UUID) {
+	a.svc.TriggerPostMeetingProcessing(ctx, recordingID, roomID)
 }

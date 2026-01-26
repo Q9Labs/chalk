@@ -10,6 +10,10 @@ import (
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/config"
+	"github.com/Q9Labs/chalk/internal/domain/ai"
+	"github.com/Q9Labs/chalk/internal/domain/transcription"
+	"github.com/Q9Labs/chalk/internal/domain/webhook"
+	infraai "github.com/Q9Labs/chalk/internal/infrastructure/ai"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/jobs"
 	"github.com/Q9Labs/chalk/internal/infrastructure/logging"
@@ -17,7 +21,10 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/Q9Labs/chalk/internal/infrastructure/storage"
+	// Import to trigger provider registration
+	_ "github.com/Q9Labs/chalk/internal/infrastructure/transcription"
 	"github.com/Q9Labs/chalk/internal/interfaces/http"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -131,15 +138,94 @@ func main() {
 		}
 	}
 
+	// Initialize transcription provider registry
+	queries := db.New(pool)
+	transcriptionRegistry := transcription.NewProviderRegistry(transcription.RegistryConfig{
+		GroqAPIKey:     cfg.PostMeeting.GroqAPIKey,
+		WhisperEnabled: cfg.PostMeeting.WhisperEnabled,
+		WhisperQueue:   cfg.PostMeeting.WhisperRedisQueue,
+	}, redisClient.GetClient())
+
+	// Initialize transcription service
+	var transcriptionService *transcription.Service
+	if storageR2 != nil {
+		transcriptionService = transcription.NewService(queries, transcriptionRegistry, storageR2)
+		slog.Info("initialized post-meeting transcription service",
+			"default_provider", transcriptionRegistry.GetDefaultProvider())
+	} else {
+		slog.Warn("post-meeting transcription service not initialized: R2 storage not configured")
+	}
+
+	// Initialize AI service (OpenRouter)
+	var aiService *ai.Service
+	if cfg.PostMeeting.OpenRouterAPIKey != "" {
+		openRouterProvider := infraai.NewOpenRouterProvider(
+			cfg.PostMeeting.OpenRouterAPIKey,
+			cfg.PostMeeting.OpenRouterDefaultModel,
+		)
+		aiService = ai.NewService(openRouterProvider, queries)
+		slog.Info("initialized AI service",
+			"provider", "openrouter",
+			"model", cfg.PostMeeting.OpenRouterDefaultModel)
+	} else {
+		slog.Warn("AI service not initialized: OpenRouter API key not configured")
+	}
+
+	// Initialize webhook service
+	webhookService := webhook.NewService(queries)
+
+	// Create storage adapter for webhook presigned URLs
+	var webhookStorageAdapter webhook.StorageService
+	if storageR2 != nil {
+		webhookStorageAdapter = storageR2
+	}
+
+	// Create transcription adapter for webhook orchestration
+	var webhookTranscriptionAdapter webhook.TranscriptionService
+	if transcriptionService != nil {
+		webhookTranscriptionAdapter = &transcriptionServiceAdapter{svc: transcriptionService}
+	}
+
+	// Initialize post-meeting service that orchestrates transcription and webhook delivery
+	postMeetingService := webhook.NewPostMeetingService(
+		queries,
+		webhookService,
+		webhookTranscriptionAdapter,
+		webhookStorageAdapter,
+		slog.Default(),
+	)
+
 	// Create router
 	router := http.NewRouter(http.RouterConfig{
-		Pool:        pool,
-		CFClient:    cfClient,
-		RedisClient: redisClient,
-		StorageR2:   storageR2,
-		StorageS3:   storageS3,
-		AppConfig:   cfg,
+		Pool:                            pool,
+		CFClient:                        cfClient,
+		RedisClient:                     redisClient,
+		StorageR2:                       storageR2,
+		StorageS3:                       storageS3,
+		AppConfig:                       cfg,
+		PostMeetingTranscriptionService: transcriptionService,
+		PostMeetingService:              postMeetingService,
 	})
+
+	// Start transcription worker
+	if transcriptionService != nil {
+		tenantGetter := jobs.NewDBTenantGetter(queries)
+		transcriptionWorker := jobs.NewTranscriptionWorker(
+			transcriptionService,
+			aiService,
+			postMeetingService, // implements PostMeetingWebhookSender
+			queries,
+			tenantGetter,
+			slog.Default(),
+		)
+		go transcriptionWorker.Run(ctx)
+		slog.Info("started transcription worker")
+	}
+
+	// Start webhook worker
+	webhookWorker := jobs.NewWebhookWorker(queries, slog.Default())
+	go webhookWorker.Run(ctx)
+	slog.Info("started webhook worker")
 
 	if storageR2 != nil && storageS3 != nil {
 		queries := db.New(pool)
@@ -180,4 +266,13 @@ func main() {
 		slog.Error("failed to start server", "error", err)
 		os.Exit(1)
 	}
+}
+
+// transcriptionServiceAdapter adapts transcription.Service to webhook.TranscriptionService
+type transcriptionServiceAdapter struct {
+	svc *transcription.Service
+}
+
+func (a *transcriptionServiceAdapter) QueueTranscription(ctx context.Context, recordingID, roomID uuid.UUID, provider string) (uuid.UUID, error) {
+	return a.svc.QueueTranscription(ctx, recordingID, roomID, provider)
 }

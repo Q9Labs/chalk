@@ -87,3 +87,9 @@ FROM tenants
 WHERE is_active = true
   AND tenant_config->'allowed_origins' IS NOT NULL
   AND jsonb_array_length(tenant_config->'allowed_origins') > 0;
+
+-- name: GetTenantByRoomID :one
+SELECT t.* FROM tenants t
+JOIN rooms r ON r.tenant_id = t.id
+WHERE r.id = $1
+LIMIT 1;

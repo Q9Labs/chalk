@@ -6,23 +6,36 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
+	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-type WebhookHandler struct {
-	recordingService *recording.Service
+// PostMeetingTrigger is called after recording completion to trigger post-meeting processing.
+type PostMeetingTrigger interface {
+	TriggerPostMeetingProcessing(ctx context.Context, recordingID, roomID uuid.UUID)
 }
 
-func NewWebhookHandler(recordingService *recording.Service) *WebhookHandler {
+type WebhookHandler struct {
+	recordingService     *recording.Service
+	queries              *db.Queries
+	postMeetingTrigger   PostMeetingTrigger
+}
+
+func NewWebhookHandler(recordingService *recording.Service, queries *db.Queries, postMeetingTrigger PostMeetingTrigger) *WebhookHandler {
 	return &WebhookHandler{
-		recordingService: recordingService,
+		recordingService:     recordingService,
+		queries:              queries,
+		postMeetingTrigger:   postMeetingTrigger,
 	}
 }
 
@@ -96,6 +109,9 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		return
 	}
 
+	// Trigger post-meeting processing if configured
+	h.triggerPostMeetingProcessing(ctx, completed.ID, completed.RoomID)
+
 	c.JSON(http.StatusOK, gin.H{
 		"message":     "recording processed successfully",
 		"id":          completed.ID,
@@ -104,6 +120,73 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"size_bytes":  webhook.Size,
 		"duration":    webhook.Duration,
 	})
+}
+
+// triggerPostMeetingProcessing checks tenant config and triggers post-meeting webhook flow.
+func (h *WebhookHandler) triggerPostMeetingProcessing(ctx context.Context, recordingID, roomID uuid.UUID) {
+	if h.queries == nil {
+		return
+	}
+
+	// Get room to find tenant
+	room, err := h.queries.GetRoom(ctx, roomID)
+	if err != nil {
+		slog.Error("failed to get room for post-meeting processing", "room_id", roomID, "error", err)
+		return
+	}
+
+	// Get tenant config
+	tenant, err := h.queries.GetTenant(ctx, room.TenantID)
+	if err != nil {
+		slog.Error("failed to get tenant for post-meeting processing", "tenant_id", room.TenantID, "error", err)
+		return
+	}
+
+	// Parse tenant config
+	config, err := parsePostMeetingWebhookConfig(tenant.TenantConfig)
+	if err != nil {
+		slog.Error("failed to parse tenant config", "tenant_id", room.TenantID, "error", err)
+		return
+	}
+
+	if !config.Enabled || config.URL == "" {
+		return
+	}
+
+	// Trigger post-meeting processing asynchronously
+	if h.postMeetingTrigger != nil {
+		go h.postMeetingTrigger.TriggerPostMeetingProcessing(context.Background(), recordingID, roomID)
+	}
+}
+
+// postMeetingWebhookConfig mirrors the tenant config structure.
+type postMeetingWebhookConfig struct {
+	Enabled            bool   `json:"enabled"`
+	URL                string `json:"url,omitempty"`
+	IncludeRecording   bool   `json:"include_recording"`
+	IncludeTranscript  bool   `json:"include_transcript"`
+	IncludeSummary     bool   `json:"include_summary"`
+	IncludeActionItems bool   `json:"include_action_items"`
+}
+
+func parsePostMeetingWebhookConfig(tenantConfig []byte) (*postMeetingWebhookConfig, error) {
+	if tenantConfig == nil {
+		return &postMeetingWebhookConfig{}, nil
+	}
+
+	var config struct {
+		PostMeetingWebhook *postMeetingWebhookConfig `json:"post_meeting_webhook"`
+	}
+
+	if err := json.Unmarshal(tenantConfig, &config); err != nil {
+		return nil, err
+	}
+
+	if config.PostMeetingWebhook == nil {
+		return &postMeetingWebhookConfig{}, nil
+	}
+
+	return config.PostMeetingWebhook, nil
 }
 
 func (h *WebhookHandler) verifySignatureBody(body []byte, signature string) bool {

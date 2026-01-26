@@ -137,6 +137,9 @@ module "ecs" {
     { name = "R2_ACCESS_KEY_ID", valueFrom = "${module.secrets.r2_credentials_arn}:access_key_id::" },
     { name = "R2_SECRET_ACCESS_KEY", valueFrom = "${module.secrets.r2_credentials_arn}:secret_access_key::" },
     { name = "AXIOM_TOKEN", valueFrom = "${module.secrets.axiom_secret_arn}:token::" },
+    # Post-meeting transcription & AI
+    { name = "POST_MEETING_GROQ_API_KEY", valueFrom = module.secrets.groq_api_secret_arn },
+    { name = "POST_MEETING_OPENROUTER_API_KEY", valueFrom = module.secrets.openrouter_api_secret_arn },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets
@@ -204,6 +207,10 @@ module "secrets" {
   r2_secret_access_key  = var.r2_secret_access_key
   axiom_token           = var.axiom_token
   axiom_dataset         = var.axiom_dataset
+
+  # Post-meeting transcription & AI
+  groq_api_key       = var.groq_api_key
+  openrouter_api_key = var.openrouter_api_key
 }
 
 # DNS and SSL certificates (must come before api_gateway)

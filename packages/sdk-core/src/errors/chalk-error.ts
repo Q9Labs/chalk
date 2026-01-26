@@ -90,6 +90,16 @@ export enum ChalkErrorCode {
   /** No active recording to stop */
   NO_ACTIVE_RECORDING = 'NO_ACTIVE_RECORDING',
 
+  // Webhook errors
+  /** Webhook signature verification failed */
+  WEBHOOK_SIGNATURE_INVALID = 'WEBHOOK_SIGNATURE_INVALID',
+
+  /** Webhook timestamp outside tolerance window */
+  WEBHOOK_TIMESTAMP_EXPIRED = 'WEBHOOK_TIMESTAMP_EXPIRED',
+
+  /** Webhook payload validation failed */
+  WEBHOOK_PAYLOAD_INVALID = 'WEBHOOK_PAYLOAD_INVALID',
+
   // Generic errors
   /** Unknown error occurred */
   UNKNOWN = 'UNKNOWN',

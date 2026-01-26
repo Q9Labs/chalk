@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Post-meeting transcription & webhooks** - Complete pipeline for post-meeting processing
+  - **Multi-provider transcription**: Groq API (cloud, $0.04/hour) with BYOK support, self-hosted Whisper (optional)
+  - **AI summaries**: OpenRouter integration for automatic meeting summaries and action items
+  - **Webhook delivery**: HMAC-SHA256 signed webhooks with exponential backoff retry (5 attempts)
+  - **Tenant configuration**: Per-tenant settings for `include_recording`, `include_transcript`, `include_summary`, `include_action_items`
+  - **SDK webhook handler**: TypeScript utilities for signature verification (`createWebhookHandler`, `chalkWebhookMiddleware`)
+  - **Terraform secrets**: Groq and OpenRouter API keys in AWS Secrets Manager
+  - Database: `post_meeting_transcripts` and `webhook_deliveries` tables
+  - New endpoints: `GET /api/v1/transcription/providers`, transcript status APIs
+
 ### Changed
 
 ### Fixed

@@ -245,13 +245,42 @@ type TenantConfig struct {
 	EmptyRoomTimeoutMinutes    int32  `json:"empty_room_timeout_minutes"`
 	RecordingRetentionDays     int32  `json:"recording_retention_days"`
 	DuplicateParticipantPolicy string `json:"duplicate_participant_policy"`
-	// Transcription settings
+	// Transcription settings (real-time)
 	TranscriptionEnabled         bool     `json:"transcription_enabled"`
 	TranscriptionLanguage        string   `json:"transcription_language"`
 	TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
 	TranscriptionKeywords        []string `json:"transcription_keywords,omitempty"`
 	// CORS settings
 	AllowedOrigins []string `json:"allowed_origins,omitempty"`
+	// Post-meeting webhook settings
+	PostMeetingWebhook *PostMeetingWebhookConfig `json:"post_meeting_webhook,omitempty"`
+}
+
+// PostMeetingWebhookConfig holds webhook and post-meeting processing settings
+type PostMeetingWebhookConfig struct {
+	Enabled            bool   `json:"enabled"`
+	URL                string `json:"url,omitempty"`
+	Secret             string `json:"secret,omitempty"`
+	IncludeRecording   bool   `json:"include_recording"`
+	IncludeTranscript  bool   `json:"include_transcript"`
+	IncludeSummary     bool   `json:"include_summary"`
+	IncludeActionItems bool   `json:"include_action_items"`
+
+	Transcription *TranscriptionProviderConfig `json:"transcription,omitempty"`
+	AI            *AIProviderConfig            `json:"ai,omitempty"`
+}
+
+// TranscriptionProviderConfig holds transcription provider settings (BYOK support)
+type TranscriptionProviderConfig struct {
+	Provider string `json:"provider,omitempty"` // "groq" | "whisper"
+	APIKey   string `json:"api_key,omitempty"`  // BYOK
+}
+
+// AIProviderConfig holds AI provider settings (BYOK support)
+type AIProviderConfig struct {
+	Provider string `json:"provider,omitempty"` // "openrouter"
+	APIKey   string `json:"api_key,omitempty"`  // BYOK
+	Model    string `json:"model,omitempty"`
 }
 
 // validateAllowedOrigins validates a list of CORS origins
