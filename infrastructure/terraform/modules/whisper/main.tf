@@ -211,6 +211,7 @@ resource "aws_launch_template" "whisper" {
     set -e
 
     # Install AWS CLI v2 (not installed by default on this AMI)
+    yum install -y unzip
     curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
     cd /tmp && unzip -q awscliv2.zip && ./aws/install
     ln -sf /usr/local/bin/aws /usr/bin/aws
