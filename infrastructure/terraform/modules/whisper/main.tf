@@ -90,10 +90,18 @@ resource "aws_security_group" "whisper" {
   }
 
   egress {
-    description = "DNS"
+    description = "DNS (UDP)"
     from_port   = 53
     to_port     = 53
     protocol    = "udp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  egress {
+    description = "DNS (TCP)"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
