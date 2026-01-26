@@ -17,6 +17,7 @@ type Config struct {
 	GitHub      GitHubConfig
 	Axiom       AxiomConfig
 	CORSOrigins CORSOriginsConfig
+	PostMeeting PostMeetingConfig
 }
 
 // ServerConfig holds server configuration
@@ -92,6 +93,20 @@ type AxiomConfig struct {
 type CORSOriginsConfig struct {
 	Bucket string // CORS_ORIGINS_BUCKET
 	Key    string // CORS_ORIGINS_KEY (default: cors/allowed-origins.json)
+}
+
+// PostMeetingConfig holds post-meeting transcription and AI configuration
+type PostMeetingConfig struct {
+	// Transcription
+	TranscriptionDefaultProvider string // POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER (default: groq)
+	GroqAPIKey                   string // POST_MEETING_GROQ_API_KEY
+	WhisperEnabled               bool   // POST_MEETING_WHISPER_ENABLED (default: false)
+	WhisperRedisQueue            string // POST_MEETING_WHISPER_REDIS_QUEUE (default: transcription:jobs)
+
+	// AI Generation
+	AIDefaultProvider      string // POST_MEETING_AI_DEFAULT_PROVIDER (default: openrouter)
+	OpenRouterAPIKey       string // POST_MEETING_OPENROUTER_API_KEY
+	OpenRouterDefaultModel string // POST_MEETING_OPENROUTER_DEFAULT_MODEL (default: z-ai/glm-4.7-flash)
 }
 
 // Load loads configuration from environment variables
@@ -186,6 +201,15 @@ func Load() (*Config, error) {
 		CORSOrigins: CORSOriginsConfig{
 			Bucket: getEnv("CORS_ORIGINS_BUCKET", ""),
 			Key:    getEnv("CORS_ORIGINS_KEY", "cors/allowed-origins.json"),
+		},
+		PostMeeting: PostMeetingConfig{
+			TranscriptionDefaultProvider: getEnv("POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER", "groq"),
+			GroqAPIKey:                   getEnv("POST_MEETING_GROQ_API_KEY", ""),
+			WhisperEnabled:               getEnvBool("POST_MEETING_WHISPER_ENABLED", false),
+			WhisperRedisQueue:            getEnv("POST_MEETING_WHISPER_REDIS_QUEUE", "transcription:jobs"),
+			AIDefaultProvider:            getEnv("POST_MEETING_AI_DEFAULT_PROVIDER", "openrouter"),
+			OpenRouterAPIKey:             getEnv("POST_MEETING_OPENROUTER_API_KEY", ""),
+			OpenRouterDefaultModel:       getEnv("POST_MEETING_OPENROUTER_DEFAULT_MODEL", "z-ai/glm-4.7-flash"),
 		},
 	}
 

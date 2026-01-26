@@ -135,6 +135,36 @@ resource "aws_secretsmanager_secret_version" "axiom" {
   })
 }
 
+# =============================================================================
+# Post-Meeting Transcription & AI Secrets
+# =============================================================================
+
+resource "aws_secretsmanager_secret" "groq_api" {
+  name        = "chalk/${var.environment}/groq"
+  description = "Groq API key for transcription"
+  kms_key_id  = aws_kms_key.secrets.arn
+
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "groq_api" {
+  secret_id     = aws_secretsmanager_secret.groq_api.id
+  secret_string = var.groq_api_key
+}
+
+resource "aws_secretsmanager_secret" "openrouter_api" {
+  name        = "chalk/${var.environment}/openrouter"
+  description = "OpenRouter API key for AI summaries"
+  kms_key_id  = aws_kms_key.secrets.arn
+
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "openrouter_api" {
+  secret_id     = aws_secretsmanager_secret.openrouter_api.id
+  secret_string = var.openrouter_api_key
+}
+
 resource "aws_iam_policy" "secrets_read" {
   name        = "${local.name}-secrets-read"
   description = "Policy to read Chalk secrets"
@@ -154,7 +184,9 @@ resource "aws_iam_policy" "secrets_read" {
           aws_secretsmanager_secret.api_config.arn,
           aws_secretsmanager_secret.github_token.arn,
           aws_secretsmanager_secret.r2_credentials.arn,
-          aws_secretsmanager_secret.axiom.arn
+          aws_secretsmanager_secret.axiom.arn,
+          aws_secretsmanager_secret.groq_api.arn,
+          aws_secretsmanager_secret.openrouter_api.arn
         ]
       },
       {

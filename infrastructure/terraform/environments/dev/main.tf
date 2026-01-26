@@ -124,6 +124,10 @@ module "secrets" {
   source = "../../modules/secrets"
 
   environment = local.environment
+
+  # Post-meeting transcription & AI (optional in dev)
+  groq_api_key       = var.groq_api_key
+  openrouter_api_key = var.openrouter_api_key
 }
 
 module "api_gateway" {

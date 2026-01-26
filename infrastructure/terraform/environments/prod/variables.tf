@@ -102,3 +102,18 @@ variable "axiom_dataset" {
   type        = string
   default     = "chalk-api-prod"
 }
+
+# Post-meeting transcription & AI
+variable "groq_api_key" {
+  description = "Groq API key for transcription service"
+  type        = string
+  sensitive   = true
+  default     = "" # Set via -var or TF_VAR_groq_api_key
+}
+
+variable "openrouter_api_key" {
+  description = "OpenRouter API key for AI summaries and action items"
+  type        = string
+  sensitive   = true
+  default     = "" # Set via -var or TF_VAR_openrouter_api_key
+}

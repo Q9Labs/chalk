@@ -26,3 +26,18 @@ variable "enable_cloudflare" {
   type        = bool
   default     = true
 }
+
+# Post-meeting transcription & AI (optional in dev)
+variable "groq_api_key" {
+  description = "Groq API key for transcription service"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "openrouter_api_key" {
+  description = "OpenRouter API key for AI summaries and action items"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

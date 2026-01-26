@@ -63,6 +63,20 @@ variable "axiom_dataset" {
   default     = "chalk-api"
 }
 
+variable "groq_api_key" {
+  description = "Groq API key for transcription service"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "openrouter_api_key" {
+  description = "OpenRouter API key for AI summaries and action items"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)

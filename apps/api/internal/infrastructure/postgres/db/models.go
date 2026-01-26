@@ -38,6 +38,24 @@ type Participant struct {
 	Metadata                []byte             `db:"metadata" json:"metadata"`
 }
 
+type PostMeetingTranscript struct {
+	ID              uuid.UUID          `db:"id" json:"id"`
+	RecordingID     uuid.UUID          `db:"recording_id" json:"recording_id"`
+	RoomID          uuid.UUID          `db:"room_id" json:"room_id"`
+	TranscriptText  *string            `db:"transcript_text" json:"transcript_text"`
+	TranscriptJson  []byte             `db:"transcript_json" json:"transcript_json"`
+	Language        *string            `db:"language" json:"language"`
+	DurationSeconds *int32             `db:"duration_seconds" json:"duration_seconds"`
+	WordCount       *int32             `db:"word_count" json:"word_count"`
+	Provider        *string            `db:"provider" json:"provider"`
+	Summary         *string            `db:"summary" json:"summary"`
+	ActionItems     []string           `db:"action_items" json:"action_items"`
+	Status          string             `db:"status" json:"status"`
+	ErrorMessage    *string            `db:"error_message" json:"error_message"`
+	CreatedAt       time.Time          `db:"created_at" json:"created_at"`
+	CompletedAt     pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+}
+
 type Recording struct {
 	ID                    uuid.UUID          `db:"id" json:"id"`
 	RoomID                uuid.UUID          `db:"room_id" json:"room_id"`
@@ -98,6 +116,24 @@ type Transcript struct {
 	ExternalID              *string     `db:"external_id" json:"external_id"`
 	Timestamp               time.Time   `db:"timestamp" json:"timestamp"`
 	CreatedAt               time.Time   `db:"created_at" json:"created_at"`
+}
+
+type WebhookDelivery struct {
+	ID           uuid.UUID          `db:"id" json:"id"`
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RoomID       uuid.UUID          `db:"room_id" json:"room_id"`
+	RecordingID  pgtype.UUID        `db:"recording_id" json:"recording_id"`
+	TranscriptID pgtype.UUID        `db:"transcript_id" json:"transcript_id"`
+	EventType    string             `db:"event_type" json:"event_type"`
+	WebhookUrl   string             `db:"webhook_url" json:"webhook_url"`
+	Payload      []byte             `db:"payload" json:"payload"`
+	Status       string             `db:"status" json:"status"`
+	Attempts     int32              `db:"attempts" json:"attempts"`
+	MaxAttempts  int32              `db:"max_attempts" json:"max_attempts"`
+	LastError    *string            `db:"last_error" json:"last_error"`
+	NextRetryAt  pgtype.Timestamptz `db:"next_retry_at" json:"next_retry_at"`
+	DeliveredAt  pgtype.Timestamptz `db:"delivered_at" json:"delivered_at"`
+	CreatedAt    time.Time          `db:"created_at" json:"created_at"`
 }
 
 type WhiteboardPermission struct {

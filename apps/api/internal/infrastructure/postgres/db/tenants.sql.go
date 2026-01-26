@@ -231,6 +231,33 @@ func (q *Queries) GetTenantByAPIKeyHash(ctx context.Context, apiKeyHash string) 
 	return i, err
 }
 
+const getTenantByRoomID = `-- name: GetTenantByRoomID :one
+SELECT t.id, t.name, t.api_key_hash, t.config, t.max_concurrent_rooms, t.max_participants_per_room, t.max_recording_duration_minutes, t.is_active, t.created_at, t.updated_at, t.whiteboard_config, t.tenant_config FROM tenants t
+JOIN rooms r ON r.tenant_id = t.id
+WHERE r.id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetTenantByRoomID(ctx context.Context, id uuid.UUID) (Tenant, error) {
+	row := q.db.QueryRow(ctx, getTenantByRoomID, id)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ApiKeyHash,
+		&i.Config,
+		&i.MaxConcurrentRooms,
+		&i.MaxParticipantsPerRoom,
+		&i.MaxRecordingDurationMinutes,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.WhiteboardConfig,
+		&i.TenantConfig,
+	)
+	return i, err
+}
+
 const listActiveTenants = `-- name: ListActiveTenants :many
 SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, is_active, created_at, updated_at, whiteboard_config, tenant_config FROM tenants
 WHERE is_active = true

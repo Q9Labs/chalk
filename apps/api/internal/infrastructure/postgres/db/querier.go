@@ -30,6 +30,9 @@ type Querier interface {
 	// Participant Queries
 	// CRUD operations and participant management
 	CreateParticipant(ctx context.Context, arg CreateParticipantParams) (Participant, error)
+	// Post-Meeting Transcripts Queries
+	// CRUD operations for post-meeting transcription
+	CreatePostMeetingTranscript(ctx context.Context, arg CreatePostMeetingTranscriptParams) (PostMeetingTranscript, error)
 	// Recording Queries
 	// CRUD operations and recording management
 	CreateRecording(ctx context.Context, arg CreateRecordingParams) (Recording, error)
@@ -43,6 +46,9 @@ type Querier interface {
 	// Transcript Queries
 	// CRUD operations for meeting transcriptions
 	CreateTranscript(ctx context.Context, arg CreateTranscriptParams) (Transcript, error)
+	// Webhook Deliveries Queries
+	// CRUD operations for webhook delivery tracking
+	CreateWebhookDelivery(ctx context.Context, arg CreateWebhookDeliveryParams) (WebhookDelivery, error)
 	DeactivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	DeleteOldAuditLogs(ctx context.Context, createdAt time.Time) error
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
@@ -56,9 +62,15 @@ type Querier interface {
 	GetAllTenantAllowedOrigins(ctx context.Context) ([]string, error)
 	GetAuditLog(ctx context.Context, id uuid.UUID) (AuditLog, error)
 	GetAuditLogWithDetails(ctx context.Context, id uuid.UUID) (GetAuditLogWithDetailsRow, error)
+	GetFailedWebhookDeliveries(ctx context.Context, arg GetFailedWebhookDeliveriesParams) ([]WebhookDelivery, error)
 	GetParticipant(ctx context.Context, id uuid.UUID) (Participant, error)
 	GetParticipantByCloudflareID(ctx context.Context, cloudflareParticipantID string) (Participant, error)
 	GetParticipantByExternalUserAndRoom(ctx context.Context, arg GetParticipantByExternalUserAndRoomParams) (Participant, error)
+	GetPendingTranscripts(ctx context.Context, limit int32) ([]PostMeetingTranscript, error)
+	GetPendingWebhookDeliveries(ctx context.Context, limit int32) ([]WebhookDelivery, error)
+	GetPostMeetingTranscript(ctx context.Context, id uuid.UUID) (PostMeetingTranscript, error)
+	GetPostMeetingTranscriptByRecordingID(ctx context.Context, recordingID uuid.UUID) (PostMeetingTranscript, error)
+	GetProcessingTranscripts(ctx context.Context, limit int32) ([]PostMeetingTranscript, error)
 	GetRecording(ctx context.Context, id uuid.UUID) (Recording, error)
 	GetRecordingByCloudflareID(ctx context.Context, cloudflareRecordingID *string) (Recording, error)
 	GetRecordingWithRoomInfo(ctx context.Context, id uuid.UUID) (GetRecordingWithRoomInfoRow, error)
@@ -69,9 +81,13 @@ type Querier interface {
 	GetRoomWithParticipantCount(ctx context.Context, id uuid.UUID) (GetRoomWithParticipantCountRow, error)
 	GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetTenantByAPIKeyHash(ctx context.Context, apiKeyHash string) (Tenant, error)
+	GetTenantByRoomID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetTotalRecordingStorageByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetTranscript(ctx context.Context, id uuid.UUID) (Transcript, error)
 	GetTranscriptByExternalID(ctx context.Context, externalID *string) (Transcript, error)
+	GetWebhookDeliveriesByRoom(ctx context.Context, roomID uuid.UUID) ([]WebhookDelivery, error)
+	GetWebhookDeliveriesByTenant(ctx context.Context, arg GetWebhookDeliveriesByTenantParams) ([]WebhookDelivery, error)
+	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
 	ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoomsByTenantParams) ([]Room, error)
 	ListActiveRoomsWithParticipantCount(ctx context.Context, arg ListActiveRoomsWithParticipantCountParams) ([]ListActiveRoomsWithParticipantCountRow, error)
@@ -88,6 +104,7 @@ type Querier interface {
 	ListEmptyActiveRooms(ctx context.Context, dollar_1 interface{}) ([]Room, error)
 	ListParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListParticipantsWithRoomInfo(ctx context.Context, arg ListParticipantsWithRoomInfoParams) ([]ListParticipantsWithRoomInfoRow, error)
+	ListPostMeetingTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) ([]PostMeetingTranscript, error)
 	ListRecordings(ctx context.Context, arg ListRecordingsParams) ([]Recording, error)
 	ListRecordingsByRoom(ctx context.Context, roomID uuid.UUID) ([]Recording, error)
 	ListRecordingsByStatus(ctx context.Context, arg ListRecordingsByStatusParams) ([]Recording, error)
@@ -97,17 +114,25 @@ type Querier interface {
 	ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantParams) ([]Room, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
 	ListTranscriptsByRoom(ctx context.Context, arg ListTranscriptsByRoomParams) ([]Transcript, error)
+	MarkPostMeetingTranscriptFailed(ctx context.Context, arg MarkPostMeetingTranscriptFailedParams) error
+	MarkPostMeetingTranscriptProcessing(ctx context.Context, id uuid.UUID) error
 	MarkRecordingDeleted(ctx context.Context, id uuid.UUID) (Recording, error)
 	MarkRecordingFailed(ctx context.Context, id uuid.UUID) (Recording, error)
+	MarkWebhookDelivered(ctx context.Context, id uuid.UUID) error
+	MarkWebhookSending(ctx context.Context, id uuid.UUID) error
 	ParticipantLeave(ctx context.Context, id uuid.UUID) (Participant, error)
 	ParticipantLeaveByCloudflareID(ctx context.Context, cloudflareParticipantID string) (Participant, error)
 	ReactivateRoom(ctx context.Context, arg ReactivateRoomParams) (Room, error)
 	RotateTenantAPIKey(ctx context.Context, arg RotateTenantAPIKeyParams) (Tenant, error)
 	StopRecording(ctx context.Context, id uuid.UUID) (Recording, error)
 	UpdateParticipant(ctx context.Context, arg UpdateParticipantParams) (Participant, error)
+	UpdatePostMeetingTranscriptAI(ctx context.Context, arg UpdatePostMeetingTranscriptAIParams) error
+	UpdatePostMeetingTranscriptResult(ctx context.Context, arg UpdatePostMeetingTranscriptResultParams) error
+	UpdatePostMeetingTranscriptStatus(ctx context.Context, arg UpdatePostMeetingTranscriptStatusParams) error
 	UpdateRoom(ctx context.Context, arg UpdateRoomParams) (Room, error)
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
 	UpdateTenantConfig(ctx context.Context, arg UpdateTenantConfigParams) (Tenant, error)
+	UpdateWebhookDeliveryAttempt(ctx context.Context, arg UpdateWebhookDeliveryAttemptParams) error
 }
 
 var _ Querier = (*Queries)(nil)

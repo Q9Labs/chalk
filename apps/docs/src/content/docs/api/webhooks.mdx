@@ -1,0 +1,281 @@
+---
+title: Webhooks
+description: Receive real-time notifications for meeting events
+---
+
+Webhooks deliver post-meeting data (recordings, transcripts, AI summaries) to your server when meetings end.
+
+## Configuration
+
+Configure webhooks via the tenant config API:
+
+```http
+PATCH /api/v1/tenants/:id/config
+X-API-Key: ck_live_xxx
+Content-Type: application/json
+
+{
+  "post_meeting_webhook": {
+    "url": "https://your-server.com/webhooks/chalk",
+    "secret": "whsec_your_secret_key",
+    "enabled": true,
+    "events": ["meeting.recording_ready"]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | string | Your webhook endpoint URL (HTTPS required) |
+| `secret` | string | Secret for signature verification |
+| `enabled` | boolean | Enable/disable webhook delivery |
+| `events` | string[] | Event types to subscribe to |
+
+## Webhook Payload
+
+When a meeting ends with a recording, you'll receive:
+
+```json
+{
+  "event": "meeting.recording_ready",
+  "timestamp": "2026-01-15T10:30:00Z",
+  "meeting": {
+    "id": "room_abc123",
+    "name": "Team Standup",
+    "started_at": "2026-01-15T10:00:00Z",
+    "ended_at": "2026-01-15T10:30:00Z",
+    "duration_seconds": 1800,
+    "participant_count": 5
+  },
+  "recording": {
+    "id": "rec_xyz789",
+    "url": "https://r2.chalk.q9labs.ai/recordings/rec_xyz789.webm?token=...",
+    "duration_seconds": 1800,
+    "size_bytes": 52428800,
+    "expires_at": "2026-01-15T11:30:00Z"
+  },
+  "transcript": {
+    "id": "tr_def456",
+    "text": "Full meeting transcript...",
+    "segments": [
+      {
+        "speaker": "John Doe",
+        "start": 0.0,
+        "end": 5.2,
+        "text": "Good morning everyone."
+      }
+    ],
+    "language": "en",
+    "word_count": 2500,
+    "provider": "groq"
+  },
+  "summary": {
+    "id": "sum_ghi012",
+    "text": "The team discussed Q1 roadmap priorities...",
+    "key_points": [
+      "Agreed on Q1 priorities",
+      "John to follow up on design review",
+      "Next standup moved to Tuesday"
+    ],
+    "action_items": [
+      {
+        "assignee": "John Doe",
+        "task": "Schedule design review meeting",
+        "due": "2026-01-17"
+      }
+    ],
+    "provider": "openrouter"
+  }
+}
+```
+
+## Headers
+
+Every webhook request includes:
+
+| Header | Description |
+|--------|-------------|
+| `X-Chalk-Signature` | HMAC-SHA256 signature of the payload |
+| `X-Chalk-Timestamp` | Unix timestamp when the webhook was sent |
+| `X-Chalk-Event` | Event type (e.g., `meeting.recording_ready`) |
+| `X-Chalk-Delivery-ID` | Unique ID for this delivery attempt |
+| `Content-Type` | `application/json` |
+
+## Signature Verification
+
+Verify webhook authenticity by computing the HMAC-SHA256 signature.
+
+### TypeScript
+
+```typescript
+import crypto from 'crypto';
+
+function verifyWebhook(
+  payload: string,
+  signature: string,
+  timestamp: string,
+  secret: string
+): boolean {
+  // Prevent replay attacks (5 minute tolerance)
+  const timestampAge = Date.now() / 1000 - parseInt(timestamp);
+  if (timestampAge > 300) return false;
+
+  const signedPayload = `${timestamp}.${payload}`;
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(signedPayload)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+}
+```
+
+### Python
+
+```python
+import hmac
+import hashlib
+import time
+
+def verify_webhook(payload: bytes, signature: str, timestamp: str, secret: str) -> bool:
+    # Prevent replay attacks (5 minute tolerance)
+    if time.time() - int(timestamp) > 300:
+        return False
+
+    signed_payload = f"{timestamp}.{payload.decode()}"
+    expected = hmac.new(
+        secret.encode(),
+        signed_payload.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(signature, expected)
+```
+
+### Express Middleware
+
+```typescript
+import express from 'express';
+
+const webhookMiddleware = (secret: string) => {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const signature = req.headers['x-chalk-signature'] as string;
+    const timestamp = req.headers['x-chalk-timestamp'] as string;
+
+    if (!signature || !timestamp) {
+      return res.status(400).json({ error: 'Missing signature headers' });
+    }
+
+    const payload = JSON.stringify(req.body);
+    if (!verifyWebhook(payload, signature, timestamp, secret)) {
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
+    next();
+  };
+};
+
+// Usage
+app.post('/webhooks/chalk',
+  express.json(),
+  webhookMiddleware(process.env.CHALK_WEBHOOK_SECRET!),
+  (req, res) => {
+    const { event, meeting, transcript, summary } = req.body;
+
+    console.log(`Meeting ${meeting.id} ended with ${meeting.participant_count} participants`);
+
+    // Store transcript and summary
+    await db.meetings.update(meeting.id, {
+      transcript: transcript.text,
+      summary: summary.text,
+      action_items: summary.action_items
+    });
+
+    res.status(200).json({ received: true });
+  }
+);
+```
+
+## Retry Policy
+
+Failed webhook deliveries are retried with exponential backoff:
+
+| Attempt | Delay | Total Time |
+|---------|-------|------------|
+| 1 | Immediate | 0s |
+| 2 | 30s | 30s |
+| 3 | 2m | 2m 30s |
+| 4 | 10m | 12m 30s |
+| 5 | 30m | 42m 30s |
+| 6 | 1h | 1h 42m 30s |
+| 7 (final) | 2h | 3h 42m 30s |
+
+A delivery is considered successful if your server responds with a `2xx` status code within 30 seconds.
+
+### Failure Scenarios
+
+| Status | Behavior |
+|--------|----------|
+| `2xx` | Success, no retry |
+| `4xx` | Permanent failure, no retry (except 429) |
+| `429` | Rate limited, retry with backoff |
+| `5xx` | Temporary failure, retry |
+| Timeout | Retry |
+| Network error | Retry |
+
+## Events
+
+| Event | Description |
+|-------|-------------|
+| `meeting.recording_ready` | Recording, transcript, and summary are available |
+
+More events coming soon:
+- `meeting.started` - Meeting begins
+- `meeting.ended` - Meeting ends (without recording)
+- `participant.joined` - Participant joins
+- `participant.left` - Participant leaves
+
+## Testing Webhooks
+
+Use the Chalk CLI to trigger test webhooks:
+
+```bash
+chalk webhook test --url https://your-server.com/webhooks/chalk
+```
+
+Or use a tool like [webhook.site](https://webhook.site) during development.
+
+## Transcription Providers
+
+Check available providers:
+
+```http
+GET /api/v1/transcription/providers
+```
+
+```json
+{
+  "providers": [
+    {"id": "groq", "name": "Groq", "available": true, "byok_supported": true},
+    {"id": "whisper", "name": "Self-Hosted Whisper", "available": false}
+  ],
+  "default_provider": "groq"
+}
+```
+
+### Bring Your Own Key (BYOK)
+
+Override the default transcription provider per-tenant:
+
+```http
+PATCH /api/v1/tenants/:id/config
+Content-Type: application/json
+
+{
+  "transcription_provider": "groq",
+  "transcription_api_key": "gsk_your_groq_key"
+}
+```

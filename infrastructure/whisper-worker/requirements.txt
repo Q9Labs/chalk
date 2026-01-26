@@ -1,0 +1,11 @@
+# Whisper transcription worker dependencies
+
+# Faster-whisper: CTranslate2-based Whisper implementation
+# 4x faster than OpenAI whisper with same accuracy
+faster-whisper==1.0.3
+
+# Redis client for job queue
+redis==5.0.1
+
+# CTranslate2 with CUDA support (installed by faster-whisper)
+# ctranslate2>=4.0.0

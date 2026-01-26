@@ -43,6 +43,16 @@ output "axiom_secret_arn" {
   value       = aws_secretsmanager_secret.axiom.arn
 }
 
+output "groq_api_secret_arn" {
+  description = "Groq API key secret ARN"
+  value       = aws_secretsmanager_secret.groq_api.arn
+}
+
+output "openrouter_api_secret_arn" {
+  description = "OpenRouter API key secret ARN"
+  value       = aws_secretsmanager_secret.openrouter_api.arn
+}
+
 output "secret_arns" {
   description = "All secret ARNs"
   value = [
@@ -51,6 +61,8 @@ output "secret_arns" {
     aws_secretsmanager_secret.api_config.arn,
     aws_secretsmanager_secret.github_token.arn,
     aws_secretsmanager_secret.r2_credentials.arn,
-    aws_secretsmanager_secret.axiom.arn
+    aws_secretsmanager_secret.axiom.arn,
+    aws_secretsmanager_secret.groq_api.arn,
+    aws_secretsmanager_secret.openrouter_api.arn
   ]
 }

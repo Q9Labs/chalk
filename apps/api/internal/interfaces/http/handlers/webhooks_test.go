@@ -17,7 +17,7 @@ import (
 
 func TestWebhookHandler_HandleRecordingReady_MissingSignature(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	router.POST("/webhooks/recording", handler.HandleRecordingReady)
 
 	body := bytes.NewBufferString(`{"type": "recording.ready"}`)
@@ -40,7 +40,7 @@ func TestWebhookHandler_HandleRecordingReady_InvalidSignature(t *testing.T) {
 	defer os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
 
 	router := setupTestRouter()
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	router.POST("/webhooks/recording", handler.HandleRecordingReady)
 
 	body := bytes.NewBufferString(`{"type": "recording.ready"}`)
@@ -63,7 +63,7 @@ func TestWebhookHandler_HandleRecordingReady_NoSecret(t *testing.T) {
 	os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
 
 	router := setupTestRouter()
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	router.POST("/webhooks/recording", handler.HandleRecordingReady)
 
 	body := bytes.NewBufferString(`{"type": "recording.ready"}`)
@@ -85,7 +85,7 @@ func TestWebhookHandler_HandleRecordingReady_AfterBodyRead(t *testing.T) {
 	defer os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
 
 	router := setupTestRouter()
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	router.POST("/webhooks/recording", handler.HandleRecordingReady)
 
 	payload := `{"type": "meeting.ended"}`
@@ -111,7 +111,7 @@ func TestWebhookHandler_verifySignatureBody_ValidSignature(t *testing.T) {
 	os.Setenv("CLOUDFLARE_WEBHOOK_SECRET", secret)
 	defer os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
 
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	body := []byte(`{"type": "recording.ready", "recording_id": "rec_123"}`)
 	signature := computeHMAC(body, secret)
 
@@ -124,7 +124,7 @@ func TestWebhookHandler_verifySignatureBody_InvalidSignature(t *testing.T) {
 	os.Setenv("CLOUDFLARE_WEBHOOK_SECRET", secret)
 	defer os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
 
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	body := []byte(`{"type": "recording.ready"}`)
 
 	result := handler.verifySignatureBody(body, "wrong-signature")
@@ -134,7 +134,7 @@ func TestWebhookHandler_verifySignatureBody_InvalidSignature(t *testing.T) {
 func TestWebhookHandler_verifySignatureBody_EmptySecret(t *testing.T) {
 	os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
 
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	body := []byte(`{"type": "recording.ready"}`)
 	signature := computeHMAC(body, "any-secret")
 
@@ -147,7 +147,7 @@ func TestWebhookHandler_verifySignatureBody_MalformedHex(t *testing.T) {
 	os.Setenv("CLOUDFLARE_WEBHOOK_SECRET", secret)
 	defer os.Unsetenv("CLOUDFLARE_WEBHOOK_SECRET")
 
-	handler := NewWebhookHandler(nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	body := []byte(`{"type": "recording.ready"}`)
 
 	// Not valid hex
