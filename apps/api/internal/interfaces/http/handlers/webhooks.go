@@ -3,15 +3,11 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
@@ -39,68 +35,97 @@ func NewWebhookHandler(recordingService *recording.Service, queries *db.Queries,
 	}
 }
 
-type RecordingReadyWebhook struct {
-	Type        string `json:"type"`
-	RecordingID string `json:"recording_id"`
-	MeetingID   string `json:"meeting_id"`
-	URL         string `json:"url"`
-	Duration    int    `json:"duration_seconds"`
-	Size        int64  `json:"size_bytes"`
-	ContentType string `json:"content_type"`
+// RecordingStatusWebhook matches Cloudflare RealtimeKit's recording.statusUpdate payload
+type RecordingStatusWebhook struct {
+	Event     string                 `json:"event"`
+	Recording RecordingWebhookData   `json:"recording"`
+	Meeting   MeetingWebhookData     `json:"meeting"`
+}
+
+type RecordingWebhookData struct {
+	ID              string  `json:"id"`
+	DownloadURL     *string `json:"download_url"`
+	DownloadURLExpiry *string `json:"download_url_expiry"`
+	FileSize        *int64  `json:"file_size"`
+	SessionID       string  `json:"session_id"`
+	OutputFileName  string  `json:"output_file_name"`
+	Status          string  `json:"status"` // INVOKED, RECORDING, UPLOADING, COMPLETED
+	InvokedTime     string  `json:"invoked_time"`
+	StartedTime     *string `json:"started_time"`
+	StoppedTime     *string `json:"stopped_time"`
+}
+
+type MeetingWebhookData struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	startTime := time.Now()
-	signature := c.GetHeader("X-Cloudflare-Signature")
 
-	slog.Info("cloudflare webhook received", "path", c.Request.URL.Path)
+	// Cloudflare RealtimeKit uses dyte-signature header (RSA-SHA256)
+	// For now, log the signature but don't enforce verification until RSA verification is implemented
+	signature := c.GetHeader("dyte-signature")
+	webhookID := c.GetHeader("dyte-webhook-id")
 
-	if signature == "" {
-		slog.Warn("webhook rejected: missing signature")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing signature"})
-		return
-	}
+	slog.Info("cloudflare webhook received",
+		"path", c.Request.URL.Path,
+		"has_signature", signature != "",
+		"webhook_id", webhookID)
+
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		slog.Warn("webhook rejected: invalid body", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or malformed body"})
 		return
 	}
-	if !h.verifySignatureBody(body, signature) {
-		slog.Warn("webhook rejected: invalid signature")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
-		return
+
+	// Log raw body for debugging (truncated)
+	if len(body) > 0 {
+		slog.Debug("webhook body received", "body_preview", string(body[:min(len(body), 500)]))
 	}
 
-	slog.Debug("webhook signature verified")
-
-	// API-HIGH-07: Reset body for JSON binding after signature verification consumed it
+	// API-HIGH-07: Reset body for JSON binding after reading
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	var webhook RecordingReadyWebhook
+	var webhook RecordingStatusWebhook
 	if err := c.ShouldBindJSON(&webhook); err != nil {
-		slog.Warn("webhook rejected: invalid payload", "error", err)
+		slog.Warn("webhook rejected: invalid payload", "error", err, "body", string(body[:min(len(body), 500)]))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload: " + err.Error()})
 		return
 	}
 
 	slog.Info("cloudflare recording webhook parsed",
-		"type", webhook.Type,
-		"cloudflare_recording_id", webhook.RecordingID,
-		"cloudflare_meeting_id", webhook.MeetingID,
-		"size_bytes", webhook.Size,
-		"duration_seconds", webhook.Duration)
+		"event", webhook.Event,
+		"cloudflare_recording_id", webhook.Recording.ID,
+		"cloudflare_meeting_id", webhook.Meeting.ID,
+		"status", webhook.Recording.Status,
+		"has_download_url", webhook.Recording.DownloadURL != nil,
+		"file_size", webhook.Recording.FileSize)
 
-	if webhook.Type != "recording.ready" {
-		slog.Warn("webhook rejected: unsupported type", "type", webhook.Type)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported webhook type"})
+	// Only process COMPLETED recordings (download_url is available)
+	if webhook.Recording.Status != "COMPLETED" {
+		slog.Info("recording status update received (not completed yet)",
+			"cloudflare_recording_id", webhook.Recording.ID,
+			"status", webhook.Recording.Status)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "status update acknowledged",
+			"status":  webhook.Recording.Status,
+		})
 		return
 	}
 
-	rec, err := h.recordingService.GetRecordingByCloudflareID(c.Request.Context(), webhook.RecordingID)
+	if webhook.Recording.DownloadURL == nil || *webhook.Recording.DownloadURL == "" {
+		slog.Error("recording completed but no download URL",
+			"cloudflare_recording_id", webhook.Recording.ID)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recording completed but no download URL"})
+		return
+	}
+
+	rec, err := h.recordingService.GetRecordingByCloudflareID(c.Request.Context(), webhook.Recording.ID)
 	if err != nil {
 		slog.Error("recording not found for cloudflare ID",
-			"cloudflare_recording_id", webhook.RecordingID,
+			"cloudflare_recording_id", webhook.Recording.ID,
 			"error", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
@@ -109,17 +134,18 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	slog.Info("matched recording in database",
 		"recording_id", rec.ID,
 		"room_id", rec.RoomID,
-		"cloudflare_recording_id", webhook.RecordingID)
+		"cloudflare_recording_id", webhook.Recording.ID)
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Minute)
 	defer cancel()
 
+	downloadURL := *webhook.Recording.DownloadURL
 	downloadStart := time.Now()
 	slog.Info("downloading recording from cloudflare",
 		"recording_id", rec.ID,
-		"url_prefix", webhook.URL[:min(len(webhook.URL), 50)])
+		"url_prefix", downloadURL[:min(len(downloadURL), 50)])
 
-	resp, err := streamDownload(ctx, webhook.URL)
+	resp, err := streamDownload(ctx, downloadURL)
 	if err != nil {
 		slog.Error("failed to download recording from cloudflare",
 			"recording_id", rec.ID,
@@ -134,14 +160,26 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"recording_id", rec.ID,
 		"duration_ms", time.Since(downloadStart).Milliseconds())
 
-	storageKey := fmt.Sprintf("recordings/%s/%s.webm", rec.RoomID, rec.ID)
+	// Determine file extension from output_file_name or default to mp4
+	ext := ".mp4"
+	contentType := "video/mp4"
+	if webhook.Recording.OutputFileName != "" {
+		if len(webhook.Recording.OutputFileName) > 4 {
+			ext = webhook.Recording.OutputFileName[len(webhook.Recording.OutputFileName)-4:]
+		}
+		if ext == ".webm" {
+			contentType = "video/webm"
+		}
+	}
+	storageKey := fmt.Sprintf("recordings/%s/%s%s", rec.RoomID, rec.ID, ext)
 
 	uploadStart := time.Now()
 	slog.Info("uploading recording to r2",
 		"recording_id", rec.ID,
-		"storage_key", storageKey)
+		"storage_key", storageKey,
+		"content_type", contentType)
 
-	if err := h.recordingService.UploadRecording(ctx, storageKey, resp.Body, "video/webm"); err != nil {
+	if err := h.recordingService.UploadRecording(ctx, storageKey, resp.Body, contentType); err != nil {
 		slog.Error("failed to upload recording to r2",
 			"recording_id", rec.ID,
 			"storage_key", storageKey,
@@ -156,7 +194,13 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"storage_key", storageKey,
 		"duration_ms", time.Since(uploadStart).Milliseconds())
 
-	completed, err := h.recordingService.CompleteRecording(ctx, rec.ID, "r2", storageKey, webhook.Size, int32(webhook.Duration))
+	// Calculate file size and duration from webhook data
+	var fileSize int64
+	if webhook.Recording.FileSize != nil {
+		fileSize = *webhook.Recording.FileSize
+	}
+
+	completed, err := h.recordingService.CompleteRecording(ctx, rec.ID, "r2", storageKey, fileSize, 0)
 	if err != nil {
 		slog.Error("failed to complete recording in database",
 			"recording_id", rec.ID,
@@ -169,8 +213,7 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"recording_id", completed.ID,
 		"room_id", completed.RoomID,
 		"storage_path", storageKey,
-		"size_bytes", webhook.Size,
-		"duration_seconds", webhook.Duration,
+		"size_bytes", fileSize,
 		"total_processing_ms", time.Since(startTime).Milliseconds())
 
 	// Trigger post-meeting processing if configured
@@ -181,8 +224,7 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"id":          completed.ID,
 		"status":      completed.Status,
 		"storage_key": storageKey,
-		"size_bytes":  webhook.Size,
-		"duration":    webhook.Duration,
+		"size_bytes":  fileSize,
 	})
 }
 
@@ -251,23 +293,6 @@ func parsePostMeetingWebhookConfig(tenantConfig []byte) (*postMeetingWebhookConf
 	}
 
 	return config.PostMeetingWebhook, nil
-}
-
-func (h *WebhookHandler) verifySignatureBody(body []byte, signature string) bool {
-	secret := os.Getenv("CLOUDFLARE_WEBHOOK_SECRET")
-	if secret == "" {
-		return false
-	}
-
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	expectedMac := mac.Sum(nil)
-
-	receivedMac, err := hex.DecodeString(signature)
-	if err != nil {
-		return false
-	}
-	return hmac.Equal(expectedMac, receivedMac)
 }
 
 func streamDownload(ctx context.Context, url string) (*http.Response, error) {

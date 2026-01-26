@@ -6,7 +6,6 @@
 // - CLOUDFLARE_APP_ID
 // - CLOUDFLARE_API_TOKEN
 // - API_PUBLIC_URL (e.g., https://api.chalk.dev)
-// - CLOUDFLARE_WEBHOOK_SECRET
 package main
 
 import (
@@ -28,7 +27,6 @@ func main() {
 	appID := os.Getenv("CLOUDFLARE_APP_ID")
 	apiToken := os.Getenv("CLOUDFLARE_API_TOKEN")
 	publicURL := os.Getenv("API_PUBLIC_URL")
-	webhookSecret := os.Getenv("CLOUDFLARE_WEBHOOK_SECRET")
 
 	// Validate required env vars
 	missing := []string{}
@@ -43,9 +41,6 @@ func main() {
 	}
 	if publicURL == "" {
 		missing = append(missing, "API_PUBLIC_URL")
-	}
-	if webhookSecret == "" {
-		missing = append(missing, "CLOUDFLARE_WEBHOOK_SECRET")
 	}
 
 	if len(missing) > 0 {
@@ -64,7 +59,12 @@ func main() {
 
 	webhooks, err := client.ListWebhooks(ctx)
 	if err != nil {
-		log.Fatalf("Failed to list webhooks: %v", err)
+		// Cloudflare returns 404 when no webhooks exist - treat as empty list
+		if strings.Contains(err.Error(), "404") {
+			webhooks = []cloudflare.Webhook{}
+		} else {
+			log.Fatalf("Failed to list webhooks: %v", err)
+		}
 	}
 
 	webhookURL := strings.TrimSuffix(publicURL, "/") + "/webhooks/cloudflare/recording"
@@ -86,6 +86,7 @@ func main() {
 	}
 
 	// Create new webhook
+	// Note: Cloudflare RealtimeKit doesn't support custom secrets - uses RSA-SHA256 with their public key
 	fmt.Println("\nCreating new webhook...")
 
 	newWebhook, err := client.CreateWebhook(ctx, cloudflare.CreateWebhookRequest{
@@ -93,7 +94,6 @@ func main() {
 		URL:     webhookURL,
 		Events:  []string{cloudflare.WebhookEventRecordingStatusUpdate},
 		Enabled: true,
-		Secret:  webhookSecret,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create webhook: %v", err)

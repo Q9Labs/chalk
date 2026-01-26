@@ -164,12 +164,12 @@ type Webhook struct {
 }
 
 // CreateWebhookRequest is the request body for creating a webhook
+// Note: Cloudflare RealtimeKit doesn't support custom secrets - uses RSA-SHA256 with their public key
 type CreateWebhookRequest struct {
 	Name    string   `json:"name"`
 	URL     string   `json:"url"`
 	Events  []string `json:"events"`
 	Enabled bool     `json:"enabled"`
-	Secret  string   `json:"secret,omitempty"`
 }
 
 // UpdateWebhookRequest is the request body for updating a webhook
