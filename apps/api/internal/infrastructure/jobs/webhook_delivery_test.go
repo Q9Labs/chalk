@@ -46,9 +46,6 @@ func TestWebhookDelivery_SignatureVerification(t *testing.T) {
 
 	payloadBytes, _ := json.Marshal(payload)
 
-	// Simulate webhook delivery
-	req, _ := http.NewRequest("POST", server.URL, nil)
-
 	// Generate signature like the worker would
 	timestamp := int64(1705318200) // Fixed timestamp for test
 	signature := webhook.GenerateSignature(secret, timestamp, payloadBytes)
@@ -72,7 +69,7 @@ func TestWebhookDelivery_SignatureVerification(t *testing.T) {
 	}
 
 	// Send actual request
-	req, _ = http.NewRequest("POST", server.URL, nil)
+	req, _ := http.NewRequest("POST", server.URL, nil)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Chalk-Signature", signature)
 	req.Header.Set("X-Chalk-Timestamp", "1705318200")
