@@ -71,6 +71,8 @@ const normalizeParticipant = (p: Participant): ParticipantData => ({
   audioTrack: p.audioTrack ?? undefined,
   screenShareTrack: p.screenShareTrack ?? undefined,
   screenShareAudioTrack: p.screenShareAudioTrack ?? undefined,
+  joinedAt: p.joinedAt ?? undefined,
+  metadata: p.metadata ?? undefined,
 });
 
 /**

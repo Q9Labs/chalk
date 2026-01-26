@@ -113,7 +113,7 @@ export const ReactionBubble = React.memo(({
         className={cn(
           'relative z-10 text-5xl',
           !prefersReducedMotion && 'chalk-animate-reaction-bounce-in',
-          isCelebration && !prefersReducedMotion && 'chalk-animate-reaction-wiggle'
+          !prefersReducedMotion && 'chalk-animate-reaction-wiggle'
         )}
       >
         {emoji}

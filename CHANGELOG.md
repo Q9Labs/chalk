@@ -40,6 +40,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Package exports include `react-native` condition for automatic resolution
   - Pinned reanimated peer dep from `>=3.0.0` to `^3.0.0` to block v4
 
+- **sdk-react: Enhanced MeetingEndData** - Richer data for post-meeting processing
+  - `participants[]` - Full participant history with join/leave times and roles
+  - `totalParticipants` - Unique participant count (vs `participantCount` for peak concurrent)
+  - `stats` - Feature usage (chat messages, reactions, hand raises, screen shares, whiteboard opens)
+  - `startedAt`/`endedAt` timestamps and `hostId` for session context
+
+- **sdk-react: In-meeting theme toggle** - Switch light/dark mode during calls
+  - Sun/moon icon button in header controls bar
+  - Smooth 300ms transitions on all color properties (`chalk-theme-transition` CSS class)
+  - Persists to document.documentElement for app-wide sync
+
+- **sdk-react: Video loading states** - Smoother video appearance
+  - VideoTile: Shows avatar until video track is fully loaded
+  - ScreenShareView: Loading spinner with "Connecting to screen..." message
+  - Fade-in transition (700ms) when video becomes ready
+
+- **sdk-react: New animations** - Polish for meeting transitions
+  - `chalk-dock-slide-up/down` - Control bar entrance/exit with spring easing
+  - `chalk-tile-pop-in` - Staggered tile appearance
+  - `chalk-void-exit` - Shrink + blur effect for leaving participants
+  - `chalk-harmonic-pulse` - Speaking indicator glow
+  - `chalk-button-tactile` - Hover/active microinteractions
+
+- **chalk-whiteboard: SyncEngine improvements** - More reliable collaboration
+  - Separate local/remote sequence numbers for proper ordering
+  - Pasted images now sync correctly (file references re-included with changed elements)
+  - Pending updates stored in Map for deduplication
+
 ### Fixed
 
 - **"Room is full" false positives after participant disconnect** - WebSocket disconnects now properly decrement active participant count

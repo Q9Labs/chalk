@@ -1,0 +1,45 @@
+{
+	"expo": {
+		"name": "Chalk",
+		"slug": "chalk",
+		"version": "1.0.0",
+		"orientation": "portrait",
+		"icon": "./assets/images/icon.png",
+		"scheme": "chalk",
+		"userInterfaceStyle": "automatic",
+		"jsEngine": "hermes",
+		"newArchEnabled": false,
+		"splash": {
+			"image": "./assets/images/splash-icon.png",
+			"resizeMode": "contain",
+			"backgroundColor": "#111111"
+		},
+		"ios": {
+			"supportsTablet": true,
+			"bundleIdentifier": "ai.q9labs.chalk",
+			"infoPlist": {
+				"NSCameraUsageDescription": "Chalk needs camera access for video calls.",
+				"NSMicrophoneUsageDescription": "Chalk needs microphone access for audio calls.",
+				"NSBluetoothAlwaysUsageDescription": "Chalk uses Bluetooth to support audio devices during calls.",
+				"UIBackgroundModes": ["audio", "voip"]
+			}
+		},
+		"android": {
+			"adaptiveIcon": {
+				"foregroundImage": "./assets/images/adaptive-icon.png",
+				"backgroundColor": "#111111"
+			},
+			"edgeToEdgeEnabled": true,
+			"package": "ai.q9labs.chalk"
+		},
+		"web": {
+			"bundler": "metro",
+			"output": "static",
+			"favicon": "./assets/images/favicon.png"
+		},
+		"plugins": ["expo-router"],
+		"experiments": {
+			"typedRoutes": true
+		}
+	}
+}

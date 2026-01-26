@@ -459,7 +459,7 @@ export const VideoGrid = React.memo(({
       )}
       data-tour="video-grid"
     >
-      {visibleParticipants.map((p) => (
+      {visibleParticipants.map((p, index) => (
         <VideoTile
           key={p.id}
           participant={mapToVideoTileParticipant(p)}
@@ -467,11 +467,15 @@ export const VideoGrid = React.memo(({
           onClick={() => onParticipantClick?.(p.id)}
           onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
           pinned={p.id === pinnedParticipantId}
-          className="w-full h-full max-h-full"
+          className="w-full h-full max-h-full chalk-animate-tile-pop"
+          style={{ animationDelay: `${index * 100}ms` }}
         />
       ))}
       {overflowCount > 0 && (
-        <div className="rounded-2xl bg-[var(--chalk-bg-tile)] aspect-video flex items-center justify-center w-full h-full">
+        <div 
+          className="rounded-2xl bg-[var(--chalk-bg-tile)] aspect-video flex items-center justify-center w-full h-full chalk-animate-tile-pop"
+          style={{ animationDelay: `${visibleParticipants.length * 100}ms` }}
+        >
           <span className="text-xl font-medium text-muted-foreground">+{overflowCount} more</span>
         </div>
       )}

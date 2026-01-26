@@ -1,7 +1,16 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
-import { VideoTile } from '../atomic';
-import { ZoomInIcon, ZoomOutIcon, Maximize01Icon } from '../../utils/icons';
+import { VideoTile, Spinner } from '../atomic';
+import { 
+  ZoomInIcon, 
+  ZoomOutIcon, 
+  Maximize01Icon, 
+  Monitor01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArrowDown01Icon,
+  ArrowUp01Icon
+} from '../../utils/icons';
 import { createLogger } from '@q9labs/chalk-core';
 import type { Participant } from './VideoGrid';
 
@@ -35,6 +44,12 @@ export const ScreenShareView = React.memo(({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Sidebar/Thumbnails state
+  const [isThumbnailsOpen, setIsThumbnailsOpen] = useState(true);
+
   // Zoom state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -49,6 +64,8 @@ export const ScreenShareView = React.memo(({
       log.warn('Screen share track is ended');
       return;
     }
+
+    setIsLoading(true);
 
     try {
       const stream = new MediaStream([screenShareTrack]);
@@ -66,6 +83,10 @@ export const ScreenShareView = React.memo(({
       videoEl.srcObject = null;
     };
   }, [screenShareTrack]);
+
+  const handleVideoLoaded = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   // Reset pan when zoom resets
   useEffect(() => {
@@ -124,10 +145,14 @@ export const ScreenShareView = React.memo(({
     setIsDragging(false);
   }, []);
 
+  const toggleThumbnails = useCallback(() => {
+    setIsThumbnailsOpen(prev => !prev);
+  }, []);
+
   return (
     <div
       className={cn(
-        "flex h-full w-full gap-2",
+        "flex h-full w-full gap-2 transition-all duration-500",
         thumbnailPosition === 'bottom' ? "flex-col" : "flex-row",
         className
       )}
@@ -141,13 +166,32 @@ export const ScreenShareView = React.memo(({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
       >
+        {/* Loading State */}
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-900/50 backdrop-blur-md transition-opacity duration-500">
+            <div className="relative">
+              <div className="absolute -inset-4 rounded-full bg-teal-500/20 blur-xl animate-pulse" />
+              <Spinner size="lg" className="text-teal-500 relative z-10" />
+            </div>
+            <div className="mt-6 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+              <div className="flex items-center gap-2 text-white/90 font-medium">
+                <Monitor01Icon size={18} className="text-teal-400" />
+                <span>Connecting to {sharedByName}'s screen...</span>
+              </div>
+              <p className="text-xs text-white/50">Setting up the high-quality stream</p>
+            </div>
+          </div>
+        )}
+
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
+          onLoadedData={handleVideoLoaded}
           className={cn(
-            "w-full h-full object-contain rounded-xl transition-transform duration-150",
+            "w-full h-full object-contain rounded-xl transition-all duration-700",
+            isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100",
             zoom > 1 && isDragging && "cursor-grabbing",
             zoom > 1 && !isDragging && "cursor-grab"
           )}
@@ -157,39 +201,42 @@ export const ScreenShareView = React.memo(({
           }}
         />
 
-        <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-sm font-medium">
+        <div className={cn(
+          "absolute top-3 left-3 px-2 py-1 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-xs font-medium transition-opacity duration-500",
+          isLoading ? "opacity-0" : "opacity-100"
+        )}>
           Shared by {sharedByName}
         </div>
 
         {/* Zoom controls */}
         {enableZoom && (
-          <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleZoomOut}
               disabled={zoom <= MIN_ZOOM}
-              className="p-2 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Zoom out"
             >
-              <ZoomOutIcon size={18} />
+              <ZoomOutIcon size={14} />
             </button>
-            <span className="px-2 py-1 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-sm font-medium min-w-[3rem] text-center">
+            <span className="px-1.5 py-0.5 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-xs font-medium min-w-[2.5rem] text-center">
               {Math.round(zoom * 100)}%
             </span>
             <button
               onClick={handleZoomIn}
               disabled={zoom >= MAX_ZOOM}
-              className="p-2 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Zoom in"
             >
-              <ZoomInIcon size={18} />
+              <ZoomInIcon size={14} />
             </button>
             {zoom > 1 && (
               <button
                 onClick={handleResetZoom}
-                className="p-2 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors ml-1"
+                className="p-1.5 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground hover:bg-secondary transition-colors ml-0.5"
                 aria-label="Reset zoom"
               >
-                <Maximize01Icon size={18} />
+                <Maximize01Icon size={14} />
               </button>
             )}
           </div>
@@ -197,7 +244,7 @@ export const ScreenShareView = React.memo(({
 
         {/* Zoom indicator when zoomed */}
         {zoom > 1 && (
-          <div className="absolute bottom-4 right-4 px-2 py-1 rounded bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-xs">
+          <div className="absolute bottom-3 right-3 px-1.5 py-0.5 rounded bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-[10px]">
             Drag to pan • Scroll to zoom
           </div>
         )}
@@ -212,23 +259,46 @@ export const ScreenShareView = React.memo(({
               </button>
            </div>
         )}
+
+        {/* Collapse/Expand Toggle Button */}
+        {showThumbnails && participants.length > 0 && (
+          <button
+            onClick={toggleThumbnails}
+            className={cn(
+              "absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",
+              thumbnailPosition === 'right' 
+                ? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl" 
+                : "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl"
+            )}
+            aria-label={isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {thumbnailPosition === 'right' ? (
+              isThumbnailsOpen ? <ArrowRight01Icon size={16} /> : <ArrowLeft01Icon size={16} />
+            ) : (
+              isThumbnailsOpen ? <ArrowDown01Icon size={16} /> : <ArrowUp01Icon size={16} />
+            )}
+          </button>
+        )}
       </div>
 
       {showThumbnails && participants.length > 0 && (
         <div
           className={cn(
-            "flex gap-2 overflow-auto",
+            "flex gap-2 transition-all duration-500 ease-in-out",
             thumbnailPosition === 'bottom'
-              ? "h-36 w-full flex-row items-center px-2"
-              : "w-56 h-full flex-col py-2"
+              ? "flex-row items-center px-2 overflow-auto"
+              : "flex-col py-2 overflow-y-auto overflow-x-hidden",
+            !isThumbnailsOpen && (thumbnailPosition === 'bottom' ? "h-0 opacity-0" : "w-0 opacity-0 px-0"),
+            isThumbnailsOpen && (thumbnailPosition === 'bottom' ? "h-36 w-full" : "w-56 h-full")
           )}
         >
           {participants.map((p) => (
              <div
                 key={p.id}
                 className={cn(
-                  "shrink-0 rounded-xl overflow-hidden relative",
-                   thumbnailPosition === 'bottom' ? "aspect-video h-full" : "aspect-video w-full"
+                  "shrink-0 rounded-xl overflow-hidden relative transition-all duration-500",
+                   thumbnailPosition === 'bottom' ? "aspect-video h-full" : "aspect-video w-full",
+                   !isThumbnailsOpen && "scale-0 opacity-0"
                 )}
              >
                 <VideoTile

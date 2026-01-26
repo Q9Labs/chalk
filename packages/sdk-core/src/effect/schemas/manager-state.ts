@@ -94,6 +94,8 @@ export const ParticipantSchema = Schema.Struct({
   audioTrack: Schema.optional(Schema.Union(MediaStreamTrackSchema, Schema.Undefined)),
   screenShareTrack: Schema.optional(Schema.Union(MediaStreamTrackSchema, Schema.Undefined)),
   screenShareAudioTrack: Schema.optional(Schema.Union(MediaStreamTrackSchema, Schema.Undefined)),
+  joinedAt: Schema.optional(Schema.DateFromSelf),
+  metadata: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
 });
 
 /** Participant state schema */

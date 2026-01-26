@@ -43,7 +43,7 @@ export const ControlButton = React.memo(
 				disabled={disabled}
 				data-tour={dataTour}
 				className={cn(
-					"group relative flex items-center justify-center transition-all duration-300 ease-out",
+					"chalk-button-tactile group relative flex items-center justify-center transition-all duration-300 ease-out",
 					"text-[var(--foreground)]",
 					size === "sm" && "h-9 w-9 rounded-full",
 					size === "md" && "h-11 w-11 rounded-full",
