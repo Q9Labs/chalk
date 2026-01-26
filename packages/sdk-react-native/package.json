@@ -1,6 +1,6 @@
 {
 	"name": "@q9labs/chalk-react-native",
-	"version": "0.0.45",
+	"version": "0.0.47",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.47] - 2026-01-26
+
+### Added
+
 - **Post-meeting transcription & webhooks** - Complete pipeline for post-meeting processing
   - **Multi-provider transcription**: Groq API (cloud, $0.04/hour) with BYOK support, self-hosted Whisper (optional)
   - **AI summaries**: OpenRouter integration for automatic meeting summaries and action items
