@@ -1,0 +1,182 @@
+---
+title: WebSocket
+description: Real-time WebSocket API
+---
+
+## Connection
+
+```http
+GET /api/v1/ws
+```
+
+### Authentication
+
+The WebSocket connection requires a valid JWT token containing `room_id` and `participant_id` claims.
+
+**Preferred: Subprotocol Header**
+
+Pass the token via the `Sec-WebSocket-Protocol` header using the format `token.{jwt}`:
+
+```javascript
+const ws = new WebSocket('wss://api.chalk.q9labs.ai/api/v1/ws', [
+  'chalk',
+  `token.${accessToken}`
+]);
+```
+
+**Deprecated: Query Parameter**
+
+```javascript
+const ws = new WebSocket(`wss://api.chalk.q9labs.ai/api/v1/ws?token=${accessToken}`);
+```
+
+### Protocol
+
+The server uses the `chalk` subprotocol. When using the header-based authentication, include both `chalk` and `token.{jwt}` in the protocols array.
+
+### Origin Validation
+
+The server validates the request origin against the tenant's `allowed_origins` configuration. If no tenant-specific origins are configured, pattern-based origin validation is applied.
+
+## Connection Flow
+
+```
+┌────────┐                         ┌────────┐
+│ Client │                         │ Server │
+└───┬────┘                         └───┬────┘
+    │                                  │
+    │  WebSocket Upgrade Request       │
+    │  Sec-WebSocket-Protocol:         │
+    │    chalk, token.{jwt}            │
+    ├─────────────────────────────────►│
+    │                                  │
+    │         Validate Token           │
+    │         Check Origin             │
+    │         Verify room_id           │
+    │         Verify participant_id    │
+    │                                  │
+    │  101 Switching Protocols         │
+    │  Sec-WebSocket-Protocol: chalk   │
+    │◄─────────────────────────────────┤
+    │                                  │
+    │         Connection Open          │
+    │◄────────────────────────────────►│
+    │                                  │
+```
+
+## Server Events
+
+### participant.joined
+
+Fired when a participant joins the room.
+
+```json
+{
+  "event": "participant.joined",
+  "data": {
+    "id": "p_abc123",
+    "display_name": "Alice",
+    "role": "participant"
+  }
+}
+```
+
+### participant.left
+
+Fired when a participant leaves the room.
+
+```json
+{
+  "event": "participant.left",
+  "data": {
+    "id": "p_abc123"
+  }
+}
+```
+
+### chat.message
+
+Fired when a chat message is received.
+
+```json
+{
+  "event": "chat.message",
+  "data": {
+    "id": "msg_123",
+    "sender_id": "p_abc123",
+    "text": "Hello!",
+    "timestamp": "2026-01-06T10:45:00Z"
+  }
+}
+```
+
+### recording.started
+
+Fired when recording begins.
+
+```json
+{
+  "event": "recording.started",
+  "data": {
+    "recording_id": "rec_abc123"
+  }
+}
+```
+
+### recording.stopped
+
+Fired when recording ends.
+
+```json
+{
+  "event": "recording.stopped",
+  "data": {
+    "recording_id": "rec_abc123"
+  }
+}
+```
+
+## Client Events
+
+### chat.send
+
+Send a chat message.
+
+```json
+{
+  "event": "chat.send",
+  "data": {
+    "text": "Hello!"
+  }
+}
+```
+
+### hand.raise
+
+Raise hand to request attention.
+
+```json
+{
+  "event": "hand.raise"
+}
+```
+
+### hand.lower
+
+Lower raised hand.
+
+```json
+{
+  "event": "hand.lower"
+}
+```
+
+### ping
+
+Keep connection alive.
+
+```json
+{
+  "event": "ping"
+}
+```

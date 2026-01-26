@@ -1,0 +1,150 @@
+---
+title: Authentication
+description: API authentication and token management
+---
+
+Chalk uses two authentication mechanisms:
+
+1. **API Keys** — For tenant-level API access (`X-API-Key` header)
+2. **JWT Tokens** — For participant-level authentication in rooms
+
+## API Key Authentication
+
+All tenant API endpoints require the `X-API-Key` header:
+
+```bash
+curl -X GET https://api.chalk.dev/api/v1/tenants/tenant_abc123 \
+  -H "X-API-Key: sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+API keys are issued when creating a tenant and can be rotated via the [Rotate API Key](/api/tenants#rotate-api-key) endpoint.
+
+## Exchange API Key for Tokens
+
+```http
+POST /api/v1/auth/token
+```
+
+Exchange an API key for JWT access and refresh tokens.
+
+### Request
+
+```json
+{
+  "api_key": "sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+    "token_type": "Bearer",
+    "expires_in": 3600
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `access_token` | string | JWT for authenticating requests |
+| `refresh_token` | string | Token for obtaining new access tokens |
+| `token_type` | string | Always "Bearer" |
+| `expires_in` | int | Access token lifetime in seconds |
+
+## Refresh Tokens
+
+```http
+POST /api/v1/auth/refresh
+```
+
+Obtain new tokens using a refresh token.
+
+### Request
+
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+    "token_type": "Bearer",
+    "expires_in": 3600
+  }
+}
+```
+
+## Using JWT Tokens
+
+Include the access token in the `Authorization` header:
+
+```bash
+curl -X GET https://api.chalk.dev/api/v1/rooms/room_abc123 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+## Token Lifecycle
+
+```
+┌─────────────────┐
+│   API Key       │
+│  (long-lived)   │
+└────────┬────────┘
+         │ POST /auth/token
+         ▼
+┌─────────────────┐
+│  Access Token   │◄────────┐
+│  (short-lived)  │         │
+└────────┬────────┘         │
+         │ expires          │ POST /auth/refresh
+         ▼                  │
+┌─────────────────┐         │
+│ Refresh Token   │─────────┘
+│  (longer-lived) │
+└─────────────────┘
+```
+
+## Error Responses
+
+### Invalid API Key
+
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Invalid API key"
+  }
+}
+```
+
+### Expired Token
+
+```json
+{
+  "error": {
+    "code": "TOKEN_EXPIRED",
+    "message": "Access token has expired"
+  }
+}
+```
+
+### Invalid Refresh Token
+
+```json
+{
+  "error": {
+    "code": "INVALID_REFRESH_TOKEN",
+    "message": "Refresh token is invalid or expired"
+  }
+}
+```

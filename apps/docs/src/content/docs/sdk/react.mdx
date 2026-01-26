@@ -1,0 +1,345 @@
+---
+title: React SDK
+description: React SDK for Chalk video conferencing
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `@q9labs/chalk-react` package provides a turnkey `VideoConference` component that handles the entire meeting lifecycle.
+
+## Installation
+
+```bash
+bun add @q9labs/chalk-react
+```
+
+## Quick Start
+
+```tsx
+import { ChalkProvider, VideoConference } from '@q9labs/chalk-react'
+import '@q9labs/chalk-react/styles.css'
+
+function App() {
+  return (
+    <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={jwt}>
+      <VideoConference
+        roomId="room-123"
+        userName="Alice"
+        role="host"
+        features={{ recording: true, whiteboard: true }}
+        onEnd={(data) => console.log('Duration:', data.duration)}
+        onLeave={() => router.push('/')}
+      />
+    </ChalkProvider>
+  )
+}
+```
+
+## VideoConference
+
+Zero-config video conferencing. Handles the full flow: **lobby** → **joining** → **meeting** → **end**.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      VideoConference                        │
+├─────────────────────────────────────────────────────────────┤
+│  Phase: lobby                                               │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  PreJoinLobby                                         │  │
+│  │  - Camera preview                                     │  │
+│  │  - Device selection                                   │  │
+│  │  - Audio/video toggle                                 │  │
+│  │  - [Join] button                                      │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                           ↓                                 │
+│  Phase: joining (loading state)                             │
+│                           ↓                                 │
+│  Phase: meeting                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  MeetingRoom                                          │  │
+│  │  ┌─────────────────────────────────────────────────┐  │  │
+│  │  │  Video Grid / Spotlight / Sidebar               │  │  │
+│  │  └─────────────────────────────────────────────────┘  │  │
+│  │  ┌─────────────────────────────────────────────────┐  │  │
+│  │  │  Controls: mic | cam | share | record | leave   │  │  │
+│  │  └─────────────────────────────────────────────────┘  │  │
+│  │  ┌─────────┐                                          │  │
+│  │  │ Chat    │ (sidebar panel)                          │  │
+│  │  └─────────┘                                          │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                           ↓                                 │
+│  Phase: end                                                 │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  EndScreen                                            │  │
+│  │  - Meeting summary                                    │  │
+│  │  - Duration, participant count                        │  │
+│  │  - [Rejoin] [Go Home]                                 │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Props
+
+#### Required
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `roomId` | `string` | Room identifier |
+| `userName` | `string` | Display name for the local participant |
+
+#### Optional
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `role` | `"host" \| "participant"` | `"participant"` | Host gets recording controls |
+| `features` | `Features` | All enabled | Enable/disable features |
+| `defaults` | `Defaults` | - | Initial UI states |
+| `theme` | `Theme` | - | Visual customization |
+| `sounds` | `boolean` | `true` | Enable sound effects |
+| `debug` | `boolean` | `false` | Enable debug logging |
+| `slots` | `Slots` | - | Custom UI slots |
+| `className` | `string` | - | CSS class for container |
+
+### Features
+
+Each feature can be a `boolean` or a function returning `boolean` based on context.
+
+```ts
+interface Features {
+  chat?: FeatureValue
+  recording?: FeatureValue
+  screenShare?: FeatureValue
+  whiteboard?: FeatureValue
+  reactions?: FeatureValue
+  handRaise?: FeatureValue
+  tour?: FeatureValue
+}
+
+type FeatureValue = boolean | ((ctx: FeatureContext) => boolean)
+
+interface FeatureContext {
+  participants: readonly Participant[]
+  localParticipant: Participant | null
+  participantCount: number
+  isRecording: boolean
+}
+```
+
+**Example: Conditional features**
+
+```tsx
+<VideoConference
+  roomId="room-123"
+  userName="Alice"
+  features={{
+    recording: ({ participantCount }) => participantCount >= 2,
+    screenShare: true,
+    whiteboard: false,
+  }}
+/>
+```
+
+### Defaults
+
+```ts
+interface Defaults {
+  layout?: "grid" | "spotlight" | "sidebar"
+  audioEnabled?: boolean
+  videoEnabled?: boolean
+  chatOpen?: boolean
+  participantsOpen?: boolean
+}
+```
+
+### Theme
+
+```ts
+interface Theme {
+  accentColor?: string
+  borderRadius?: "rounded" | "sharp"
+}
+```
+
+### Slots
+
+Override or wrap default UI components.
+
+```ts
+interface Slots {
+  header?: ReactNode | ((DefaultHeader: ComponentType) => ReactNode)
+  controls?: ReactNode | ((DefaultControls: ComponentType) => ReactNode)
+  sidebar?: ReactNode | ((DefaultSidebar: ComponentType) => ReactNode)
+  videoGrid?: ReactNode | ((DefaultVideoGrid: ComponentType) => ReactNode)
+  lobby?: {
+    header?: ReactNode
+    footer?: ReactNode
+  }
+  endScreen?: {
+    actions?: ReactNode
+  }
+}
+```
+
+### Callbacks
+
+#### onJoin
+
+Fires when the user successfully joins the room.
+
+```ts
+onJoin?: (data: MeetingJoinedData) => void
+
+interface MeetingJoinedData {
+  roomId: string
+  participantId: string
+  role: string
+  displayName: string
+  isRecording: boolean
+  joinedAt: Date
+}
+```
+
+#### onLeave
+
+Fires when the user initiates leaving (clicks leave button).
+
+```ts
+onLeave?: () => void
+```
+
+#### onEnd
+
+Fires when the meeting ends with full session data and stats.
+
+```ts
+onEnd?: (data: MeetingEndData) => void
+
+interface MeetingEndData {
+  roomId: string
+  duration: number                    // seconds
+  transcripts: Transcript[]
+  recordingId: string | null
+  participantCount: number            // peak concurrent
+  totalParticipants: number           // unique participants
+  participants: ParticipantSession[]
+  hostId: string | null
+  startedAt: Date
+  endedAt: Date
+  stats: MeetingStats
+}
+
+interface ParticipantSession {
+  id: string
+  externalId: string | null
+  displayName: string
+  role: "host" | "participant"
+  joinedAt: Date
+  leftAt: Date | null
+}
+
+interface MeetingStats {
+  chatMessageCount: number
+  reactionCount: number
+  handRaiseCount: number
+  screenShareCount: number
+  whiteboardOpened: boolean
+  recordingDuration: number           // seconds
+}
+```
+
+#### onError
+
+Fires when an error occurs.
+
+```ts
+onError?: (error: ChalkError) => void
+```
+
+#### onAddPeople
+
+Fires when the invite/add people button is clicked.
+
+```ts
+onAddPeople?: () => void
+```
+
+## Full Example
+
+```tsx
+import { ChalkProvider, VideoConference } from '@q9labs/chalk-react'
+import type { MeetingEndData, MeetingJoinedData, ChalkError } from '@q9labs/chalk-react'
+import '@q9labs/chalk-react/styles.css'
+
+function MeetingPage({ roomId, token }: { roomId: string; token: string }) {
+  const router = useRouter()
+
+  const handleJoin = (data: MeetingJoinedData) => {
+    console.log(`Joined as ${data.displayName} (${data.role})`)
+    analytics.track('meeting_joined', { roomId: data.roomId })
+  }
+
+  const handleEnd = (data: MeetingEndData) => {
+    console.log(`Meeting ended after ${data.duration}s`)
+    console.log(`Participants: ${data.totalParticipants}`)
+    console.log(`Chat messages: ${data.stats.chatMessageCount}`)
+
+    if (data.recordingId) {
+      console.log(`Recording available: ${data.recordingId}`)
+    }
+
+    // Save transcripts
+    if (data.transcripts.length > 0) {
+      saveTranscripts(data.transcripts)
+    }
+  }
+
+  const handleError = (error: ChalkError) => {
+    toast.error(error.message)
+  }
+
+  return (
+    <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={token}>
+      <VideoConference
+        roomId={roomId}
+        userName="Alice"
+        role="host"
+        features={{
+          chat: true,
+          recording: true,
+          screenShare: true,
+          whiteboard: true,
+          reactions: true,
+          handRaise: true,
+        }}
+        defaults={{
+          layout: "grid",
+          audioEnabled: true,
+          videoEnabled: true,
+        }}
+        theme={{
+          accentColor: "#6366f1",
+          borderRadius: "rounded",
+        }}
+        sounds={true}
+        onJoin={handleJoin}
+        onEnd={handleEnd}
+        onLeave={() => router.push('/')}
+        onError={handleError}
+        onAddPeople={() => openInviteModal()}
+      />
+    </ChalkProvider>
+  )
+}
+```
+
+## What It Includes
+
+The `VideoConference` component provides a complete meeting experience:
+
+- **Pre-join lobby** - Camera/mic preview, device selection, display name input
+- **Video grid** - Adaptive layouts (grid, spotlight, sidebar)
+- **Control bar** - Mute, camera, screen share, recording, reactions, hand raise
+- **Chat panel** - Real-time messaging with unread notifications
+- **Whiteboard** - Collaborative drawing (when enabled)
+- **End screen** - Meeting summary with duration and stats
+- **Sound effects** - Audio cues for join, leave, messages, reactions

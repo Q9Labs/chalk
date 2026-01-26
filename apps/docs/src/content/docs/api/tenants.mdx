@@ -1,0 +1,269 @@
+---
+title: Tenants
+description: Tenant management and configuration API
+---
+
+## Create Tenant
+
+```http
+POST /api/v1/tenants
+```
+
+### Request
+
+```json
+{
+  "name": "Acme University",
+  "max_concurrent_rooms": 50,
+  "max_participants_per_room": 25,
+  "max_recording_duration_minutes": 180
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Tenant display name |
+| `max_concurrent_rooms` | int | No | 100 | Maximum rooms running simultaneously |
+| `max_participants_per_room` | int | No | 10 | Maximum participants per room |
+| `max_recording_duration_minutes` | int | No | 120 | Maximum recording duration in minutes |
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "tenant_abc123",
+    "name": "Acme University",
+    "api_key": "sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "max_concurrent_rooms": 50,
+    "max_participants_per_room": 25,
+    "max_recording_duration_minutes": 180,
+    "created_at": "2026-01-06T10:00:00Z"
+  }
+}
+```
+
+:::caution
+The `api_key` is shown **only once** during creation. Store it securely — it cannot be retrieved later.
+:::
+
+## Get Tenant
+
+```http
+GET /api/v1/tenants/{id}
+```
+
+Requires `X-API-Key` header. Tenants can only access their own data.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "tenant_abc123",
+    "name": "Acme University",
+    "max_concurrent_rooms": 50,
+    "max_participants_per_room": 25,
+    "max_recording_duration_minutes": 180,
+    "config": {
+      "force_recording": false,
+      "auto_start_recording": false,
+      "allow_early_join": true,
+      "empty_room_timeout_minutes": 30,
+      "recording_retention_days": 30,
+      "duplicate_participant_policy": "reject",
+      "transcription_enabled": true,
+      "transcription_language": "en-US"
+    },
+    "created_at": "2026-01-06T10:00:00Z"
+  }
+}
+```
+
+## Update Tenant
+
+```http
+PATCH /api/v1/tenants/{id}
+```
+
+### Request
+
+```json
+{
+  "name": "Acme Education",
+  "max_concurrent_rooms": 100,
+  "max_participants_per_room": 50
+}
+```
+
+All fields are optional. Only provided fields are updated.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "tenant_abc123",
+    "name": "Acme Education",
+    "max_concurrent_rooms": 100,
+    "max_participants_per_room": 50,
+    "max_recording_duration_minutes": 180,
+    "updated_at": "2026-01-06T12:00:00Z"
+  }
+}
+```
+
+## Delete Tenant
+
+```http
+DELETE /api/v1/tenants/{id}
+```
+
+Permanently deletes the tenant and all associated data.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "tenant_abc123",
+    "deleted": true
+  }
+}
+```
+
+## Rotate API Key
+
+```http
+POST /api/v1/tenants/{id}/rotate-key
+```
+
+Generates a new API key and invalidates the previous one.
+
+### Response
+
+```json
+{
+  "data": {
+    "api_key": "sk_live_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+  }
+}
+```
+
+:::caution
+The new `api_key` is shown **only once**. The previous key is immediately invalidated.
+:::
+
+## Update Tenant Config
+
+```http
+PATCH /api/v1/tenants/{id}/config
+```
+
+PATCH merges with existing config — only provided fields are updated.
+
+### Request
+
+```json
+{
+  "force_recording": true,
+  "auto_start_recording": true,
+  "allow_early_join": false,
+  "empty_room_timeout_minutes": 15,
+  "recording_retention_days": 90,
+  "duplicate_participant_policy": "disconnect_existing",
+  "transcription_enabled": true,
+  "transcription_language": "es-ES",
+  "transcription_profanity_filter": true,
+  "transcription_keywords": ["chemistry", "equation", "formula"],
+  "allowed_origins": [
+    "https://app.acme.edu",
+    "https://learn.acme.edu"
+  ],
+  "post_meeting_webhook": {
+    "enabled": true,
+    "url": "https://api.acme.edu/webhooks/chalk",
+    "secret": "whsec_xxxxxxxxx",
+    "include_recording": true,
+    "include_transcript": true,
+    "include_summary": true,
+    "include_action_items": true,
+    "transcription": {
+      "provider": "deepgram",
+      "api_key": "dg_xxxxxxxxx"
+    },
+    "ai": {
+      "provider": "openai",
+      "api_key": "sk-xxxxxxxxx",
+      "model": "gpt-4o"
+    }
+  }
+}
+```
+
+### Config Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `force_recording` | bool | false | Force recording for all rooms |
+| `auto_start_recording` | bool | false | Start recording when room begins |
+| `allow_early_join` | bool | true | Allow joining before scheduled time |
+| `empty_room_timeout_minutes` | int | 30 | Minutes before empty room closes |
+| `recording_retention_days` | int | 30 | Days to retain recordings |
+| `duplicate_participant_policy` | string | "reject" | How to handle duplicate participants |
+| `transcription_enabled` | bool | true | Enable live transcription |
+| `transcription_language` | string | "en-US" | Transcription language code |
+| `transcription_profanity_filter` | bool | false | Filter profanity in transcripts |
+| `transcription_keywords` | string[] | [] | Keywords for transcription accuracy |
+| `allowed_origins` | string[] | [] | CORS origins (max 20, valid URLs only) |
+| `post_meeting_webhook` | object | null | Post-meeting webhook configuration |
+
+### Allowed Origins
+
+- Maximum 20 origins
+- Must be valid `http://` or `https://` URLs
+- Wildcards not allowed except for localhost
+
+### Post-Meeting Webhook Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Enable webhook delivery |
+| `url` | string | Webhook endpoint URL |
+| `secret` | string | Signature verification secret |
+| `include_recording` | bool | Include recording URL |
+| `include_transcript` | bool | Include transcript data |
+| `include_summary` | bool | Include AI summary |
+| `include_action_items` | bool | Include extracted action items |
+| `transcription.provider` | string | Transcription provider |
+| `transcription.api_key` | string | Provider API key |
+| `ai.provider` | string | AI provider for summaries |
+| `ai.api_key` | string | AI provider API key |
+| `ai.model` | string | AI model to use |
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "tenant_abc123",
+    "config": {
+      "force_recording": true,
+      "auto_start_recording": true,
+      "allow_early_join": false,
+      "empty_room_timeout_minutes": 15,
+      "recording_retention_days": 90,
+      "duplicate_participant_policy": "disconnect_existing",
+      "transcription_enabled": true,
+      "transcription_language": "es-ES",
+      "transcription_profanity_filter": true,
+      "transcription_keywords": ["chemistry", "equation", "formula"],
+      "allowed_origins": [
+        "https://app.acme.edu",
+        "https://learn.acme.edu"
+      ]
+    },
+    "updated_at": "2026-01-06T12:00:00Z"
+  }
+}
+```

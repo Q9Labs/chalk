@@ -1,0 +1,67 @@
+---
+title: Chalk Documentation
+description: Ultra low-latency video conferencing SDK for education
+template: splash
+hero:
+  tagline: Ultra low-latency video conferencing built on Cloudflare RealtimeKit
+  image:
+    file: ../../assets/chalk-logo.svg
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/q9labs/chalk
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Features
+
+<CardGrid stagger>
+  <Card title="Low Latency" icon="rocket">
+    Built on Cloudflare's global edge network for sub-100ms latency worldwide.
+  </Card>
+  <Card title="Education First" icon="pencil">
+    Designed for virtual classrooms, tutoring, and online lectures.
+  </Card>
+  <Card title="Turnkey Components" icon="laptop">
+    Zero-config VideoConference component with lobby, meeting room, and end screen.
+  </Card>
+  <Card title="Recording & Transcription" icon="document">
+    Built-in recording with automatic transcription and AI summaries.
+  </Card>
+</CardGrid>
+
+## Quick Start
+
+```bash
+bun add @q9labs/chalk-react
+```
+
+```tsx
+import { ChalkProvider, VideoConference } from '@q9labs/chalk-react'
+import '@q9labs/chalk-react/styles.css'
+
+function App() {
+  return (
+    <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={jwt}>
+      <VideoConference
+        roomId="room-123"
+        userName="Alice"
+        role="host"
+        features={{ recording: true, whiteboard: true }}
+        onEnd={(data) => console.log('Meeting ended:', data.duration)}
+      />
+    </ChalkProvider>
+  )
+}
+```
+
+## Package
+
+| Package | Description |
+|---------|-------------|
+| `@q9labs/chalk-react` | React SDK with turnkey VideoConference component |

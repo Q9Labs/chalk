@@ -1,0 +1,128 @@
+---
+title: Authentication
+description: API keys and JWT tokens
+---
+
+Chalk uses a two-tier authentication system:
+
+1. **API Keys** - Server-to-server communication
+2. **JWT Tokens** - Client authentication
+
+## API Keys
+
+API keys authenticate your server with the Chalk API. Never expose them to clients.
+
+```
+chalk_abc123...  # Your tenant API key
+```
+
+### Usage
+
+Use the `X-API-Key` header for all server-side API calls:
+
+```typescript
+// Server-side only
+const response = await fetch('https://api.chalk.q9labs.ai/api/v1/rooms', {
+  method: 'POST',
+  headers: {
+    'X-API-Key': process.env.CHALK_API_KEY,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ name: 'CS101 Lecture' }),
+})
+```
+
+## JWT Tokens
+
+Tokens are returned when adding a participant to a room. Pass these to your client.
+
+### Server: Add Participant and Get Token
+
+```typescript
+// Your backend endpoint
+app.post('/api/join-room', async (req, res) => {
+  const { roomId, displayName } = req.body
+
+  // Add participant to room (creates room if allow_early_join is enabled)
+  const response = await fetch(
+    `https://api.chalk.q9labs.ai/api/v1/rooms/${roomId}/participants`,
+    {
+      method: 'POST',
+      headers: {
+        'X-API-Key': process.env.CHALK_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        display_name: displayName,
+        role: 'participant',
+      }),
+    }
+  )
+
+  const data = await response.json()
+
+  // Return tokens to client
+  res.json({
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    participantId: data.participant.id,
+    roomId: data.room.id,
+  })
+})
+```
+
+### Client: Use Token
+
+```tsx
+function MeetingPage({ roomId }: { roomId: string }) {
+  const [token, setToken] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function joinRoom() {
+      const res = await fetch('/api/join-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, displayName: 'Alice' }),
+      })
+      const { accessToken } = await res.json()
+      setToken(accessToken)
+    }
+    joinRoom()
+  }, [roomId])
+
+  if (!token) return <div>Joining...</div>
+
+  return (
+    <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={token}>
+      <VideoConference roomId={roomId} userName="Alice" />
+    </ChalkProvider>
+  )
+}
+```
+
+## Roles
+
+| Role | Permissions |
+|------|-------------|
+| `host` | Full control, can record, kick participants |
+| `participant` | Join, send messages, share screen (if enabled) |
+
+## Token Refresh
+
+Tokens expire after a set period. Use the refresh token to get new tokens:
+
+```typescript
+const response = await fetch(
+  `https://api.chalk.q9labs.ai/api/v1/rooms/${roomId}/participants/${participantId}/token`,
+  {
+    method: 'POST',
+    headers: {
+      'X-API-Key': process.env.CHALK_API_KEY,
+    },
+  }
+)
+
+const { access_token, refresh_token } = await response.json()
+```
+
+See [Authentication API](/api/authentication) for more details.

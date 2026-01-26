@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Whisper GPU infrastructure** - Self-hosted transcription on EC2 GPU instances
+
+### Changed
+
+- **Documentation overhaul** - Complete rewrite of developer documentation
+  - **New API docs**: Tenants (CRUD + config), Authentication (token/refresh), Transcription (post-meeting)
+  - **Rewritten API docs**: Recordings (all 9 endpoints), Webhooks (comprehensive with signature verification examples), Rooms, Participants (with bulk and token refresh)
+  - **Rewritten SDK docs**: VideoConference turnkey component with full TypeScript types
+  - **Removed**: React Native, Core SDK, Testing, Pricing, Architecture docs (per plan)
+  - **Updated**: Getting started guides with accurate auth flow and X-API-Key header
   - Whisper module instantiated in production environment
   - ECR repository for whisper-worker Docker image
   - GitHub Actions workflow for whisper-worker builds

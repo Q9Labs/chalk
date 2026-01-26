@@ -1,0 +1,265 @@
+---
+title: Recordings
+description: Recording management API
+---
+
+## Status Lifecycle
+
+```
+recording → processing → ready → archived
+                      ↘ failed
+```
+
+| Status | Description |
+|--------|-------------|
+| `recording` | Currently recording |
+| `processing` | Processing after stop |
+| `ready` | Available for download |
+| `archived` | Moved to cold storage |
+| `failed` | Recording failed |
+
+## Start Recording
+
+```http
+POST /api/v1/rooms/{id}/recordings/start
+```
+
+Starts recording for the specified room. Returns conflict if already recording.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "rec_abc123",
+    "room_id": "room_abc123",
+    "status": "recording",
+    "started_at": "2026-01-06T10:30:00Z"
+  }
+}
+```
+
+### Errors
+
+| Status | Description |
+|--------|-------------|
+| `409 Conflict` | Room is already being recorded |
+
+## Stop Recording
+
+```http
+POST /api/v1/rooms/{id}/recordings/stop
+```
+
+Stops the active recording for the specified room.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "rec_abc123",
+    "room_id": "room_abc123",
+    "status": "processing",
+    "stopped_at": "2026-01-06T11:00:00Z"
+  }
+}
+```
+
+### Errors
+
+| Status | Description |
+|--------|-------------|
+| `404 Not Found` | No active recording for this room |
+
+## Sync Recordings
+
+```http
+POST /api/v1/rooms/{id}/recordings/sync
+```
+
+Syncs recordings from Cloudflare. Use this to import auto-started recordings that were initiated by Cloudflare directly.
+
+### Response
+
+```json
+{
+  "data": {
+    "synced_count": 2,
+    "recordings": [
+      {
+        "id": "rec_abc123",
+        "status": "ready"
+      }
+    ]
+  }
+}
+```
+
+## List Recordings
+
+```http
+GET /api/v1/recordings
+```
+
+Lists all recordings for the current tenant.
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | integer | 20 | Maximum number of recordings to return |
+| `offset` | integer | 0 | Number of recordings to skip |
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "rec_abc123",
+      "room_id": "room_abc123",
+      "status": "ready",
+      "duration_seconds": 1800,
+      "size_bytes": 524288000,
+      "created_at": "2026-01-06T10:30:00Z"
+    }
+  ],
+  "meta": {
+    "total": 50,
+    "limit": 20,
+    "offset": 0
+  }
+}
+```
+
+## Get Recording
+
+```http
+GET /api/v1/recordings/{id}
+```
+
+Retrieves details for a specific recording, including room information.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "rec_abc123",
+    "room_id": "room_abc123",
+    "room": {
+      "id": "room_abc123",
+      "name": "CS101 Lecture"
+    },
+    "status": "ready",
+    "duration_seconds": 1800,
+    "size_bytes": 524288000,
+    "started_at": "2026-01-06T10:30:00Z",
+    "stopped_at": "2026-01-06T11:00:00Z"
+  }
+}
+```
+
+## Download Recording
+
+```http
+GET /api/v1/recordings/{id}/download
+```
+
+Returns a presigned download URL for the recording.
+
+### Response (Ready)
+
+```json
+{
+  "recording_id": "rec_abc123",
+  "download_url": "https://storage.example.com/recordings/rec_abc123.mp4?signature=...",
+  "status": "ready",
+  "duration": 1800,
+  "file_size": 524288000,
+  "provider": "r2"
+}
+```
+
+### Response (Processing)
+
+```json
+{
+  "recording_id": "rec_abc123",
+  "status": "processing",
+  "message": "Recording is still being processed. Please try again later."
+}
+```
+
+## Archive Recording
+
+```http
+POST /api/v1/recordings/{id}/archive
+```
+
+Moves the recording to S3 Glacier for long-term storage. Recording must have status `ready` and be stored in R2.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "rec_abc123",
+    "status": "archived",
+    "archived_at": "2026-01-06T12:00:00Z"
+  }
+}
+```
+
+### Errors
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | Recording is not in `ready` status or not stored in R2 |
+
+## Recover Recording
+
+```http
+POST /api/v1/recordings/{id}/recover
+```
+
+Attempts to recover a stalled recording from Cloudflare. Recording must have status `processing` and a valid `cloudflare_recording_id`.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "rec_abc123",
+    "status": "processing",
+    "message": "Recovery initiated. Recording will be reprocessed."
+  }
+}
+```
+
+### Errors
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | Recording is not in `processing` status or missing Cloudflare recording ID |
+
+## Delete Recording
+
+```http
+DELETE /api/v1/recordings/{id}
+```
+
+Soft deletes a recording. The recording data is retained but marked as deleted.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "rec_abc123",
+    "deleted": true,
+    "deleted_at": "2026-01-06T12:00:00Z"
+  }
+}
+```
