@@ -297,6 +297,8 @@ export interface Participant {
 	 * @max 100
 	 */
 	connectionQuality: number;
+	/** When this participant joined the room */
+	joinedAt?: Date;
 	/** Custom metadata set when joining */
 	metadata?: Record<string, unknown>;
 }

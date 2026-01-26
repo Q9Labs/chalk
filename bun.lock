@@ -57,6 +57,44 @@
         "typescript": "~5.9.2",
       },
     },
+    "apps/mobile2": {
+      "name": "@q9labs/chalk-mobile2",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cloudflare/react-native-webrtc": "^125.0.3",
+        "@cloudflare/realtimekit-react-native": "^0.3.1",
+        "@expo/vector-icons": "^15.0.3",
+        "@gorhom/bottom-sheet": "^5.2.8",
+        "@q9labs/chalk-core": "workspace:*",
+        "@q9labs/chalk-react-native": "workspace:*",
+        "@react-native-async-storage/async-storage": "^2.1.0",
+        "@react-navigation/native": "^7.1.8",
+        "expo": "~54.0.31",
+        "expo-constants": "~18.0.13",
+        "expo-dev-client": "~6.0.20",
+        "expo-font": "~14.0.10",
+        "expo-linking": "~8.0.11",
+        "expo-router": "~6.0.21",
+        "expo-splash-screen": "~31.0.13",
+        "expo-status-bar": "~3.0.9",
+        "expo-web-browser": "~15.0.10",
+        "react": "19.1.0",
+        "react-dom": "19.1.0",
+        "react-native": "0.81.5",
+        "react-native-gesture-handler": "^2.30.0",
+        "react-native-reanimated": "~3.19.5",
+        "react-native-safe-area-context": "~5.6.0",
+        "react-native-screens": "~4.16.0",
+        "react-native-web": "~0.21.0",
+      },
+      "devDependencies": {
+        "@babel/core": "^7.28.5",
+        "@types/react": "~19.1.0",
+        "babel-preset-expo": "~14.0.0",
+        "react-test-renderer": "19.1.0",
+        "typescript": "~5.9.2",
+      },
+    },
     "apps/web": {
       "name": "web",
       "dependencies": {
@@ -147,7 +185,7 @@
     },
     "packages/sdk-react": {
       "name": "@q9labs/chalk-react",
-      "version": "0.0.45",
+      "version": "0.0.46",
       "dependencies": {
         "@base-ui/react": "^1.0.0-alpha.11",
         "@cloudflare/realtimekit": "^1.2.2",
@@ -224,7 +262,7 @@
         "react": "^18.0.0 || ^19.0.0",
         "react-native": ">=0.70.0",
         "react-native-gesture-handler": ">=2.0.0",
-        "react-native-reanimated": ">=3.0.0",
+        "react-native-reanimated": "^3.0.0",
         "typescript": "^5",
       },
     },
@@ -275,6 +313,9 @@
         "react": "^18.0.0 || ^19.0.0",
       },
     },
+  },
+  "overrides": {
+    "react-native-reanimated": "~3.19.5",
   },
   "packages": {
     "@0no-co/graphql.web": ["@0no-co/graphql.web@1.2.0", "", { "peerDependencies": { "graphql": "^14.0.0 || ^15.0.0 || ^16.0.0" }, "optionalPeers": ["graphql"] }, "sha512-/1iHy9TTr63gE1YcR5idjx8UREz1s0kFhydf3bBLCXyqjhkIc6igAzTOx3zPifCwFR87tsh/4Pa9cNts6d2otw=="],
@@ -584,6 +625,8 @@
     "@cloudflare/workerd-linux-arm64": ["@cloudflare/workerd-linux-arm64@1.20251210.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-2IB37nXi7PZVQLa1OCuO7/6pNxqisRSO8DmCQ5x/3sezI5op1vwOxAcb1osAnuVsVN9bbvpw70HJvhKruFJTuA=="],
 
     "@cloudflare/workerd-windows-64": ["@cloudflare/workerd-windows-64@1.20251210.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Uaz6/9XE+D6E7pCY4OvkCuJHu7HcSDzeGcCGY1HLhojXhHd7yL52c3yfiyJdS8hPatiAa0nn5qSI/42+aTdDSw=="],
+
+    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20260124.0", "", {}, "sha512-h6TJlew6AtGuEXFc+k5ifalk+tg3fkg0lla6XbMAb2AKKfJGwlFNTwW2xyT/Ha92KY631CIJ+Ace08DPdFohdA=="],
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 
@@ -1002,6 +1045,8 @@
     "@q9labs/chalk-core": ["@q9labs/chalk-core@workspace:packages/sdk-core"],
 
     "@q9labs/chalk-mobile": ["@q9labs/chalk-mobile@workspace:apps/mobile"],
+
+    "@q9labs/chalk-mobile2": ["@q9labs/chalk-mobile2@workspace:apps/mobile2"],
 
     "@q9labs/chalk-react": ["@q9labs/chalk-react@workspace:packages/sdk-react"],
 
@@ -1585,6 +1630,8 @@
 
     "available-typed-arrays": ["available-typed-arrays@1.0.7", "", { "dependencies": { "possible-typed-array-names": "^1.0.0" } }, "sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ=="],
 
+    "aws4fetch": ["aws4fetch@1.0.20", "", {}, "sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g=="],
+
     "axe-core": ["axe-core@4.11.0", "", {}, "sha512-ilYanEU8vxxBexpJd8cWM4ElSQq4QctCLKih0TSfjIfCQTeyH/6zVrmIJfLPrKTKJRbiG+cfnZbQIjAlJmF1jQ=="],
 
     "babel-core": ["babel-core@7.0.0-bridge.0", "", { "peerDependencies": { "@babel/core": "^7.0.0-0" } }, "sha512-poPX9mZH/5CSanm50Q+1toVci6pv5KSRv/5TWCwtzQS5XEwn40BcCrgIeMFWP9CKKIniKXNxoIOnOq4VVlGXhg=="],
@@ -1968,6 +2015,8 @@
     "dotenv": ["dotenv@16.4.7", "", {}, "sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ=="],
 
     "dotenv-expand": ["dotenv-expand@11.0.7", "", { "dependencies": { "dotenv": "^16.4.5" } }, "sha512-zIHwmZPRshsCdpMDyVsqGmgyP0yT8GAgXUnkdAoJisxvf33k7yO6OuoKmcTGuXPWSsm8Oh88nZicRLA9Y0rUeA=="],
+
+    "drizzle-orm": ["drizzle-orm@0.45.1", "", { "peerDependencies": { "@aws-sdk/client-rds-data": ">=3", "@cloudflare/workers-types": ">=4", "@electric-sql/pglite": ">=0.2.0", "@libsql/client": ">=0.10.0", "@libsql/client-wasm": ">=0.10.0", "@neondatabase/serverless": ">=0.10.0", "@op-engineering/op-sqlite": ">=2", "@opentelemetry/api": "^1.4.1", "@planetscale/database": ">=1.13", "@prisma/client": "*", "@tidbcloud/serverless": "*", "@types/better-sqlite3": "*", "@types/pg": "*", "@types/sql.js": "*", "@upstash/redis": ">=1.34.7", "@vercel/postgres": ">=0.8.0", "@xata.io/client": "*", "better-sqlite3": ">=7", "bun-types": "*", "expo-sqlite": ">=14.0.0", "gel": ">=2", "knex": "*", "kysely": "*", "mysql2": ">=2", "pg": ">=8", "postgres": ">=3", "sql.js": ">=1", "sqlite3": ">=5" }, "optionalPeers": ["@aws-sdk/client-rds-data", "@cloudflare/workers-types", "@electric-sql/pglite", "@libsql/client", "@libsql/client-wasm", "@neondatabase/serverless", "@op-engineering/op-sqlite", "@opentelemetry/api", "@planetscale/database", "@prisma/client", "@tidbcloud/serverless", "@types/better-sqlite3", "@types/pg", "@types/sql.js", "@upstash/redis", "@vercel/postgres", "@xata.io/client", "better-sqlite3", "bun-types", "expo-sqlite", "gel", "knex", "kysely", "mysql2", "pg", "postgres", "sql.js", "sqlite3"] }, "sha512-Te0FOdKIistGNPMq2jscdqngBRfBpC8uMFVwqjf6gtTVJHIQ/dosgV/CLBU2N4ZJBsXL5savCba9b0YJskKdcA=="],
 
     "dunder-proto": ["dunder-proto@1.0.1", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.1", "es-errors": "^1.3.0", "gopd": "^1.2.0" } }, "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A=="],
 

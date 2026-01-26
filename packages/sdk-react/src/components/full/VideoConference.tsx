@@ -110,6 +110,38 @@ export interface MeetingJoinedData {
 	joinedAt: Date;
 }
 
+/** Individual participant's session info */
+export interface ParticipantSession {
+	/** Participant ID */
+	id: string;
+	/** External ID from metadata (if provided at join) */
+	externalId: string | null;
+	/** Display name */
+	displayName: string;
+	/** Participant role */
+	role: "host" | "participant";
+	/** When this participant joined */
+	joinedAt: Date;
+	/** When this participant left (null if still present when meeting ended) */
+	leftAt: Date | null;
+}
+
+/** Feature usage stats during the meeting */
+export interface MeetingStats {
+	/** Total chat messages sent */
+	chatMessageCount: number;
+	/** Total reactions sent */
+	reactionCount: number;
+	/** Total hand raises */
+	handRaiseCount: number;
+	/** Number of times screen was shared */
+	screenShareCount: number;
+	/** Whether whiteboard was opened */
+	whiteboardOpened: boolean;
+	/** Total seconds recorded (if any) */
+	recordingDuration: number;
+}
+
 /** Data provided when meeting ends (via leave or disconnect) */
 export interface MeetingEndData {
 	/** Room ID of the meeting */
@@ -120,8 +152,20 @@ export interface MeetingEndData {
 	transcripts: Transcript[];
 	/** Recording ID if recording was active, null otherwise */
 	recordingId: string | null;
-	/** Number of participants in the meeting */
+	/** Peak concurrent participant count */
 	participantCount: number;
+	/** Total unique participants who joined */
+	totalParticipants: number;
+	/** Full participant history with join/leave times */
+	participants: ParticipantSession[];
+	/** Host participant ID (if any) */
+	hostId: string | null;
+	/** When the meeting started */
+	startedAt: Date;
+	/** When the meeting ended */
+	endedAt: Date;
+	/** Feature usage stats */
+	stats: MeetingStats;
 }
 
 export interface VideoConferenceProps {
@@ -170,6 +214,18 @@ function VideoConferenceBase({
 	const [joinStartTime, setJoinStartTime] = useState<number | null>(null);
 	const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 	const [isExiting, setIsExiting] = useState(false);
+
+	// Participant history tracking
+	const participantHistoryRef = useRef<Map<string, ParticipantSession>>(new Map());
+	const peakParticipantCountRef = useRef(0);
+	const meetingStartTimeRef = useRef<Date | null>(null);
+
+	// Stats tracking
+	const reactionCountRef = useRef(0);
+	const handRaiseCountRef = useRef(0);
+	const screenShareCountRef = useRef(0);
+	const whiteboardOpenedRef = useRef(false);
+	const prevScreenShareStateRef = useRef(false);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
@@ -275,6 +331,72 @@ function VideoConferenceBase({
 		prevMessageCountRef.current = newCount;
 	}, [messages, localParticipant?.id, phase, play]);
 
+	// Track meeting start time
+	useEffect(() => {
+		if (phase === "meeting" && !meetingStartTimeRef.current) {
+			meetingStartTimeRef.current = new Date();
+		}
+	}, [phase]);
+
+	// Track participant history and peak count
+	useEffect(() => {
+		if (phase !== "meeting") return;
+
+		// Update peak count
+		if (participantCount > peakParticipantCountRef.current) {
+			peakParticipantCountRef.current = participantCount;
+		}
+
+		// Track each participant
+		for (const p of participants) {
+			if (!participantHistoryRef.current.has(p.id)) {
+				// New participant - add to history
+				const externalId = (p.metadata?.externalId as string) ?? null;
+				participantHistoryRef.current.set(p.id, {
+					id: p.id,
+					externalId,
+					displayName: p.displayName,
+					role: p.role as "host" | "participant",
+					joinedAt: p.joinedAt ?? new Date(),
+					leftAt: null,
+				});
+			}
+		}
+
+		// Mark departed participants
+		const currentIds = new Set(participants.map(p => p.id));
+		for (const [id, session] of participantHistoryRef.current) {
+			if (!currentIds.has(id) && session.leftAt === null) {
+				session.leftAt = new Date();
+			}
+		}
+	}, [phase, participants, participantCount]);
+
+	// Track screen share count
+	useEffect(() => {
+		if (screenShare.isLocalSharing && !prevScreenShareStateRef.current) {
+			screenShareCountRef.current++;
+		}
+		prevScreenShareStateRef.current = screenShare.isLocalSharing;
+	}, [screenShare.isLocalSharing]);
+
+	// Track whiteboard usage
+	useEffect(() => {
+		if (whiteboard.isOpen) {
+			whiteboardOpenedRef.current = true;
+		}
+	}, [whiteboard.isOpen]);
+
+	// Track reactions (count from interactions.activeReactions changes)
+	const prevReactionCountRef = useRef(0);
+	useEffect(() => {
+		const currentCount = interactions.activeReactions.length;
+		if (currentCount > prevReactionCountRef.current) {
+			reactionCountRef.current += currentCount - prevReactionCountRef.current;
+		}
+		prevReactionCountRef.current = currentCount;
+	}, [interactions.activeReactions]);
+
 	const featureContext = useMemo(
 		(): FeatureContext => ({
 			participants,
@@ -295,19 +417,39 @@ function VideoConferenceBase({
 	);
 
 	const buildEndData = useCallback(
-		(): MeetingEndData => ({
-			roomId,
-			duration: meetingDuration,
-			transcripts: rawTranscripts,
-			recordingId: recording.recordingId,
-			participantCount,
-		}),
+		(): MeetingEndData => {
+			const endedAt = new Date();
+			const participantSessions = Array.from(participantHistoryRef.current.values());
+			const hostSession = participantSessions.find(p => p.role === "host");
+
+			return {
+				roomId,
+				duration: meetingDuration,
+				transcripts: rawTranscripts,
+				recordingId: recording.recordingId,
+				participantCount: peakParticipantCountRef.current,
+				totalParticipants: participantSessions.length,
+				participants: participantSessions,
+				hostId: hostSession?.id ?? null,
+				startedAt: meetingStartTimeRef.current ?? endedAt,
+				endedAt,
+				stats: {
+					chatMessageCount: messages.length,
+					reactionCount: reactionCountRef.current,
+					handRaiseCount: handRaiseCountRef.current,
+					screenShareCount: screenShareCountRef.current,
+					whiteboardOpened: whiteboardOpenedRef.current,
+					recordingDuration: recording.durationSeconds,
+				},
+			};
+		},
 		[
 			roomId,
 			meetingDuration,
 			rawTranscripts,
 			recording.recordingId,
-			participantCount,
+			recording.durationSeconds,
+			messages.length,
 		],
 	);
 
@@ -398,6 +540,15 @@ function VideoConferenceBase({
 		setPhase("lobby");
 		setMeetingDuration(0);
 		setJoinStartTime(null);
+		// Reset tracking refs for new meeting
+		participantHistoryRef.current.clear();
+		peakParticipantCountRef.current = 0;
+		meetingStartTimeRef.current = null;
+		reactionCountRef.current = 0;
+		handRaiseCountRef.current = 0;
+		screenShareCountRef.current = 0;
+		whiteboardOpenedRef.current = false;
+		prevScreenShareStateRef.current = false;
 	}, []);
 
 	const handleGoHome = useCallback(() => {
@@ -421,6 +572,10 @@ function VideoConferenceBase({
 	}, [recording]);
 
 	const handleToggleHandRaise = useCallback(() => {
+		// Track hand raise count (only when raising, not lowering)
+		if (!interactions.isHandRaised) {
+			handRaiseCountRef.current++;
+		}
 		interactions.toggleHand();
 		play('handRaise');
 	}, [interactions, play]);

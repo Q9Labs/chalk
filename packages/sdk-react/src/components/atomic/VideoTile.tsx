@@ -27,6 +27,7 @@ export interface VideoTileProps {
   onDoubleClick?: () => void;
   pinned?: boolean;
   className?: string;
+  style?: React.CSSProperties;
   children?: React.ReactNode;
   showAvatar?: boolean;
 }
@@ -54,11 +55,13 @@ export const VideoTile = React.memo(({
   onDoubleClick,
   pinned,
   className,
+  style,
   children,
 }: VideoTileProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [trackError, setTrackError] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [, setCurrentTrackId] = useState<string | null>(null);
   const [, forceUpdate] = useState(0);
 
@@ -84,6 +87,7 @@ export const VideoTile = React.memo(({
     if (!videoEl) return;
 
     setTrackError(null);
+    setIsLoaded(false);
 
     const shouldShowVideo = participant.isVideoEnabled && videoTrack;
 
@@ -106,6 +110,7 @@ export const VideoTile = React.memo(({
 
     const handleEnded = () => {
       setTrackError('Track ended');
+      setIsLoaded(false);
       forceUpdate(n => n + 1);
     };
 
@@ -131,20 +136,27 @@ export const VideoTile = React.memo(({
     };
   }, [videoTrack, participant.isVideoEnabled, attachTrack]);
 
+  const handleVideoLoaded = useCallback(() => {
+    setIsLoaded(true);
+  }, []);
+
   const isTrackValid = isTrackUsable(videoTrack);
-  const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError;
+  const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError && isLoaded;
 
   const participantGradient = useMemo(() => getParticipantGradient(participant.id), [participant.id]);
 
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-2xl border-0 outline-none',
+        'relative overflow-hidden rounded-2xl border-2 border-transparent outline-none transition-all duration-300',
         aspectRatioClasses[aspectRatio],
         pinned && 'ring-2 ring-primary/50',
+        participant.isSpeaking && !prefersReducedMotion && 'chalk-animate-harmonic-pulse',
+        participant.isSpeaking && prefersReducedMotion && 'border-green-500',
         onClick && 'cursor-pointer',
         className
       )}
+      style={style}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       data-tour={participant.isLocal ? 'local-video' : 'video-grid'}
@@ -157,17 +169,18 @@ export const VideoTile = React.memo(({
         autoPlay
         playsInline
         muted
+        onLoadedData={handleVideoLoaded}
         className={cn(
-          'h-full w-full object-cover',
+          'h-full w-full object-cover transition-opacity duration-500',
           mirror && 'scale-x-[-1]',
-          !showVideo && 'hidden'
+          !showVideo ? 'opacity-0' : 'opacity-100'
         )}
       />
 
-      {/* Avatar background when video is off */}
+      {/* Avatar background when video is off or loading */}
       {!showVideo && showAvatar && (
         <div
-          className="absolute inset-0 flex items-center justify-center"
+          className="absolute inset-0 flex items-center justify-center transition-opacity duration-300"
           style={{ background: participantGradient }}
         >
           <Avatar
@@ -183,9 +196,9 @@ export const VideoTile = React.memo(({
 
       {/* Compact bottom-left info chip */}
       {(showName || showStatus) && (
-        <div className="absolute bottom-3 left-3 right-3 pointer-events-none">
+        <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
           <div
-            className="inline-flex items-center gap-2 px-2 py-1.5 rounded-full backdrop-blur-md"
+            className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-full backdrop-blur-md"
             style={{
               background: 'rgba(0, 0, 0, 0.5)',
             }}
@@ -195,13 +208,13 @@ export const VideoTile = React.memo(({
               <Avatar
                 name={participant.displayName}
                 src={participant.avatarUrl}
-                size="sm"
+                size="xs"
               />
             )}
 
             {/* Name */}
             {showName && (
-              <span className="text-sm font-medium text-white truncate max-w-[120px]">
+              <span className="text-xs font-medium text-white truncate max-w-[100px]">
                 {participant.displayName}
               </span>
             )}
@@ -210,21 +223,21 @@ export const VideoTile = React.memo(({
             {showStatus && (
               <div className="flex items-center gap-1 ml-auto">
                 {participant.isMuted && (
-                  <div className="rounded-full bg-red-500/80 p-1">
-                    <MicrophoneOff01Icon size={12} className="text-white" />
+                  <div className="rounded-full bg-red-500/80 p-0.5">
+                    <MicrophoneOff01Icon size={10} className="text-white" />
                   </div>
                 )}
                 {participant.isHandRaised && (
                   <div className={cn(
-                    "rounded-full bg-amber-500/80 p-1",
+                    "rounded-full bg-amber-500/80 p-0.5",
                     !prefersReducedMotion && "chalk-animate-hand-bounce"
                   )}>
-                    <HandIcon size={12} className="text-white" />
+                    <HandIcon size={10} className="text-white" />
                   </div>
                 )}
                 {participant.isScreenSharing && (
-                  <div className="rounded-full bg-primary/80 p-1">
-                    <Monitor01Icon size={12} className="text-white" />
+                  <div className="rounded-full bg-primary/80 p-0.5">
+                    <Monitor01Icon size={10} className="text-white" />
                   </div>
                 )}
               </div>

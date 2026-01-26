@@ -9,11 +9,10 @@ export type SendMessage = (type: string, payload: unknown) => void;
 export class SyncEngine {
 	private lastElements: Map<string, ExcalidrawElement> = new Map();
 	private lastFiles: Set<string> = new Set();
-	private seq = 0;
-	private pendingUpdate: {
-		elements: ExcalidrawElement[];
-		files: BinaryFiles;
-	} | null = null;
+	private localSeq = 0;
+	private remoteSeq = 0;
+	private pendingElements: Map<string, ExcalidrawElement> = new Map();
+	private pendingFiles: BinaryFiles = {};
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private lastCursorSend = 0;
 	private readonly config: Required<WhiteboardConfig>;
@@ -60,20 +59,24 @@ export class SyncEngine {
 			}
 		}
 
+		// Include files referenced by changed elements (ensures pasted images sync)
+		// Even if we've "seen" the file, re-include it if its element changed
+		for (const element of changedElements) {
+			const fileId = element.fileId as string | undefined;
+			if (fileId && files[fileId] && !newFiles[fileId]) {
+				newFiles[fileId] = files[fileId];
+			}
+		}
+
 		if (changedElements.length === 0 && Object.keys(newFiles).length === 0) {
 			return; // No changes
 		}
 
-		// Accumulate pending update
-		if (this.pendingUpdate) {
-			this.pendingUpdate.elements.push(...changedElements);
-			Object.assign(this.pendingUpdate.files, newFiles);
-		} else {
-			this.pendingUpdate = {
-				elements: changedElements,
-				files: newFiles,
-			};
+		// Accumulate pending updates (Map ensures only latest version per element)
+		for (const element of changedElements) {
+			this.pendingElements.set(element.id, element);
 		}
+		Object.assign(this.pendingFiles, newFiles);
 
 		// Debounce
 		if (this.debounceTimer) {
@@ -86,20 +89,23 @@ export class SyncEngine {
 	}
 
 	private flush(): void {
-		if (!this.pendingUpdate) return;
+		if (this.pendingElements.size === 0 && Object.keys(this.pendingFiles).length === 0) {
+			return;
+		}
 
-		this.seq++;
+		this.localSeq++;
 
 		this.sendMessage("whiteboard.update", {
-			elements: this.pendingUpdate.elements,
+			elements: Array.from(this.pendingElements.values()),
 			files:
-				Object.keys(this.pendingUpdate.files).length > 0
-					? this.pendingUpdate.files
+				Object.keys(this.pendingFiles).length > 0
+					? this.pendingFiles
 					: undefined,
-			seq: this.seq,
+			seq: this.localSeq,
 		});
 
-		this.pendingUpdate = null;
+		this.pendingElements.clear();
+		this.pendingFiles = {};
 	}
 
 	/**
@@ -123,8 +129,8 @@ export class SyncEngine {
 		currentElements: readonly ExcalidrawElement[],
 		update: { elements: ExcalidrawElement[]; seq: number },
 	): ExcalidrawElement[] {
-		// Skip old updates
-		if (update.seq <= this.seq) {
+		// Skip already-processed remote updates (prevents duplicate processing)
+		if (update.seq <= this.remoteSeq) {
 			return [...currentElements];
 		}
 
@@ -134,15 +140,17 @@ export class SyncEngine {
 			if (element.isDeleted) {
 				elementMap.delete(element.id);
 			} else {
-				// Remote wins for remote elements
+				// Use per-element versioning for conflict resolution
 				const existing = elementMap.get(element.id);
-				if (!existing || existing.version <= element.version) {
+				if (!existing || existing.version < element.version) {
 					elementMap.set(element.id, element);
+					// Update our tracking to avoid re-sending this element
+					this.lastElements.set(element.id, element);
 				}
 			}
 		}
 
-		this.seq = update.seq;
+		this.remoteSeq = update.seq;
 		return Array.from(elementMap.values());
 	}
 
@@ -152,8 +160,10 @@ export class SyncEngine {
 	reset(): void {
 		this.lastElements.clear();
 		this.lastFiles.clear();
-		this.seq = 0;
-		this.pendingUpdate = null;
+		this.localSeq = 0;
+		this.remoteSeq = 0;
+		this.pendingElements.clear();
+		this.pendingFiles = {};
 		if (this.debounceTimer) {
 			clearTimeout(this.debounceTimer);
 			this.debounceTimer = null;
@@ -165,6 +175,6 @@ export class SyncEngine {
 	 */
 	loadSnapshot(elements: readonly ExcalidrawElement[], seq: number): void {
 		this.lastElements = new Map(elements.map((e) => [e.id, e]));
-		this.seq = seq;
+		this.remoteSeq = seq;
 	}
 }

@@ -12,7 +12,7 @@
  * ```
  */
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { createLogger } from "@q9labs/chalk-core";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
@@ -144,8 +144,6 @@ function WhiteboardPanelBase({
 		sendUpdate,
 		sendCursor,
 		requestSync,
-		notifyOpen,
-		notifyClose,
 	} = useWhiteboard();
 	const { canGrant, grantAll, revokeAll } = useWhiteboardPermissions();
 
@@ -255,18 +253,22 @@ function WhiteboardPanelBase({
 						[],
 					);
 
-					// Canvas background - always dark for better drawing experience
-					const backgroundColor = "#121212";
+					// Theme-aware colors: dark theme = dark canvas, light theme = light canvas
+					const isDark = resolvedTheme === "dark";
+					const backgroundColor = isDark ? "#121212" : "#ffffff";
+					// Stroke color: contrasts with canvas (light on dark, dark on light)
+					const strokeColor = isDark ? "#ffffff" : "#1e1e1e";
 
 					return React.createElement(Excalidraw, {
 						excalidrawAPI: (api: unknown) => {
 							excalidrawRef.current = api;
 						},
-						theme: "dark",
+						theme: resolvedTheme,
 						initialData: {
 							appState: {
 								viewBackgroundColor: backgroundColor,
-								theme: "dark",
+								theme: resolvedTheme,
+								currentItemStrokeColor: strokeColor,
 							},
 						},
 						onChange: handleChange,
@@ -307,15 +309,6 @@ function WhiteboardPanelBase({
 		};
 	}, [canDraw, excalidrawCssPath, resolvedTheme, sendCursor, sendUpdate]);
 
-	// Notify others when visibility changes
-	useEffect(() => {
-		if (isVisible) {
-			notifyOpen();
-		} else {
-			notifyClose();
-		}
-	}, [isVisible, notifyOpen, notifyClose]);
-
 	// Request initial sync
 	useEffect(() => {
 		requestSync();
@@ -339,20 +332,17 @@ function WhiteboardPanelBase({
 		excalidrawRef.current.updateScene({ elements: merged });
 	}, [latestUpdate]);
 
-	// Close on Escape key
-	const handleKeyDown = useCallback(
-		(e: KeyboardEvent) => {
-			if (e.key === "Escape") {
-				onClose?.();
-			}
-		},
-		[onClose],
-	);
-
-	useEffect(() => {
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [handleKeyDown]);
+	// UI styling based on canvas background (dark canvas = light UI, light canvas = dark UI)
+	const isDarkTheme = resolvedTheme === "dark";
+	// Dark theme = dark canvas (#121212), needs light UI
+	// Light theme = light canvas (#ffffff), needs dark UI
+	const isDarkCanvas = isDarkTheme;
+	const pillBg = isDarkCanvas ? "bg-black/50" : "bg-white/80";
+	const pillBorder = isDarkCanvas ? "border-white/10" : "border-black/10";
+	const pillText = isDarkCanvas ? "text-white/90" : "text-black/90";
+	const buttonText = isDarkCanvas ? "text-white/70 hover:text-white" : "text-black/70 hover:text-black";
+	const buttonHover = isDarkCanvas ? "hover:bg-white/10" : "hover:bg-black/10";
+	const dividerBg = isDarkCanvas ? "bg-white/10" : "bg-black/10";
 
 	return (
 		<div
@@ -366,19 +356,19 @@ function WhiteboardPanelBase({
 			{/* Excalidraw Container */}
 			<div className="h-full w-full relative">
 				{/* Top-left title pill */}
-				<div className="absolute top-4 left-4 z-10 rounded-full px-3 py-1.5 bg-black/50 backdrop-blur-md border border-white/10 flex items-center gap-2">
+				<div className={cn("absolute top-4 left-4 z-10 rounded-full px-3 py-1.5 backdrop-blur-md border flex items-center gap-2", pillBg, pillBorder)}>
 					<PencilIcon />
-					<span className="text-white/90 text-sm font-medium">Whiteboard</span>
+					<span className={cn("text-sm font-medium", pillText)}>Whiteboard</span>
 				</div>
 
 				{/* Top-right actions pill */}
-				<div className="absolute top-4 right-4 z-10 rounded-lg p-1 bg-black/40 backdrop-blur-md border border-white/10 flex items-center gap-1">
+				<div className={cn("absolute top-4 right-4 z-10 rounded-lg p-1 backdrop-blur-md border flex items-center gap-1", pillBg, pillBorder)}>
 					{canGrant && (
 						<>
 							<button
 								type="button"
 								onClick={grantAll}
-								className="w-8 h-8 rounded-md flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+								className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
 								aria-label="Enable drawing for all"
 								title="Enable All"
 							>
@@ -387,37 +377,25 @@ function WhiteboardPanelBase({
 							<button
 								type="button"
 								onClick={revokeAll}
-								className="w-8 h-8 rounded-md flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+								className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
 								aria-label="Disable drawing for all"
 								title="Disable All"
 							>
 								<LockIcon />
 							</button>
-							<div className="w-px h-5 bg-white/10 mx-0.5" />
+							<div className={cn("w-px h-5 mx-0.5", dividerBg)} />
 						</>
 					)}
 					<button
 						type="button"
 						onClick={onClose}
-						className="w-8 h-8 rounded-md flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+						className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
 						aria-label="Close whiteboard"
 					>
 						<XIcon />
 					</button>
 				</div>
 
-				{/* Bottom-left status pill */}
-				<div className="absolute bottom-4 left-4 z-10 rounded-full px-3 py-1.5 bg-black/50 backdrop-blur-md border border-white/10 flex items-center gap-2">
-					<div
-						className={cn(
-							"w-2 h-2 rounded-full",
-							canDraw ? "bg-[#1bb6a6]" : "bg-red-500",
-						)}
-					/>
-					<span className="text-white/90 text-sm">
-						{canDraw ? "You can draw" : "View only"}
-					</span>
-				</div>
 				{/* Loading state */}
 				{(!isReady || !cssLoaded) && !loadError && (
 					<div className="absolute inset-0 flex items-center justify-center text-foreground bg-background z-20">

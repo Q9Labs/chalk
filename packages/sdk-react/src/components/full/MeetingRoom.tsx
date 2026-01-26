@@ -2,7 +2,7 @@ import type React from "react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
-import { ColumnIcon, LayoutGridIcon, Maximize01Icon } from "../../utils/icons";
+import { ColumnIcon, LayoutGridIcon, Maximize01Icon, Moon02Icon, Sun02Icon } from "../../utils/icons";
 import { AudioRenderer, ReactionBubble } from "../atomic";
 import { Toggle, Tooltip, TooltipTrigger, TooltipContent } from "../ui";
 import {
@@ -186,7 +186,33 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	const [showInviteToast, setShowInviteToast] = useState(showInviteToastOnJoin);
 	const [showTour, setShowTour] = useState(false);
 	const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+	const [isExiting, setIsExiting] = useState(false);
 	const isMobile = useIsMobile();
+	const [isDarkMode, setIsDarkMode] = useState(() => {
+		if (typeof document !== "undefined" && document.documentElement.classList.contains("dark")) {
+			return true;
+		}
+		return theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+	});
+
+	const handleLeave = useCallback(() => {
+		setIsExiting(true);
+		// Wait for animation to complete before calling onLeave
+		setTimeout(() => {
+			onLeave?.();
+		}, 600);
+	}, [onLeave]);
+
+	const toggleTheme = useCallback(() => {
+		setIsDarkMode((prev) => {
+			const newValue = !prev;
+			if (typeof document !== "undefined") {
+				document.documentElement.classList.remove("light", "dark");
+				document.documentElement.classList.add(newValue ? "dark" : "light");
+			}
+			return newValue;
+		});
+	}, []);
 
 	useEffect(() => {
 		if (enableTour && showTourOnFirstVisit) {
@@ -264,8 +290,8 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 		<div
 			data-chalk
 			className={cn(
-				"chalk-root relative h-screen w-full overflow-hidden flex flex-col bg-zinc-950 text-white", // Deep background
-				isMobile ? "p-2" : "p-0", // Remove padding on desktop for full immersion
+				"chalk-root chalk-theme-transition relative h-screen w-full overflow-hidden flex flex-col bg-background text-foreground",
+				isMobile ? "p-2" : "p-0",
 				className,
 			)}
 			data-chalk-theme={theme === "system" ? undefined : theme}
@@ -277,54 +303,68 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					onMouseEnter={(e) => e.currentTarget.dataset.hovered = "true"}
 					onMouseLeave={(e) => e.currentTarget.dataset.hovered = "false"}
 				>
-					<div className="flex bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-						<Tooltip>
-							<TooltipTrigger
-								render={
-									<Toggle
-										pressed={layout === "grid"}
-										onPressedChange={() => setLayout("grid")}
-										aria-label="Grid layout"
-										className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-8 h-8 p-0"
-									/>
-								}
-							>
-								<LayoutGridIcon className="w-4 h-4" />
-							</TooltipTrigger>
-							<TooltipContent side="bottom">Grid</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger
-								render={
-									<Toggle
-										pressed={layout === "spotlight"}
-										onPressedChange={() => setLayout("spotlight")}
-										aria-label="Spotlight layout"
-										className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-8 h-8 p-0"
-									/>
-								}
-							>
-								<Maximize01Icon className="w-4 h-4" />
-							</TooltipTrigger>
-							<TooltipContent side="bottom">Spotlight</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger
-								render={
-									<Toggle
-										pressed={layout === "sidebar"}
-										onPressedChange={() => setLayout("sidebar")}
-										aria-label="Sidebar layout"
-										className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-8 h-8 p-0"
-									/>
-								}
-							>
-								<ColumnIcon className="w-4 h-4" />
-							</TooltipTrigger>
-							<TooltipContent side="bottom">Sidebar</TooltipContent>
-						</Tooltip>
-					</div>
-				</div>
+										<div className="flex bg-black/40 backdrop-blur-md rounded-lg p-0.5 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-0.5">
+											<Tooltip>
+												<TooltipTrigger
+													render={
+														<button
+															onClick={toggleTheme}
+															className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+															aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+														>
+															{isDarkMode ? <Sun02Icon className="w-3.5 h-3.5" /> : <Moon02Icon className="w-3.5 h-3.5" />}
+														</button>
+													}
+												/>
+												<TooltipContent side="bottom">{isDarkMode ? "Light Mode" : "Dark Mode"}</TooltipContent>
+											</Tooltip>
+											<div className="w-px bg-white/10 my-1" />
+											<Tooltip>
+												<TooltipTrigger
+													render={
+														<Toggle
+															pressed={layout === "grid"}
+															onPressedChange={() => setLayout("grid")}
+															aria-label="Grid layout"
+															className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-7 h-7 p-0"
+														/>
+													}
+												>
+													<LayoutGridIcon className="w-3.5 h-3.5" />
+												</TooltipTrigger>
+												<TooltipContent side="bottom">Grid</TooltipContent>
+											</Tooltip>
+											<Tooltip>
+												<TooltipTrigger
+													render={
+														<Toggle
+															pressed={layout === "spotlight"}
+															onPressedChange={() => setLayout("spotlight")}
+															aria-label="Spotlight layout"
+															className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-7 h-7 p-0"
+														/>
+													}
+												>
+													<Maximize01Icon className="w-3.5 h-3.5" />
+												</TooltipTrigger>
+												<TooltipContent side="bottom">Spotlight</TooltipContent>
+											</Tooltip>
+											<Tooltip>
+												<TooltipTrigger
+													render={
+														<Toggle
+															pressed={layout === "sidebar"}
+															onPressedChange={() => setLayout("sidebar")}
+															aria-label="Sidebar layout"
+															className="data-[pressed]:bg-teal-600 data-[pressed]:text-white text-zinc-400 hover:text-white rounded-md w-7 h-7 p-0"
+														/>
+													}
+												>
+													<ColumnIcon className="w-3.5 h-3.5" />
+												</TooltipTrigger>
+												<TooltipContent side="bottom">Sidebar</TooltipContent>
+											</Tooltip>
+										</div>				</div>
 			)}
 
 			{/* Main content area - Split View */}
@@ -332,10 +372,14 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				className={cn(
 					"flex-1 min-h-0 relative flex flex-row overflow-hidden",
 					isMobile ? "gap-2 pt-2" : "gap-4 px-4 pt-4",
+					isExiting && "pointer-events-none"
 				)}
 			>
 				{/* Stage / Video Grid */}
-				<div className="flex-1 h-full min-w-0 relative flex flex-col rounded-3xl overflow-hidden">
+				<div className={cn(
+					"flex-1 h-full min-w-0 relative flex flex-col rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]",
+					isExiting && "chalk-animate-void-exit"
+				)}>
 					{showScreenShare && screenSharer?.screenShareTrack ? (
 						<ScreenShareView
 							screenShareTrack={screenSharer.screenShareTrack}
@@ -521,7 +565,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						onToggleWhiteboard={
 							enableWhiteboard ? onToggleWhiteboard : undefined
 						}
-						onLeave={onLeave}
+						onLeave={handleLeave}
 						onToggleChat={enableChat ? () => togglePanel("chat") : undefined}
 						onToggleParticipants={() => togglePanel("participants")}
 						onToggleTranscription={
@@ -536,7 +580,10 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 							enableReactions ? () => setIsReactionPickerOpen(true) : undefined
 						}
 						onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
-						className={isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2" : ""}
+						className={cn(
+							isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2" : "",
+							isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up"
+						)}
 					/>
 					{enableReactions && !isMobile && (
 						<ReactionPicker
@@ -566,6 +613,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				<WhiteboardPanel
 					isVisible={isWhiteboardOpen}
 					onClose={onToggleWhiteboard}
+					theme={theme === "system" ? "auto" : theme}
 				/>
 			)}
 

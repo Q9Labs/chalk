@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChalkSession } from '../context/chalk-provider';
+import { SOUND_DATA } from '../assets/sound-data';
 
 export type SoundEffect =
   | 'join'
@@ -17,10 +18,9 @@ export type SoundEffect =
 export interface UseSoundEffectsOptions {
   enabled?: boolean;
   volume?: number;
+  /** Custom path to sound files. If set, disables bundled sounds. */
   basePath?: string;
   autoSubscribe?: boolean;
-  /** Use bundled sounds from node_modules (zero-config) */
-  useBundled?: boolean;
 }
 
 export interface UseSoundEffectsReturn {
@@ -57,20 +57,13 @@ const SOUND_FILES: Record<SoundEffect, string> = {
   tourStep: 'click.mp3',
 };
 
-const BUNDLED_SOUNDS_PATH = '/node_modules/@q9labs/chalk-react/dist/assets/sounds';
-
 export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundEffectsReturn {
   const {
     enabled: initialEnabled = true,
     volume: initialVolume = 0.5,
     basePath,
     autoSubscribe = false,
-    useBundled = false,
   } = options;
-
-  const effectiveBasePath = useBundled
-    ? BUNDLED_SOUNDS_PATH
-    : (basePath ?? '/sounds');
 
   const { session } = useChalkSession();
   const [enabled, setEnabled] = useState(initialEnabled);
@@ -80,11 +73,15 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
   const play = useCallback((sound: SoundEffect) => {
     if (!enabled || typeof window === 'undefined') return;
 
-    const soundPath = `${effectiveBasePath}/${SOUND_FILES[sound]}`;
+    // Use custom basePath if provided, otherwise use bundled data URLs
+    const soundSrc = basePath
+      ? `${basePath}/${SOUND_FILES[sound]}`
+      : SOUND_DATA[sound];
+
     let audio = audioCache.current.get(sound);
 
-    if (!audio) {
-      audio = new Audio(soundPath);
+    if (!audio || (basePath && !audio.src.startsWith(basePath))) {
+      audio = new Audio(soundSrc);
       audioCache.current.set(sound, audio);
     }
 
@@ -93,7 +90,7 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
     audio.play().catch(() => {
       // Silently fail if autoplay blocked
     });
-  }, [enabled, volume, effectiveBasePath]);
+  }, [enabled, volume, basePath]);
 
   // Auto-subscribe to session events
   useEffect(() => {

@@ -94,8 +94,8 @@ export const ReactionPicker = React.memo(({
       <div
         className={cn(
           "absolute z-50 w-80 rounded-2xl shadow-2xl overflow-hidden",
-          "bg-zinc-900/95 backdrop-blur-xl",
-          "border border-teal-500/20",
+          "bg-popover/95 backdrop-blur-xl",
+          "border border-border",
           "ring-1 ring-white/5",
           !prefersReducedMotion && "animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200",
           position === 'top' ? "bottom-full mb-3" : "top-full mt-3",
@@ -106,11 +106,11 @@ export const ReactionPicker = React.memo(({
         aria-label="Reaction picker"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <h3 className="text-sm font-semibold text-white">Reactions</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+          <h3 className="text-sm font-semibold text-popover-foreground">Reactions</h3>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded-lg text-muted-foreground hover:text-popover-foreground hover:bg-accent transition-colors"
             aria-label="Close"
           >
             <Cancel01Icon size={16} />
@@ -118,7 +118,7 @@ export const ReactionPicker = React.memo(({
         </div>
 
         {/* Category Tabs */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-white/10 bg-white/5">
+        <div className="flex items-center gap-1 px-3 py-2 border-b border-border/50 bg-accent/30">
           {categories.map(([key, category]) => (
             <button
               key={key}
@@ -126,8 +126,8 @@ export const ReactionPicker = React.memo(({
               className={cn(
                 "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
                 activeCategory === key
-                  ? "bg-teal-500 text-white shadow-lg shadow-teal-500/25"
-                  : "text-zinc-400 hover:text-white hover:bg-white/10"
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                  : "text-muted-foreground hover:text-popover-foreground hover:bg-accent"
               )}
               aria-label={key === 'recent' ? 'Recent reactions' : `${category.label} category`}
             >
@@ -137,7 +137,7 @@ export const ReactionPicker = React.memo(({
         </div>
 
         {/* Emoji Grid */}
-        <div className="p-3 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+        <div className="p-3 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
           <div className="grid grid-cols-8 gap-1">
             {currentEmojis.map((emoji, index) => (
               <button
@@ -146,7 +146,7 @@ export const ReactionPicker = React.memo(({
                 className={cn(
                   "w-9 h-9 flex items-center justify-center rounded-lg text-xl",
                   "transition-all duration-150",
-                  "hover:bg-teal-500/20 hover:scale-110",
+                  "hover:bg-primary/20 hover:scale-110",
                   "active:scale-95",
                   !prefersReducedMotion && "hover:animate-pulse"
                 )}
@@ -159,9 +159,9 @@ export const ReactionPicker = React.memo(({
         </div>
 
         {/* Footer hint */}
-        <div className="px-4 py-2 border-t border-white/10 bg-white/5">
-          <p className="text-xs text-zinc-500 text-center">
-            Click to react • <span className="text-teal-400">Esc</span> to close
+        <div className="px-4 py-2 border-t border-border/50 bg-accent/30">
+          <p className="text-xs text-muted-foreground text-center">
+            Click to react • <span className="text-primary">Esc</span> to close
           </p>
         </div>
       </div>
