@@ -81,7 +81,7 @@ resource "aws_ecr_repository_policy" "api" {
 
 resource "aws_ecr_repository" "whisper" {
   name                 = "${local.name}-whisper"
-  image_tag_mutability = var.image_tag_mutability
+  image_tag_mutability = "MUTABLE" # Mutable for latest tag updates
 
   image_scanning_configuration {
     scan_on_push = true
