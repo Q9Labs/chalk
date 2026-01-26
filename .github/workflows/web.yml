@@ -42,6 +42,8 @@ jobs:
       - name: Prune monorepo for web app only
         run: |
           bunx turbo prune web
+          # Copy root config files needed for builds
+          cp tsconfig.json turbo.json out/
           # Fix workspaces to only include pruned packages
           cd out
           node -e "
