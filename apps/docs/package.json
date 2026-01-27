@@ -1,0 +1,21 @@
+{
+	"name": "docs",
+	"type": "module",
+	"version": "0.0.1",
+	"scripts": {
+		"dev": "astro dev --port 3071",
+		"build": "astro build",
+		"preview": "astro preview",
+		"deploy": "bun run build && bun run alchemy.run.ts",
+		"destroy": "DESTROY=true bun run alchemy.run.ts"
+	},
+	"dependencies": {
+		"@astrojs/sitemap": "^3.3.0",
+		"@astrojs/starlight": "^0.31.0",
+		"@tailwindcss/vite": "^4.0.6",
+		"alchemy": "^0.83.1",
+		"astro": "^5.2.0",
+		"sharp": "^0.33.0",
+		"tailwindcss": "^4.0.6"
+	}
+}

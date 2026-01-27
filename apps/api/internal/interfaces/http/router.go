@@ -183,9 +183,6 @@ func (r *Router) setupRoutes() {
 		v1.POST("/auth/token", authHandler.Token)
 		v1.POST("/auth/refresh", authHandler.Refresh)
 
-		demoHandler := handlers.NewDemoHandler(r.queries, r.roomService, r.participantService)
-		v1.POST("/demo/join", demoHandler.Join)
-
 		// What's New - public endpoints for release info
 		whatsNew := handlers.NewWhatsNewHandler(r.githubClient, r.redisClient, r.storageR2, r.appConfig.GitHub.CacheTTL)
 		v1.GET("/whats-new", whatsNew.Get)

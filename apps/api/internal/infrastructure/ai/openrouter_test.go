@@ -32,7 +32,7 @@ func TestOpenRouterProvider_GenerateSummary_Success(t *testing.T) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-		assert.Equal(t, "https://chalk.dev", r.Header.Get("HTTP-Referer"))
+		assert.Equal(t, "https://chalk-api.q9labs.ai", r.Header.Get("HTTP-Referer"))
 
 		// Decode request to verify structure
 		var req map[string]any

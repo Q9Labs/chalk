@@ -1,8 +1,12 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +17,73 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 )
+
+// MockR2Client is a mock implementation of StorageClient for testing
+type MockR2Client struct {
+	mu      sync.RWMutex
+	files   map[string][]byte
+	deleted map[string]bool
+}
+
+func NewMockR2Client() *MockR2Client {
+	return &MockR2Client{
+		files:   make(map[string][]byte),
+		deleted: make(map[string]bool),
+	}
+}
+
+func (m *MockR2Client) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	m.files[key] = data
+	delete(m.deleted, key)
+	return nil
+}
+
+func (m *MockR2Client) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	data, ok := m.files[key]
+	if !ok {
+		return nil, fmt.Errorf("file not found: %s", key)
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+func (m *MockR2Client) GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	return fmt.Sprintf("https://mock.storage/%s?expires=%d", key, expiry.Milliseconds()), nil
+}
+
+func (m *MockR2Client) Delete(ctx context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.files, key)
+	m.deleted[key] = true
+	return nil
+}
+
+func (m *MockR2Client) Exists(ctx context.Context, key string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.files[key]
+	return exists, nil
+}
+
+func (m *MockR2Client) ListByPrefix(ctx context.Context, prefix string) ([]StorageObject, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var objects []StorageObject
+	for key := range m.files {
+		if strings.HasPrefix(key, prefix) {
+			objects = append(objects, StorageObject{Key: key, Size: int64(len(m.files[key]))})
+		}
+	}
+	return objects, nil
+}
 
 type MockRecordingArchiver struct {
 	recordings    []db.Recording

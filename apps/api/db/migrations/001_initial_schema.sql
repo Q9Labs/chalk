@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     max_concurrent_rooms INT NOT NULL DEFAULT 100,
     max_participants_per_room INT NOT NULL DEFAULT 10,
     max_recording_duration_minutes INT NOT NULL DEFAULT 120,
+    max_total_minutes_of_meetings INT NOT NULL DEFAULT 1000,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

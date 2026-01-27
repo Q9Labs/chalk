@@ -37,18 +37,15 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
-// IsConfigured returns true if the client has valid Cloudflare credentials
 func (c *Client) IsConfigured() bool {
 	return c.accountID != "" && c.appID != "" && c.apiToken != ""
 }
 
-// endpoint builds the full API endpoint URL
 func (c *Client) endpoint(path string) string {
 	return fmt.Sprintf("%s/accounts/%s/realtime/kit/%s%s",
 		c.baseURL, c.accountID, c.appID, path)
 }
 
-// doRequest performs an HTTP request with proper headers
 func (c *Client) doRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
@@ -74,11 +71,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 // Returns mock data if Cloudflare is not configured (for demo/testing)
 func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*Meeting, error) {
 	if !c.IsConfigured() {
-		// Return mock meeting for demo mode when Cloudflare is not configured
-		return &Meeting{
-			ID:     fmt.Sprintf("demo-%d", time.Now().UnixNano()),
-			Status: "active",
-		}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
 	resp, err := c.doRequest(ctx, "POST", "/meetings", req)
@@ -103,7 +96,6 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	// Check both Data and Result fields
 	if result.Result != nil {
 		return result.Result, nil
 	}
@@ -118,7 +110,7 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 // GetMeeting retrieves meeting details from Cloudflare RealtimeKit
 func (c *Client) GetMeeting(ctx context.Context, meetingID string) (*Meeting, error) {
 	if !c.IsConfigured() {
-		return &Meeting{ID: meetingID, Status: "active"}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
 	path := fmt.Sprintf("/meetings/%s", meetingID)
@@ -143,7 +135,8 @@ func (c *Client) GetMeeting(ctx context.Context, meetingID string) (*Meeting, er
 // EndMeeting ends a meeting by updating its status to INACTIVE
 func (c *Client) EndMeeting(ctx context.Context, meetingID string) (*Meeting, error) {
 	if !c.IsConfigured() {
-		return &Meeting{ID: meetingID, Status: "inactive"}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
+
 	}
 
 	path := fmt.Sprintf("/meetings/%s", meetingID)
@@ -170,11 +163,7 @@ func (c *Client) EndMeeting(ctx context.Context, meetingID string) (*Meeting, er
 // AddParticipant adds a participant to a meeting and returns their auth token
 func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddParticipantRequest) (*Participant, error) {
 	if !c.IsConfigured() {
-		// Return mock participant with demo token for testing
-		return &Participant{
-			ID:    fmt.Sprintf("demo-participant-%d", time.Now().UnixNano()),
-			Token: "demo-token-not-for-production",
-		}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
 	// DEBUG: Log request being sent to Cloudflare
@@ -223,7 +212,7 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 func (c *Client) RemoveParticipant(ctx context.Context, meetingID, participantID string) error {
 	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
-		return nil
+		return fmt.Errorf("cloudflare is not configured")
 	}
 
 	path := fmt.Sprintf("/meetings/%s/participants/%s", meetingID, participantID)
@@ -249,10 +238,7 @@ func (c *Client) RemoveParticipant(ctx context.Context, meetingID, participantID
 func (c *Client) RefreshParticipantToken(ctx context.Context, meetingID, participantID string) (*Participant, error) {
 	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
-		return &Participant{
-			ID:    participantID,
-			Token: "demo-refreshed-token-not-for-production",
-		}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
 	path := fmt.Sprintf("/meetings/%s/participants/%s/token", meetingID, participantID)
@@ -278,10 +264,7 @@ func (c *Client) RefreshParticipantToken(ctx context.Context, meetingID, partici
 func (c *Client) StartRecording(ctx context.Context, meetingID string, req StartRecordingRequest) (*Recording, error) {
 	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
-		return &Recording{
-			ID:     fmt.Sprintf("demo-recording-%d", time.Now().UnixNano()),
-			Status: "recording",
-		}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
 	body := map[string]interface{}{
@@ -323,12 +306,8 @@ func (c *Client) StartRecording(ctx context.Context, meetingID string, req Start
 
 // StopRecording stops an active recording
 func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Recording, error) {
-	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
-		return &Recording{
-			ID:     recordingID,
-			Status: "stopped",
-		}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
 	path := fmt.Sprintf("/recordings/%s", recordingID)
@@ -354,12 +333,9 @@ func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Record
 
 // GetRecording retrieves recording details
 func (c *Client) GetRecording(ctx context.Context, recordingID string) (*Recording, error) {
-	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
-		return &Recording{
-			ID:     recordingID,
-			Status: "ready",
-		}, nil
+		return nil, fmt.Errorf("cloudflare is not configured")
+
 	}
 
 	path := fmt.Sprintf("/recordings/%s", recordingID)
@@ -383,7 +359,6 @@ func (c *Client) GetRecording(ctx context.Context, recordingID string) (*Recordi
 
 // KickAllParticipants ends an active session by kicking all participants
 func (c *Client) KickAllParticipants(ctx context.Context, meetingID string) error {
-	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
 		return nil
 	}
@@ -409,7 +384,6 @@ func (c *Client) KickAllParticipants(ctx context.Context, meetingID string) erro
 
 // GetActiveRecording retrieves the active recording for a meeting
 func (c *Client) GetActiveRecording(ctx context.Context, meetingID string) (*Recording, error) {
-	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("no active recording (mock mode)")
 	}

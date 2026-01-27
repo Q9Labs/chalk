@@ -5,7 +5,7 @@
 // - CLOUDFLARE_ACCOUNT_ID
 // - CLOUDFLARE_APP_ID
 // - CLOUDFLARE_API_TOKEN
-// - API_PUBLIC_URL (e.g., https://api.chalk.dev)
+// - API_PUBLIC_URL (e.g., https://chalk-api.q9labs.ai)
 package main
 
 import (

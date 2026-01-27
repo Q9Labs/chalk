@@ -6,7 +6,6 @@ import (
 	"strconv"
 )
 
-// Config holds all application configuration
 type Config struct {
 	Server      ServerConfig
 	Database    DatabaseConfig
@@ -21,13 +20,11 @@ type Config struct {
 	PostMeeting PostMeetingConfig
 }
 
-// ServerConfig holds server configuration
 type ServerConfig struct {
 	Port string
 	Env  string
 }
 
-// DatabaseConfig holds database configuration
 type DatabaseConfig struct {
 	URL      string
 	Host     string
@@ -38,7 +35,6 @@ type DatabaseConfig struct {
 	SSLMode  string
 }
 
-// RedisConfig holds Redis configuration
 type RedisConfig struct {
 	URL      string
 	Host     string
@@ -47,28 +43,23 @@ type RedisConfig struct {
 	TLS      bool
 }
 
-// CloudflareConfig holds Cloudflare RealtimeKit configuration
 type CloudflareConfig struct {
 	AccountID     string
 	AppID         string
 	APIToken      string
-	WebhookSecret string // CLOUDFLARE_WEBHOOK_SECRET - for verifying incoming webhooks
+	WebhookSecret string
 }
 
-// APIConfig holds API server configuration
 type APIConfig struct {
 	PublicURL string // API_PUBLIC_URL - public URL for webhook registration
 }
 
-// JWTConfig holds JWT configuration
 type JWTConfig struct {
 	SigningKey    string
 	ExpiryMinutes int
 }
 
-// StorageConfig holds storage configuration for R2 and S3
 type StorageConfig struct {
-	// R2 (Cloudflare)
 	R2AccountID       string
 	R2AccessKeyID     string
 	R2SecretAccessKey string
@@ -82,43 +73,35 @@ type StorageConfig struct {
 	S3BucketName      string
 }
 
-// GitHubConfig holds GitHub API configuration for What's New feature
 type GitHubConfig struct {
-	Token    string // GITHUB_TOKEN (optional, unauthenticated if empty)
-	Owner    string // GITHUB_OWNER
-	Repo     string // GITHUB_REPO
-	CacheTTL int    // WHATS_NEW_CACHE_TTL (minutes)
+	Token    string
+	Owner    string
+	Repo     string
+	CacheTTL int // (minutes)
 }
 
-// AxiomConfig holds Axiom logging configuration
 type AxiomConfig struct {
 	Token   string // AXIOM_TOKEN (required for Axiom, falls back to stdout if empty)
-	Dataset string // AXIOM_DATASET (default: chalk-api)
+	Dataset string // AXIOM_DATASET (default: chalk-api | chalk-api-prod)
 }
 
-// CORSOriginsConfig holds configuration for CORS origins S3 sync
 type CORSOriginsConfig struct {
 	Bucket string // CORS_ORIGINS_BUCKET
 	Key    string // CORS_ORIGINS_KEY (default: cors/allowed-origins.json)
 }
 
-// PostMeetingConfig holds post-meeting transcription and AI configuration
 type PostMeetingConfig struct {
-	// Transcription
-	TranscriptionDefaultProvider string // POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER (default: groq)
+	TranscriptionDefaultProvider string // POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER (default: whisper)
 	GroqAPIKey                   string // POST_MEETING_GROQ_API_KEY
-	WhisperEnabled               bool   // POST_MEETING_WHISPER_ENABLED (default: false)
+	WhisperEnabled               bool   // POST_MEETING_WHISPER_ENABLED (default: true)
 	WhisperRedisQueue            string // POST_MEETING_WHISPER_REDIS_QUEUE (default: transcription:jobs)
 
-	// AI Generation
 	AIDefaultProvider      string // POST_MEETING_AI_DEFAULT_PROVIDER (default: openrouter)
 	OpenRouterAPIKey       string // POST_MEETING_OPENROUTER_API_KEY
 	OpenRouterDefaultModel string // POST_MEETING_OPENROUTER_DEFAULT_MODEL (default: z-ai/glm-4.7-flash)
 }
 
-// Load loads configuration from environment variables
 func Load() (*Config, error) {
-	// Database config - prefer URL, fallback to parts
 	dbURL := getEnv("DATABASE_URL", "postgres://postgres:hello123@localhost:5432/chalk?sslmode=disable")
 	dbHost := getEnv("DATABASE_HOST", "localhost")
 	dbPort := getEnv("DATABASE_PORT", "5432")
@@ -135,7 +118,6 @@ func Load() (*Config, error) {
 			dbUser, dbHost, dbPort, dbName, dbSSLMode)
 	}
 
-	// Redis config - prefer URL, fallback to parts
 	redisURL := getEnv("REDIS_URL", "")
 	redisHost := getEnv("REDIS_HOST", "localhost")
 	redisPort := getEnv("REDIS_PORT", "6379")
@@ -214,7 +196,7 @@ func Load() (*Config, error) {
 			Key:    getEnv("CORS_ORIGINS_KEY", "cors/allowed-origins.json"),
 		},
 		PostMeeting: PostMeetingConfig{
-			TranscriptionDefaultProvider: getEnv("POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER", "groq"),
+			TranscriptionDefaultProvider: getEnv("POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER", "whisper"),
 			GroqAPIKey:                   getEnv("POST_MEETING_GROQ_API_KEY", ""),
 			WhisperEnabled:               getEnvBool("POST_MEETING_WHISPER_ENABLED", false),
 			WhisperRedisQueue:            getEnv("POST_MEETING_WHISPER_REDIS_QUEUE", "transcription:jobs"),
@@ -224,7 +206,6 @@ func Load() (*Config, error) {
 		},
 	}
 
-	// Validate required fields
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -232,9 +213,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// validate checks that required configuration is present
 func (c *Config) validate() error {
-	// JWT secret is required in production - fail fast
 	devSecrets := []string{"", "development-secret-key", "chalk-dev-secret-change-in-production"}
 	isDevSecret := false
 	for _, s := range devSecrets {
@@ -247,34 +226,27 @@ func (c *Config) validate() error {
 		return fmt.Errorf("JWT_SIGNING_KEY must be set to a secure value in production (not empty or default)")
 	}
 
-	// Cloudflare config is optional - API can run in limited mode without real-time features
-	// Only validate if any Cloudflare config is provided (indicates intent to use)
-	hasCloudflareConfig := c.Cloudflare.AccountID != "" || c.Cloudflare.AppID != "" || c.Cloudflare.APIToken != ""
-	if hasCloudflareConfig {
-		if c.Cloudflare.AccountID == "" {
-			return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID is required when Cloudflare is configured")
-		}
-		if c.Cloudflare.AppID == "" {
-			return fmt.Errorf("CLOUDFLARE_APP_ID is required when Cloudflare is configured")
-		}
-		if c.Cloudflare.APIToken == "" {
-			return fmt.Errorf("CLOUDFLARE_API_TOKEN is required when Cloudflare is configured")
-		}
+	if c.Cloudflare.AccountID == "" {
+		return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID is required")
 	}
+	if c.Cloudflare.AppID == "" {
+		return fmt.Errorf("CLOUDFLARE_APP_ID is required")
+	}
+	if c.Cloudflare.APIToken == "" {
+		return fmt.Errorf("CLOUDFLARE_API_TOKEN is required")
+	}
+
 	return nil
 }
 
-// IsDevelopment returns true if running in development mode
 func (c *Config) IsDevelopment() bool {
 	return c.Server.Env == "development"
 }
 
-// IsProduction returns true if running in production mode
 func (c *Config) IsProduction() bool {
 	return c.Server.Env == "production"
 }
 
-// getEnv gets an environment variable or returns a default value
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -282,7 +254,6 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvInt gets an environment variable as int or returns a default value
 func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if i, err := strconv.Atoi(value); err == nil {
@@ -292,7 +263,6 @@ func getEnvInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
-// getEnvBool gets an environment variable as bool or returns a default value
 func getEnvBool(key string, defaultValue bool) bool {
 	if value := os.Getenv(key); value != "" {
 		if b, err := strconv.ParseBool(value); err == nil {

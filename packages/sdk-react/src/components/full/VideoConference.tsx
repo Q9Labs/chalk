@@ -173,6 +173,8 @@ export interface VideoConferenceProps {
 	userName: string;
 	/** Participant role - host gets recording controls, force_recording triggers */
 	role?: "host" | "participant";
+	/** Custom metadata to attach to this participant (e.g., { externalId: "user-123" }) */
+	metadata?: Record<string, unknown>;
 	features?: Features;
 	defaults?: Defaults;
 	theme?: Theme;
@@ -194,6 +196,7 @@ function VideoConferenceBase({
 	roomId,
 	userName,
 	role,
+	metadata,
 	features = {},
 	defaults = {},
 	theme: _theme,
@@ -482,6 +485,7 @@ function VideoConferenceBase({
 					role,
 					videoEnabled: settings.videoEnabled,
 					audioEnabled: settings.audioEnabled,
+					metadata,
 				});
 				setPhase("meeting");
 				play("join");
@@ -506,7 +510,7 @@ function VideoConferenceBase({
 				setPhase("lobby");
 			}
 		},
-		[join, roomId, role, localParticipant, recording.isRecording, play, onJoin, onError, isJoining, isConnected],
+		[join, roomId, role, metadata, localParticipant, recording.isRecording, play, onJoin, onError, isJoining, isConnected],
 	);
 
 	const handleLeave = useCallback(() => {

@@ -12,7 +12,7 @@ import (
 	domain "github.com/Q9Labs/chalk/internal/domain/ai"
 )
 
-const defaultModel = "google/gemini-2.0-flash-001"
+const defaultModel = "z-ai/glm-4.7-flash"
 
 // OpenRouterProvider implements AI analysis via OpenRouter API
 type OpenRouterProvider struct {
@@ -71,7 +71,7 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
 
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("HTTP-Referer", "https://chalk.dev")
+	req.Header.Set("HTTP-Referer", "https://chalk-api.q9labs.ai")
 	req.Header.Set("X-Title", "Chalk Meeting Transcription")
 
 	resp, err := p.client.Do(req)

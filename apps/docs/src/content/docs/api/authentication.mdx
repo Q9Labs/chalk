@@ -13,7 +13,7 @@ Chalk uses two authentication mechanisms:
 All tenant API endpoints require the `X-API-Key` header:
 
 ```bash
-curl -X GET https://api.chalk.dev/api/v1/tenants/tenant_abc123 \
+curl -X GET https://chalk-api.q9labs.ai/api/v1/tenants/tenant_abc123 \
   -H "X-API-Key: sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
@@ -89,7 +89,7 @@ Obtain new tokens using a refresh token.
 Include the access token in the `Authorization` header:
 
 ```bash
-curl -X GET https://api.chalk.dev/api/v1/rooms/room_abc123 \
+curl -X GET https://chalk-api.q9labs.ai/api/v1/rooms/room_abc123 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 

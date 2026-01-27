@@ -33,8 +33,6 @@ tags:
     description: Room participant management
   - name: Recordings
     description: Recording management and storage
-  - name: Demo
-    description: Demo mode endpoints (development only)
   - name: Webhooks
     description: Webhook handlers for external services
 
@@ -1064,51 +1062,6 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   # ============================================================================
-  # DEMO ENDPOINTS
-  # ============================================================================
-  /api/v1/demo/join:
-    post:
-      summary: Demo join room
-      description: |
-        Join a demo room without authentication. Only available when
-        CHALK_ENABLE_DEMO=true is set. Creates tenant and room if needed.
-      operationId: demoJoin
-      tags:
-        - Demo
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DemoJoinRequest'
-      responses:
-        '200':
-          description: Successfully joined demo room
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DemoJoinResponse'
-        '400':
-          description: Invalid request body
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DemoErrorResponse'
-        '403':
-          description: Demo mode is disabled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DemoErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DemoErrorResponse'
-
-  # ============================================================================
   # WEBHOOK ENDPOINTS
   # ============================================================================
   /api/v1/webhooks/cloudflare/recording:
@@ -1933,83 +1886,6 @@ components:
           format: uuid
           description: Recording ID
           example: 550e8400-e29b-41d4-a716-446655440003
-
-    # =========================================================================
-    # DEMO SCHEMAS
-    # =========================================================================
-    DemoJoinRequest:
-      type: object
-      required:
-        - room_id
-        - display_name
-      properties:
-        room_id:
-          type: string
-          description: Room name/ID to join (created if not exists)
-          example: demo-room-1
-        display_name:
-          type: string
-          description: Display name in the room
-          example: Demo User
-
-    DemoJoinResponse:
-      type: object
-      required:
-        - success
-        - room_id
-        - participant_id
-        - token
-        - auth_token
-        - room
-      properties:
-        success:
-          type: boolean
-          description: Whether join was successful
-          example: true
-        room_id:
-          type: string
-          description: Room UUID
-          example: 550e8400-e29b-41d4-a716-446655440001
-        participant_id:
-          type: string
-          description: Participant UUID
-          example: 550e8400-e29b-41d4-a716-446655440002
-        token:
-          type: string
-          description: JWT access token
-          example: eyJhbGciOiJIUzI1NiIs...
-        auth_token:
-          type: string
-          description: Cloudflare RealtimeKit token for SDK
-          example: cf_auth_token_xyz
-        room:
-          type: object
-          required:
-            - id
-            - name
-          properties:
-            id:
-              type: string
-              description: Room UUID
-              example: 550e8400-e29b-41d4-a716-446655440001
-            name:
-              type: string
-              description: Room name
-              example: demo-room-1
-
-    DemoErrorResponse:
-      type: object
-      required:
-        - success
-        - error
-      properties:
-        success:
-          type: boolean
-          example: false
-        error:
-          type: string
-          description: Error message
-          example: demo mode is disabled
 
     # =========================================================================
     # WEBHOOK SCHEMAS
