@@ -59,6 +59,7 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
     }
   });
 
+  // Attach/update audio elements - NO cleanup on re-render to prevent audio breaks
   useEffect(() => {
     const audioElements = audioElementsRef.current;
 
@@ -103,7 +104,8 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       }
     }
 
-    // Clean up audio elements for participants who left or stopped audio
+    // Clean up audio elements ONLY for participants who left or stopped audio
+    // Do NOT clean up all elements on every render - that causes audio breaks
     const activeIds = new Set(remoteWithAudio.map((p) => p.id));
     for (const [id, audioEl] of audioElements.entries()) {
       if (!activeIds.has(id)) {
@@ -112,8 +114,12 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
         audioElements.delete(id);
       }
     }
+    // No cleanup return here - we only clean departed participants above
+  }, [remoteWithAudio, volume]);
 
-    // Cleanup on unmount
+  // Unmount-only cleanup for mic audio
+  useEffect(() => {
+    const audioElements = audioElementsRef.current;
     return () => {
       for (const audioEl of audioElements.values()) {
         audioEl.srcObject = null;
@@ -121,7 +127,7 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       }
       audioElements.clear();
     };
-  }, [remoteWithAudio, volume]);
+  }, []);
 
   // Handle track ended events
   useEffect(() => {
@@ -159,7 +165,7 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
     };
   }, [remoteWithAudio]);
 
-  // Handle screen share audio tracks
+  // Handle screen share audio tracks - NO cleanup on re-render
   useEffect(() => {
     const audioElements = screenShareAudioRef.current;
 
@@ -193,7 +199,7 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       }
     }
 
-    // Clean up
+    // Clean up ONLY departed participants
     const activeIds = new Set(remoteWithScreenShareAudio.map((p) => `ss-${p.id}`));
     for (const [key, audioEl] of audioElements.entries()) {
       if (!activeIds.has(key)) {
@@ -202,7 +208,11 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
         audioElements.delete(key);
       }
     }
+  }, [remoteWithScreenShareAudio, volume]);
 
+  // Unmount-only cleanup for screen share audio
+  useEffect(() => {
+    const audioElements = screenShareAudioRef.current;
     return () => {
       for (const audioEl of audioElements.values()) {
         audioEl.srcObject = null;
@@ -210,7 +220,7 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       }
       audioElements.clear();
     };
-  }, [remoteWithScreenShareAudio, volume]);
+  }, []);
 
   // This component renders nothing visible - audio is played through Audio elements
   return null;

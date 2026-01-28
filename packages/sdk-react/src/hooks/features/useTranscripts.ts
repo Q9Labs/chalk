@@ -62,7 +62,7 @@ export function useTranscripts(): UseTranscriptsReturn {
   // Subscribe to transcript events from the room
   // Re-run when connection status changes (room becomes available after join)
   useEffect(() => {
-    const room = session.chalkClient.room;
+    const room = session.room.getRoom();
     console.log("[useTranscripts] Setting up transcript subscription", { hasRoom: !!room, isConnected });
 
     if (!room || !isConnected) {

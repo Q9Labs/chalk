@@ -7,20 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **Missing database tables in production** - Embedded migration in `postgres.go` was missing tables from migrations 005-007 (transcripts, post_meeting_transcripts, webhook_deliveries, failed recording status)
-- **post_meeting_webhook config now persists** - PATCH /api/v1/tenants/{id}/config was silently ignoring `post_meeting_webhook` field (missing from request struct and merge logic)
+### Added
 
 ### Changed
 
-- **API CI/CD optimization** - Reduced workflow time from ~4min to ~2min
-  - Split `lint-and-test` into parallel `lint` and `test` jobs
-  - Removed `-v` verbose flag from tests (failures still show full output)
-  - Race detection (`-race`) now conditional: enabled on PRs only, skipped on master push
-  - Added `.golangci.yml` with lean linter config (6 essential linters vs all defaults)
+### Fixed
+
+## [0.0.48] - 2025-01-28
 
 ### Added
+
+- **[chalk] debug logging prefix** - All post-meeting flow logs now use `[chalk]` prefix for easy filtering and tracing
+  - Webhook handler: cloudflare webhook receive, recording download/upload, completion status
+  - Post-meeting service: trigger, transcription queueing, webhook preparation
+  - Transcription service: queue, process, presigned URL generation, API calls
+  - Transcription worker: job processing, AI summary generation, webhook send
+  - Webhook worker: delivery start, retry scheduling, success/failure tracking
+  - Webhook service: payload building, delivery queueing
+  - AI service: generation start, provider calls, result storage
+  - OpenRouter provider: API request/response with timing
+  - Groq provider: transcription request/response with timing
 
 - **Cloudflare webhook registration** - API now registers webhooks with Cloudflare RealtimeKit
   - New `setup-webhook` CLI command (`go run ./cmd/setup-webhook`) for one-time webhook registration
@@ -37,15 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Workers: webhook delivery timing and retry tracking
 
 - **Whisper GPU infrastructure** - Self-hosted transcription on EC2 GPU instances
-
-### Changed
-
-- **Documentation overhaul** - Complete rewrite of developer documentation
-  - **New API docs**: Tenants (CRUD + config), Authentication (token/refresh), Transcription (post-meeting)
-  - **Rewritten API docs**: Recordings (all 9 endpoints), Webhooks (comprehensive with signature verification examples), Rooms, Participants (with bulk and token refresh)
-  - **Rewritten SDK docs**: VideoConference turnkey component with full TypeScript types
-  - **Removed**: React Native, Core SDK, Testing, Pricing, Architecture docs (per plan)
-  - **Updated**: Getting started guides with accurate auth flow and X-API-Key header
   - Whisper module instantiated in production environment
   - ECR repository for whisper-worker Docker image
   - GitHub Actions workflow for whisper-worker builds
@@ -55,7 +52,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **API CI/CD optimization** - Reduced workflow time from ~4min to ~2min
+  - Split `lint-and-test` into parallel `lint` and `test` jobs
+  - Removed `-v` verbose flag from tests (failures still show full output)
+  - Race detection (`-race`) now conditional: enabled on PRs only, skipped on master push
+  - Added `.golangci.yml` with lean linter config (6 essential linters vs all defaults)
+
+- **Documentation overhaul** - Complete rewrite of developer documentation
+  - **New API docs**: Tenants (CRUD + config), Authentication (token/refresh), Transcription (post-meeting)
+  - **Rewritten API docs**: Recordings (all 9 endpoints), Webhooks (comprehensive with signature verification examples), Rooms, Participants (with bulk and token refresh)
+  - **Rewritten SDK docs**: VideoConference turnkey component with full TypeScript types
+  - **Removed**: React Native, Core SDK, Testing, Pricing, Architecture docs (per plan)
+  - **Updated**: Getting started guides with accurate auth flow and X-API-Key header
+
 ### Fixed
+
+- **Audio breaking/cutting out during calls** - `AudioRenderer` cleanup effect was running on every participant update (video, speaking, transcription events), causing `srcObject=null` and `pause()` on each render. Moved cleanup to unmount-only effects to prevent audio interruptions
+- **Missing database tables in production** - Embedded migration in `postgres.go` was missing tables from migrations 005-007 (transcripts, post_meeting_transcripts, webhook_deliveries, failed recording status)
+- **post_meeting_webhook config now persists** - PATCH /api/v1/tenants/{id}/config was silently ignoring `post_meeting_webhook` field (missing from request struct and merge logic)
 
 ## [0.0.47] - 2026-01-26
 

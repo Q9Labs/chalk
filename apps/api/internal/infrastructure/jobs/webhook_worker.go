@@ -35,7 +35,9 @@ func NewWebhookWorker(queries *db.Queries, logger *slog.Logger) *WebhookWorker {
 }
 
 func (w *WebhookWorker) Run(ctx context.Context) {
-	w.logger.Info("webhook worker started")
+	w.logger.Info("[chalk] webhook worker started",
+		"poll_interval", w.pollInterval,
+		"batch_size", w.batchSize)
 
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
@@ -46,7 +48,7 @@ func (w *WebhookWorker) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			w.logger.Info("webhook worker stopped")
+			w.logger.Info("[chalk] webhook worker stopped")
 			return
 		case <-ticker.C:
 			w.processPendingDeliveries(ctx)
@@ -57,8 +59,12 @@ func (w *WebhookWorker) Run(ctx context.Context) {
 func (w *WebhookWorker) processPendingDeliveries(ctx context.Context) {
 	deliveries, err := w.queries.GetPendingWebhookDeliveries(ctx, w.batchSize)
 	if err != nil {
-		w.logger.Error("failed to get pending deliveries", "error", err)
+		w.logger.Error("[chalk] failed to get pending deliveries", "error", err)
 		return
+	}
+
+	if len(deliveries) > 0 {
+		w.logger.Debug("[chalk] processing pending webhook deliveries", "count", len(deliveries))
 	}
 
 	for _, delivery := range deliveries {
@@ -69,17 +75,23 @@ func (w *WebhookWorker) processPendingDeliveries(ctx context.Context) {
 func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookDelivery) {
 	start := time.Now()
 
-	w.logger.Info("webhook delivery starting",
+	w.logger.Info("[chalk] webhook delivery starting",
 		"delivery_id", delivery.ID,
 		"url", delivery.WebhookUrl,
 		"attempt", delivery.Attempts+1,
-		"event_type", delivery.EventType)
+		"max_attempts", delivery.MaxAttempts,
+		"event_type", delivery.EventType,
+		"room_id", delivery.RoomID)
 
 	// Mark as sending
 	if err := w.queries.MarkWebhookSending(ctx, delivery.ID); err != nil {
-		w.logger.Error("failed to mark webhook sending", "delivery_id", delivery.ID, "error", err)
+		w.logger.Error("[chalk] failed to mark webhook sending", "delivery_id", delivery.ID, "error", err)
 		return
 	}
+
+	w.logger.Debug("[chalk] loading tenant for webhook secret",
+		"delivery_id", delivery.ID,
+		"tenant_id", delivery.TenantID)
 
 	// Get tenant for secret
 	tenant, err := w.queries.GetTenant(ctx, delivery.TenantID)
@@ -100,9 +112,19 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 		return
 	}
 
+	w.logger.Debug("[chalk] webhook secret loaded",
+		"delivery_id", delivery.ID,
+		"secret_length", len(secret))
+
 	// Generate signature
 	timestamp := time.Now().Unix()
 	signature := webhook.GenerateSignature(secret, timestamp, delivery.Payload)
+
+	w.logger.Debug("[chalk] sending webhook request",
+		"delivery_id", delivery.ID,
+		"url", delivery.WebhookUrl,
+		"payload_size", len(delivery.Payload),
+		"timestamp", timestamp)
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "POST", delivery.WebhookUrl, bytes.NewReader(delivery.Payload))
@@ -120,7 +142,7 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 	// Send request
 	resp, err := w.client.Do(req)
 	if err != nil {
-		w.logger.Error("webhook request failed",
+		w.logger.Error("[chalk] webhook request failed",
 			"delivery_id", delivery.ID,
 			"url", delivery.WebhookUrl,
 			"error", err,
@@ -134,9 +156,9 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		// Success
 		if err := w.queries.MarkWebhookDelivered(ctx, delivery.ID); err != nil {
-			w.logger.Error("failed to mark webhook delivered", "delivery_id", delivery.ID, "error", err)
+			w.logger.Error("[chalk] failed to mark webhook delivered", "delivery_id", delivery.ID, "error", err)
 		}
-		w.logger.Info("webhook delivered successfully",
+		w.logger.Info("[chalk] webhook delivered successfully",
 			"delivery_id", delivery.ID,
 			"url", delivery.WebhookUrl,
 			"status_code", resp.StatusCode,
@@ -145,7 +167,7 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 		// Read error response (limit to 1KB)
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
-		w.logger.Warn("webhook delivery failed with HTTP error",
+		w.logger.Warn("[chalk] webhook delivery failed with HTTP error",
 			"delivery_id", delivery.ID,
 			"url", delivery.WebhookUrl,
 			"status_code", resp.StatusCode,
@@ -160,9 +182,11 @@ func (w *WebhookWorker) scheduleRetry(ctx context.Context, delivery db.WebhookDe
 	if attempts >= delivery.MaxAttempts {
 		// Max retries reached
 		w.updateAttempt(ctx, delivery.ID, "failed", errMsg, pgtype.Timestamptz{})
-		w.logger.Error("webhook delivery failed permanently",
+		w.logger.Error("[chalk] webhook delivery failed permanently",
 			"delivery_id", delivery.ID,
 			"attempts", attempts,
+			"max_attempts", delivery.MaxAttempts,
+			"url", delivery.WebhookUrl,
 			"error", errMsg)
 		return
 	}
@@ -181,17 +205,20 @@ func (w *WebhookWorker) scheduleRetry(ctx context.Context, delivery db.WebhookDe
 
 	w.updateAttempt(ctx, delivery.ID, "failed", errMsg, pgtype.Timestamptz{Time: nextRetry, Valid: true})
 
-	w.logger.Warn("webhook delivery failed, scheduling retry",
+	w.logger.Warn("[chalk] webhook delivery failed, scheduling retry",
 		"delivery_id", delivery.ID,
 		"attempt", attempts,
+		"max_attempts", delivery.MaxAttempts,
+		"delay", delay,
 		"next_retry", nextRetry,
 		"error", errMsg)
 }
 
 func (w *WebhookWorker) markFailed(ctx context.Context, delivery db.WebhookDelivery, errMsg string) {
 	w.updateAttempt(ctx, delivery.ID, "failed", errMsg, pgtype.Timestamptz{})
-	w.logger.Error("webhook delivery failed",
+	w.logger.Error("[chalk] webhook delivery failed",
 		"delivery_id", delivery.ID,
+		"url", delivery.WebhookUrl,
 		"error", errMsg)
 }
 
@@ -202,7 +229,7 @@ func (w *WebhookWorker) updateAttempt(ctx context.Context, id uuid.UUID, status,
 		LastError:   &errMsg,
 		NextRetryAt: nextRetry,
 	}); err != nil {
-		w.logger.Error("failed to update webhook attempt", "delivery_id", id, "error", err)
+		w.logger.Error("[chalk] failed to update webhook attempt", "delivery_id", id, "error", err)
 	}
 }
 

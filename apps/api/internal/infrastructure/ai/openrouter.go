@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -25,6 +26,9 @@ func NewOpenRouterProvider(apiKey, model string) *OpenRouterProvider {
 	if model == "" {
 		model = defaultModel
 	}
+	slog.Debug("[chalk] OpenRouter provider initialized",
+		"model", model,
+		"has_api_key", apiKey != "")
 	return &OpenRouterProvider{
 		apiKey: apiKey,
 		model:  model,
@@ -33,6 +37,10 @@ func NewOpenRouterProvider(apiKey, model string) *OpenRouterProvider {
 }
 
 func (p *OpenRouterProvider) GenerateSummary(ctx context.Context, transcript string) (*domain.AIResult, error) {
+	slog.Debug("[chalk] OpenRouter: generating summary",
+		"model", p.model,
+		"transcript_length", len(transcript))
+
 	prompt := fmt.Sprintf(`Analyze this meeting transcript and provide:
 1. A concise summary (2-3 paragraphs maximum)
 2. A list of action items with assignees if mentioned
@@ -59,13 +67,22 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
+		slog.Error("[chalk] OpenRouter: failed to marshal request", "error", err)
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
+
+	slog.Debug("[chalk] OpenRouter: sending API request",
+		"model", p.model,
+		"prompt_length", len(prompt),
+		"request_size", len(body))
+
+	start := time.Now()
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		"https://openrouter.ai/api/v1/chat/completions",
 		bytes.NewReader(body))
 	if err != nil {
+		slog.Error("[chalk] OpenRouter: failed to create request", "error", err)
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
@@ -76,14 +93,25 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		slog.Error("[chalk] OpenRouter: request failed",
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("openrouter request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
+		slog.Error("[chalk] OpenRouter: API error",
+			"status", resp.Status,
+			"response_body", string(bodyBytes[:min(len(bodyBytes), 500)]),
+			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("openrouter API error: %s - %s", resp.Status, string(bodyBytes))
 	}
+
+	slog.Debug("[chalk] OpenRouter: response received",
+		"status", resp.StatusCode,
+		"duration_ms", time.Since(start).Milliseconds())
 
 	var openRouterResp struct {
 		Choices []struct {
@@ -94,18 +122,32 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&openRouterResp); err != nil {
+		slog.Error("[chalk] OpenRouter: failed to decode response", "error", err)
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	if len(openRouterResp.Choices) == 0 {
+		slog.Error("[chalk] OpenRouter: no choices in response")
 		return nil, fmt.Errorf("no response from AI model")
 	}
 
 	content := openRouterResp.Choices[0].Message.Content
+	slog.Debug("[chalk] OpenRouter: parsing AI response",
+		"content_length", len(content))
+
 	var result domain.AIResult
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		slog.Error("[chalk] OpenRouter: failed to parse response as JSON",
+			"error", err,
+			"content_preview", content[:min(len(content), 200)])
 		return nil, fmt.Errorf("parse AI response as JSON: %w (content: %.500s)", err, content)
 	}
+
+	slog.Info("[chalk] OpenRouter: summary generated successfully",
+		"model", p.model,
+		"summary_length", len(result.Summary),
+		"action_items_count", len(result.ActionItems),
+		"duration_ms", time.Since(start).Milliseconds())
 
 	return &result, nil
 }

@@ -380,7 +380,13 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					"flex-1 h-full min-w-0 relative flex flex-col rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]",
 					isExiting && "chalk-animate-void-exit"
 				)}>
-					{showScreenShare && screenSharer?.screenShareTrack ? (
+					{enableWhiteboard && isWhiteboardOpen ? (
+						<WhiteboardPanel
+							participants={allParticipants}
+							thumbnailPosition={layout === "sidebar" ? "right" : "bottom"}
+							theme={theme === "system" ? "auto" : theme}
+						/>
+					) : showScreenShare && screenSharer?.screenShareTrack ? (
 						<ScreenShareView
 							screenShareTrack={screenSharer.screenShareTrack}
 							sharedByName={screenSharer.displayName || "Unknown"}
@@ -608,14 +614,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				onRetry={onRetryConnection}
 			/>
 
-			{/* Whiteboard overlay */}
-			{enableWhiteboard && (
-				<WhiteboardPanel
-					isVisible={isWhiteboardOpen}
-					onClose={onToggleWhiteboard}
-					theme={theme === "system" ? "auto" : theme}
-				/>
-			)}
+
 
 			{enableTour && (
 				<GuidedTour

@@ -1,42 +1,25 @@
 /**
- * WhiteboardPanel - Full-screen collaborative whiteboard using Excalidraw
+ * WhiteboardPanel - Integrated collaborative whiteboard using Excalidraw
  *
- * Self-contained component that integrates with the SDK's whiteboard system.
- * Handles sync, permissions, and React 19 compatibility automatically.
- *
- * @example
- * ```tsx
- * const { isOpen, toggle } = useWhiteboard();
- *
- * return isOpen ? <WhiteboardPanel onClose={toggle} /> : null;
- * ```
+ * Integrated component that acts as a "Stage" in the video conference.
+ * Handles sync, permissions, and participant thumbnails.
  */
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, useCallback } from "react";
 import { createLogger } from "@q9labs/chalk-core";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
 import { cn } from "../../utils/cn";
+import { VideoTile } from "../atomic";
+import type { Participant } from "../composite/VideoGrid";
+import {
+	ArrowLeft01Icon,
+	ArrowRight01Icon,
+	ArrowDown01Icon,
+	ArrowUp01Icon,
+} from "../../utils/icons";
 
 const log = createLogger("WhiteboardPanel");
-
-// Icons (inline to avoid lucide-react version issues)
-const XIcon = () => (
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="20"
-		height="20"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		strokeWidth="2"
-		strokeLinecap="round"
-		strokeLinejoin="round"
-	>
-		<path d="M18 6 6 18" />
-		<path d="m6 6 12 12" />
-	</svg>
-);
 
 const LockIcon = () => (
 	<svg
@@ -123,20 +106,28 @@ export interface WhiteboardPanelProps {
 	excalidrawCssPath?: string;
 	/** Theme override */
 	theme?: "light" | "dark" | "auto";
+	/** List of participants to display in thumbnails */
+	participants?: Participant[];
+	/** Whether to show participant thumbnails */
+	showThumbnails?: boolean;
+	/** Position of thumbnails relative to whiteboard */
+	thumbnailPosition?: "bottom" | "right";
 }
 
 /**
- * Full-screen collaborative whiteboard panel
+ * Integrated collaborative whiteboard panel
  *
  * Uses Excalidraw with real-time sync via the SDK's whiteboard system.
  * Automatically handles permissions, cursors, and element syncing.
  */
 function WhiteboardPanelBase({
-	onClose,
 	isVisible = true,
 	className,
 	excalidrawCssPath = EXCALIDRAW_CSS_CDN,
 	theme = "auto",
+	participants = [],
+	showThumbnails = true,
+	thumbnailPosition = "bottom",
 }: WhiteboardPanelProps): React.JSX.Element {
 	const {
 		canDraw,
@@ -156,6 +147,13 @@ function WhiteboardPanelBase({
 	const [isReady, setIsReady] = useState(false);
 	const [cssLoaded, setCssLoaded] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
+
+	// Thumbnail state
+	const [isThumbnailsOpen, setIsThumbnailsOpen] = useState(true);
+
+	const toggleThumbnails = useCallback(() => {
+		setIsThumbnailsOpen((prev) => !prev);
+	}, []);
 
 	// Determine theme
 	const resolvedTheme =
@@ -332,29 +330,26 @@ function WhiteboardPanelBase({
 		excalidrawRef.current.updateScene({ elements: merged });
 	}, [latestUpdate]);
 
-	// UI styling based on canvas background (dark canvas = light UI, light canvas = dark UI)
+	// UI styling based on canvas background
 	const isDarkTheme = resolvedTheme === "dark";
-	// Dark theme = dark canvas (#121212), needs light UI
-	// Light theme = light canvas (#ffffff), needs dark UI
 	const isDarkCanvas = isDarkTheme;
 	const pillBg = isDarkCanvas ? "bg-black/50" : "bg-white/80";
 	const pillBorder = isDarkCanvas ? "border-white/10" : "border-black/10";
 	const pillText = isDarkCanvas ? "text-white/90" : "text-black/90";
 	const buttonText = isDarkCanvas ? "text-white/70 hover:text-white" : "text-black/70 hover:text-black";
 	const buttonHover = isDarkCanvas ? "hover:bg-white/10" : "hover:bg-black/10";
-	const dividerBg = isDarkCanvas ? "bg-white/10" : "bg-black/10";
 
 	return (
 		<div
 			className={cn(
-				"fixed inset-0 z-50",
-				"bg-background",
+				"flex h-full w-full gap-2 transition-all duration-500",
+				thumbnailPosition === "bottom" ? "flex-col" : "flex-row",
 				!isVisible && "hidden",
 				className,
 			)}
 		>
-			{/* Excalidraw Container */}
-			<div className="h-full w-full relative">
+			{/* Main Stage (Excalidraw) */}
+			<div className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-background">
 				{/* Top-left title pill */}
 				<div className={cn("absolute top-4 left-4 z-10 rounded-full px-3 py-1.5 backdrop-blur-md border flex items-center gap-2", pillBg, pillBorder)}>
 					<PencilIcon />
@@ -362,39 +357,28 @@ function WhiteboardPanelBase({
 				</div>
 
 				{/* Top-right actions pill */}
-				<div className={cn("absolute top-4 right-4 z-10 rounded-lg p-1 backdrop-blur-md border flex items-center gap-1", pillBg, pillBorder)}>
-					{canGrant && (
-						<>
-							<button
-								type="button"
-								onClick={grantAll}
-								className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
-								aria-label="Enable drawing for all"
-								title="Enable All"
-							>
-								<UnlockIcon />
-							</button>
-							<button
-								type="button"
-								onClick={revokeAll}
-								className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
-								aria-label="Disable drawing for all"
-								title="Disable All"
-							>
-								<LockIcon />
-							</button>
-							<div className={cn("w-px h-5 mx-0.5", dividerBg)} />
-						</>
-					)}
-					<button
-						type="button"
-						onClick={onClose}
-						className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
-						aria-label="Close whiteboard"
-					>
-						<XIcon />
-					</button>
-				</div>
+				{canGrant && (
+					<div className={cn("absolute top-4 right-4 z-10 rounded-lg p-1 backdrop-blur-md border flex items-center gap-1", pillBg, pillBorder)}>
+						<button
+							type="button"
+							onClick={grantAll}
+							className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
+							aria-label="Enable drawing for all"
+							title="Enable All"
+						>
+							<UnlockIcon />
+						</button>
+						<button
+							type="button"
+							onClick={revokeAll}
+							className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
+							aria-label="Disable drawing for all"
+							title="Disable All"
+						>
+							<LockIcon />
+						</button>
+					</div>
+				)}
 
 				{/* Loading state */}
 				{(!isReady || !cssLoaded) && !loadError && (
@@ -416,17 +400,92 @@ function WhiteboardPanelBase({
 							<span className="text-sm text-muted-foreground">
 								{loadError}
 							</span>
-							<span className="text-xs text-muted-foreground/70">
-								Make sure @excalidraw/excalidraw is installed as a peer
-								dependency
-							</span>
 						</div>
 					</div>
 				)}
 
 				{/* Excalidraw mounts here */}
 				<div ref={containerRef} className="h-full w-full" />
+
+				{/* Collapse/Expand Toggle Button */}
+				{showThumbnails && participants.length > 0 && (
+					<button
+						onClick={toggleThumbnails}
+						className={cn(
+							"absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",
+							thumbnailPosition === "right"
+								? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl"
+								: "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl",
+						)}
+						aria-label={isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"}
+					>
+						{thumbnailPosition === "right" ? (
+							isThumbnailsOpen ? (
+								<ArrowRight01Icon size={16} />
+							) : (
+								<ArrowLeft01Icon size={16} />
+							)
+						) : isThumbnailsOpen ? (
+							<ArrowDown01Icon size={16} />
+						) : (
+							<ArrowUp01Icon size={16} />
+						)}
+					</button>
+				)}
 			</div>
+
+			{/* Thumbnails Strip */}
+			{showThumbnails && participants.length > 0 && (
+				<div
+					className={cn(
+						"flex gap-2 transition-all duration-500 ease-in-out",
+						thumbnailPosition === "bottom"
+							? "flex-row items-center px-2 overflow-auto"
+							: "flex-col py-2 overflow-y-auto overflow-x-hidden",
+						!isThumbnailsOpen &&
+							(thumbnailPosition === "bottom"
+								? "h-0 opacity-0"
+								: "w-0 opacity-0 px-0"),
+						isThumbnailsOpen &&
+							(thumbnailPosition === "bottom" ? "h-36 w-full" : "w-56 h-full"),
+					)}
+				>
+					{participants.map((p) => (
+						<div
+							key={p.id}
+							className={cn(
+								"shrink-0 rounded-xl overflow-hidden relative transition-all duration-500",
+								thumbnailPosition === "bottom"
+									? "aspect-video h-full"
+									: "aspect-video w-full",
+								!isThumbnailsOpen && "scale-0 opacity-0",
+							)}
+						>
+							<VideoTile
+								participant={{
+									id: p.id,
+									displayName: p.displayName,
+									isLocal: p.isLocal,
+									isSpeaking: p.isSpeaking,
+									isMuted: p.isMuted,
+									isVideoEnabled: p.isVideoEnabled,
+									isScreenSharing: p.isScreenSharing,
+									isHandRaised: p.isHandRaised,
+									connectionQuality:
+										p.connectionQuality && p.connectionQuality > 0
+											? (p.connectionQuality as 1 | 2 | 3 | 4)
+											: undefined,
+									avatarUrl: p.avatarUrl,
+								}}
+								videoTrack={p.videoTrack}
+								className="w-full h-full"
+								showName={true}
+								showStatus={true}
+							/>
+						</div>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }

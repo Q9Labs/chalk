@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,7 +15,7 @@ import (
 )
 
 const (
-	groqAPIURL     = "https://api.groq.com/openai/v1/audio/transcriptions"
+	groqAPIURL      = "https://api.groq.com/openai/v1/audio/transcriptions"
 	groqMaxFileSize = 100 * 1024 * 1024 // 100MB
 )
 
@@ -26,6 +27,9 @@ type GroqProvider struct {
 
 // NewGroqProvider creates a new Groq transcription provider.
 func NewGroqProvider(apiKey string) *GroqProvider {
+	slog.Debug("[chalk] Groq provider initialized",
+		"has_api_key", apiKey != "",
+		"timeout", "5m")
 	return &GroqProvider{
 		apiKey: apiKey,
 		client: &http.Client{Timeout: 5 * time.Minute},
@@ -33,6 +37,10 @@ func NewGroqProvider(apiKey string) *GroqProvider {
 }
 
 func (p *GroqProvider) Transcribe(ctx context.Context, audioURL string) (*domain.TranscriptionResult, error) {
+	slog.Debug("[chalk] Groq: starting transcription",
+		"url_length", len(audioURL),
+		"model", "whisper-large-v3-turbo")
+
 	reqBody := map[string]any{
 		"url":                     audioURL,
 		"model":                   "whisper-large-v3-turbo",
@@ -42,11 +50,18 @@ func (p *GroqProvider) Transcribe(ctx context.Context, audioURL string) (*domain
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
+		slog.Error("[chalk] Groq: failed to marshal request", "error", err)
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
+	slog.Debug("[chalk] Groq: sending API request",
+		"request_size", len(body))
+
+	start := time.Now()
+
 	req, err := http.NewRequestWithContext(ctx, "POST", groqAPIURL, bytes.NewReader(body))
 	if err != nil {
+		slog.Error("[chalk] Groq: failed to create request", "error", err)
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
@@ -55,17 +70,29 @@ func (p *GroqProvider) Transcribe(ctx context.Context, audioURL string) (*domain
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		slog.Error("[chalk] Groq: request failed",
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("groq API request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
+		slog.Error("[chalk] Groq: API error",
+			"status", resp.Status,
+			"response_body", string(bodyBytes[:min(len(bodyBytes), 500)]),
+			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("groq API error: %s - %s", resp.Status, string(bodyBytes))
 	}
 
+	slog.Debug("[chalk] Groq: response received",
+		"status", resp.StatusCode,
+		"duration_ms", time.Since(start).Milliseconds())
+
 	var groqResp groqTranscriptionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&groqResp); err != nil {
+		slog.Error("[chalk] Groq: failed to decode response", "error", err)
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
@@ -78,12 +105,22 @@ func (p *GroqProvider) Transcribe(ctx context.Context, audioURL string) (*domain
 		}
 	}
 
+	wordCount := len(strings.Fields(groqResp.Text))
+
+	slog.Info("[chalk] Groq: transcription completed",
+		"language", groqResp.Language,
+		"duration_seconds", groqResp.Duration,
+		"text_length", len(groqResp.Text),
+		"word_count", wordCount,
+		"segments_count", len(segments),
+		"api_duration_ms", time.Since(start).Milliseconds())
+
 	return &domain.TranscriptionResult{
 		Text:            groqResp.Text,
 		Segments:        segments,
 		Language:        groqResp.Language,
 		DurationSeconds: int(groqResp.Duration),
-		WordCount:       len(strings.Fields(groqResp.Text)),
+		WordCount:       wordCount,
 	}, nil
 }
 
