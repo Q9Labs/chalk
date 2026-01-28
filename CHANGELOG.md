@@ -23,12 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **API Gateway 503 timeout errors** — Switched HTTP API integration from INTERNET to VPC_LINK connection
-  - Root cause: API Gateway using public internet path to ALB caused intermittent 30-second timeouts
-  - Changed `connection_type` from `INTERNET` to `VPC_LINK` for HTTP API integrations
+- **API Gateway 503 timeout errors** — Increased HTTP API integration timeout
+  - Root cause: API Gateway 30-second timeout was causing intermittent 503s
   - Increased timeout from 30s to 60s to match ALB idle timeout
-  - Added explicit security group rule allowing VPC link ENIs to reach ALB on port 80
-  - Added `vpc_link_security_group_id` output to api-gateway module
+  - Added `vpc_link_security_group_id` output to api-gateway module for future use
 
 - **Whiteboard React instance conflict in production** — Externalized `@excalidraw/excalidraw` from sdk-react bundle to prevent duplicate React instances
   - Root cause: Excalidraw was bundled into sdk-react, causing `ReactCurrentOwner` undefined errors in production

@@ -127,12 +127,11 @@ resource "aws_apigatewayv2_integration" "http_alb_root" {
   api_id             = aws_apigatewayv2_api.http.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
-  # VPC_LINK requires ALB listener ARN (not DNS name)
-  # Path suffix "/" is appended for root route
-  integration_uri = "${var.alb_listener_arn}/"
+  # Use HTTP URL for ALB - TLS terminates at API Gateway (Cloudflare→APIGW is HTTPS)
+  # VPC_LINK requires internal ALB, but we need internet-facing for WebSocket access
+  integration_uri = "http://${var.alb_dns_name}/"
 
-  connection_type = "VPC_LINK"
-  connection_id   = aws_apigatewayv2_vpc_link.main.id
+  connection_type = "INTERNET"
 
   payload_format_version = "1.0"
   timeout_milliseconds   = 60000
@@ -142,11 +141,10 @@ resource "aws_apigatewayv2_integration" "http_alb_proxy" {
   api_id             = aws_apigatewayv2_api.http.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
-  # VPC_LINK requires ALB listener ARN with {proxy} path variable
-  integration_uri = "${var.alb_listener_arn}/{proxy}"
+  # Include {proxy} to forward the path from the route
+  integration_uri = "http://${var.alb_dns_name}/{proxy}"
 
-  connection_type = "VPC_LINK"
-  connection_id   = aws_apigatewayv2_vpc_link.main.id
+  connection_type = "INTERNET"
 
   payload_format_version = "1.0"
   timeout_milliseconds   = 60000

@@ -378,14 +378,3 @@ resource "aws_security_group_rule" "redis_from_whisper" {
   description              = "Redis from Whisper workers"
 }
 
-# Allow API Gateway VPC Link to access ALB on port 80
-# VPC Link uses private ENIs that need explicit access to ALB
-resource "aws_security_group_rule" "alb_from_vpc_link" {
-  type                     = "ingress"
-  from_port                = 80
-  to_port                  = 80
-  protocol                 = "tcp"
-  security_group_id        = module.ecs.alb_security_group_id
-  source_security_group_id = module.api_gateway.vpc_link_security_group_id
-  description              = "HTTP from API Gateway VPC Link"
-}
