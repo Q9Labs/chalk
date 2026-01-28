@@ -127,9 +127,9 @@ resource "aws_apigatewayv2_integration" "http_alb_root" {
   api_id             = aws_apigatewayv2_api.http.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
-  # Use HTTP URL for ALB - TLS terminates at API Gateway (Cloudflare→APIGW is HTTPS)
-  # VPC_LINK provides private connectivity and better reliability than INTERNET
-  integration_uri = "http://${var.alb_dns_name}/"
+  # VPC_LINK requires ALB listener ARN (not DNS name)
+  # Path suffix "/" is appended for root route
+  integration_uri = "${var.alb_listener_arn}/"
 
   connection_type = "VPC_LINK"
   connection_id   = aws_apigatewayv2_vpc_link.main.id
@@ -142,8 +142,8 @@ resource "aws_apigatewayv2_integration" "http_alb_proxy" {
   api_id             = aws_apigatewayv2_api.http.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
-  # Include {proxy} to forward the path from the route
-  integration_uri = "http://${var.alb_dns_name}/{proxy}"
+  # VPC_LINK requires ALB listener ARN with {proxy} path variable
+  integration_uri = "${var.alb_listener_arn}/{proxy}"
 
   connection_type = "VPC_LINK"
   connection_id   = aws_apigatewayv2_vpc_link.main.id
