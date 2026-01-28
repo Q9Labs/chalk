@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewRecordingChecker(t *testing.T) {
-	checker := NewRecordingChecker(nil, nil, nil)
+	checker := NewRecordingChecker(nil, nil, nil, nil)
 	assert.NotNil(t, checker)
 	assert.Nil(t, checker.db)
 	assert.Nil(t, checker.cfClient)
@@ -18,7 +18,7 @@ func TestNewRecordingChecker(t *testing.T) {
 func TestRecordingChecker_CheckStalledRecordings_NilDB_Panics(t *testing.T) {
 	// This test documents that nil DB causes a panic
 	// In production, DB should never be nil
-	checker := NewRecordingChecker(nil, nil, nil)
+	checker := NewRecordingChecker(nil, nil, nil, nil)
 	ctx := context.Background()
 
 	assert.Panics(t, func() {

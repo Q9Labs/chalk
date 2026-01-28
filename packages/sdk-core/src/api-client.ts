@@ -4,7 +4,7 @@
 
 import { EventEmitter } from "./events.ts";
 import { camelToSnake, snakeToCamel } from "./transforms.ts";
-import { createLogger, type Logger } from "./utils/logger.ts";
+import { wideEvents } from "./wide-events/index.ts";
 import { ChalkError, ChalkErrorCode } from "./errors/chalk-error.ts";
 import type {
 	ApiResponse,
@@ -30,7 +30,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	private isRefreshingToken = false;
 	// SDKCORE-MED-02: Queue for serializing concurrent refresh requests
 	private refreshPromise: Promise<string | null> | null = null;
-	private readonly log: Logger = createLogger("API");
 
 	constructor(config: ChalkClientConfig) {
 		super();
@@ -41,12 +40,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		this.apiKey = config.apiKey;
 		this.tokenProvider = config.tokenProvider;
 		this.token = config.token;
-
-		if (config.apiKey) {
-			this.log.warn(
-				"Using apiKey is deprecated and will be removed in v2.0. Use `token` or `tokenProvider` instead for improved security.",
-			);
-		}
 	}
 
 	setToken(token: string): void {
@@ -67,6 +60,9 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		body?: unknown,
 		isRetry = false,
 	): Promise<ApiResponse<T>> {
+		const ctx = wideEvents.start("api.request");
+		ctx.set("request", { method, path, hasBody: !!body });
+
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 		};
@@ -82,7 +78,10 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 					this.token = newToken;
 				}
 			} catch (error) {
-				this.log.error("Token provider failed", { error });
+				ctx.complete("error", {
+					code: "TOKEN_EXPIRED",
+					message: error instanceof Error ? error.message : "Failed to get authentication token",
+				});
 				return {
 					success: false,
 					error: {
@@ -103,7 +102,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		}
 
 		const url = `${this.apiUrl}${path}`;
-		this.log.debug("Request", { method, url });
 
 		try {
 			const transformedBody = body ? camelToSnake(body) : undefined;
@@ -115,11 +113,14 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			});
 
 			if (response.status === 401 && !isRetry) {
+				ctx.complete("error", { code: "HTTP_401", message: "Unauthorized - attempting refresh" });
 				return this.handle401<T>(method, path, body);
 			}
 
 			// SDKCORE-MED-01: Handle empty/204 responses before parsing JSON
 			if (response.status === 204 || response.headers.get("content-length") === "0") {
+				ctx.set("response", { statusCode: response.status });
+				ctx.complete("success");
 				return {
 					success: true,
 					data: undefined as T,
@@ -138,23 +139,30 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				};
 				const errorMessage =
 					errorData.message ?? errorData.error ?? "An unknown error occurred";
-				this.log.error("API error", { status: response.status, message: errorMessage });
+				const errorCode = errorData.code ?? `HTTP_${response.status}`;
+				ctx.set("response", { statusCode: response.status });
+				ctx.complete("error", { code: errorCode, message: errorMessage });
 				return {
 					success: false,
 					error: {
-						code: errorData.code ?? `HTTP_${response.status}`,
+						code: errorCode,
 						message: errorMessage,
 						details: errorData.details,
 					},
 				};
 			}
 
+			ctx.set("response", { statusCode: response.status });
+			ctx.complete("success");
 			return {
 				success: true,
 				data,
 			};
 		} catch (error) {
-			this.log.error("Request failed", { error });
+			ctx.complete("error", {
+				code: "NETWORK_ERROR",
+				message: error instanceof Error ? error.message : "Network error",
+			});
 			return {
 				success: false,
 				error: {
@@ -170,8 +178,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		path: string,
 		body?: unknown,
 	): Promise<ApiResponse<T>> {
-		this.log.debug("Received 401, attempting token refresh");
-
 		if (!this.tokenProvider) {
 			const error: ChalkErrorType = {
 				code: "TOKEN_EXPIRED",
@@ -184,7 +190,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		// SDKCORE-MED-02: Serialize concurrent refresh requests
 		// If a refresh is already in progress, wait for it instead of failing
 		if (this.isRefreshingToken && this.refreshPromise) {
-			this.log.debug("Waiting for existing token refresh");
 			const token = await this.refreshPromise;
 			if (token) {
 				return this.request<T>(method, path, body, true);
@@ -221,7 +226,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 
 		// Only proceed if we got a valid token
 		if (!newToken) {
-			this.log.warn("Token refresh returned empty token");
 			const error: ChalkErrorType = {
 				code: "TOKEN_EXPIRED",
 				message: "Token refresh failed: no token returned",
@@ -230,7 +234,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			return { success: false, error };
 		}
 
-		this.log.debug("Token refreshed successfully");
 		return this.request<T>(method, path, body, true);
 	}
 
@@ -342,7 +345,6 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		roomId: string,
 		participantId: string,
 	): Promise<ApiResponse<void>> {
-		this.log.debug("removeParticipant", { roomId, participantId });
 		return this.request<void>(
 			"DELETE",
 			`/api/v1/rooms/${roomId}/participants/${participantId}`,

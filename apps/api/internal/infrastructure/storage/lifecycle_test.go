@@ -134,7 +134,7 @@ func TestNewRecordingLifecycleManager(t *testing.T) {
 		BatchSize:  50,
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, cfg)
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, cfg, nil)
 
 	assert.NotNil(t, mgr)
 	assert.Equal(t, 1*time.Hour, mgr.interval)
@@ -147,7 +147,7 @@ func TestNewRecordingLifecycleManager_DefaultConfig(t *testing.T) {
 	s3 := NewMockR2Client()
 	mockDB := NewMockRecordingArchiver()
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, LifecycleConfig{})
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, LifecycleConfig{}, nil)
 
 	assert.Equal(t, 24*time.Hour, mgr.interval)
 	assert.Equal(t, 7*24*time.Hour, mgr.archiveAge)
@@ -179,7 +179,7 @@ func TestLifecycleManager_ArchiveRecording_Success(t *testing.T) {
 
 	mockDB.recordings = append(mockDB.recordings, rec)
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveRecording(ctx, rec)
 
@@ -209,7 +209,7 @@ func TestLifecycleManager_ArchiveRecording_NoStoragePath(t *testing.T) {
 		StoragePath: nil,
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveRecording(ctx, rec)
 
@@ -233,7 +233,7 @@ func TestLifecycleManager_ArchiveRecording_EmptyStoragePath(t *testing.T) {
 		StorageProvider: &provider,
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveRecording(ctx, rec)
 
@@ -258,7 +258,7 @@ func TestLifecycleManager_ArchiveRecording_NotR2Provider(t *testing.T) {
 		StorageProvider: &provider,
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveRecording(ctx, rec)
 
@@ -282,7 +282,7 @@ func TestLifecycleManager_ArchiveRecording_NilProvider(t *testing.T) {
 		StorageProvider: nil,
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveRecording(ctx, rec)
 
@@ -307,7 +307,7 @@ func TestLifecycleManager_ArchiveRecording_R2DownloadFails(t *testing.T) {
 		StorageProvider: &provider,
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveRecording(ctx, rec)
 
@@ -345,7 +345,7 @@ func TestLifecycleManager_ArchiveOldRecordings_Success(t *testing.T) {
 		},
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveOldRecordings(ctx)
 
@@ -382,7 +382,7 @@ func TestLifecycleManager_ArchiveOldRecordings_PartialFailure(t *testing.T) {
 		},
 	}
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveOldRecordings(ctx)
 
@@ -397,7 +397,7 @@ func TestLifecycleManager_ArchiveOldRecordings_NoRecordings(t *testing.T) {
 	s3 := NewMockR2Client()
 	mockDB := NewMockRecordingArchiver()
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.archiveOldRecordings(ctx)
 
@@ -414,7 +414,7 @@ func TestLifecycleManager_Start_ContextCancellation(t *testing.T) {
 		Interval:   100 * time.Millisecond,
 		ArchiveAge: 7 * 24 * time.Hour,
 		BatchSize:  100,
-	})
+	}, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -438,7 +438,7 @@ func TestLifecycleManager_RunOnce(t *testing.T) {
 	s3 := NewMockR2Client()
 	mockDB := NewMockRecordingArchiver()
 
-	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig())
+	mgr := NewRecordingLifecycleManager(r2, s3, mockDB, DefaultLifecycleConfig(), nil)
 
 	err := mgr.RunOnce(ctx)
 

@@ -22,7 +22,7 @@ func (m *mockRoomEnder) EndRoom(ctx context.Context, roomID uuid.UUID) error {
 }
 
 func TestNewRoomCleanup(t *testing.T) {
-	cleanup := NewRoomCleanup(nil, nil)
+	cleanup := NewRoomCleanup(nil, nil, nil)
 	assert.NotNil(t, cleanup)
 	assert.Nil(t, cleanup.db)
 	assert.Nil(t, cleanup.roomSvc)
@@ -31,7 +31,7 @@ func TestNewRoomCleanup(t *testing.T) {
 func TestRoomCleanup_CleanupEmptyRooms_NilDB_Panics(t *testing.T) {
 	// This test documents that nil DB causes a panic
 	// In production, DB should never be nil
-	cleanup := NewRoomCleanup(nil, nil)
+	cleanup := NewRoomCleanup(nil, nil, nil)
 	ctx := context.Background()
 
 	assert.Panics(t, func() {
@@ -41,7 +41,7 @@ func TestRoomCleanup_CleanupEmptyRooms_NilDB_Panics(t *testing.T) {
 
 func TestRoomCleanup_Run_ContextCancellation(t *testing.T) {
 	mock := &mockRoomEnder{}
-	cleanup := NewRoomCleanup(nil, mock)
+	cleanup := NewRoomCleanup(nil, mock, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan struct{})

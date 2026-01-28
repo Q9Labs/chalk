@@ -3,7 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -67,6 +67,8 @@ type Hub struct {
 	ctx context.Context
 
 	stop chan struct{}
+
+	logger *slog.Logger
 }
 
 // RoomRecordingState tracks recording state for a room
@@ -75,7 +77,10 @@ type RoomRecordingState struct {
 	RecordingID *uuid.UUID
 }
 
-func NewHub(redisClient RedisInterface) *Hub {
+func NewHub(redisClient RedisInterface, logger *slog.Logger) *Hub {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Hub{
 		clients:                 make(map[uuid.UUID]*Client),
 		rooms:                   make(map[uuid.UUID]map[uuid.UUID]*Client),
@@ -88,6 +93,7 @@ func NewHub(redisClient RedisInterface) *Hub {
 		ctx:                     context.Background(),
 		stop:                    make(chan struct{}),
 		whiteboardPersistTimers: make(map[uuid.UUID]*time.Timer),
+		logger:                  logger.With("component", "ws_hub"),
 	}
 }
 
@@ -149,7 +155,14 @@ func (h *Hub) registerClient(client *Client) {
 	}
 	h.rooms[client.roomID][client.participantID] = client
 
-	log.Printf("Client registered: participant %s in room %s", client.participantID, client.roomID)
+	roomSize := len(h.rooms[client.roomID])
+
+	h.logger.Info("client registered",
+		"participant_id", client.participantID,
+		"room_id", client.roomID,
+		"tenant_id", client.tenantID,
+		"room_size", roomSize,
+	)
 
 	connMsg, _ := NewMessage(MessageTypeConnected, ConnectedPayload{
 		ParticipantID: client.participantID,
@@ -188,9 +201,11 @@ func (h *Hub) unregisterClient(client *Client) {
 
 	// Check if room exists and count remaining participants
 	roomEmpty := false
+	var roomSize int
 	if room, ok := h.rooms[client.roomID]; ok {
 		delete(room, client.participantID)
-		roomEmpty = len(room) == 0
+		roomSize = len(room)
+		roomEmpty = roomSize == 0
 	}
 
 	h.mu.Unlock()
@@ -198,13 +213,21 @@ func (h *Hub) unregisterClient(client *Client) {
 	// Mark participant as left in database (updates left_at timestamp)
 	if h.participantService != nil {
 		if err := h.participantService.LeaveRoom(h.ctx, client.roomID, client.participantID); err != nil {
-			log.Printf("Failed to mark participant %s as left in database: %v", client.participantID, err)
+			h.logger.Error("failed to mark participant as left",
+				"participant_id", client.participantID,
+				"room_id", client.roomID,
+				"error", err.Error(),
+			)
 		}
 	}
 
 	// Use client.Close() which has proper channel close protection
 	client.Close()
-	log.Printf("Client unregistered: participant %s from room %s", client.participantID, client.roomID)
+	h.logger.Info("client unregistered",
+		"participant_id", client.participantID,
+		"room_id", client.roomID,
+		"room_size", roomSize,
+	)
 
 	// Broadcast participant_left BEFORE removing room (only if room has other participants)
 	if !roomEmpty {
@@ -226,7 +249,10 @@ func (h *Hub) unregisterClient(client *Client) {
 			delete(h.whiteboardPersistTimers, client.roomID)
 		}
 		h.mu.Unlock()
-		log.Printf("Room %s removed from hub (last participant left)", client.roomID)
+		h.logger.Info("room removed",
+			"room_id", client.roomID,
+			"reason", "last_participant_left",
+		)
 	}
 }
 
@@ -236,17 +262,12 @@ func (h *Hub) BroadcastToRoom(roomID uuid.UUID, message []byte, excludeParticipa
 	defer h.mu.RUnlock()
 
 	if room, ok := h.rooms[roomID]; ok {
-		log.Printf("[Hub] Broadcasting to room %s with %d clients", roomID, len(room))
 		for participantID, client := range room {
 			if excludeParticipantID != "" && participantID.String() == excludeParticipantID {
-				log.Printf("[Hub] Skipping excluded participant %s", participantID)
 				continue
 			}
-			log.Printf("[Hub] Sending to participant %s", participantID)
 			client.Send(message)
 		}
-	} else {
-		log.Printf("[Hub] WARNING: Room %s not found in hub.rooms!", roomID)
 	}
 }
 
@@ -346,15 +367,17 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 	pubsub := h.redisClient.Subscribe(ctx, channelName)
 	defer pubsub.Close()
 
-	log.Printf("Subscribed to Redis channel: %s", channelName)
-
 	for {
 		msg, err := pubsub.ReceiveMessage(ctx)
 		if err != nil {
 			if err == context.Canceled || err == redislib.Nil {
 				return
 			}
-			log.Printf("Redis subscription error for room %s: %v", roomID, err)
+			h.logger.Error("redis subscription error",
+				"room_id", roomID,
+				"channel", channelName,
+				"error", err.Error(),
+			)
 			continue
 		}
 

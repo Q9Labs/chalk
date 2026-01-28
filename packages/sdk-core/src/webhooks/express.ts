@@ -5,19 +5,19 @@
  * @module @q9labs/chalk-core/webhooks
  */
 
-import type { Request, Response, NextFunction } from "express";
+import type { NextFunction, Request, Response } from "express";
 import {
-  createWebhookHandler,
-  type WebhookHandlerOptions,
-  type WebhookEvent,
+	createWebhookHandler,
+	type WebhookEvent,
+	type WebhookHandlerOptions,
 } from "./handler";
 
 declare global {
-  namespace Express {
-    interface Request {
-      chalkEvent?: WebhookEvent;
-    }
-  }
+	namespace Express {
+		interface Request {
+			chalkEvent?: WebhookEvent;
+		}
+	}
 }
 
 /**
@@ -43,35 +43,35 @@ declare global {
  * ```
  */
 export function chalkWebhookMiddleware(options: WebhookHandlerOptions) {
-  const handler = createWebhookHandler(options);
+	const handler = createWebhookHandler(options);
 
-  return (req: Request, res: Response, next: NextFunction) => {
-    const signature = req.headers["x-chalk-signature"];
-    const timestamp = req.headers["x-chalk-timestamp"];
+	return (req: Request, res: Response, next: NextFunction) => {
+		const signature = req.headers["x-chalk-signature"];
+		const timestamp = req.headers["x-chalk-timestamp"];
 
-    if (typeof signature !== "string" || typeof timestamp !== "string") {
-      res.status(401).json({ error: "Missing webhook headers" });
-      return;
-    }
+		if (typeof signature !== "string" || typeof timestamp !== "string") {
+			res.status(401).json({ error: "Missing webhook headers" });
+			return;
+		}
 
-    // Handle both raw buffer and parsed body
-    let body: string;
-    if (Buffer.isBuffer(req.body)) {
-      body = req.body.toString("utf8");
-    } else if (typeof req.body === "string") {
-      body = req.body;
-    } else {
-      body = JSON.stringify(req.body);
-    }
+		// Handle both raw buffer and parsed body
+		let body: string;
+		if (Buffer.isBuffer(req.body)) {
+			body = req.body.toString("utf8");
+		} else if (typeof req.body === "string") {
+			body = req.body;
+		} else {
+			body = JSON.stringify(req.body);
+		}
 
-    handler
-      .verify(body, signature, timestamp)
-      .then((event) => {
-        req.chalkEvent = event;
-        next();
-      })
-      .catch(() => {
-        res.status(401).json({ error: "Webhook verification failed" });
-      });
-  };
+		handler
+			.verify(body, signature, timestamp)
+			.then((event) => {
+				req.chalkEvent = event;
+				next();
+			})
+			.catch(() => {
+				res.status(401).json({ error: "Webhook verification failed" });
+			});
+	};
 }

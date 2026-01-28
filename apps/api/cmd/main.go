@@ -228,16 +228,17 @@ func main() {
 			storageS3,
 			queries,
 			storage.DefaultLifecycleConfig(),
+			slog.Default(),
 		)
 		go lifecycleMgr.Start(ctx)
 		slog.Info("started recording lifecycle manager")
 	}
 
-	recChecker := jobs.NewRecordingChecker(router.Queries(), cfClient, router.RecordingService())
+	recChecker := jobs.NewRecordingChecker(router.Queries(), cfClient, router.RecordingService(), slog.Default())
 	go recChecker.Run(ctx, 30*time.Minute)
 	slog.Info("started recording checker", "interval", "30m")
 
-	roomCleanup := jobs.NewRoomCleanup(router.Queries(), router.RoomService())
+	roomCleanup := jobs.NewRoomCleanup(router.Queries(), router.RoomService(), slog.Default())
 	go roomCleanup.Run(ctx, 10*time.Minute, 30) // Check every 10min, cleanup rooms empty for 30min
 	slog.Info("started room cleanup", "interval", "10m", "timeout", "30m")
 

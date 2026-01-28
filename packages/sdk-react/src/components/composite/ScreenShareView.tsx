@@ -1,20 +1,17 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
 import { VideoTile, Spinner } from '../atomic';
-import { 
-  ZoomInIcon, 
-  ZoomOutIcon, 
-  Maximize01Icon, 
+import {
+  ZoomInIcon,
+  ZoomOutIcon,
+  Maximize01Icon,
   Monitor01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowDown01Icon,
   ArrowUp01Icon
 } from '../../utils/icons';
-import { createLogger } from '@q9labs/chalk-core';
 import type { Participant } from './VideoGrid';
-
-const log = createLogger('ScreenShareView');
 
 export interface ScreenShareViewProps {
   screenShareTrack: MediaStreamTrack;
@@ -61,7 +58,6 @@ export const ScreenShareView = React.memo(({
     if (!videoEl || !screenShareTrack) return;
 
     if (screenShareTrack.readyState === 'ended') {
-      log.warn('Screen share track is ended');
       return;
     }
 
@@ -70,13 +66,11 @@ export const ScreenShareView = React.memo(({
     try {
       const stream = new MediaStream([screenShareTrack]);
       videoEl.srcObject = stream;
-      videoEl.play().catch((error) => {
-        if (error.name !== 'AbortError') {
-          log.error('Failed to play video:', error);
-        }
+      videoEl.play().catch(() => {
+        // Play failed - may be user interaction required
       });
-    } catch (error) {
-      log.error('Failed to create MediaStream:', error);
+    } catch {
+      // Failed to create MediaStream
     }
 
     return () => {

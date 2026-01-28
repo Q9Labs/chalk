@@ -13,6 +13,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.0.50] - 2026-01-28
+
+### Changed
+
+- **SDK-Core: Wide Events logging** — Replaced 250+ scattered log calls with canonical "wide events" pattern
+  - Each operation emits ONE context-rich event at completion with full timing breakdown
+  - New `wideEvents` API: `wideEvents.start("room.join")` → accumulate context → `ctx.complete("success")`
+  - Phase timing: `ctx.markPhase("api")`, `ctx.markPhase("rtk.join")` tracks where time is spent
+  - Configurable via `ChalkClientConfig.wideEvents`: `{ enabled, handler, includeDebugInfo }`
+  - Custom handler support for analytics/logging services: `handler: (event) => analytics.track(event)`
+  - Exports: `wideEvents`, `WideEvent`, `WideEventConfig`, `WideEventContext`
+  - Removed: `createLogger`, `configureLogger`, `initLogging`, `isLoggingEnabled`, `Logger` types
+  - Event types: `room.join`, `room.leave`, `api.request`, `media.toggle`, `screenshare.start/stop`, `websocket.connect/disconnect`, `session.init/dispose`
+
+- **Unified slog-based logging** — Migrated all Go API logging from scattered `log.Printf()` to structured `slog` with wide events pattern
+  - New `internal/version` package with build-time variables (CommitSHA, Version, BuildTime)
+  - Enhanced central logger adds environment context (service, version, commit_sha, env, region) to all log events
+  - Migrated background jobs: `room_cleanup.go`, `recording_check.go`, `storage/lifecycle.go` with injected loggers
+  - Migrated WebSocket package: removed verbose per-message logging, kept lifecycle/error events only
+  - Migrated remaining files: router, handlers, redis, s3/cors_origins
+  - All constructors now accept optional `*slog.Logger` parameter with `slog.Default()` fallback
+
 ## [0.0.49] - 2025-01-28
 
 ### Added

@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -18,14 +18,15 @@ import (
 
 // CORSOriginsService handles aggregation of tenant CORS origins and uploading to S3
 type CORSOriginsService struct {
-	s3Client       *s3.Client
-	bucket         string
-	key            string
-	queries        *db.Queries
-	githubRepo     string
-	githubToken    string
-	staticOrigins  []string
-	enabled        bool
+	s3Client      *s3.Client
+	bucket        string
+	key           string
+	queries       *db.Queries
+	githubRepo    string
+	githubToken   string
+	staticOrigins []string
+	enabled       bool
+	logger        *slog.Logger
 }
 
 // CORSOriginsConfig holds configuration for the CORS origins service
@@ -46,13 +47,19 @@ type CORSOriginsFile struct {
 }
 
 // NewCORSOriginsService creates a new CORS origins service
-func NewCORSOriginsService(cfg CORSOriginsConfig, queries *db.Queries) (*CORSOriginsService, error) {
+func NewCORSOriginsService(cfg CORSOriginsConfig, queries *db.Queries, logger *slog.Logger) (*CORSOriginsService, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger = logger.With("component", "cors_origins")
+
 	// If no credentials provided, create a disabled service
 	if cfg.AccessKeyID == "" || cfg.SecretAccessKey == "" || cfg.Bucket == "" {
-		log.Printf("CORS origins S3 service disabled (no credentials configured)")
+		logger.Info("CORS origins S3 service disabled (no credentials configured)")
 		return &CORSOriginsService{
 			enabled: false,
 			queries: queries,
+			logger:  logger,
 		}, nil
 	}
 
@@ -96,13 +103,14 @@ func NewCORSOriginsService(cfg CORSOriginsConfig, queries *db.Queries) (*CORSOri
 			"https://backend-dev.tuitionhighway.com",
 		},
 		enabled: true,
+		logger:  logger,
 	}, nil
 }
 
 // AggregateAndUpload fetches all tenant origins + static origins and uploads to S3
 func (s *CORSOriginsService) AggregateAndUpload(ctx context.Context) error {
 	if !s.enabled {
-		log.Printf("CORS origins S3 upload skipped (service disabled)")
+		s.logger.Debug("CORS origins S3 upload skipped (service disabled)")
 		return nil
 	}
 
@@ -149,13 +157,17 @@ func (s *CORSOriginsService) AggregateAndUpload(ctx context.Context) error {
 		return fmt.Errorf("failed to upload to S3: %w", err)
 	}
 
-	log.Printf("CORS origins uploaded to s3://%s/%s (%d origins)", s.bucket, s.key, len(origins))
+	s.logger.Info("CORS origins uploaded",
+		"bucket", s.bucket,
+		"key", s.key,
+		"origin_count", len(origins),
+	)
 
 	// Trigger GitHub workflow for Terraform sync
 	if s.githubToken != "" && s.githubRepo != "" {
 		if err := s.triggerGitHubWorkflow(ctx); err != nil {
 			// Log but don't fail - S3 upload succeeded
-			log.Printf("Warning: failed to trigger GitHub workflow: %v", err)
+			s.logger.Warn("failed to trigger GitHub workflow", "error", err)
 		}
 	}
 
@@ -194,7 +206,7 @@ func (s *CORSOriginsService) triggerGitHubWorkflow(ctx context.Context) error {
 		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
-	log.Printf("Triggered GitHub workflow for repo %s", s.githubRepo)
+	s.logger.Info("triggered GitHub workflow", "repo", s.githubRepo)
 	return nil
 }
 

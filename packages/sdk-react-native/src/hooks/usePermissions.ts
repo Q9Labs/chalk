@@ -1,4 +1,3 @@
-import { createLogger } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import {
 	Alert,
@@ -7,8 +6,6 @@ import {
 	PermissionsAndroid,
 	Platform,
 } from "react-native";
-
-const log = createLogger("usePermissions");
 
 /**
  * Get the PermissionsModule from NativeModules at runtime
@@ -169,11 +166,9 @@ export function usePermissions(): UsePermissionsResult {
 
 			// iOS: Use native module to check AVFoundation permissions
 			const PermissionsModule = getPermissionsModule();
-			log.debug("Checking iOS permissions, module available:", !!PermissionsModule);
 			if (PermissionsModule?.checkPermissions) {
 				try {
 					const result = await PermissionsModule.checkPermissions();
-					log.debug("iOS permission result:", result);
 
 					const state: PermissionsState = {
 						camera: result.camera as PermissionStatus,
@@ -184,8 +179,8 @@ export function usePermissions(): UsePermissionsResult {
 
 					setPermissions(state);
 					return state;
-				} catch (error) {
-					log.error("iOS permission check failed", error);
+				} catch {
+					// Silently ignore error
 				}
 			}
 
@@ -221,8 +216,7 @@ export function usePermissions(): UsePermissionsResult {
 				}));
 
 				return cameraStatus === "granted" && micStatus === "granted";
-			} catch (error) {
-				log.error("Request failed", error);
+			} catch {
 				return false;
 			}
 		}
@@ -243,8 +237,7 @@ export function usePermissions(): UsePermissionsResult {
 				}));
 
 				return cameraStatus === "granted" && micStatus === "granted";
-			} catch (error) {
-				log.error("iOS permission request failed", error);
+			} catch {
 				return false;
 			}
 		}
@@ -277,8 +270,7 @@ export function usePermissions(): UsePermissionsResult {
 				const status = androidResultToStatus(result);
 				setPermissions((prev) => ({ ...prev, notifications: status }));
 				return status === "granted";
-			} catch (error) {
-				log.error("Notification permission request failed", error);
+			} catch {
 				return false;
 			}
 		}, []);
@@ -289,8 +281,8 @@ export function usePermissions(): UsePermissionsResult {
 	const openSettings = useCallback(async (): Promise<void> => {
 		try {
 			await Linking.openSettings();
-		} catch (error) {
-			log.error("Failed to open settings", error);
+		} catch {
+			// Silently ignore error
 		}
 	}, []);
 

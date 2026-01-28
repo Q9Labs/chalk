@@ -3,7 +3,6 @@ package websocket
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,9 +62,7 @@ func (h *Hub) UpdateWhiteboardState(roomID uuid.UUID, payload WhiteboardUpdatePa
 
 	if len(payload.Elements) > 0 {
 		var rawElements []json.RawMessage
-		if err := json.Unmarshal(payload.Elements, &rawElements); err != nil {
-			log.Printf("[WB-STATE] Failed to parse elements for room %s: %v", roomID, err)
-		} else {
+		if err := json.Unmarshal(payload.Elements, &rawElements); err == nil {
 			for _, raw := range rawElements {
 				var meta elementMeta
 				if err := json.Unmarshal(raw, &meta); err != nil {
@@ -89,9 +86,7 @@ func (h *Hub) UpdateWhiteboardState(roomID uuid.UUID, payload WhiteboardUpdatePa
 
 	if len(payload.Files) > 0 {
 		var files map[string]json.RawMessage
-		if err := json.Unmarshal(payload.Files, &files); err != nil {
-			log.Printf("[WB-STATE] Failed to parse files for room %s: %v", roomID, err)
-		} else {
+		if err := json.Unmarshal(payload.Files, &files); err == nil {
 			for id, raw := range files {
 				state.Files[id] = raw
 			}
@@ -220,19 +215,28 @@ func (h *Hub) persistWhiteboardState(roomID uuid.UUID) {
 	}
 	data, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("[WB-STATE] Failed to marshal state for room %s: %v", roomID, err)
+		h.logger.Error("failed to marshal whiteboard state",
+			"room_id", roomID,
+			"error", err.Error(),
+		)
 		return
 	}
 
 	if err := h.whiteboardStore.Save(h.ctx, roomID, data); err != nil {
-		log.Printf("[WB-STATE] Failed to persist state for room %s: %v", roomID, err)
+		h.logger.Error("failed to persist whiteboard state",
+			"room_id", roomID,
+			"error", err.Error(),
+		)
 	}
 }
 
 func (h *Hub) restoreWhiteboardState(roomID uuid.UUID, raw []byte) *WhiteboardState {
 	var persisted persistedWhiteboardState
 	if err := json.Unmarshal(raw, &persisted); err != nil {
-		log.Printf("[WB-STATE] Failed to parse persisted state for room %s: %v", roomID, err)
+		h.logger.Error("failed to parse persisted whiteboard state",
+			"room_id", roomID,
+			"error", err.Error(),
+		)
 		return nil
 	}
 

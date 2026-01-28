@@ -9,7 +9,6 @@ import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-reac
 import {
 	ChalkSession,
 	type ChalkSessionConfig,
-	createLogger,
 	type JoinOptions,
 } from "@q9labs/chalk-core";
 import type { JSX, ReactNode } from "react";
@@ -21,8 +20,6 @@ import {
 	useMemo,
 	useState,
 } from "react";
-
-const log = createLogger("ChalkProvider");
 
 // Module-level session cache for HMR persistence
 // Key is apiUrl to allow different sessions for different endpoints
@@ -114,7 +111,6 @@ export function ChalkProvider({
 		const cached = sessionCache.get(cacheKey);
 
 		if (cached) {
-			log.debug("Reusing cached session for HMR");
 			return cached;
 		}
 
@@ -162,8 +158,8 @@ export function ChalkProvider({
 	// Auto-connect if roomId and userName provided
 	useEffect(() => {
 		if (roomId && userName && !isConnected) {
-			session.join(roomId, { userName }).catch((err) => {
-				log.error("Auto-join failed:", err);
+			session.join(roomId, { userName }).catch(() => {
+				// Auto-join failed - user can retry manually
 			});
 		}
 	}, [roomId, userName, isConnected, session]);

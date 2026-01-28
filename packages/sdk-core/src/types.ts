@@ -142,6 +142,31 @@ export interface ChalkClientConfig {
 	 * @default false
 	 */
 	demoMode?: boolean;
+
+	/**
+	 * Wide events configuration for comprehensive logging
+	 * Wide events emit one context-rich event per operation with full timing
+	 *
+	 * @example
+	 * ```ts
+	 * const client = new ChalkClient({
+	 *   apiUrl: "https://api.chalk.io",
+	 *   token: "...",
+	 *   wideEvents: {
+	 *     enabled: true,
+	 *     handler: (event) => analytics.track("chalk_sdk", event),
+	 *   },
+	 * });
+	 * ```
+	 */
+	wideEvents?: {
+		/** Enable wide events (default: true when debug: true) */
+		enabled?: boolean;
+		/** Custom handler for sending events to analytics/logging services */
+		handler?: (event: import("./wide-events/types").WideEvent) => void;
+		/** Include debug info like stack traces (default: false) */
+		includeDebugInfo?: boolean;
+	};
 }
 
 // ============================================================================

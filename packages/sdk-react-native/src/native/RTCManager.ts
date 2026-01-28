@@ -8,7 +8,6 @@ import type {
 	MediaStream,
 	RTCPeerConnection,
 } from "@cloudflare/react-native-webrtc";
-import { createLogger } from "@q9labs/chalk-core";
 import { NativeModules, PermissionsAndroid, Platform } from "react-native";
 
 // Detect iOS simulator - on simulator, enumerateDevices() crashes with nil object insertion
@@ -34,8 +33,6 @@ try {
 } catch {
 	// Native module not available (e.g., running in simulator without full setup)
 }
-
-const log = createLogger("RTCManager");
 
 // RealtimeKit client type definition
 // The actual import is dynamic to allow fallback when package is not available
@@ -86,7 +83,6 @@ try {
 	);
 } catch {
 	// RealtimeKit not available, will use fallback mode
-	log.info("RealtimeKit not available, using fallback mode");
 }
 
 export interface MediaDeviceInfo {
@@ -196,8 +192,7 @@ export class RTCManager {
 					granted[PermissionsAndroid.PERMISSIONS.CAMERA] === "granted" &&
 					granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === "granted"
 				);
-			} catch (err) {
-				log.error("Permission request error", err);
+			} catch {
 				return false;
 			}
 		}
@@ -264,7 +259,6 @@ export class RTCManager {
 	 */
 	async startScreenShare(): Promise<boolean> {
 		if (!this.rtkClient) {
-			log.error("Screen share requires RealtimeKit");
 			return false;
 		}
 
@@ -272,8 +266,7 @@ export class RTCManager {
 			await this.rtkClient.self.enableScreenShare();
 			this.isScreenSharing = true;
 			return true;
-		} catch (error) {
-			log.error("Screen share failed", error);
+		} catch {
 			return false;
 		}
 	}
@@ -286,8 +279,8 @@ export class RTCManager {
 			try {
 				await this.rtkClient.self.disableScreenShare();
 				this.isScreenSharing = false;
-			} catch (error) {
-				log.error("Stop screen share failed", error);
+			} catch {
+				// Silently ignore error
 			}
 		}
 	}
@@ -311,7 +304,6 @@ export class RTCManager {
 		audio: boolean = true,
 	): Promise<MediaStream> {
 		if (!mediaDevices) {
-			log.warn("mediaDevices not available - running in limited mode");
 			throw new Error("WebRTC not available on this device");
 		}
 
@@ -336,7 +328,6 @@ export class RTCManager {
 			this.localStream = await mediaDevices.getUserMedia(constraints);
 			return this.localStream;
 		} catch (err) {
-			log.error("getUserMedia error", err);
 			throw err;
 		}
 	}
@@ -348,11 +339,6 @@ export class RTCManager {
 	async enumerateDevices(): Promise<MediaDeviceInfo[]> {
 		// Return mock devices on simulator to avoid native crash
 		if (!mediaDevices || isIOSSimulator) {
-			if (isIOSSimulator) {
-				log.info("Running on simulator - returning mock devices");
-			} else {
-				log.warn("mediaDevices not available - returning mock devices");
-			}
 			return [
 				{
 					deviceId: "mock-camera-front",
@@ -380,8 +366,7 @@ export class RTCManager {
 		try {
 			const devices = await mediaDevices.enumerateDevices();
 			return devices as MediaDeviceInfo[];
-		} catch (err) {
-			log.error("enumerateDevices error", err);
+		} catch {
 			return [];
 		}
 	}
@@ -440,7 +425,6 @@ export class RTCManager {
 				}
 			}
 		} catch (err) {
-			log.error("switchCamera error", err);
 			throw err;
 		}
 	}
@@ -457,7 +441,6 @@ export class RTCManager {
 	 */
 	async startVideo(): Promise<void> {
 		if (!mediaDevices) {
-			log.warn("startVideo: mediaDevices not available");
 			return;
 		}
 
@@ -487,7 +470,6 @@ export class RTCManager {
 					this.localStream.addTrack(newVideoTrack);
 				}
 			} catch (err) {
-				log.error("startVideo error", err);
 				throw err;
 			}
 		}
@@ -525,7 +507,6 @@ export class RTCManager {
 	 */
 	async startAudio(): Promise<void> {
 		if (!mediaDevices) {
-			log.warn("startAudio: mediaDevices not available");
 			return;
 		}
 
@@ -555,7 +536,6 @@ export class RTCManager {
 					this.localStream.addTrack(newAudioTrack);
 				}
 			} catch (err) {
-				log.error("startAudio error", err);
 				throw err;
 			}
 		}
@@ -601,8 +581,8 @@ export class RTCManager {
 	cleanup(): void {
 		// Clean up RealtimeKit
 		if (this.rtkClient) {
-			this.rtkClient.leave().catch((err) => {
-				log.error("Error leaving room during cleanup", err);
+			this.rtkClient.leave().catch(() => {
+				// Silently ignore error
 			});
 			this.rtkClient = null;
 		}

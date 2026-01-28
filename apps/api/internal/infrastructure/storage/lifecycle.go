@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
@@ -21,6 +21,7 @@ type RecordingLifecycleManager struct {
 	interval   time.Duration
 	archiveAge time.Duration
 	batchSize  int32
+	logger     *slog.Logger
 }
 
 type LifecycleConfig struct {
@@ -37,9 +38,12 @@ func DefaultLifecycleConfig() LifecycleConfig {
 	}
 }
 
-func NewRecordingLifecycleManager(r2, s3 StorageClient, database RecordingArchiver, cfg LifecycleConfig) *RecordingLifecycleManager {
+func NewRecordingLifecycleManager(r2, s3 StorageClient, database RecordingArchiver, cfg LifecycleConfig, logger *slog.Logger) *RecordingLifecycleManager {
 	if cfg.Interval == 0 {
 		cfg = DefaultLifecycleConfig()
+	}
+	if logger == nil {
+		logger = slog.Default()
 	}
 	return &RecordingLifecycleManager{
 		r2:         r2,
@@ -48,6 +52,7 @@ func NewRecordingLifecycleManager(r2, s3 StorageClient, database RecordingArchiv
 		interval:   cfg.Interval,
 		archiveAge: cfg.ArchiveAge,
 		batchSize:  cfg.BatchSize,
+		logger:     logger.With("component", "lifecycle_manager"),
 	}
 }
 
@@ -55,47 +60,73 @@ func (m *RecordingLifecycleManager) Start(ctx context.Context) {
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 
-	log.Println("Recording lifecycle manager started")
+	m.logger.Info("recording lifecycle manager started",
+		"interval", m.interval.String(),
+		"archive_age", m.archiveAge.String(),
+		"batch_size", m.batchSize,
+	)
 
 	if err := m.archiveOldRecordings(ctx); err != nil {
-		log.Printf("Initial archive run failed: %v", err)
+		m.logger.Error("initial archive run failed",
+			"operation", "archive_batch",
+			"error", err.Error(),
+		)
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Recording lifecycle manager stopping")
+			m.logger.Info("recording lifecycle manager stopped")
 			return
 		case <-ticker.C:
 			if err := m.archiveOldRecordings(ctx); err != nil {
-				log.Printf("Archive run failed: %v", err)
+				m.logger.Error("archive run failed",
+					"operation", "archive_batch",
+					"error", err.Error(),
+				)
 			}
 		}
 	}
 }
 
 func (m *RecordingLifecycleManager) archiveOldRecordings(ctx context.Context) error {
-	log.Println("Checking for recordings to archive...")
+	start := time.Now()
 
 	recordings, err := m.db.ListRecordingsReadyForArchive(ctx, m.batchSize)
 	if err != nil {
 		return fmt.Errorf("failed to get old recordings: %w", err)
 	}
 
-	log.Printf("Found %d recordings to archive", len(recordings))
-
-	var archiveErrors int
-	for _, rec := range recordings {
-		if err := m.archiveRecording(ctx, rec); err != nil {
-			log.Printf("Failed to archive recording %s: %v", rec.ID, err)
-			archiveErrors++
-			continue
-		}
-		log.Printf("Archived recording %s", rec.ID)
+	if len(recordings) == 0 {
+		return nil
 	}
 
-	if archiveErrors > 0 {
-		return fmt.Errorf("failed to archive %d recordings", archiveErrors)
+	var archived, failed int
+	for _, rec := range recordings {
+		recStart := time.Now()
+		if err := m.archiveRecording(ctx, rec); err != nil {
+			m.logger.Error("recording archive failed",
+				"operation", "archive_recording",
+				"recording_id", rec.ID,
+				"duration_ms", time.Since(recStart).Milliseconds(),
+				"error", err.Error(),
+			)
+			failed++
+			continue
+		}
+		archived++
+	}
+
+	m.logger.Info("archive batch completed",
+		"operation", "archive_batch",
+		"recordings_found", len(recordings),
+		"recordings_archived", archived,
+		"recordings_failed", failed,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
+
+	if failed > 0 {
+		return fmt.Errorf("failed to archive %d recordings", failed)
 	}
 	return nil
 }
@@ -129,7 +160,12 @@ func (m *RecordingLifecycleManager) archiveRecording(ctx context.Context, rec db
 	}
 
 	if err := m.r2.Delete(ctx, *rec.StoragePath); err != nil {
-		log.Printf("Warning: failed to delete from R2 after archiving: %v", err)
+		m.logger.Warn("failed to delete from R2 after archiving",
+			"operation", "archive_recording",
+			"recording_id", rec.ID,
+			"storage_path", *rec.StoragePath,
+			"error", err.Error(),
+		)
 	}
 
 	return nil

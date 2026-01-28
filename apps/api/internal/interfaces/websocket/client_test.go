@@ -28,7 +28,7 @@ func (m *testMockRedis) Exists(ctx context.Context, keys ...string) (int64, erro
 }
 
 func newTestHub() *Hub {
-	return NewHub(&testMockRedis{})
+	return NewHub(&testMockRedis{}, nil)
 }
 
 func TestNewClient(t *testing.T) {

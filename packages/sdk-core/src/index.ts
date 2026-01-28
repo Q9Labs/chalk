@@ -41,17 +41,23 @@ export {
 // Typed event emitter utility
 export { TypedEventEmitter } from "./utils/typed-emitter.ts";
 
-// Debug logging
+// Wide Events - canonical log lines for comprehensive event tracking
 export {
-	createLogger,
-	configureLogger,
-	initLogging,
-	isLoggingEnabled,
-	type Logger,
-	type LogLevel,
-	type LoggerConfig,
-	type LogEntry,
-} from "./utils/logger.ts";
+	wideEvents,
+	configureWideEvents,
+	WideEventContext,
+	WideEventCollector,
+	wideEventsCollector,
+} from "./wide-events/index.ts";
+export type {
+	WideEvent,
+	WideEventConfig,
+	WideEventOutcome,
+	WideEventPlatform,
+	WideEventSdk,
+	WideEventError,
+	WideEventType,
+} from "./wide-events/index.ts";
 
 // Error handling
 export { ChalkError as ChalkErrorClass, ChalkErrorCode as ErrorCode } from "./errors/chalk-error.ts";

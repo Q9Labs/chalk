@@ -14,7 +14,6 @@ import type {
 	WhiteboardSnapshot,
 	WhiteboardUpdate,
 } from "../types/entities/whiteboard";
-import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Whiteboard manager state */
@@ -70,7 +69,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 	private pendingFiles: Record<string, unknown> | null = null;
 	private lastSeqByParticipant = new Map<string, number>();
 	private openParticipants = new Set<string>();
-	private readonly log: Logger;
 
 	constructor(_debug = false) {
 		super({
@@ -82,7 +80,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			lastSeq: 0,
 			openParticipants: [],
 		});
-		this.log = createLogger("Whiteboard");
 	}
 
 	/** Subscribe to whiteboard events */
@@ -137,7 +134,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 		if (!this.room) return;
 
 		this.room.on("whiteboard-update", (data) => {
-			this.log.debug("Update received", { participantId: data.participantId, seq: data.seq, count: data.elements?.length });
 			const update: WhiteboardUpdate = {
 				participantId: data.participantId,
 				displayName: data.displayName,
@@ -170,7 +166,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 		});
 
 		this.room.on("whiteboard-snapshot", (data) => {
-			this.log.info("Snapshot received", { roomId: data.roomId, count: data.elements?.length });
 			const snapshot: WhiteboardSnapshot = {
 				roomId: data.roomId,
 				elements: data.elements,
@@ -203,7 +198,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 		});
 
 		this.room.on("whiteboard-permission-changed", (data) => {
-			this.log.info("Permission changed", { participantId: data.participantId, canDraw: data.canDraw });
 			// Update local permission if it's for us
 			const localId = this.room?.localParticipant?.id;
 			if (data.participantId === localId) {
@@ -222,7 +216,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 		});
 
 		this.room.on("whiteboard-opened", (data) => {
-			this.log.info("Participant opened whiteboard", { participantId: data.participantId, displayName: data.displayName });
 			this.openParticipants.add(data.participantId);
 			this.setState({ openParticipants: Array.from(this.openParticipants) });
 			this.events.emit("opened", {
@@ -233,7 +226,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			// If we have whiteboard open with elements, send full state to help new joiner sync
 			const state = this.getState();
 			if (state.isOpen && state.elements.length > 0) {
-				this.log.info("Sending full state to help new participant sync");
 				const seq = Date.now();
 				this.room?.sendWhiteboardUpdate(
 					state.elements as unknown[],
@@ -245,7 +237,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 		});
 
 		this.room.on("whiteboard-closed", (data) => {
-			this.log.info("Participant closed whiteboard", { participantId: data.participantId });
 			this.openParticipants.delete(data.participantId);
 			this.cursors.delete(data.participantId);
 			this.setState({
@@ -274,7 +265,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			);
 		}
 
-		this.log.info("Opening whiteboard");
 		this.room.openWhiteboard();
 		this.setState({ isOpen: true });
 
@@ -291,7 +281,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			);
 		}
 
-		this.log.info("Closing whiteboard");
 		this.room.closeWhiteboard();
 		this.setState({ isOpen: false });
 	}
@@ -400,7 +389,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			);
 		}
 
-		this.log.info("Clearing whiteboard");
 		this.room.clearWhiteboard();
 		this.lastSeqByParticipant.clear();
 		this.setState({ elements: [], files: {}, lastSeq: 0 });
@@ -415,7 +403,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			);
 		}
 
-		this.log.info("Granting permission", { participantId });
 		this.room.grantWhiteboardPermission(participantId);
 	}
 
@@ -428,7 +415,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			);
 		}
 
-		this.log.info("Revoking permission", { participantId });
 		this.room.revokeWhiteboardPermission(participantId);
 	}
 

@@ -1,6 +1,6 @@
 import { EventEmitter } from "./events.ts";
 import { camelToSnake, snakeToCamel } from "./transforms.ts";
-import { createLogger, type Logger } from "./utils/logger.ts";
+import { wideEvents, type WideEventContext } from "./wide-events/index.ts";
 import type {
 	ChalkError,
 	ChatMessage,
@@ -98,7 +98,7 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private reconnectAttempt = 0;
 	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 	private lastPongTime: number = Date.now();
-	private readonly log: Logger = createLogger("WebSocket");
+	private connectContext: WideEventContext | null = null;
 
 	constructor(wsUrl: string, _debug = false, tokenProvider?: TokenProvider) {
 		super();
@@ -116,13 +116,17 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	connect(token: string, roomId: string): void {
 		if (this.state === "connected" || this.state === "connecting") {
-			this.log.debug("Already connected or connecting");
 			return;
 		}
 
 		this.token = token;
 		this.roomId = roomId;
 		this.state = "connecting";
+
+		this.connectContext = wideEvents.start("websocket.connect");
+		this.connectContext.set("roomId", roomId);
+		this.connectContext.set("wsUrl", this.wsUrl);
+
 		this.doConnect();
 	}
 
@@ -140,11 +144,8 @@ export class WSClient extends EventEmitter<WSEvents> {
 			const separator = this.wsUrl.includes("?") ? "&" : "?";
 			url = `${this.wsUrl}${separator}token=${encodeURIComponent(this.token)}&room=${encodeURIComponent(this.roomId)}`;
 		}
-		this.log.info("Connecting", {
-			url: this.wsUrl,
-			roomId: this.roomId,
-			attempt: this.reconnectAttempt + 1,
-		});
+
+		this.connectContext?.set("attempt", this.reconnectAttempt + 1);
 
 		try {
 			// Also pass token via subprotocol as fallback
@@ -152,15 +153,12 @@ export class WSClient extends EventEmitter<WSEvents> {
 			this.ws = new WebSocket(url, protocols);
 			this.setupEventHandlers();
 		} catch (error) {
-			// Capture the actual error details
 			const errorMessage = error instanceof Error ? error.message : String(error);
-			const errorStack = error instanceof Error ? error.stack : undefined;
-			this.log.error("Connection error", {
-				message: errorMessage,
-				stack: errorStack,
-				url: this.wsUrl,
-				roomId: this.roomId,
+			this.connectContext?.complete("error", {
+				errorCode: "WS_CONNECTION_ERROR",
+				errorMessage,
 			});
+			this.connectContext = null;
 			this.handleConnectionFailure();
 		}
 	}
@@ -169,10 +167,13 @@ export class WSClient extends EventEmitter<WSEvents> {
 		if (!this.ws) return;
 
 		this.ws.onopen = () => {
-			this.log.info("Connected");
 			this.state = "connected";
 			this.reconnectAttempt = 0;
 			this.startHeartbeat();
+
+			this.connectContext?.complete("success");
+			this.connectContext = null;
+
 			this.emit("connected", undefined);
 		};
 
@@ -197,13 +198,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 			};
 			const codeDescription = closeCodeMap[event.code] ?? "Unknown close code";
 
-			this.log.info("Disconnected", {
-				code: event.code,
-				codeDescription,
-				reason: event.reason || "(no reason provided)",
-				wasClean: event.wasClean,
-				state: this.state,
-			});
 			this.stopHeartbeat();
 
 			if (this.state === "connected") {
@@ -216,7 +210,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 		};
 
 		this.ws.onerror = (event) => {
-			// Extract error details from ErrorEvent if available
 			const errorEvent = event as ErrorEvent;
 			const errorMessage = errorEvent.message || "Unknown WebSocket error";
 			const errorDetails: Record<string, unknown> = {
@@ -226,12 +219,10 @@ export class WSClient extends EventEmitter<WSEvents> {
 				readyStateDesc: this.ws ? ["CONNECTING", "OPEN", "CLOSING", "CLOSED"][this.ws.readyState] : "null",
 			};
 
-			// Include filename/lineno if available (ErrorEvent properties)
 			if (errorEvent.filename) errorDetails.filename = errorEvent.filename;
 			if (errorEvent.lineno) errorDetails.lineno = errorEvent.lineno;
 			if (errorEvent.error) errorDetails.error = String(errorEvent.error);
 
-			this.log.warn("WebSocket error", errorDetails);
 			this.emit("error", {
 				code: "WS_ERROR",
 				message: `WebSocket error: ${errorMessage}`,
@@ -247,10 +238,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private handleMessage(data: string): void {
 		try {
 			const rawMessage = JSON.parse(data);
-			this.log.debug("Received", {
-				type: rawMessage.type,
-				payloadPreview: JSON.stringify(rawMessage.payload).substring(0, 200),
-			});
 
 			const payload = rawMessage.payload
 				? snakeToCamel<Record<string, unknown>>(rawMessage.payload)
@@ -280,8 +267,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 					);
 					break;
 				case "chat.message": {
-					// Map backend field names to frontend ChatMessage interface
-					this.log.debug("Chat message received", { payload });
 					const rawPayload = payload as {
 						id: string;
 						participantId: string;
@@ -296,7 +281,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 						content: rawPayload.content,
 						timestamp: new Date(rawPayload.timestamp),
 					};
-					this.log.debug("Chat message emitting", { id: chatMessage.id, senderId: chatMessage.senderId });
 					this.emit("chat.message", chatMessage);
 					break;
 				}
@@ -355,28 +339,20 @@ export class WSClient extends EventEmitter<WSEvents> {
 					this.emit("error", payload as unknown as ChalkError);
 					break;
 				case "whiteboard.data": {
-					const data = payload as WSEvents["whiteboard.data"];
-					this.log.debug("Whiteboard data received", {
-						participantId: data.participantId,
-						displayName: data.displayName,
-						seq: data.seq,
-						elementsCount: Array.isArray(data.elements) ? data.elements.length : "unknown",
-					});
+					const wbData = payload as WSEvents["whiteboard.data"];
 					this.emit("whiteboard.data", {
-						...data,
-						timestamp: new Date(data.timestamp),
+						...wbData,
+						timestamp: new Date(wbData.timestamp),
 					});
 					break;
 				}
 				case "whiteboard.snapshot":
-					this.log.debug("Whiteboard snapshot received", { roomId: (payload as { roomId: string }).roomId });
 					this.emit(
 						"whiteboard.snapshot",
 						payload as WSEvents["whiteboard.snapshot"],
 					);
 					break;
 				case "whiteboard.cursor":
-					// Don't log cursor - too noisy
 					this.emit("whiteboard.cursor", {
 						...(payload as WSEvents["whiteboard.cursor"]),
 						timestamp: new Date(
@@ -385,42 +361,39 @@ export class WSClient extends EventEmitter<WSEvents> {
 					});
 					break;
 				case "permission.changed": {
-					const data = payload as WSEvents["permission.changed"];
-					this.log.debug("Permission changed", { participantId: data.participantId, feature: data.feature, canDraw: data.canDraw });
+					const permData = payload as WSEvents["permission.changed"];
 					this.emit("permission.changed", {
-						...data,
-						timestamp: new Date(data.timestamp),
+						...permData,
+						timestamp: new Date(permData.timestamp),
 					});
 					break;
 				}
 				case "whiteboard.opened": {
-					const data = payload as WSEvents["whiteboard.opened"];
-					this.log.debug("Whiteboard opened", { participantId: data.participantId, displayName: data.displayName });
+					const openData = payload as WSEvents["whiteboard.opened"];
 					this.emit("whiteboard.opened", {
-						...data,
-						timestamp: new Date(data.timestamp),
+						...openData,
+						timestamp: new Date(openData.timestamp),
 					});
 					break;
 				}
 				case "whiteboard.closed": {
-					const data = payload as WSEvents["whiteboard.closed"];
-					this.log.debug("Whiteboard closed", { participantId: data.participantId });
+					const closeData = payload as WSEvents["whiteboard.closed"];
 					this.emit("whiteboard.closed", {
-						...data,
-						timestamp: new Date(data.timestamp),
+						...closeData,
+						timestamp: new Date(closeData.timestamp),
 					});
 					break;
 				}
 				case "transcript.ack": {
-					const data = payload as { id: string; timestamp: string };
-					this.log.debug("Transcript acknowledged", { id: data.id });
+					// Acknowledged, no action needed
 					break;
 				}
 				default:
-					this.log.warn("Unknown message type", { type: rawMessage.type });
+					// Unknown message type
+					break;
 			}
-		} catch (error) {
-			this.log.error("Failed to parse message", { error });
+		} catch {
+			// Failed to parse message
 		}
 	}
 
@@ -462,8 +435,24 @@ export class WSClient extends EventEmitter<WSEvents> {
 		this.stopHeartbeat();
 
 		if (this.reconnectAttempt >= RECONNECT_DELAYS.length) {
-			this.log.error("Max reconnect attempts reached");
 			this.state = "failed";
+
+			if (this.connectContext) {
+				this.connectContext.complete("error", {
+					errorCode: "MAX_RECONNECT_ATTEMPTS",
+					errorMessage: "Failed to reconnect after multiple attempts",
+				});
+				this.connectContext = null;
+			}
+
+			const ctx = wideEvents.start("websocket.disconnect");
+			ctx.set("roomId", this.roomId);
+			ctx.set("reason", "max_reconnect_attempts");
+			ctx.complete("error", {
+				errorCode: "MAX_RECONNECT_ATTEMPTS",
+				errorMessage: "Failed to reconnect after multiple attempts",
+			});
+
 			this.emit("error", {
 				code: "MAX_RECONNECT_ATTEMPTS",
 				message: "Failed to reconnect after multiple attempts",
@@ -477,7 +466,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 			RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1]!;
 		this.reconnectAttempt++;
 
-		this.log.info("Reconnecting", { delayMs: delay, attempt: this.reconnectAttempt });
 		this.emit("reconnecting", { attempt: this.reconnectAttempt });
 
 		setTimeout(async () => {
@@ -490,11 +478,8 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private async refreshTokenAndConnect(): Promise<void> {
 		if (this.tokenProvider) {
 			try {
-				this.log.debug("Refreshing token before reconnect");
 				this.token = await this.tokenProvider();
-				this.log.info("Token refreshed successfully");
 			} catch (error) {
-				this.log.error("Token refresh failed", { error });
 				const chalkError: ChalkError = {
 					code: "TOKEN_EXPIRED",
 					message:
@@ -517,10 +502,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 			// SDKCORE-LOW-01: Check for heartbeat timeout
 			const timeSinceLastPong = Date.now() - this.lastPongTime;
 			if (timeSinceLastPong > HEARTBEAT_TIMEOUT) {
-				this.log.warn("Heartbeat timeout - no pong received", {
-					timeSinceLastPong,
-					threshold: HEARTBEAT_TIMEOUT,
-				});
 				this.handleConnectionFailure();
 				return;
 			}
@@ -544,16 +525,12 @@ export class WSClient extends EventEmitter<WSEvents> {
 					: message.payload,
 			};
 			const jsonMsg = JSON.stringify(transformedMessage);
-			this.log.debug("Sending", { type: message.type, messageLength: jsonMsg.length });
 			this.ws.send(jsonMsg);
-		} else {
-			this.log.warn("Send failed", { type: message.type, readyState: this.ws?.readyState, OPEN: WebSocket.OPEN });
 		}
 	}
 
 	// Client-to-server actions
 	sendChatMessage(content: string): void {
-		this.log.debug("Chat message sending", { contentLength: content.length, readyState: this.ws?.readyState, OPEN: WebSocket.OPEN });
 		this.send({ type: "chat.send", payload: { content } });
 	}
 
@@ -570,7 +547,11 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	disconnect(): void {
-		this.log.info("Disconnecting");
+		const ctx = wideEvents.start("websocket.disconnect");
+		ctx.set("roomId", this.roomId);
+		ctx.set("reason", "client_initiated");
+		ctx.complete("success");
+
 		this.state = "disconnected";
 		this.stopHeartbeat();
 
@@ -589,11 +570,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 		files?: Record<string, unknown>,
 		seq?: number,
 	): void {
-		this.log.debug("Whiteboard update sending", {
-			elementsCount: elements.length,
-			hasFiles: !!files,
-			seq: seq ?? Date.now(),
-		});
 		this.send({
 			type: "whiteboard.update",
 			payload: { elements, files, seq: seq ?? Date.now() },
@@ -601,7 +577,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	sendWhiteboardCursor(x: number, y: number): void {
-		// Don't log cursor - too noisy
 		this.send({
 			type: "whiteboard.cursor",
 			payload: { x, y },
@@ -609,17 +584,14 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	sendWhiteboardClear(): void {
-		this.log.debug("Whiteboard clear sending");
 		this.send({ type: "whiteboard.clear", payload: {} });
 	}
 
 	requestWhiteboardSync(): void {
-		this.log.debug("Whiteboard sync request sending");
 		this.send({ type: "whiteboard.sync", payload: {} });
 	}
 
 	grantWhiteboardPermission(participantId: string): void {
-		this.log.debug("Whiteboard permission grant sending", { participantId });
 		this.send({
 			type: "permission.grant",
 			payload: { participantId, feature: "whiteboard" },
@@ -627,7 +599,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	revokeWhiteboardPermission(participantId: string): void {
-		this.log.debug("Whiteboard permission revoke sending", { participantId });
 		this.send({
 			type: "permission.revoke",
 			payload: { participantId, feature: "whiteboard" },
@@ -635,12 +606,10 @@ export class WSClient extends EventEmitter<WSEvents> {
 	}
 
 	sendWhiteboardOpen(): void {
-		this.log.debug("Whiteboard open sending");
 		this.send({ type: "whiteboard.open", payload: {} });
 	}
 
 	sendWhiteboardClose(): void {
-		this.log.debug("Whiteboard close sending");
 		this.send({ type: "whiteboard.close", payload: {} });
 	}
 
@@ -656,7 +625,6 @@ export class WSClient extends EventEmitter<WSEvents> {
 		if (transcript.isInterim) {
 			return; // Don't send interim transcripts
 		}
-		this.log.debug("Transcript sending", { id: transcript.id, speakerName: transcript.speakerName });
 		this.send({
 			type: "transcript",
 			payload: {

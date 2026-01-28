@@ -33,7 +33,7 @@ func (m *mockRedis) Exists(ctx context.Context, keys ...string) (int64, error) {
 }
 
 func newTestWSHub() *wsocket.Hub {
-	return wsocket.NewHub(&mockRedis{})
+	return wsocket.NewHub(&mockRedis{}, nil)
 }
 
 func TestWebSocketHandler_HandleWebSocket_MissingToken(t *testing.T) {

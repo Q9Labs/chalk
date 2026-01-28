@@ -5,9 +5,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
-import { createLogger } from "@q9labs/chalk-core";
-
-const log = createLogger("useRecording");
 
 export interface UseRecordingResult {
 	/** Whether recording is currently active */
@@ -58,12 +55,10 @@ export function useRecording(): UseRecordingResult {
 				setRecordingId(response.data.recordingId);
 				setIsRecording(true);
 				setDurationSeconds(0);
-				log.info("Recording started", { recordingId: response.data.recordingId });
 			} else {
 				throw new Error(response.error?.message ?? "Failed to start recording");
 			}
 		} catch (err) {
-			log.error("startRecording error", err);
 			setError(err as Error);
 		}
 	}, [apiClient, roomInfo]);
@@ -80,12 +75,10 @@ export function useRecording(): UseRecordingResult {
 			if (response.success) {
 				setIsRecording(false);
 				setRecordingId(null);
-				log.info("Recording stopped");
 			} else {
 				throw new Error(response.error?.message ?? "Failed to stop recording");
 			}
 		} catch (err) {
-			log.error("stopRecording error", err);
 			setError(err as Error);
 		}
 	}, [apiClient, roomInfo]);

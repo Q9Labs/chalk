@@ -9,7 +9,6 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { Room } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { Recording, RecordingStatus } from "../types";
-import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Recording manager state */
@@ -47,7 +46,6 @@ export class RecordingManager extends StateContainer<RecordingState> {
 	private room: Room | null = null;
 	private apiStartRecording?: () => Promise<string>;
 	private apiStopRecording?: () => Promise<void>;
-	private readonly log: Logger;
 
 	constructor(_debug = false) {
 		super({
@@ -57,7 +55,6 @@ export class RecordingManager extends StateContainer<RecordingState> {
 			recordingId: null,
 			status: null,
 		});
-		this.log = createLogger("Recording");
 	}
 
 	/** Subscribe to recording events */
@@ -96,7 +93,6 @@ export class RecordingManager extends StateContainer<RecordingState> {
 		if (!this.room) return;
 
 		this.room.on("recording-started", ({ recordingId }) => {
-			this.log.info("Recording started", { recordingId });
 			this.setState({
 				isRecording: true,
 				isStarting: false,
@@ -107,7 +103,6 @@ export class RecordingManager extends StateContainer<RecordingState> {
 		});
 
 		this.room.on("recording-stopped", (recording) => {
-			this.log.info("Recording stopped", { id: recording.id, status: recording.status });
 			this.setState({
 				isRecording: false,
 				isStopping: false,
@@ -140,7 +135,6 @@ export class RecordingManager extends StateContainer<RecordingState> {
 			);
 		}
 
-		this.log.info("Starting recording");
 		this.setState({ isStarting: true });
 
 		try {
@@ -186,17 +180,14 @@ export class RecordingManager extends StateContainer<RecordingState> {
 			);
 		}
 
-		this.log.info("Stopping recording", { recordingId: this.getState().recordingId });
 		this.setState({ isStopping: true });
 
 		try {
 			await this.apiStopRecording();
-			this.log.info("Recording stop requested");
 			// State will be updated via room event
 		} catch (err) {
 			this.setState({ isStopping: false });
 			const error = ChalkError.wrap(err);
-			this.log.error("Recording stop failed", { code: error.code });
 			this.events.emit("error", error);
 			throw error;
 		}

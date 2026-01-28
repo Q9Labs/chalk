@@ -8,9 +8,6 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { createLogger } from '@q9labs/chalk-core';
-
-const log = createLogger('AudioRenderer');
 
 export interface AudioParticipant {
   id: string;
@@ -92,14 +89,9 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
         audioEl.srcObject = stream;
 
         // Handle autoplay restrictions
-        audioEl.play().catch((err) => {
+        audioEl.play().catch(() => {
           // Autoplay was blocked - user interaction required
           // This is expected on some browsers until user interacts with page
-          if (err.name !== 'AbortError') {
-            log.warn(
-              `Autoplay blocked for participant ${id}. User interaction may be required.`
-            );
-          }
         });
       }
     }
@@ -191,10 +183,8 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       if (currentTrack?.id !== screenShareAudioTrack.id) {
         const stream = new MediaStream([screenShareAudioTrack]);
         audioEl.srcObject = stream;
-        audioEl.play().catch((err) => {
-          if (err.name !== 'AbortError') {
-            log.warn(`Screen share audio blocked for ${id}`);
-          }
+        audioEl.play().catch(() => {
+          // Autoplay was blocked - user interaction required
         });
       }
     }

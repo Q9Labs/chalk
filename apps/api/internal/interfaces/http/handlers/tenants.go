@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -459,7 +459,7 @@ func (h *TenantHandler) UpdateConfig(c *gin.Context) {
 	if req.AllowedOrigins != nil && h.corsOriginsService != nil {
 		go func() {
 			if err := h.corsOriginsService.AggregateAndUpload(context.Background()); err != nil {
-				log.Printf("Failed to upload CORS origins to S3: %v", err)
+				slog.Error("failed to upload CORS origins to S3", "error", err)
 			}
 		}()
 	}

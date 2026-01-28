@@ -30,8 +30,8 @@ import type {
 	MediaDeviceData,
 } from "../effect/schemas/manager-state";
 import { RoomError } from "../effect/errors";
-import { createLogger, initLogging, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
+import { wideEvents } from "../wide-events/index";
 
 /** ChalkSession configuration */
 export interface ChalkSessionConfig {
@@ -191,7 +191,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	readonly whiteboard: WhiteboardManager;
 
 	private readonly client: ChalkClient;
-	private readonly log: Logger;
 	private _runtime: ManagedRuntime.ManagedRuntime<
 		RoomService | ParticipantService | MediaService,
 		never
@@ -201,12 +200,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	constructor(config: ChalkSessionConfig) {
 		super();
 		const debug = config.debug ?? false;
-
-		// Initialize global logging
-		initLogging(debug);
-		this.log = createLogger("Session");
-
-		this.log.info("Initializing", { apiUrl: config.apiUrl });
 
 		// Initialize ChalkClient for API/WebRTC
 		this.client = new ChalkClient({
@@ -453,6 +446,11 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this.ui = new UIManager();
 		this.whiteboard = new WhiteboardManager();
 
+		// Emit session init event
+		const initCtx = wideEvents.start("session.init");
+		initCtx.set("config", { apiUrl: config.apiUrl, debug, demoMode: config.demoMode });
+		initCtx.complete("success");
+
 		this.setupEventForwarding();
 		this._initEventBridges();
 	}
@@ -518,8 +516,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 					yield* mediaSvc.pipe(Effect.andThen((ms) => ms.attachRoom(room)));
 				}),
 			)
-			.catch((err) => {
-				this.log.error("Room attachment failed", { error: err });
+			.catch(() => {
+				// Room attachment failed - error already emitted via wide events in client
 			});
 
 		// Set up recording API callbacks
@@ -687,8 +685,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	 * @param options - Join options including userName
 	 */
 	async join(roomId: string, options: JoinOptions): Promise<void> {
-		this.log.info("Joining room", { roomId, displayName: options.userName });
-
 		try {
 			// Signal join starting via Effect service
 			await this._runtime.runPromise(
@@ -709,11 +705,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 
 			// Attach room to all managers
 			this.attachRoomToManagers(room);
-
-			this.log.info("Room joined", { roomId });
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.log.error("Join failed", { roomId, code: error.code });
 			const roomError = new RoomError({
 				code: "ROOM_NOT_FOUND",
 				message: error.message,
@@ -739,8 +732,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	 * @param options - Leave options (endForAll for hosts)
 	 */
 	async leave(options?: LeaveOptions): Promise<void> {
-		this.log.info("Leaving room");
-
 		try {
 			await this._runtime.runPromise(
 				Effect.gen(function* () {
@@ -750,10 +741,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			);
 			this.client.disconnect();
 			this._currentRoom = null;
-			this.log.info("Left room");
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.log.error("Leave failed", { code: error.code });
 			this.emit("error", error);
 			throw error;
 		}
@@ -833,7 +822,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	 * Cleanup all resources
 	 */
 	dispose(): void {
-		this.log.info("Disposing session");
+		const ctx = wideEvents.start("session.dispose");
 
 		// Dispose Effect services runtime
 		this._runtime.dispose();
@@ -850,6 +839,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this._currentRoom = null;
 		this.removeAllListeners();
 
-		this.log.info("Session disposed");
+		ctx.complete("success");
 	}
 }

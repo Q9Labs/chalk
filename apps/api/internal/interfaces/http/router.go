@@ -2,7 +2,7 @@ package http
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/config"
@@ -83,7 +83,7 @@ func NewRouter(cfg RouterConfig) *Router {
 	jwtService := auth.NewJWTService(jwtConfig)
 	apiKeyService := auth.NewAPIKeyService()
 
-	wsHub := websocket.NewHub(cfg.RedisClient)
+	wsHub := websocket.NewHub(cfg.RedisClient, slog.Default())
 	wsHub.SetWhiteboardStateStore(&whiteboardStateStoreAdapter{queries: queries})
 	go wsHub.Run(context.Background())
 
@@ -110,9 +110,9 @@ func NewRouter(cfg RouterConfig) *Router {
 		Key:             cfg.AppConfig.CORSOrigins.Key,
 		GitHubRepo:      cfg.AppConfig.GitHub.Owner + "/" + cfg.AppConfig.GitHub.Repo,
 		GitHubToken:     cfg.AppConfig.GitHub.Token,
-	}, queries)
+	}, queries, slog.Default())
 	if err != nil {
-		log.Printf("Warning: failed to initialize CORS origins service: %v", err)
+		slog.Warn("failed to initialize CORS origins service", "error", err)
 	}
 
 	// Wire transcript service to WebSocket hub for real-time transcript persistence

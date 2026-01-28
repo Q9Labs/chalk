@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -258,18 +257,18 @@ type WhiteboardClosedPayload struct {
 
 // TranscriptPayload - client sends transcript from Cloudflare AI
 type TranscriptPayload struct {
-	ID            string    `json:"id"`             // External ID from Cloudflare
-	ParticipantID string    `json:"participantId"`  // Cloudflare participant ID
-	SpeakerName   string    `json:"speakerName"`
-	Text          string    `json:"text"`
-	Timestamp     string    `json:"timestamp"`      // ISO 8601 string
-	IsInterim     bool      `json:"isInterim"`
-	Confidence    *float32  `json:"confidence,omitempty"`
+	ID            string   `json:"id"`            // External ID from Cloudflare
+	ParticipantID string   `json:"participantId"` // Cloudflare participant ID
+	SpeakerName   string   `json:"speakerName"`
+	Text          string   `json:"text"`
+	Timestamp     string   `json:"timestamp"` // ISO 8601 string
+	IsInterim     bool     `json:"isInterim"`
+	Confidence    *float32 `json:"confidence,omitempty"`
 }
 
 // TranscriptAckPayload - server acknowledges transcript receipt
 type TranscriptAckPayload struct {
-	ID        string    `json:"id"`        // External ID that was saved
+	ID        string    `json:"id"` // External ID that was saved
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -279,7 +278,6 @@ func NewMessage(msgType MessageType, payload interface{}) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("type: %v | message: %v", msgType, payload)
 	return &Message{
 		Type:    msgType,
 		Payload: data,

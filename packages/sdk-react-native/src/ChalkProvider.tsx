@@ -7,7 +7,6 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import {
 	APIClient,
 	type ChalkClientConfig,
-	createLogger,
 	type JoinRoomResponse,
 	type RoomConfig,
 	type RoomStatus,
@@ -54,8 +53,6 @@ try {
 		"RealtimeKit React Native not available - will use fallback mode",
 	);
 }
-
-const log = createLogger("ChalkProvider");
 
 interface ChalkContextValue {
 	apiClient: APIClient | null;
@@ -128,10 +125,6 @@ export function ChalkProvider({
 		const manager = new RTCManager();
 		setRtcManager(manager);
 
-		if (debug && !apiKey && !token && !tokenProvider) {
-			log.info("Running in demo mode without credentials");
-		}
-
 		return () => {
 			manager.cleanup();
 		};
@@ -141,15 +134,12 @@ export function ChalkProvider({
 	useEffect(() => {
 		if (rtkClient && !hasJoinedRtk.current) {
 			hasJoinedRtk.current = true;
-			log.debug("RTK client ready, joining room");
 			rtkClient
 				.join()
 				.then(() => {
-					log.info("Joined RTK room");
 					setConnectionStatus("connected");
 				})
-				.catch((err) => {
-					log.error("Failed to join RTK room", err);
+				.catch(() => {
 					setConnectionStatus("disconnected");
 				});
 		}
@@ -168,7 +158,6 @@ export function ChalkProvider({
 			}
 
 			setConnectionStatus("connecting");
-			log.info("Joining room", { roomId });
 
 			// Call API to get auth tokens
 			const response = demoMode
@@ -186,16 +175,12 @@ export function ChalkProvider({
 			}
 
 			const { tokens } = response.data;
-			log.info("Got auth tokens", {
-				participantId: response.data.participantId,
-			});
 
 			// Check for valid RTC token
 			if (
 				!tokens.rtcToken ||
 				tokens.rtcToken === "demo-token-not-for-production"
 			) {
-				log.warn("No valid rtcToken - Cloudflare Calls may not be enabled");
 				// Still store room info for demo mode
 				setRoomInfo(response.data);
 				setConnectionStatus("disconnected");
@@ -204,7 +189,6 @@ export function ChalkProvider({
 
 			// Initialize RTK with the auth token
 			if (rtkAvailable && initRtk) {
-				log.debug("Initializing RTK with auth token");
 				hasJoinedRtk.current = false; // Reset so useEffect can join
 				initRtk({
 					authToken: tokens.rtcToken,
@@ -214,7 +198,6 @@ export function ChalkProvider({
 					},
 				});
 			} else {
-				log.warn("RTK RN hooks not available - using fallback mode");
 				// Fallback: Try using RTCManager directly
 				try {
 					await rtcManager.initializeWithToken(tokens.rtcToken, {
@@ -223,8 +206,7 @@ export function ChalkProvider({
 					});
 					await rtcManager.joinRoom();
 					setConnectionStatus("connected");
-				} catch (err) {
-					log.error("RTCManager fallback failed", err);
+				} catch {
 					setConnectionStatus("disconnected");
 				}
 			}
@@ -241,15 +223,15 @@ export function ChalkProvider({
 		if (rtkClient) {
 			try {
 				await rtkClient.leave();
-			} catch (err) {
-				log.error("Error leaving RTK room", err);
+			} catch {
+				// Silently ignore error
 			}
 		}
 		if (rtcManager) {
 			try {
 				await rtcManager.leaveRoom();
-			} catch (err) {
-				log.error("Error leaving via RTCManager", err);
+			} catch {
+				// Silently ignore error
 			}
 		}
 		hasJoinedRtk.current = false;

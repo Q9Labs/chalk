@@ -12,7 +12,6 @@
  * - Keyboard shortcut 'W' to toggle whiteboard
  */
 
-import { createLogger } from "@q9labs/chalk-core";
 import {
 	useInteractions,
 	useWhiteboard,
@@ -33,7 +32,6 @@ export const Route = createFileRoute("/room/$roomId")({
 function RoomPage() {
 	const { roomId } = Route.useParams() as { roomId: string };
 	const navigate = useNavigate();
-	const log = createLogger("RoomPage");
 
 	const [storedUserName, setStoredUserName] = useState<string>("");
 
@@ -47,7 +45,6 @@ function RoomPage() {
 
 	const handleError = useCallback(
 		(error: unknown) => {
-			log.error("Room error", error);
 			const errorMessage =
 				error instanceof Error ? error.message : String(error);
 			navigate({

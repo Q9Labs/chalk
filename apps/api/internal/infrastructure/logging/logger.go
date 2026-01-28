@@ -4,28 +4,58 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/Q9Labs/chalk/internal/version"
 	axiomslog "github.com/axiomhq/axiom-go/adapters/slog"
 )
 
 var handler *axiomslog.Handler
 
+// Init initializes the global slog logger with environment context.
+// If AXIOM_TOKEN is set, logs go to Axiom; otherwise JSON to stdout.
 func Init() {
+	// Build base attributes for all log events
+	attrs := []slog.Attr{
+		slog.String("service", "chalk-api"),
+		slog.String("version", version.Version),
+		slog.String("commit_sha", version.CommitSHA),
+		slog.String("env", getEnv("ENV", "development")),
+		slog.String("region", getEnv("AWS_REGION", "unknown")),
+	}
+
 	if os.Getenv("AXIOM_TOKEN") != "" {
 		h, err := axiomslog.New()
 		if err == nil {
 			handler = h
-			slog.SetDefault(slog.New(handler))
+			logger := slog.New(handler).With(attrsToAny(attrs)...)
+			slog.SetDefault(logger)
 			return
 		}
-		// Log fallback reason to stderr before switching handlers
 		slog.Error("failed to initialize Axiom handler, falling back to stdout", "error", err)
 	}
-	// Fallback: JSON to stdout
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	// Fallback: JSON to stdout with base attrs
+	jsonHandler := slog.NewJSONHandler(os.Stdout, nil).WithAttrs(attrs)
+	slog.SetDefault(slog.New(jsonHandler))
 }
 
+// Close flushes and closes the Axiom handler if initialized.
 func Close() {
 	if handler != nil {
 		handler.Close()
 	}
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func attrsToAny(attrs []slog.Attr) []any {
+	result := make([]any, len(attrs))
+	for i, a := range attrs {
+		result[i] = a
+	}
+	return result
 }

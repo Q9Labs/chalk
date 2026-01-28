@@ -3,7 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,6 +74,13 @@ func (c *Client) Wait() {
 	<-c.done
 }
 
+func (c *Client) logger() *slog.Logger {
+	return c.hub.logger.With(
+		"participant_id", c.participantID,
+		"room_id", c.roomID,
+	)
+}
+
 // readPump reads messages from the WebSocket connection
 func (c *Client) readPump(ctx context.Context) {
 	defer func() {
@@ -94,16 +101,15 @@ func (c *Client) readPump(ctx context.Context) {
 				return
 			}
 			if ctx.Err() != nil {
-				log.Printf("WebSocket context canceled for participant %s in room %s: %v", c.participantID, c.roomID, ctx.Err())
 				return
 			}
-			log.Printf("WebSocket read error for participant %s in room %s: %v", c.participantID, c.roomID, err)
+			c.logger().Error("websocket read error", "error", err.Error())
 			return
 		}
 
 		var message Message
 		if err := json.Unmarshal(data, &message); err != nil {
-			log.Printf("Failed to unmarshal message: %v", err)
+			c.logger().Warn("failed to unmarshal message", "error", err.Error())
 			c.sendErrorMessage("invalid_message", "Failed to parse message")
 			continue
 		}
@@ -120,7 +126,6 @@ func (c *Client) writePump(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("WebSocket writePump context canceled for participant %s in room %s: %v", c.participantID, c.roomID, ctx.Err())
 			return
 
 		case <-c.done:
@@ -132,7 +137,7 @@ func (c *Client) writePump(ctx context.Context) {
 			cancel()
 
 			if err != nil {
-				log.Printf("Failed to write message to participant %s: %v", c.participantID, err)
+				c.logger().Error("websocket write error", "error", err.Error())
 				return
 			}
 
@@ -148,7 +153,7 @@ func (c *Client) writePump(ctx context.Context) {
 			cancel()
 
 			if err != nil {
-				log.Printf("Failed to send ping to participant %s: %v", c.participantID, err)
+				c.logger().Error("failed to send ping", "error", err.Error())
 				return
 			}
 		}
@@ -157,8 +162,6 @@ func (c *Client) writePump(ctx context.Context) {
 
 // handleMessage processes a message received from the client
 func (c *Client) handleMessage(msg *Message) {
-	log.Printf("[WS] handleMessage: type=%s from participant=%s room=%s", msg.Type, c.participantID, c.roomID)
-
 	switch msg.Type {
 	case MessageTypeChatSend:
 		c.handleChatMessage(msg)
@@ -196,30 +199,23 @@ func (c *Client) handleMessage(msg *Message) {
 	case MessageTypeTranscript:
 		c.handleTranscript(msg)
 	default:
-		log.Printf("[WS] Unknown message type: %s", msg.Type)
+		c.logger().Warn("unknown message type", "type", msg.Type)
 	}
 }
 
 func (c *Client) handleChatMessage(msg *Message) {
-	log.Printf("[Chat] handleChatMessage called from participant %s in room %s", c.participantID, c.roomID)
-
 	var payload ChatSendPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
-		log.Printf("[Chat] Failed to parse payload: %v", err)
 		c.sendErrorMessage("invalid_payload", "Failed to parse chat message")
 		return
 	}
 
-	log.Printf("[Chat] Received content: %s", payload.Content)
-
 	if payload.Content == "" {
-		log.Printf("[Chat] Empty content, rejecting")
 		c.sendErrorMessage("invalid_payload", "Content cannot be empty")
 		return
 	}
 
 	meta := c.hub.GetParticipantMetadata(c.participantID)
-	log.Printf("[Chat] Sender metadata - DisplayName: %s", meta.DisplayName)
 
 	chatMsg, _ := NewMessage(MessageTypeChatMessage, ChatMessagePayload{
 		ID:            uuid.New(),
@@ -230,7 +226,6 @@ func (c *Client) handleChatMessage(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(chatMsg)
-	log.Printf("[Chat] Broadcasting message to room %s: %s", c.roomID, string(msgData))
 	c.hub.BroadcastToRoom(c.roomID, msgData, "")
 }
 
@@ -292,19 +287,13 @@ func (c *Client) sendErrorMessage(code, message string) {
 
 // handleWhiteboardUpdate processes a whiteboard update and broadcasts it
 func (c *Client) handleWhiteboardUpdate(msg *Message) {
-	log.Printf("[WB-UPDATE] Received whiteboard.update from participant=%s room=%s", c.participantID, c.roomID)
-
 	var payload WhiteboardUpdatePayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
-		log.Printf("[WB-UPDATE] ERROR: Failed to parse payload: %v", err)
 		c.sendErrorMessage("invalid_payload", "Failed to parse whiteboard update")
 		return
 	}
 
-	log.Printf("[WB-UPDATE] Payload: seq=%d, elements=%d bytes", payload.Seq, len(payload.Elements))
-
 	meta := c.hub.GetParticipantMetadata(c.participantID)
-	log.Printf("[WB-UPDATE] Sender metadata: displayName=%s", meta.DisplayName)
 
 	// Merge update into in-memory state for durability and sync requests
 	c.hub.UpdateWhiteboardState(c.roomID, payload)
@@ -320,25 +309,19 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(dataMsg)
-	log.Printf("[WB-UPDATE] Broadcasting whiteboard.data to room=%s, msgSize=%d bytes", c.roomID, len(msgData))
 	c.hub.BroadcastToRoom(c.roomID, msgData, "")
-	log.Printf("[WB-UPDATE] Broadcast complete")
 }
 
 // handleWhiteboardSync sends the current whiteboard state to the requesting client
 func (c *Client) handleWhiteboardSync() {
-	log.Printf("[WB-SYNC] Received whiteboard.sync request from participant=%s room=%s", c.participantID, c.roomID)
-
 	// Send cached snapshot if available; otherwise return empty state
 	payload, ok := c.hub.GetWhiteboardSnapshot(c.roomID)
 	if !ok {
-		log.Printf("[WB-SYNC] No whiteboard state available for room=%s; skipping snapshot", c.roomID)
 		c.sendErrorMessage("whiteboard_state_empty", "No whiteboard state available")
 		return
 	}
 	snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, payload)
 	data, _ := json.Marshal(snapshot)
-	log.Printf("[WB-SYNC] Sending snapshot to participant=%s, size=%d bytes", c.participantID, len(data))
 	c.Send(data)
 }
 
@@ -445,10 +428,7 @@ func (c *Client) handlePermissionRevoke(msg *Message) {
 
 // handleWhiteboardOpen broadcasts that this participant opened the whiteboard
 func (c *Client) handleWhiteboardOpen() {
-	log.Printf("[WB-OPEN] Received whiteboard.open from participant=%s room=%s", c.participantID, c.roomID)
-
 	meta := c.hub.GetParticipantMetadata(c.participantID)
-	log.Printf("[WB-OPEN] Participant metadata: displayName=%s", meta.DisplayName)
 
 	openedMsg, _ := NewMessage(MessageTypeWhiteboardOpened, WhiteboardOpenedPayload{
 		ParticipantID: c.participantID,
@@ -457,47 +437,36 @@ func (c *Client) handleWhiteboardOpen() {
 	})
 
 	msgData, _ := json.Marshal(openedMsg)
-	log.Printf("[WB-OPEN] Broadcasting whiteboard.opened to room=%s, msgSize=%d bytes", c.roomID, len(msgData))
 	c.hub.BroadcastToRoom(c.roomID, msgData, "")
-	log.Printf("[WB-OPEN] Broadcast complete")
 }
 
 // handleWhiteboardClose broadcasts that this participant closed the whiteboard
 func (c *Client) handleWhiteboardClose() {
-	log.Printf("[WB-CLOSE] Received whiteboard.close from participant=%s room=%s", c.participantID, c.roomID)
-
 	closedMsg, _ := NewMessage(MessageTypeWhiteboardClosed, WhiteboardClosedPayload{
 		ParticipantID: c.participantID,
 		Timestamp:     time.Now(),
 	})
 
 	msgData, _ := json.Marshal(closedMsg)
-	log.Printf("[WB-CLOSE] Broadcasting whiteboard.closed to room=%s, msgSize=%d bytes", c.roomID, len(msgData))
 	c.hub.BroadcastToRoom(c.roomID, msgData, "")
-	log.Printf("[WB-CLOSE] Broadcast complete")
 }
 
 // handleTranscript persists a transcript from the client SDK
 func (c *Client) handleTranscript(msg *Message) {
 	var payload TranscriptPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
-		log.Printf("[TRANSCRIPT] Failed to parse payload: %v", err)
 		c.sendErrorMessage("invalid_payload", "Failed to parse transcript")
 		return
 	}
 
 	// Skip interim transcripts - only store final ones
 	if payload.IsInterim {
-		log.Printf("[TRANSCRIPT] Skipping interim transcript from participant=%s", c.participantID)
 		return
 	}
-
-	log.Printf("[TRANSCRIPT] Received transcript from participant=%s: %s", c.participantID, payload.Text)
 
 	// Check if transcript service is available
 	ts := c.hub.GetTranscriptService()
 	if ts == nil {
-		log.Printf("[TRANSCRIPT] Warning: Transcript service not configured, skipping persistence")
 		return
 	}
 
@@ -519,7 +488,10 @@ func (c *Client) handleTranscript(msg *Message) {
 		Timestamp:               timestamp,
 	})
 	if err != nil {
-		log.Printf("[TRANSCRIPT] Failed to persist transcript: %v", err)
+		c.logger().Error("failed to persist transcript",
+			"transcript_id", payload.ID,
+			"error", err.Error(),
+		)
 		return
 	}
 
@@ -530,5 +502,4 @@ func (c *Client) handleTranscript(msg *Message) {
 	})
 	ackData, _ := json.Marshal(ackMsg)
 	c.Send(ackData)
-	log.Printf("[TRANSCRIPT] Persisted and acknowledged transcript id=%s", payload.ID)
 }

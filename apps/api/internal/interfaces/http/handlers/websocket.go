@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -117,7 +117,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	if token == "" {
 		token = c.Query("token")
 		if token != "" {
-			log.Printf("Warning: WebSocket token passed via query param (deprecated, use subprotocol)")
+			slog.Warn("websocket token passed via query param (deprecated, use subprotocol)")
 		}
 	}
 
@@ -129,7 +129,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Validate JWT token
 	claims, err := h.jwtService.ValidateToken(token)
 	if err != nil {
-		log.Printf("Invalid token: %v", err)
+		slog.Debug("invalid websocket token", "error", err.Error())
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
 	}
@@ -151,7 +151,10 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		tenant, err := h.queries.GetTenant(c.Request.Context(), claims.TenantID)
 		if err == nil {
 			if !middleware.IsOriginAllowedForTenant(origin, &tenant) {
-				log.Printf("WebSocket origin %s not allowed for tenant %s", origin, claims.TenantID)
+				slog.Warn("websocket origin not allowed for tenant",
+					"origin", origin,
+					"tenant_id", claims.TenantID,
+				)
 				c.JSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
 				return
 			}
@@ -174,12 +177,12 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		acceptOpts.OriginPatterns = h.allowedOrigins
 	} else {
 		// No origins configured - strict mode (will reject cross-origin)
-		log.Printf("Warning: No ALLOWED_WS_ORIGINS configured, WebSocket will reject cross-origin requests")
+		slog.Warn("no ALLOWED_WS_ORIGINS configured, WebSocket will reject cross-origin requests")
 	}
 
 	ws, err := websocket.Accept(writer, c.Request, acceptOpts)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		slog.Error("websocket upgrade failed", "error", err.Error())
 		return
 	}
 	ws.SetReadLimit(getWsReadLimitBytes())
@@ -187,7 +190,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Parse participant ID from claims.Subject
 	participantID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		log.Printf("Invalid participant ID: %v", err)
+		slog.Error("invalid participant ID in token", "error", err.Error())
 		ws.Close(websocket.StatusInternalError, "invalid participant id")
 		return
 	}

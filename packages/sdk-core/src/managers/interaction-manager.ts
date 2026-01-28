@@ -9,7 +9,6 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { Room } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { Reaction, ReactionEmoji } from "../types";
-import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Interaction manager state */
@@ -54,7 +53,6 @@ export class InteractionManager extends StateContainer<InteractionState> {
 	private reactionTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 	private activeReactions: ActiveReaction[] = [];
 	private raisedHandsSet = new Set<string>();
-	private readonly log: Logger;
 
 	constructor(_debug = false) {
 		super({
@@ -62,7 +60,6 @@ export class InteractionManager extends StateContainer<InteractionState> {
 			raisedHands: [],
 			activeReactions: [],
 		});
-		this.log = createLogger("Interactions");
 	}
 
 	/** Subscribe to interaction events */
@@ -101,13 +98,11 @@ export class InteractionManager extends StateContainer<InteractionState> {
 		if (!this.room) return;
 
 		this.room.on("reaction", (reaction) => {
-			this.log.debug("Reaction received", { participantId: reaction.participantId, emoji: reaction.emoji });
 			this.addReaction(reaction);
 			this.events.emit("reaction", reaction);
 		});
 
 		this.room.on("hand-raised", ({ participantId }) => {
-			this.log.info("Hand raised", { participantId });
 			this.raisedHandsSet.add(participantId);
 			this.updateRaisedHandsState();
 
@@ -120,7 +115,6 @@ export class InteractionManager extends StateContainer<InteractionState> {
 		});
 
 		this.room.on("hand-lowered", ({ participantId }) => {
-			this.log.info("Hand lowered", { participantId });
 			this.raisedHandsSet.delete(participantId);
 			this.updateRaisedHandsState();
 
@@ -187,7 +181,6 @@ export class InteractionManager extends StateContainer<InteractionState> {
 			);
 		}
 
-		this.log.debug("Sending reaction", { emoji });
 		this.room.sendReaction(emoji);
 
 		// Also show locally immediately
@@ -212,7 +205,6 @@ export class InteractionManager extends StateContainer<InteractionState> {
 			);
 		}
 
-		this.log.info("Raising hand");
 		this.room.raiseHand();
 		this.setState({ isHandRaised: true });
 
@@ -232,7 +224,6 @@ export class InteractionManager extends StateContainer<InteractionState> {
 			);
 		}
 
-		this.log.info("Lowering hand");
 		this.room.lowerHand();
 		this.setState({ isHandRaised: false });
 

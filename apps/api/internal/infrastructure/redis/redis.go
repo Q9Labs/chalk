@@ -2,7 +2,7 @@ package redis
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -41,7 +41,7 @@ func NewClient(ctx context.Context, url string) (*Client, error) {
 		return nil, err
 	}
 
-	log.Println("Redis client connected")
+	slog.Info("redis client connected")
 	return &Client{client: client}, nil
 }
 

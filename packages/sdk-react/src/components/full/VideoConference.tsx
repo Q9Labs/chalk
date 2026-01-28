@@ -11,12 +11,9 @@ import type {
 	ReactionEmoji,
 	Transcript,
 } from "@q9labs/chalk-core";
-import { createLogger } from "@q9labs/chalk-core";
 import type React from "react";
 import type { ComponentType, ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-const log = createLogger("VideoConference");
 
 import { toast } from "sonner";
 import { useChalkSession } from "../../context/chalk-provider";
@@ -467,9 +464,6 @@ function VideoConferenceBase({
 		}) => {
 			// Guard: prevent duplicate join attempts
 			if (isJoining || isConnected) {
-				log.warn(
-					"Join already in progress or connected, ignoring duplicate call",
-				);
 				if (isConnected) {
 					setPhase("meeting");
 				}
@@ -501,8 +495,7 @@ function VideoConferenceBase({
 				const chalkError = err as ChalkError;
 				// If already connected, transition to meeting instead of lobby
 				if (chalkError.message?.includes("Already connected")) {
-					log.warn("Already connected, transitioning to meeting");
-					setPhase("meeting");
+						setPhase("meeting");
 					return;
 				}
 				setError(chalkError.message || "Failed to join room");
@@ -530,8 +523,8 @@ function VideoConferenceBase({
 			onEnd?.(buildEndData());
 			setPhase("end");
 			onLeave?.();
-		} catch (err) {
-			log.error("Leave failed:", err);
+		} catch {
+			// Leave failed but still end the meeting
 			onEnd?.(buildEndData());
 			setPhase("end");
 			onLeave?.();

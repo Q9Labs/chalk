@@ -51,7 +51,7 @@ func (m *MockRedisClient) Exists(ctx context.Context, keys ...string) (int64, er
 // TestNewHub tests hub creation
 func TestNewHub(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 
 	assert.NotNil(t, hub)
 	assert.NotNil(t, hub.clients)
@@ -63,7 +63,7 @@ func TestNewHub(t *testing.T) {
 // TestHubGetParticipantsInRoom tests retrieving participants from a room
 func TestHubGetParticipantsInRoom(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	roomID := uuid.New()
@@ -89,7 +89,7 @@ func TestHubGetParticipantsInRoom(t *testing.T) {
 // TestHubBroadcastToRoom tests broadcasting to a room
 func TestHubBroadcastToRoom(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	roomID := uuid.New()
@@ -131,7 +131,7 @@ func TestHubBroadcastToRoom(t *testing.T) {
 // TestHubBroadcastToRoomExclude tests broadcasting with exclusion
 func TestHubBroadcastToRoomExclude(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	roomID := uuid.New()
@@ -182,7 +182,7 @@ func TestHubBroadcastToRoomExclude(t *testing.T) {
 // TestHubSendToParticipant tests sending to a specific participant
 func TestHubSendToParticipant(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	participantID := uuid.New()
@@ -210,7 +210,7 @@ func TestHubSendToParticipant(t *testing.T) {
 // TestHubClose tests closing the hub
 func TestHubClose(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 
 	client := &Client{
 		participantID: uuid.New(),
@@ -231,7 +231,7 @@ func TestHubClose(t *testing.T) {
 
 func TestHubSetGetParticipantMetadata(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	participantID := uuid.New()
@@ -250,7 +250,7 @@ func TestHubSetGetParticipantMetadata(t *testing.T) {
 
 func TestHubRemoveParticipantMetadata(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	participantID := uuid.New()
@@ -269,7 +269,7 @@ func TestHubRemoveParticipantMetadata(t *testing.T) {
 
 func TestHubSetRoomRecordingState(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	roomID := uuid.New()
@@ -287,7 +287,7 @@ func TestHubSetRoomRecordingState(t *testing.T) {
 
 func TestHubGetRoomSnapshot(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	roomID := uuid.New()
@@ -335,7 +335,7 @@ func TestHubGetRoomSnapshot(t *testing.T) {
 
 func TestHubGetRoomSnapshotEmptyRoom(t *testing.T) {
 	mockRedis := &MockRedisClient{}
-	hub := NewHub(mockRedis)
+	hub := NewHub(mockRedis, nil)
 	defer hub.Close()
 
 	roomID := uuid.New()

@@ -48,16 +48,12 @@ export type {
 // Re-export error codes
 export { ChalkErrorCode } from "@q9labs/chalk-core";
 
-// Re-export logging utilities
+// Re-export wide events (replaces old logging utilities)
 export {
-	createLogger,
-	configureLogger,
-	initLogging,
-	isLoggingEnabled,
-	type Logger,
-	type LogLevel,
-	type LoggerConfig,
-	type LogEntry,
+	wideEvents,
+	configureWideEvents,
+	type WideEvent,
+	type WideEventConfig,
 } from "@q9labs/chalk-core";
 
 // ============================================================================

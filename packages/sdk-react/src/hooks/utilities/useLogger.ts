@@ -1,22 +1,25 @@
 /**
  * useLogger hook for React components
  *
- * Provides component-scoped debug logging that respects
- * the global debug mode setting.
+ * @deprecated Use wide events instead via wideEvents from @q9labs/chalk-core
  *
  * @packageDocumentation
  * @module @q9labs/chalk-react/hooks
  */
 
 import { useMemo } from "react";
-import {
-	createLogger,
-	isLoggingEnabled,
-	type Logger,
-} from "@q9labs/chalk-core";
+import { wideEvents } from "@q9labs/chalk-core";
+
+/** Logger interface (now a no-op) */
+export interface Logger {
+	debug: (message: string, data?: unknown) => void;
+	info: (message: string, data?: unknown) => void;
+	warn: (message: string, data?: unknown) => void;
+	error: (message: string, data?: unknown) => void;
+}
 
 export interface UseLoggerReturn {
-	/** Component-scoped logger instance */
+	/** Component-scoped logger instance (no-op, use wide events) */
 	log: Logger;
 	/** Whether debug logging is enabled globally */
 	isEnabled: boolean;
@@ -25,30 +28,21 @@ export interface UseLoggerReturn {
 /**
  * Create a component-scoped logger
  *
- * @param component - Component name for log prefixes
- * @returns Logger instance and enabled state
+ * @deprecated Use wide events instead. This hook now returns a no-op logger.
  *
- * @example
- * ```tsx
- * function MyComponent() {
- *   const { log, isEnabled } = useLogger('MyComponent');
- *
- *   useEffect(() => {
- *     log.info('Component mounted');
- *     return () => log.info('Component unmounted');
- *   }, [log]);
- *
- *   const handleClick = () => {
- *     log.debug('Button clicked');
- *   };
- *
- *   return <button onClick={handleClick}>Click me</button>;
- * }
- * ```
+ * @param _component - Component name (unused)
+ * @returns Logger instance (no-op) and enabled state
  */
-export function useLogger(component: string): UseLoggerReturn {
-	const log = useMemo(() => createLogger(component), [component]);
-	const isEnabled = isLoggingEnabled();
+export function useLogger(_component: string): UseLoggerReturn {
+	const log = useMemo(
+		(): Logger => ({
+			debug: () => {},
+			info: () => {},
+			warn: () => {},
+			error: () => {},
+		}),
+		[],
+	);
 
-	return { log, isEnabled };
+	return { log, isEnabled: wideEvents.isEnabled };
 }

@@ -6,13 +6,3 @@
  */
 
 export { TypedEventEmitter } from './typed-emitter';
-export {
-	createLogger,
-	configureLogger,
-	initLogging,
-	isLoggingEnabled,
-	type Logger,
-	type LogLevel,
-	type LoggerConfig,
-	type LogEntry,
-} from './logger';

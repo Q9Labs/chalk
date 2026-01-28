@@ -2,11 +2,9 @@
  * useDevices hook - List and select media devices (cameras, microphones)
  */
 
-import { createLogger, type MediaDevice } from "@q9labs/chalk-core";
+import { type MediaDevice } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
-
-const log = createLogger("useDevices");
 
 export interface UseDevicesResult {
 	/** All available media devices */
@@ -84,8 +82,7 @@ export function useDevices(): UseDevicesResult {
 				await rtcManager.switchCamera();
 				setSelectedCamera(deviceId);
 				return true;
-			} catch (err) {
-				log.error("selectCamera error", err);
+			} catch {
 				return false;
 			}
 		},
@@ -96,7 +93,6 @@ export function useDevices(): UseDevicesResult {
 		async (deviceId: string): Promise<boolean> => {
 			// RN WebRTC doesn't support dynamic microphone switching
 			// Would need to stop/restart the audio track
-			log.warn("Microphone switching not yet supported in RN SDK");
 			setSelectedMicrophone(deviceId);
 			return false;
 		},

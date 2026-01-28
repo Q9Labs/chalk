@@ -6,7 +6,6 @@
  */
 
 import { createElement, memo, useEffect, useRef, useState, useCallback } from "react";
-import { createLogger } from "@q9labs/chalk-core";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
 import { cn } from "../../utils/cn";
@@ -18,8 +17,6 @@ import {
 	ArrowDown01Icon,
 	ArrowUp01Icon,
 } from "../../utils/icons";
-
-const log = createLogger("WhiteboardPanel");
 
 const CURSOR_STALE_MS = 10000;
 const CURSOR_COLORS = [
@@ -319,7 +316,6 @@ function WhiteboardPanelBase({
 				root.render(createElement(ExcalidrawWrapper));
 				setIsReady(true);
 			} catch (err) {
-				log.error("Failed to load Excalidraw:", err);
 				setLoadError(
 					err instanceof Error ? err.message : "Failed to load whiteboard",
 				);

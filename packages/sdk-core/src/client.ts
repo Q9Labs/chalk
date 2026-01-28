@@ -16,7 +16,7 @@ import type {
   RoomStatus,
   TokenProvider,
 } from "./types.ts";
-import { createLogger, initLogging, type Logger } from "./utils/logger.ts";
+import { wideEvents } from "./wide-events/index.ts";
 import { WSClient } from "./ws-client.ts";
 import {
   createOperationLock,
@@ -42,7 +42,6 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private currentWsClient: WSClient | null = null;
   // Effect: OperationLock for serializing join operations
   private readonly joinLock: OperationLock = createOperationLock();
-  private readonly log: Logger;
 
   constructor(config: ChalkClientConfig) {
     super();
@@ -50,10 +49,6 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     this.demoMode = config.demoMode ?? false;
     this.wsUrl = config.wsUrl ?? this.deriveWsUrl(config.apiUrl);
     this.tokenProvider = config.tokenProvider;
-
-    // Initialize logging globally
-    initLogging(this.debug);
-    this.log = createLogger("Client");
 
     const hasAuth =
       config.token || config.tokenProvider || config.apiKey || this.debug;
@@ -64,11 +59,16 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     }
 
     this.apiClient = new APIClient(config);
-    this.log.info("Initialized", { debug: this.debug, hasWsUrl: !!this.wsUrl });
 
     this.apiClient.on("token-expired", (error) => {
-      this.log.warn("Token expired", { code: error.code });
       this.emit("token-expired", error);
+    });
+
+    // Configure wide events
+    wideEvents.configure({
+      enabled: config.wideEvents?.enabled ?? config.debug ?? false,
+      handler: config.wideEvents?.handler,
+      includeDebugInfo: config.wideEvents?.includeDebugInfo ?? config.debug ?? false,
     });
   }
 
@@ -186,30 +186,24 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       return;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      this.log.warn("RTK join attempt 1 failed, will retry", { error: lastError.message });
     }
 
     // Retry attempts with exponential backoff
     for (let i = 0; i < RTK_JOIN_RETRY_DELAYS.length; i++) {
       const delay = RTK_JOIN_RETRY_DELAYS[i]!;
-      const attemptNum = i + 2;
 
-      this.log.info(`Waiting ${delay}ms before RTK join retry attempt ${attemptNum}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
 
       try {
         await Effect.runPromise(this._joinRealtimeKitEffect(rtkClient, RTK_JOIN_TIMEOUT_MS));
-        this.log.info(`RTK join succeeded on attempt ${attemptNum}`);
         return;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        this.log.warn(`RTK join attempt ${attemptNum} failed`, { error: lastError.message });
       }
     }
 
     // All attempts failed
     const totalAttempts = 1 + RTK_JOIN_RETRY_DELAYS.length;
-    this.log.error(`RTK join failed after ${totalAttempts} attempts`);
     throw new Error(`Failed to join room after ${totalAttempts} attempts: ${lastError?.message}`);
   }
 
@@ -218,144 +212,143 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     return this.joinLock.withLock(async () => {
       // Clean up existing room before joining new one
       if (this.currentRoom) {
-        this.log.info("Leaving existing room before joining new one");
         await this.currentRoom.leave();
         this.currentRoom = null;
       }
 
-      this.log.info("Joining room", { roomId });
+      const ctx = wideEvents.start("room.join");
+      ctx.set("input", { roomId, displayName: config.displayName, role: config.role, audio: config.audio, video: config.video });
 
-      const response = this.demoMode
-        ? await this.apiClient.demoJoin(roomId, config.displayName)
-        : await this.apiClient.addParticipant(
-            roomId,
-            config.displayName,
-            config.role,
-            config.metadata,
-          );
+      try {
+        const response = this.demoMode
+          ? await this.apiClient.demoJoin(roomId, config.displayName)
+          : await this.apiClient.addParticipant(
+              roomId,
+              config.displayName,
+              config.role,
+              config.metadata,
+            );
 
-      if (!response.success || !response.data) {
-        throw new Error(response.error?.message ?? "Failed to join room");
-      }
+        ctx.markPhase("api");
 
-      const { participantId, role, tokens, room: roomInfo } = response.data;
-      this.log.info("Got auth tokens", { role, participantId });
+        if (!response.success || !response.data) {
+          throw new Error(response.error?.message ?? "Failed to join room");
+        }
 
-      // CRITICAL: Validate token BEFORE using it
-      if (!tokens.rtcToken) {
-        this.log.error("RealtimeKit token missing");
-        throw new Error("RealtimeKit token missing - API did not return rtcToken");
-      }
+        const { participantId, role, tokens, room: roomInfo } = response.data;
 
-      // Check token expiration
-      if (this.isTokenExpired(tokens.rtcToken)) {
-        this.log.warn("rtcToken is expired or invalid");
+        ctx.set("api", { success: true, participantId, role });
 
-        // Attempt token refresh if provider is available
-        if (this.tokenProvider) {
-          this.log.info("Attempting token refresh");
-          try {
-            const newToken = await this.tokenProvider();
-            tokens.rtcToken = newToken;
-            this.log.info("Token refreshed successfully");
-          } catch (refreshError) {
-            throw new Error("Token expired and refresh failed: " +
-              (refreshError instanceof Error ? refreshError.message : String(refreshError)));
+        // CRITICAL: Validate token BEFORE using it
+        if (!tokens.rtcToken) {
+          throw new Error("RealtimeKit token missing - API did not return rtcToken");
+        }
+
+        // Check token expiration
+        if (this.isTokenExpired(tokens.rtcToken)) {
+          // Attempt token refresh if provider is available
+          if (this.tokenProvider) {
+            try {
+              const newToken = await this.tokenProvider();
+              tokens.rtcToken = newToken;
+            } catch (refreshError) {
+              throw new Error("Token expired and refresh failed: " +
+                (refreshError instanceof Error ? refreshError.message : String(refreshError)));
+            }
+          } else {
+            throw new Error("Invalid or expired RealtimeKit token. Provide a tokenProvider for automatic refresh.");
           }
-        } else {
-          throw new Error("Invalid or expired RealtimeKit token. Provide a tokenProvider for automatic refresh.");
         }
-      }
 
-      this.apiClient.setToken(tokens.accessToken);
+        this.apiClient.setToken(tokens.accessToken);
 
-      const localParticipant: Participant = {
-        id: participantId,
-        displayName: config.displayName,
-        role: role ?? "participant",
-        isLocal: true,
-        videoEnabled: config.video ?? false,
-        audioEnabled: config.audio ?? false,
-        isSpeaking: false,
-        isScreenSharing: false,
-        handRaised: false,
-        connectionQuality: 100,
-        metadata: config.metadata,
-      };
+        const localParticipant: Participant = {
+          id: participantId,
+          displayName: config.displayName,
+          role: role ?? "participant",
+          isLocal: true,
+          videoEnabled: config.video ?? false,
+          audioEnabled: config.audio ?? false,
+          isSpeaking: false,
+          isScreenSharing: false,
+          handRaised: false,
+          connectionQuality: 100,
+          metadata: config.metadata,
+        };
 
-      // Optional WebSocket signaling (chat, reactions, whiteboard, etc.)
-      let wsClient: WSClient | null = null;
-      if (this.wsUrl) {
-        this.log.debug("Initializing WebSocket signaling");
-        wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
-        wsClient.on("token-expired", (error) => {
-          this.emit("token-expired", error);
+        // Optional WebSocket signaling (chat, reactions, whiteboard, etc.)
+        let wsClient: WSClient | null = null;
+        if (this.wsUrl) {
+          wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
+          wsClient.on("token-expired", (error) => {
+            this.emit("token-expired", error);
+          });
+        }
+
+        ctx.markPhase("rtk.init");
+
+        // Effect: RTK initialization with typed errors
+        const rtkClient = await Effect.runPromise(
+          this._initRealtimeKitEffect(
+            tokens.rtcToken,
+            config.audio ?? false,
+            config.video ?? false
+          )
+        ).catch((error) => {
+          if (error instanceof ConnectionError) {
+            throw new Error(`RealtimeKit initialization failed: ${error.message}`);
+          }
+          throw error;
         });
-      }
 
-      // Effect: RTK initialization with typed errors
-      this.log.debug("Initializing RealtimeKit");
-      const rtkClient = await Effect.runPromise(
-        this._initRealtimeKitEffect(
-          tokens.rtcToken,
-          config.audio ?? false,
-          config.video ?? false
-        )
-      ).catch((error) => {
-        if (error instanceof ConnectionError) {
-          this.log.error("RealtimeKit init failed", { error: error.message });
-          throw new Error(`RealtimeKit initialization failed: ${error.message}`);
+        if (!rtkClient) {
+          throw new Error("RealtimeKit init returned null/undefined client");
         }
+
+        const room = new Room(roomInfo.id, rtkClient, this.debug);
+        room._setLocalParticipant(localParticipant);
+        room._setInfo(roomInfo);
+        room._setTokens(tokens);
+        room._setRoomCreated(response.data.roomCreated ?? false);
+        room._setTenantConfig(response.data.tenantConfig ?? null);
+
+        // Attach WebSocket client to room (sets up event handlers)
+        if (wsClient) {
+          room.attachWsClient(wsClient);
+          this.currentWsClient = wsClient;
+        }
+
+        ctx.markPhase("rtk.join");
+
+        // Run RTK join and WebSocket connect in parallel
+        const rtkJoinPromise = this._joinRealtimeKitWithRetry(rtkClient);
+
+        // Start WebSocket connection in parallel (non-blocking)
+        if (wsClient && tokens.accessToken) {
+          wsClient.connect(tokens.accessToken, roomId);
+        }
+
+        // Wait for RTK join to complete (WS connects independently)
+        await rtkJoinPromise;
+
+        this.currentRoom = room;
+
+        // Auto-start recording if server indicates (force_recording enabled)
+        if (response.data.shouldStartRecording) {
+          this.startRecording().catch(() => {
+            // Recording auto-start failed, non-blocking
+          });
+        }
+
+        wideEvents.setRoomId(roomInfo.id);
+        wideEvents.setParticipantId(participantId);
+        ctx.complete("success", { participantCount: room.participants.size, roomCreated: response.data.roomCreated });
+
+        return room;
+      } catch (error) {
+        ctx.complete("error", error);
         throw error;
-      });
-
-      if (!rtkClient) {
-        this.log.error("RealtimeKit init returned null/undefined client");
-        throw new Error("RealtimeKit init returned null/undefined client");
       }
-
-      this.log.debug("RealtimeKit initialized, creating Room");
-
-      const room = new Room(roomInfo.id, rtkClient, this.debug);
-      room._setLocalParticipant(localParticipant);
-      room._setInfo(roomInfo);
-      room._setTokens(tokens);
-      room._setRoomCreated(response.data.roomCreated ?? false);
-      room._setTenantConfig(response.data.tenantConfig ?? null);
-
-      // Attach WebSocket client to room (sets up event handlers)
-      if (wsClient) {
-        room.attachWsClient(wsClient);
-        this.currentWsClient = wsClient;
-      }
-
-      // Run RTK join and WebSocket connect in parallel
-      this.log.debug("Joining RealtimeKit room");
-      const rtkJoinPromise = this._joinRealtimeKitWithRetry(rtkClient);
-
-      // Start WebSocket connection in parallel (non-blocking)
-      if (wsClient && tokens.accessToken) {
-        this.log.debug("Starting WebSocket connection in parallel");
-        wsClient.connect(tokens.accessToken, roomId);
-      } else if (wsClient) {
-        this.log.warn("accessToken missing; WebSocket features disabled");
-      }
-
-      // Wait for RTK join to complete (WS connects independently)
-      await rtkJoinPromise;
-      this.log.info("Joined RealtimeKit room", { roomId });
-
-      this.currentRoom = room;
-
-      // Auto-start recording if server indicates (force_recording enabled)
-      if (response.data.shouldStartRecording) {
-        this.log.info("Auto-starting recording (force_recording enabled)");
-        this.startRecording().catch((err) => {
-          this.log.error("Failed to auto-start recording", { error: err });
-        });
-      }
-
-      return room;
     });
   }
 
@@ -369,15 +362,22 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     name?: string,
     config?: Record<string, unknown>,
   ): Promise<string> {
-    this.log.info("Creating room", { name });
+    const ctx = wideEvents.start("room.create");
+    ctx.set("input", { name, config });
 
-    const response = await this.apiClient.createRoom(name, config);
+    try {
+      const response = await this.apiClient.createRoom(name, config);
 
-    if (!response.success || !response.data) {
-      throw new Error(response.error?.message ?? "Failed to create room");
+      if (!response.success || !response.data) {
+        throw new Error(response.error?.message ?? "Failed to create room");
+      }
+
+      ctx.complete("success", { roomId: response.data.roomId });
+      return response.data.roomId;
+    } catch (error) {
+      ctx.complete("error", error);
+      throw error;
     }
-
-    return response.data.roomId;
   }
 
   /**
@@ -385,12 +385,20 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * @param roomId - The room ID to end
    */
   async endRoom(roomId: string): Promise<void> {
-    this.log.info("Ending room", { roomId });
+    const ctx = wideEvents.start("room.end");
+    ctx.set("input", { roomId });
 
-    const response = await this.apiClient.endRoom(roomId);
+    try {
+      const response = await this.apiClient.endRoom(roomId);
 
-    if (!response.success) {
-      throw new Error(response.error?.message ?? "Failed to end room");
+      if (!response.success) {
+        throw new Error(response.error?.message ?? "Failed to end room");
+      }
+
+      ctx.complete("success");
+    } catch (error) {
+      ctx.complete("error", error);
+      throw error;
     }
   }
 
@@ -399,31 +407,52 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * @returns The recording ID
    */
   async startRecording(): Promise<string> {
-    if (!this.currentRoom) {
-      throw new Error("Not connected to a room");
+    const ctx = wideEvents.start("recording.start");
+
+    try {
+      if (!this.currentRoom) {
+        throw new Error("Not connected to a room");
+      }
+
+      ctx.set("input", { roomId: this.currentRoom.id });
+
+      const response = await this.apiClient.startRecording(this.currentRoom.id);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error?.message ?? "Failed to start recording");
+      }
+
+      ctx.complete("success", { recordingId: response.data.recordingId });
+      return response.data.recordingId;
+    } catch (error) {
+      ctx.complete("error", error);
+      throw error;
     }
-
-    const response = await this.apiClient.startRecording(this.currentRoom.id);
-
-    if (!response.success || !response.data) {
-      throw new Error(response.error?.message ?? "Failed to start recording");
-    }
-
-    return response.data.recordingId;
   }
 
   /**
    * Stop recording for the current room
    */
   async stopRecording(): Promise<void> {
-    if (!this.currentRoom) {
-      throw new Error("Not connected to a room");
-    }
+    const ctx = wideEvents.start("recording.stop");
 
-    const response = await this.apiClient.stopRecording(this.currentRoom.id);
+    try {
+      if (!this.currentRoom) {
+        throw new Error("Not connected to a room");
+      }
 
-    if (!response.success) {
-      throw new Error(response.error?.message ?? "Failed to stop recording");
+      ctx.set("input", { roomId: this.currentRoom.id });
+
+      const response = await this.apiClient.stopRecording(this.currentRoom.id);
+
+      if (!response.success) {
+        throw new Error(response.error?.message ?? "Failed to stop recording");
+      }
+
+      ctx.complete("success");
+    } catch (error) {
+      ctx.complete("error", error);
+      throw error;
     }
   }
 
@@ -453,34 +482,42 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * @param apiParticipantId - The API participant ID (customParticipantId) to remove
    */
   async removeParticipant(apiParticipantId: string): Promise<void> {
-    if (!this.currentRoom) {
-      throw new Error("Not connected to a room");
-    }
+    const ctx = wideEvents.start("participant.remove");
 
-    // Validate ID format (basic UUID check)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(apiParticipantId)) {
-      throw new Error(
-        `Invalid participant ID format: "${apiParticipantId}". ` +
-        `Use customParticipantId from the participant object.`
+    try {
+      if (!this.currentRoom) {
+        throw new Error("Not connected to a room");
+      }
+
+      ctx.set("input", { roomId: this.currentRoom.id, participantId: apiParticipantId });
+
+      // Validate ID format (basic UUID check)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(apiParticipantId)) {
+        throw new Error(
+          `Invalid participant ID format: "${apiParticipantId}". ` +
+          `Use customParticipantId from the participant object.`
+        );
+      }
+
+      // Prevent self-removal
+      if (apiParticipantId === this.currentRoom.localParticipant?.id) {
+        throw new Error("Cannot remove yourself from the room");
+      }
+
+      const response = await this.apiClient.removeParticipant(
+        this.currentRoom.id,
+        apiParticipantId,
       );
-    }
 
-    // Prevent self-removal
-    if (apiParticipantId === this.currentRoom.localParticipant?.id) {
-      throw new Error("Cannot remove yourself from the room");
-    }
+      if (!response.success) {
+        throw new Error(response.error?.message ?? "Failed to remove participant");
+      }
 
-    this.log.info("Removing participant", { participantId: apiParticipantId, roomId: this.currentRoom.id });
-
-    const response = await this.apiClient.removeParticipant(
-      this.currentRoom.id,
-      apiParticipantId,
-    );
-
-    if (!response.success) {
-      this.log.error("Remove participant failed", { error: response.error });
-      throw new Error(response.error?.message ?? "Failed to remove participant");
+      ctx.complete("success");
+    } catch (error) {
+      ctx.complete("error", error);
+      throw error;
     }
   }
 
@@ -488,7 +525,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * Disconnect from the current room and clean up resources
    */
   disconnect(): void {
-    this.log.info("Disconnecting");
+    const ctx = wideEvents.start("room.leave");
+
     if (this.currentRoom) {
       this.currentRoom.leave();
       this.currentRoom = null;
@@ -498,6 +536,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       this.currentWsClient = null;
     }
     // Note: OperationLock handles serialization automatically, no reset needed
-    this.log.info("Disconnected");
+
+    ctx.complete("success");
   }
 }

@@ -3,7 +3,6 @@
  * Handles speakerphone, Bluetooth, and audio focus management
  */
 
-import { createLogger } from "@q9labs/chalk-core";
 import React, { useCallback, useEffect, useState } from "react";
 import {
 	DeviceEventEmitter,
@@ -11,8 +10,6 @@ import {
 	NativeModules,
 	Platform,
 } from "react-native";
-
-const log = createLogger("AudioSession");
 
 interface AudioSessionModuleType {
 	configureForCall: () => Promise<void>;
@@ -62,16 +59,14 @@ export function AudioSession({
 
 async function configureAudioSession(useSpeaker: boolean): Promise<void> {
 	if (!AudioSessionModule) {
-		log.warn("AudioSessionModule not available - native module not linked");
 		return;
 	}
 
 	try {
 		await AudioSessionModule.configureForCall();
 		await AudioSessionModule.setSpeakerphone(useSpeaker);
-		log.info(`Audio configured: speaker=${useSpeaker}`);
-	} catch (err) {
-		log.error("Audio config error", err);
+	} catch {
+		// Silently ignore error
 	}
 }
 
@@ -86,7 +81,6 @@ export function useSpeakerphone() {
 		const newState = !isSpeakerOn;
 
 		if (!AudioSessionModule) {
-			log.warn("AudioSessionModule not available");
 			setIsSpeakerOn(newState);
 			return;
 		}
@@ -94,15 +88,13 @@ export function useSpeakerphone() {
 		try {
 			await AudioSessionModule.setSpeakerphone(newState);
 			setIsSpeakerOn(newState);
-			log.debug(`Speakerphone: ${newState}`);
-		} catch (err) {
-			log.error("Speakerphone toggle error", err);
+		} catch {
+			// Silently ignore error
 		}
 	}, [isSpeakerOn]);
 
 	const setSpeaker = useCallback(async (enabled: boolean) => {
 		if (!AudioSessionModule) {
-			log.warn("AudioSessionModule not available");
 			setIsSpeakerOn(enabled);
 			return;
 		}
@@ -110,8 +102,8 @@ export function useSpeakerphone() {
 		try {
 			await AudioSessionModule.setSpeakerphone(enabled);
 			setIsSpeakerOn(enabled);
-		} catch (err) {
-			log.error("Speakerphone set error", err);
+		} catch {
+			// Silently ignore error
 		}
 	}, []);
 
@@ -142,7 +134,6 @@ export function useBluetoothAudio() {
 		const subscription = eventEmitter.addListener(
 			"onRouteChange",
 			(event: { route: string; availableRoutes?: string[] }) => {
-				log.debug("Route changed", event);
 				setIsBluetoothConnected(event.route === "bluetooth");
 				if (event.availableRoutes) {
 					setIsBluetoothAvailable(event.availableRoutes.includes("bluetooth"));
@@ -164,8 +155,8 @@ export function useBluetoothAudio() {
 
 			setIsBluetoothAvailable(routes.includes("bluetooth"));
 			setIsBluetoothConnected(currentRoute === "bluetooth");
-		} catch (err) {
-			log.error("Bluetooth status check error", err);
+		} catch {
+			// Silently ignore error
 		}
 	}
 
@@ -177,8 +168,8 @@ export function useBluetoothAudio() {
 		try {
 			await AudioSessionModule.setOutputRoute("bluetooth");
 			setIsBluetoothConnected(true);
-		} catch (err) {
-			log.error("Bluetooth connect error", err);
+		} catch {
+			// Silently ignore error
 		}
 	}, []);
 
@@ -190,8 +181,8 @@ export function useBluetoothAudio() {
 		try {
 			await AudioSessionModule.setOutputRoute("speaker");
 			setIsBluetoothConnected(false);
-		} catch (err) {
-			log.error("Bluetooth disconnect error", err);
+		} catch {
+			// Silently ignore error
 		}
 	}, []);
 

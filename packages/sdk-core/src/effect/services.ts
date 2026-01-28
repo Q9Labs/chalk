@@ -11,6 +11,7 @@
 import { Context, Effect, Layer } from "effect";
 import type { TokenProvider, ChalkClientConfig } from "../types";
 import type { AuthError } from "./errors";
+import { wideEventsCollector } from "../wide-events/collector";
 
 /**
  * Token service for managing JWT tokens
@@ -89,14 +90,23 @@ export const NoopLoggerLive = Layer.succeed(
 
 /**
  * Create a console logger layer (for debug mode)
+ * Now enriches the active wide event context instead of direct console output
  */
 export const ConsoleLoggerLive = Layer.succeed(
   LoggerService,
   {
-    debug: (message, data) => Effect.sync(() => console.debug(`[Chalk] ${message}`, data ?? "")),
-    info: (message, data) => Effect.sync(() => console.info(`[Chalk] ${message}`, data ?? "")),
-    warn: (message, data) => Effect.sync(() => console.warn(`[Chalk] ${message}`, data ?? "")),
-    error: (message, data) => Effect.sync(() => console.error(`[Chalk] ${message}`, data ?? "")),
+    debug: (message, data) => Effect.sync(() => {
+      wideEventsCollector.enrichActiveContext(`debug:${message}`, data);
+    }),
+    info: (message, data) => Effect.sync(() => {
+      wideEventsCollector.enrichActiveContext(`info:${message}`, data);
+    }),
+    warn: (message, data) => Effect.sync(() => {
+      wideEventsCollector.enrichActiveContext(`warn:${message}`, data);
+    }),
+    error: (message, data) => Effect.sync(() => {
+      wideEventsCollector.enrichActiveContext(`error:${message}`, data);
+    }),
   }
 );
 

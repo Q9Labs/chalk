@@ -3,15 +3,12 @@
  * Provides native call UI integration for iOS devices
  */
 
-import { createLogger } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import {
 	NativeEventEmitter,
 	NativeModules,
 	Platform,
 } from "react-native";
-
-const log = createLogger("useCallKit");
 
 interface CallKitModuleType {
 	reportIncomingCall: (
@@ -77,17 +74,14 @@ export function useCallKit(): UseCallKitResult {
 
 		const subscriptions = [
 			eventEmitter.addListener("onCallAnswered", (event: { uuid: string }) => {
-				log.debug("Call answered", event.uuid);
 				setActiveCallId(event.uuid);
 			}),
 			eventEmitter.addListener("onCallEnded", (event: { uuid: string }) => {
-				log.debug("Call ended", event.uuid);
 				if (activeCallId === event.uuid) {
 					setActiveCallId(null);
 				}
 			}),
 			eventEmitter.addListener("onStartCall", (event: { uuid: string }) => {
-				log.debug("Call started", event.uuid);
 				setActiveCallId(event.uuid);
 			}),
 		];
@@ -109,7 +103,6 @@ export function useCallKit(): UseCallKitResult {
 	const reportIncomingCall = useCallback(
 		async (callId: string, callerName: string, hasVideo = true) => {
 			if (!CallKitModule) {
-				log.warn("CallKit not available");
 				return;
 			}
 
@@ -120,9 +113,7 @@ export function useCallKit(): UseCallKitResult {
 					callerName,
 					hasVideo,
 				);
-				log.info("Reported incoming call", callId);
 			} catch (err) {
-				log.error("Failed to report incoming call", err);
 				throw err;
 			}
 		},
@@ -131,16 +122,13 @@ export function useCallKit(): UseCallKitResult {
 
 	const reportOutgoingCall = useCallback(async (callId: string) => {
 		if (!CallKitModule) {
-			log.warn("CallKit not available");
 			return;
 		}
 
 		try {
 			await CallKitModule.reportOutgoingCall(callId, callId);
 			setActiveCallId(callId);
-			log.info("Reported outgoing call", callId);
 		} catch (err) {
-			log.error("Failed to report outgoing call", err);
 			throw err;
 		}
 	}, []);
@@ -152,9 +140,7 @@ export function useCallKit(): UseCallKitResult {
 
 		try {
 			await CallKitModule.reportCallConnected(callId);
-			log.info("Reported call connected", callId);
 		} catch (err) {
-			log.error("Failed to report call connected", err);
 			throw err;
 		}
 	}, []);
@@ -173,9 +159,7 @@ export function useCallKit(): UseCallKitResult {
 				if (activeCallId === callId) {
 					setActiveCallId(null);
 				}
-				log.info(`Reported call ended: ${callId} (${reason})`);
 			} catch (err) {
-				log.error("Failed to report call ended", err);
 				throw err;
 			}
 		},
@@ -193,9 +177,7 @@ export function useCallKit(): UseCallKitResult {
 				if (activeCallId === callId) {
 					setActiveCallId(null);
 				}
-				log.info("Ended call", callId);
 			} catch (err) {
-				log.error("Failed to end call", err);
 				throw err;
 			}
 		},
@@ -209,9 +191,7 @@ export function useCallKit(): UseCallKitResult {
 
 		try {
 			await CallKitModule.setCallMuted(callId, muted);
-			log.debug(`Set call muted: ${callId} (${muted})`);
 		} catch (err) {
-			log.error("Failed to set muted", err);
 			throw err;
 		}
 	}, []);

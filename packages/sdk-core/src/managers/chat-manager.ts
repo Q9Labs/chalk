@@ -9,7 +9,6 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { Room } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { ChatMessage, ReactionEmoji } from "../types";
-import { createLogger, type Logger } from "../utils/logger";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Chat manager state */
@@ -45,7 +44,6 @@ export class ChatManager extends StateContainer<ChatState> {
 	private messages: ChatMessage[] = [];
 	private unreadCount = 0;
 	private isChatVisible = false;
-	private readonly log: Logger;
 
 	constructor(_debug = false) {
 		super({
@@ -54,7 +52,6 @@ export class ChatManager extends StateContainer<ChatState> {
 			count: 0,
 			unreadCount: 0,
 		});
-		this.log = createLogger("Chat");
 	}
 
 	/** Subscribe to chat events */
@@ -102,7 +99,6 @@ export class ChatManager extends StateContainer<ChatState> {
 				this.unreadCount++;
 			}
 
-			this.log.debug("Message received", { senderId: normalized.senderId, count: this.messages.length });
 			this.updateState();
 			this.events.emit("message", { message: normalized });
 		});
@@ -129,7 +125,6 @@ export class ChatManager extends StateContainer<ChatState> {
 			return;
 		}
 
-		this.log.debug("Sending message", { count: this.messages.length + 1 });
 		this.room.sendMessage(content);
 	}
 
@@ -149,7 +144,6 @@ export class ChatManager extends StateContainer<ChatState> {
 		const localId = this.room.localParticipant?.id;
 		if (!localId) return;
 
-		this.log.debug("Reacting to message", { messageId, emoji });
 		// TODO: Send reaction to server when API supports it
 		// For now, just emit the event locally
 		this.updateState();
@@ -158,7 +152,6 @@ export class ChatManager extends StateContainer<ChatState> {
 
 	/** Mark chat as visible (resets unread count) */
 	markAsRead(): void {
-		this.log.debug("Chat marked as read");
 		this.isChatVisible = true;
 		this.unreadCount = 0;
 		this.updateState();
@@ -166,13 +159,11 @@ export class ChatManager extends StateContainer<ChatState> {
 
 	/** Mark chat as hidden (starts counting unread) */
 	markAsHidden(): void {
-		this.log.debug("Chat marked as hidden");
 		this.isChatVisible = false;
 	}
 
 	/** Clear all messages (used when meeting ends) */
 	clear(): void {
-		this.log.info("Chat cleared", { count: this.messages.length });
 		this.messages = [];
 		this.unreadCount = 0;
 		this.updateState();

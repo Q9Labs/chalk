@@ -3,11 +3,8 @@
  * Enables background audio and persistent notification for calls
  */
 
-import { createLogger } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { NativeModules, Platform } from "react-native";
-
-const log = createLogger("useForegroundService");
 
 interface CallServiceModuleType {
 	startCallService: (roomId: string, roomName: string) => Promise<void>;
@@ -54,16 +51,13 @@ export function useForegroundService(): UseForegroundServiceResult {
 	const startService = useCallback(
 		async (roomId: string, roomName: string) => {
 			if (!CallServiceModule) {
-				log.warn("CallServiceModule not available");
 				return;
 			}
 
 			try {
 				await CallServiceModule.startCallService(roomId, roomName);
 				setIsRunning(true);
-				log.info("Started foreground service", roomId);
 			} catch (err) {
-				log.error("Failed to start foreground service", err);
 				throw err;
 			}
 		},
@@ -72,16 +66,13 @@ export function useForegroundService(): UseForegroundServiceResult {
 
 	const stopService = useCallback(async () => {
 		if (!CallServiceModule) {
-			log.warn("CallServiceModule not available");
 			return;
 		}
 
 		try {
 			await CallServiceModule.stopCallService();
 			setIsRunning(false);
-			log.info("Stopped foreground service");
 		} catch (err) {
-			log.error("Failed to stop foreground service", err);
 			throw err;
 		}
 	}, []);
@@ -93,9 +84,7 @@ export function useForegroundService(): UseForegroundServiceResult {
 
 		try {
 			await CallServiceModule.updateNotification(title, body);
-			log.debug("Updated notification", title);
 		} catch (err) {
-			log.error("Failed to update notification", err);
 			throw err;
 		}
 	}, []);
