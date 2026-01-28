@@ -77,3 +77,8 @@ output "websocket_stage_id" {
   description = "WebSocket API stage ID"
   value       = aws_apigatewayv2_stage.websocket.id
 }
+
+output "vpc_link_security_group_id" {
+  description = "VPC Link security group ID"
+  value       = aws_security_group.vpc_link.id
+}

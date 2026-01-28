@@ -89,8 +89,8 @@ module "ecs" {
   max_capacity     = 2          # Downsized from 10
   desired_capacity = 1          # Downsized from 3
 
-  # ALB must be internet-facing for WebSocket support
-  # VPC Link V2 (HTTP API) doesn't support WebSocket upgrade
+  # ALB is internet-facing for direct WebSocket access via chalk-ws subdomain
+  # HTTP API uses VPC Link for improved reliability
   internal_alb          = false
   enable_https_listener = true
   certificate_arn       = module.dns.certificate_validated_arn
@@ -376,4 +376,16 @@ resource "aws_security_group_rule" "redis_from_whisper" {
   security_group_id        = module.elasticache.security_group_id
   source_security_group_id = module.whisper.security_group_id
   description              = "Redis from Whisper workers"
+}
+
+# Allow API Gateway VPC Link to access ALB on port 80
+# VPC Link uses private ENIs that need explicit access to ALB
+resource "aws_security_group_rule" "alb_from_vpc_link" {
+  type                     = "ingress"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "tcp"
+  security_group_id        = module.ecs.alb_security_group_id
+  source_security_group_id = module.api_gateway.vpc_link_security_group_id
+  description              = "HTTP from API Gateway VPC Link"
 }

@@ -9,9 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SDK-React-Native: Wide-event logging system** — Comprehensive structured logging following canonical log line best practices
+  - New `src/logger.ts` with singleton `logger` and `createLogger()` factory
+  - Auto-injected environment context: platform, platformVersion, sdkVersion, isSimulator, debug mode
+  - Session context tracking: roomId, participantId, displayName (set on room join, cleared on leave)
+  - JSON structured output prefixed with `[Chalk]` for easy filtering
+  - Respects `debug` prop from ChalkProvider (info logs only when debug=true, errors always logged)
+  - Exports: `logger`, `createLogger`, `ChalkLogger` type
+  - Event naming convention: `{domain}.{action}[.{phase}]` (e.g., `room.join.start`, `media.video.toggle`)
+  - Coverage: ChalkProvider (room ops), RTCManager (WebRTC ops), useMedia, useParticipants, useLocalStream, usePermissions, useRecording
+
 ### Changed
 
 ### Fixed
+
+- **API Gateway 503 timeout errors** — Switched HTTP API integration from INTERNET to VPC_LINK connection
+  - Root cause: API Gateway using public internet path to ALB caused intermittent 30-second timeouts
+  - Changed `connection_type` from `INTERNET` to `VPC_LINK` for HTTP API integrations
+  - Increased timeout from 30s to 60s to match ALB idle timeout
+  - Added explicit security group rule allowing VPC link ENIs to reach ALB on port 80
+  - Added `vpc_link_security_group_id` output to api-gateway module
 
 - **Whiteboard React instance conflict in production** — Externalized `@excalidraw/excalidraw` from sdk-react bundle to prevent duplicate React instances
   - Root cause: Excalidraw was bundled into sdk-react, causing `ReactCurrentOwner` undefined errors in production
