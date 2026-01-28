@@ -134,7 +134,7 @@ resource "aws_apigatewayv2_integration" "http_alb_root" {
   connection_type = "INTERNET"
 
   payload_format_version = "1.0"
-  timeout_milliseconds   = 60000
+  timeout_milliseconds   = 30000 # HTTP API max is 30s
 }
 
 resource "aws_apigatewayv2_integration" "http_alb_proxy" {
@@ -147,7 +147,7 @@ resource "aws_apigatewayv2_integration" "http_alb_proxy" {
   connection_type = "INTERNET"
 
   payload_format_version = "1.0"
-  timeout_milliseconds   = 60000
+  timeout_milliseconds   = 30000 # HTTP API max is 30s
 }
 
 resource "aws_apigatewayv2_route" "http_default" {
