@@ -97,6 +97,7 @@ func NewCORSOriginsService(cfg CORSOriginsConfig, queries *db.Queries, logger *s
 			"https://collabdash-dev.vercel.app",
 			"https://app.collabdash.io",
 			"https://dev.dwd4jsk5p7j52.amplifyapp.com",
+			"https://dev.d17jmjn2v13h91.amplifyapp.com",
 			"https://portal-dev.tuitionhighway.com",
 			"https://portal.tuitionhighway.com",
 			"https://backend.tuitionhighway.com",

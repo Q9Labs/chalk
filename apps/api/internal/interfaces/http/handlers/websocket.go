@@ -60,6 +60,8 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub, queries 
 		// TuitionHighway origins
 		"https://dev.dwd4jsk5p7j52.amplifyapp.com",
 		"dev.dwd4jsk5p7j52.amplifyapp.com",
+		"https://dev.d17jmjn2v13h91.amplifyapp.com",
+		"dev.d17jmjn2v13h91.amplifyapp.com",
 		"https://portal-dev.tuitionhighway.com",
 		"portal-dev.tuitionhighway.com",
 		"https://portal.tuitionhighway.com",

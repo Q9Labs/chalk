@@ -18,6 +18,7 @@ var PlatformOrigins = map[string]bool{
 	"https://collabdash-dev.vercel.app":            true,
 	"https://app.collabdash.io":                    true,
 	"https://dev.dwd4jsk5p7j52.amplifyapp.com":     true,
+	"https://dev.d17jmjn2v13h91.amplifyapp.com":    true,
 	"https://portal-dev.tuitionhighway.com":        true,
 	"https://portal.tuitionhighway.com":            true,
 	"https://backend.tuitionhighway.com":           true,

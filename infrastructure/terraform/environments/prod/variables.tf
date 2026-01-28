@@ -20,6 +20,7 @@ variable "cors_allowed_origins" {
     "http://localhost:3070",
     "https://collabdash-dev.vercel.app",
     "https://app.collabdash.io",
+    "https://dev.d17jmjn2v13h91.amplifyapp.com",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3070",
