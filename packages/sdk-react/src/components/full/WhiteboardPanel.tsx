@@ -5,7 +5,7 @@
  * Handles sync, permissions, and participant thumbnails.
  */
 
-import { memo, useEffect, useRef, useState, useCallback } from "react";
+import { createElement, memo, useEffect, useRef, useState, useCallback } from "react";
 import { createLogger } from "@q9labs/chalk-core";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
@@ -201,11 +201,10 @@ function WhiteboardPanelBase({
 		const loadExcalidraw = async () => {
 			try {
 				// Dynamic imports
-				const [{ Excalidraw }, { createRoot }, React, chalkWhiteboard] =
+				const [{ Excalidraw }, { createRoot }, chalkWhiteboard] =
 					await Promise.all([
 						import("@excalidraw/excalidraw"),
 						import("react-dom/client"),
-						import("react"),
 						import("@q9labs/chalk-whiteboard").catch(() => null),
 					]);
 
@@ -258,7 +257,7 @@ function WhiteboardPanelBase({
 				root = createRoot(containerRef.current);
 
 				const ExcalidrawWrapper = () => {
-					const handleChange = React.useCallback(
+					const handleChange = useCallback(
 						(
 							elements: readonly ExcalidrawElement[],
 							_appState: unknown,
@@ -271,7 +270,7 @@ function WhiteboardPanelBase({
 						[],
 					);
 
-					const handlePointerUpdate = React.useCallback(
+					const handlePointerUpdate = useCallback(
 						(payload: { pointer: { x: number; y: number } }) => {
 							syncEngineRef.current?.sendCursor(
 								payload.pointer.x,
@@ -287,7 +286,7 @@ function WhiteboardPanelBase({
 					// Stroke color: contrasts with canvas (light on dark, dark on light)
 					const strokeColor = isDark ? "#ffffff" : "#1e1e1e";
 
-					return React.createElement(Excalidraw, {
+					return createElement(Excalidraw, {
 						excalidrawAPI: (api: unknown) => {
 							excalidrawRef.current = api;
 						},
@@ -317,7 +316,7 @@ function WhiteboardPanelBase({
 					});
 				};
 
-				root.render(React.createElement(ExcalidrawWrapper));
+				root.render(createElement(ExcalidrawWrapper));
 				setIsReady(true);
 			} catch (err) {
 				log.error("Failed to load Excalidraw:", err);

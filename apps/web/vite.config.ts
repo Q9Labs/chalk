@@ -12,6 +12,14 @@ const config = defineConfig({
 	server: {
 		port: 3070,
 	},
+	resolve: {
+		dedupe: [
+			"react",
+			"react-dom",
+			"react/jsx-runtime",
+			"react/jsx-dev-runtime",
+		],
+	},
 	plugins: [
 		viteTsConfigPaths({
 			projects: ["./tsconfig.json", "../../packages/ui/tsconfig.json"],
