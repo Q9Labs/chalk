@@ -145,7 +145,7 @@ export type {
 } from "./managers/index.ts";
 
 // Whiteboard types
-export type { WhiteboardCursor, WhiteboardUpdate } from "./types/entities/whiteboard.ts";
+export type { WhiteboardCursor, WhiteboardUpdate, WhiteboardSnapshot } from "./types/entities/whiteboard.ts";
 
 // Namespace exports for managers
 export * as managers from "./managers/index.ts";
