@@ -13,6 +13,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.0.49] - 2025-01-28
+
+### Added
+
+- **Whiteboard sync for late joiners** — Server now maintains in-memory whiteboard state per room. New participants receive full snapshot on `whiteboard.sync` request instead of empty state.
+  - New `WhiteboardState` struct tracks elements (by ID/version), files, appState, and lastSeq
+  - `whiteboard.snapshot` message type delivers full state to requesting client
+  - Debounced DB persistence (750ms) via `WhiteboardStateStore` interface
+  - State cleaned up when last participant leaves room
+
+- **Collaborative cursors** — Participants see each other's cursors with color-coded names
+  - 8 distinct cursor colors assigned by participant ID hash
+  - Stale cursor cleanup (10s timeout)
+  - Cursor position updates sent even when not drawing
+
+- **Large file batching** — Whiteboard images split into batches to prevent WebSocket message size limits
+  - New config: `maxPayloadBytes` (32MB default), `maxFileBytes` (32MB default)
+  - Files exceeding `maxFileBytes` are skipped
+  - Batches sent sequentially with elements only in first batch
+
+### Changed
+
+- **Per-participant sequence tracking** — SyncEngine now tracks sequence numbers per participant instead of globally
+  - Prevents cross-participant deduplication issues (participant A's seq 5 no longer blocks participant B's seq 3)
+  - `remoteSeqBySource` map replaces single `remoteSeq` counter
+  - Snapshot load resets all per-participant sequences
+
+- **WebSocket read limit increased** — Default read limit raised from 32KB to 32MB for large whiteboard payloads
+  - Configurable via `CHALK_WS_READ_LIMIT_BYTES` environment variable
+
+### Fixed
+
 ## [0.0.48] - 2025-01-28
 
 ### Added

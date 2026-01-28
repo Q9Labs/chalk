@@ -68,6 +68,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 	private cursorDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
 	private pendingElements: unknown[] | null = null;
 	private pendingFiles: Record<string, unknown> | null = null;
+	private lastSeqByParticipant = new Map<string, number>();
 	private openParticipants = new Set<string>();
 	private readonly log: Logger;
 
@@ -147,7 +148,8 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			};
 
 			// Only apply if sequence is newer
-			if (data.seq > this.getState().lastSeq) {
+			const lastSeq = this.lastSeqByParticipant.get(data.participantId) ?? 0;
+			if (data.seq > lastSeq) {
 				// Merge incoming elements with existing (delta updates)
 				const currentState = this.getState();
 				const mergedElements = this.mergeElements(
@@ -156,14 +158,34 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 				);
 				const mergedFiles = { ...currentState.files, ...(data.files ?? {}) };
 
+				this.lastSeqByParticipant.set(data.participantId, data.seq);
 				this.setState({
 					elements: mergedElements,
 					files: mergedFiles,
-					lastSeq: data.seq,
+					lastSeq: Math.max(currentState.lastSeq, data.seq),
 				});
 			}
 
 			this.events.emit("update", update);
+		});
+
+		this.room.on("whiteboard-snapshot", (data) => {
+			this.log.info("Snapshot received", { roomId: data.roomId, count: data.elements?.length });
+			const snapshot: WhiteboardSnapshot = {
+				roomId: data.roomId,
+				elements: data.elements,
+				files: data.files,
+				appState: data.appState,
+				lastSeq: data.lastSeq,
+			};
+
+			this.lastSeqByParticipant.clear();
+			this.setState({
+				elements: data.elements,
+				files: data.files,
+				lastSeq: data.lastSeq,
+			});
+			this.events.emit("snapshot", snapshot);
 		});
 
 		this.room.on("whiteboard-cursor", (data) => {
@@ -300,7 +322,11 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 	 * @param elements - Excalidraw elements array
 	 * @param files - Optional files map
 	 */
-	sendUpdate(elements: unknown[], files?: Record<string, unknown>): void {
+	sendUpdate(
+		elements: unknown[],
+		files?: Record<string, unknown>,
+		seqOverride?: number,
+	): void {
 		if (!this.room) {
 			throw new ChalkError(
 				ChalkErrorCode.NOT_IN_ROOM,
@@ -323,7 +349,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
 		this.updateDebounceTimeout = setTimeout(() => {
 			if (this.pendingElements && this.room) {
-				const seq = Date.now();
+				const seq = typeof seqOverride === "number" ? seqOverride : Date.now();
 				this.room.sendWhiteboardUpdate(
 					this.pendingElements,
 					this.pendingFiles ?? undefined,
@@ -341,7 +367,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 				this.setState({
 					elements: mergedElements,
 					files: mergedFiles,
-					lastSeq: seq,
+					lastSeq: Math.max(currentState.lastSeq, seq),
 				});
 				this.pendingElements = null;
 				this.pendingFiles = null;
@@ -376,7 +402,8 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
 		this.log.info("Clearing whiteboard");
 		this.room.clearWhiteboard();
-		this.setState({ elements: [], files: {}, lastSeq: Date.now() });
+		this.lastSeqByParticipant.clear();
+		this.setState({ elements: [], files: {}, lastSeq: 0 });
 	}
 
 	/** Grant drawing permission to a participant (host only) */
@@ -413,6 +440,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 		if (this.cursorDebounceTimeout) {
 			clearTimeout(this.cursorDebounceTimeout);
 		}
+		this.lastSeqByParticipant.clear();
 		this.cursors.clear();
 		this.openParticipants.clear();
 		this.events.removeAllListeners();

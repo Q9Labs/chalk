@@ -64,10 +64,16 @@ export interface WhiteboardConfig {
 	cursorThrottleMs?: number;
 	/** Max elements before warning */
 	maxElements?: number;
+	/** Max serialized payload size (bytes) */
+	maxPayloadBytes?: number;
+	/** Max serialized file size (bytes) */
+	maxFileBytes?: number;
 }
 
 export const DEFAULT_CONFIG: Required<WhiteboardConfig> = {
 	debounceMs: 150,
 	cursorThrottleMs: 16, // ~60fps
 	maxElements: 5000,
+	maxPayloadBytes: 32 * 1024 * 1024, // 32MB
+	maxFileBytes: 32 * 1024 * 1024, // 32MB
 };

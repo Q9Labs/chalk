@@ -50,6 +50,8 @@ type Hub struct {
 	rooms           map[uuid.UUID]map[uuid.UUID]*Client
 	participantMeta map[uuid.UUID]domain.ParticipantMetadata
 	roomRecording   map[uuid.UUID]*RoomRecordingState
+	whiteboardState map[uuid.UUID]*WhiteboardState
+	whiteboardStore WhiteboardStateStore
 
 	register   chan *Client
 	unregister chan *Client
@@ -57,6 +59,8 @@ type Hub struct {
 	redisClient        RedisInterface
 	transcriptService  TranscriptService
 	participantService ParticipantService
+
+	whiteboardPersistTimers map[uuid.UUID]*time.Timer
 
 	mu sync.RWMutex
 
@@ -73,15 +77,17 @@ type RoomRecordingState struct {
 
 func NewHub(redisClient RedisInterface) *Hub {
 	return &Hub{
-		clients:         make(map[uuid.UUID]*Client),
-		rooms:           make(map[uuid.UUID]map[uuid.UUID]*Client),
-		participantMeta: make(map[uuid.UUID]domain.ParticipantMetadata),
-		roomRecording:   make(map[uuid.UUID]*RoomRecordingState),
-		register:        make(chan *Client),
-		unregister:      make(chan *Client),
-		redisClient:     redisClient,
-		ctx:             context.Background(),
-		stop:            make(chan struct{}),
+		clients:                 make(map[uuid.UUID]*Client),
+		rooms:                   make(map[uuid.UUID]map[uuid.UUID]*Client),
+		participantMeta:         make(map[uuid.UUID]domain.ParticipantMetadata),
+		roomRecording:           make(map[uuid.UUID]*RoomRecordingState),
+		whiteboardState:         make(map[uuid.UUID]*WhiteboardState),
+		register:                make(chan *Client),
+		unregister:              make(chan *Client),
+		redisClient:             redisClient,
+		ctx:                     context.Background(),
+		stop:                    make(chan struct{}),
+		whiteboardPersistTimers: make(map[uuid.UUID]*time.Timer),
 	}
 }
 
@@ -93,6 +99,11 @@ func (h *Hub) SetTranscriptService(ts TranscriptService) {
 // SetParticipantService sets the participant service for marking participants as left
 func (h *Hub) SetParticipantService(ps ParticipantService) {
 	h.participantService = ps
+}
+
+// SetWhiteboardStateStore sets the persistence layer for whiteboard state.
+func (h *Hub) SetWhiteboardStateStore(store WhiteboardStateStore) {
+	h.whiteboardStore = store
 }
 
 // GetTranscriptService returns the transcript service (may be nil)
@@ -209,6 +220,11 @@ func (h *Hub) unregisterClient(client *Client) {
 		h.mu.Lock()
 		delete(h.rooms, client.roomID)
 		delete(h.roomRecording, client.roomID)
+		delete(h.whiteboardState, client.roomID)
+		if timer, ok := h.whiteboardPersistTimers[client.roomID]; ok {
+			timer.Stop()
+			delete(h.whiteboardPersistTimers, client.roomID)
+		}
 		h.mu.Unlock()
 		log.Printf("Room %s removed from hub (last participant left)", client.roomID)
 	}

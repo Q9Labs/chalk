@@ -64,6 +64,13 @@ interface RoomEvents {
     files?: Record<string, unknown>;
     seq: number;
   };
+  "whiteboard-snapshot": {
+    roomId: string;
+    elements: unknown[];
+    files: Record<string, unknown>;
+    appState: Record<string, unknown>;
+    lastSeq: number;
+  };
   "whiteboard-cursor": {
     participantId: string;
     displayName: string;
@@ -493,6 +500,14 @@ export class Room extends EventEmitter<RoomEvents> {
         files: data.files,
         seq: data.seq,
       });
+    });
+
+    this.wsClient.on("whiteboard.snapshot", (snapshot) => {
+      this.log.debug("Whiteboard snapshot received", {
+        roomId: snapshot.roomId,
+        elements: Array.isArray(snapshot.elements) ? snapshot.elements.length : 0,
+      });
+      this.emit("whiteboard-snapshot", snapshot);
     });
 
     this.wsClient.on("whiteboard.cursor", (data) => {

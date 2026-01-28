@@ -306,6 +306,9 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 	log.Printf("[WB-UPDATE] Sender metadata: displayName=%s", meta.DisplayName)
 
+	// Merge update into in-memory state for durability and sync requests
+	c.hub.UpdateWhiteboardState(c.roomID, payload)
+
 	// Broadcast to all participants in room
 	dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
 		ParticipantID: c.participantID,
@@ -326,22 +329,24 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 func (c *Client) handleWhiteboardSync() {
 	log.Printf("[WB-SYNC] Received whiteboard.sync request from participant=%s room=%s", c.participantID, c.roomID)
 
-	// For now, send empty snapshot (persistence can be added later)
-	snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, WhiteboardSnapshotPayload{
-		RoomID:   c.roomID,
-		Elements: json.RawMessage("[]"),
-		Files:    json.RawMessage("{}"),
-		AppState: json.RawMessage("{}"),
-		LastSeq:  0,
-	})
+	// Send cached snapshot if available; otherwise return empty state
+	payload, ok := c.hub.GetWhiteboardSnapshot(c.roomID)
+	if !ok {
+		log.Printf("[WB-SYNC] No whiteboard state available for room=%s; skipping snapshot", c.roomID)
+		c.sendErrorMessage("whiteboard_state_empty", "No whiteboard state available")
+		return
+	}
+	snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, payload)
 	data, _ := json.Marshal(snapshot)
-	log.Printf("[WB-SYNC] Sending empty snapshot to participant=%s, size=%d bytes", c.participantID, len(data))
+	log.Printf("[WB-SYNC] Sending snapshot to participant=%s, size=%d bytes", c.participantID, len(data))
 	c.Send(data)
 }
 
 // handleWhiteboardClear broadcasts a whiteboard clear event
 func (c *Client) handleWhiteboardClear() {
 	meta := c.hub.GetParticipantMetadata(c.participantID)
+
+	c.hub.ClearWhiteboardState(c.roomID)
 
 	clearMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
 		ParticipantID: c.participantID,

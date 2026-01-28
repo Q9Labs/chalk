@@ -10,12 +10,46 @@ export class SyncEngine {
 	private lastElements: Map<string, ExcalidrawElement> = new Map();
 	private lastFiles: Set<string> = new Set();
 	private localSeq = 0;
-	private remoteSeq = 0;
 	private pendingElements: Map<string, ExcalidrawElement> = new Map();
 	private pendingFiles: BinaryFiles = {};
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private lastCursorSend = 0;
 	private readonly config: Required<WhiteboardConfig>;
+	private remoteSeqBySource: Map<string, number> = new Map();
+
+	private splitFilesIntoBatches(
+		files: BinaryFiles,
+		basePayloadSize: number,
+	): BinaryFiles[] {
+		const batches: BinaryFiles[] = [];
+		let current: BinaryFiles = {};
+		let currentSize = basePayloadSize;
+
+		for (const [id, file] of Object.entries(files)) {
+			const fileSize = JSON.stringify({ [id]: file }).length;
+			if (fileSize > this.config.maxFileBytes) {
+				continue;
+			}
+
+			if (
+				currentSize + fileSize > this.config.maxPayloadBytes &&
+				Object.keys(current).length > 0
+			) {
+				batches.push(current);
+				current = {};
+				currentSize = basePayloadSize;
+			}
+
+			current[id] = file;
+			currentSize += fileSize;
+		}
+
+		if (Object.keys(current).length > 0) {
+			batches.push(current);
+		}
+
+		return batches;
+	}
 
 	constructor(
 		private readonly sendMessage: SendMessage,
@@ -93,16 +127,33 @@ export class SyncEngine {
 			return;
 		}
 
-		this.localSeq++;
+		const elements = Array.from(this.pendingElements.values());
+		const files = this.pendingFiles;
+		const basePayloadSize = JSON.stringify({ elements, seq: this.localSeq + 1 }).length;
 
-		this.sendMessage("whiteboard.update", {
-			elements: Array.from(this.pendingElements.values()),
-			files:
-				Object.keys(this.pendingFiles).length > 0
-					? this.pendingFiles
-					: undefined,
-			seq: this.localSeq,
-		});
+		const hasFiles = Object.keys(files).length > 0;
+		const batches =
+			hasFiles && this.config.maxPayloadBytes > 0
+				? this.splitFilesIntoBatches(files, basePayloadSize)
+				: null;
+
+		if (batches && batches.length > 0) {
+			batches.forEach((batch, index) => {
+				this.localSeq++;
+				this.sendMessage("whiteboard.update", {
+					elements: index === 0 ? elements : [],
+					files: Object.keys(batch).length > 0 ? batch : undefined,
+					seq: this.localSeq,
+				});
+			});
+		} else {
+			this.localSeq++;
+			this.sendMessage("whiteboard.update", {
+				elements,
+				files: hasFiles && !batches ? files : undefined,
+				seq: this.localSeq,
+			});
+		}
 
 		this.pendingElements.clear();
 		this.pendingFiles = {};
@@ -127,10 +178,13 @@ export class SyncEngine {
 	 */
 	applyRemoteUpdate(
 		currentElements: readonly ExcalidrawElement[],
-		update: { elements: ExcalidrawElement[]; seq: number },
+		update: { elements: ExcalidrawElement[]; seq: number; participantId?: string },
 	): ExcalidrawElement[] {
-		// Skip already-processed remote updates (prevents duplicate processing)
-		if (update.seq <= this.remoteSeq) {
+		const sourceKey = update.participantId ?? "__global__";
+		const lastSeq = this.remoteSeqBySource.get(sourceKey) ?? 0;
+
+		// Skip already-processed remote updates for this participant
+		if (update.seq <= lastSeq) {
 			return [...currentElements];
 		}
 
@@ -150,7 +204,7 @@ export class SyncEngine {
 			}
 		}
 
-		this.remoteSeq = update.seq;
+		this.remoteSeqBySource.set(sourceKey, update.seq);
 		return Array.from(elementMap.values());
 	}
 
@@ -161,7 +215,7 @@ export class SyncEngine {
 		this.lastElements.clear();
 		this.lastFiles.clear();
 		this.localSeq = 0;
-		this.remoteSeq = 0;
+		this.remoteSeqBySource.clear();
 		this.pendingElements.clear();
 		this.pendingFiles = {};
 		if (this.debounceTimer) {
@@ -175,6 +229,7 @@ export class SyncEngine {
 	 */
 	loadSnapshot(elements: readonly ExcalidrawElement[], seq: number): void {
 		this.lastElements = new Map(elements.map((e) => [e.id, e]));
-		this.remoteSeq = seq;
+		this.remoteSeqBySource.clear();
+		this.remoteSeqBySource.set("__global__", seq);
 	}
 }

@@ -4,6 +4,7 @@
 
 import type {
 	WhiteboardCursor,
+	WhiteboardSnapshot,
 	WhiteboardState,
 	WhiteboardUpdate,
 } from "@q9labs/chalk-core";
@@ -26,6 +27,8 @@ export interface UseWhiteboardReturn {
 	openParticipants: readonly string[];
 	/** Latest update from remote participants */
 	latestUpdate: WhiteboardUpdate | null;
+	/** Latest snapshot from sync */
+	latestSnapshot: WhiteboardSnapshot | null;
 	/** Open whiteboard */
 	open: () => void;
 	/** Close whiteboard */
@@ -81,6 +84,8 @@ export function useWhiteboard(): UseWhiteboardReturn {
 	const [latestUpdate, setLatestUpdate] = useState<WhiteboardUpdate | null>(
 		null,
 	);
+	const [latestSnapshot, setLatestSnapshot] =
+		useState<WhiteboardSnapshot | null>(null);
 
 	useEffect(() => {
 		return whiteboard.subscribe(setState);
@@ -90,6 +95,13 @@ export function useWhiteboard(): UseWhiteboardReturn {
 	useEffect(() => {
 		return whiteboard.on("update", (update) => {
 			setLatestUpdate(update);
+		});
+	}, [whiteboard]);
+
+	// Listen for snapshots
+	useEffect(() => {
+		return whiteboard.on("snapshot", (snapshot) => {
+			setLatestSnapshot(snapshot);
 		});
 	}, [whiteboard]);
 
@@ -136,7 +148,7 @@ export function useWhiteboard(): UseWhiteboardReturn {
 			elements: unknown[],
 			files?: Record<string, unknown>,
 			_seq?: number,
-		): void => whiteboard.sendUpdate(elements, files),
+		): void => whiteboard.sendUpdate(elements, files, _seq),
 		[whiteboard],
 	);
 
@@ -171,6 +183,7 @@ export function useWhiteboard(): UseWhiteboardReturn {
 			lastSeq: state.lastSeq,
 			openParticipants: state.openParticipants,
 			latestUpdate,
+			latestSnapshot,
 			open,
 			close,
 			toggle,
@@ -186,6 +199,7 @@ export function useWhiteboard(): UseWhiteboardReturn {
 		[
 			state,
 			latestUpdate,
+			latestSnapshot,
 			open,
 			close,
 			toggle,

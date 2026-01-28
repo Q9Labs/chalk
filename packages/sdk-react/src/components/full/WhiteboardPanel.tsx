@@ -21,6 +21,28 @@ import {
 
 const log = createLogger("WhiteboardPanel");
 
+const CURSOR_STALE_MS = 10000;
+const CURSOR_COLORS = [
+	{ stroke: "#FF5D5D", background: "rgba(255, 93, 93, 0.2)" },
+	{ stroke: "#4CB9FF", background: "rgba(76, 185, 255, 0.2)" },
+	{ stroke: "#8B5CF6", background: "rgba(139, 92, 246, 0.2)" },
+	{ stroke: "#10B981", background: "rgba(16, 185, 129, 0.2)" },
+	{ stroke: "#F59E0B", background: "rgba(245, 158, 11, 0.2)" },
+	{ stroke: "#EC4899", background: "rgba(236, 72, 153, 0.2)" },
+	{ stroke: "#22D3EE", background: "rgba(34, 211, 238, 0.2)" },
+	{ stroke: "#A3E635", background: "rgba(163, 230, 53, 0.2)" },
+];
+
+const getCursorColor = (id: string) => {
+	let hash = 0;
+	for (let i = 0; i < id.length; i += 1) {
+		hash = (hash << 5) - hash + id.charCodeAt(i);
+		hash |= 0;
+	}
+	const index = Math.abs(hash) % CURSOR_COLORS.length;
+	return CURSOR_COLORS[index];
+};
+
 const LockIcon = () => (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -131,7 +153,9 @@ function WhiteboardPanelBase({
 }: WhiteboardPanelProps): React.JSX.Element {
 	const {
 		canDraw,
+		cursors,
 		latestUpdate,
+		latestSnapshot,
 		sendUpdate,
 		sendCursor,
 		requestSync,
@@ -142,11 +166,13 @@ function WhiteboardPanelBase({
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const excalidrawRef = useRef<any>(null);
 	const elementsRef = useRef<readonly ExcalidrawElement[]>([]);
+	const filesRef = useRef<Record<string, unknown>>({});
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const [isReady, setIsReady] = useState(false);
 	const [cssLoaded, setCssLoaded] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
+	const [cursorTick, setCursorTick] = useState(0);
 
 	// Thumbnail state
 	const [isThumbnailsOpen, setIsThumbnailsOpen] = useState(true);
@@ -219,7 +245,12 @@ function WhiteboardPanelBase({
 								sendCursor(p.x, p.y);
 							}
 						},
-						{ debounceMs: 150, cursorThrottleMs: 16 },
+						{
+							debounceMs: 150,
+							cursorThrottleMs: 16,
+							maxPayloadBytes: 32 * 1024 * 1024,
+							maxFileBytes: 32 * 1024 * 1024,
+						},
 					);
 				}
 
@@ -242,7 +273,6 @@ function WhiteboardPanelBase({
 
 					const handlePointerUpdate = React.useCallback(
 						(payload: { pointer: { x: number; y: number } }) => {
-							if (!canDraw) return;
 							syncEngineRef.current?.sendCursor(
 								payload.pointer.x,
 								payload.pointer.y,
@@ -261,6 +291,7 @@ function WhiteboardPanelBase({
 						excalidrawAPI: (api: unknown) => {
 							excalidrawRef.current = api;
 						},
+						isCollaborating: true,
 						theme: resolvedTheme,
 						initialData: {
 							appState: {
@@ -315,6 +346,13 @@ function WhiteboardPanelBase({
 		};
 	}, [requestSync]);
 
+	useEffect(() => {
+		const interval = setInterval(() => {
+			setCursorTick((prev) => prev + 1);
+		}, 1000);
+		return () => clearInterval(interval);
+	}, []);
+
 	// Apply remote updates
 	useEffect(() => {
 		if (!latestUpdate || !syncEngineRef.current || !excalidrawRef.current) {
@@ -324,11 +362,71 @@ function WhiteboardPanelBase({
 		const merged = syncEngineRef.current.applyRemoteUpdate(elementsRef.current, {
 			elements: latestUpdate.elements as ExcalidrawElement[],
 			seq: latestUpdate.seq,
+			participantId: latestUpdate.participantId,
 		});
 
+		if (latestUpdate.files) {
+			filesRef.current = { ...filesRef.current, ...latestUpdate.files };
+		}
 		elementsRef.current = merged;
-		excalidrawRef.current.updateScene({ elements: merged });
+		excalidrawRef.current.updateScene({
+			elements: merged,
+			files: filesRef.current,
+		});
 	}, [latestUpdate]);
+
+	// Apply snapshot (full state)
+	useEffect(() => {
+		if (!latestSnapshot || !excalidrawRef.current) {
+			return;
+		}
+
+		elementsRef.current = latestSnapshot.elements as ExcalidrawElement[];
+		filesRef.current = latestSnapshot.files ?? {};
+		syncEngineRef.current?.loadSnapshot(
+			latestSnapshot.elements as ExcalidrawElement[],
+			latestSnapshot.lastSeq,
+		);
+		excalidrawRef.current.updateScene({
+			elements: latestSnapshot.elements,
+			files: latestSnapshot.files,
+			appState: latestSnapshot.appState,
+		});
+	}, [latestSnapshot]);
+
+	useEffect(() => {
+		if (!excalidrawRef.current) {
+			return;
+		}
+
+		const now = Date.now();
+		const collaborators = new Map();
+
+		for (const cursor of cursors) {
+			const timestamp = cursor.timestamp instanceof Date
+				? cursor.timestamp.getTime()
+				: new Date(cursor.timestamp as unknown as string).getTime();
+			if (now - timestamp > CURSOR_STALE_MS) {
+				continue;
+			}
+
+			const color = getCursorColor(cursor.participantId);
+			collaborators.set(cursor.participantId, {
+				pointer: {
+					x: cursor.x,
+					y: cursor.y,
+					tool: "pointer",
+					renderCursor: true,
+				},
+				username: cursor.displayName,
+				color,
+				id: cursor.participantId,
+				socketId: cursor.participantId,
+			});
+		}
+
+		excalidrawRef.current.updateScene({ collaborators });
+	}, [cursors, cursorTick]);
 
 	// UI styling based on canvas background
 	const isDarkTheme = resolvedTheme === "dark";

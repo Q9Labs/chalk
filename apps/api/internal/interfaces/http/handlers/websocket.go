@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
@@ -15,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"nhooyr.io/websocket"
 )
+
+const defaultWsReadLimitBytes = 32 << 20 // 32MB
 
 // WebSocketHandler handles WebSocket upgrades and connections
 type WebSocketHandler struct {
@@ -40,7 +43,7 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub, queries 
 		origins = append(origins,
 			"http://localhost:*",
 			"http://127.0.0.1:*",
-			"localhost:*",    // Some browsers send origin without scheme
+			"localhost:*", // Some browsers send origin without scheme
 			"127.0.0.1:*",
 		)
 	}
@@ -78,6 +81,21 @@ func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub, queries 
 		queries:        queries,
 		allowedOrigins: origins,
 	}
+}
+
+func getWsReadLimitBytes() int64 {
+	// Prefer CHALK_WS_READ_LIMIT_BYTES; fall back to WS_READ_LIMIT_BYTES.
+	if raw := os.Getenv("CHALK_WS_READ_LIMIT_BYTES"); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	if raw := os.Getenv("WS_READ_LIMIT_BYTES"); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	return defaultWsReadLimitBytes
 }
 
 // HandleWebSocket upgrades an HTTP connection to WebSocket
@@ -164,6 +182,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
+	ws.SetReadLimit(getWsReadLimitBytes())
 
 	// Parse participant ID from claims.Subject
 	participantID, err := uuid.Parse(claims.Subject)

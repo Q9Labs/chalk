@@ -84,6 +84,7 @@ func NewRouter(cfg RouterConfig) *Router {
 	apiKeyService := auth.NewAPIKeyService()
 
 	wsHub := websocket.NewHub(cfg.RedisClient)
+	wsHub.SetWhiteboardStateStore(&whiteboardStateStoreAdapter{queries: queries})
 	go wsHub.Run(context.Background())
 
 	roomState := redis.NewRoomState(cfg.RedisClient)
@@ -165,6 +166,18 @@ func (a *transcriptServiceAdapter) CreateTranscript(ctx context.Context, input w
 		Timestamp:               input.Timestamp,
 	})
 	return err
+}
+
+type whiteboardStateStoreAdapter struct {
+	queries *db.Queries
+}
+
+func (a *whiteboardStateStoreAdapter) Save(ctx context.Context, roomID uuid.UUID, state []byte) error {
+	return a.queries.UpdateRoomWhiteboardState(ctx, roomID, state)
+}
+
+func (a *whiteboardStateStoreAdapter) Load(ctx context.Context, roomID uuid.UUID) ([]byte, error) {
+	return a.queries.GetRoomWhiteboardState(ctx, roomID)
 }
 
 func (r *Router) setupRoutes() {
