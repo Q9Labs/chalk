@@ -35,7 +35,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard && bun run build:fix-use-client && bun run build:types && bun run build:styles && bun run build:assets",
+    "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw && bun run build:fix-use-client && bun run build:types && bun run build:styles && bun run build:assets",
     "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
     "build:styles": "mkdir -p ./dist/styles && cp ./src/styles/styles.css ./dist/styles/",
     "build:assets": "mkdir -p ./dist/assets/sounds ./dist/assets/logos && bun run build:copy-sounds && bun run build:copy-logos",
@@ -100,10 +100,14 @@
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "typescript": "^5",
-    "@q9labs/chalk-whiteboard": "workspace:^"
+    "@q9labs/chalk-whiteboard": "workspace:^",
+    "@excalidraw/excalidraw": "^0.17.0 || ^0.18.0"
   },
   "peerDependenciesMeta": {
     "@q9labs/chalk-whiteboard": {
+      "optional": true
+    },
+    "@excalidraw/excalidraw": {
       "optional": true
     }
   }

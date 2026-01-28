@@ -18,6 +18,7 @@ const config = defineConfig({
 			"react-dom",
 			"react/jsx-runtime",
 			"react/jsx-dev-runtime",
+			"@excalidraw/excalidraw",
 		],
 	},
 	plugins: [

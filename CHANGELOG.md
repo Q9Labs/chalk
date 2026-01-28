@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Whiteboard React instance conflict in production** — Externalized `@excalidraw/excalidraw` from sdk-react bundle to prevent duplicate React instances
+  - Root cause: Excalidraw was bundled into sdk-react, causing `ReactCurrentOwner` undefined errors in production
+  - Added `--external @excalidraw/excalidraw` to sdk-react build
+  - Added `@excalidraw/excalidraw` to vite dedupe list and sdk-react peer dependencies
+  - Reduced sdk-react bundle size by ~70% (342k → 104k lines)
+
 ## [0.0.50] - 2026-01-28
 
 ### Changed
