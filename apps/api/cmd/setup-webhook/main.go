@@ -67,22 +67,19 @@ func main() {
 		}
 	}
 
-	webhookURL := strings.TrimSuffix(publicURL, "/") + "/webhooks/cloudflare/recording"
+	webhookURL := strings.TrimSuffix(publicURL, "/") + "/api/v1/webhooks/cloudflare/recording"
 
 	fmt.Printf("Target webhook URL: %s\n", webhookURL)
 	fmt.Printf("Found %d existing webhook(s)\n", len(webhooks))
 
-	// Check if webhook already exists
+	// Delete all existing webhooks to ensure clean state
 	for _, wh := range webhooks {
 		fmt.Printf("  - [%s] %s -> %s (enabled: %v)\n", wh.ID, wh.Name, wh.URL, wh.Enabled)
-		if wh.URL == webhookURL {
-			fmt.Println("\nWebhook already registered for this URL.")
-			fmt.Printf("Webhook ID: %s\n", wh.ID)
-			if !wh.Enabled {
-				fmt.Println("WARNING: Webhook is disabled. Enable it to receive recording events.")
-			}
-			return
+		fmt.Printf("    Deleting webhook %s...\n", wh.ID)
+		if err := client.DeleteWebhook(ctx, wh.ID); err != nil {
+			log.Fatalf("Failed to delete webhook %s: %v", wh.ID, err)
 		}
+		fmt.Printf("    Deleted.\n")
 	}
 
 	// Create new webhook
