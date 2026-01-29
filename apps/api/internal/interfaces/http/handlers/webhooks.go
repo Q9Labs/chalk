@@ -139,7 +139,20 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"room_id", rec.RoomID,
 		"cloudflare_recording_id", webhook.Recording.ID)
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Minute)
+	// Respond 200 immediately — process download+upload async so API Gateway
+	// timeout (30s) doesn't cancel the context and kill the transfer.
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "recording accepted for processing",
+		"recording_id": rec.ID,
+	})
+
+	go h.processRecording(rec, webhook, startTime)
+}
+
+// processRecording downloads from Cloudflare, uploads to R2, and marks the recording complete.
+// Runs in a background goroutine with its own context so it survives HTTP response.
+func (h *WebhookHandler) processRecording(rec *db.Recording, webhook RecordingStatusWebhook, startTime time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
 	downloadURL := *webhook.Recording.DownloadURL
@@ -154,7 +167,6 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 			"recording_id", rec.ID,
 			"error", err,
 			"duration_ms", time.Since(downloadStart).Milliseconds())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to download recording: " + err.Error()})
 		return
 	}
 	defer resp.Body.Close()
@@ -189,7 +201,6 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 			"storage_key", storageKey,
 			"error", err,
 			"duration_ms", time.Since(uploadStart).Milliseconds())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to R2: " + err.Error()})
 		return
 	}
 
@@ -209,7 +220,6 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		slog.Error("[chalk] failed to complete recording in database",
 			"recording_id", rec.ID,
 			"error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update recording status: " + err.Error()})
 		return
 	}
 
@@ -222,14 +232,6 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 
 	// Trigger post-meeting processing if configured
 	h.triggerPostMeetingProcessing(ctx, completed.ID, completed.RoomID)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":     "recording processed successfully",
-		"id":          completed.ID,
-		"status":      completed.Status,
-		"storage_key": storageKey,
-		"size_bytes":  fileSize,
-	})
 }
 
 // triggerPostMeetingProcessing checks tenant config and triggers post-meeting webhook flow.

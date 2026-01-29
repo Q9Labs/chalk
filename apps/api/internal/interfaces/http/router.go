@@ -89,9 +89,9 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	roomState := redis.NewRoomState(cfg.RedisClient)
 
-	roomService := room.NewService(queries, cfg.CFClient, roomState, wsHub)
-	participantService := participant.NewService(queries, cfg.CFClient, roomState, jwtService, wsHub)
 	recordingService := recording.NewService(queries, cfg.CFClient, cfg.StorageR2, cfg.StorageS3, roomState, wsHub)
+	roomService := room.NewService(queries, cfg.CFClient, roomState, wsHub, &recordingStopperAdapter{svc: recordingService})
+	participantService := participant.NewService(queries, cfg.CFClient, roomState, jwtService, wsHub)
 	transcriptService := transcript.NewService(queries)
 
 	// GitHub client for What's New feature
@@ -334,6 +334,16 @@ func (r *Router) PostMeetingTranscriptionService() *postmeetingtranscription.Ser
 
 func (r *Router) PostMeetingService() *webhook.PostMeetingService {
 	return r.postMeetingService
+}
+
+// recordingStopperAdapter adapts recording.Service to room.RecordingStopper interface
+type recordingStopperAdapter struct {
+	svc *recording.Service
+}
+
+func (a *recordingStopperAdapter) StopRecording(ctx context.Context, roomID uuid.UUID) error {
+	_, err := a.svc.StopRecording(ctx, roomID)
+	return err
 }
 
 // postMeetingTriggerAdapter adapts the webhook.PostMeetingService to the handlers.PostMeetingTrigger interface

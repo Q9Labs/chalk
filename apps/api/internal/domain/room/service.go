@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
@@ -30,19 +31,25 @@ type WebSocketHub interface {
 	SetRoomRecordingState(roomID uuid.UUID, isRecording bool, recordingID *uuid.UUID)
 }
 
-type Service struct {
-	db        *db.Queries
-	cfClient  CloudflareClient
-	roomState RoomStateManager
-	hub       WebSocketHub
+type RecordingStopper interface {
+	StopRecording(ctx context.Context, roomID uuid.UUID) error
 }
 
-func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateManager, hub WebSocketHub) *Service {
+type Service struct {
+	db               *db.Queries
+	cfClient         CloudflareClient
+	roomState        RoomStateManager
+	hub              WebSocketHub
+	recordingStopper RecordingStopper
+}
+
+func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateManager, hub WebSocketHub, recordingStopper RecordingStopper) *Service {
 	return &Service{
-		db:        queries,
-		cfClient:  cf,
-		roomState: roomState,
-		hub:       hub,
+		db:               queries,
+		cfClient:         cf,
+		roomState:        roomState,
+		hub:              hub,
+		recordingStopper: recordingStopper,
 	}
 }
 
@@ -208,6 +215,15 @@ func (s *Service) EndRoom(ctx context.Context, roomID uuid.UUID) error {
 			},
 		})
 		s.hub.BroadcastToRoom(roomID, msg, "")
+	}
+
+	// Stop any active recording before ending the meeting
+	if s.recordingStopper != nil {
+		if err := s.recordingStopper.StopRecording(ctx, roomID); err != nil {
+			slog.Info("[chalk] stopping recording before room end (may not have active recording)",
+				"room_id", roomID,
+				"error", err)
+		}
 	}
 
 	_, _ = s.cfClient.EndMeeting(ctx, room.CloudflareMeetingID)
