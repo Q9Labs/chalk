@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **CI/CD: Migrate Docker builds to Depot** — Replace GitHub-hosted Docker buildx with Depot builders for persistent build cache and faster builds. Applies to `api.yml` and `whisper-worker.yml` workflows. Auth via OIDC (no secrets needed).
+- **CI/CD: Migrate to Depot** — Replace GitHub-hosted runners and Docker buildx with Depot runners (`depot-ubuntu-latest`) and Depot build-push-action for persistent build cache and faster CI. Applies to `api.yml` and `whisper-worker.yml` workflows. Auth via OIDC (no secrets needed).
 
 ### Added
 
