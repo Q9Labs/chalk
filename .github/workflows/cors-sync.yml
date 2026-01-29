@@ -31,7 +31,7 @@ permissions:
 jobs:
   sync-cors:
     name: Sync CORS Origins (Prod)
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     environment: prod
     defaults:
       run:

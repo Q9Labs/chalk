@@ -53,7 +53,7 @@ permissions:
 jobs:
   validate:
     name: Validate
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,7 +90,7 @@ jobs:
   # Production deployment
   plan-prod:
     name: Plan (Prod)
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     needs: validate
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
@@ -186,7 +186,7 @@ jobs:
 
   apply-prod:
     name: Apply (Prod)
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     needs: plan-prod
     if: |
       (github.ref == 'refs/heads/master' && github.event_name == 'push') ||
@@ -241,7 +241,7 @@ jobs:
   # Development deployment
   plan-dev:
     name: Plan (Dev)
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     needs: validate
     if: |
       github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
@@ -306,7 +306,7 @@ jobs:
 
   apply-dev:
     name: Apply (Dev)
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     needs: plan-dev
     if: |
       github.event_name == 'workflow_dispatch' && inputs.environment == 'dev' && inputs.action == 'apply'
