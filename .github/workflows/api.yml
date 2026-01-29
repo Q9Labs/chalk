@@ -122,7 +122,10 @@ jobs:
         working-directory: apps/api
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-            -ldflags="-w -s -X main.version=${{ github.sha }}" \
+            -ldflags="-w -s \
+              -X github.com/Q9Labs/chalk/internal/version.CommitSHA=${{ github.sha }} \
+              -X github.com/Q9Labs/chalk/internal/version.Version=${{ github.sha }} \
+              -X github.com/Q9Labs/chalk/internal/version.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o ./bin/server \
             ./cmd/main.go
 
@@ -179,6 +182,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
 
       - name: Output image URI
         id: output

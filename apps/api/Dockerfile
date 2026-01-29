@@ -13,9 +13,16 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Build args for version stamping
+ARG COMMIT_SHA=unknown
+ARG BUILD_TIME=unknown
+
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
+    -ldflags="-w -s \
+      -X github.com/Q9Labs/chalk/internal/version.CommitSHA=${COMMIT_SHA} \
+      -X github.com/Q9Labs/chalk/internal/version.Version=${COMMIT_SHA} \
+      -X github.com/Q9Labs/chalk/internal/version.BuildTime=${BUILD_TIME}" \
     -o /app/server \
     ./cmd/main.go
 
