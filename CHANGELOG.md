@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CI/CD: Migrate Docker builds to Depot** — Replace GitHub-hosted Docker buildx with Depot builders for persistent build cache and faster builds. Applies to `api.yml` and `whisper-worker.yml` workflows. Auth via OIDC (no secrets needed).
+
 ### Added
 
 - **SDK-React-Native: Wide-event logging system** — Comprehensive structured logging following canonical log line best practices

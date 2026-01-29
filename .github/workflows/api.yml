@@ -161,8 +161,8 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set up Depot CLI
+        uses: depot/setup-action@v1
 
       - name: Extract metadata
         id: meta
@@ -175,8 +175,9 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v5
+        uses: depot/build-push-action@v1
         with:
+          project: 2dh05v2lvk
           context: apps/api
           push: true
           tags: ${{ steps.meta.outputs.tags }}

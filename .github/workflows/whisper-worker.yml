@@ -27,9 +27,15 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
         id: login-ecr
 
+      - name: Set up Depot CLI
+        uses: depot/setup-action@v1
+
       - name: Build and push
-        working-directory: infrastructure/whisper-worker
-        run: |
-          IMAGE=${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:${{ github.sha }}
-          docker build -t $IMAGE -t ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:latest .
-          docker push --all-tags ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper
+        uses: depot/build-push-action@v1
+        with:
+          project: 2dh05v2lvk
+          context: infrastructure/whisper-worker
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:latest
