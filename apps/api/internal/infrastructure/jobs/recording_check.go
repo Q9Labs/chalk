@@ -55,62 +55,64 @@ func (c *RecordingChecker) CheckStalledRecordings(ctx context.Context) error {
 
 func (c *RecordingChecker) checkRecording(ctx context.Context, rec db.Recording) {
 	start := time.Now()
-	logger := c.logger.With("recording_id", rec.ID)
+	evt := map[string]any{
+		"event":        "recording.stalled_check",
+		"recording_id": rec.ID,
+		"recording_age_hours": time.Since(rec.CreatedAt).Hours(),
+	}
+	defer func() {
+		evt["duration_ms"] = time.Since(start).Milliseconds()
+		if evt["error"] != nil {
+			slog.Error("recording.stalled_check", mapToSlogAttrs(evt)...)
+		} else {
+			slog.Info("recording.stalled_check", mapToSlogAttrs(evt)...)
+		}
+	}()
 
 	if rec.CloudflareRecordingID == nil {
-		logger.Warn("recording has no cloudflare ID, marking failed",
-			"operation", "check_stalled",
-		)
+		evt["action"] = "marked_failed"
+		evt["outcome"] = "no_cloudflare_id"
 		c.markFailed(ctx, rec.ID)
 		return
 	}
+	evt["cf_recording_id"] = *rec.CloudflareRecordingID
 
 	cfRec, err := c.cfClient.GetRecording(ctx, *rec.CloudflareRecordingID)
 	if err != nil {
-		logger.Error("cloudflare API error",
-			"operation", "get_recording",
-			"cloudflare_id", *rec.CloudflareRecordingID,
-			"error", err.Error(),
-		)
-		// Don't mark failed on transient API errors
+		evt["error"] = err.Error()
+		evt["action"] = "api_error"
+		evt["outcome"] = "skipped"
 		return
+	}
+
+	evt["cf_status"] = cfRec.Status
+	evt["cf_has_download_url"] = cfRec.DownloadURL != nil && *cfRec.DownloadURL != ""
+	if cfRec.FileSize != nil {
+		evt["cf_file_size"] = *cfRec.FileSize
 	}
 
 	switch cfRec.Status {
 	case cloudflare.RecordingStatusCompleted:
-		logger.Info("recording ready in cloudflare but webhook missed, recovering",
-			"operation", "recover_recording",
-			"cloudflare_status", cfRec.Status,
-		)
-		c.recoverRecording(ctx, rec, cfRec, start)
+		evt["action"] = "recovered"
+		c.recoverRecording(ctx, rec, cfRec, evt)
 	case cloudflare.RecordingStatusFailed:
-		logger.Warn("recording failed in cloudflare",
-			"operation", "check_stalled",
-			"cloudflare_status", cfRec.Status,
-		)
+		evt["action"] = "marked_failed"
+		evt["outcome"] = "cf_failed"
 		c.markFailed(ctx, rec.ID)
 	default:
-		logger.Debug("recording still processing",
-			"operation", "check_stalled",
-			"cloudflare_status", cfRec.Status,
-		)
+		evt["action"] = "skipped"
+		evt["outcome"] = "still_processing"
 	}
 }
 
-func (c *RecordingChecker) recoverRecording(ctx context.Context, rec db.Recording, cfRec *cloudflare.Recording, start time.Time) {
-	logger := c.logger.With("recording_id", rec.ID)
-
+func (c *RecordingChecker) recoverRecording(ctx context.Context, rec db.Recording, cfRec *cloudflare.Recording, evt map[string]any) {
 	if c.recoverer == nil {
-		logger.Warn("no recoverer configured, skipping",
-			"operation", "recover_recording",
-		)
+		evt["outcome"] = "no_recoverer"
 		return
 	}
 
 	if cfRec.DownloadURL == nil || *cfRec.DownloadURL == "" {
-		logger.Warn("no download URL available from cloudflare",
-			"operation", "recover_recording",
-		)
+		evt["outcome"] = "no_download_url"
 		c.markFailed(ctx, rec.ID)
 		return
 	}
@@ -128,28 +130,22 @@ func (c *RecordingChecker) recoverRecording(ctx context.Context, rec db.Recordin
 	recoveryCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 
+	recoveryStart := time.Now()
 	if err := c.recoverer.RecoverRecording(recoveryCtx, rec.ID, *cfRec.DownloadURL, fileSize, durationSeconds); err != nil {
-		logger.Error("recovery failed",
-			"operation", "recover_recording",
-			"duration_ms", time.Since(start).Milliseconds(),
-			"error", err.Error(),
-		)
+		evt["error"] = err.Error()
+		evt["outcome"] = "recovery_failed"
+		evt["recovery_duration_ms"] = time.Since(recoveryStart).Milliseconds()
 		return
 	}
 
-	logger.Info("recording recovered successfully",
-		"operation", "recover_recording",
-		"duration_ms", time.Since(start).Milliseconds(),
-		"file_size", fileSize,
-		"duration_seconds", durationSeconds,
-	)
+	evt["outcome"] = "recovered"
+	evt["recovery_duration_ms"] = time.Since(recoveryStart).Milliseconds()
 }
 
 func (c *RecordingChecker) markFailed(ctx context.Context, id uuid.UUID) {
 	_, err := c.db.MarkRecordingFailed(ctx, id)
 	if err != nil {
 		c.logger.Error("failed to mark recording as failed",
-			"operation", "mark_failed",
 			"recording_id", id,
 			"error", err.Error(),
 		)
@@ -162,20 +158,14 @@ func (c *RecordingChecker) Run(ctx context.Context, interval time.Duration) {
 
 	// Run immediately on start
 	if err := c.CheckStalledRecordings(ctx); err != nil {
-		c.logger.Error("recording check error",
-			"operation", "check_tick",
-			"error", err.Error(),
-		)
+		c.logger.Error("recording check error", "error", err.Error())
 	}
 
 	for {
 		select {
 		case <-ticker.C:
 			if err := c.CheckStalledRecordings(ctx); err != nil {
-				c.logger.Error("recording check error",
-					"operation", "check_tick",
-					"error", err.Error(),
-				)
+				c.logger.Error("recording check error", "error", err.Error())
 			}
 		case <-ctx.Done():
 			c.logger.Info("recording checker stopped")

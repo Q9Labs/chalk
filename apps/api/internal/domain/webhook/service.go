@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
@@ -93,22 +92,10 @@ func (s *Service) QueueDelivery(
 	recordingID *uuid.UUID,
 	transcriptID *uuid.UUID,
 ) (uuid.UUID, error) {
-	slog.Debug("[chalk] queueing webhook delivery",
-		"tenant_id", tenantID,
-		"room_id", roomID,
-		"event", payload.Event,
-		"webhook_url", webhookURL,
-		"has_recording", recordingID != nil,
-		"has_transcript", transcriptID != nil)
-
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		slog.Error("[chalk] failed to marshal webhook payload", "error", err)
 		return uuid.Nil, fmt.Errorf("marshal payload: %w", err)
 	}
-
-	slog.Debug("[chalk] webhook payload marshaled",
-		"payload_size", len(payloadJSON))
 
 	var recID, transID pgtype.UUID
 	if recordingID != nil {
@@ -128,20 +115,8 @@ func (s *Service) QueueDelivery(
 		Payload:      payloadJSON,
 	})
 	if err != nil {
-		slog.Error("[chalk] failed to create webhook delivery record",
-			"tenant_id", tenantID,
-			"room_id", roomID,
-			"error", err)
 		return uuid.Nil, fmt.Errorf("create webhook delivery: %w", err)
 	}
-
-	slog.Info("[chalk] webhook delivery queued",
-		"delivery_id", delivery.ID,
-		"tenant_id", tenantID,
-		"room_id", roomID,
-		"event", payload.Event,
-		"webhook_url", webhookURL,
-		"payload_size", len(payloadJSON))
 
 	return delivery.ID, nil
 }
@@ -156,15 +131,6 @@ func (s *Service) BuildPayload(
 	participantCount int,
 	errors []ErrorInfo,
 ) WebhookPayload {
-	slog.Debug("[chalk] building webhook payload",
-		"room_id", room.ID,
-		"include_recording", config.IncludeRecording,
-		"include_transcript", config.IncludeTranscript,
-		"include_summary", config.IncludeSummary,
-		"include_action_items", config.IncludeActionItems,
-		"participant_count", participantCount,
-		"errors_count", len(errors))
-
 	roomName := ""
 	if room.Name != nil {
 		roomName = *room.Name
@@ -181,13 +147,6 @@ func (s *Service) BuildPayload(
 			durationSeconds = int(room.EndedAt.Time.Sub(room.StartedAt.Time).Seconds())
 		}
 	}
-
-	slog.Debug("[chalk] meeting info for payload",
-		"room_id", room.ID,
-		"room_name", roomName,
-		"started_at", startedAt,
-		"ended_at", endedAt,
-		"duration_seconds", durationSeconds)
 
 	payload := WebhookPayload{
 		Event:     "meeting.recording_ready",
@@ -221,11 +180,6 @@ func (s *Service) BuildPayload(
 			DownloadAPI:     fmt.Sprintf("/api/v1/recordings/%s/download", recording.ID),
 			ExpiresAt:       expiresAt.Format(time.RFC3339),
 		}
-		slog.Debug("[chalk] recording info added to payload",
-			"recording_id", recording.ID,
-			"duration_seconds", duration,
-			"size_bytes", size,
-			"has_download_url", presignedURL != "")
 	}
 
 	if config.IncludeTranscript && transcript != nil && transcript.TranscriptText != nil {
@@ -254,32 +208,15 @@ func (s *Service) BuildPayload(
 			Provider:  provider,
 			Segments:  segments,
 		}
-		slog.Debug("[chalk] transcript info added to payload",
-			"transcript_id", transcript.ID,
-			"word_count", wordCount,
-			"language", language,
-			"segments_count", len(segments),
-			"text_length", len(*transcript.TranscriptText))
 	}
 
 	if config.IncludeSummary && transcript != nil && transcript.Summary != nil {
 		payload.Summary = transcript.Summary
-		slog.Debug("[chalk] summary added to payload",
-			"summary_length", len(*transcript.Summary))
 	}
 
 	if config.IncludeActionItems && transcript != nil && len(transcript.ActionItems) > 0 {
 		payload.ActionItems = transcript.ActionItems
-		slog.Debug("[chalk] action items added to payload",
-			"action_items_count", len(transcript.ActionItems))
 	}
-
-	slog.Debug("[chalk] webhook payload built",
-		"room_id", room.ID,
-		"has_recording", payload.Recording != nil,
-		"has_transcript", payload.Transcript != nil,
-		"has_summary", payload.Summary != nil,
-		"action_items_count", len(payload.ActionItems))
 
 	return payload
 }

@@ -22,37 +22,37 @@ type PostMeetingTrigger interface {
 }
 
 type WebhookHandler struct {
-	recordingService     *recording.Service
-	queries              *db.Queries
-	postMeetingTrigger   PostMeetingTrigger
+	recordingService   *recording.Service
+	queries            *db.Queries
+	postMeetingTrigger PostMeetingTrigger
 }
 
 func NewWebhookHandler(recordingService *recording.Service, queries *db.Queries, postMeetingTrigger PostMeetingTrigger) *WebhookHandler {
 	return &WebhookHandler{
-		recordingService:     recordingService,
-		queries:              queries,
-		postMeetingTrigger:   postMeetingTrigger,
+		recordingService:   recordingService,
+		queries:            queries,
+		postMeetingTrigger: postMeetingTrigger,
 	}
 }
 
 // RecordingStatusWebhook matches Cloudflare RealtimeKit's recording.statusUpdate payload
 type RecordingStatusWebhook struct {
-	Event     string                 `json:"event"`
-	Recording RecordingWebhookData   `json:"recording"`
-	Meeting   MeetingWebhookData     `json:"meeting"`
+	Event     string               `json:"event"`
+	Recording RecordingWebhookData `json:"recording"`
+	Meeting   MeetingWebhookData   `json:"meeting"`
 }
 
 type RecordingWebhookData struct {
-	ID              string  `json:"id"`
-	DownloadURL     *string `json:"download_url"`
+	ID                string  `json:"id"`
+	DownloadURL       *string `json:"download_url"`
 	DownloadURLExpiry *string `json:"download_url_expiry"`
-	FileSize        *int64  `json:"file_size"`
-	SessionID       string  `json:"session_id"`
-	OutputFileName  string  `json:"output_file_name"`
-	Status          string  `json:"status"` // INVOKED, RECORDING, UPLOADING, COMPLETED
-	InvokedTime     string  `json:"invoked_time"`
-	StartedTime     *string `json:"started_time"`
-	StoppedTime     *string `json:"stopped_time"`
+	FileSize          *int64  `json:"file_size"`
+	SessionID         string  `json:"session_id"`
+	OutputFileName    string  `json:"output_file_name"`
+	Status            string  `json:"status"` // INVOKED, RECORDING, UPLOADING, COMPLETED
+	InvokedTime       string  `json:"invoked_time"`
+	StartedTime       *string `json:"started_time"`
+	StoppedTime       *string `json:"stopped_time"`
 }
 
 type MeetingWebhookData struct {
@@ -61,53 +61,55 @@ type MeetingWebhookData struct {
 }
 
 func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
-	startTime := time.Now()
+	start := time.Now()
+	evt := map[string]any{
+		"event": "recording.webhook_received",
+	}
+	defer func() {
+		evt["duration_ms"] = time.Since(start).Milliseconds()
+		if evt["error"] != nil {
+			slog.Error("recording.webhook_received", mapToSlogAttrs(evt)...)
+		} else {
+			slog.Info("recording.webhook_received", mapToSlogAttrs(evt)...)
+		}
+	}()
 
 	// Cloudflare RealtimeKit uses dyte-signature header (RSA-SHA256)
-	// For now, log the signature but don't enforce verification until RSA verification is implemented
 	signature := c.GetHeader("dyte-signature")
 	webhookID := c.GetHeader("dyte-webhook-id")
-
-	slog.Info("[chalk] cloudflare webhook received",
-		"path", c.Request.URL.Path,
-		"has_signature", signature != "",
-		"webhook_id", webhookID)
+	evt["webhook_id"] = webhookID
+	evt["has_signature"] = signature != ""
 
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		slog.Warn("[chalk] webhook rejected: invalid body", "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or malformed body"})
 		return
 	}
-
-	// Log raw body for debugging (truncated)
-	if len(body) > 0 {
-		slog.Debug("[chalk] webhook body received", "body_preview", string(body[:min(len(body), 500)]))
-	}
+	evt["body_size"] = len(body)
 
 	// API-HIGH-07: Reset body for JSON binding after reading
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
 	var webhook RecordingStatusWebhook
 	if err := c.ShouldBindJSON(&webhook); err != nil {
-		slog.Warn("[chalk] webhook rejected: invalid payload", "error", err, "body", string(body[:min(len(body), 500)]))
+		evt["parse_ok"] = false
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload: " + err.Error()})
 		return
 	}
-
-	slog.Info("[chalk] cloudflare recording webhook parsed",
-		"event", webhook.Event,
-		"cloudflare_recording_id", webhook.Recording.ID,
-		"cloudflare_meeting_id", webhook.Meeting.ID,
-		"status", webhook.Recording.Status,
-		"has_download_url", webhook.Recording.DownloadURL != nil,
-		"file_size", webhook.Recording.FileSize)
+	evt["parse_ok"] = true
+	evt["cf_recording_id"] = webhook.Recording.ID
+	evt["cf_meeting_id"] = webhook.Meeting.ID
+	evt["cf_status"] = webhook.Recording.Status
+	evt["cf_file_size"] = webhook.Recording.FileSize
+	evt["has_download_url"] = webhook.Recording.DownloadURL != nil
 
 	// Only process COMPLETED recordings (download_url is available)
 	if webhook.Recording.Status != "COMPLETED" {
-		slog.Info("[chalk] recording status update received (not completed yet)",
-			"cloudflare_recording_id", webhook.Recording.ID,
-			"status", webhook.Recording.Status)
+		evt["outcome"] = "acknowledged"
 		c.JSON(http.StatusOK, gin.H{
 			"message": "status update acknowledged",
 			"status":  webhook.Recording.Status,
@@ -116,28 +118,23 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	}
 
 	if webhook.Recording.DownloadURL == nil || *webhook.Recording.DownloadURL == "" {
-		slog.Error("[chalk] recording completed but no download URL",
-			"cloudflare_recording_id", webhook.Recording.ID)
+		evt["error"] = "recording completed but no download URL"
+		evt["outcome"] = "error"
 		c.JSON(http.StatusBadRequest, gin.H{"error": "recording completed but no download URL"})
 		return
 	}
 
-	slog.Debug("[chalk] looking up recording by cloudflare ID",
-		"cloudflare_recording_id", webhook.Recording.ID)
-
 	rec, err := h.recordingService.GetRecordingByCloudflareID(c.Request.Context(), webhook.Recording.ID)
 	if err != nil {
-		slog.Error("[chalk] recording not found for cloudflare ID",
-			"cloudflare_recording_id", webhook.Recording.ID,
-			"error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
 
-	slog.Info("[chalk] matched recording in database",
-		"recording_id", rec.ID,
-		"room_id", rec.RoomID,
-		"cloudflare_recording_id", webhook.Recording.ID)
+	evt["db_recording_id"] = rec.ID
+	evt["db_room_id"] = rec.RoomID
+	evt["outcome"] = "accepted"
 
 	// Respond 200 immediately — process download+upload async so API Gateway
 	// timeout (30s) doesn't cancel the context and kill the transfer.
@@ -146,7 +143,7 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		"recording_id": rec.ID,
 	})
 
-	go h.processRecording(rec, webhook, startTime)
+	go h.processRecording(rec, webhook, start)
 }
 
 // processRecording downloads from Cloudflare, uploads to R2, and marks the recording complete.
@@ -155,26 +152,35 @@ func (h *WebhookHandler) processRecording(rec *db.Recording, webhook RecordingSt
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	evt := map[string]any{
+		"event":           "recording.process",
+		"recording_id":    rec.ID,
+		"room_id":         rec.RoomID,
+		"cf_recording_id": webhook.Recording.ID,
+	}
+	defer func() {
+		evt["total_duration_ms"] = time.Since(startTime).Milliseconds()
+		if evt["error"] != nil {
+			slog.Error("recording.process", mapToSlogAttrs(evt)...)
+		} else {
+			slog.Info("recording.process", mapToSlogAttrs(evt)...)
+		}
+	}()
+
 	downloadURL := *webhook.Recording.DownloadURL
 	downloadStart := time.Now()
-	slog.Info("[chalk] downloading recording from cloudflare",
-		"recording_id", rec.ID,
-		"url_prefix", downloadURL[:min(len(downloadURL), 50)])
+	evt["download_started"] = true
 
 	resp, err := streamDownload(ctx, downloadURL)
 	if err != nil {
-		slog.Error("[chalk] failed to download recording from cloudflare",
-			"recording_id", rec.ID,
-			"error", err,
-			"duration_ms", time.Since(downloadStart).Milliseconds())
+		evt["error"] = err.Error()
+		evt["download_duration_ms"] = time.Since(downloadStart).Milliseconds()
 		return
 	}
 	defer resp.Body.Close()
 
-	slog.Info("[chalk] download stream opened",
-		"recording_id", rec.ID,
-		"content_length", resp.ContentLength,
-		"duration_ms", time.Since(downloadStart).Milliseconds())
+	evt["download_duration_ms"] = time.Since(downloadStart).Milliseconds()
+	evt["download_content_length"] = resp.ContentLength
 
 	// Determine file extension from output_file_name or default to mp4
 	ext := ".mp4"
@@ -190,104 +196,74 @@ func (h *WebhookHandler) processRecording(rec *db.Recording, webhook RecordingSt
 	storageKey := fmt.Sprintf("recordings/%s/%s%s", rec.RoomID, rec.ID, ext)
 
 	uploadStart := time.Now()
-	slog.Info("[chalk] uploading recording to r2",
-		"recording_id", rec.ID,
-		"storage_key", storageKey,
-		"content_type", contentType)
+	evt["upload_started"] = true
+	evt["upload_storage_key"] = storageKey
+	evt["upload_content_type"] = contentType
 
 	if err := h.recordingService.UploadRecording(ctx, storageKey, resp.Body, contentType); err != nil {
-		slog.Error("[chalk] failed to upload recording to r2",
-			"recording_id", rec.ID,
-			"storage_key", storageKey,
-			"error", err,
-			"duration_ms", time.Since(uploadStart).Milliseconds())
+		evt["error"] = err.Error()
+		evt["upload_duration_ms"] = time.Since(uploadStart).Milliseconds()
 		return
 	}
+	evt["upload_duration_ms"] = time.Since(uploadStart).Milliseconds()
 
-	slog.Info("[chalk] recording uploaded to r2",
-		"recording_id", rec.ID,
-		"storage_key", storageKey,
-		"duration_ms", time.Since(uploadStart).Milliseconds())
-
-	// Calculate file size and duration from webhook data
+	// Calculate file size from webhook data
 	var fileSize int64
 	if webhook.Recording.FileSize != nil {
 		fileSize = *webhook.Recording.FileSize
 	}
+	evt["file_size"] = fileSize
 
 	completed, err := h.recordingService.CompleteRecording(ctx, rec.ID, "r2", storageKey, fileSize, 0)
 	if err != nil {
-		slog.Error("[chalk] failed to complete recording in database",
-			"recording_id", rec.ID,
-			"error", err)
+		evt["complete_ok"] = false
+		evt["error"] = err.Error()
 		return
 	}
-
-	slog.Info("[chalk] recording completed",
-		"recording_id", completed.ID,
-		"room_id", completed.RoomID,
-		"storage_path", storageKey,
-		"size_bytes", fileSize,
-		"total_processing_ms", time.Since(startTime).Milliseconds())
+	evt["complete_ok"] = true
 
 	// Trigger post-meeting processing if configured
-	h.triggerPostMeetingProcessing(ctx, completed.ID, completed.RoomID)
+	postMeetingTriggered := h.triggerPostMeetingProcessing(ctx, completed.ID, completed.RoomID)
+	evt["post_meeting_triggered"] = postMeetingTriggered
 }
 
 // triggerPostMeetingProcessing checks tenant config and triggers post-meeting webhook flow.
-func (h *WebhookHandler) triggerPostMeetingProcessing(ctx context.Context, recordingID, roomID uuid.UUID) {
+// Returns whether post-meeting processing was triggered.
+func (h *WebhookHandler) triggerPostMeetingProcessing(ctx context.Context, recordingID, roomID uuid.UUID) bool {
 	if h.queries == nil {
-		slog.Debug("[chalk] post-meeting trigger skipped: no queries available",
-			"recording_id", recordingID,
-			"room_id", roomID)
-		return
+		return false
 	}
 
-	slog.Debug("[chalk] checking tenant config for post-meeting processing",
-		"recording_id", recordingID,
-		"room_id", roomID)
-
-	// Get room to find tenant
 	room, err := h.queries.GetRoom(ctx, roomID)
 	if err != nil {
-		slog.Error("[chalk] failed to get room for post-meeting processing", "room_id", roomID, "error", err)
-		return
+		slog.Error("recording.post_meeting_trigger_failed",
+			"recording_id", recordingID, "room_id", roomID, "error", err.Error())
+		return false
 	}
 
-	// Get tenant config
 	tenant, err := h.queries.GetTenant(ctx, room.TenantID)
 	if err != nil {
-		slog.Error("[chalk] failed to get tenant for post-meeting processing", "tenant_id", room.TenantID, "error", err)
-		return
+		slog.Error("recording.post_meeting_trigger_failed",
+			"recording_id", recordingID, "tenant_id", room.TenantID, "error", err.Error())
+		return false
 	}
 
-	// Parse tenant config
 	config, err := parsePostMeetingWebhookConfig(tenant.TenantConfig)
 	if err != nil {
-		slog.Error("[chalk] failed to parse tenant config", "tenant_id", room.TenantID, "error", err)
-		return
+		slog.Error("recording.post_meeting_trigger_failed",
+			"recording_id", recordingID, "tenant_id", room.TenantID, "error", err.Error())
+		return false
 	}
 
 	if !config.Enabled || config.URL == "" {
-		slog.Debug("[chalk] post-meeting webhook not enabled",
-			"recording_id", recordingID,
-			"room_id", roomID,
-			"tenant_id", room.TenantID,
-			"enabled", config.Enabled,
-			"has_url", config.URL != "")
-		return
+		return false
 	}
 
-	slog.Info("[chalk] triggering post-meeting processing",
-		"recording_id", recordingID,
-		"room_id", roomID,
-		"tenant_id", room.TenantID,
-		"webhook_url", config.URL)
-
-	// Trigger post-meeting processing asynchronously
 	if h.postMeetingTrigger != nil {
 		go h.postMeetingTrigger.TriggerPostMeetingProcessing(context.Background(), recordingID, roomID)
+		return true
 	}
+	return false
 }
 
 // postMeetingWebhookConfig mirrors the tenant config structure.
@@ -337,4 +313,12 @@ func streamDownload(ctx context.Context, url string) (*http.Response, error) {
 	}
 
 	return resp, nil
+}
+
+func mapToSlogAttrs(m map[string]any) []any {
+	attrs := make([]any, 0, len(m)*2)
+	for k, v := range m {
+		attrs = append(attrs, k, v)
+	}
+	return attrs
 }

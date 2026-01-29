@@ -50,99 +50,85 @@ func NewPostMeetingService(
 // If transcription is needed, it queues transcription first - webhook will be sent after.
 // If only recording is needed, it sends the webhook immediately.
 func (s *PostMeetingService) TriggerPostMeetingProcessing(ctx context.Context, recordingID, roomID uuid.UUID) {
-	s.logger.Info("[chalk] post-meeting processing triggered",
-		"recording_id", recordingID,
-		"room_id", roomID)
+	start := time.Now()
+	evt := map[string]any{
+		"event":        "recording.post_meeting",
+		"recording_id": recordingID,
+		"room_id":      roomID,
+	}
+	defer func() {
+		evt["duration_ms"] = time.Since(start).Milliseconds()
+		if evt["error"] != nil {
+			slog.Error("recording.post_meeting", mapToSlogAttrs(evt)...)
+		} else {
+			slog.Info("recording.post_meeting", mapToSlogAttrs(evt)...)
+		}
+	}()
 
-	// Get room and tenant info
 	room, err := s.queries.GetRoom(ctx, roomID)
 	if err != nil {
-		s.logger.Error("[chalk] failed to get room", "room_id", roomID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return
 	}
-
-	s.logger.Debug("[chalk] room loaded for post-meeting",
-		"room_id", roomID,
-		"tenant_id", room.TenantID,
-		"room_name", room.Name)
+	evt["tenant_id"] = room.TenantID
+	if room.Name != nil {
+		evt["room_name"] = *room.Name
+	}
 
 	tenant, err := s.queries.GetTenant(ctx, room.TenantID)
 	if err != nil {
-		s.logger.Error("[chalk] failed to get tenant", "tenant_id", room.TenantID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return
 	}
 
-	s.logger.Debug("[chalk] tenant loaded for post-meeting",
-		"tenant_id", room.TenantID,
-		"tenant_name", tenant.Name)
-
-	// Parse config
 	config, err := s.parseConfig(tenant.TenantConfig)
 	if err != nil {
-		s.logger.Error("[chalk] failed to parse tenant config", "tenant_id", room.TenantID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return
 	}
+
+	evt["config_enabled"] = config.Enabled
+	evt["config_url"] = config.URL
+	evt["config_include_recording"] = config.IncludeRecording
+	evt["config_include_transcript"] = config.IncludeTranscript
+	evt["config_include_summary"] = config.IncludeSummary
+	evt["config_include_action_items"] = config.IncludeActionItems
 
 	if !config.Enabled || config.URL == "" {
-		s.logger.Debug("[chalk] post-meeting webhook not enabled for tenant",
-			"tenant_id", room.TenantID,
-			"enabled", config.Enabled,
-			"has_url", config.URL != "")
+		evt["outcome"] = "skipped"
 		return
 	}
 
-	// Determine processing path
 	needsTranscription := config.IncludeTranscript || config.IncludeSummary || config.IncludeActionItems
-
-	s.logger.Info("[chalk] post-meeting processing started",
-		"recording_id", recordingID,
-		"room_id", roomID,
-		"tenant_id", room.TenantID,
-		"needs_transcription", needsTranscription,
-		"include_recording", config.IncludeRecording,
-		"include_transcript", config.IncludeTranscript,
-		"include_summary", config.IncludeSummary,
-		"include_action_items", config.IncludeActionItems,
-		"webhook_url", config.URL)
+	evt["needs_transcription"] = needsTranscription
 
 	if needsTranscription && s.transcriptionService != nil {
-		// Queue transcription - webhook will be sent after transcription completes
 		provider := ""
 		if config.Transcription != nil && config.Transcription.Provider != "" {
 			provider = config.Transcription.Provider
 		}
-
-		s.logger.Debug("[chalk] queueing transcription",
-			"recording_id", recordingID,
-			"room_id", roomID,
-			"provider", provider)
+		evt["transcript_provider"] = provider
 
 		transcriptID, err := s.transcriptionService.QueueTranscription(ctx, recordingID, roomID, provider)
 		if err != nil {
-			s.logger.Error("[chalk] failed to queue transcription", "recording_id", recordingID, "error", err)
+			evt["transcript_queue_error"] = err.Error()
 			// Fall back to sending webhook without transcript
-			s.logger.Info("[chalk] falling back to webhook without transcript",
-				"recording_id", recordingID)
-			s.sendWebhookWithRecordingOnly(ctx, room, tenant, recordingID, config)
+			evt["path"] = "recording_only_fallback"
+			s.sendWebhookWithRecordingOnly(ctx, room, tenant, recordingID, config, evt)
 			return
 		}
-		s.logger.Info("[chalk] transcription queued for post-meeting processing",
-			"recording_id", recordingID,
-			"room_id", roomID,
-			"transcript_id", transcriptID,
-			"provider", provider)
+		evt["transcript_id"] = transcriptID
+		evt["path"] = "transcription"
+		evt["outcome"] = "queued"
 	} else if config.IncludeRecording {
-		// No transcript needed - send webhook immediately with just recording
-		s.logger.Info("[chalk] sending webhook with recording only (no transcription)",
-			"recording_id", recordingID,
-			"room_id", roomID)
-		s.sendWebhookWithRecordingOnly(ctx, room, tenant, recordingID, config)
+		evt["path"] = "recording_only"
+		s.sendWebhookWithRecordingOnly(ctx, room, tenant, recordingID, config, evt)
 	} else {
-		s.logger.Debug("[chalk] no post-meeting action required",
-			"recording_id", recordingID,
-			"room_id", roomID,
-			"needs_transcription", needsTranscription,
-			"include_recording", config.IncludeRecording)
+		evt["path"] = "skipped"
+		evt["outcome"] = "skipped"
 	}
 }
 
@@ -153,61 +139,64 @@ func (s *PostMeetingService) SendWebhookAfterTranscription(
 	recordingID uuid.UUID,
 	transcriptID uuid.UUID,
 ) error {
-	s.logger.Info("[chalk] preparing webhook after transcription",
-		"recording_id", recordingID,
-		"transcript_id", transcriptID)
+	start := time.Now()
+	evt := map[string]any{
+		"event":         "recording.post_meeting",
+		"recording_id":  recordingID,
+		"transcript_id": transcriptID,
+		"path":          "after_transcription",
+	}
+	defer func() {
+		evt["duration_ms"] = time.Since(start).Milliseconds()
+		if evt["error"] != nil {
+			slog.Error("recording.post_meeting", mapToSlogAttrs(evt)...)
+		} else {
+			slog.Info("recording.post_meeting", mapToSlogAttrs(evt)...)
+		}
+	}()
 
-	// Get recording
 	recording, err := s.queries.GetRecording(ctx, recordingID)
 	if err != nil {
-		s.logger.Error("[chalk] failed to get recording for webhook", "recording_id", recordingID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return err
 	}
+	evt["room_id"] = recording.RoomID
 
-	s.logger.Debug("[chalk] recording loaded for webhook",
-		"recording_id", recordingID,
-		"room_id", recording.RoomID,
-		"storage_path", recording.StoragePath)
-
-	// Get room
 	room, err := s.queries.GetRoom(ctx, recording.RoomID)
 	if err != nil {
-		s.logger.Error("[chalk] failed to get room for webhook", "room_id", recording.RoomID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return err
 	}
+	evt["tenant_id"] = room.TenantID
 
-	// Get tenant
 	tenant, err := s.queries.GetTenant(ctx, room.TenantID)
 	if err != nil {
-		s.logger.Error("[chalk] failed to get tenant for webhook", "tenant_id", room.TenantID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return err
 	}
 
-	// Parse config
 	config, err := s.parseConfig(tenant.TenantConfig)
 	if err != nil {
-		s.logger.Error("[chalk] failed to parse tenant config for webhook", "tenant_id", room.TenantID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return err
 	}
 
+	evt["config_enabled"] = config.Enabled
+	evt["config_url"] = config.URL
+
 	if !config.Enabled || config.URL == "" {
-		s.logger.Debug("[chalk] webhook not enabled, skipping",
-			"recording_id", recordingID,
-			"tenant_id", room.TenantID)
+		evt["outcome"] = "skipped"
 		return nil
 	}
 
-	// Get transcript
 	transcript, err := s.queries.GetPostMeetingTranscript(ctx, transcriptID)
 	if err != nil {
-		s.logger.Warn("[chalk] transcript not found, sending webhook without it", "transcript_id", transcriptID, "error", err)
+		evt["transcript_load_error"] = err.Error()
 		transcript = db.PostMeetingTranscript{}
-	} else {
-		s.logger.Debug("[chalk] transcript loaded for webhook",
-			"transcript_id", transcriptID,
-			"status", transcript.Status,
-			"word_count", transcript.WordCount,
-			"has_summary", transcript.Summary != nil)
 	}
 
 	// Get presigned URL if recording is included
@@ -215,11 +204,11 @@ func (s *PostMeetingService) SendWebhookAfterTranscription(
 	if config.IncludeRecording && recording.StoragePath != nil && s.storageService != nil {
 		presignedURL, _ = s.storageService.GetPresignedURL(ctx, *recording.StoragePath, 24*time.Hour)
 	}
+	evt["presigned_url_generated"] = presignedURL != ""
 
-	// Count participants
 	participantCount := s.getParticipantCount(ctx, room.ID)
+	evt["participant_count"] = participantCount
 
-	// Build and queue payload
 	var transcriptPtr *db.PostMeetingTranscript
 	if transcript.ID != uuid.Nil {
 		transcriptPtr = &transcript
@@ -251,16 +240,6 @@ func (s *PostMeetingService) SendWebhookAfterTranscription(
 		errors,
 	)
 
-	s.logger.Debug("[chalk] queueing webhook delivery",
-		"recording_id", recordingID,
-		"transcript_id", transcriptID,
-		"webhook_url", config.URL,
-		"has_recording", payload.Recording != nil,
-		"has_transcript", payload.Transcript != nil,
-		"has_summary", payload.Summary != nil,
-		"action_items_count", len(payload.ActionItems),
-		"errors_count", len(payload.Errors))
-
 	deliveryID, err := s.webhookService.QueueDelivery(
 		ctx,
 		room.TenantID,
@@ -271,16 +250,14 @@ func (s *PostMeetingService) SendWebhookAfterTranscription(
 		&transcriptID,
 	)
 	if err != nil {
-		s.logger.Error("[chalk] failed to queue webhook delivery", "recording_id", recordingID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return err
 	}
 
-	s.logger.Info("[chalk] webhook queued after transcription",
-		"recording_id", recordingID,
-		"transcript_id", transcriptID,
-		"room_id", room.ID,
-		"delivery_id", deliveryID)
-
+	evt["delivery_id"] = deliveryID
+	evt["delivery_queued"] = true
+	evt["outcome"] = "queued"
 	return nil
 }
 
@@ -290,36 +267,24 @@ func (s *PostMeetingService) sendWebhookWithRecordingOnly(
 	tenant db.Tenant,
 	recordingID uuid.UUID,
 	config *tenantWebhookConfig,
+	evt map[string]any,
 ) {
-	s.logger.Debug("[chalk] preparing recording-only webhook",
-		"recording_id", recordingID,
-		"room_id", room.ID)
-
-	// Get recording
 	recording, err := s.queries.GetRecording(ctx, recordingID)
 	if err != nil {
-		s.logger.Error("[chalk] failed to get recording", "recording_id", recordingID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return
 	}
 
-	// Get presigned URL
 	var presignedURL string
 	if recording.StoragePath != nil && s.storageService != nil {
 		presignedURL, _ = s.storageService.GetPresignedURL(ctx, *recording.StoragePath, 24*time.Hour)
-		s.logger.Debug("[chalk] presigned URL generated",
-			"recording_id", recordingID,
-			"has_url", presignedURL != "")
 	}
+	evt["presigned_url_generated"] = presignedURL != ""
 
-	// Count participants
 	participantCount := s.getParticipantCount(ctx, room.ID)
+	evt["participant_count"] = participantCount
 
-	s.logger.Debug("[chalk] building recording-only payload",
-		"recording_id", recordingID,
-		"participant_count", participantCount,
-		"size_bytes", recording.SizeBytes)
-
-	// Build payload
 	payload := s.webhookService.BuildPayload(
 		room,
 		&recording,
@@ -347,14 +312,14 @@ func (s *PostMeetingService) sendWebhookWithRecordingOnly(
 		nil,
 	)
 	if err != nil {
-		s.logger.Error("[chalk] failed to queue webhook delivery", "recording_id", recordingID, "error", err)
+		evt["error"] = err.Error()
+		evt["outcome"] = "error"
 		return
 	}
 
-	s.logger.Info("[chalk] webhook queued with recording only",
-		"recording_id", recordingID,
-		"room_id", room.ID,
-		"delivery_id", deliveryID)
+	evt["delivery_id"] = deliveryID
+	evt["delivery_queued"] = true
+	evt["outcome"] = "queued"
 }
 
 func (s *PostMeetingService) getParticipantCount(ctx context.Context, roomID uuid.UUID) int {
@@ -406,4 +371,12 @@ func (s *PostMeetingService) parseConfig(tenantConfig []byte) (*tenantWebhookCon
 	}
 
 	return config.PostMeetingWebhook, nil
+}
+
+func mapToSlogAttrs(m map[string]any) []any {
+	attrs := make([]any, 0, len(m)*2)
+	for k, v := range m {
+		attrs = append(attrs, k, v)
+	}
+	return attrs
 }
