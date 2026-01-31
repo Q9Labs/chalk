@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-Core: iPadOS/Safari screen share reliability** — `getDisplayMedia` now retries with safer constraints (no-audio, then video-only) to support iPadOS/Safari/WebKit while preserving Chrome/Firefox behavior
 - **API: Stop recordings when rooms end** — `EndRoom()` now calls `StopRecording()` on Cloudflare before ending the meeting, preventing recordings from staying stuck in "recording" status forever
 - **API: Webhook recording processing survives API Gateway timeout** — Recording download+upload now runs in a background goroutine with `context.Background()` instead of the request context, so API Gateway's 30s connection timeout no longer kills the transfer
+- **API: Normalize Cloudflare webhook field casing** — Recording webhook payloads now accept camelCase fields (e.g., `downloadUrl`, `outputFileName`, `roomUUID`) so UPLOADED events reliably include the download URL.
 - **API Gateway 503 timeout investigation** — Documented HTTP API timeout limitation
   - Investigation revealed intermittent 30-second timeouts from API Gateway
   - HTTP API has a **hard limit of 30 seconds** (cannot be increased)

@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
@@ -34,31 +33,6 @@ func NewWebhookHandler(recordingService *recording.Service, queries *db.Queries,
 		queries:            queries,
 		postMeetingTrigger: postMeetingTrigger,
 	}
-}
-
-// RecordingStatusWebhook matches Cloudflare RealtimeKit's recording.statusUpdate payload
-type RecordingStatusWebhook struct {
-	Event     string               `json:"event"`
-	Recording RecordingWebhookData `json:"recording"`
-	Meeting   MeetingWebhookData   `json:"meeting"`
-}
-
-type RecordingWebhookData struct {
-	ID                string  `json:"id"`
-	DownloadURL       *string `json:"download_url"`
-	DownloadURLExpiry *string `json:"download_url_expiry"`
-	FileSize          *int64  `json:"file_size"`
-	SessionID         string  `json:"session_id"`
-	OutputFileName    string  `json:"output_file_name"`
-	Status            string  `json:"status"` // INVOKED, RECORDING, UPLOADING, UPLOADED, ERRORED
-	InvokedTime       string  `json:"invoked_time"`
-	StartedTime       *string `json:"started_time"`
-	StoppedTime       *string `json:"stopped_time"`
-}
-
-type MeetingWebhookData struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
 }
 
 func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
@@ -102,6 +76,7 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload: " + err.Error()})
 		return
 	}
+	normalizeRecordingWebhook(&webhook)
 	evt["parse_ok"] = true
 	evt["cf_recording_id"] = webhook.Recording.ID
 	evt["cf_meeting_id"] = webhook.Meeting.ID
@@ -298,40 +273,4 @@ func parsePostMeetingWebhookConfig(tenantConfig []byte) (*postMeetingWebhookConf
 	}
 
 	return config.PostMeetingWebhook, nil
-}
-
-func shouldProcessRecording(status string) bool {
-	switch strings.ToUpper(status) {
-	case "UPLOADED", "COMPLETED":
-		return true
-	default:
-		return false
-	}
-}
-
-func streamDownload(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("download failed: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
-	}
-
-	return resp, nil
-}
-
-func mapToSlogAttrs(m map[string]any) []any {
-	attrs := make([]any, 0, len(m)*2)
-	for k, v := range m {
-		attrs = append(attrs, k, v)
-	}
-	return attrs
 }
