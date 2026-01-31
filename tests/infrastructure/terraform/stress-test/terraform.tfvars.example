@@ -9,3 +9,14 @@ api_image = "ghcr.io/q9labs/chalk-api:latest"
 # Aurora database credentials (use strong passwords in production)
 db_username = "chalk_stress"
 db_password = "CHANGE_ME_strong_password_here"
+
+# Sizing to match production-like t3.small profile
+ecs_task_cpu = 256
+ecs_task_memory = 512
+ecs_desired_count = 1
+db_instance_class = "db.serverless"
+db_instance_count = 1
+aurora_min_capacity = 0.5
+aurora_max_capacity = 2
+load_generator_instance_type = "t3.small"
+load_generator_count = 3

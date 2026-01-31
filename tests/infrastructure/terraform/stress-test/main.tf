@@ -26,23 +26,116 @@ locals {
   }
 }
 
-# Use existing VPC from main infrastructure
-data "aws_vpc" "main" {
-  tags = {
-    Name = "chalk-prod"
+resource "aws_ecr_repository" "api" {
+  name                 = "${local.name_prefix}-api"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
   }
+
+  tags = local.tags
 }
 
-data "aws_subnets" "private" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.main.id]
-  }
-  tags = {
-    Tier = "private"
-  }
+locals {
+  api_image_resolved = var.api_image != "" ? var.api_image : "${aws_ecr_repository.api.repository_url}:latest"
 }
 
+# Dedicated VPC for stress testing
+resource "aws_vpc" "stress" {
+  cidr_block           = "10.50.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags                 = merge(local.tags, { Name = "${local.name_prefix}-vpc" })
+}
+
+resource "aws_internet_gateway" "stress" {
+  vpc_id = aws_vpc.stress.id
+  tags   = local.tags
+}
+
+resource "aws_subnet" "public_a" {
+  vpc_id                  = aws_vpc.stress.id
+  cidr_block              = "10.50.0.0/20"
+  availability_zone       = "${var.aws_region}a"
+  map_public_ip_on_launch = true
+  tags                    = merge(local.tags, { Tier = "public" })
+}
+
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.stress.id
+  cidr_block              = "10.50.16.0/20"
+  availability_zone       = "${var.aws_region}b"
+  map_public_ip_on_launch = true
+  tags                    = merge(local.tags, { Tier = "public" })
+}
+
+resource "aws_subnet" "private_a" {
+  vpc_id            = aws_vpc.stress.id
+  cidr_block        = "10.50.32.0/20"
+  availability_zone = "${var.aws_region}a"
+  tags              = merge(local.tags, { Tier = "private" })
+}
+
+resource "aws_subnet" "private_b" {
+  vpc_id            = aws_vpc.stress.id
+  cidr_block        = "10.50.48.0/20"
+  availability_zone = "${var.aws_region}b"
+  tags              = merge(local.tags, { Tier = "private" })
+}
+
+resource "aws_eip" "nat" {
+  domain = "vpc"
+  tags   = local.tags
+}
+
+resource "aws_nat_gateway" "stress" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public_a.id
+  tags          = local.tags
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.stress.id
+  tags   = merge(local.tags, { Tier = "public" })
+}
+
+resource "aws_route" "public_internet" {
+  route_table_id         = aws_route_table.public.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.stress.id
+}
+
+resource "aws_route_table_association" "public_a" {
+  subnet_id      = aws_subnet.public_a.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "public_b" {
+  subnet_id      = aws_subnet.public_b.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.stress.id
+  tags   = merge(local.tags, { Tier = "private" })
+}
+
+resource "aws_route" "private_nat" {
+  route_table_id         = aws_route_table.private.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.stress.id
+}
+
+resource "aws_route_table_association" "private_a" {
+  subnet_id      = aws_subnet.private_a.id
+  route_table_id = aws_route_table.private.id
+}
+
+resource "aws_route_table_association" "private_b" {
+  subnet_id      = aws_subnet.private_b.id
+  route_table_id = aws_route_table.private.id
+}
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -128,7 +221,7 @@ resource "aws_cloudwatch_log_group" "api" {
 resource "aws_security_group" "api" {
   name        = "${local.name_prefix}-api"
   description = "Security group for stress test API"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.stress.id
 
   ingress {
     from_port       = 8080
@@ -150,7 +243,7 @@ resource "aws_security_group" "api" {
 resource "aws_security_group" "alb" {
   name        = "${local.name_prefix}-alb"
   description = "Security group for stress test ALB"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.stress.id
 
   ingress {
     from_port   = 443
@@ -179,7 +272,7 @@ resource "aws_security_group" "alb" {
 resource "aws_security_group" "db" {
   name        = "${local.name_prefix}-db"
   description = "Security group for stress test Aurora"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.stress.id
 
   ingress {
     from_port       = 5432
@@ -194,7 +287,7 @@ resource "aws_security_group" "db" {
 resource "aws_security_group" "redis" {
   name        = "${local.name_prefix}-redis"
   description = "Security group for stress test Redis"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.stress.id
 
   ingress {
     from_port       = 6379
@@ -209,7 +302,7 @@ resource "aws_security_group" "redis" {
 resource "aws_security_group" "load_generator" {
   name        = "${local.name_prefix}-load-gen"
   description = "Security group for load generators"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.stress.id
 
   ingress {
     from_port   = 22
@@ -241,7 +334,7 @@ resource "aws_lb" "stress" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = data.aws_subnets.private.ids
+  subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
 
   tags = local.tags
 }
@@ -250,7 +343,7 @@ resource "aws_lb_target_group" "api" {
   name        = "${local.name_prefix}-api"
   port        = 8080
   protocol    = "HTTP"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.stress.id
   target_type = "ip"
 
   health_check {
@@ -284,15 +377,15 @@ resource "aws_ecs_task_definition" "api" {
   family                   = "${local.name_prefix}-api"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 1024
-  memory                   = 2048
+  cpu                      = var.ecs_task_cpu
+  memory                   = var.ecs_task_memory
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {
       name      = "api"
-      image     = var.api_image
+      image     = local.api_image_resolved
       essential = true
 
       portMappings = [
@@ -307,6 +400,20 @@ resource "aws_ecs_task_definition" "api" {
         { name = "ENVIRONMENT", value = "stress-test" },
         { name = "DB_MAX_CONNS", value = "50" },
         { name = "REDIS_POOL_SIZE", value = "20" },
+        { name = "DATABASE_HOST", value = aws_rds_cluster.stress.endpoint },
+        { name = "DATABASE_PORT", value = "5432" },
+        { name = "DATABASE_NAME", value = "chalk_stress" },
+        { name = "DATABASE_USER", value = var.db_username },
+        { name = "DATABASE_PASSWORD", value = var.db_password },
+        { name = "DATABASE_SSLMODE", value = "require" },
+        { name = "REDIS_HOST", value = aws_elasticache_replication_group.stress.primary_endpoint_address },
+        { name = "REDIS_PORT", value = "6379" },
+        { name = "REDIS_TLS", value = "false" },
+        { name = "API_PUBLIC_URL", value = "http://${aws_lb.stress.dns_name}" },
+        { name = "CLOUDFLARE_ACCOUNT_ID", value = var.cloudflare_account_id },
+        { name = "CLOUDFLARE_APP_ID", value = var.cloudflare_app_id },
+        { name = "CLOUDFLARE_API_TOKEN", value = var.cloudflare_api_token },
+        { name = "CLOUDFLARE_MOCK", value = "true" },
       ]
 
       logConfiguration = {
@@ -328,7 +435,7 @@ resource "aws_ecs_service" "api" {
   name            = "${local.name_prefix}-api"
   cluster         = aws_ecs_cluster.stress.id
   task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = 3
+  desired_count   = var.ecs_desired_count
 
   capacity_provider_strategy {
     capacity_provider = "FARGATE_SPOT"
@@ -336,7 +443,7 @@ resource "aws_ecs_service" "api" {
   }
 
   network_configuration {
-    subnets         = data.aws_subnets.private.ids
+    subnets         = [aws_subnet.private_a.id, aws_subnet.private_b.id]
     security_groups = [aws_security_group.api.id]
   }
 
@@ -352,7 +459,7 @@ resource "aws_ecs_service" "api" {
 # Aurora Serverless v2
 resource "aws_db_subnet_group" "stress" {
   name       = "${local.name_prefix}-db"
-  subnet_ids = data.aws_subnets.private.ids
+  subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
 
   tags = local.tags
 }
@@ -360,7 +467,6 @@ resource "aws_db_subnet_group" "stress" {
 resource "aws_rds_cluster" "stress" {
   cluster_identifier     = "${local.name_prefix}-db"
   engine                 = "aurora-postgresql"
-  engine_mode            = "provisioned"
   engine_version         = "16.4"
   database_name          = "chalk_stress"
   master_username        = var.db_username
@@ -369,8 +475,8 @@ resource "aws_rds_cluster" "stress" {
   deletion_protection    = false
 
   serverlessv2_scaling_configuration {
-    min_capacity = 1.0
-    max_capacity = 4.0
+    min_capacity = var.aurora_min_capacity
+    max_capacity = var.aurora_max_capacity
   }
 
   vpc_security_group_ids = [aws_security_group.db.id]
@@ -380,10 +486,10 @@ resource "aws_rds_cluster" "stress" {
 }
 
 resource "aws_rds_cluster_instance" "stress" {
-  count              = 2
+  count              = var.db_instance_count
   identifier         = "${local.name_prefix}-db-${count.index}"
   cluster_identifier = aws_rds_cluster.stress.id
-  instance_class     = "db.serverless"
+  instance_class     = var.db_instance_class
   engine             = aws_rds_cluster.stress.engine
   engine_version     = aws_rds_cluster.stress.engine_version
 
@@ -393,7 +499,7 @@ resource "aws_rds_cluster_instance" "stress" {
 # ElastiCache Redis
 resource "aws_elasticache_subnet_group" "stress" {
   name       = "${local.name_prefix}-redis"
-  subnet_ids = data.aws_subnets.private.ids
+  subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
 
   tags = local.tags
 }
@@ -401,7 +507,7 @@ resource "aws_elasticache_subnet_group" "stress" {
 resource "aws_elasticache_replication_group" "stress" {
   replication_group_id       = "${local.name_prefix}-redis"
   description                = "Stress test Redis cluster"
-  node_type                  = "cache.t3.small"
+  node_type                  = "cache.t3.micro"
   num_cache_clusters         = 2
   port                       = 6379
   automatic_failover_enabled = true
@@ -415,10 +521,10 @@ resource "aws_elasticache_replication_group" "stress" {
 
 # Load generator instances
 resource "aws_instance" "load_generator" {
-  count         = 3
+  count         = var.load_generator_count
   ami           = data.aws_ami.amazon_linux.id
-  instance_type = "c5.xlarge"
-  subnet_id     = element(data.aws_subnets.private.ids, count.index)
+  instance_type = var.load_generator_instance_type
+  subnet_id     = element([aws_subnet.private_a.id, aws_subnet.private_b.id], count.index)
 
   vpc_security_group_ids = [aws_security_group.load_generator.id]
 

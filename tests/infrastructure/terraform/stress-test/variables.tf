@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "api_image" {
   description = "Docker image for the API service"
   type        = string
-  default     = "ghcr.io/q9labs/chalk-api:latest"
+  default     = ""
 }
 
 variable "db_username" {
@@ -20,4 +20,76 @@ variable "db_password" {
   description = "Aurora database master password"
   type        = string
   sensitive   = true
+}
+
+variable "cloudflare_account_id" {
+  description = "Cloudflare account ID for RealtimeKit"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_app_id" {
+  description = "Cloudflare RealtimeKit app ID"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token for RealtimeKit"
+  type        = string
+  sensitive   = true
+}
+
+variable "ecs_task_cpu" {
+  description = "ECS task CPU units"
+  type        = number
+  default     = 256
+}
+
+variable "ecs_task_memory" {
+  description = "ECS task memory (MiB)"
+  type        = number
+  default     = 512
+}
+
+variable "ecs_desired_count" {
+  description = "ECS service desired count"
+  type        = number
+  default     = 1
+}
+
+variable "db_instance_class" {
+  description = "RDS Aurora instance class"
+  type        = string
+  default     = "db.serverless"
+}
+
+variable "db_instance_count" {
+  description = "Number of RDS cluster instances"
+  type        = number
+  default     = 1
+}
+
+variable "aurora_min_capacity" {
+  description = "Aurora Serverless v2 min ACU"
+  type        = number
+  default     = 0.5
+}
+
+variable "aurora_max_capacity" {
+  description = "Aurora Serverless v2 max ACU"
+  type        = number
+  default     = 2
+}
+
+variable "load_generator_instance_type" {
+  description = "EC2 instance type for load generators"
+  type        = string
+  default     = "t3.small"
+}
+
+variable "load_generator_count" {
+  description = "Number of load generator instances"
+  type        = number
+  default     = 3
 }
