@@ -2,6 +2,7 @@ data "aws_caller_identity" "current" {}
 
 locals {
   alb_access_logs_bucket_name = "${local.name}-alb-logs-${data.aws_caller_identity.current.account_id}"
+  alb_access_logs_prefix      = trim(var.alb_access_logs_prefix, "/")
 }
 
 resource "aws_s3_bucket" "alb_access_logs" {
@@ -77,7 +78,10 @@ resource "aws_s3_bucket_policy" "alb_access_logs" {
         Sid    = "AWSLogDeliveryAclCheck"
         Effect = "Allow"
         Principal = {
-          Service = "delivery.logs.amazonaws.com"
+          Service = [
+            "logdelivery.elasticloadbalancing.amazonaws.com",
+            "delivery.logs.amazonaws.com",
+          ]
         }
         Action   = "s3:GetBucketAcl"
         Resource = aws_s3_bucket.alb_access_logs[0].arn
@@ -94,10 +98,13 @@ resource "aws_s3_bucket_policy" "alb_access_logs" {
         Sid    = "AWSLogDeliveryWrite"
         Effect = "Allow"
         Principal = {
-          Service = "delivery.logs.amazonaws.com"
+          Service = [
+            "logdelivery.elasticloadbalancing.amazonaws.com",
+            "delivery.logs.amazonaws.com",
+          ]
         }
         Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.alb_access_logs[0].arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+        Resource = local.alb_access_logs_prefix != "" ? "${aws_s3_bucket.alb_access_logs[0].arn}/${local.alb_access_logs_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*" : "${aws_s3_bucket.alb_access_logs[0].arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
         Condition = {
           StringEquals = {
             "s3:x-amz-acl"      = "bucket-owner-full-control"
