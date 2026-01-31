@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
@@ -49,7 +50,7 @@ type RecordingWebhookData struct {
 	FileSize          *int64  `json:"file_size"`
 	SessionID         string  `json:"session_id"`
 	OutputFileName    string  `json:"output_file_name"`
-	Status            string  `json:"status"` // INVOKED, RECORDING, UPLOADING, COMPLETED
+	Status            string  `json:"status"` // INVOKED, RECORDING, UPLOADING, UPLOADED, ERRORED
 	InvokedTime       string  `json:"invoked_time"`
 	StartedTime       *string `json:"started_time"`
 	StoppedTime       *string `json:"stopped_time"`
@@ -88,6 +89,7 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		return
 	}
 	evt["body_size"] = len(body)
+	evt["raw_body"] = string(body)
 
 	// API-HIGH-07: Reset body for JSON binding after reading
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
@@ -106,9 +108,11 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	evt["cf_status"] = webhook.Recording.Status
 	evt["cf_file_size"] = webhook.Recording.FileSize
 	evt["has_download_url"] = webhook.Recording.DownloadURL != nil
+	statusHandled := shouldProcessRecording(webhook.Recording.Status)
+	evt["status_handled"] = statusHandled
 
-	// Only process COMPLETED recordings (download_url is available)
-	if webhook.Recording.Status != "COMPLETED" {
+	// Only process recordings that reached a downloadable state
+	if !statusHandled {
 		evt["outcome"] = "acknowledged"
 		c.JSON(http.StatusOK, gin.H{
 			"message": "status update acknowledged",
@@ -294,6 +298,15 @@ func parsePostMeetingWebhookConfig(tenantConfig []byte) (*postMeetingWebhookConf
 	}
 
 	return config.PostMeetingWebhook, nil
+}
+
+func shouldProcessRecording(status string) bool {
+	switch strings.ToUpper(status) {
+	case "UPLOADED", "COMPLETED":
+		return true
+	default:
+		return false
+	}
 }
 
 func streamDownload(ctx context.Context, url string) (*http.Response, error) {
