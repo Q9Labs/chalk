@@ -66,6 +66,8 @@ func (c *Client) Send(msg []byte) {
 	case c.send <- msg:
 	case <-c.done:
 		// Client already closed
+	default:
+		// Drop message if the buffer is full to avoid blocking callers (e.g. HTTP handlers).
 	}
 }
 
@@ -138,6 +140,8 @@ func (c *Client) writePump(ctx context.Context) {
 
 			if err != nil {
 				c.logger().Error("websocket write error", "error", err.Error())
+				// Ensure we don't leave a half-dead client registered with a growing send buffer.
+				_ = c.Close()
 				return
 			}
 
@@ -154,6 +158,7 @@ func (c *Client) writePump(ctx context.Context) {
 
 			if err != nil {
 				c.logger().Error("failed to send ping", "error", err.Error())
+				_ = c.Close()
 				return
 			}
 		}

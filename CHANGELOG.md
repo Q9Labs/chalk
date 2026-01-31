@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - VPC_LINK requires internal ALB (incompatible with WebSocket direct access)
   - Added `vpc_link_security_group_id` output to api-gateway module for future use
   - Next steps: Investigate why some requests take >30s to respond
+- **API: Prevent room join hangs from WebSocket backpressure** — `Client.Send()` now drops messages when the per-client buffer is full (instead of blocking request handlers)
 
 - **Whiteboard React instance conflict in production** — Externalized `@excalidraw/excalidraw` from sdk-react bundle to prevent duplicate React instances
   - Root cause: Excalidraw was bundled into sdk-react, causing `ReactCurrentOwner` undefined errors in production

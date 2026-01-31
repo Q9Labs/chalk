@@ -15,9 +15,11 @@ import (
 // testMockRedis is a mock Redis client for testing
 type testMockRedis struct{}
 
-func (m *testMockRedis) Close() error                                                     { return nil }
-func (m *testMockRedis) Publish(ctx context.Context, channel string, message []byte) error { return nil }
-func (m *testMockRedis) Subscribe(ctx context.Context, channel string) *redis.PubSub     { return nil }
+func (m *testMockRedis) Close() error { return nil }
+func (m *testMockRedis) Publish(ctx context.Context, channel string, message []byte) error {
+	return nil
+}
+func (m *testMockRedis) Subscribe(ctx context.Context, channel string) *redis.PubSub { return nil }
 func (m *testMockRedis) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return nil
 }
@@ -84,6 +86,28 @@ func TestClient_Send_BufferCapacity(t *testing.T) {
 
 	// Should still have messages in buffer
 	assert.Equal(t, 256, len(client.send))
+}
+
+func TestClient_Send_DoesNotBlockWhenBufferFull(t *testing.T) {
+	hub := newTestHub()
+	client := NewClient(nil, hub, uuid.New(), uuid.New(), uuid.New())
+
+	for i := 0; i < cap(client.send); i++ {
+		client.Send([]byte("message"))
+	}
+
+	done := make(chan struct{})
+	go func() {
+		client.Send([]byte("extra"))
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// ok
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Send blocked with full buffer")
+	}
 }
 
 func TestClient_Wait_AfterClose(t *testing.T) {
