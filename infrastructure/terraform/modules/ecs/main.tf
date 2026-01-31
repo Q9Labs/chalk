@@ -238,6 +238,12 @@ resource "aws_lb" "main" {
     }
   }
 
+  depends_on = [
+    aws_s3_bucket_policy.alb_access_logs,
+    aws_s3_bucket_public_access_block.alb_access_logs,
+    aws_s3_bucket_ownership_controls.alb_access_logs,
+  ]
+
   tags = local.tags
 }
 

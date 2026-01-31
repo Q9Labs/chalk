@@ -90,7 +90,7 @@ resource "aws_s3_bucket_policy" "alb_access_logs" {
             "aws:SourceAccount" = data.aws_caller_identity.current.account_id
           }
           ArnLike = {
-            "aws:SourceArn" = aws_lb.main.arn
+            "aws:SourceArn" = "arn:aws:elasticloadbalancing:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:loadbalancer/app/${local.name}/*"
           }
         }
       },
@@ -111,7 +111,7 @@ resource "aws_s3_bucket_policy" "alb_access_logs" {
             "aws:SourceAccount" = data.aws_caller_identity.current.account_id
           }
           ArnLike = {
-            "aws:SourceArn" = aws_lb.main.arn
+            "aws:SourceArn" = "arn:aws:elasticloadbalancing:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:loadbalancer/app/${local.name}/*"
           }
         }
       }
