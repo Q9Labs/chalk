@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Monitoring: WebSocket backpressure observability** — Periodic `ws.metrics` log line + CloudWatch metric filters/alarms/dashboard for drops/errors/clients/rooms
 - **Monitoring: Fix Terraform CloudWatch metric filters** — Split WebSocket log metric filters into single-metric resources to satisfy provider constraints (unblocks prod apply)
 - **Infra: Fix ALB access logs S3 permissions** — Allow ALB to write access logs to the configured S3 prefix (unblocks prod apply)
+- **Infra: ALB access logs principal** — Use `aws_elb_service_account` in bucket policy to satisfy AWS log delivery requirements
 - **SDK-React: Participant volume slider + mute icon** — Slider drag now updates volume, and mute icon instantly sets participant volume to 0
 
 - **Whiteboard React instance conflict in production** — Externalized `@excalidraw/excalidraw` from sdk-react bundle to prevent duplicate React instances
