@@ -283,6 +283,9 @@ func (r *Router) setupRoutes() {
 
 		webhooks := handlers.NewWebhookHandler(r.recordingService, r.queries, postMeetingTrigger)
 		v1.POST("/webhooks/cloudflare/recording", webhooks.HandleRecordingReady)
+
+		localPostMeeting := handlers.NewLocalPostMeetingWebhookHandler(r.queries)
+		v1.POST("/webhooks/local/post-meeting", localPostMeeting.Handle)
 	}
 }
 

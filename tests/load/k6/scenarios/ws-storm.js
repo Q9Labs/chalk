@@ -2,7 +2,7 @@ import ws from 'k6/ws';
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Rate } from 'k6/metrics';
-import { BASE_URL, WS_URL } from '../config.js';
+import { BASE_URL, WS_URL, ACTIVE_USERS, SHORT_RUN } from '../config.js';
 import { getAuthToken } from '../helpers/auth.js';
 import { chatMessage, reaction, pong, MessageType } from '../helpers/websocket.js';
 
@@ -14,8 +14,8 @@ export const options = {
   scenarios: {
     message_storm: {
       executor: 'constant-vus',
-      vus: 50,
-      duration: '5m',
+      vus: Math.min(200, Math.max(50, Math.round(ACTIVE_USERS / 60))),
+      duration: SHORT_RUN ? '1m' : '5m',
     },
   },
   thresholds: {

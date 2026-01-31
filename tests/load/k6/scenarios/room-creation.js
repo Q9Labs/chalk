@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
-import { BASE_URL } from '../config.js';
+import { BASE_URL, ACTIVE_USERS, SHORT_RUN } from '../config.js';
 import { getAuthToken } from '../helpers/auth.js';
 
 const roomsCreated = new Counter('rooms_created');
@@ -11,15 +11,15 @@ export const options = {
   scenarios: {
     room_storm: {
       executor: 'ramping-arrival-rate',
-      startRate: 10,
+      startRate: Math.max(5, Math.round(ACTIVE_USERS / 300)),
       timeUnit: '1s',
-      preAllocatedVUs: 100,
-      maxVUs: 200,
+      preAllocatedVUs: Math.max(50, Math.round(ACTIVE_USERS / 20)),
+      maxVUs: Math.max(100, Math.round(ACTIVE_USERS / 10)),
       stages: [
-        { duration: '30s', target: 50 },   // Ramp to 50 req/s
-        { duration: '2m', target: 100 },   // Ramp to 100 req/s
-        { duration: '5m', target: 100 },   // Hold at 100 req/s
-        { duration: '30s', target: 0 },    // Ramp down
+        { duration: SHORT_RUN ? '20s' : '30s', target: Math.max(10, Math.round(ACTIVE_USERS / 60)) },
+        { duration: SHORT_RUN ? '40s' : '2m', target: Math.max(20, Math.round(ACTIVE_USERS / 30)) },
+        { duration: SHORT_RUN ? '1m' : '5m', target: Math.max(20, Math.round(ACTIVE_USERS / 30)) },
+        { duration: SHORT_RUN ? '20s' : '30s', target: 0 },
       ],
     },
   },

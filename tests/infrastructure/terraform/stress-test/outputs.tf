@@ -1,6 +1,6 @@
 output "api_endpoint" {
   description = "URL for the stress test API"
-  value       = "https://${aws_lb.stress.dns_name}"
+  value       = "http://${aws_lb.stress.dns_name}"
 }
 
 output "load_generator_ips" {
@@ -26,4 +26,9 @@ output "redis_endpoint" {
 output "ecs_cluster_name" {
   description = "ECS cluster name"
   value       = aws_ecs_cluster.stress.name
+}
+
+output "ecr_repository_url" {
+  description = "ECR repository URL for the API image"
+  value       = aws_ecr_repository.api.repository_url
 }

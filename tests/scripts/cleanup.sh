@@ -9,6 +9,7 @@ echo "=== Cleaning Up Stress Test Environment ==="
 
 TERRAFORM_DIR="$PROJECT_ROOT/tests/infrastructure/terraform/stress-test"
 ENV_FILE="$PROJECT_ROOT/tests/load/k6/.env"
+AWS_PROFILE_NAME=${AWS_PROFILE:-${AWS_CLI_PROFILE:-}}
 
 # Load config and delete tenant
 if [ -f "$ENV_FILE" ]; then
@@ -27,7 +28,11 @@ fi
 # Destroy infrastructure
 echo "Destroying test infrastructure..."
 terraform -chdir="$TERRAFORM_DIR" workspace select stress-test 2>/dev/null || true
-terraform -chdir="$TERRAFORM_DIR" destroy -auto-approve
+if [ -n "$AWS_PROFILE_NAME" ]; then
+  AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" destroy -auto-approve
+else
+  terraform -chdir="$TERRAFORM_DIR" destroy -auto-approve
+fi
 
 echo ""
 echo "=== Cleanup Complete ==="

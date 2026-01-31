@@ -2,7 +2,7 @@ import http from 'k6/http';
 import ws from 'k6/ws';
 import { check, sleep } from 'k6';
 import { Counter, Trend, Gauge } from 'k6/metrics';
-import { BASE_URL, WS_URL } from '../config.js';
+import { BASE_URL, WS_URL, ROOM_SIZE, SHORT_RUN } from '../config.js';
 import { getAuthToken } from '../helpers/auth.js';
 import { chatMessage, pong, MessageType } from '../helpers/websocket.js';
 
@@ -16,11 +16,11 @@ export const options = {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '2m', target: 50 },    // First 50 participants
-        { duration: '3m', target: 100 },   // Scale to 100
-        { duration: '5m', target: 150 },   // Scale to 150 (stress)
-        { duration: '10m', target: 150 },  // Hold and observe
-        { duration: '2m', target: 0 },     // Ramp down
+        { duration: SHORT_RUN ? '30s' : '2m', target: Math.max(25, Math.round(ROOM_SIZE * 0.33)) },
+        { duration: SHORT_RUN ? '1m' : '3m', target: Math.max(50, Math.round(ROOM_SIZE * 0.66)) },
+        { duration: SHORT_RUN ? '1m' : '5m', target: Math.max(75, ROOM_SIZE) },
+        { duration: SHORT_RUN ? '2m' : '10m', target: Math.max(75, ROOM_SIZE) },
+        { duration: SHORT_RUN ? '30s' : '2m', target: 0 },
       ],
     },
   },

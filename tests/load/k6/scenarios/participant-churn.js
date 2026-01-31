@@ -2,7 +2,7 @@ import http from 'k6/http';
 import ws from 'k6/ws';
 import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
-import { BASE_URL, WS_URL } from '../config.js';
+import { BASE_URL, WS_URL, ACTIVE_USERS, SHORT_RUN } from '../config.js';
 import { getAuthToken } from '../helpers/auth.js';
 import { pong, MessageType } from '../helpers/websocket.js';
 
@@ -16,10 +16,10 @@ export const options = {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '1m', target: 50 },    // Ramp to 50 concurrent
-        { duration: '5m', target: 100 },   // Ramp to 100 concurrent
-        { duration: '10m', target: 100 },  // Hold
-        { duration: '1m', target: 0 },     // Ramp down
+        { duration: SHORT_RUN ? '30s' : '2m', target: Math.max(50, Math.round(ACTIVE_USERS * 0.5)) },
+        { duration: SHORT_RUN ? '1m' : '5m', target: Math.max(100, ACTIVE_USERS) },
+        { duration: SHORT_RUN ? '1m' : '10m', target: Math.max(100, ACTIVE_USERS) },
+        { duration: SHORT_RUN ? '30s' : '2m', target: 0 },
       ],
     },
   },

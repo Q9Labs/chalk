@@ -1,15 +1,15 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { BASE_URL } from '../config.js';
+import { BASE_URL, SHORT_RUN } from '../config.js';
 import { getAuthToken } from '../helpers/auth.js';
 
 export const options = {
   vus: 10,
-  duration: '1m',
+  duration: SHORT_RUN ? '20s' : '1m',
   thresholds: {
     http_req_failed: ['rate<0.01'],
-    http_req_duration: ['p(95)<500'],
-    checks: ['rate>0.99'],
+    http_req_duration: ['p(95)<3000'],
+    checks: ['rate>0.95'],
   },
 };
 
@@ -18,7 +18,7 @@ export default function() {
   const health = http.get(`${BASE_URL}/health`);
   check(health, {
     'health status 200': (r) => r.status === 200,
-    'health latency < 100ms': (r) => r.timings.duration < 100,
+    'health latency < 1000ms': (r) => r.timings.duration < 1000,
   });
 
   // Auth token

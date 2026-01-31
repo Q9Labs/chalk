@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Exports: `logger`, `createLogger`, `ChalkLogger` type
   - Event naming convention: `{domain}.{action}[.{phase}]` (e.g., `room.join.start`, `media.video.toggle`)
   - Coverage: ChalkProvider (room ops), RTCManager (WebRTC ops), useMedia, useParticipants, useLocalStream, usePermissions, useRecording
+- **API: Local post-meeting webhook receiver** — Test-only endpoint for self-call webhook delivery verification
 
 ### Changed
 

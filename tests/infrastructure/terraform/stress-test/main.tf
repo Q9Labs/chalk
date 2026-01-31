@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
   backend "s3" {
@@ -26,6 +30,13 @@ locals {
   }
 }
 
+resource "random_password" "redis_auth" {
+  count = var.redis_auth_token == "" ? 1 : 0
+
+  length  = 32
+  special = false
+}
+
 resource "aws_ecr_repository" "api" {
   name                 = "${local.name_prefix}-api"
   image_tag_mutability = "MUTABLE"
@@ -39,6 +50,7 @@ resource "aws_ecr_repository" "api" {
 
 locals {
   api_image_resolved = var.api_image != "" ? var.api_image : "${aws_ecr_repository.api.repository_url}:latest"
+  redis_auth_token   = var.redis_auth_token != "" ? var.redis_auth_token : random_password.redis_auth[0].result
 }
 
 # Dedicated VPC for stress testing
@@ -161,10 +173,10 @@ resource "aws_ecs_cluster" "stress" {
 resource "aws_ecs_cluster_capacity_providers" "stress" {
   cluster_name = aws_ecs_cluster.stress.name
 
-  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+  capacity_providers = ["FARGATE"]
 
   default_capacity_provider_strategy {
-    capacity_provider = "FARGATE_SPOT"
+    capacity_provider = "FARGATE"
     weight            = 1
   }
 }
@@ -408,12 +420,13 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DATABASE_SSLMODE", value = "require" },
         { name = "REDIS_HOST", value = aws_elasticache_replication_group.stress.primary_endpoint_address },
         { name = "REDIS_PORT", value = "6379" },
-        { name = "REDIS_TLS", value = "false" },
+        { name = "REDIS_TLS", value = "true" },
+        { name = "REDIS_PASSWORD", value = local.redis_auth_token },
         { name = "API_PUBLIC_URL", value = "http://${aws_lb.stress.dns_name}" },
         { name = "CLOUDFLARE_ACCOUNT_ID", value = var.cloudflare_account_id },
         { name = "CLOUDFLARE_APP_ID", value = var.cloudflare_app_id },
         { name = "CLOUDFLARE_API_TOKEN", value = var.cloudflare_api_token },
-        { name = "CLOUDFLARE_MOCK", value = "true" },
+        { name = "CLOUDFLARE_MOCK", value = var.cloudflare_mock ? "true" : "false" },
       ]
 
       logConfiguration = {
@@ -438,7 +451,7 @@ resource "aws_ecs_service" "api" {
   desired_count   = var.ecs_desired_count
 
   capacity_provider_strategy {
-    capacity_provider = "FARGATE_SPOT"
+    capacity_provider = "FARGATE"
     weight            = 1
   }
 
@@ -507,11 +520,15 @@ resource "aws_elasticache_subnet_group" "stress" {
 resource "aws_elasticache_replication_group" "stress" {
   replication_group_id       = "${local.name_prefix}-redis"
   description                = "Stress test Redis cluster"
-  node_type                  = "cache.t3.micro"
-  num_cache_clusters         = 2
+  node_type                  = var.redis_node_type
+  num_cache_clusters         = var.redis_num_cache_clusters
   port                       = 6379
   automatic_failover_enabled = true
   multi_az_enabled           = true
+
+  at_rest_encryption_enabled = true
+  transit_encryption_enabled = true
+  auth_token                 = local.redis_auth_token
 
   subnet_group_name  = aws_elasticache_subnet_group.stress.name
   security_group_ids = [aws_security_group.redis.id]

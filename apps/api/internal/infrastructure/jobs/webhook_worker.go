@@ -3,7 +3,6 @@ package jobs
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -107,7 +106,7 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 	}
 
 	// Parse tenant config to get secret
-	secret, err := extractWebhookSecret(tenant.TenantConfig)
+	secret, err := webhook.ExtractWebhookSecret(tenant.TenantConfig)
 	if err != nil {
 		evt["error"] = "failed to parse tenant config: " + err.Error()
 		evt["outcome"] = "permanently_failed"
@@ -202,28 +201,6 @@ func (w *WebhookWorker) updateAttempt(ctx context.Context, id uuid.UUID, status,
 	}); err != nil {
 		slog.Error("failed to update webhook attempt", "delivery_id", id, "error", err)
 	}
-}
-
-func extractWebhookSecret(tenantConfig []byte) (string, error) {
-	if tenantConfig == nil {
-		return "", nil
-	}
-
-	var config struct {
-		PostMeetingWebhook *struct {
-			Secret string `json:"secret"`
-		} `json:"post_meeting_webhook"`
-	}
-
-	if err := json.Unmarshal(tenantConfig, &config); err != nil {
-		return "", err
-	}
-
-	if config.PostMeetingWebhook == nil {
-		return "", nil
-	}
-
-	return config.PostMeetingWebhook.Secret, nil
 }
 
 func minInt(a, b int) int {

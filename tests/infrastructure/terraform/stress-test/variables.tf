@@ -40,6 +40,12 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
+variable "cloudflare_mock" {
+  description = "Whether to mock Cloudflare calls in the API"
+  type        = bool
+  default     = false
+}
+
 variable "ecs_task_cpu" {
   description = "ECS task CPU units"
   type        = number
@@ -80,6 +86,25 @@ variable "aurora_max_capacity" {
   description = "Aurora Serverless v2 max ACU"
   type        = number
   default     = 2
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache Redis node type"
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_num_cache_clusters" {
+  description = "Number of Redis cache nodes"
+  type        = number
+  default     = 2
+}
+
+variable "redis_auth_token" {
+  description = "Redis AUTH token (leave empty to auto-generate)"
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "load_generator_instance_type" {

@@ -36,18 +36,25 @@ echo "Target: $BASE_URL"
 run_k6() {
   local scenario=$1
   local script=$2
-  local output="$RESULTS_DIR/${scenario}-$(date +%Y%m%d-%H%M%S).json"
+  local timestamp
+  timestamp=$(date +%Y%m%d-%H%M%S)
+  local output_jsonl="$RESULTS_DIR/${scenario}-${timestamp}.jsonl"
+  local output_summary="$RESULTS_DIR/${scenario}-${timestamp}-summary.json"
 
   k6 run \
     -e BASE_URL="$BASE_URL" \
     -e WS_URL="$WS_URL" \
     -e TENANT_ID="$TENANT_ID" \
     -e API_KEY="$API_KEY" \
-    --out "json=$output" \
+    -e K6_ACTIVE_USERS="${K6_ACTIVE_USERS:-}" \
+    -e K6_ROOM_SIZE="${K6_ROOM_SIZE:-}" \
+    -e K6_SHORT="${K6_SHORT:-}" \
+    --out "json=$output_jsonl" \
+    --summary-export "$output_summary" \
     "$script"
 
   # Append results to persistent file
-  "$SCRIPT_DIR/append-results.sh" "$scenario" "$output"
+  "$SCRIPT_DIR/append-results.sh" "$scenario" "$output_summary" "$?" "$output_jsonl"
 }
 
 case "$PHASE" in

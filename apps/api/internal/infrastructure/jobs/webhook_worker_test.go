@@ -2,6 +2,8 @@ package jobs
 
 import (
 	"testing"
+
+	"github.com/Q9Labs/chalk/internal/domain/webhook"
 )
 
 func TestMinInt(t *testing.T) {
@@ -70,7 +72,7 @@ func TestExtractWebhookSecret(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			secret, err := extractWebhookSecret(tc.config)
+			secret, err := webhook.ExtractWebhookSecret(tc.config)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("extractWebhookSecret() error = %v, wantErr %v", err, tc.wantErr)
 				return
