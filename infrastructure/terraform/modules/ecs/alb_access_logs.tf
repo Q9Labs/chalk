@@ -1,4 +1,5 @@
 data "aws_caller_identity" "current" {}
+data "aws_elb_service_account" "main" {}
 
 locals {
   alb_access_logs_bucket_name = "${local.name}-alb-logs-${data.aws_caller_identity.current.account_id}"
@@ -78,40 +79,22 @@ resource "aws_s3_bucket_policy" "alb_access_logs" {
         Sid    = "AWSLogDeliveryAclCheck"
         Effect = "Allow"
         Principal = {
-          Service = [
-            "logdelivery.elasticloadbalancing.amazonaws.com",
-            "delivery.logs.amazonaws.com",
-          ]
+          AWS = data.aws_elb_service_account.main.arn
         }
         Action   = "s3:GetBucketAcl"
         Resource = aws_s3_bucket.alb_access_logs[0].arn
-        Condition = {
-          StringEquals = {
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-          }
-          ArnLike = {
-            "aws:SourceArn" = "arn:aws:elasticloadbalancing:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:loadbalancer/app/${local.name}/*"
-          }
-        }
       },
       {
         Sid    = "AWSLogDeliveryWrite"
         Effect = "Allow"
         Principal = {
-          Service = [
-            "logdelivery.elasticloadbalancing.amazonaws.com",
-            "delivery.logs.amazonaws.com",
-          ]
+          AWS = data.aws_elb_service_account.main.arn
         }
         Action   = "s3:PutObject"
         Resource = local.alb_access_logs_prefix != "" ? "${aws_s3_bucket.alb_access_logs[0].arn}/${local.alb_access_logs_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*" : "${aws_s3_bucket.alb_access_logs[0].arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
         Condition = {
           StringEquals = {
-            "s3:x-amz-acl"      = "bucket-owner-full-control"
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-          }
-          ArnLike = {
-            "aws:SourceArn" = "arn:aws:elasticloadbalancing:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:loadbalancer/app/${local.name}/*"
+            "s3:x-amz-acl" = "bucket-owner-full-control"
           }
         }
       }
