@@ -91,10 +91,13 @@ module "ecs" {
 
   # ALB is internet-facing for direct WebSocket access via chalk-ws subdomain
   # HTTP API uses VPC Link for improved reliability
-  internal_alb          = false
-  enable_https_listener = true
-  certificate_arn       = module.dns.certificate_validated_arn
-  log_retention_days    = 30 # Reduced from 90
+  internal_alb                   = false
+  enable_https_listener          = true
+  certificate_arn                = module.dns.certificate_validated_arn
+  log_retention_days             = 30 # Reduced from 90
+  enable_alb_access_logs         = true
+  alb_access_logs_prefix         = "alb"
+  alb_access_logs_retention_days = 30
 
   # ECS Service configuration
   create_service         = true
@@ -326,9 +329,11 @@ module "monitoring" {
 
   environment = local.environment
 
-  ecs_cluster_name = module.ecs.cluster_name
-  alb_arn          = module.ecs.alb_arn
-  alb_arn_suffix   = replace(module.ecs.alb_arn, "/^.*:loadbalancer\\//", "")
+  ecs_cluster_name            = module.ecs.cluster_name
+  ecs_log_group_name          = module.ecs.log_group_name
+  alb_arn                     = module.ecs.alb_arn
+  alb_arn_suffix              = regexreplace(module.ecs.alb_arn, "^.*:loadbalancer/", "")
+  alb_target_group_arn_suffix = regexreplace(module.ecs.target_group_arn, "^.*:targetgroup/", "")
 
   aurora_cluster_id          = module.aurora.cluster_identifier
   aurora_max_connections     = 100 # Reduced from 500 (0.5 ACU has fewer connections)
@@ -377,4 +382,3 @@ resource "aws_security_group_rule" "redis_from_whisper" {
   source_security_group_id = module.whisper.security_group_id
   description              = "Redis from Whisper workers"
 }
-

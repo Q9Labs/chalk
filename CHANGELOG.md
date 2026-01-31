@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-Core: iPadOS/Safari screen share reliability** — `getDisplayMedia` now retries with safer constraints (no-audio, then video-only) to support iPadOS/Safari/WebKit while preserving Chrome/Firefox behavior
 - **API: Stop recordings when rooms end** — `EndRoom()` now calls `StopRecording()` on Cloudflare before ending the meeting, preventing recordings from staying stuck in "recording" status forever
 - **API: Webhook recording processing survives API Gateway timeout** — Recording download+upload now runs in a background goroutine with `context.Background()` instead of the request context, so API Gateway's 30s connection timeout no longer kills the transfer
 - **API Gateway 503 timeout investigation** — Documented HTTP API timeout limitation
@@ -36,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `vpc_link_security_group_id` output to api-gateway module for future use
   - Next steps: Investigate why some requests take >30s to respond
 - **API: Prevent room join hangs from WebSocket backpressure** — `Client.Send()` now drops messages when the per-client buffer is full (instead of blocking request handlers)
+- **Monitoring: WebSocket backpressure observability** — Periodic `ws.metrics` log line + CloudWatch metric filters/alarms/dashboard for drops/errors/clients/rooms
+- **SDK-React: Participant volume slider + mute icon** — Slider drag now updates volume, and mute icon instantly sets participant volume to 0
 
 - **Whiteboard React instance conflict in production** — Externalized `@excalidraw/excalidraw` from sdk-react bundle to prevent duplicate React instances
   - Root cause: Excalidraw was bundled into sdk-react, causing `ReactCurrentOwner` undefined errors in production

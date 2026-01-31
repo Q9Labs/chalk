@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain"
+	"github.com/Q9Labs/chalk/internal/infrastructure/logging"
 	"github.com/google/uuid"
 	redislib "github.com/redis/go-redis/v9"
 )
@@ -120,6 +121,10 @@ func (h *Hub) GetTranscriptService() TranscriptService {
 // Run starts the hub's main loop
 func (h *Hub) Run(ctx context.Context) {
 	h.ctx = ctx
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	last := snapshotWSMetrics()
 
 	for {
 		select {
@@ -131,6 +136,39 @@ func (h *Hub) Run(ctx context.Context) {
 
 		case client := <-h.unregister:
 			h.unregisterClient(client)
+
+		case <-ticker.C:
+			now := snapshotWSMetrics()
+			deltaDrops := now.sendDrops - last.sendDrops
+			deltaWriteErrors := now.writeErrors - last.writeErrors
+			deltaPingErrors := now.pingErrors - last.pingErrors
+			deltaEnqueued := now.sendEnqueued - last.sendEnqueued
+
+			h.mu.RLock()
+			clientCount := len(h.clients)
+			roomCount := len(h.rooms)
+			h.mu.RUnlock()
+
+			attrs := []any{
+				"event", "ws.metrics",
+				"interval_s", 60,
+				"clients", clientCount,
+				"rooms", roomCount,
+				"sends_enqueued", deltaEnqueued,
+				"sends_enqueued_total", now.sendEnqueued,
+				"sends_dropped", deltaDrops,
+				"sends_dropped_total", now.sendDrops,
+				"write_errors", deltaWriteErrors,
+				"write_errors_total", now.writeErrors,
+				"ping_errors", deltaPingErrors,
+				"ping_errors_total", now.pingErrors,
+			}
+
+			// Dual-path: stdout for CloudWatch alarms; default logger for Axiom.
+			logging.Stdout().Info("websocket metrics", attrs...)
+			h.logger.Info("websocket metrics", attrs...)
+
+			last = now
 		}
 	}
 }
@@ -294,6 +332,18 @@ func (h *Hub) GetParticipantsInRoom(roomID uuid.UUID) []uuid.UUID {
 		}
 	}
 	return participants
+}
+
+func (h *Hub) IsParticipantInRoom(roomID, participantID uuid.UUID) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	room, ok := h.rooms[roomID]
+	if !ok {
+		return false
+	}
+	_, exists := room[participantID]
+	return exists
 }
 
 func (h *Hub) SetParticipantMetadata(participantID uuid.UUID, meta domain.ParticipantMetadata) {

@@ -78,8 +78,11 @@ module "ecs" {
   max_capacity     = 2
   desired_capacity = 1
 
-  internal_alb       = true
-  log_retention_days = 14
+  internal_alb                   = true
+  log_retention_days             = 14
+  enable_alb_access_logs         = true
+  alb_access_logs_prefix         = "alb"
+  alb_access_logs_retention_days = 14
 }
 
 module "aurora" {
@@ -159,9 +162,11 @@ module "monitoring" {
 
   environment = local.environment
 
-  ecs_cluster_name = module.ecs.cluster_name
-  alb_arn          = module.ecs.alb_arn
-  alb_arn_suffix   = replace(module.ecs.alb_arn, "/^.*:loadbalancer\\//", "")
+  ecs_cluster_name            = module.ecs.cluster_name
+  ecs_log_group_name          = module.ecs.log_group_name
+  alb_arn                     = module.ecs.alb_arn
+  alb_arn_suffix              = regexreplace(module.ecs.alb_arn, "^.*:loadbalancer/", "")
+  alb_target_group_arn_suffix = regexreplace(module.ecs.target_group_arn, "^.*:targetgroup/", "")
 
   aurora_cluster_id          = module.aurora.cluster_identifier
   redis_replication_group_id = module.elasticache.replication_group_id
