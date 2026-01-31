@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Next steps: Investigate why some requests take >30s to respond
 - **API: Prevent room join hangs from WebSocket backpressure** — `Client.Send()` now drops messages when the per-client buffer is full (instead of blocking request handlers)
 - **Monitoring: WebSocket backpressure observability** — Periodic `ws.metrics` log line + CloudWatch metric filters/alarms/dashboard for drops/errors/clients/rooms
+- **Monitoring: Fix Terraform CloudWatch metric filters** — Split WebSocket log metric filters into single-metric resources to satisfy provider constraints (unblocks prod apply)
 - **SDK-React: Participant volume slider + mute icon** — Slider drag now updates volume, and mute icon instantly sets participant volume to 0
 
 - **Whiteboard React instance conflict in production** — Externalized `@excalidraw/excalidraw` from sdk-react bundle to prevent duplicate React instances

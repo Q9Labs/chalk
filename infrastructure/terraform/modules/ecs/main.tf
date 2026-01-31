@@ -229,6 +229,15 @@ resource "aws_lb" "main" {
   enable_deletion_protection = var.environment == "prod"
   enable_http2               = true
 
+  dynamic "access_logs" {
+    for_each = var.enable_alb_access_logs ? [1] : []
+    content {
+      enabled = true
+      bucket  = aws_s3_bucket.alb_access_logs[0].bucket
+      prefix  = var.alb_access_logs_prefix
+    }
+  }
+
   tags = local.tags
 }
 

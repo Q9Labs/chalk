@@ -165,8 +165,8 @@ module "monitoring" {
   ecs_cluster_name            = module.ecs.cluster_name
   ecs_log_group_name          = module.ecs.log_group_name
   alb_arn                     = module.ecs.alb_arn
-  alb_arn_suffix              = regexreplace(module.ecs.alb_arn, "^.*:loadbalancer/", "")
-  alb_target_group_arn_suffix = regexreplace(module.ecs.target_group_arn, "^.*:targetgroup/", "")
+  alb_arn_suffix              = element(split("loadbalancer/", module.ecs.alb_arn), 1)
+  alb_target_group_arn_suffix = element(split("targetgroup/", module.ecs.target_group_arn), 1)
 
   aurora_cluster_id          = module.aurora.cluster_identifier
   redis_replication_group_id = module.elasticache.replication_group_id

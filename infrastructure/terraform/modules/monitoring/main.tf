@@ -78,10 +78,10 @@ resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
   tags = local.tags
 }
 
-resource "aws_cloudwatch_log_metric_filter" "websocket_metrics" {
+resource "aws_cloudwatch_log_metric_filter" "websocket_send_drops" {
   count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
 
-  name           = "${local.name}-websocket-metrics"
+  name           = "${local.name}-ws-send-drops-filter"
   log_group_name = var.ecs_log_group_name
 
   # JSON slog line emitted by ws hub metrics ticker
@@ -93,6 +93,16 @@ resource "aws_cloudwatch_log_metric_filter" "websocket_metrics" {
     value     = "$.sends_dropped"
     unit      = "Count"
   }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "websocket_write_errors" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  name           = "${local.name}-ws-write-errors-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # JSON slog line emitted by ws hub metrics ticker
+  pattern = "{ $.event = \"ws.metrics\" }"
 
   metric_transformation {
     name      = "${local.name}-ws-write-errors"
@@ -100,6 +110,16 @@ resource "aws_cloudwatch_log_metric_filter" "websocket_metrics" {
     value     = "$.write_errors"
     unit      = "Count"
   }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "websocket_ping_errors" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  name           = "${local.name}-ws-ping-errors-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # JSON slog line emitted by ws hub metrics ticker
+  pattern = "{ $.event = \"ws.metrics\" }"
 
   metric_transformation {
     name      = "${local.name}-ws-ping-errors"
@@ -107,6 +127,16 @@ resource "aws_cloudwatch_log_metric_filter" "websocket_metrics" {
     value     = "$.ping_errors"
     unit      = "Count"
   }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "websocket_clients" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  name           = "${local.name}-ws-clients-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # JSON slog line emitted by ws hub metrics ticker
+  pattern = "{ $.event = \"ws.metrics\" }"
 
   metric_transformation {
     name      = "${local.name}-ws-clients"
@@ -114,6 +144,16 @@ resource "aws_cloudwatch_log_metric_filter" "websocket_metrics" {
     value     = "$.clients"
     unit      = "Count"
   }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "websocket_rooms" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  name           = "${local.name}-ws-rooms-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # JSON slog line emitted by ws hub metrics ticker
+  pattern = "{ $.event = \"ws.metrics\" }"
 
   metric_transformation {
     name      = "${local.name}-ws-rooms"

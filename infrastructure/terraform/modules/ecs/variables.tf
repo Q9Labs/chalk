@@ -66,6 +66,24 @@ variable "log_retention_days" {
   default     = 30
 }
 
+variable "enable_alb_access_logs" {
+  description = "Enable ALB access logging to S3"
+  type        = bool
+  default     = false
+}
+
+variable "alb_access_logs_prefix" {
+  description = "S3 key prefix for ALB access logs"
+  type        = string
+  default     = "alb"
+}
+
+variable "alb_access_logs_retention_days" {
+  description = "Retention for ALB access logs in days"
+  type        = number
+  default     = 30
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)
