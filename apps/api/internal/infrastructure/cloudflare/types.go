@@ -193,4 +193,5 @@ type WebhooksListResponse struct {
 	Errors   []APIError `json:"errors,omitempty"`
 	Messages []string   `json:"messages,omitempty"`
 	Result   []Webhook  `json:"result,omitempty"`
+	Data     []Webhook  `json:"data,omitempty"`
 }
