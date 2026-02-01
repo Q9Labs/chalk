@@ -48,6 +48,7 @@ type CloudflareConfig struct {
 	AppID         string
 	APIToken      string
 	WebhookSecret string
+	Mock          bool
 }
 
 type APIConfig struct {
@@ -162,6 +163,7 @@ func Load() (*Config, error) {
 			AppID:         getEnv("CLOUDFLARE_APP_ID", ""),
 			APIToken:      getEnv("CLOUDFLARE_API_TOKEN", ""),
 			WebhookSecret: getEnv("CLOUDFLARE_WEBHOOK_SECRET", ""),
+			Mock:          getEnvBool("CLOUDFLARE_MOCK", false),
 		},
 		API: APIConfig{
 			PublicURL: getEnv("API_PUBLIC_URL", ""),
@@ -226,6 +228,9 @@ func (c *Config) validate() error {
 		return fmt.Errorf("JWT_SIGNING_KEY must be set to a secure value in production (not empty or default)")
 	}
 
+	if c.Cloudflare.Mock {
+		return nil
+	}
 	if c.Cloudflare.AccountID == "" {
 		return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID is required")
 	}
