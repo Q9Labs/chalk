@@ -170,7 +170,6 @@ jobs:
         with:
           images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
           tags: |
-            type=sha,prefix=
             type=sha,prefix=,format=long
 
       - name: Build and push

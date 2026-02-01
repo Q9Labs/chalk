@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API: Record webhook payload and gate downloadable statuses** — webhook handler now stores the raw Cloudflare request body in the wide event log and only begins download/upload once the recording status reaches `UPLOADED`/`COMPLETED`, which matches RealtimeKit’s documented lifecycle and prevents missing the download URL.
 
 - **CI/CD: Migrate to Depot** — Replace GitHub-hosted runners and Docker buildx with Depot runners (`depot-ubuntu-latest`) and Depot build-push-action for persistent build cache and faster CI. Applies to `api.yml` and `whisper-worker.yml` workflows. Auth via OIDC (no secrets needed).
+- **CI/CD: Use full SHA tags for API images** — Avoids ECR immutable tag collisions during force deploy.
+- **API: Log missing R2 env vars at startup** — Clear warning when storage credentials/bucket config are absent.
+- **Infra: Require R2 credentials in prod when Cloudflare enabled** — Prevents silent misconfig in production.
 
 ### Added
 

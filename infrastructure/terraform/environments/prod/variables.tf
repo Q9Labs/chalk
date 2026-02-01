@@ -82,6 +82,10 @@ variable "r2_access_key_id" {
   type        = string
   sensitive   = true
   default     = "" # Set via -var or TF_VAR_r2_access_key_id
+  validation {
+    condition     = var.enable_cloudflare == false || var.r2_access_key_id != ""
+    error_message = "r2_access_key_id is required when enable_cloudflare is true."
+  }
 }
 
 variable "r2_secret_access_key" {
@@ -89,6 +93,10 @@ variable "r2_secret_access_key" {
   type        = string
   sensitive   = true
   default     = "" # Set via -var or TF_VAR_r2_secret_access_key
+  validation {
+    condition     = var.enable_cloudflare == false || var.r2_secret_access_key != ""
+    error_message = "r2_secret_access_key is required when enable_cloudflare is true."
+  }
 }
 
 variable "axiom_token" {
