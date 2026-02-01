@@ -562,10 +562,7 @@ func (c *Client) ListRecordingsByMeeting(ctx context.Context, meetingID string) 
 		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
 	}
 
-	if len(result.Result) > 0 {
-		return result.Result, nil
-	}
-	return result.Data, nil
+	return result.Result, nil
 }
 
 // CreateWebhook registers a webhook endpoint with Cloudflare RealtimeKit
@@ -698,7 +695,10 @@ func (c *Client) ListWebhooks(ctx context.Context) ([]Webhook, error) {
 		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
 	}
 
-	return result.Result, nil
+	if len(result.Result) > 0 {
+		return result.Result, nil
+	}
+	return result.Data, nil
 }
 
 // DeleteWebhook removes a webhook
