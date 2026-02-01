@@ -26,8 +26,8 @@
 	],
 	"scripts": {
 		"build": "bun run build:node && bun run build:rn && bun run build:types",
-		"build:node": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external react-native-reanimated --external react-native-gesture-handler --external @gorhom/bottom-sheet --external @cloudflare/react-native-webrtc --external @chalk/core",
-		"build:rn": "bun build ./src/index.ts --outdir ./dist/react-native --target browser --external react --external react-native --external react-native-reanimated --external react-native-gesture-handler --external @gorhom/bottom-sheet --external @cloudflare/react-native-webrtc --external @chalk/core",
+		"build:node": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external react-native-reanimated --external react-native-gesture-handler --external @gorhom/bottom-sheet --external @cloudflare/react-native-webrtc --external @chalk/core --external @lineiconshq/react-native-lineicons --external @lineiconshq/free-icons --external react-native-svg",
+		"build:rn": "bun build ./src/index.ts --outdir ./dist/react-native --target browser --external react --external react-native --external react-native-reanimated --external react-native-gesture-handler --external @gorhom/bottom-sheet --external @cloudflare/react-native-webrtc --external @chalk/core --external @lineiconshq/react-native-lineicons --external @lineiconshq/free-icons --external react-native-svg",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
 		"dev": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @cloudflare/react-native-webrtc --external @chalk/core --watch",
 		"test": "bun test",
@@ -36,6 +36,8 @@
 		"clean": "rm -rf dist"
 	},
 	"dependencies": {
+		"@lineiconshq/free-icons": "^1.0.4",
+		"@lineiconshq/react-native-lineicons": "^0.0.3",
 		"@q9labs/chalk-core": "workspace:^"
 	},
 	"devDependencies": {
@@ -52,6 +54,7 @@
 		"react-native": ">=0.70.0",
 		"react-native-gesture-handler": ">=2.0.0",
 		"react-native-reanimated": "^3.0.0",
+		"react-native-svg": ">=12.0.0",
 		"@cloudflare/react-native-webrtc": ">=125.0.0",
 		"typescript": "^5"
 	}

@@ -1,5 +1,5 @@
 config:
-  target: "wss://api-stress.chalk.example.com"
+  target: "{{ $processEnvironment.WS_URL }}"
   phases:
     - duration: 60
       arrivalRate: 5
@@ -12,5 +12,5 @@ config:
       name: "Spike"
   ws:
     rejectUnauthorized: false
-  variables:
-    token: "{{ $processEnvironment.WS_TOKEN }}"
+  processor: "./functions.js"
+  beforeScenario: "setupParticipant"

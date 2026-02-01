@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'bun:test';
-import { render, fireEvent } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { PreJoinLobby } from '../../components/full/PreJoinLobby';
 
 // @ts-ignore
@@ -7,33 +7,52 @@ window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
 global.MediaStream = vi.fn().mockImplementation(() => ({})) as any;
 
 describe('PreJoinLobby', () => {
-  it('renders correctly', () => {
+  it('renders correctly', async () => {
     const { getByText, getByPlaceholderText } = render(
-      <PreJoinLobby onJoin={() => {}} roomName="Big Meeting" />
+      <PreJoinLobby
+        onJoin={() => {}}
+        roomName="Big Meeting"
+        initialVideoEnabled={false}
+        initialAudioEnabled={false}
+      />
     );
+    await act(async () => {});
     expect(getByText('Big Meeting')).toBeDefined();
     expect(getByPlaceholderText('Enter your name')).toBeDefined();
-    expect(getByText('Join Meeting')).toBeDefined();
+    expect(getByText('Ask to join')).toBeDefined();
   });
 
-  it('calls onJoin with settings when join button is clicked', () => {
+  it('calls onJoin with settings when join button is clicked', async () => {
     const onJoin = vi.fn();
     const { getByPlaceholderText, getByText } = render(
-      <PreJoinLobby onJoin={onJoin} />
+      <PreJoinLobby
+        onJoin={onJoin}
+        userName="John Doe"
+        initialVideoEnabled={false}
+        initialAudioEnabled={false}
+      />
     );
+    await act(async () => {});
     
     const input = getByPlaceholderText('Enter your name');
-    fireEvent.change(input, { target: { value: 'John Doe' } });
-    
-    fireEvent.click(getByText('Join Meeting'));
+    expect((input as HTMLInputElement).value).toBe('John Doe');
+    await act(async () => {
+      fireEvent.click(getByText('Ask to join'));
+    });
     expect(onJoin).toHaveBeenCalled();
     expect(onJoin.mock.calls[0][0].displayName).toBe('John Doe');
   });
 
-  it('shows error toast when error prop is provided', () => {
+  it('shows error toast when error prop is provided', async () => {
     const { getByText } = render(
-      <PreJoinLobby onJoin={() => {}} error="Failed to get camera" />
+      <PreJoinLobby
+        onJoin={() => {}}
+        error="Failed to get camera"
+        initialVideoEnabled={false}
+        initialAudioEnabled={false}
+      />
     );
+    await act(async () => {});
     expect(getByText('Failed to get camera')).toBeDefined();
   });
 });

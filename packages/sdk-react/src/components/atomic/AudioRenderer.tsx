@@ -21,13 +21,15 @@ export interface AudioRendererProps {
   participants: AudioParticipant[];
   /** Volume level 0-1 (default: 1) */
   volume?: number;
+  /** Per-participant volume override (0-1). Takes precedence over volume prop. */
+  getParticipantVolume?: (participantId: string) => number;
 }
 
 /**
  * Renders audio for all remote participants.
  * Must be included once in your room to hear other participants.
  */
-export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) {
+export function AudioRenderer({ participants, volume = 1, getParticipantVolume }: AudioRendererProps) {
   // Map of participant ID -> audio element (mic audio)
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   // Map of participant ID -> audio element (screen share audio)
@@ -76,8 +78,8 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
         audioElements.set(id, audioEl);
       }
 
-      // Update volume
-      audioEl.volume = volume;
+      // Update volume (per-participant override takes precedence)
+      audioEl.volume = getParticipantVolume ? getParticipantVolume(id) : volume;
 
       // Check if we need to attach a new track
       const currentStream = audioEl.srcObject as MediaStream | null;
@@ -107,7 +109,7 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
       }
     }
     // No cleanup return here - we only clean departed participants above
-  }, [remoteWithAudio, volume]);
+  }, [remoteWithAudio, volume, getParticipantVolume]);
 
   // Unmount-only cleanup for mic audio
   useEffect(() => {
@@ -175,7 +177,8 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
         audioElements.set(ssKey, audioEl);
       }
 
-      audioEl.volume = volume;
+      // Per-participant override uses participant id (not ss- key)
+      audioEl.volume = getParticipantVolume ? getParticipantVolume(id) : volume;
 
       const currentStream = audioEl.srcObject as MediaStream | null;
       const currentTrack = currentStream?.getAudioTracks()[0];
@@ -198,7 +201,7 @@ export function AudioRenderer({ participants, volume = 1 }: AudioRendererProps) 
         audioElements.delete(key);
       }
     }
-  }, [remoteWithScreenShareAudio, volume]);
+  }, [remoteWithScreenShareAudio, volume, getParticipantVolume]);
 
   // Unmount-only cleanup for screen share audio
   useEffect(() => {

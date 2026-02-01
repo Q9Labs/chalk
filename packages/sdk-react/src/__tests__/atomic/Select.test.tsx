@@ -10,17 +10,25 @@ describe('Select', () => {
 
   it('renders correctly with label', () => {
     const { getByLabelText, getByText } = render(<Select label="My Select" options={options} />);
-    expect(getByLabelText('My Select')).toBeDefined();
-    expect(getByText('Option 1')).toBeDefined();
+    const trigger = getByLabelText('My Select');
+    expect(trigger).toBeDefined();
+    expect(getByText('My Select')).toBeDefined();
   });
 
   it('handles change events', () => {
     const onChange = vi.fn();
-    const { getByLabelText } = render(<Select label="My Select" options={options} onChange={onChange} />);
-    const select = getByLabelText('My Select') as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: '2' } });
-    expect(onChange).toHaveBeenCalled();
-    expect(select.value).toBe('2');
+    const { getByLabelText, getByRole, getByText, queryByRole } = render(
+      <Select label="My Select" options={options} onChange={onChange} />
+    );
+
+    const trigger = getByLabelText('My Select');
+    fireEvent.click(trigger);
+
+    expect(getByRole('listbox')).toBeDefined();
+    fireEvent.click(getByText('Option 2'));
+
+    expect(onChange).toHaveBeenCalledWith({ target: { value: '2' } });
+    expect(queryByRole('listbox')).toBeNull();
   });
 
   it('renders placeholder', () => {
@@ -35,6 +43,6 @@ describe('Select', () => {
 
   it('can be disabled', () => {
     const { getByRole } = render(<Select options={options} disabled />);
-    expect(getByRole('combobox')).toBeDisabled();
+    expect(getByRole('button')).toBeDisabled();
   });
 });

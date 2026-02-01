@@ -16,6 +16,8 @@ const (
 	MessageTypeParticipantJoined MessageType = "participant.joined"
 	MessageTypeParticipantLeft   MessageType = "participant.left"
 	MessageTypeParticipantUpdate MessageType = "participant.updated"
+	MessageTypeParticipantMute   MessageType = "participant.mute"
+	MessageTypeParticipantUnmute MessageType = "participant.unmute"
 	MessageTypeChatMessage       MessageType = "chat.message"
 	MessageTypeReaction          MessageType = "reaction"
 	MessageTypeHandRaised        MessageType = "hand.raised"
@@ -94,6 +96,14 @@ type ParticipantLeftPayload struct {
 // ParticipantUpdatedPayload is sent when a participant's state changes
 type ParticipantUpdatedPayload struct {
 	Participant ParticipantPayload `json:"participant"`
+}
+
+// ParticipantControlPayload is used for host moderation actions like mute/unmute.
+// - Client → Server: requested_by omitted
+// - Server → Client: requested_by set to the host participant_id
+type ParticipantControlPayload struct {
+	ParticipantID uuid.UUID  `json:"participant_id"`
+	RequestedBy   *uuid.UUID `json:"requested_by,omitempty"`
 }
 
 // ChatMessagePayload contains a chat message

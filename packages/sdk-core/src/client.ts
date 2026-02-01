@@ -28,6 +28,8 @@ import { ConnectionError, TimeoutError } from "./effect/errors.ts";
 const RTK_JOIN_TIMEOUT_MS = 30000; // 30 seconds per attempt
 const RTK_JOIN_RETRY_DELAYS = [500, 1000, 2000]; // 3 retries with faster backoff
 
+const DEFAULT_API_URL = "https://api.chalk.dev";
+
 interface ChalkClientEvents {
   "token-expired": ChalkError;
 }
@@ -45,9 +47,10 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
   constructor(config: ChalkClientConfig) {
     super();
+    const apiUrl = config.apiUrl ?? DEFAULT_API_URL;
     this.debug = config.debug ?? false;
     this.demoMode = config.demoMode ?? false;
-    this.wsUrl = config.wsUrl ?? this.deriveWsUrl(config.apiUrl);
+    this.wsUrl = config.wsUrl ?? this.deriveWsUrl(apiUrl);
     this.tokenProvider = config.tokenProvider;
 
     const hasAuth =
@@ -58,7 +61,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       );
     }
 
-    this.apiClient = new APIClient(config);
+    if (config.apiKey) {
+      console.warn(
+        "[Chalk] DEPRECATION: `apiKey` is deprecated. Use `token` or `tokenProvider` instead. This option will be removed in v2.0.",
+      );
+    }
+
+    this.apiClient = new APIClient({ ...config, apiUrl });
 
     this.apiClient.on("token-expired", (error) => {
       this.emit("token-expired", error);
@@ -264,6 +273,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
         const localParticipant: Participant = {
           id: participantId,
+          userId: participantId,
           displayName: config.displayName,
           role: role ?? "participant",
           isLocal: true,

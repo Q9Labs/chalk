@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings01Icon, LayoutGridIcon, Maximize01Icon, ColumnIcon } from '../../utils/icons';
+import { Settings01Icon, LayoutGridIcon, Maximize01Icon, ColumnIcon, UserGroupIcon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { StatusBadge } from '../atomic/StatusBadge';
 
@@ -33,7 +33,7 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
   isTranscribing = false,
   layout = 'grid',
   onLayoutChange,
-  onInvite: _onInvite,
+  onInvite,
   onSettings,
   className,
 }) => {
@@ -64,6 +64,20 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
       <div className="flex items-center justify-end gap-3 flex-1">
         {isRecording && <StatusBadge status="recording" pulse />}
         {isTranscribing && <StatusBadge status="transcribing" />}
+
+        {onInvite && (
+          <button
+            onClick={onInvite}
+            className={cn(
+              "p-2 rounded-full transition-colors",
+              "text-muted-foreground",
+              "hover:text-foreground hover:bg-accent/50"
+            )}
+            aria-label="Invite participants"
+          >
+            <UserGroupIcon size={18} />
+          </button>
+        )}
 
         {onLayoutChange && (
           <div className="hidden sm:flex rounded-full p-1 gap-1 bg-secondary/50">

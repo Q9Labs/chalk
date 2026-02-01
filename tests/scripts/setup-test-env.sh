@@ -35,50 +35,23 @@ fi
 
 # Initialize Terraform
 echo "Initializing Terraform..."
-if [ -n "$AWS_PROFILE_NAME" ]; then
-  AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" init
-else
-  terraform -chdir="$TERRAFORM_DIR" init
-fi
+terraform -chdir="$TERRAFORM_DIR" init
 
 # Create workspace if it doesn't exist
-if [ -n "$AWS_PROFILE_NAME" ]; then
-  AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" workspace select "$WORKSPACE" 2>/dev/null || \
-    AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" workspace new "$WORKSPACE"
-else
-  terraform -chdir="$TERRAFORM_DIR" workspace select "$WORKSPACE" 2>/dev/null || \
-    terraform -chdir="$TERRAFORM_DIR" workspace new "$WORKSPACE"
-fi
+terraform -chdir="$TERRAFORM_DIR" workspace select "$WORKSPACE" 2>/dev/null || \
+  terraform -chdir="$TERRAFORM_DIR" workspace new "$WORKSPACE"
 
 # Plan and apply
 echo "Planning infrastructure..."
-if [ -n "$AWS_PROFILE_NAME" ]; then
-  AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" plan -out=tfplan
-else
-  terraform -chdir="$TERRAFORM_DIR" plan -out=tfplan
-fi
+terraform -chdir="$TERRAFORM_DIR" plan -out=tfplan
 
 echo "Applying infrastructure..."
-if [ -n "$AWS_PROFILE_NAME" ]; then
-  AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" apply tfplan
-else
-  terraform -chdir="$TERRAFORM_DIR" apply tfplan
-fi
+terraform -chdir="$TERRAFORM_DIR" apply tfplan
 
 # Get outputs
-if [ -n "$AWS_PROFILE_NAME" ]; then
-  API_ENDPOINT=$(AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" output -raw api_endpoint)
-  LOAD_GEN_IPS=$(AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" output -json load_generator_ips | jq -r '.[]')
-  DASHBOARD_URL=$(AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" output -raw cloudwatch_dashboard_url)
-  ECR_REPO=$(AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" output -raw ecr_repository_url)
-  CLUSTER_NAME=$(AWS_PROFILE="$AWS_PROFILE_NAME" terraform -chdir="$TERRAFORM_DIR" output -raw ecs_cluster_name)
-else
-  API_ENDPOINT=$(terraform -chdir="$TERRAFORM_DIR" output -raw api_endpoint)
-  LOAD_GEN_IPS=$(terraform -chdir="$TERRAFORM_DIR" output -json load_generator_ips | jq -r '.[]')
-  DASHBOARD_URL=$(terraform -chdir="$TERRAFORM_DIR" output -raw cloudwatch_dashboard_url)
-  ECR_REPO=$(terraform -chdir="$TERRAFORM_DIR" output -raw ecr_repository_url)
-  CLUSTER_NAME=$(terraform -chdir="$TERRAFORM_DIR" output -raw ecs_cluster_name)
-fi
+API_ENDPOINT=$(terraform -chdir="$TERRAFORM_DIR" output -raw api_endpoint)
+LOAD_GEN_IPS=$(terraform -chdir="$TERRAFORM_DIR" output -json load_generator_ips | jq -r '.[]')
+DASHBOARD_URL=$(terraform -chdir="$TERRAFORM_DIR" output -raw cloudwatch_dashboard_url)
 
 echo ""
 echo "=== Infrastructure Ready ==="
@@ -87,6 +60,7 @@ echo "Load Generators: $LOAD_GEN_IPS"
 echo "CloudWatch Dashboard: $DASHBOARD_URL"
 
 # Build and push API image to ECR
+ECR_REPO=$(terraform -chdir="$TERRAFORM_DIR" output -raw ecr_repository_url)
 ECR_REGISTRY=$(echo "$ECR_REPO" | cut -d/ -f1)
 ECR_IMAGE="${ECR_REPO}:latest"
 
@@ -96,6 +70,7 @@ aws "${AWS_CLI_ARGS[@]}" ecr get-login-password --region "$AWS_REGION" | docker 
 docker build -t "$ECR_IMAGE" "$PROJECT_ROOT/apps/api"
 docker push "$ECR_IMAGE"
 
+CLUSTER_NAME=$(terraform -chdir="$TERRAFORM_DIR" output -raw ecs_cluster_name)
 SERVICE_NAME="${CLUSTER_NAME/-cluster/-api}"
 
 # Force ECS to use the newly pushed image digest

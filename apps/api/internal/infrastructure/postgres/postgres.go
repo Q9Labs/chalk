@@ -132,12 +132,15 @@ CREATE TABLE IF NOT EXISTS tenants (
     max_concurrent_rooms INT NOT NULL DEFAULT 100,
     max_participants_per_room INT NOT NULL DEFAULT 10,
     max_recording_duration_minutes INT NOT NULL DEFAULT 120,
+    max_total_minutes_of_meetings INT NOT NULL DEFAULT 1000,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     whiteboard_config JSONB DEFAULT '{"default_access": "all", "host_can_override": true}',
     tenant_config JSONB NOT NULL DEFAULT '{"force_recording": false, "duplicate_participant_policy": "allow", "empty_room_timeout_minutes": 30, "recording_retention_days": 90, "auto_start_recording": false, "allow_early_join": true}'::jsonb
 );
+
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_total_minutes_of_meetings INT NOT NULL DEFAULT 1000;
 
 DROP TRIGGER IF EXISTS update_tenants_updated_at ON tenants;
 CREATE TRIGGER update_tenants_updated_at

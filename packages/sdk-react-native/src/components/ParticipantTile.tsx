@@ -6,7 +6,9 @@
 import { useMemo } from "react";
 import { View, Text, StyleSheet, type ViewStyle } from "react-native";
 import type { Participant } from "@q9labs/chalk-core";
+import { CHALK_THEME } from "../theme";
 import { VideoView } from "./VideoView";
+import { MutedIcon } from "../icons";
 
 interface ParticipantTileProps {
 	/** Participant data including video/audio tracks */
@@ -85,7 +87,7 @@ export function ParticipantTile({
 			{/* Mute indicator */}
 			{!audioEnabled && (
 				<View style={styles.muteIndicator}>
-					<Text style={styles.muteIcon}>🔇</Text>
+					<MutedIcon size={12} color={CHALK_THEME.colors.text.primary} />
 				</View>
 			)}
 
@@ -105,9 +107,9 @@ export function ParticipantTile({
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		borderRadius: 12,
+		borderRadius: CHALK_THEME.borderRadius.lg,
 		overflow: "hidden",
-		backgroundColor: "#1a1a1a",
+		backgroundColor: CHALK_THEME.colors.surface,
 		position: "relative",
 	},
 	video: {
@@ -118,44 +120,41 @@ const styles = StyleSheet.create({
 		flex: 1,
 		justifyContent: "center",
 		alignItems: "center",
-		backgroundColor: "#2a2a2a",
+		backgroundColor: CHALK_THEME.colors.surfaceHighlight,
 	},
 	avatar: {
 		width: 64,
 		height: 64,
 		borderRadius: 32,
-		backgroundColor: "rgba(255,255,255,0.1)",
+		backgroundColor: CHALK_THEME.colors.ui.pillBg,
 		justifyContent: "center",
 		alignItems: "center",
 	},
 	avatarText: {
-		color: "#fff",
-		fontSize: 24,
+		color: CHALK_THEME.colors.text.primary,
+		fontSize: CHALK_THEME.typography.sizes.xl,
 		fontWeight: "600",
 	},
 	muteIndicator: {
 		position: "absolute",
-		top: 8,
-		right: 8,
-		backgroundColor: "rgba(0,0,0,0.6)",
-		borderRadius: 12,
-		padding: 4,
-	},
-	muteIcon: {
-		fontSize: 12,
+		top: CHALK_THEME.spacing.sm,
+		right: CHALK_THEME.spacing.sm,
+		backgroundColor: CHALK_THEME.colors.ui.overlay,
+		borderRadius: CHALK_THEME.borderRadius.lg,
+		padding: CHALK_THEME.spacing.xs,
 	},
 	nameContainer: {
 		position: "absolute",
 		bottom: 0,
 		left: 0,
 		right: 0,
-		backgroundColor: "rgba(0,0,0,0.6)",
-		paddingHorizontal: 8,
-		paddingVertical: 4,
+		backgroundColor: CHALK_THEME.colors.ui.overlay,
+		paddingHorizontal: CHALK_THEME.spacing.sm,
+		paddingVertical: CHALK_THEME.spacing.xs,
 	},
 	nameText: {
-		color: "#fff",
-		fontSize: 12,
+		color: CHALK_THEME.colors.text.primary,
+		fontSize: CHALK_THEME.typography.sizes.xs,
 		fontWeight: "500",
 	},
 });

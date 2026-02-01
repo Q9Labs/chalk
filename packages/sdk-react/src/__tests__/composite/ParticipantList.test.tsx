@@ -13,7 +13,7 @@ describe('ParticipantList', () => {
     const { getByText } = render(<ParticipantList participants={participants} />);
     expect(getByText('Alice')).toBeDefined();
     expect(getByText('Bob')).toBeDefined();
-    expect(getByText('(You)')).toBeDefined();
+    expect(getByText('(you)')).toBeDefined();
   });
 
   it('filters participants by search', async () => {
@@ -60,5 +60,21 @@ describe('ParticipantList', () => {
     // Click Make Co-Host
     await user.click(getByText('Make Co-Host'));
     expect(onMakeCoHost).toHaveBeenCalledWith('2');
+  });
+
+  it('mutes participant volume when mute icon clicked', async () => {
+    const user = userEvent.setup();
+    const onParticipantVolumeChange = vi.fn();
+    const participantVolumes = new Map([['2', 60]]);
+    const { getByLabelText } = render(
+      <ParticipantList
+        participants={participants}
+        participantVolumes={participantVolumes}
+        onParticipantVolumeChange={onParticipantVolumeChange}
+      />
+    );
+
+    await user.click(getByLabelText('Mute'));
+    expect(onParticipantVolumeChange).toHaveBeenCalledWith('2', 0);
   });
 });

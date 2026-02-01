@@ -4,26 +4,24 @@ import { MobileControlSheet } from '../../components/composite/MobileControlShee
 
 describe('MobileControlSheet', () => {
   it('renders correctly when open', () => {
-    const { getByLabelText } = render(
+    const { getByLabelText, getByText } = render(
       <MobileControlSheet isOpen={true} onClose={() => {}} />
     );
-    expect(getByLabelText('Mobile controls')).toBeDefined();
+    expect(getByText('More controls')).toBeDefined();
     expect(getByLabelText('Mute')).toBeDefined();
   });
 
-  it('calls onClose when close button clicked', () => {
+  it('calls onClose on Escape', () => {
     const onClose = vi.fn();
-    const { getByLabelText } = render(
-      <MobileControlSheet isOpen={true} onClose={onClose} />
-    );
-    fireEvent.click(getByLabelText('Close menu'));
+    render(<MobileControlSheet isOpen={true} onClose={onClose} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('hides when isOpen is false', () => {
-    const { getByLabelText } = render(
+    const { queryByText } = render(
       <MobileControlSheet isOpen={false} onClose={() => {}} />
     );
-    expect(getByLabelText('Mobile controls')).toHaveClass('translate-y-full');
+    expect(queryByText('More controls')).toBeNull();
   });
 });

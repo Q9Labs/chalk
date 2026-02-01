@@ -228,16 +228,13 @@ func (c *Config) validate() error {
 		return fmt.Errorf("JWT_SIGNING_KEY must be set to a secure value in production (not empty or default)")
 	}
 
-	if c.Cloudflare.Mock {
-		return nil
-	}
-	if c.Cloudflare.AccountID == "" {
+	if !c.Cloudflare.Mock && c.Cloudflare.AccountID == "" {
 		return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID is required")
 	}
-	if c.Cloudflare.AppID == "" {
+	if !c.Cloudflare.Mock && c.Cloudflare.AppID == "" {
 		return fmt.Errorf("CLOUDFLARE_APP_ID is required")
 	}
-	if c.Cloudflare.APIToken == "" {
+	if !c.Cloudflare.Mock && c.Cloudflare.APIToken == "" {
 		return fmt.Errorf("CLOUDFLARE_API_TOKEN is required")
 	}
 

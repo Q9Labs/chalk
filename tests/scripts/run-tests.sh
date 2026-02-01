@@ -22,6 +22,7 @@ fi
 # Verify prerequisites
 command -v k6 >/dev/null 2>&1 || { echo "Error: k6 not found. Install with: brew install k6"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "Error: jq not found. Install with: brew install jq"; exit 1; }
+command -v bc >/dev/null 2>&1 || { echo "Error: bc not found. Install with: brew install bc"; exit 1; }
 
 PHASE=${1:-"smoke"}
 K6_DIR="$PROJECT_ROOT/tests/load/k6"
@@ -36,25 +37,20 @@ echo "Target: $BASE_URL"
 run_k6() {
   local scenario=$1
   local script=$2
-  local timestamp
-  timestamp=$(date +%Y%m%d-%H%M%S)
-  local output_jsonl="$RESULTS_DIR/${scenario}-${timestamp}.jsonl"
-  local output_summary="$RESULTS_DIR/${scenario}-${timestamp}-summary.json"
+  local output="$RESULTS_DIR/${scenario}-$(date +%Y%m%d-%H%M%S).json"
 
   k6 run \
     -e BASE_URL="$BASE_URL" \
     -e WS_URL="$WS_URL" \
     -e TENANT_ID="$TENANT_ID" \
     -e API_KEY="$API_KEY" \
-    -e K6_ACTIVE_USERS="${K6_ACTIVE_USERS:-}" \
-    -e K6_ROOM_SIZE="${K6_ROOM_SIZE:-}" \
-    -e K6_SHORT="${K6_SHORT:-}" \
-    --out "json=$output_jsonl" \
-    --summary-export "$output_summary" \
+    -e K6_SHORT="${K6_SHORT:-false}" \
+    -e K6_ACTIVE_USERS="${K6_ACTIVE_USERS:-3000}" \
+    --summary-export "$output" \
     "$script"
 
   # Append results to persistent file
-  "$SCRIPT_DIR/append-results.sh" "$scenario" "$output_summary" "$?" "$output_jsonl"
+  "$SCRIPT_DIR/append-results.sh" "$scenario" "$output" "$?"
 }
 
 case "$PHASE" in

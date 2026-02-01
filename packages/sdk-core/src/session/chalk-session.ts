@@ -741,6 +741,35 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			);
 			this.client.disconnect();
 			this._currentRoom = null;
+
+			// Ensure hooks see a clean slate after leaving (Room.leave clears maps without per-participant events).
+			const updateRoomState = (this as any)._updateRoomState;
+			const updateParticipantState = (this as any)._updateParticipantState;
+			const updateMediaState = (this as any)._updateMediaState;
+
+			updateRoomState?.({
+				status: "disconnected",
+				roomId: null,
+				roomName: null,
+				isJoining: false,
+				hostId: null,
+			});
+			updateParticipantState?.({
+				participants: [],
+				activeSpeaker: null,
+				localParticipant: null,
+				count: 0,
+			});
+			updateMediaState?.({
+				isVideoEnabled: false,
+				isAudioEnabled: false,
+				isTogglingVideo: false,
+				isTogglingAudio: false,
+				selectedCamera: null,
+				selectedMicrophone: null,
+				selectedSpeaker: null,
+				devices: [],
+			});
 		} catch (err) {
 			const error = ChalkError.wrap(err);
 			this.emit("error", error);
@@ -796,6 +825,26 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			this.emit("error", error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Mute a participant (host only).
+	 *
+	 * @param participantId - Participant ID to mute
+	 */
+	muteParticipant(participantId: string): void {
+		const room = this.room.getRoom();
+		room?.muteParticipant(participantId);
+	}
+
+	/**
+	 * Unmute a participant (host only).
+	 *
+	 * @param participantId - Participant ID to unmute
+	 */
+	unmuteParticipant(participantId: string): void {
+		const room = this.room.getRoom();
+		room?.unmuteParticipant(participantId);
 	}
 
 	/** Get current connection status */

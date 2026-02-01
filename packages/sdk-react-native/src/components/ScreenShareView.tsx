@@ -6,6 +6,7 @@
 import React from "react";
 import { StyleSheet, View, type ViewStyle } from "react-native";
 import { RTCView } from "@cloudflare/react-native-webrtc";
+import { CHALK_THEME } from "../theme";
 
 interface ScreenShareViewProps {
 	/** MediaStream of the screen share */
@@ -64,7 +65,7 @@ const styles = StyleSheet.create({
 	},
 	placeholder: {
 		flex: 1,
-		backgroundColor: "#1a1a1a",
+		backgroundColor: CHALK_THEME.colors.surface,
 		justifyContent: "center",
 		alignItems: "center",
 	},

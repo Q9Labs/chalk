@@ -19,7 +19,7 @@ describe('ControlBar', () => {
   });
 
   it('shows active state for recording', () => {
-    const { getByLabelText } = render(<ControlBar isRecording={true} />);
+    const { getByLabelText } = render(<ControlBar isRecording={true} buttons={['record']} />);
     expect(getByLabelText('Stop Recording')).toBeDefined();
   });
 

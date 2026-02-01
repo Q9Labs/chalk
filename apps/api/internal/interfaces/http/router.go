@@ -229,7 +229,7 @@ func (r *Router) setupRoutes() {
 			roomsGroup.POST("/:id/participants", participants.Add)
 			roomsGroup.POST("/:id/participants/bulk", participants.BulkAdd)
 			roomsGroup.GET("/:id/participants", participants.List)
-			roomsGroup.DELETE("/:id/participants/:pid", participants.Remove)
+			roomsGroup.DELETE("/:id/participants/:pid", authMw.RequireHost(), participants.Remove)
 			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
 
 			// API-HIGH-05: Recording start/stop/archive require host role

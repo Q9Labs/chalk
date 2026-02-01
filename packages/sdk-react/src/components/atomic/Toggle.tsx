@@ -11,17 +11,30 @@ interface ToggleProps {
   className?: string;
 }
 
-export const Toggle = React.memo(React.forwardRef<HTMLButtonElement, ToggleProps>(
+export const Toggle = React.memo(React.forwardRef<HTMLSpanElement, ToggleProps>(
   ({ checked, onChange, label, disabled = false, size = 'md', className }, ref) => {
     const isSmall = size === 'sm';
+    const labelId = React.useId();
+    const switchRef = React.useRef<HTMLSpanElement | null>(null);
+
+    const mergedRef = React.useCallback((node: HTMLSpanElement | null) => {
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        (ref as React.MutableRefObject<HTMLSpanElement | null>).current = node;
+      }
+      // Keep a local ref for label click-to-toggle behavior.
+      switchRef.current = node;
+    }, [ref]);
 
     return (
-      <label className={cn('inline-flex items-center gap-2', disabled && 'cursor-not-allowed opacity-50', className)}>
+      <div className={cn('inline-flex items-center gap-2', disabled && 'cursor-not-allowed opacity-50', className)}>
         <Switch.Root
-          ref={ref}
+          ref={mergedRef}
           checked={checked}
           onCheckedChange={onChange}
           disabled={disabled}
+          aria-labelledby={label ? labelId : undefined}
           className={cn(
             'relative inline-flex shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -42,11 +55,19 @@ export const Toggle = React.memo(React.forwardRef<HTMLButtonElement, ToggleProps
           />
         </Switch.Root>
         {label && (
-          <span className="text-sm font-medium text-foreground">
+          <span
+            id={labelId}
+            className={cn('text-sm font-medium text-foreground', !disabled && 'cursor-pointer')}
+            onClick={() => {
+              if (!disabled) {
+                switchRef.current?.click();
+              }
+            }}
+          >
             {label}
           </span>
         )}
-      </label>
+      </div>
     );
   }
 ));

@@ -25,6 +25,7 @@ describe("@q9labs/chalk-react-native SDK", () => {
 			"useDevices",
 			"useChat",
 			"useRecording",
+			"EndScreen",
 			"VideoView",
 			"ScreenShareView",
 			"AudioSession",

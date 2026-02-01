@@ -30,6 +30,7 @@ import { useDevices } from "../../hooks/stream/useDevices";
 import { useMedia } from "../../hooks/stream/useMedia";
 import { useScreenShare } from "../../hooks/stream/useScreenShare";
 import { useLayout } from "../../hooks/ui/useLayout";
+import { useParticipantVolume } from "../../hooks/ui/useParticipantVolume";
 import { usePanels } from "../../hooks/ui/usePanels";
 import { useSoundEffects } from "../../hooks/useSoundEffects";
 import { cn } from "../../utils/cn";
@@ -240,6 +241,7 @@ function VideoConferenceBase({
 	const whiteboard = useWhiteboard();
 	const { layout } = useLayout();
 	const { activePanel } = usePanels();
+	const { participantVolumes, setParticipantVolume, getAudioVolume } = useParticipantVolume();
 	const {
 		refreshDevices,
 		cameras,
@@ -631,6 +633,33 @@ function VideoConferenceBase({
 		};
 	}, [session, phase, onEnd, buildEndData, onLeave, onError]);
 
+	const canManageParticipants = localParticipant?.role === "host";
+
+	const handleToggleParticipantMute = useCallback(
+		(participantId: string) => {
+			if (!canManageParticipants) return;
+			const target = participants.find((p) => p.id === participantId);
+			if (!target || target.isLocal) return;
+
+			if (target.audioEnabled) {
+				session.muteParticipant(participantId);
+			} else {
+				session.unmuteParticipant(participantId);
+			}
+		},
+		[canManageParticipants, participants, session],
+	);
+
+	const handleRemoveParticipant = useCallback(
+		(participantId: string) => {
+			if (!canManageParticipants) return;
+			const target = participants.find((p) => p.id === participantId);
+			if (!target || target.isLocal) return;
+			void session.removeParticipant(participantId);
+		},
+		[canManageParticipants, participants, session],
+	);
+
 	if (phase === "lobby" || phase === "joining") {
 		return (
 			<PreJoinLobby
@@ -715,7 +744,7 @@ function VideoConferenceBase({
 		if (layout === "speaker" || layout === "auto") return "spotlight";
 		if (layout === "spotlight") return "spotlight";
 		return "grid";
-	})();
+		})();
 
 	return (
 		<>
@@ -723,6 +752,9 @@ function VideoConferenceBase({
 				roomName={roomId}
 				localParticipant={localMeetingParticipant}
 				participants={allParticipants}
+				canManageParticipants={canManageParticipants}
+				onToggleParticipantMute={handleToggleParticipantMute}
+				onRemoveParticipant={handleRemoveParticipant}
 				activeReactions={interactions.activeReactions}
 				transcripts={transcripts}
 				isMuted={!media.isAudioEnabled}
@@ -759,6 +791,9 @@ function VideoConferenceBase({
 				onSendReaction={handleSendReaction}
 				onLeave={handleLeave}
 				onAddPeople={onAddPeople}
+				participantVolumes={participantVolumes}
+				onParticipantVolumeChange={setParticipantVolume}
+				getParticipantVolume={getAudioVolume}
 				connectionStatus={connectionStatus}
 				className={cn(className, isExiting && "chalk-animate-exit")}
 			/>

@@ -14,13 +14,13 @@ describe('TranscriptLine', () => {
         timestamp={timestamp} 
       />
     );
-    expect(getByText(/John:/)).toBeDefined();
+    expect(getByText('John')).toBeDefined();
     expect(getByText('Hello world')).toBeDefined();
-    expect(getByText(/\[12:00\]/)).toBeDefined();
+    expect(getByText('12:00')).toBeDefined();
   });
 
   it('renders interim state', () => {
-    const { getByRole } = render(
+    const { getByRole, getByText } = render(
       <TranscriptLine 
         speaker="John" 
         speakerId="p1" 
@@ -29,8 +29,8 @@ describe('TranscriptLine', () => {
         isInterim 
       />
     );
-    expect(getByRole('listitem')).toHaveClass('italic');
     expect(getByRole('listitem')).toHaveAttribute('aria-live', 'off');
+    expect(getByText('Interim text')).toHaveClass('text-muted-foreground/70');
   });
 
   it('hides speaker and timestamp when requested', () => {
@@ -44,7 +44,7 @@ describe('TranscriptLine', () => {
         showTimestamp={false}
       />
     );
-    expect(queryByText(/John:/)).toBeNull();
-    expect(queryByText(/\[12:00\]/)).toBeNull();
+    expect(queryByText('John')).toBeNull();
+    expect(queryByText('12:00')).toBeNull();
   });
 });

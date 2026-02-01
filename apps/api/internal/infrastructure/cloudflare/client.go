@@ -49,38 +49,6 @@ func (c *Client) IsConfigured() bool {
 	return c.accountID != "" && c.appID != "" && c.apiToken != ""
 }
 
-func (c *Client) IsMock() bool {
-	return c.mock
-}
-
-func (c *Client) mockMeeting(title string) *Meeting {
-	now := time.Now()
-	return &Meeting{
-		ID:        uuid.NewString(),
-		Title:     title,
-		Status:    MeetingStatusActive,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-}
-
-func (c *Client) mockParticipant(req AddParticipantRequest, participantID string) *Participant {
-	now := time.Now()
-	id := participantID
-	if id == "" {
-		id = uuid.NewString()
-	}
-	return &Participant{
-		ID:               id,
-		Name:             req.Name,
-		PresetName:       req.PresetName,
-		ClientSpecificID: req.ClientSpecificID,
-		Token:            "mock-token-" + uuid.NewString(),
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-}
-
 func (c *Client) endpoint(path string) string {
 	return fmt.Sprintf("%s/accounts/%s/realtime/kit/%s%s",
 		c.baseURL, c.accountID, c.appID, path)
@@ -111,7 +79,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 // Returns mock data if Cloudflare is not configured (for demo/testing)
 func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*Meeting, error) {
 	if c.mock {
-		return c.mockMeeting(req.Title), nil
+		return mockMeeting(req.Title), nil
 	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
@@ -153,9 +121,13 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 // GetMeeting retrieves meeting details from Cloudflare RealtimeKit
 func (c *Client) GetMeeting(ctx context.Context, meetingID string) (*Meeting, error) {
 	if c.mock {
-		meeting := c.mockMeeting("mock")
-		meeting.ID = meetingID
-		return meeting, nil
+		return &Meeting{
+			ID:        meetingID,
+			Status:    MeetingStatusActive,
+			Title:     "mock-meeting",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}, nil
 	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
@@ -183,10 +155,13 @@ func (c *Client) GetMeeting(ctx context.Context, meetingID string) (*Meeting, er
 // EndMeeting ends a meeting by updating its status to INACTIVE
 func (c *Client) EndMeeting(ctx context.Context, meetingID string) (*Meeting, error) {
 	if c.mock {
-		meeting := c.mockMeeting("mock")
-		meeting.ID = meetingID
-		meeting.Status = MeetingStatusInactive
-		return meeting, nil
+		return &Meeting{
+			ID:        meetingID,
+			Status:    MeetingStatusInactive,
+			Title:     "mock-meeting",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}, nil
 	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
@@ -217,7 +192,7 @@ func (c *Client) EndMeeting(ctx context.Context, meetingID string) (*Meeting, er
 // AddParticipant adds a participant to a meeting and returns their auth token
 func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddParticipantRequest) (*Participant, error) {
 	if c.mock {
-		return c.mockParticipant(req, ""), nil
+		return mockParticipant(req), nil
 	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
@@ -265,11 +240,32 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 	return &result.Data, nil
 }
 
+func mockMeeting(title string) *Meeting {
+	now := time.Now()
+	return &Meeting{
+		ID:        uuid.NewString(),
+		Title:     title,
+		Status:    MeetingStatusActive,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+func mockParticipant(req AddParticipantRequest) *Participant {
+	now := time.Now()
+	return &Participant{
+		ID:               uuid.NewString(),
+		Name:             req.Name,
+		PresetName:       req.PresetName,
+		ClientSpecificID: req.ClientSpecificID,
+		Token:            "mock-token-" + uuid.NewString(),
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+}
+
 // RemoveParticipant removes a participant from a meeting
 func (c *Client) RemoveParticipant(ctx context.Context, meetingID, participantID string) error {
-	if c.mock {
-		return nil
-	}
 	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
 		return fmt.Errorf("cloudflare is not configured")
@@ -296,9 +292,6 @@ func (c *Client) RemoveParticipant(ctx context.Context, meetingID, participantID
 
 // RefreshParticipantToken refreshes a participant's auth token
 func (c *Client) RefreshParticipantToken(ctx context.Context, meetingID, participantID string) (*Participant, error) {
-	if c.mock {
-		return c.mockParticipant(AddParticipantRequest{Name: "mock", PresetName: PresetParticipant}, participantID), nil
-	}
 	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
@@ -325,15 +318,6 @@ func (c *Client) RefreshParticipantToken(ctx context.Context, meetingID, partici
 
 // StartRecording starts recording for a meeting
 func (c *Client) StartRecording(ctx context.Context, meetingID string, req StartRecordingRequest) (*Recording, error) {
-	if c.mock {
-		now := time.Now()
-		return &Recording{
-			ID:         uuid.NewString(),
-			MeetingID:  meetingID,
-			Status:     RecordingStatusRecording,
-			StartedTime: &now,
-		}, nil
-	}
 	// API-MED-08: Return mock response when not configured
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
@@ -378,14 +362,6 @@ func (c *Client) StartRecording(ctx context.Context, meetingID string, req Start
 
 // StopRecording stops an active recording
 func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Recording, error) {
-	if c.mock {
-		now := time.Now()
-		return &Recording{
-			ID:        recordingID,
-			Status:    RecordingStatusUploading,
-			StoppedTime: &now,
-		}, nil
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
 	}
@@ -413,14 +389,6 @@ func (c *Client) StopRecording(ctx context.Context, recordingID string) (*Record
 
 // GetRecording retrieves recording details
 func (c *Client) GetRecording(ctx context.Context, recordingID string) (*Recording, error) {
-	if c.mock {
-		now := time.Now()
-		return &Recording{
-			ID:     recordingID,
-			Status: RecordingStatusCompleted,
-			StoppedTime: &now,
-		}, nil
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare is not configured")
 
@@ -447,9 +415,6 @@ func (c *Client) GetRecording(ctx context.Context, recordingID string) (*Recordi
 
 // KickAllParticipants ends an active session by kicking all participants
 func (c *Client) KickAllParticipants(ctx context.Context, meetingID string) error {
-	if c.mock {
-		return nil
-	}
 	if !c.IsConfigured() {
 		return nil
 	}
@@ -475,9 +440,6 @@ func (c *Client) KickAllParticipants(ctx context.Context, meetingID string) erro
 
 // GetActiveRecording retrieves the active recording for a meeting
 func (c *Client) GetActiveRecording(ctx context.Context, meetingID string) (*Recording, error) {
-	if c.mock {
-		return nil, fmt.Errorf("no active recording (mock mode)")
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("no active recording (mock mode)")
 	}
@@ -518,9 +480,6 @@ type RecordingsListResponse struct {
 
 // ListRecordingsByMeeting retrieves all recordings for a meeting
 func (c *Client) ListRecordingsByMeeting(ctx context.Context, meetingID string) ([]Recording, error) {
-	if c.mock {
-		return []Recording{}, nil
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare not configured")
 	}
@@ -567,15 +526,6 @@ func (c *Client) ListRecordingsByMeeting(ctx context.Context, meetingID string) 
 
 // CreateWebhook registers a webhook endpoint with Cloudflare RealtimeKit
 func (c *Client) CreateWebhook(ctx context.Context, req CreateWebhookRequest) (*Webhook, error) {
-	if c.mock {
-		return &Webhook{
-			ID:      uuid.NewString(),
-			Name:    req.Name,
-			URL:     req.URL,
-			Events:  req.Events,
-			Enabled: req.Enabled,
-		}, nil
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare not configured")
 	}
@@ -613,15 +563,6 @@ func (c *Client) CreateWebhook(ctx context.Context, req CreateWebhookRequest) (*
 
 // GetWebhook retrieves a webhook by ID
 func (c *Client) GetWebhook(ctx context.Context, webhookID string) (*Webhook, error) {
-	if c.mock {
-		return &Webhook{
-			ID:      webhookID,
-			Name:    "mock",
-			URL:     "https://example.com/webhook",
-			Events:  []string{},
-			Enabled: true,
-		}, nil
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare not configured")
 	}
@@ -664,9 +605,6 @@ func (c *Client) GetWebhook(ctx context.Context, webhookID string) (*Webhook, er
 
 // ListWebhooks lists all webhooks for the app
 func (c *Client) ListWebhooks(ctx context.Context) ([]Webhook, error) {
-	if c.mock {
-		return []Webhook{}, nil
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare not configured")
 	}
@@ -695,17 +633,11 @@ func (c *Client) ListWebhooks(ctx context.Context) ([]Webhook, error) {
 		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
 	}
 
-	if len(result.Result) > 0 {
-		return result.Result, nil
-	}
-	return result.Data, nil
+	return result.Result, nil
 }
 
 // DeleteWebhook removes a webhook
 func (c *Client) DeleteWebhook(ctx context.Context, webhookID string) error {
-	if c.mock {
-		return nil
-	}
 	if !c.IsConfigured() {
 		return fmt.Errorf("cloudflare not configured")
 	}
@@ -727,15 +659,6 @@ func (c *Client) DeleteWebhook(ctx context.Context, webhookID string) error {
 
 // UpdateWebhook updates webhook configuration
 func (c *Client) UpdateWebhook(ctx context.Context, webhookID string, req UpdateWebhookRequest) (*Webhook, error) {
-	if c.mock {
-		return &Webhook{
-			ID:      webhookID,
-			Name:    "mock",
-			URL:     "https://example.com/webhook",
-			Events:  []string{},
-			Enabled: true,
-		}, nil
-	}
 	if !c.IsConfigured() {
 		return nil, fmt.Errorf("cloudflare not configured")
 	}

@@ -248,11 +248,10 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		presetName = cloudflare.PresetHost
 	}
 
-	// Generate a participant ID if none provided (Cloudflare requires client_specific_id)
-	clientSpecificID := input.ExternalUserID
-	if clientSpecificID == "" {
-		clientSpecificID = uuid.New().String()
-	}
+	// Stable identity across WS + RTK: use DB participant UUID as Cloudflare client_specific_id.
+	// This makes RTK participant.userId match our canonical participant ID.
+	participantID := uuid.New()
+	clientSpecificID := participantID.String()
 
 	// Parse tenant config for all relevant settings
 	var tenantCfg struct {
@@ -295,9 +294,10 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	}
 
 	participant, err := s.db.CreateParticipant(ctx, db.CreateParticipantParams{
+		ID:                      participantID,
 		RoomID:                  input.RoomID,
 		CloudflareParticipantID: cfParticipant.ID,
-		ExternalUserID:          strPtr(clientSpecificID),
+		ExternalUserID:          strPtr(input.ExternalUserID),
 		DisplayName:             strPtr(input.DisplayName),
 		Role:                    role,
 	})

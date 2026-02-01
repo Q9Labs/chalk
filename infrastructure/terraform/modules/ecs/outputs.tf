@@ -87,3 +87,13 @@ output "ecs_tasks_security_group_id" {
   description = "ECS tasks security group ID (awsvpc mode)"
   value       = try(aws_security_group.ecs_tasks[0].id, null)
 }
+
+output "alb_access_logs_bucket_name" {
+  description = "ALB access logs bucket name"
+  value       = try(aws_s3_bucket.alb_logs[0].bucket, null)
+}
+
+output "alb_access_logs_bucket_arn" {
+  description = "ALB access logs bucket ARN"
+  value       = try(aws_s3_bucket.alb_logs[0].arn, null)
+}

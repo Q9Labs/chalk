@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
+import { logger } from "../logger";
 
 export interface UseRecordingResult {
 	/** Whether recording is currently active */
@@ -22,7 +23,7 @@ export interface UseRecordingResult {
 }
 
 export function useRecording(): UseRecordingResult {
-	const { apiClient, roomInfo } = useChalk();
+	const { apiClient, roomInfo, wsClient, wsRoomId } = useChalk();
 	const [isRecording, setIsRecording] = useState(false);
 	const [recordingId, setRecordingId] = useState<string | null>(null);
 	const [durationSeconds, setDurationSeconds] = useState(0);
@@ -42,9 +43,74 @@ export function useRecording(): UseRecordingResult {
 		return () => clearInterval(interval);
 	}, [isRecording]);
 
+	useEffect(() => {
+		if (!wsClient) {
+			return;
+		}
+
+		const unsubscribeStarted = wsClient.on("recording.started", (data) => {
+			setIsRecording(true);
+			setRecordingId(data.recordingId);
+			setDurationSeconds(0);
+		});
+
+		const unsubscribeStopped = wsClient.on("recording.stopped", () => {
+			setIsRecording(false);
+			setRecordingId(null);
+			setDurationSeconds(0);
+		});
+
+		const unsubscribeSnapshot = wsClient.on("room.snapshot", (snapshot) => {
+			setIsRecording(snapshot.isRecording);
+			setRecordingId(snapshot.recordingId ?? null);
+			setDurationSeconds(0);
+		});
+
+		const unsubscribeSync = wsClient.on("room-sync", (snapshot) => {
+			setIsRecording(snapshot.isRecording);
+			setRecordingId(snapshot.recordingId ?? null);
+			setDurationSeconds(0);
+		});
+
+		const unsubscribeDisconnected = wsClient.on("disconnected", () => {
+			setIsRecording(false);
+			setRecordingId(null);
+			setDurationSeconds(0);
+		});
+
+		return () => {
+			unsubscribeStarted();
+			unsubscribeStopped();
+			unsubscribeSnapshot();
+			unsubscribeSync();
+			unsubscribeDisconnected();
+		};
+	}, [wsClient]);
+
+	useEffect(() => {
+		setIsRecording(false);
+		setRecordingId(null);
+		setDurationSeconds(0);
+	}, [wsRoomId]);
+
 	const startRecording = useCallback(async () => {
+		const startTime = Date.now();
+		const roomId = roomInfo?.room?.id;
+
+		logger.info({
+			event: "recording.start",
+			roomId,
+		});
+
 		if (!apiClient || !roomInfo) {
-			setError(new Error("Not connected to a room"));
+			const error = new Error("Not connected to a room");
+			logger.error({
+				event: "recording.start.error",
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: error.message, type: "StateError" },
+			});
+			setError(error);
 			return;
 		}
 
@@ -55,17 +121,51 @@ export function useRecording(): UseRecordingResult {
 				setRecordingId(response.data.recordingId);
 				setIsRecording(true);
 				setDurationSeconds(0);
+
+				logger.info({
+					event: "recording.started",
+					roomId,
+					recordingId: response.data.recordingId,
+					duration_ms: Date.now() - startTime,
+					outcome: "success",
+				});
 			} else {
 				throw new Error(response.error?.message ?? "Failed to start recording");
 			}
 		} catch (err) {
-			setError(err as Error);
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "recording.start.error",
+				roomId,
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
+			setError(error);
 		}
 	}, [apiClient, roomInfo]);
 
 	const stopRecording = useCallback(async () => {
+		const startTime = Date.now();
+		const roomId = roomInfo?.room?.id;
+		const currentRecordingId = recordingId;
+
+		logger.info({
+			event: "recording.stop",
+			roomId,
+			recordingId: currentRecordingId,
+			durationSeconds,
+		});
+
 		if (!apiClient || !roomInfo) {
-			setError(new Error("Not connected to a room"));
+			const error = new Error("Not connected to a room");
+			logger.error({
+				event: "recording.stop.error",
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: error.message, type: "StateError" },
+			});
+			setError(error);
 			return;
 		}
 
@@ -75,13 +175,31 @@ export function useRecording(): UseRecordingResult {
 			if (response.success) {
 				setIsRecording(false);
 				setRecordingId(null);
+
+				logger.info({
+					event: "recording.stopped",
+					roomId,
+					recordingId: currentRecordingId,
+					totalDurationSeconds: durationSeconds,
+					duration_ms: Date.now() - startTime,
+					outcome: "success",
+				});
 			} else {
 				throw new Error(response.error?.message ?? "Failed to stop recording");
 			}
 		} catch (err) {
-			setError(err as Error);
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "recording.stop.error",
+				roomId,
+				recordingId: currentRecordingId,
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
+			setError(error);
 		}
-	}, [apiClient, roomInfo]);
+	}, [apiClient, roomInfo, recordingId, durationSeconds]);
 
 	return {
 		isRecording,

@@ -48,5 +48,3 @@ apps/api/server
 # *.tfstate
 # .terraform/
 
-*storybook.log
-storybook-static

@@ -34,6 +34,8 @@ interface WSEvents {
 		participantId: string;
 		changes: Partial<Participant>;
 	};
+	"participant.mute": { participantId: string; requestedBy?: string };
+	"participant.unmute": { participantId: string; requestedBy?: string };
 	"chat.message": ChatMessage;
 	reaction: Reaction;
 	"hand.raised": { participantId: string };
@@ -99,6 +101,9 @@ export class WSClient extends EventEmitter<WSEvents> {
 	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 	private lastPongTime: number = Date.now();
 	private connectContext: WideEventContext | null = null;
+	private lastCloseEvent:
+		| { code: number; reason: string; wasClean: boolean }
+		| null = null;
 
 	constructor(wsUrl: string, _debug = false, tokenProvider?: TokenProvider) {
 		super();
@@ -112,6 +117,12 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	get lastPongReceived(): number {
 		return this.lastPongTime;
+	}
+
+	get lastClose():
+		| { code: number; reason: string; wasClean: boolean }
+		| null {
+		return this.lastCloseEvent;
 	}
 
 	connect(token: string, roomId: string): void {
@@ -197,6 +208,11 @@ export class WSClient extends EventEmitter<WSEvents> {
 				1015: "TLS handshake failure",
 			};
 			const codeDescription = closeCodeMap[event.code] ?? "Unknown close code";
+			this.lastCloseEvent = {
+				code: event.code,
+				reason: event.reason || codeDescription,
+				wasClean: event.wasClean,
+			};
 
 			this.stopHeartbeat();
 
@@ -205,7 +221,9 @@ export class WSClient extends EventEmitter<WSEvents> {
 				this.handleConnectionFailure();
 			} else {
 				this.state = "disconnected";
-				this.emit("disconnected", { reason: event.reason || codeDescription });
+				this.emit("disconnected", {
+					reason: event.reason || codeDescription,
+				});
 			}
 		};
 
@@ -265,6 +283,12 @@ export class WSClient extends EventEmitter<WSEvents> {
 							changes: Partial<Participant>;
 						},
 					);
+					break;
+				case "participant.mute":
+					this.emit("participant.mute", payload as WSEvents["participant.mute"]);
+					break;
+				case "participant.unmute":
+					this.emit("participant.unmute", payload as WSEvents["participant.unmute"]);
 					break;
 				case "chat.message": {
 					const rawPayload = payload as {
@@ -544,6 +568,14 @@ export class WSClient extends EventEmitter<WSEvents> {
 
 	lowerHand(): void {
 		this.send({ type: "hand.lower", payload: {} });
+	}
+
+	muteParticipant(participantId: string): void {
+		this.send({ type: "participant.mute", payload: { participantId } });
+	}
+
+	unmuteParticipant(participantId: string): void {
+		this.send({ type: "participant.unmute", payload: { participantId } });
 	}
 
 	disconnect(): void {

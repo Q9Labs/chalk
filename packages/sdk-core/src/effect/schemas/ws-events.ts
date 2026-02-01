@@ -76,6 +76,15 @@ export const ParticipantUpdatedPayload = Schema.Struct({
 export type ParticipantUpdatedPayload = Schema.Schema.Type<typeof ParticipantUpdatedPayload>;
 
 /**
+ * participant.mute / participant.unmute command payload
+ */
+export const ParticipantControlPayload = Schema.Struct({
+  participantId: Schema.String,
+  requestedBy: Schema.optional(Schema.String),
+});
+export type ParticipantControlPayload = Schema.Schema.Type<typeof ParticipantControlPayload>;
+
+/**
  * chat.message event payload
  */
 export const ChatMessagePayload = Schema.Struct({
@@ -239,6 +248,8 @@ export const WSPayloadSchemas = {
   "participant.joined": ParticipantJoinedPayload,
   "participant.left": ParticipantLeftPayload,
   "participant.updated": ParticipantUpdatedPayload,
+  "participant.mute": ParticipantControlPayload,
+  "participant.unmute": ParticipantControlPayload,
   "chat.message": ChatMessagePayload,
   "reaction": ReactionPayload,
   "hand.raised": HandPayload,

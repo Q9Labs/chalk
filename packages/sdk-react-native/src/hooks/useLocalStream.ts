@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MediaStream } from "@cloudflare/react-native-webrtc";
 import { useChalk } from "../ChalkProvider";
+import { logger } from "../logger";
 
 export interface UseLocalStreamResult {
 	/** The local media stream (camera + mic) */
@@ -32,10 +33,22 @@ export function useLocalStream(): UseLocalStreamResult {
 
 	const startStream = useCallback(
 		async (options?: { video?: boolean; audio?: boolean }) => {
-			console.log("[useLocalStream] startStream called", { rtcManager: !!rtcManager, options });
+			const startTime = Date.now();
+
+			logger.info({
+				event: "stream.start",
+				options: {
+					video: options?.video ?? true,
+					audio: options?.audio ?? true,
+				},
+				hasRtcManager: !!rtcManager,
+			});
 
 			if (!rtcManager) {
-				console.log("[useLocalStream] RTCManager not available yet, queueing request");
+				logger.info({
+					event: "stream.start.queued",
+					reason: "rtcManager_not_ready",
+				});
 				setPendingStart(options ?? { video: true, audio: true });
 				return;
 			}
@@ -44,18 +57,33 @@ export function useLocalStream(): UseLocalStreamResult {
 			setError(null);
 
 			try {
-				console.log("[useLocalStream] Calling getLocalStream...");
 				const localStream = await rtcManager.getLocalStream(
 					options?.video ?? true,
 					options?.audio ?? true,
 				);
-				console.log("[useLocalStream] Got stream:", { stream: !!localStream, tracks: localStream?.getTracks?.()?.length });
 				setStream(localStream);
 				setIsActive(true);
+
+				logger.info({
+					event: "stream.ready",
+					duration_ms: Date.now() - startTime,
+					outcome: "success",
+					tracks: {
+						total: localStream?.getTracks?.()?.length ?? 0,
+						video: localStream?.getVideoTracks?.()?.length ?? 0,
+						audio: localStream?.getAudioTracks?.()?.length ?? 0,
+					},
+				});
 			} catch (err) {
 				const message = err instanceof Error ? err.message : "Failed to get stream";
-				console.log("[useLocalStream] Error getting stream:", message);
 				setError(message);
+
+				logger.error({
+					event: "stream.error",
+					duration_ms: Date.now() - startTime,
+					outcome: "error",
+					error: { message, type: err instanceof Error ? err.name : "UnknownError" },
+				});
 			} finally {
 				setIsLoading(false);
 			}
@@ -65,18 +93,28 @@ export function useLocalStream(): UseLocalStreamResult {
 
 	const stopStream = useCallback(() => {
 		if (stream) {
+			const trackCount = stream.getTracks().length;
 			for (const track of stream.getTracks()) {
 				(track as unknown as { stop: () => void }).stop();
 			}
 			setStream(null);
 			setIsActive(false);
+
+			logger.info({
+				event: "stream.stop",
+				outcome: "success",
+				tracksStopped: trackCount,
+			});
 		}
 	}, [stream]);
 
 	// Process pending start when rtcManager becomes available
 	useEffect(() => {
 		if (rtcManager && pendingStart && !isLoading && !isActive) {
-			console.log("[useLocalStream] RTCManager now available, processing pending request");
+			logger.info({
+				event: "stream.pending.process",
+				options: pendingStart,
+			});
 			setPendingStart(null);
 			startStream(pendingStart);
 		}

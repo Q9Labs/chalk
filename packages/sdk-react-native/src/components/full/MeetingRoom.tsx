@@ -13,6 +13,7 @@ import {
 	type ViewStyle,
 } from "react-native";
 import { useChat } from "../../hooks/useChat";
+import { CHALK_THEME } from "../../theme";
 import { useMedia } from "../../hooks/useMedia";
 import { useParticipants } from "../../hooks/useParticipants";
 import { useScreenShare } from "../../hooks/useScreenShare";
@@ -72,7 +73,7 @@ interface MeetingRoomProps {
 }
 
 export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
-	const { leaveRoom, roomInfo } = useChalk();
+	const { leaveRoom, roomInfo, wsConnectionState } = useChalk();
 	const { participants, localParticipant } = useParticipants();
 	const { isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio } = useMedia();
 	const { isScreenSharing, startScreenShare, stopScreenShare } = useScreenShare();
@@ -131,8 +132,41 @@ export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
 		setIsChatOpen(index >= 0);
 	}, []);
 
+	const wsStatusLabel = useMemo(() => {
+		switch (wsConnectionState) {
+			case "connected":
+				return "WS Connected";
+			case "connecting":
+				return "WS Connecting";
+			case "reconnecting":
+				return "WS Reconnecting";
+			case "failed":
+				return "WS Failed";
+			default:
+				return "WS Disconnected";
+		}
+	}, [wsConnectionState]);
+
+	const wsStatusColor = useMemo(() => {
+		switch (wsConnectionState) {
+			case "connected":
+				return CHALK_THEME.colors.status.success;
+			case "connecting":
+			case "reconnecting":
+				return CHALK_THEME.colors.status.warning;
+			case "failed":
+				return CHALK_THEME.colors.status.error;
+			default:
+				return CHALK_THEME.colors.text.muted;
+		}
+	}, [wsConnectionState]);
+
 	return (
 		<View style={[styles.container, style]}>
+			<View style={styles.wsStatusBadge}>
+				<View style={[styles.wsStatusDot, { backgroundColor: wsStatusColor }]} />
+				<Text style={styles.wsStatusText}>{wsStatusLabel}</Text>
+			</View>
 			{/* Main content area */}
 			<View style={styles.content}>
 				{screenShareStream ? (
@@ -224,7 +258,31 @@ export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: "#111827", // gray-900
+		backgroundColor: CHALK_THEME.colors.background,
+	},
+	wsStatusBadge: {
+		position: "absolute",
+		top: CHALK_THEME.spacing.md,
+		left: CHALK_THEME.spacing.md,
+		zIndex: 10,
+		flexDirection: "row",
+		alignItems: "center",
+		backgroundColor: CHALK_THEME.colors.ui.pillBg,
+		borderColor: CHALK_THEME.colors.ui.pillBorder,
+		borderWidth: 1,
+		borderRadius: CHALK_THEME.borderRadius.full,
+		paddingHorizontal: CHALK_THEME.spacing.sm,
+		paddingVertical: 6,
+	},
+	wsStatusDot: {
+		width: 8,
+		height: 8,
+		borderRadius: 4,
+		marginRight: 8,
+	},
+	wsStatusText: {
+		fontSize: 12,
+		color: CHALK_THEME.colors.text.secondary,
 	},
 	content: {
 		flex: 1,
@@ -237,31 +295,31 @@ const styles = StyleSheet.create({
 	},
 	screenShareContainer: {
 		flex: 3,
-		padding: 8,
+		padding: CHALK_THEME.spacing.sm,
 	},
 	screenShare: {
 		flex: 1,
-		borderRadius: 8,
+		borderRadius: CHALK_THEME.borderRadius.md,
 		overflow: "hidden",
 	},
 	participantStrip: {
 		flex: 1,
-		paddingHorizontal: 8,
-		paddingBottom: 8,
+		paddingHorizontal: CHALK_THEME.spacing.sm,
+		paddingBottom: CHALK_THEME.spacing.sm,
 	},
 	controlBarContainer: {
-		paddingHorizontal: 16,
+		paddingHorizontal: CHALK_THEME.spacing.md,
 		paddingBottom: 24,
-		paddingTop: 8,
+		paddingTop: CHALK_THEME.spacing.sm,
 		alignItems: "center",
 	},
 	bottomSheetBackground: {
-		backgroundColor: "#ffffff",
-		borderTopLeftRadius: 16,
-		borderTopRightRadius: 16,
+		backgroundColor: CHALK_THEME.colors.background,
+		borderTopLeftRadius: CHALK_THEME.borderRadius.lg,
+		borderTopRightRadius: CHALK_THEME.borderRadius.lg,
 	},
 	bottomSheetHandle: {
-		backgroundColor: "#d1d5db", // gray-300
+		backgroundColor: CHALK_THEME.colors.ui.border,
 		width: 40,
 	},
 	bottomSheetContent: {
@@ -273,32 +331,32 @@ const styles = StyleSheet.create({
 	// Modal fallback styles
 	modalOverlay: {
 		flex: 1,
-		backgroundColor: "rgba(0, 0, 0, 0.5)",
+		backgroundColor: CHALK_THEME.colors.ui.overlay,
 		justifyContent: "flex-end",
 	},
 	modalContent: {
-		backgroundColor: "#ffffff",
-		borderTopLeftRadius: 16,
-		borderTopRightRadius: 16,
+		backgroundColor: CHALK_THEME.colors.background,
+		borderTopLeftRadius: CHALK_THEME.borderRadius.lg,
+		borderTopRightRadius: CHALK_THEME.borderRadius.lg,
 		height: "60%",
-		paddingTop: 8,
+		paddingTop: CHALK_THEME.spacing.sm,
 	},
 	modalHeader: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
-		paddingHorizontal: 16,
-		paddingVertical: 12,
+		paddingHorizontal: CHALK_THEME.spacing.md,
+		paddingVertical: CHALK_THEME.spacing.md,
 		borderBottomWidth: 1,
-		borderBottomColor: "#e5e7eb",
+		borderBottomColor: CHALK_THEME.colors.ui.border,
 	},
 	modalTitle: {
-		fontSize: 18,
+		fontSize: CHALK_THEME.typography.sizes.lg,
 		fontWeight: "600",
-		color: "#111827",
+		color: CHALK_THEME.colors.text.primary,
 	},
 	modalClose: {
-		fontSize: 16,
-		color: "#2563eb",
+		fontSize: CHALK_THEME.typography.sizes.md,
+		color: CHALK_THEME.colors.primary,
 	},
 });

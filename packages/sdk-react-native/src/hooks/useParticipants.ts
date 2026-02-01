@@ -1,12 +1,13 @@
 /**
- * useParticipants hook - Access participant list via RTK
- * Integrates with @cloudflare/realtimekit-react-native
+ * useParticipants hook - Access participant list via API WebSocket
+ * Uses RTK only for media tracks when available
  */
 
 import type { Participant } from "@q9labs/chalk-core";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useChalk } from "../ChalkProvider";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeKitParticipant } from "@cloudflare/realtimekit";
+import { useChalk } from "../ChalkProvider";
+import { logger } from "../logger";
 
 export interface UseParticipantsResult {
 	/** All participants including local */
@@ -23,8 +24,8 @@ export interface UseParticipantsResult {
 	getParticipant: (id: string) => Participant | undefined;
 }
 
-// Convert RTK participant to Chalk Participant type
-function toChalkParticipant(
+// Convert RTK participant to Chalk Participant type (fallback)
+function toChalkParticipantFromRtk(
 	rtkParticipant: RealtimeKitParticipant,
 	isLocal = false,
 ): Participant {
@@ -45,97 +46,223 @@ function toChalkParticipant(
 }
 
 export function useParticipants(): UseParticipantsResult {
-	const { rtkClient, roomInfo } = useChalk();
+	const { wsClient, wsConnectionState, wsParticipantId, rtkClient, roomInfo } =
+		useChalk();
 	const [participants, setParticipants] = useState<Participant[]>([]);
 	// Active speaker detection requires additional RTK integration (future)
 	const [activeSpeaker] = useState<Participant | null>(null);
+	// Track previous participant IDs for join/leave detection
+	const prevParticipantIds = useRef<Set<string>>(new Set());
 
-	// Build local participant from roomInfo and RTK self
-	const localParticipant = useMemo<Participant | null>(() => {
-		if (!roomInfo) return null;
+	const localId = wsParticipantId ?? roomInfo?.participantId ?? null;
 
-		const selfState = rtkClient?.self;
-		return {
-			id: roomInfo.participantId,
-			displayName: roomInfo.room?.name || "You",
-			role: roomInfo.role || "participant",
-			isLocal: true,
-			videoEnabled: selfState?.videoEnabled ?? false,
-			audioEnabled: selfState?.audioEnabled ?? false,
-			isSpeaking: false,
-			isScreenSharing: selfState?.screenShareEnabled ?? false,
-			handRaised: false,
-			connectionQuality: 100,
-			videoTrack: selfState?.videoTrack ?? undefined,
-			audioTrack: selfState?.audioTrack ?? undefined,
-		};
-	}, [roomInfo, rtkClient?.self]);
+	const logParticipantChanges = useCallback((all: Participant[]) => {
+		const currentIds = new Set(all.map((p) => p.id));
+		const prevIds = prevParticipantIds.current;
 
-	const updateParticipants = useCallback(() => {
-		if (!rtkClient) {
-			setParticipants(localParticipant ? [localParticipant] : []);
+		for (const p of all) {
+			if (!prevIds.has(p.id)) {
+				logger.info({
+					event: "participants.join",
+					participant: {
+						id: p.id,
+						displayName: p.displayName,
+						role: p.role,
+						isLocal: p.isLocal,
+					},
+					participantCount: all.length,
+				});
+			}
+		}
+
+		for (const id of prevIds) {
+			if (!currentIds.has(id)) {
+				logger.info({
+					event: "participants.leave",
+					participantId: id,
+					participantCount: all.length,
+				});
+			}
+		}
+
+		if (prevIds.size !== currentIds.size) {
+			logger.info({
+				event: "participants.update",
+				previousCount: prevIds.size,
+				currentCount: all.length,
+			});
+		}
+
+		prevParticipantIds.current = currentIds;
+	}, []);
+
+	useEffect(() => {
+		if (!wsClient) {
 			return;
 		}
 
-		// Get remote participants from RTK
-		const rtkParticipants = rtkClient.participants.toArray?.() ?? [];
-		const remotes = rtkParticipants.map((p: RealtimeKitParticipant) =>
-			toChalkParticipant(p, false),
-		);
+		const unsubscribeSnapshot = wsClient.on("room.snapshot", (snapshot) => {
+			const next = snapshot.participants.map((p) => ({
+				...p,
+				isLocal: localId ? p.id === localId : p.isLocal,
+			}));
+			logParticipantChanges(next);
+			setParticipants(next);
+		});
 
-		// Combine local + remote
-		const all = localParticipant ? [localParticipant, ...remotes] : remotes;
-		setParticipants(all);
-	}, [rtkClient, localParticipant]);
+		const unsubscribeSync = wsClient.on("room-sync", (snapshot) => {
+			const next = snapshot.participants.map((p) => ({
+				...p,
+				isLocal: localId ? p.id === localId : p.isLocal,
+			}));
+			logParticipantChanges(next);
+			setParticipants(next);
+		});
 
-	useEffect(() => {
-		if (!rtkClient) return;
+		const unsubscribeJoined = wsClient.on("participant.joined", (participant) => {
+			setParticipants((prev) => {
+				const exists = prev.some((p) => p.id === participant.id);
+				if (exists) return prev;
+				const next = [
+					...prev,
+					{
+						...participant,
+						isLocal: localId ? participant.id === localId : participant.isLocal,
+					},
+				];
+				logParticipantChanges(next);
+				return next;
+			});
+		});
 
-		// Initial sync
-		updateParticipants();
+		const unsubscribeLeft = wsClient.on("participant.left", ({ participantId }) => {
+			setParticipants((prev) => {
+				const next = prev.filter((p) => p.id !== participantId);
+				logParticipantChanges(next);
+				return next;
+			});
+		});
 
-		// Subscribe to RTK participant events
-		const unsubJoined = rtkClient.participants.joined?.on?.(
-			"participantJoined",
-			updateParticipants,
-		);
-		const unsubLeft = rtkClient.participants.joined?.on?.(
-			"participantLeft",
-			updateParticipants,
-		);
-		const unsubVideo = rtkClient.participants.joined?.on?.(
-			"videoUpdate",
-			updateParticipants,
-		);
-		const unsubAudio = rtkClient.participants.joined?.on?.(
-			"audioUpdate",
-			updateParticipants,
+		const unsubscribeUpdated = wsClient.on(
+			"participant.updated",
+			({ participantId, changes }) => {
+				setParticipants((prev) => {
+					const next = prev.map((p) =>
+						p.id === participantId ? { ...p, ...changes } : p,
+					);
+					return next;
+				});
+			},
 		);
 
 		return () => {
-			unsubJoined?.();
-			unsubLeft?.();
-			unsubVideo?.();
-			unsubAudio?.();
+			unsubscribeSnapshot();
+			unsubscribeSync();
+			unsubscribeJoined();
+			unsubscribeLeft();
+			unsubscribeUpdated();
 		};
-	}, [rtkClient, updateParticipants]);
+	}, [wsClient, localId, logParticipantChanges]);
+
+	useEffect(() => {
+		setParticipants((prev) =>
+			prev.map((p) => ({
+				...p,
+				isLocal: localId ? p.id === localId : p.isLocal,
+			})),
+		);
+	}, [localId]);
+
+	useEffect(() => {
+		if (wsClient && wsConnectionState === "connected") return;
+		if (!rtkClient) {
+			return;
+		}
+
+		const rtkParticipants = rtkClient.participants.toArray?.() ?? [];
+		const remotes = rtkParticipants.map((p: RealtimeKitParticipant) =>
+			toChalkParticipantFromRtk(p, false),
+		);
+		const localParticipantFallback = localId
+			? {
+					id: localId,
+					displayName: roomInfo?.room?.name || "You",
+					role: roomInfo?.role || "participant",
+					isLocal: true,
+					videoEnabled: rtkClient.self?.videoEnabled ?? false,
+					audioEnabled: rtkClient.self?.audioEnabled ?? false,
+					isSpeaking: false,
+					isScreenSharing: rtkClient.self?.screenShareEnabled ?? false,
+					handRaised: false,
+					connectionQuality: 100,
+					videoTrack: rtkClient.self?.videoTrack ?? undefined,
+					audioTrack: rtkClient.self?.audioTrack ?? undefined,
+				}
+			: null;
+
+		const all = localParticipantFallback
+			? [localParticipantFallback, ...remotes]
+			: remotes;
+		setParticipants(all);
+	}, [
+		wsClient,
+		wsConnectionState,
+		rtkClient,
+		localId,
+		roomInfo?.room?.name,
+		roomInfo?.role,
+	]);
+
+	const enrichedParticipants = useMemo(() => {
+		if (!rtkClient) {
+			return participants;
+		}
+		const rtkParticipants = rtkClient.participants.toArray?.() ?? [];
+		const rtkMap = new Map(
+			rtkParticipants.map((p: RealtimeKitParticipant) => [p.id, p]),
+		);
+		return participants.map((p) => {
+			const rtk =
+				(localId && p.id === localId ? rtkClient.self : undefined) ??
+				rtkMap.get(p.id);
+			if (!rtk) return p;
+			const base = wsClient
+				? p
+				: {
+						...p,
+						videoEnabled: rtk.videoEnabled ?? p.videoEnabled,
+						audioEnabled: rtk.audioEnabled ?? p.audioEnabled,
+						isScreenSharing: rtk.screenShareEnabled ?? p.isScreenSharing,
+					};
+			return {
+				...base,
+				videoTrack: rtk.videoTrack ?? p.videoTrack,
+				audioTrack: rtk.audioTrack ?? p.audioTrack,
+			};
+		});
+	}, [participants, rtkClient, localId, wsClient]);
+
+	const localParticipant = useMemo(
+		() => enrichedParticipants.find((p) => p.id === localId) ?? null,
+		[enrichedParticipants, localId],
+	);
 
 	const remoteParticipants = useMemo(
-		() => participants.filter((p) => !p.isLocal),
-		[participants],
+		() => enrichedParticipants.filter((p) => !p.isLocal),
+		[enrichedParticipants],
 	);
 
 	const getParticipant = useCallback(
-		(id: string) => participants.find((p) => p.id === id),
-		[participants],
+		(id: string) => enrichedParticipants.find((p) => p.id === id),
+		[enrichedParticipants],
 	);
 
 	return {
-		participants,
+		participants: enrichedParticipants,
 		localParticipant,
 		remoteParticipants,
 		activeSpeaker,
-		participantCount: participants.length,
+		participantCount: enrichedParticipants.length,
 		getParticipant,
 	};
 }

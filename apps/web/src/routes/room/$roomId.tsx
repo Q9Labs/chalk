@@ -70,6 +70,7 @@ function RoomPage() {
 				}}
 				sounds={true}
 				debug={true}
+			
 				role="host"
 				features={{
 					chat: true,

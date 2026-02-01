@@ -15,6 +15,7 @@ export {
   ParticipantJoinedPayload,
   ParticipantLeftPayload,
   ParticipantUpdatedPayload,
+  ParticipantControlPayload,
   // Chat schemas
   ChatMessagePayload,
   // Reaction schemas

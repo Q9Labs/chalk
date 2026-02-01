@@ -1,11 +1,12 @@
 /**
  * useChat hook - Chat messaging functionality
- * Note: Chat requires WebSocket integration (not yet implemented in RN SDK)
+ * Uses API WebSocket for real-time messaging
  */
 
 import type { ChatMessage } from "@q9labs/chalk-core";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
+import { logger } from "../logger";
 
 export interface UseChatResult {
 	messages: ChatMessage[];
@@ -13,25 +14,45 @@ export interface UseChatResult {
 }
 
 export function useChat(): UseChatResult {
-	const { roomInfo } = useChalk();
+	const { wsClient, wsConnectionState, wsRoomId } = useChalk();
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+	useEffect(() => {
+		if (!wsClient) {
+			return;
+		}
+
+		const unsubscribeMessage = wsClient.on("chat.message", (message) => {
+			setMessages((prev) => [...prev, message]);
+		});
+
+		const unsubscribeDisconnected = wsClient.on("disconnected", () => {
+			setMessages([]);
+		});
+
+		return () => {
+			unsubscribeMessage();
+			unsubscribeDisconnected();
+		};
+	}, [wsClient]);
+
+	useEffect(() => {
+		setMessages([]);
+	}, [wsRoomId]);
 
 	const sendMessage = useCallback(
 		(content: string) => {
-			if (!roomInfo) return;
-
-			// TODO: Implement WebSocket chat
-			// For now, add message to local state only
-			const localMessage: ChatMessage = {
-				id: `local-${Date.now()}`,
-				senderId: roomInfo.participantId,
-				senderName: "You",
-				content,
-				timestamp: new Date(),
-			};
-			setMessages((prev) => [...prev, localMessage]);
+			if (!wsClient || wsConnectionState !== "connected") {
+				logger.info({
+					event: "chat.send.skipped",
+					roomId: wsRoomId,
+					reason: wsClient ? "ws_not_connected" : "ws_client_unavailable",
+				});
+				return;
+			}
+			wsClient.sendChatMessage(content);
 		},
-		[roomInfo],
+		[wsClient, wsConnectionState, wsRoomId],
 	);
 
 	return {

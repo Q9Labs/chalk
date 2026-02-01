@@ -23,6 +23,6 @@ describe('Skeleton', () => {
 
   it('applies animation classes', () => {
     const { container } = render(<Skeleton animation="pulse" />);
-    expect(container.firstChild).toHaveClass('chalk-animate-pulse');
+    expect(container.firstChild).toHaveClass('animate-pulse');
   });
 });

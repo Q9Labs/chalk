@@ -56,6 +56,14 @@ type Participant struct {
 	CFAuthToken string `json:"cf_auth_token"`
 }
 
+type AddParticipantResponse struct {
+	Participant struct {
+		ID string `json:"id"`
+	} `json:"participant"`
+	AccessToken string `json:"access_token"`
+	AuthToken   string `json:"auth_token"`
+}
+
 type AuthResponse struct {
 	AccessToken string `json:"access_token"`
 }
@@ -197,7 +205,7 @@ func runParticipant(ctx context.Context, cfg Config, token, roomID string, idx i
 }
 
 func getAuthToken(baseURL, tenantID, apiKey string) (string, error) {
-	reqBody, _ := json.Marshal(map[string]string{"tenant_id": tenantID})
+	reqBody, _ := json.Marshal(map[string]string{"api_key": apiKey})
 
 	req, err := http.NewRequest("POST", baseURL+"/api/v1/auth/token", bytes.NewBuffer(reqBody))
 	if err != nil {
@@ -282,12 +290,16 @@ func addParticipant(baseURL, token, roomID, displayName string) (*Participant, e
 		return nil, fmt.Errorf("add participant failed: %d", resp.StatusCode)
 	}
 
-	var participant Participant
+	var participant AddParticipantResponse
 	if err := json.NewDecoder(resp.Body).Decode(&participant); err != nil {
 		return nil, err
 	}
 
-	return &participant, nil
+	return &Participant{
+		ID:          participant.Participant.ID,
+		Token:       participant.AccessToken,
+		CFAuthToken: participant.AuthToken,
+	}, nil
 }
 
 func connectRTK(ctx context.Context, p *Participant) error {

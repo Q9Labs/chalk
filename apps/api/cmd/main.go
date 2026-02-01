@@ -48,25 +48,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	missingR2 := []string{}
-	if cfg.Storage.R2AccountID == "" {
-		missingR2 = append(missingR2, "R2_ACCOUNT_ID")
-	}
-	if cfg.Storage.R2BucketName == "" {
-		missingR2 = append(missingR2, "R2_BUCKET_NAME")
-	}
-	if cfg.Storage.R2AccessKeyID == "" {
-		missingR2 = append(missingR2, "R2_ACCESS_KEY_ID")
-	}
-	if cfg.Storage.R2SecretAccessKey == "" {
-		missingR2 = append(missingR2, "R2_SECRET_ACCESS_KEY")
-	}
-	if len(missingR2) > 0 {
-		slog.Warn("r2 storage not fully configured", "missing", missingR2)
-	} else {
-		slog.Info("r2 storage configuration detected")
-	}
-
 	slog.Info("starting server", "env", cfg.Server.Env)
 
 	dbPort := 5432
@@ -120,16 +101,17 @@ func main() {
 		Mock:      cfg.Cloudflare.Mock,
 	})
 
-	slog.Info("initialized Cloudflare RealtimeKit client", "mock", cfg.Cloudflare.Mock)
+	slog.Info("initialized Cloudflare RealtimeKit client")
 
 	if cfg.Cloudflare.Mock {
-		slog.Info("cloudflare webhook init skipped (mock mode)")
+		slog.Warn("cloudflare mock enabled; skipping webhook setup")
 	} else {
 		configured, err := cloudflare.InitCloudflareWebhook(ctx, cfClient)
 		if !configured && err != nil {
 			slog.Warn("cloudflare webhook is not configured or failed", "error", err)
+		} else {
+			slog.Info("cloudflare webhook configured")
 		}
-		slog.Info("cloudflare webhook configured")
 	}
 
 	var storageR2 storage.StorageClient

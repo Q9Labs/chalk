@@ -69,6 +69,10 @@ interface ChalkSessionContextValue {
 	endRoom: (roomId: string) => Promise<void>;
 	/** Remove a participant (host only) */
 	removeParticipant: (participantId: string) => Promise<void>;
+	/** Mute a participant (host only) */
+	muteParticipant: (participantId: string) => void;
+	/** Unmute a participant (host only) */
+	unmuteParticipant: (participantId: string) => void;
 	/** Whether connected to a room */
 	isConnected: boolean;
 	/** RealtimeKit meeting instance (for RTK provider) */
@@ -219,6 +223,20 @@ export function ChalkProvider({
 		[session],
 	);
 
+	const muteParticipant = useCallback(
+		(participantId: string) => {
+			session.muteParticipant(participantId);
+		},
+		[session],
+	);
+
+	const unmuteParticipant = useCallback(
+		(participantId: string) => {
+			session.unmuteParticipant(participantId);
+		},
+		[session],
+	);
+
 	const value = useMemo(
 		(): ChalkSessionContextValue => ({
 			session,
@@ -227,6 +245,8 @@ export function ChalkProvider({
 			createRoom,
 			endRoom,
 			removeParticipant,
+			muteParticipant,
+			unmuteParticipant,
 			isConnected,
 			rtkMeeting,
 		}),
@@ -237,6 +257,8 @@ export function ChalkProvider({
 			createRoom,
 			endRoom,
 			removeParticipant,
+			muteParticipant,
+			unmuteParticipant,
 			isConnected,
 			rtkMeeting,
 		],

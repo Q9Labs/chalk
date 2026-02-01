@@ -7,12 +7,15 @@ import {
   useParticipants,
   useInteractions,
   useLocalStream,
-  VideoView,
   ParticipantTile,
   AudioSession,
   type ReactionEmoji,
 } from '@q9labs/chalk-react-native';
 import type {Participant} from '@q9labs/chalk-core';
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
+const {Lineicons} = require('@lineiconshq/react-native-lineicons') as {Lineicons: any};
+const freeIcons = require('@lineiconshq/free-icons') as Record<string, any>;
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 
 interface CallScreenProps {
   roomId: string;
@@ -28,12 +31,16 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return result;
 }
 
-// Simple icon components using styled text
+// Icon components using LineIcons
 function MicIcon({muted}: {muted: boolean}) {
   return (
     <View style={iconStyles.container}>
-      <View style={[iconStyles.micBody, muted && iconStyles.muted]} />
-      <View style={[iconStyles.micStand, muted && iconStyles.muted]} />
+      <Lineicons
+        icon={freeIcons.Microphone1Stroke}
+        size={24}
+        color={muted ? 'rgba(255,255,255,0.5)' : '#fff'}
+        strokeWidth={1.5}
+      />
       {muted && <View style={iconStyles.slash} />}
     </View>
   );
@@ -42,8 +49,12 @@ function MicIcon({muted}: {muted: boolean}) {
 function CamIcon({off}: {off: boolean}) {
   return (
     <View style={iconStyles.container}>
-      <View style={[iconStyles.camBody, off && iconStyles.muted]} />
-      <View style={[iconStyles.camLens, off && iconStyles.muted]} />
+      <Lineicons
+        icon={freeIcons.CameraMovie1Stroke}
+        size={24}
+        color={off ? 'rgba(255,255,255,0.5)' : '#fff'}
+        strokeWidth={1.5}
+      />
       {off && <View style={iconStyles.slash} />}
     </View>
   );
@@ -51,24 +62,34 @@ function CamIcon({off}: {off: boolean}) {
 
 function HandIcon({raised}: {raised: boolean}) {
   return (
-    <Text style={[iconStyles.handText, raised && iconStyles.handRaised]}>
-      ✋
-    </Text>
+    <View style={iconStyles.container}>
+      <Lineicons
+        icon={freeIcons.HandStopStroke}
+        size={24}
+        color={raised ? '#FFD700' : '#fff'}
+        strokeWidth={1.5}
+      />
+    </View>
   );
 }
 
 function EndCallIcon() {
   return (
-    <View style={iconStyles.phoneContainer}>
-      <View style={iconStyles.phoneBody} />
+    <View style={[iconStyles.container, {transform: [{rotate: '135deg'}]}]}>
+      <Lineicons icon={freeIcons.PhoneStroke} size={24} color="#fff" strokeWidth={1.5} />
     </View>
   );
 }
 
 function SwitchCameraIcon() {
   return (
-    <View style={iconStyles.switchContainer}>
-      <Text style={iconStyles.switchText}>🔄</Text>
+    <View style={iconStyles.container}>
+      <Lineicons
+        icon={freeIcons.RefreshCircle1ClockwiseStroke}
+        size={20}
+        color="#fff"
+        strokeWidth={1.5}
+      />
     </View>
   );
 }
@@ -115,7 +136,7 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
   const {leaveRoom, rtcManager, joinRoom} = useChalk();
   const {room, isConnected, status} = useRoom();
   const {isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio} = useMedia();
-  const {participants, localParticipant, remoteParticipants} = useParticipants();
+  const {localParticipant, remoteParticipants} = useParticipants();
   const {isHandRaised, toggleHand, sendReaction, activeReactions} = useInteractions();
   const {stream, startStream, isActive} = useLocalStream();
   const [floatingReactions, setFloatingReactions] = useState<{id: string; emoji: string}[]>([]);
@@ -176,7 +197,7 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
     if (rtcManager) {
       try {
         await rtcManager.switchCamera();
-      } catch (e) {
+      } catch {
         // Ignore switch camera errors
       }
     }
@@ -372,72 +393,12 @@ const iconStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  micBody: {
-    width: 10,
-    height: 16,
-    backgroundColor: '#fff',
-    borderRadius: 5,
-  },
-  micStand: {
-    width: 14,
-    height: 3,
-    backgroundColor: '#fff',
-    borderRadius: 1.5,
-    marginTop: 2,
-  },
-  camBody: {
-    width: 20,
-    height: 14,
-    backgroundColor: '#fff',
-    borderRadius: 3,
-  },
-  camLens: {
-    position: 'absolute',
-    right: 0,
-    width: 8,
-    height: 8,
-    backgroundColor: '#fff',
-    borderRadius: 2,
-    transform: [{translateX: 4}],
-  },
-  muted: {
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
   slash: {
     position: 'absolute',
     width: 2,
     height: 32,
     backgroundColor: '#FF3B30',
     transform: [{rotate: '45deg'}],
-  },
-  handText: {
-    fontSize: 24,
-    opacity: 0.8,
-  },
-  handRaised: {
-    opacity: 1,
-  },
-  phoneContainer: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  phoneBody: {
-    width: 20,
-    height: 8,
-    backgroundColor: '#fff',
-    borderRadius: 4,
-    transform: [{rotate: '135deg'}],
-  },
-  switchContainer: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  switchText: {
-    fontSize: 16,
   },
 });
 
@@ -558,30 +519,6 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: 12,
   },
-  localVideoContainer: {
-    flex: 1,
-    width: '100%',
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#1a1a1a',
-  },
-  localVideo: {
-    flex: 1,
-  },
-  localVideoLabel: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  localVideoText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
   switchCameraButton: {
     position: 'absolute',
     top: 12,
@@ -592,32 +529,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  videoOff: {
-    flex: 1,
-    width: '100%',
-    borderRadius: 16,
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '600',
-  },
-  videoOffText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 14,
   },
   participantBadge: {
     position: 'absolute',

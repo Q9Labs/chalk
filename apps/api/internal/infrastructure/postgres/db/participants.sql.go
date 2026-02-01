@@ -28,6 +28,7 @@ func (q *Queries) CountActiveParticipantsByRoom(ctx context.Context, roomID uuid
 const createParticipant = `-- name: CreateParticipant :one
 
 INSERT INTO participants (
+    id,
     room_id,
     cloudflare_participant_id,
     external_user_id,
@@ -35,12 +36,13 @@ INSERT INTO participants (
     role,
     joined_at
 ) VALUES (
-    $1, $2, $3, $4, $5, NOW()
+    $1, $2, $3, $4, $5, $6, NOW()
 )
 RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata
 `
 
 type CreateParticipantParams struct {
+	ID                      uuid.UUID `db:"id" json:"id"`
 	RoomID                  uuid.UUID `db:"room_id" json:"room_id"`
 	CloudflareParticipantID string    `db:"cloudflare_participant_id" json:"cloudflare_participant_id"`
 	ExternalUserID          *string   `db:"external_user_id" json:"external_user_id"`
@@ -52,6 +54,7 @@ type CreateParticipantParams struct {
 // CRUD operations and participant management
 func (q *Queries) CreateParticipant(ctx context.Context, arg CreateParticipantParams) (Participant, error) {
 	row := q.db.QueryRow(ctx, createParticipant,
+		arg.ID,
 		arg.RoomID,
 		arg.CloudflareParticipantID,
 		arg.ExternalUserID,

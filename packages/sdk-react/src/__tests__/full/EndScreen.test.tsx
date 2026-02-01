@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'bun:test';
-import { render, fireEvent } from '@testing-library/react';
+import { render } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { EndScreen } from '../../components/full/EndScreen';
 
 describe('EndScreen', () => {
@@ -17,17 +18,18 @@ describe('EndScreen', () => {
     expect(getByText('15 participants')).toBeDefined();
   });
 
-  it('handles feedback submission', () => {
+  it('handles feedback submission', async () => {
     const onSubmitFeedback = vi.fn();
+    const user = userEvent.setup();
     const { getByLabelText, getByText, getByPlaceholderText } = render(
       <EndScreen {...defaultProps} onSubmitFeedback={onSubmitFeedback} />
     );
     
-    fireEvent.click(getByLabelText('Rate 5 stars'));
+    await user.click(getByLabelText('Rate 5 stars'));
     const commentArea = getByPlaceholderText('Any comments or issues?');
-    fireEvent.change(commentArea, { target: { value: 'Great class!' } });
+    await user.type(commentArea, 'Great class!');
     
-    fireEvent.click(getByText('Submit Feedback'));
+    await user.click(getByText('Submit Feedback'));
     expect(onSubmitFeedback).toHaveBeenCalledWith(5, 'Great class!');
     expect(getByText('Thank you for your feedback!')).toBeDefined();
   });
@@ -35,7 +37,7 @@ describe('EndScreen', () => {
   it('calls onRejoin when rejoin button clicked', () => {
     const onRejoin = vi.fn();
     const { getByText } = render(<EndScreen {...defaultProps} onRejoin={onRejoin} />);
-    fireEvent.click(getByText('Rejoin'));
+    getByText('Rejoin').click();
     expect(onRejoin).toHaveBeenCalledTimes(1);
   });
 });

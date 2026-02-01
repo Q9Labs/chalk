@@ -26,7 +26,7 @@ describe('StatusBadge', () => {
 
   it('applies pulse animation when pulse is true', () => {
     const { container } = render(<StatusBadge status="recording" pulse />);
-    expect(container.firstChild).toHaveClass('chalk-animate-pulse');
+    expect(container.firstChild).toHaveClass('animate-pulse');
   });
 
   it('applies custom size classes', () => {

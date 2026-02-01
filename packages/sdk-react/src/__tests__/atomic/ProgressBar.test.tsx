@@ -23,7 +23,7 @@ describe('ProgressBar', () => {
 
   it('applies variant colors', () => {
     const { getByRole } = render(<ProgressBar value={50} variant="success" />);
-    expect(getByRole('progressbar')).toHaveClass('bg-[var(--chalk-success)]');
+    expect(getByRole('progressbar')).toHaveClass('bg-success');
   });
 
   it('clamps values between 0 and 100%', () => {

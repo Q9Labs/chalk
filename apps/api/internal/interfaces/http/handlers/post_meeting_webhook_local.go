@@ -59,6 +59,7 @@ func (h *LocalPostMeetingWebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 	evt["payload_size"] = len(body)
+	evt["raw_body"] = string(body)
 
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 

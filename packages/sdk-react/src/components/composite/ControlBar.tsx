@@ -101,6 +101,7 @@ export const ControlBar = React.memo(
 		unreadChatCount = 0,
 		showLabels = false,
 		variant = "floating",
+		buttons,
 
 		onToggleMute,
 		onToggleVideo,
@@ -119,6 +120,40 @@ export const ControlBar = React.memo(
 
 		className,
 	}: ControlBarProps) => {
+		const defaultButtons: ControlBarButton[] = [
+			"mic",
+			"video",
+			"screenshare",
+			"whiteboard",
+			"handraise",
+			"leave",
+			"participants",
+			"chat",
+			"transcription",
+			"thumbsup",
+		];
+
+		const buttonsToRender = buttons ?? defaultButtons;
+		const showLeave = buttonsToRender.includes("leave");
+		const mediaButtons = buttonsToRender.filter((b) =>
+			b === "mic" ||
+			b === "video" ||
+			b === "screenshare" ||
+			b === "record" ||
+			b === "whiteboard" ||
+			b === "handraise"
+		);
+		const interactionButtons = buttonsToRender.filter((b) =>
+			b === "participants" ||
+			b === "chat" ||
+			b === "transcription" ||
+			b === "thumbsup" ||
+			b === "reactions" ||
+			b === "settings" ||
+			b === "more" ||
+			b === "info"
+		);
+
 		const renderButton = (type: ControlBarButton) => {
 			switch (type) {
 				case "mic":
@@ -474,29 +509,24 @@ export const ControlBar = React.memo(
 
 				{/* Middle: Media controls */}
 				<div className="flex items-center gap-3">
-					{renderButton("mic")}
-					{renderButton("video")}
-					{renderButton("screenshare")}
-					{renderButton("whiteboard")}
-					{renderButton("handraise")}
-					<div className="ml-2">
-						<ControlButton
-							key="leave"
-							icon={<CallEnd01Icon size={20} />}
-							label="Leave"
-							onClick={onLeave}
-							danger
-							data-tour="controls-leave"
-						/>
-					</div>
+					{mediaButtons.map(renderButton)}
+					{showLeave && (
+						<div className="ml-2">
+							<ControlButton
+								key="leave"
+								icon={<CallEnd01Icon size={20} />}
+								label="Leave"
+								onClick={onLeave}
+								danger
+								data-tour="controls-leave"
+							/>
+						</div>
+					)}
 				</div>
 
 				{/* Right: Interaction controls */}
 				<div className="flex items-center gap-4">
-					{renderButton("participants")}
-					{renderButton("chat")}
-					{renderButton("transcription")}
-					{renderButton("thumbsup")}
+					{interactionButtons.map(renderButton)}
 				</div>
 			</div>
 		);

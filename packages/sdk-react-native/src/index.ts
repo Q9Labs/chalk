@@ -62,12 +62,32 @@ export type {
 } from "@q9labs/chalk-core";
 // Re-export error codes (value export also exports the type)
 export { ChalkErrorCode } from "@q9labs/chalk-core";
+// Logger
+export { createLogger, logger, type ChalkLogger } from "./logger";
 // Provider and hooks
 export {
 	ChalkProvider,
 	type ChalkProviderProps,
 	useChalk,
 } from "./ChalkProvider";
+// Theme
+export { CHALK_THEME, type ChalkTheme } from "./theme";
+// Icons (LineIcons)
+export {
+	CameraIcon,
+	ChatIcon,
+	CheckIcon,
+	CloseIcon,
+	HandRaisedIcon,
+	MicrophoneIcon,
+	MutedIcon,
+	PhoneIcon,
+	ScreenShareIcon,
+	SendIcon,
+	SpeakingIcon,
+	SwitchCameraIcon,
+	VideoIcon,
+} from "./icons";
 // Components
 export {
 	AudioSession,
@@ -75,6 +95,7 @@ export {
 	ChatPanel,
 	ControlBar,
 	DeviceSelector,
+	EndScreen,
 	MeetingRoom,
 	ParticipantTile,
 	PreJoinLobby,

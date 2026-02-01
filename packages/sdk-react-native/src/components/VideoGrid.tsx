@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 import { View, StyleSheet, useWindowDimensions, type ViewStyle } from "react-native";
 import type { Participant } from "@q9labs/chalk-core";
+import { CHALK_THEME } from "../theme";
 import { ParticipantTile } from "./ParticipantTile";
 
 interface VideoGridProps {
@@ -13,7 +14,7 @@ interface VideoGridProps {
 	participants: Participant[];
 	/** Container style */
 	style?: ViewStyle;
-	/** Gap between tiles in pixels */
+	/** Gap between tiles in pixels (default: CHALK_THEME.spacing.sm) */
 	gap?: number;
 }
 
@@ -31,7 +32,7 @@ function getGridLayout(count: number, screenWidth: number, screenHeight: number)
 	return { cols: 4, rows: Math.ceil(count / 4) };
 }
 
-export function VideoGrid({ participants, style, gap = 8 }: VideoGridProps) {
+export function VideoGrid({ participants, style, gap = CHALK_THEME.spacing.sm }: VideoGridProps) {
 	const { width, height } = useWindowDimensions();
 
 	const layout = useMemo(

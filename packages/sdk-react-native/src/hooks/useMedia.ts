@@ -6,6 +6,7 @@
 import type { ScreenShareOptions } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useState } from "react";
 import { useChalk } from "../ChalkProvider";
+import { logger } from "../logger";
 
 export interface UseMediaResult {
 	/** Whether local video is enabled */
@@ -48,76 +49,223 @@ export function useMedia(): UseMediaResult {
 	}, [rtkClient?.self]);
 
 	const toggleVideo = useCallback(async () => {
-		console.log("[useMedia] toggleVideo called", {
-			hasRtkClient: !!rtkClient,
-			hasRtkSelf: !!rtkClient?.self,
-			hasRtcManager: !!rtcManager,
-			currentState: isVideoEnabled,
+		const previousState = isVideoEnabled;
+		const fallbackPath = rtkClient?.self
+			? "rtk"
+			: rtcManager
+				? "rtcManager"
+				: "demo";
+
+		logger.info({
+			event: "media.video.toggle.start",
+			previousState,
+			fallbackPath,
 		});
-		if (rtkClient?.self) {
-			// Use RTK for video toggle
-			if (rtkClient.self.videoEnabled) {
-				await rtkClient.self.disableVideo();
-				setIsVideoEnabled(false);
+
+		try {
+			if (rtkClient?.self) {
+				// Use RTK for video toggle
+				if (rtkClient.self.videoEnabled) {
+					await rtkClient.self.disableVideo();
+					setIsVideoEnabled(false);
+				} else {
+					await rtkClient.self.enableVideo();
+					setIsVideoEnabled(true);
+				}
+				setLocalVideoTrack(rtkClient.self.videoTrack);
+
+				logger.info({
+					event: "media.video.toggle",
+					enabled: !previousState,
+					previousState,
+					fallbackPath: "rtk",
+					outcome: "success",
+				});
+			} else if (rtcManager) {
+				// Fallback to RTCManager
+				const enabled = await rtcManager.toggleVideo();
+				setIsVideoEnabled(enabled);
+
+				logger.info({
+					event: "media.video.toggle",
+					enabled,
+					previousState,
+					fallbackPath: "rtcManager",
+					outcome: "success",
+				});
 			} else {
-				await rtkClient.self.enableVideo();
-				setIsVideoEnabled(true);
+				// Demo mode - toggle local state
+				const newState = !previousState;
+				setIsVideoEnabled(newState);
+
+				logger.info({
+					event: "media.video.toggle",
+					enabled: newState,
+					previousState,
+					fallbackPath: "demo",
+					outcome: "success",
+				});
 			}
-			setLocalVideoTrack(rtkClient.self.videoTrack);
-		} else if (rtcManager) {
-			// Fallback to RTCManager
-			console.log("[useMedia] Using RTCManager fallback for toggleVideo");
-			const enabled = await rtcManager.toggleVideo();
-			console.log("[useMedia] RTCManager toggleVideo returned:", enabled);
-			setIsVideoEnabled(enabled);
-		} else {
-			// Demo mode - toggle local state
-			console.log("[useMedia] Using demo mode for toggleVideo");
-			setIsVideoEnabled((prev) => !prev);
+		} catch (err) {
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "media.video.toggle.error",
+				previousState,
+				fallbackPath,
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
+			throw error;
 		}
 	}, [rtkClient, rtcManager, isVideoEnabled]);
 
 	const toggleAudio = useCallback(async () => {
-		if (rtkClient?.self) {
-			// Use RTK for audio toggle
-			if (rtkClient.self.audioEnabled) {
-				await rtkClient.self.disableAudio();
-				setIsAudioEnabled(false);
+		const previousState = isAudioEnabled;
+		const fallbackPath = rtkClient?.self
+			? "rtk"
+			: rtcManager
+				? "rtcManager"
+				: "demo";
+
+		logger.info({
+			event: "media.audio.toggle.start",
+			previousState,
+			fallbackPath,
+		});
+
+		try {
+			if (rtkClient?.self) {
+				// Use RTK for audio toggle
+				if (rtkClient.self.audioEnabled) {
+					await rtkClient.self.disableAudio();
+					setIsAudioEnabled(false);
+				} else {
+					await rtkClient.self.enableAudio();
+					setIsAudioEnabled(true);
+				}
+				setLocalAudioTrack(rtkClient.self.audioTrack);
+
+				logger.info({
+					event: "media.audio.toggle",
+					enabled: !previousState,
+					previousState,
+					fallbackPath: "rtk",
+					outcome: "success",
+				});
+			} else if (rtcManager) {
+				// Fallback to RTCManager
+				const enabled = await rtcManager.toggleAudio();
+				setIsAudioEnabled(enabled);
+
+				logger.info({
+					event: "media.audio.toggle",
+					enabled,
+					previousState,
+					fallbackPath: "rtcManager",
+					outcome: "success",
+				});
 			} else {
-				await rtkClient.self.enableAudio();
-				setIsAudioEnabled(true);
+				// Demo mode - toggle local state
+				const newState = !previousState;
+				setIsAudioEnabled(newState);
+
+				logger.info({
+					event: "media.audio.toggle",
+					enabled: newState,
+					previousState,
+					fallbackPath: "demo",
+					outcome: "success",
+				});
 			}
-			setLocalAudioTrack(rtkClient.self.audioTrack);
-		} else if (rtcManager) {
-			// Fallback to RTCManager
-			const enabled = await rtcManager.toggleAudio();
-			setIsAudioEnabled(enabled);
-		} else {
-			// Demo mode - toggle local state
-			setIsAudioEnabled((prev) => !prev);
+		} catch (err) {
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "media.audio.toggle.error",
+				previousState,
+				fallbackPath,
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
+			throw error;
 		}
-	}, [rtkClient, rtcManager]);
+	}, [rtkClient, rtcManager, isAudioEnabled]);
 
 	const startScreenShare = useCallback(
 		async (_options?: ScreenShareOptions) => {
-			if (rtkClient?.self) {
-				await rtkClient.self.enableScreenShare();
-				setIsScreenSharing(true);
-			} else if (rtcManager) {
-				const success = await rtcManager.startScreenShare();
-				setIsScreenSharing(success);
+			const fallbackPath = rtkClient?.self ? "rtk" : rtcManager ? "rtcManager" : "none";
+
+			logger.info({
+				event: "media.screenshare.start",
+				fallbackPath,
+			});
+
+			try {
+				if (rtkClient?.self) {
+					await rtkClient.self.enableScreenShare();
+					setIsScreenSharing(true);
+
+					logger.info({
+						event: "media.screenshare.started",
+						fallbackPath: "rtk",
+						outcome: "success",
+					});
+				} else if (rtcManager) {
+					const success = await rtcManager.startScreenShare();
+					setIsScreenSharing(success);
+
+					logger.info({
+						event: "media.screenshare.started",
+						fallbackPath: "rtcManager",
+						outcome: success ? "success" : "failed",
+					});
+				} else {
+					logger.info({
+						event: "media.screenshare.started",
+						fallbackPath: "none",
+						outcome: "skipped",
+						reason: "no_client_available",
+					});
+				}
+			} catch (err) {
+				const error = err instanceof Error ? err : new Error(String(err));
+				logger.error({
+					event: "media.screenshare.error",
+					fallbackPath,
+					outcome: "error",
+					error: { message: error.message, type: error.name },
+				});
+				throw error;
 			}
 		},
 		[rtkClient, rtcManager],
 	);
 
 	const stopScreenShare = useCallback(() => {
+		const fallbackPath = rtkClient?.self ? "rtk" : rtcManager ? "rtcManager" : "none";
+
+		logger.info({
+			event: "media.screenshare.stop",
+			fallbackPath,
+		});
+
 		if (rtkClient?.self) {
 			rtkClient.self.disableScreenShare();
 			setIsScreenSharing(false);
+
+			logger.info({
+				event: "media.screenshare.stopped",
+				fallbackPath: "rtk",
+				outcome: "success",
+			});
 		} else if (rtcManager) {
 			rtcManager.stopScreenShare();
 			setIsScreenSharing(false);
+
+			logger.info({
+				event: "media.screenshare.stopped",
+				fallbackPath: "rtcManager",
+				outcome: "success",
+			});
 		}
 	}, [rtkClient, rtcManager]);
 

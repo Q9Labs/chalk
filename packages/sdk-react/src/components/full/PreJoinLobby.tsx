@@ -59,7 +59,7 @@ export interface PreJoinLobbyProps {
 }
 
 function PreJoinLobbyBase({
-	roomName: _roomName,
+	roomName,
 	userName = "Guest",
 	onJoin,
 	videoTrack,
@@ -458,6 +458,14 @@ function PreJoinLobbyBase({
 							className="h-8 w-auto"
 							draggable={false}
 						/>
+						{roomName && (
+							<>
+								<div className="w-px h-6 bg-border/50 mx-1" />
+								<span className="text-sm font-medium text-(--muted-foreground) truncate max-w-[200px]">
+									{roomName}
+								</span>
+							</>
+						)}
 					</div>
 
 					{/* Theme Toggle */}

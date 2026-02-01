@@ -80,6 +80,10 @@ export {
 	useWhatsNew,
 } from "./ui/useWhatsNew";
 export {
+	type UseParticipantVolumeReturn,
+	useParticipantVolume,
+} from "./ui/useParticipantVolume";
+export {
 	type AnnouncementPoliteness,
 	type UseAnnouncerOptions,
 	type UseAnnouncerReturn,

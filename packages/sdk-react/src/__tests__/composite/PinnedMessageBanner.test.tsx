@@ -27,10 +27,12 @@ describe('PinnedMessageBanner', () => {
 
   it('calls onJumpToMessage when content clicked', () => {
     const onJumpToMessage = vi.fn();
-    const { getByRole } = render(
+    const { getByText } = render(
       <PinnedMessageBanner message={message} onJumpToMessage={onJumpToMessage} />
     );
-    fireEvent.click(getByRole('button'));
+    const clickable = getByText('Pinned Message').closest('[role="button"]');
+    expect(clickable).not.toBeNull();
+    fireEvent.click(clickable as HTMLElement);
     expect(onJumpToMessage).toHaveBeenCalledTimes(1);
   });
 });

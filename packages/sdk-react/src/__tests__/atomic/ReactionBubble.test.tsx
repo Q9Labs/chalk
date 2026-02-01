@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'bun:test';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { ReactionBubble } from '../../components/atomic/ReactionBubble';
 
 describe('ReactionBubble', () => {
@@ -10,19 +10,29 @@ describe('ReactionBubble', () => {
 
   it('calls onComplete after duration', async () => {
     const onComplete = vi.fn();
+    vi.useFakeTimers();
+
     render(<ReactionBubble emoji="🔥" onComplete={onComplete} duration={100} />);
-    
-    await new Promise(r => setTimeout(r, 150));
-    
+
+    await act(async () => {
+      vi.advanceTimersByTime(150);
+    });
+
     expect(onComplete).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it('hides after duration', async () => {
+    vi.useFakeTimers();
+
     const { queryByText } = render(<ReactionBubble emoji="🔥" duration={100} />);
     expect(queryByText('🔥')).toBeDefined();
-    
-    await new Promise(r => setTimeout(r, 150));
-    
+
+    await act(async () => {
+      vi.advanceTimersByTime(150);
+    });
+
     expect(queryByText('🔥')).toBeNull();
+    vi.useRealTimers();
   });
 });

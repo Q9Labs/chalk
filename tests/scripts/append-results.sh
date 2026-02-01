@@ -5,11 +5,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Usage: ./append-results.sh <scenario> <k6-summary-json> [k6-exit-code] [k6-raw-jsonl]
+# Usage: ./append-results.sh <scenario> <k6-json-output> [k6-exit-code]
 SCENARIO=$1
 K6_OUTPUT=$2
 K6_EXIT_CODE=${3:-}
-K6_RAW_OUTPUT=${4:-}
 RESULTS_FILE="$PROJECT_ROOT/tests/results/STRESS_TEST_RESULTS.md"
 
 # Ensure results directory exists
@@ -34,7 +33,7 @@ if [ ! -f "$RESULTS_FILE" ]; then
 HEADER
 fi
 
-# Extract metrics from k6 summary JSON output
+# Extract metrics from k6 JSON output
 TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 HTTP_REQS=$(jq -r '.metrics.http_reqs.count // .metrics.http_reqs.values.count // 0' "$K6_OUTPUT")
 HTTP_FAILED=$(jq -r '.metrics.http_req_failed.value // .metrics.http_req_failed.rate // .metrics.http_req_failed.values.rate // 0' "$K6_OUTPUT")
@@ -81,11 +80,11 @@ cat >> "$RESULTS_FILE" << EOF
 | Metric | Value | Threshold |
 |--------|-------|-----------|
 | Total Requests | $HTTP_REQS | - |
-| Error Rate | $(printf "%.4f" $HTTP_FAILED) | - |
-| p95 Latency | $(printf "%.0f" $HTTP_P95) ms | - |
-| p99 Latency | $(printf "%.0f" $HTTP_P99) ms | - |
+| Error Rate | $(printf "%.4f" $HTTP_FAILED) | < 0.01 |
+| p95 Latency | $(printf "%.0f" $HTTP_P95) ms | < 2000 ms |
+| p99 Latency | $(printf "%.0f" $HTTP_P99) ms | < 5000 ms |
 | Checks Passed | $CHECKS_PASSED | - |
-| Checks Failed | $CHECKS_FAILED | - |
+| Checks Failed | $CHECKS_FAILED | 0 |
 | Rooms Created | $ROOMS_CREATED | - |
 | Participant Joins | $PARTICIPANT_JOINS | - |
 | Participants Joined | $PARTICIPANTS_JOINED | - |
@@ -99,11 +98,7 @@ cat >> "$RESULTS_FILE" << EOF
 <summary>Raw Output</summary>
 
 \`\`\`
-$(if [ -n "$K6_RAW_OUTPUT" ] && [ -f "$K6_RAW_OUTPUT" ]; then
-  cat "$K6_RAW_OUTPUT" | head -100
-else
-  cat "$K6_OUTPUT" | head -100
-fi)
+$(cat "$K6_OUTPUT" | head -100)
 \`\`\`
 
 </details>

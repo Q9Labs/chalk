@@ -16,6 +16,8 @@ import {
 	type ViewStyle,
 } from "react-native";
 import type { ChatMessage } from "@q9labs/chalk-core";
+import { CHALK_THEME } from "../../theme";
+import { SendIcon } from "../../icons";
 
 interface ChatPanelProps {
 	/** Array of chat messages to display */
@@ -62,15 +64,6 @@ function MessageBubble({
 	);
 }
 
-function SendIcon() {
-	return (
-		<View style={styles.sendIconContainer}>
-			{/* Arrow pointing right */}
-			<View style={styles.sendArrow} />
-		</View>
-	);
-}
-
 export function ChatPanel({
 	messages,
 	onSend,
@@ -109,6 +102,8 @@ export function ChatPanel({
 
 	const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
 
+	const isDisabled = inputText.trim().length === 0;
+
 	return (
 		<KeyboardAvoidingView
 			style={[styles.container, style]}
@@ -135,7 +130,7 @@ export function ChatPanel({
 					value={inputText}
 					onChangeText={setInputText}
 					placeholder="Type a message..."
-					placeholderTextColor="#9ca3af"
+					placeholderTextColor={CHALK_THEME.colors.text.muted}
 					returnKeyType="send"
 					onSubmitEditing={handleSend}
 					blurOnSubmit={false}
@@ -143,13 +138,13 @@ export function ChatPanel({
 				<TouchableOpacity
 					style={[
 						styles.sendButton,
-						inputText.trim().length === 0 && styles.sendButtonDisabled,
+						isDisabled && styles.sendButtonDisabled,
 					]}
 					onPress={handleSend}
-					disabled={inputText.trim().length === 0}
+					disabled={isDisabled}
 					activeOpacity={0.7}
 				>
-					<SendIcon />
+					<SendIcon size={20} color={CHALK_THEME.colors.text.inverse} />
 				</TouchableOpacity>
 			</View>
 		</KeyboardAvoidingView>
@@ -159,52 +154,52 @@ export function ChatPanel({
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: "#ffffff",
+		backgroundColor: CHALK_THEME.colors.background,
 	},
 	messageList: {
-		paddingHorizontal: 16,
-		paddingVertical: 12,
+		paddingHorizontal: CHALK_THEME.spacing.md,
+		paddingVertical: CHALK_THEME.spacing.md,
 		flexGrow: 1,
 	},
 	messageBubble: {
 		maxWidth: "80%",
-		paddingHorizontal: 12,
-		paddingVertical: 8,
-		borderRadius: 16,
-		marginBottom: 8,
+		paddingHorizontal: CHALK_THEME.spacing.md,
+		paddingVertical: CHALK_THEME.spacing.sm,
+		borderRadius: CHALK_THEME.borderRadius.lg,
+		marginBottom: CHALK_THEME.spacing.sm,
 	},
 	localBubble: {
 		alignSelf: "flex-end",
-		backgroundColor: "#3b82f6", // blue-500
-		borderBottomRightRadius: 4,
+		backgroundColor: CHALK_THEME.colors.primary,
+		borderBottomRightRadius: CHALK_THEME.borderRadius.sm,
 	},
 	remoteBubble: {
 		alignSelf: "flex-start",
-		backgroundColor: "#f3f4f6", // gray-100
-		borderBottomLeftRadius: 4,
+		backgroundColor: CHALK_THEME.colors.surface,
+		borderBottomLeftRadius: CHALK_THEME.borderRadius.sm,
 	},
 	senderName: {
-		fontSize: 12,
+		fontSize: CHALK_THEME.typography.sizes.xs,
 		fontWeight: "600",
-		color: "#6b7280", // gray-500
+		color: CHALK_THEME.colors.text.secondary,
 		marginBottom: 2,
 	},
 	messageText: {
 		fontSize: 15,
-		color: "#1f2937", // gray-800
+		color: CHALK_THEME.colors.text.primary,
 		lineHeight: 20,
 	},
 	localMessageText: {
-		color: "#ffffff",
+		color: CHALK_THEME.colors.text.inverse,
 	},
 	timestamp: {
 		fontSize: 10,
-		color: "#9ca3af", // gray-400
+		color: CHALK_THEME.colors.text.muted,
 		marginTop: 4,
 		alignSelf: "flex-end",
 	},
 	localTimestamp: {
-		color: "rgba(255, 255, 255, 0.7)",
+		color: "rgba(15, 23, 42, 0.6)", // Darker text on light primary
 	},
 	emptyContainer: {
 		flex: 1,
@@ -213,56 +208,40 @@ const styles = StyleSheet.create({
 		paddingVertical: 40,
 	},
 	emptyText: {
-		fontSize: 14,
-		color: "#9ca3af",
+		fontSize: CHALK_THEME.typography.sizes.sm,
+		color: CHALK_THEME.colors.text.muted,
 	},
 	inputContainer: {
 		flexDirection: "row",
 		alignItems: "center",
-		paddingHorizontal: 12,
-		paddingVertical: 8,
+		paddingHorizontal: CHALK_THEME.spacing.md,
+		paddingVertical: CHALK_THEME.spacing.sm,
 		borderTopWidth: 1,
-		borderTopColor: "#e5e7eb", // gray-200
-		backgroundColor: "#ffffff",
+		borderTopColor: CHALK_THEME.colors.ui.border,
+		backgroundColor: CHALK_THEME.colors.background,
 	},
 	input: {
 		flex: 1,
 		minHeight: 40,
 		maxHeight: 100,
-		paddingHorizontal: 16,
-		paddingVertical: 8,
-		backgroundColor: "#f3f4f6", // gray-100
-		borderRadius: 20,
+		paddingHorizontal: CHALK_THEME.spacing.md,
+		paddingVertical: CHALK_THEME.spacing.sm,
+		backgroundColor: CHALK_THEME.colors.ui.pillBg,
+		borderRadius: CHALK_THEME.borderRadius.xl,
 		fontSize: 15,
-		color: "#1f2937",
+		color: CHALK_THEME.colors.text.primary,
 	},
 	sendButton: {
 		width: 40,
 		height: 40,
 		borderRadius: 20,
-		backgroundColor: "#3b82f6", // blue-500
+		backgroundColor: CHALK_THEME.colors.primary,
 		justifyContent: "center",
 		alignItems: "center",
-		marginLeft: 8,
+		marginLeft: CHALK_THEME.spacing.sm,
 	},
 	sendButtonDisabled: {
-		backgroundColor: "#d1d5db", // gray-300
-	},
-	sendIconContainer: {
-		width: 20,
-		height: 20,
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	sendArrow: {
-		width: 0,
-		height: 0,
-		borderTopWidth: 6,
-		borderTopColor: "transparent",
-		borderBottomWidth: 6,
-		borderBottomColor: "transparent",
-		borderLeftWidth: 10,
-		borderLeftColor: "#ffffff",
-		marginLeft: 2,
+		backgroundColor: CHALK_THEME.colors.ui.pillBg,
+		opacity: 0.5,
 	},
 });

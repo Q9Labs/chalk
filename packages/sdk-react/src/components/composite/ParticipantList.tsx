@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Cancel01Icon, MoreVerticalIcon, Search01Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Crown01Icon, ArrowDown01Icon, ArrowUp01Icon, Shield01Icon, UserGroupIcon } from '../../utils/icons';
+import { Cancel01Icon, MoreVerticalIcon, Search01Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Crown01Icon, Shield01Icon, UserGroupIcon } from '../../utils/icons';
 import {
   Avatar,
   AudioIndicator,
   HandRaiseIndicator,
   IconButton,
   Input,
-  Badge
+  Badge,
+  VolumeSlider
 } from '../atomic';
 import { Button } from '../ui';
 import { cn } from '../../utils/cn';
@@ -33,6 +34,10 @@ export interface ParticipantListProps {
   canManageParticipants?: boolean;
   searchable?: boolean;
   onClose?: () => void;
+  /** Per-participant volume overrides (0-100). Only contains adjusted participants. */
+  participantVolumes?: ReadonlyMap<string, number>;
+  /** Called when a participant's volume is changed via the slider. */
+  onParticipantVolumeChange?: (id: string, volume: number) => void;
   className?: string;
   variant?: 'default' | 'sidebar' | 'mobile';
   title?: string;
@@ -45,6 +50,8 @@ export const ParticipantList = React.memo(({
   onMakeHost,
   onMakeCoHost,
   onAddPeople,
+  participantVolumes,
+  onParticipantVolumeChange,
   canManageParticipants = false,
   searchable = true,
   onClose,
@@ -55,7 +62,6 @@ export const ParticipantList = React.memo(({
   const prefersReducedMotion = usePrefersReducedMotion();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(true);
 
   const filteredParticipants = useMemo(() => {
     let sorted = [...participants].sort((a, b) => {
@@ -130,6 +136,30 @@ export const ParticipantList = React.memo(({
               </span>
             )}
           </div>
+          {/* Per-participant volume slider for remote participants */}
+          {!participant.isLocal && participantVolumes && onParticipantVolumeChange && (
+            <div className={cn(
+              "transition-opacity",
+              (participantVolumes.get(participant.id) ?? 100) < 100
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100"
+            )}>
+              <VolumeSlider
+                value={participantVolumes.get(participant.id) ?? 100}
+                onChange={(vol) => onParticipantVolumeChange(participant.id, vol)}
+                muted={(participantVolumes.get(participant.id) ?? 100) === 0}
+                onMuteToggle={() => {
+                  const currentVolume = participantVolumes.get(participant.id) ?? 100;
+                  onParticipantVolumeChange(
+                    participant.id,
+                    currentVolume === 0 ? 100 : 0
+                  );
+                }}
+                size="sm"
+                className="w-24"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -313,72 +343,65 @@ export const ParticipantList = React.memo(({
         aria-label="Participants list"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-5">
-          <h2 className="text-2xl font-bold text-card-foreground tracking-tight">{title === 'Participants' ? 'People' : title}</h2>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors p-1"
-              aria-label="Close"
-            >
-              <Cancel01Icon className="w-5 h-5" />
-            </button>
-          )}
+        <div className="flex items-center justify-between px-6 py-5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-card-foreground tracking-tight">{title === 'Participants' ? 'People' : title}</h2>
+            <span className="text-muted-foreground text-sm font-medium">
+              ({participants.length})
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onAddPeople && (
+              <Button
+                onClick={onAddPeople}
+                className="h-8 px-3 text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary border-0 gap-1.5 rounded-md transition-colors"
+              >
+                <UserGroupIcon className="w-4 h-4" />
+                <span>Add</span>
+              </Button>
+            )}
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted/50"
+                aria-label="Close"
+              >
+                <Cancel01Icon className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
-          {onAddPeople && (
-            <Button
-              onClick={onAddPeople}
-              className="w-full bg-[#1bb6a6] hover:bg-[#0d9488] text-white rounded-full py-3 px-4 mb-6 shadow-lg shadow-[#1bb6a6]/25"
-            >
-              <UserGroupIcon className="w-4 h-4" />
-              <span>Add people</span>
-            </Button>
-          )}
+        {searchable && (
+          <div className="px-6 pb-2">
+            <Input
+              placeholder="Search for people..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              icon={<Search01Icon className="w-4 h-4 text-muted-foreground" />}
+              iconPosition="left"
+              className="w-full bg-muted/30 border-transparent focus:bg-background focus:border-primary/20 transition-all placeholder:text-muted-foreground/70"
+            />
+          </div>
+        )}
 
+        <div className="flex-1 overflow-y-auto px-4 pb-6 mt-2">
           {/* Section Label */}
-          <div className="mb-3 px-1">
+          <div className="mb-2 px-3">
             <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
-              IN THE MEETING
+              In Meeting
             </p>
           </div>
 
-          {/* Participants Container with Glass Effect */}
-          <div className="rounded-2xl overflow-hidden bg-muted/30 backdrop-blur-sm border border-border/30">
-            {/* Collapsible Header */}
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full px-4 py-3.5 flex items-center justify-between group focus:outline-none cursor-pointer hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-card-foreground font-semibold text-sm">Participants</span>
+          {/* Participants List */}
+          <div className="space-y-0.5">
+            {filteredParticipants.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                No participants found
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-sm font-medium">
-                  {participants.length}
-                </span>
-                {isExpanded ? (
-                  <ArrowUp01Icon className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <ArrowDown01Icon className="w-4 h-4 text-muted-foreground" />
-                )}
-              </div>
-            </button>
-
-            {/* Participants List */}
-            {isExpanded && (
-              <div className="px-3 pb-3">
-                {filteredParticipants.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-muted-foreground">
-                    No participants found
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {filteredParticipants.map(renderParticipantRow)}
-                  </div>
-                )}
-              </div>
+            ) : (
+              filteredParticipants.map(renderParticipantRow)
             )}
           </div>
         </div>

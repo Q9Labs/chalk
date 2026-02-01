@@ -26,6 +26,6 @@ describe('AudioIndicator', () => {
 
   it('applies success color when level is high', () => {
     const { container } = render(<AudioIndicator variant="dot" level={50} />);
-    expect(container.firstChild).toHaveClass('bg-[var(--chalk-success)]');
+    expect(container.firstChild).toHaveClass('bg-success');
   });
 });

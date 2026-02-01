@@ -121,7 +121,7 @@ export interface ChalkClientConfig {
 
 	/**
 	 * API base URL
-	 * @default 'https://api.chalk.dev'
+	 * @default 'https://chalk-api.q9labs.ai'
 	 */
 	apiUrl?: string;
 
@@ -483,6 +483,8 @@ export const ChalkErrorCode = {
 	DEVICE_NOT_FOUND: "DEVICE_NOT_FOUND",
 	SCREEN_SHARE_ERROR: "SCREEN_SHARE_ERROR",
 	SCREEN_SHARE_CANCELLED: "SCREEN_SHARE_CANCELLED",
+	OVERCONSTRAINED: "OVERCONSTRAINED",
+	SCREEN_SHARE_FAILED: "SCREEN_SHARE_FAILED",
 
 	// Recording errors
 	RECORDING_FAILED: "RECORDING_FAILED",

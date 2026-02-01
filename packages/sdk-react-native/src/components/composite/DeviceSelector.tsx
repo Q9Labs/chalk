@@ -13,6 +13,8 @@ import {
 	type ViewStyle,
 } from "react-native";
 import type { MediaDevice } from "@q9labs/chalk-core";
+import { CHALK_THEME } from "../../theme";
+import { CheckIcon, CloseIcon } from "../../icons";
 
 interface DeviceSelectorProps {
 	/** Whether the modal is visible */
@@ -29,16 +31,6 @@ interface DeviceSelectorProps {
 	type: "video" | "audio";
 	/** Additional container styles */
 	style?: ViewStyle;
-}
-
-function CheckIcon() {
-	return (
-		<View style={styles.checkIcon}>
-			{/* Checkmark using two rotated lines */}
-			<View style={styles.checkLong} />
-			<View style={styles.checkShort} />
-		</View>
-	);
 }
 
 function DeviceRow({
@@ -62,7 +54,9 @@ function DeviceRow({
 			>
 				{device.label || `Device ${device.deviceId.slice(0, 8)}`}
 			</Text>
-			{isSelected && <CheckIcon />}
+			{isSelected && (
+				<CheckIcon size={18} color={CHALK_THEME.colors.primary} />
+			)}
 		</TouchableOpacity>
 	);
 }
@@ -121,10 +115,7 @@ export function DeviceSelector({
 								onPress={onClose}
 								hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 							>
-								<View style={styles.closeX}>
-									<View style={styles.closeLine1} />
-									<View style={styles.closeLine2} />
-								</View>
+								<CloseIcon size={16} color={CHALK_THEME.colors.text.muted} />
 							</TouchableOpacity>
 						</View>
 
@@ -152,58 +143,40 @@ export function DeviceSelector({
 const styles = StyleSheet.create({
 	overlay: {
 		flex: 1,
-		backgroundColor: "rgba(0, 0, 0, 0.5)",
+		backgroundColor: CHALK_THEME.colors.ui.overlay,
 		justifyContent: "center",
 		alignItems: "center",
-		padding: 24,
+		padding: CHALK_THEME.spacing.lg,
 	},
 	container: {
-		backgroundColor: "#ffffff",
-		borderRadius: 16,
+		backgroundColor: CHALK_THEME.colors.background,
+		borderRadius: CHALK_THEME.borderRadius.lg,
 		width: "100%",
 		maxWidth: 400,
 		maxHeight: "80%",
 		overflow: "hidden",
+		borderWidth: 1,
+		borderColor: CHALK_THEME.colors.ui.border,
 	},
 	header: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
-		paddingHorizontal: 20,
-		paddingVertical: 16,
+		paddingHorizontal: CHALK_THEME.spacing.lg,
+		paddingVertical: CHALK_THEME.spacing.md,
 		borderBottomWidth: 1,
-		borderBottomColor: "#e5e7eb", // gray-200
+		borderBottomColor: CHALK_THEME.colors.ui.border,
 	},
 	title: {
-		fontSize: 18,
+		fontSize: CHALK_THEME.typography.sizes.lg,
 		fontWeight: "600",
-		color: "#1f2937", // gray-800
+		color: CHALK_THEME.colors.text.primary,
 	},
 	closeButton: {
 		width: 28,
 		height: 28,
 		justifyContent: "center",
 		alignItems: "center",
-	},
-	closeX: {
-		width: 16,
-		height: 16,
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	closeLine1: {
-		position: "absolute",
-		width: 16,
-		height: 2,
-		backgroundColor: "#6b7280", // gray-500
-		transform: [{ rotate: "45deg" }],
-	},
-	closeLine2: {
-		position: "absolute",
-		width: 16,
-		height: 2,
-		backgroundColor: "#6b7280", // gray-500
-		transform: [{ rotate: "-45deg" }],
 	},
 	list: {
 		maxHeight: 300,
@@ -212,43 +185,23 @@ const styles = StyleSheet.create({
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
-		paddingHorizontal: 20,
-		paddingVertical: 14,
+		paddingHorizontal: CHALK_THEME.spacing.lg,
+		paddingVertical: CHALK_THEME.spacing.md,
 		borderBottomWidth: 1,
-		borderBottomColor: "#f3f4f6", // gray-100
+		borderBottomColor: CHALK_THEME.colors.ui.border,
 	},
 	deviceRowSelected: {
-		backgroundColor: "#eff6ff", // blue-50
+		backgroundColor: CHALK_THEME.colors.ui.pillBg,
 	},
 	deviceName: {
 		flex: 1,
 		fontSize: 15,
-		color: "#374151", // gray-700
+		color: CHALK_THEME.colors.text.secondary,
 		marginRight: 12,
 	},
 	deviceNameSelected: {
-		color: "#2563eb", // blue-600
+		color: CHALK_THEME.colors.primary,
 		fontWeight: "500",
-	},
-	checkIcon: {
-		width: 20,
-		height: 20,
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	checkLong: {
-		position: "absolute",
-		width: 12,
-		height: 2,
-		backgroundColor: "#2563eb", // blue-600
-		transform: [{ rotate: "45deg" }, { translateX: 2 }, { translateY: 2 }],
-	},
-	checkShort: {
-		position: "absolute",
-		width: 6,
-		height: 2,
-		backgroundColor: "#2563eb", // blue-600
-		transform: [{ rotate: "-45deg" }, { translateX: -3 }, { translateY: 3 }],
 	},
 	emptyContainer: {
 		paddingVertical: 40,
@@ -257,6 +210,6 @@ const styles = StyleSheet.create({
 	},
 	emptyText: {
 		fontSize: 14,
-		color: "#9ca3af", // gray-400
+		color: CHALK_THEME.colors.text.muted,
 	},
 });

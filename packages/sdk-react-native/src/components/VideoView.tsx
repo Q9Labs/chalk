@@ -6,6 +6,7 @@
 import React from "react";
 import { StyleSheet, View, Text, Platform, type ViewStyle } from "react-native";
 import { RTCView } from "@cloudflare/react-native-webrtc";
+import { CHALK_THEME } from "../theme";
 
 interface VideoViewProps {
 	/** MediaStream to display */
@@ -96,32 +97,32 @@ const styles = StyleSheet.create({
 	},
 	placeholder: {
 		flex: 1,
-		backgroundColor: "#1a1a1a",
+		backgroundColor: CHALK_THEME.colors.surface,
 		justifyContent: "center",
 		alignItems: "center",
 	},
 	placeholderText: {
-		color: "rgba(255,255,255,0.5)",
-		fontSize: 14,
+		color: CHALK_THEME.colors.text.muted,
+		fontSize: CHALK_THEME.typography.sizes.sm,
 	},
 	simulatorOverlay: {
 		position: "absolute",
 		bottom: 0,
 		left: 0,
 		right: 0,
-		backgroundColor: "rgba(0,0,0,0.7)",
-		paddingVertical: 12,
-		paddingHorizontal: 16,
+		backgroundColor: CHALK_THEME.colors.ui.overlay,
+		paddingVertical: CHALK_THEME.spacing.lg / 2, // 12
+		paddingHorizontal: CHALK_THEME.spacing.md,
 		alignItems: "center",
 	},
 	simulatorText: {
-		color: "#fff",
-		fontSize: 13,
+		color: CHALK_THEME.colors.text.primary,
+		fontSize: 13, // Keep specific size or use closest typography
 		fontWeight: "600",
-		marginBottom: 4,
+		marginBottom: CHALK_THEME.spacing.xs,
 	},
 	simulatorSubtext: {
-		color: "rgba(255,255,255,0.6)",
+		color: CHALK_THEME.colors.text.secondary,
 		fontSize: 11,
 	},
 });

@@ -6,7 +6,7 @@ describe('MessageBubble', () => {
   const timestamp = new Date('2025-01-01T12:00:00');
 
   it('renders content correctly', () => {
-    const { getByText } = render(
+    const { getByText, getByLabelText } = render(
       <MessageBubble 
         content="Hello" 
         senderName="Alice" 
@@ -14,7 +14,7 @@ describe('MessageBubble', () => {
       />
     );
     expect(getByText('Hello')).toBeDefined();
-    expect(getByText('Alice')).toBeDefined();
+    expect(getByLabelText('Avatar for Alice')).toBeDefined();
   });
 
   it('renders links as anchor tags', () => {
@@ -50,7 +50,7 @@ describe('MessageBubble', () => {
         isLocal 
       />
     );
-    const bubble = container.querySelector('.bg-\\[var\\(--chalk-primary\\)\\]');
+    const bubble = container.querySelector('.bg-primary');
     expect(bubble).toBeDefined();
   });
 });

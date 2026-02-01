@@ -139,6 +139,7 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 	req.Header.Set("X-Chalk-Signature", signature)
 	req.Header.Set("X-Chalk-Timestamp", fmt.Sprintf("%d", timestamp))
 	req.Header.Set("X-Chalk-Event", delivery.EventType)
+	req.Header.Set("X-Chalk-Delivery-ID", delivery.ID.String())
 	req.Header.Set("User-Agent", "Chalk-Webhook/1.0")
 
 	// Send request

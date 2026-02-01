@@ -18,9 +18,11 @@ locals {
   })
 
   container_port = 8080
+  alb_logs_bucket_name = "${local.name}-alb-logs"
 }
 
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 data "aws_ssm_parameter" "ecs_ami" {
   name = "/aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id"
@@ -232,19 +234,98 @@ resource "aws_lb" "main" {
   dynamic "access_logs" {
     for_each = var.enable_alb_access_logs ? [1] : []
     content {
-      enabled = true
-      bucket  = aws_s3_bucket.alb_access_logs[0].bucket
+      bucket  = aws_s3_bucket.alb_logs[0].bucket
       prefix  = var.alb_access_logs_prefix
+      enabled = true
     }
   }
 
-  depends_on = [
-    aws_s3_bucket_policy.alb_access_logs,
-    aws_s3_bucket_public_access_block.alb_access_logs,
-    aws_s3_bucket_ownership_controls.alb_access_logs,
-  ]
+  tags = local.tags
+}
+
+resource "aws_s3_bucket" "alb_logs" {
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = local.alb_logs_bucket_name
 
   tags = local.tags
+}
+
+resource "aws_s3_bucket_versioning" "alb_logs" {
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_logs[0].id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "alb_logs" {
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_logs[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "alb_logs" {
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_logs[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "alb_logs" {
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_logs[0].id
+
+  rule {
+    id     = "expire-logs"
+    status = "Enabled"
+
+    expiration {
+      days = var.alb_access_logs_retention_days
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "alb_logs" {
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_logs[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AWSLogDeliveryWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "logdelivery.elasticloadbalancing.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "arn:aws:s3:::${aws_s3_bucket.alb_logs[0].bucket}/${var.alb_access_logs_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      },
+      {
+        Sid    = "AWSLogDeliveryAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "logdelivery.elasticloadbalancing.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = "arn:aws:s3:::${aws_s3_bucket.alb_logs[0].bucket}"
+      }
+    ]
+  })
 }
 
 resource "aws_lb_target_group" "main" {

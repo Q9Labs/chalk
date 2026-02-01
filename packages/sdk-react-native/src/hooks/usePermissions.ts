@@ -6,6 +6,7 @@ import {
 	PermissionsAndroid,
 	Platform,
 } from "react-native";
+import { logger } from "../logger";
 
 /**
  * Get the PermissionsModule from NativeModules at runtime
@@ -134,6 +135,11 @@ export function usePermissions(): UsePermissionsResult {
 	const checkPermissions = useCallback(async (): Promise<PermissionsState> => {
 		setIsChecking(true);
 
+		logger.info({
+			event: "permissions.check",
+			platform: Platform.OS,
+		});
+
 		try {
 			if (Platform.OS === "android") {
 				const [camera, microphone, notifications, bluetooth] =
@@ -160,6 +166,12 @@ export function usePermissions(): UsePermissionsResult {
 					bluetooth: bluetooth ? "granted" : "unavailable",
 				};
 
+				logger.info({
+					event: "permissions.status",
+					platform: "android",
+					permissions: state,
+				});
+
 				setPermissions(state);
 				return state;
 			}
@@ -177,14 +189,32 @@ export function usePermissions(): UsePermissionsResult {
 						bluetooth: "unavailable",
 					};
 
+					logger.info({
+						event: "permissions.status",
+						platform: "ios",
+						permissions: state,
+					});
+
 					setPermissions(state);
 					return state;
-				} catch {
-					// Silently ignore error
+				} catch (err) {
+					const error = err instanceof Error ? err : new Error(String(err));
+					logger.error({
+						event: "permissions.check.error",
+						platform: "ios",
+						outcome: "error",
+						error: { message: error.message, type: error.name },
+					});
 				}
 			}
 
 			// Fallback: return initial state (unavailable)
+			logger.info({
+				event: "permissions.status",
+				platform: Platform.OS,
+				permissions: initialState,
+				note: "fallback_unavailable",
+			});
 			return initialState;
 		} finally {
 			setIsChecking(false);
@@ -195,6 +225,12 @@ export function usePermissions(): UsePermissionsResult {
 	 * Request camera and microphone permissions
 	 */
 	const requestPermissions = useCallback(async (): Promise<boolean> => {
+		logger.info({
+			event: "permissions.request",
+			platform: Platform.OS,
+			requested: ["camera", "microphone"],
+		});
+
 		if (Platform.OS === "android") {
 			try {
 				const results = await PermissionsAndroid.requestMultiple([
@@ -209,14 +245,33 @@ export function usePermissions(): UsePermissionsResult {
 					results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO],
 				);
 
+				const allGranted = cameraStatus === "granted" && micStatus === "granted";
+
+				logger.info({
+					event: "permissions.result",
+					platform: "android",
+					outcome: allGranted ? "success" : "denied",
+					permissions: {
+						camera: cameraStatus,
+						microphone: micStatus,
+					},
+				});
+
 				setPermissions((prev) => ({
 					...prev,
 					camera: cameraStatus,
 					microphone: micStatus,
 				}));
 
-				return cameraStatus === "granted" && micStatus === "granted";
-			} catch {
+				return allGranted;
+			} catch (err) {
+				const error = err instanceof Error ? err : new Error(String(err));
+				logger.error({
+					event: "permissions.request.error",
+					platform: "android",
+					outcome: "error",
+					error: { message: error.message, type: error.name },
+				});
 				return false;
 			}
 		}
@@ -230,19 +285,46 @@ export function usePermissions(): UsePermissionsResult {
 					PermissionsModule.requestMicrophonePermission(),
 				]);
 
+				const allGranted = cameraStatus === "granted" && micStatus === "granted";
+
+				logger.info({
+					event: "permissions.result",
+					platform: "ios",
+					outcome: allGranted ? "success" : "denied",
+					permissions: {
+						camera: cameraStatus,
+						microphone: micStatus,
+					},
+				});
+
 				setPermissions((prev) => ({
 					...prev,
 					camera: cameraStatus as PermissionStatus,
 					microphone: micStatus as PermissionStatus,
 				}));
 
-				return cameraStatus === "granted" && micStatus === "granted";
-			} catch {
+				return allGranted;
+			} catch (err) {
+				const error = err instanceof Error ? err : new Error(String(err));
+				logger.error({
+					event: "permissions.request.error",
+					platform: "ios",
+					outcome: "error",
+					error: { message: error.message, type: error.name },
+				});
 				return false;
 			}
 		}
 
 		// Fallback: assume permissions will be requested by WebRTC
+		logger.info({
+			event: "permissions.result",
+			platform: Platform.OS,
+			outcome: "success",
+			permissions: { camera: "granted", microphone: "granted" },
+			note: "fallback_assumed",
+		});
+
 		setPermissions((prev) => ({
 			...prev,
 			camera: "granted",

@@ -21,10 +21,11 @@ config.resolver.nodeModulesPaths = [
 // Enable symlink resolution (bun uses symlinks for hoisted packages)
 config.resolver.unstable_enableSymlinks = true;
 
-// Force single React instance from project's node_modules
+// Force single instances from project's node_modules
 config.resolver.extraNodeModules = {
 	react: path.resolve(projectRoot, "node_modules/react"),
 	"react-native": path.resolve(projectRoot, "node_modules/react-native"),
+	"react-native-svg": path.resolve(projectRoot, "node_modules/react-native-svg"),
 };
 
 // Custom resolver for workspace packages and node: protocol blocking
@@ -48,6 +49,24 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 			filePath: path.resolve(projectRoot, "node_modules/react-native/index.js"),
 			type: "sourceFile",
 		};
+	}
+
+	// Force single react-native-svg instance (needed for native module registration)
+	if (moduleName === "react-native-svg") {
+		return context.resolveRequest(
+			context,
+			path.resolve(projectRoot, "node_modules/react-native-svg"),
+			platform,
+		);
+	}
+
+	// Resolve LineIcons packages from the app's node_modules
+	if (moduleName.startsWith("@lineiconshq/")) {
+		return context.resolveRequest(
+			context,
+			path.resolve(projectRoot, "node_modules", moduleName),
+			platform,
+		);
 	}
 
 	return context.resolveRequest(context, moduleName, platform);

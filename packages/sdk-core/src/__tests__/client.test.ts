@@ -8,9 +8,12 @@ import { ChalkClient } from "../client.ts";
 import type { ChalkClientConfig, RoomConfig } from "../types.ts";
 
 describe("ChalkClient", () => {
+	const DEFAULT_API_URL = "http://localhost:8080";
+
 	describe("initialization", () => {
 		it("should initialize with token (recommended)", () => {
 			const config: ChalkClientConfig = {
+				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			};
 
@@ -21,6 +24,7 @@ describe("ChalkClient", () => {
 
 		it("should initialize with tokenProvider (recommended for browser)", () => {
 			const config: ChalkClientConfig = {
+				apiUrl: DEFAULT_API_URL,
 				tokenProvider: async () => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			};
 
@@ -35,6 +39,7 @@ describe("ChalkClient", () => {
 			console.warn = (msg: string) => warnings.push(msg);
 
 			const config: ChalkClientConfig = {
+				apiUrl: DEFAULT_API_URL,
 				apiKey: "ck_live_test123",
 			};
 
@@ -47,7 +52,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("should throw if no auth method provided", () => {
-			const config: ChalkClientConfig = {};
+			const config: ChalkClientConfig = { apiUrl: DEFAULT_API_URL };
 
 			expect(() => {
 				new ChalkClient(config);
@@ -70,6 +75,7 @@ describe("ChalkClient", () => {
 
 		it("should accept debug flag", () => {
 			const config: ChalkClientConfig = {
+				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 				debug: true,
 			};
@@ -81,7 +87,7 @@ describe("ChalkClient", () => {
 
 		it("should allow debug mode without credentials", () => {
 			expect(() => {
-				new ChalkClient({ debug: true });
+				new ChalkClient({ apiUrl: DEFAULT_API_URL, debug: true });
 			}).not.toThrow();
 		});
 	});
@@ -91,6 +97,7 @@ describe("ChalkClient", () => {
 
 		beforeEach(() => {
 			client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
 		});
@@ -110,6 +117,7 @@ describe("ChalkClient", () => {
 
 		beforeEach(() => {
 			client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
 		});
@@ -127,6 +135,7 @@ describe("ChalkClient", () => {
 			console.warn = () => {};
 
 			const config: ChalkClientConfig = {
+				apiUrl: DEFAULT_API_URL,
 				apiKey: "ck_live_test123",
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			};
@@ -213,7 +222,7 @@ describe("ChalkClient", () => {
 
 			// Debug mode without credentials should NOT throw (intentional)
 			expect(() => {
-				new ChalkClient({ debug: true });
+				new ChalkClient({ apiUrl: DEFAULT_API_URL, debug: true });
 			}).not.toThrow();
 		});
 	});
@@ -221,6 +230,7 @@ describe("ChalkClient", () => {
 	describe("type safety", () => {
 		it("should maintain type safety for connection status", () => {
 			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
 
@@ -238,6 +248,7 @@ describe("ChalkClient", () => {
 
 		it("should maintain type safety for room reference", () => {
 			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
 
@@ -248,6 +259,7 @@ describe("ChalkClient", () => {
 
 		it("should maintain type safety for boolean flags", () => {
 			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
 
@@ -278,11 +290,12 @@ describe("ChalkClient", () => {
 		});
 	});
 
-	describe("token-expired event", () => {
-		it("should emit token-expired event when API returns 401", async () => {
-			const client = new ChalkClient({
-				token: "expired_token",
-			});
+		describe("token-expired event", () => {
+			it("should emit token-expired event when API returns 401", async () => {
+				const client = new ChalkClient({
+					apiUrl: DEFAULT_API_URL,
+					token: "expired_token",
+				});
 
 			let eventReceived = false;
 			client.on("token-expired", () => {

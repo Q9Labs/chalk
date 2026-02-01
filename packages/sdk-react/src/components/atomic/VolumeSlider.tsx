@@ -24,14 +24,13 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
   orientation = 'horizontal',
   className,
 }) => {
-  const handleValueChange = (newValue: number | number[]) => {
-    const val = Array.isArray(newValue) ? newValue[0] : newValue;
-    if (val !== undefined) {
-      onChange(val);
-    }
+  const handleValueChange = (newValue: number[]) => {
+    const val = newValue[0];
+    if (val !== undefined) onChange(val);
   };
 
   const isVertical = orientation === 'vertical';
+  const sliderValue = muted ? 0 : value;
 
   return (
     <div
@@ -44,11 +43,13 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
       <button
         type="button"
         onClick={onMuteToggle}
+        disabled={!onMuteToggle}
         className={cn(
           'flex items-center justify-center rounded-full transition-colors',
           'hover:bg-accent',
           size === 'sm' ? 'p-1' : 'p-1.5',
-          muted ? 'text-muted-foreground' : 'text-foreground'
+          muted ? 'text-muted-foreground' : 'text-foreground',
+          !onMuteToggle && 'opacity-50 pointer-events-none'
         )}
         aria-label={muted ? 'Unmute' : 'Mute'}
       >
@@ -60,39 +61,45 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
       </button>
 
       <Slider.Root
-        value={muted ? 0 : value}
+        value={[sliderValue]}
         onValueChange={handleValueChange}
-        disabled={muted}
         min={0}
         max={100}
         step={1}
         orientation={orientation}
         className={cn(
-          'relative flex items-center touch-none select-none',
-          isVertical ? 'h-full w-2 flex-col' : 'w-full h-2'
+          'relative flex items-center',
+          isVertical ? 'h-full w-2 flex-col' : 'w-full'
         )}
       >
-        <Slider.Track
+        <Slider.Control
           className={cn(
-            'relative grow rounded-full bg-muted',
-            isVertical ? 'w-2 h-full' : 'h-2 w-full'
+            'relative flex items-center touch-none select-none cursor-pointer',
+            isVertical ? 'h-full w-2 flex-col' : 'w-full h-5'
           )}
         >
-          <Slider.Indicator
+          <Slider.Track
             className={cn(
-              'absolute rounded-full bg-primary',
-              isVertical ? 'w-full bottom-0' : 'h-full left-0'
+              'relative grow rounded-full bg-muted',
+              isVertical ? 'w-2 h-full' : 'h-2 w-full'
             )}
-          />
-          <Slider.Thumb
-            className={cn(
-              'block rounded-full shadow-sm bg-primary',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              'disabled:pointer-events-none disabled:opacity-50',
-              size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'
-            )}
-          />
-        </Slider.Track>
+          >
+            <Slider.Indicator
+              className={cn(
+                'absolute rounded-full bg-primary',
+                isVertical ? 'w-full bottom-0' : 'h-full left-0'
+              )}
+            />
+            <Slider.Thumb
+              className={cn(
+                'block rounded-full shadow-sm bg-primary',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'disabled:pointer-events-none disabled:opacity-50',
+                size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'
+              )}
+            />
+          </Slider.Track>
+        </Slider.Control>
       </Slider.Root>
 
       {showValue && (

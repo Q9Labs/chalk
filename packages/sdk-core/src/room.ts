@@ -23,6 +23,7 @@ import type {
 import { ChalkErrorCode } from "./types.ts";
 import { wideEvents } from "./wide-events/index.ts";
 import type { WSClient } from "./ws-client.ts";
+import { withPatchedGetDisplayMedia } from "./utils/get-display-media-fallback.ts";
 
 /** Real-time transcript entry from speech-to-text */
 export interface Transcript {
@@ -95,6 +96,7 @@ export class Room extends EventEmitter<RoomEvents> {
   private _status: RoomStatus = "disconnected";
   private _info: RoomInfo | null = null;
   private _participants: Map<string, Participant> = new Map();
+  private _rtkPeerIdToStableId = new Map();
   private _localParticipant: Participant | null = null;
   private _activeSpeaker: Participant | null = null;
   private _messages: ChatMessage[] = [];
@@ -298,6 +300,15 @@ export class Room extends EventEmitter<RoomEvents> {
       });
     }
 
+    // Host moderation commands (always listen; commands are addressed to the local participant)
+    this.wsClient.on("participant.mute", (data) => {
+      void this.handleHostAudioCommand(data.participantId, false);
+    });
+
+    this.wsClient.on("participant.unmute", (data) => {
+      void this.handleHostAudioCommand(data.participantId, true);
+    });
+
     this.wsClient.on("chat.message", (data) => {
       this._messages.push(data);
       this.emit("chat-message", data);
@@ -439,34 +450,97 @@ export class Room extends EventEmitter<RoomEvents> {
     });
   }
 
+  private async handleHostAudioCommand(participantId: string, enable: boolean) {
+    if (!this._localParticipant || !this.rtkClient) return;
+    if (participantId !== this._localParticipant.id) return;
+
+    const ctx = wideEvents.start("participant.moderation.audio");
+    ctx.set("action", enable ? "unmute" : "mute");
+
+    try {
+      if (enable) {
+        if (!this.rtkClient.self.audioEnabled) {
+          await this.rtkClient.self.enableAudio();
+        }
+        this._localParticipant.audioEnabled = true;
+        this._localParticipant.audioTrack =
+          this.rtkClient.self.audioTrack ?? undefined;
+      } else {
+        if (this.rtkClient.self.audioEnabled) {
+          await this.rtkClient.self.disableAudio();
+        }
+        this._localParticipant.audioEnabled = false;
+        this._localParticipant.audioTrack = undefined;
+      }
+
+      this.emit("participant-updated", {
+        participantId: this._localParticipant.id,
+        participant: this._localParticipant,
+      });
+
+      ctx.complete("success", { enabled: this._localParticipant.audioEnabled });
+    } catch (error) {
+      ctx.complete("error", error);
+      this.emit("error", {
+        code: "MEDIA_ERROR",
+        message: enable
+          ? "Failed to unmute microphone"
+          : "Failed to mute microphone",
+      });
+    }
+  }
+
   attachWsClient(wsClient: WSClient): void {
     if (this.wsClient === wsClient) return;
     this.wsClient = wsClient;
     this.setupWSListeners();
   }
 
+  private getRtkIds(rtkParticipant: unknown) {
+    const p = rtkParticipant as any;
+
+    const peerId =
+      typeof p?.id === "string" && p.id.length > 0 ? p.id : crypto.randomUUID();
+
+    const directUserId =
+      (typeof p?.userId === "string" && p.userId.length > 0
+        ? p.userId
+        : undefined) ??
+      (typeof p?.clientSpecificId === "string" && p.clientSpecificId.length > 0
+        ? p.clientSpecificId
+        : undefined) ??
+      (typeof p?.client_specific_id === "string" && p.client_specific_id.length > 0
+        ? p.client_specific_id
+        : undefined) ??
+      (typeof p?.customParticipantId === "string" && p.customParticipantId.length > 0
+        ? p.customParticipantId
+        : undefined) ??
+      (typeof p?.custom_participant_id === "string" &&
+      p.custom_participant_id.length > 0
+        ? p.custom_participant_id
+        : undefined);
+
+    const mapped = this._rtkPeerIdToStableId.get(peerId) as string | undefined;
+    const userId = directUserId ?? mapped;
+    const stableId = userId ?? peerId;
+
+    if (directUserId) {
+      this._rtkPeerIdToStableId.set(peerId, directUserId);
+    }
+
+    return { stableId, peerId, userId };
+  }
+
   /**
    * Map a RealtimeKit participant to Chalk Participant type
    */
   private mapRTKParticipant(rtkParticipant: unknown): Participant {
-    const p = rtkParticipant as {
-      id: string;
-      userId?: string;
-      name?: string;
-      videoEnabled?: boolean;
-      audioEnabled?: boolean;
-      videoTrack?: MediaStreamTrack;
-      audioTrack?: MediaStreamTrack;
-      screenShareEnabled?: boolean;
-      screenShareTracks?: {
-        audio?: MediaStreamTrack;
-        video?: MediaStreamTrack;
-      };
-    };
+    const p = rtkParticipant as any;
+    const { stableId, userId } = this.getRtkIds(rtkParticipant);
 
     return {
-      id: p.id,
-      userId: p.userId, // Used for chat message matching
+      id: stableId,
+      userId, // Used for chat message matching (and stable ID when present)
       displayName: p.name ?? "Unknown",
       role: "participant",
       isLocal: false,
@@ -621,10 +695,10 @@ export class Room extends EventEmitter<RoomEvents> {
     this.rtkClient.participants.joined.on(
       "participantJoined",
       (rtkParticipant: unknown) => {
-        const raw = rtkParticipant as Record<string, unknown>;
+        const { stableId, peerId } = this.getRtkIds(rtkParticipant);
 
         // Skip if this is the local participant (RTK may include self in joined list)
-        if (this._localParticipant && raw.id === this._localParticipant.id) {
+        if (this._localParticipant && stableId === this._localParticipant.id) {
           return;
         }
 
@@ -633,6 +707,11 @@ export class Room extends EventEmitter<RoomEvents> {
         // CRITICAL: Skip if participant already exists (prevents duplicates from WS + RTK)
         if (this._participants.has(participant.id)) {
           return;
+        }
+
+        // Transition cleanup: if we previously keyed by peerId, migrate to stableId.
+        if (peerId !== participant.id && this._participants.has(peerId)) {
+          this._participants.delete(peerId);
         }
 
         this._participants.set(participant.id, participant);
@@ -644,9 +723,15 @@ export class Room extends EventEmitter<RoomEvents> {
     this.rtkClient.participants.joined.on(
       "participantLeft",
       (rtkParticipant: unknown) => {
-        const p = rtkParticipant as { id: string };
-        this._participants.delete(p.id);
-        this.emit("participant-left", p.id);
+        const { stableId, peerId } = this.getRtkIds(rtkParticipant);
+        this._rtkPeerIdToStableId.delete(peerId);
+        const deletedStable = this._participants.delete(stableId);
+        const deletedPeer =
+          peerId !== stableId ? this._participants.delete(peerId) : false;
+
+        if (deletedStable || deletedPeer) {
+          this.emit("participant-left", stableId);
+        }
       },
     );
 
@@ -941,8 +1026,8 @@ export class Room extends EventEmitter<RoomEvents> {
 
     participants.on("activeSpeakerChanged", (speaker: unknown) => {
       if (speaker) {
-        const speakerId = (speaker as { id: string }).id;
-        const participant = this._participants.get(speakerId) ?? null;
+        const ids = this.getRtkIds(speaker);
+        const participant = this._participants.get(ids.stableId) ?? null;
         if (this._activeSpeaker?.id !== participant?.id) {
           this._activeSpeaker = participant;
           this.emit("active-speaker-changed", participant);
@@ -1075,7 +1160,7 @@ export class Room extends EventEmitter<RoomEvents> {
     }
   }
 
-  async startScreenShare(_options?: ScreenShareOptions): Promise<boolean> {
+  async startScreenShare(options?: ScreenShareOptions): Promise<boolean> {
     if (!this._localParticipant || !this.rtkClient) return false;
 
     if (this._localParticipant.isScreenSharing) return true;
@@ -1083,15 +1168,39 @@ export class Room extends EventEmitter<RoomEvents> {
     const ctx = wideEvents.start("screenshare.start");
 
     try {
-      await this.rtkClient.self.enableScreenShare();
+      // iPadOS/Safari/WebKit frequently fails when RealtimeKit requests
+      // getDisplayMedia({ audio: true, video: {...} }). Patch + retry with safer
+      // constraints to make screensharing cross-platform.
+      await withPatchedGetDisplayMedia(
+        async () => {
+          await this.rtkClient!.self.enableScreenShare();
+          return true;
+        },
+        { withAudio: options?.withAudio === true },
+      );
       this._localParticipant.isScreenSharing = true;
       ctx.complete("success");
       return true;
     } catch (error) {
       ctx.complete("error", error);
+      const err = error as any;
+      const name = typeof err?.name === "string" ? err.name : undefined;
+      const message =
+        typeof err?.message === "string"
+          ? err.message
+          : "Failed to start screen sharing";
+
+      const code =
+        name === "OverconstrainedError"
+          ? ChalkErrorCode.OVERCONSTRAINED
+          : name === "NotAllowedError"
+            ? ChalkErrorCode.SCREEN_SHARE_CANCELLED
+            : ChalkErrorCode.SCREEN_SHARE_FAILED;
+
       this.emit("error", {
-        code: "SCREEN_SHARE_ERROR",
-        message: "Failed to start screen sharing",
+        code,
+        message,
+        details: { name },
       });
       return false;
     }
@@ -1108,6 +1217,7 @@ export class Room extends EventEmitter<RoomEvents> {
       await this.rtkClient.self.disableScreenShare();
       this._localParticipant.isScreenSharing = false;
       this._localParticipant.screenShareTrack = undefined;
+      this._localParticipant.screenShareAudioTrack = undefined;
       ctx.complete("success");
     } catch (error) {
       ctx.complete("error", error);
@@ -1354,6 +1464,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
         // Clear state after disconnect
         this._participants.clear();
+        this._rtkPeerIdToStableId.clear();
         this._activeSpeaker = null;
         this._messages = [];
         this._currentRecording = null;
@@ -1375,6 +1486,28 @@ export class Room extends EventEmitter<RoomEvents> {
    */
   get rtkMeeting(): RealtimeKitClient | undefined {
     return this.rtkClient;
+  }
+
+  // ===== Participant Moderation =====
+
+  /**
+   * Mute a participant (host only).
+   * Sends a command over WebSocket; the participant's client applies it locally.
+   */
+  muteParticipant(participantId: string): void {
+    if (this._localParticipant?.role !== "host") return;
+    if (participantId === this._localParticipant.id) return;
+    this.wsClient?.muteParticipant(participantId);
+  }
+
+  /**
+   * Unmute a participant (host only).
+   * Sends a command over WebSocket; enabling the mic may still be blocked by browser/user policy.
+   */
+  unmuteParticipant(participantId: string): void {
+    if (this._localParticipant?.role !== "host") return;
+    if (participantId === this._localParticipant.id) return;
+    this.wsClient?.unmuteParticipant(participantId);
   }
 
   // ===== Whiteboard Methods =====

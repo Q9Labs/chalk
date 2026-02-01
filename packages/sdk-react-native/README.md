@@ -12,6 +12,37 @@ npm install @chalk/react-native react-native react-native-webrtc
 
 ## Quick Start
 
+### Single Component (Recommended)
+
+```tsx
+import { createTokenProvider } from '@q9labs/chalk-core';
+import { VideoConference } from '@chalk/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const tokenProvider = createTokenProvider({
+  apiKey: 'ck_live_xxx',
+  apiUrl: 'https://api.chalk.example.com',
+  storage: {
+    get: (key) => AsyncStorage.getItem(key),
+    set: (key, value) => AsyncStorage.setItem(key, value),
+    remove: (key) => AsyncStorage.removeItem(key),
+  },
+});
+
+export default function App() {
+  return (
+    <VideoConference
+      roomId="room_123"
+      displayName="Ada Lovelace"
+      provider={{ tokenProvider }}
+      onEnd={(data) => console.log('ended', data)}
+    />
+  );
+}
+```
+
+### Custom UI (Hooks + Components)
+
 ```tsx
 import { createTokenProvider } from '@q9labs/chalk-core';
 import { ChalkProvider, useRoom, useParticipants, useMedia } from '@chalk/react-native';

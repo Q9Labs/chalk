@@ -1,5 +1,5 @@
 config:
-  target: "wss://api-stress.chalk.example.com"
+  target: "{{ $processEnvironment.WS_URL }}"
   phases:
     - duration: 60
       arrivalRate: 5
@@ -7,6 +7,8 @@ config:
       arrivalRate: 15
   ws:
     rejectUnauthorized: false
+  processor: "./functions.js"
+  beforeScenario: "setupParticipant"
 
 scenarios:
   - name: "Whiteboard collaborator"
@@ -30,8 +32,15 @@ scenarios:
               json:
                 type: "whiteboard.update"
                 payload:
-                  elements: '[{"type":"rectangle","x":{{ $randomNumber(0,1000) }},"y":{{ $randomNumber(0,1000) }}}]'
-                  seq: "{{ $loopCount }}"
+                  elements:
+                    - type: "rectangle"
+                      x: {{ $randomNumber(0,1000) }}
+                      y: {{ $randomNumber(0,1000) }}
+                      width: 120
+                      height: 80
+                  files: {}
+                  app_state: {}
+                  seq: {{ $loopCount }}
           - think: 0.2
         count: 100
 
@@ -41,7 +50,7 @@ scenarios:
               json:
                 type: "whiteboard.cursor"
                 payload:
-                  x: "{{ $randomNumber(0,1920) }}"
-                  y: "{{ $randomNumber(0,1080) }}"
+                  x: {{ $randomNumber(0,1920) }}
+                  y: {{ $randomNumber(0,1080) }}
           - think: 0.05
         count: 200

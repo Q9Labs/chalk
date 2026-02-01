@@ -12,12 +12,14 @@ import {
 	View,
 	type ViewStyle,
 } from "react-native";
+import { CHALK_THEME } from "../../theme";
 import { useDevices } from "../../hooks/useDevices";
 import { useLocalStream } from "../../hooks/useLocalStream";
 import { usePermissions } from "../../hooks/usePermissions";
 import { Avatar } from "../atomic/Avatar";
 import { DeviceSelector } from "../composite/DeviceSelector";
 import { VideoView } from "../VideoView";
+import { CameraIcon, MicrophoneIcon } from "../../icons";
 
 interface PreJoinLobbyProps {
 	/** Callback when user taps join with their display name */
@@ -26,35 +28,17 @@ interface PreJoinLobbyProps {
 	roomId?: string;
 	/** Initial display name */
 	initialName?: string;
+	/** Optional error message to display */
+	error?: string;
 	/** Additional container styles */
 	style?: ViewStyle;
-}
-
-/** Camera icon drawn with View components */
-function CameraIcon({ color }: { color: string }) {
-	return (
-		<View style={iconStyles.cameraContainer}>
-			<View style={[iconStyles.cameraBody, { borderColor: color }]} />
-			<View style={[iconStyles.cameraLens, { borderColor: color }]} />
-		</View>
-	);
-}
-
-/** Microphone icon drawn with View components */
-function MicIcon({ color }: { color: string }) {
-	return (
-		<View style={iconStyles.micContainer}>
-			<View style={[iconStyles.micHead, { borderColor: color }]} />
-			<View style={[iconStyles.micStand, { backgroundColor: color }]} />
-			<View style={[iconStyles.micBase, { backgroundColor: color }]} />
-		</View>
-	);
 }
 
 export function PreJoinLobby({
 	onJoin,
 	roomId,
 	initialName = "",
+	error,
 	style,
 }: PreJoinLobbyProps) {
 	const [displayName, setDisplayName] = useState(initialName);
@@ -139,7 +123,10 @@ export function PreJoinLobby({
 					onPress={() => setShowCameraSelector(true)}
 					disabled={cameras.length === 0}
 				>
-					<CameraIcon color={cameras.length > 0 ? "#2563eb" : "#9ca3af"} />
+					<CameraIcon
+						size={20}
+						color={cameras.length > 0 ? CHALK_THEME.colors.primary : CHALK_THEME.colors.text.muted}
+					/>
 					<Text
 						style={[
 							styles.deviceButtonText,
@@ -156,7 +143,10 @@ export function PreJoinLobby({
 					onPress={() => setShowMicSelector(true)}
 					disabled={microphones.length === 0}
 				>
-					<MicIcon color={microphones.length > 0 ? "#2563eb" : "#9ca3af"} />
+					<MicrophoneIcon
+						size={20}
+						color={microphones.length > 0 ? CHALK_THEME.colors.primary : CHALK_THEME.colors.text.muted}
+					/>
 					<Text
 						style={[
 							styles.deviceButtonText,
@@ -173,7 +163,7 @@ export function PreJoinLobby({
 			<TextInput
 				style={styles.nameInput}
 				placeholder="Enter your name"
-				placeholderTextColor="#9ca3af"
+				placeholderTextColor={CHALK_THEME.colors.text.muted}
 				value={displayName}
 				onChangeText={setDisplayName}
 				autoCapitalize="words"
@@ -198,6 +188,8 @@ export function PreJoinLobby({
 					Join
 				</Text>
 			</TouchableOpacity>
+
+			{error && <Text style={styles.errorText}>{error}</Text>}
 
 			{/* Permission hint */}
 			{!hasRequiredPermissions && !isChecking && (
@@ -233,31 +225,31 @@ export function PreJoinLobby({
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: "#111827", // gray-900
-		paddingHorizontal: 24,
-		paddingVertical: 32,
+		backgroundColor: CHALK_THEME.colors.background,
+		paddingHorizontal: CHALK_THEME.spacing.lg,
+		paddingVertical: CHALK_THEME.spacing.xl,
 	},
 	header: {
 		alignItems: "center",
-		marginBottom: 24,
+		marginBottom: CHALK_THEME.spacing.lg,
 	},
 	roomLabel: {
 		fontSize: 12,
-		color: "#9ca3af", // gray-400
+		color: CHALK_THEME.colors.text.muted,
 		textTransform: "uppercase",
 		letterSpacing: 1,
 		marginBottom: 4,
 	},
 	roomId: {
-		fontSize: 16,
-		color: "#f9fafb", // gray-50
+		fontSize: CHALK_THEME.typography.sizes.md,
+		color: CHALK_THEME.colors.text.primary,
 		fontWeight: "500",
 	},
 	previewContainer: {
 		flex: 1,
-		borderRadius: 16,
+		borderRadius: CHALK_THEME.borderRadius.lg,
 		overflow: "hidden",
-		backgroundColor: "#1f2937", // gray-800
+		backgroundColor: CHALK_THEME.colors.surface,
 		marginBottom: 20,
 	},
 	videoPreview: {
@@ -271,58 +263,65 @@ const styles = StyleSheet.create({
 	permissionHint: {
 		marginTop: 16,
 		fontSize: 14,
-		color: "#9ca3af", // gray-400
+		color: CHALK_THEME.colors.text.muted,
 	},
 	deviceButtons: {
 		flexDirection: "row",
 		justifyContent: "center",
-		gap: 16,
+		gap: CHALK_THEME.spacing.md,
 		marginBottom: 20,
 	},
 	deviceButton: {
 		flexDirection: "row",
 		alignItems: "center",
-		backgroundColor: "#1f2937", // gray-800
-		paddingHorizontal: 16,
+		backgroundColor: CHALK_THEME.colors.surface,
+		paddingHorizontal: CHALK_THEME.spacing.md,
 		paddingVertical: 10,
-		borderRadius: 8,
-		gap: 8,
+		borderRadius: CHALK_THEME.borderRadius.md,
+		gap: CHALK_THEME.spacing.sm,
 	},
 	deviceButtonText: {
 		fontSize: 14,
-		color: "#2563eb", // blue-600
+		color: CHALK_THEME.colors.primary,
 		fontWeight: "500",
 	},
 	deviceButtonTextDisabled: {
-		color: "#9ca3af", // gray-400
+		color: CHALK_THEME.colors.text.muted,
 	},
 	nameInput: {
-		backgroundColor: "#1f2937", // gray-800
-		borderRadius: 12,
-		paddingHorizontal: 16,
+		backgroundColor: CHALK_THEME.colors.surface,
+		borderRadius: CHALK_THEME.borderRadius.lg,
+		paddingHorizontal: CHALK_THEME.spacing.md,
 		paddingVertical: 14,
 		fontSize: 16,
-		color: "#f9fafb", // gray-50
+		color: CHALK_THEME.colors.text.primary,
 		marginBottom: 16,
 		borderWidth: 1,
-		borderColor: "#374151", // gray-700
+		borderColor: CHALK_THEME.colors.ui.border,
 	},
 	joinButton: {
-		backgroundColor: "#2563eb", // blue-600
-		borderRadius: 12,
+		backgroundColor: CHALK_THEME.colors.primary,
+		borderRadius: CHALK_THEME.borderRadius.lg,
 		paddingVertical: 16,
 		alignItems: "center",
 	},
 	joinButtonDisabled: {
-		backgroundColor: "#374151", // gray-700
+		backgroundColor: CHALK_THEME.colors.ui.pillBg,
+		opacity: 0.5,
 	},
 	joinButtonText: {
 		fontSize: 16,
 		fontWeight: "600",
-		color: "#ffffff",
+		color: CHALK_THEME.colors.text.inverse,
 	},
 	joinButtonTextDisabled: {
-		color: "#6b7280", // gray-500
+		color: CHALK_THEME.colors.text.muted,
+	},
+	errorText: {
+		marginTop: 12,
+		fontSize: 14,
+		color: CHALK_THEME.colors.status.error,
+		textAlign: "center",
 	},
 	permissionButton: {
 		marginTop: 12,
@@ -331,55 +330,7 @@ const styles = StyleSheet.create({
 	},
 	permissionButtonText: {
 		fontSize: 14,
-		color: "#60a5fa", // blue-400
+		color: CHALK_THEME.colors.primary,
 		textDecorationLine: "underline",
-	},
-});
-
-const iconStyles = StyleSheet.create({
-	cameraContainer: {
-		width: 20,
-		height: 20,
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	cameraBody: {
-		width: 14,
-		height: 10,
-		borderWidth: 2,
-		borderRadius: 2,
-	},
-	cameraLens: {
-		position: "absolute",
-		right: 0,
-		width: 0,
-		height: 0,
-		borderLeftWidth: 4,
-		borderTopWidth: 3,
-		borderBottomWidth: 3,
-		borderTopColor: "transparent",
-		borderBottomColor: "transparent",
-	},
-	micContainer: {
-		width: 20,
-		height: 20,
-		justifyContent: "flex-end",
-		alignItems: "center",
-	},
-	micHead: {
-		width: 8,
-		height: 12,
-		borderWidth: 2,
-		borderRadius: 4,
-		marginBottom: -2,
-	},
-	micStand: {
-		width: 2,
-		height: 4,
-	},
-	micBase: {
-		width: 8,
-		height: 2,
-		borderRadius: 1,
 	},
 });

@@ -37,6 +37,11 @@ resource "random_password" "redis_auth" {
   special = false
 }
 
+locals {
+  api_image_resolved = var.api_image != "" ? var.api_image : "${aws_ecr_repository.api.repository_url}:latest"
+  redis_auth_token   = var.redis_auth_token != "" ? var.redis_auth_token : random_password.redis_auth[0].result
+}
+
 resource "aws_ecr_repository" "api" {
   name                 = "${local.name_prefix}-api"
   image_tag_mutability = "MUTABLE"
@@ -48,10 +53,7 @@ resource "aws_ecr_repository" "api" {
   tags = local.tags
 }
 
-locals {
-  api_image_resolved = var.api_image != "" ? var.api_image : "${aws_ecr_repository.api.repository_url}:latest"
-  redis_auth_token   = var.redis_auth_token != "" ? var.redis_auth_token : random_password.redis_auth[0].result
-}
+ 
 
 # Dedicated VPC for stress testing
 resource "aws_vpc" "stress" {

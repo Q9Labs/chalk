@@ -27,6 +27,8 @@ export { APIClient } from "./api-client.ts";
 export { EventEmitter } from "./events.ts";
 // Room
 export { Room, type Transcript } from "./room.ts";
+// WebSocket client (for advanced/React Native integrations)
+export { WSClient } from "./ws-client.ts";
 export {
 	camelToSnake,
 	camelToSnakeString,

@@ -1,115 +1,133 @@
-import http from 'k6/http';
-import ws from 'k6/ws';
-import { check, sleep } from 'k6';
-import { Counter, Trend, Gauge } from 'k6/metrics';
-import { BASE_URL, WS_URL, ROOM_SIZE, SHORT_RUN } from '../config.js';
-import { getAuthToken } from '../helpers/auth.js';
-import { chatMessage, pong, MessageType } from '../helpers/websocket.js';
+import http from "k6/http";
+import { Counter, Trend } from "k6/metrics";
+import ws from "k6/ws";
+import { BASE_URL, WS_URL } from "../config.js";
+import { getAuthToken } from "../helpers/auth.js";
+import { chatMessage, MessageType, pong } from "../helpers/websocket.js";
 
-const broadcastLatency = new Trend('broadcast_latency');
-const participantCount = new Gauge('participant_count');
-const messagesReceived = new Counter('messages_received');
+const broadcastLatency = new Trend("broadcast_latency");
+const participantsJoined = new Counter("participants_joined");
+const messagesReceived = new Counter("messages_received");
+const isShort = __ENV.K6_SHORT === "true";
+const activeUsers = Number(__ENV.K6_ACTIVE_USERS || 3000);
+const fullTarget = Math.max(100, activeUsers);
+const midTarget = Math.max(50, Math.round(fullTarget * 0.7));
+const lowTarget = Math.max(20, Math.round(fullTarget * 0.4));
+const stages = isShort
+	? [
+			{ duration: "30s", target: 20 },
+			{ duration: "1m", target: 40 },
+			{ duration: "1m", target: 40 },
+			{ duration: "30s", target: 0 },
+		]
+	: [
+			{ duration: "2m", target: lowTarget }, // Ramp to 40%
+			{ duration: "3m", target: midTarget }, // Ramp to 70%
+			{ duration: "5m", target: fullTarget }, // Scale to full load
+			{ duration: "10m", target: fullTarget }, // Hold and observe
+			{ duration: "2m", target: 0 }, // Ramp down
+		];
+const minParticipants = isShort ? 20 : Math.max(100, Math.round(fullTarget * 0.6));
+const socketDuration = isShort ? 120000 : 600000;
 
 export const options = {
-  scenarios: {
-    large_room: {
-      executor: 'ramping-vus',
-      startVUs: 0,
-      stages: [
-        { duration: SHORT_RUN ? '30s' : '2m', target: Math.max(25, Math.round(ROOM_SIZE * 0.33)) },
-        { duration: SHORT_RUN ? '1m' : '3m', target: Math.max(50, Math.round(ROOM_SIZE * 0.66)) },
-        { duration: SHORT_RUN ? '1m' : '5m', target: Math.max(75, ROOM_SIZE) },
-        { duration: SHORT_RUN ? '2m' : '10m', target: Math.max(75, ROOM_SIZE) },
-        { duration: SHORT_RUN ? '30s' : '2m', target: 0 },
-      ],
-    },
-  },
-  thresholds: {
-    broadcast_latency: ['p(95)<500', 'p(99)<1000'],
-    participant_count: ['value>100'],
-  },
+	scenarios: {
+		large_room: {
+			executor: "ramping-vus",
+			startVUs: 0,
+			stages,
+		},
+	},
+	thresholds: {
+		broadcast_latency: ["p(95)<500", "p(99)<1000"],
+		participants_joined: [`count>${minParticipants}`],
+	},
 };
 
-let sharedRoomId = null;
+const sharedRoomId = null;
 
 export function setup() {
-  const token = getAuthToken();
+	const token = getAuthToken();
 
-  const roomRes = http.post(`${BASE_URL}/api/v1/rooms`, JSON.stringify({
-    name: `large-room-test-${Date.now()}`,
-  }), {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-  });
+	const roomRes = http.post(
+		`${BASE_URL}/api/v1/rooms`,
+		JSON.stringify({
+			name: `large-room-test-${Date.now()}`,
+		}),
+		{
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	);
 
-  const room = JSON.parse(roomRes.body);
-  return { token, roomId: room.id };
+	const room = JSON.parse(roomRes.body);
+	return { token, roomId: room.id };
 }
 
-export default function(data) {
-  // Add participant
-  const addRes = http.post(
-    `${BASE_URL}/api/v1/rooms/${data.roomId}/participants`,
-    JSON.stringify({
-      external_user_id: `large-room-user-${__VU}`,
-      display_name: `User ${__VU}`,
-      role: 'participant',
-    }),
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${data.token}`,
-      },
-    }
-  );
+export default function (data) {
+	// Add participant
+	const addRes = http.post(
+		`${BASE_URL}/api/v1/rooms/${data.roomId}/participants`,
+		JSON.stringify({
+			external_user_id: `large-room-user-${__VU}`,
+			display_name: `User ${__VU}`,
+			role: "participant",
+		}),
+		{
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${data.token}`,
+			},
+		},
+	);
 
-  if (addRes.status !== 201) {
-    console.log(`Join failed: ${addRes.status}`);
-    return;
-  }
+	if (addRes.status !== 201) {
+		console.log(`Join failed: ${addRes.status}`);
+		return;
+	}
 
-  const participant = JSON.parse(addRes.body);
-  participantCount.add(1);
+	const participant = JSON.parse(addRes.body);
+	participantsJoined.add(1);
 
-  ws.connect(
-    `${WS_URL}?token=${participant.token}`,
-    {},
-    function(socket) {
-      const sentMessages = new Map(); // Track message send times
+	const wsHeaders = {
+		"Sec-WebSocket-Protocol": `chalk, token.${participant.access_token}`,
+	};
 
-      socket.on('message', (msg) => {
-        const message = JSON.parse(msg);
-        messagesReceived.add(1);
+	ws.connect(`${WS_URL}`, { headers: wsHeaders }, (socket) => {
+		const sentMessages = new Map(); // content -> send time
 
-        if (message.type === MessageType.PING) {
-          socket.send(pong());
-        }
+		socket.on("message", (msg) => {
+			const message = JSON.parse(msg);
+			messagesReceived.add(1);
 
-        // Measure broadcast latency for chat messages
-        if (message.type === MessageType.CHAT_MESSAGE) {
-          const payload = message.payload;
-          const sentTime = sentMessages.get(payload.id);
-          if (sentTime) {
-            broadcastLatency.add(Date.now() - sentTime);
-            sentMessages.delete(payload.id);
-          }
-        }
-      });
+			if (message.type === MessageType.PING) {
+				socket.send(pong());
+			}
 
-      // Send periodic chat messages using k6 socket.setInterval
-      socket.setInterval(function() {
-        const msgId = `${__VU}-${Date.now()}`;
-        sentMessages.set(msgId, Date.now());
-        socket.send(chatMessage(`Test message from VU ${__VU}`));
-      }, 7000); // 7 second interval
+			// Measure broadcast latency for chat messages
+			if (message.type === MessageType.CHAT_MESSAGE) {
+				const payload = message.payload;
+				const sentTime = sentMessages.get(payload.content);
+				if (sentTime) {
+					broadcastLatency.add(Date.now() - sentTime);
+					sentMessages.delete(payload.content);
+				}
+			}
+		});
 
-      // Stay connected for the test duration using socket.setTimeout
-      socket.setTimeout(function() {
-        socket.close();
-        participantCount.add(-1);
-      }, 600000); // 10 minutes
-    }
-  );
+		// Send periodic chat messages using k6 socket.setInterval
+		socket.setInterval(() => {
+			const content = `Test message ${__VU}-${Date.now()}`;
+			sentMessages.set(content, Date.now());
+			socket.send(chatMessage(content));
+		}, 7000); // 7 second interval
+
+		// Stay connected for the test duration using socket.setTimeout
+		socket.setTimeout(() => {
+			socket.close();
+			// connection finished
+		}, socketDuration);
+	});
 }

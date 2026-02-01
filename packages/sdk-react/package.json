@@ -43,12 +43,10 @@
     "build:copy-logos": "for f in ./src/assets/logos/*; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/logos/; done",
     "build:types": "tsc --project tsconfig.json",
     "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
-    "test": "bun test --preload ./src/__tests__/setup.ts",
+    "test": "bun test ./src/__tests__ --preload ./src/__tests__/setup.ts",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",
-    "clean": "rm -rf dist",
-    "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0-alpha.11",
@@ -65,17 +63,6 @@
     "tw-animate-css": "^1.3.0"
   },
   "devDependencies": {
-    "@chromatic-com/storybook": "^4.1.3",
-    "@storybook/addon-a11y": "8.6.14",
-    "@storybook/addon-docs": "8.6.14",
-    "@storybook/addon-essentials": "8.6.14",
-    "@storybook/addon-interactions": "8.6.14",
-    "@storybook/addon-links": "8.6.14",
-    "@storybook/addon-onboarding": "8.6.14",
-    "@storybook/blocks": "8.6.14",
-    "@storybook/react": "8.6.14",
-    "@storybook/react-vite": "8.6.14",
-    "@storybook/test": "8.6.14",
     "@tailwindcss/vite": "^4.1.18",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -91,7 +78,6 @@
     "jsdom": "^27.4.0",
     "playwright": "^1.57.0",
     "postcss": "^8.5.6",
-    "storybook": "8.6.14",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.7.2",
     "vitest": "^4.0.16"

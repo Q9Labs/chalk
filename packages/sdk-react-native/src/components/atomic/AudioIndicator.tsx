@@ -13,6 +13,7 @@ import Animated, {
 	cancelAnimation,
 	Easing,
 } from "react-native-reanimated";
+import { CHALK_THEME } from "../../theme";
 
 interface AudioIndicatorProps {
 	/** Audio level from 0 to 1 */
@@ -101,7 +102,7 @@ export function AudioIndicator({
 	}));
 
 	const animatedStyles = [animatedStyle0, animatedStyle1, animatedStyle2];
-	const barColor = isActive ? "#22c55e" : "#9ca3af";
+	const barColor = isActive ? CHALK_THEME.colors.status.speaking : CHALK_THEME.colors.text.muted;
 
 	return (
 		<View style={[styles.container, { width: size, height: size, gap }]}>

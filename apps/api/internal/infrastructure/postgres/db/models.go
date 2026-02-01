@@ -96,6 +96,7 @@ type Tenant struct {
 	MaxConcurrentRooms          int32     `db:"max_concurrent_rooms" json:"max_concurrent_rooms"`
 	MaxParticipantsPerRoom      int32     `db:"max_participants_per_room" json:"max_participants_per_room"`
 	MaxRecordingDurationMinutes int32     `db:"max_recording_duration_minutes" json:"max_recording_duration_minutes"`
+	MaxTotalMinutesOfMeetings   int32     `db:"max_total_minutes_of_meetings" json:"max_total_minutes_of_meetings"`
 	IsActive                    bool      `db:"is_active" json:"is_active"`
 	CreatedAt                   time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt                   time.Time `db:"updated_at" json:"updated_at"`

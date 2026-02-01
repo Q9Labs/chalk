@@ -21,7 +21,7 @@ const sizeClasses = {
   lg: 'text-base px-3 py-1.5',
 };
 
-export const NameTag = React.memo(({ name, role = 'participant', size = 'md', className }: NameTagProps) => {
+export const NameTag = React.memo(({ name, role = 'participant', isLocal = false, size = 'md', className }: NameTagProps) => {
   return (
     <div
       className={cn(
@@ -33,6 +33,11 @@ export const NameTag = React.memo(({ name, role = 'participant', size = 'md', cl
       <span className="truncate font-semibold text-lg tracking-tight">
         {name}
       </span>
+      {isLocal && (
+        <span className="text-xs text-white/80 whitespace-nowrap">
+          (You)
+        </span>
+      )}
       {role !== 'participant' && (
         <span
           className="rounded-[var(--chalk-border-radius-sm)] px-1.5 py-0.5 text-[10px] uppercase font-bold tracking-wider text-white"

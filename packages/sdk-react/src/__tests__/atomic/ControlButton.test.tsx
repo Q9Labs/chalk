@@ -30,13 +30,14 @@ describe('ControlButton', () => {
     const { getByRole } = render(<ControlButton icon={icon} label={label} active />);
     const button = getByRole('button', { name: label });
     expect(button).toHaveAttribute('aria-pressed', 'true');
-    expect(button).toHaveClass('bg-[var(--chalk-accent)]');
+    expect(button).toHaveClass('bg-[var(--secondary)]');
   });
 
   it('applies danger styles', () => {
     const { getByRole } = render(<ControlButton icon={icon} label={label} danger />);
     const button = getByRole('button', { name: label });
-    expect(button).toHaveClass('bg-[var(--chalk-danger)]');
+    expect(button).toHaveClass('bg-[#dc2626]');
+    expect(button).toHaveClass('text-white');
   });
 
   it('can be disabled', () => {

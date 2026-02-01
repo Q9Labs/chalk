@@ -16,6 +16,7 @@ func TestWebhookDelivery_SignatureVerification(t *testing.T) {
 	var mu sync.Mutex
 	var capturedSignature string
 	var capturedTimestamp string
+	var capturedDeliveryID string
 
 	// Create a test server that captures webhook requests
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -24,6 +25,7 @@ func TestWebhookDelivery_SignatureVerification(t *testing.T) {
 
 		capturedSignature = r.Header.Get("X-Chalk-Signature")
 		capturedTimestamp = r.Header.Get("X-Chalk-Timestamp")
+		capturedDeliveryID = r.Header.Get("X-Chalk-Delivery-ID")
 		_, _ = io.ReadAll(r.Body)
 
 		w.WriteHeader(http.StatusOK)
@@ -73,6 +75,7 @@ func TestWebhookDelivery_SignatureVerification(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Chalk-Signature", signature)
 	req.Header.Set("X-Chalk-Timestamp", "1705318200")
+	req.Header.Set("X-Chalk-Delivery-ID", "delivery_test_1")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -93,6 +96,9 @@ func TestWebhookDelivery_SignatureVerification(t *testing.T) {
 	}
 	if capturedTimestamp == "" {
 		t.Error("expected X-Chalk-Timestamp header")
+	}
+	if capturedDeliveryID == "" {
+		t.Error("expected X-Chalk-Delivery-ID header")
 	}
 	t.Logf("Captured signature: %s", capturedSignature)
 	t.Logf("Captured timestamp: %s", capturedTimestamp)

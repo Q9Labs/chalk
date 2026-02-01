@@ -4,6 +4,7 @@
 
 import { useMemo } from "react";
 import { View, Text, StyleSheet, type ViewStyle } from "react-native";
+import { CHALK_THEME } from "../../theme";
 
 interface AvatarProps {
 	/** Display name to extract initials from */
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 	},
 	text: {
-		color: "#ffffff",
+		color: CHALK_THEME.colors.text.primary,
 		fontWeight: "600",
 	},
 });

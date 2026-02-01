@@ -9,19 +9,20 @@ describe('DeviceSelector', () => {
   ];
 
   it('renders device options', () => {
-    const { getByText } = render(
+    const { getByRole, getByText } = render(
       <DeviceSelector type="audioinput" devices={devices} onChange={() => {}} />
     );
+    fireEvent.click(getByRole('button', { name: 'Select device' }));
     expect(getByText('Mic 1')).toBeDefined();
   });
 
   it('calls onChange when device is selected', () => {
     const onChange = vi.fn();
-    const { getByRole } = render(
+    const { getByRole, getByText } = render(
       <DeviceSelector type="audioinput" devices={devices} onChange={onChange} />
     );
-    const select = getByRole('combobox');
-    fireEvent.change(select, { target: { value: '2' } });
+    fireEvent.click(getByRole('button', { name: 'Select device' }));
+    fireEvent.click(getByText('Mic 2'));
     expect(onChange).toHaveBeenCalledWith('2');
   });
 

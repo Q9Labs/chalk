@@ -64,9 +64,11 @@ Stored in AWS Secrets Manager:
 
 ## Monitoring
 
-**Dashboards:** ECS CPU/Memory, ALB latency/errors, Aurora connections, Redis usage, API Gateway metrics
+**Dashboards:** ECS CPU/Memory, ALB latency/errors, target group health/errors, Aurora connections, Redis usage, API Gateway metrics
 
-**Alarms:** CPU/Memory >80%, 5XX >50/5min, p99 >500ms, DB connections >80%
+**Alarms:** CPU/Memory >80%, ALB 5XX, target 5XX, unhealthy/zero healthy hosts, target connection errors, p99 >500ms, DB connections >80%
+
+**Logs:** API Gateway access logs; ALB access logs to S3 when enabled
 
 ## CI/CD
 

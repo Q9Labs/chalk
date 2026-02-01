@@ -53,16 +53,17 @@ export const ReactionBubble = React.memo(({
   const isCelebration = CELEBRATION_EMOJIS.includes(emoji);
   const animProps = useMemo(() => generateAnimationProps(), []);
   const particles = useMemo(() => isCelebration ? generateParticles() : [], [isCelebration]);
-  const duration = prefersReducedMotion ? baseDuration : animProps.duration;
+  const timeoutMs = baseDuration;
+  const floatDurationMs = prefersReducedMotion ? baseDuration : animProps.duration;
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsVisible(false);
       onComplete?.();
-    }, duration);
+    }, timeoutMs);
 
     return () => clearTimeout(timer);
-  }, [duration, onComplete]);
+  }, [timeoutMs, onComplete]);
 
   if (!isVisible) return null;
 
@@ -73,7 +74,7 @@ export const ReactionBubble = React.memo(({
         '--float-travel-y': `${animProps.travelY}px`,
         '--float-rotation': `${animProps.rotation}deg`,
         '--float-scale': animProps.scale,
-        '--float-duration': `${animProps.duration}ms`,
+        '--float-duration': `${floatDurationMs}ms`,
         animationDelay: `${animProps.delay}ms`,
       } as React.CSSProperties;
 

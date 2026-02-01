@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'bun:test';
-import { render, fireEvent } from '@testing-library/react';
+import { describe, it, expect } from 'bun:test';
+import { render } from '@testing-library/react';
 import { NoiseSuppressionToggle } from '../../components/composite/NoiseSuppressionToggle';
 
 describe('NoiseSuppressionToggle', () => {
@@ -12,18 +12,20 @@ describe('NoiseSuppressionToggle', () => {
   });
 
   it('shows level selector when enabled', () => {
-    const { getByLabelText } = render(
-      <NoiseSuppressionToggle enabled={true} onChange={() => {}} />
+    const { getByRole } = render(
+      <NoiseSuppressionToggle enabled={true} onChange={() => {}} onLevelChange={() => {}} />
     );
-    expect(getByLabelText('Noise suppression level')).toBeDefined();
+    // Select renders as a button with the current value as its accessible name.
+    expect(getByRole('button', { name: /medium/i })).toBeDefined();
   });
 
-  it('calls onChange when toggle clicked', () => {
-    const onChange = vi.fn();
-    const { getByRole } = render(
-      <NoiseSuppressionToggle enabled={false} onChange={onChange} />
+  it('reflects enabled state on the switch', () => {
+    const { getByRole, rerender } = render(
+      <NoiseSuppressionToggle enabled={false} onChange={() => {}} />
     );
-    fireEvent.click(getByRole('switch'));
-    expect(onChange).toHaveBeenCalledWith(true);
+    expect(getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+
+    rerender(<NoiseSuppressionToggle enabled={true} onChange={() => {}} />);
+    expect(getByRole('switch')).toHaveAttribute('aria-checked', 'true');
   });
 });

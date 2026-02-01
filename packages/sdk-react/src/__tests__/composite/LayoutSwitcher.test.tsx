@@ -19,6 +19,6 @@ describe('LayoutSwitcher', () => {
 
   it('marks current layout as default variant (active)', () => {
     const { getByLabelText } = render(<LayoutSwitcher layout="grid" onChange={() => {}} />);
-    expect(getByLabelText('Switch to grid layout')).toHaveClass('bg-[var(--chalk-bg-tertiary)]');
+    expect(getByLabelText('Switch to grid layout')).toHaveClass('bg-secondary');
   });
 });

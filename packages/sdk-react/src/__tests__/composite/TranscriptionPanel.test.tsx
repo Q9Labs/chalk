@@ -13,17 +13,17 @@ describe('TranscriptionPanel', () => {
 
   it('renders transcripts correctly', () => {
     const { getByText } = render(<TranscriptionPanel transcripts={transcripts} />);
-    expect(getByText(/Alice:/)).toBeDefined();
+    expect(getByText('Alice')).toBeDefined();
     expect(getByText('Hello')).toBeDefined();
   });
 
   it('shows empty state message', () => {
     const { getByText } = render(<TranscriptionPanel transcripts={[]} />);
-    expect(getByText('Transcription will appear here')).toBeDefined();
+    expect(getByText('No transcripts yet')).toBeDefined();
   });
 
   it('renders status badge when live', () => {
-    const { getByLabelText } = render(<TranscriptionPanel transcripts={[]} isLive={true} />);
-    expect(getByLabelText('transcribing')).toBeDefined();
+    const { getByText } = render(<TranscriptionPanel transcripts={[]} isLive={true} />);
+    expect(getByText('Live')).toBeDefined();
   });
 });

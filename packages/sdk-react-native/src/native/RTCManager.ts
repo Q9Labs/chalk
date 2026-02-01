@@ -9,6 +9,7 @@ import type {
 	RTCPeerConnection,
 } from "@cloudflare/react-native-webrtc";
 import { NativeModules, PermissionsAndroid, Platform } from "react-native";
+import { logger } from "../logger";
 
 // Detect iOS simulator - on simulator, enumerateDevices() crashes with nil object insertion
 // Use multiple detection methods for reliability
@@ -119,12 +120,34 @@ export class RTCManager {
 		authToken: string,
 		options?: RTCManagerInitOptions,
 	): Promise<void> {
+		const startTime = Date.now();
+
+		logger.info({
+			event: "rtc.init.start",
+			options: {
+				audio: options?.audio ?? true,
+				video: options?.video ?? true,
+			},
+		});
+
 		const hasPermissions = await this.requestPermissions();
 		if (!hasPermissions) {
+			logger.error({
+				event: "rtc.init.error",
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: "Media permissions denied", type: "PermissionError" },
+			});
 			throw new Error("Media permissions denied");
 		}
 
 		if (!RealtimeKitClient) {
+			logger.error({
+				event: "rtc.init.error",
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: "RealtimeKit not available", type: "ModuleError" },
+			});
 			throw new Error(
 				"RealtimeKit is not available. Install @cloudflare/realtimekit-react-native",
 			);
@@ -139,6 +162,13 @@ export class RTCManager {
 		});
 
 		this.isUsingRealtimeKit = true;
+
+		logger.info({
+			event: "rtc.init.complete",
+			duration_ms: Date.now() - startTime,
+			outcome: "success",
+			mode: "realtimekit",
+		});
 	}
 
 	/**
@@ -179,6 +209,11 @@ export class RTCManager {
 	 * iOS permissions are handled via Info.plist
 	 */
 	async requestPermissions(): Promise<boolean> {
+		logger.info({
+			event: "rtc.permissions.request",
+			platform: Platform.OS,
+		});
+
 		if (Platform.OS === "android") {
 			try {
 				const permissions = [
@@ -188,16 +223,43 @@ export class RTCManager {
 
 				const granted = await PermissionsAndroid.requestMultiple(permissions);
 
-				return (
-					granted[PermissionsAndroid.PERMISSIONS.CAMERA] === "granted" &&
-					granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === "granted"
-				);
-			} catch {
+				const cameraGranted =
+					granted[PermissionsAndroid.PERMISSIONS.CAMERA] === "granted";
+				const audioGranted =
+					granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === "granted";
+				const allGranted = cameraGranted && audioGranted;
+
+				logger.info({
+					event: "rtc.permissions.result",
+					outcome: allGranted ? "success" : "denied",
+					permissions: {
+						camera: cameraGranted ? "granted" : "denied",
+						microphone: audioGranted ? "granted" : "denied",
+					},
+				});
+
+				return allGranted;
+			} catch (err) {
+				const error = err instanceof Error ? err : new Error(String(err));
+				logger.error({
+					event: "rtc.permissions.error",
+					outcome: "error",
+					error: { message: error.message, type: error.name },
+				});
 				return false;
 			}
 		}
 
 		// iOS permissions handled via Info.plist
+		logger.info({
+			event: "rtc.permissions.result",
+			outcome: "success",
+			permissions: {
+				camera: "granted",
+				microphone: "granted",
+			},
+			note: "iOS permissions via Info.plist",
+		});
 		return true;
 	}
 
@@ -205,13 +267,27 @@ export class RTCManager {
 	 * Toggle video using RealtimeKit or fallback
 	 */
 	async toggleVideo(): Promise<boolean> {
+		const previousState = this.rtkClient?.self?.videoEnabled ?? false;
+
 		// RealtimeKit mode
 		if (this.rtkClient) {
 			if (this.rtkClient.self.videoEnabled) {
 				await this.rtkClient.self.disableVideo();
+				logger.info({
+					event: "rtc.video.toggle",
+					enabled: false,
+					previousState: true,
+					mode: "realtimekit",
+				});
 				return false;
 			}
 			await this.rtkClient.self.enableVideo();
+			logger.info({
+				event: "rtc.video.toggle",
+				enabled: true,
+				previousState: false,
+				mode: "realtimekit",
+			});
 			return true;
 		}
 
@@ -221,9 +297,23 @@ export class RTCManager {
 			if (videoTracks.length > 0) {
 				const track = videoTracks[0] as unknown as { enabled: boolean };
 				track.enabled = !track.enabled;
+				logger.info({
+					event: "rtc.video.toggle",
+					enabled: track.enabled,
+					previousState,
+					mode: "fallback",
+				});
 				return track.enabled;
 			}
 		}
+
+		logger.info({
+			event: "rtc.video.toggle",
+			enabled: false,
+			previousState,
+			mode: "none",
+			note: "No stream available",
+		});
 		return false;
 	}
 
@@ -231,13 +321,27 @@ export class RTCManager {
 	 * Toggle audio using RealtimeKit or fallback
 	 */
 	async toggleAudio(): Promise<boolean> {
+		const previousState = this.rtkClient?.self?.audioEnabled ?? false;
+
 		// RealtimeKit mode
 		if (this.rtkClient) {
 			if (this.rtkClient.self.audioEnabled) {
 				await this.rtkClient.self.disableAudio();
+				logger.info({
+					event: "rtc.audio.toggle",
+					enabled: false,
+					previousState: true,
+					mode: "realtimekit",
+				});
 				return false;
 			}
 			await this.rtkClient.self.enableAudio();
+			logger.info({
+				event: "rtc.audio.toggle",
+				enabled: true,
+				previousState: false,
+				mode: "realtimekit",
+			});
 			return true;
 		}
 
@@ -247,9 +351,23 @@ export class RTCManager {
 			if (audioTracks.length > 0) {
 				const track = audioTracks[0] as unknown as { enabled: boolean };
 				track.enabled = !track.enabled;
+				logger.info({
+					event: "rtc.audio.toggle",
+					enabled: track.enabled,
+					previousState,
+					mode: "fallback",
+				});
 				return track.enabled;
 			}
 		}
+
+		logger.info({
+			event: "rtc.audio.toggle",
+			enabled: false,
+			previousState,
+			mode: "none",
+			note: "No stream available",
+		});
 		return false;
 	}
 
@@ -258,15 +376,35 @@ export class RTCManager {
 	 * Note: Screen sharing requires additional native setup on iOS/Android
 	 */
 	async startScreenShare(): Promise<boolean> {
+		logger.info({
+			event: "rtc.screenshare.start",
+			hasRtkClient: !!this.rtkClient,
+		});
+
 		if (!this.rtkClient) {
+			logger.info({
+				event: "rtc.screenshare.start",
+				outcome: "skipped",
+				reason: "no_rtk_client",
+			});
 			return false;
 		}
 
 		try {
 			await this.rtkClient.self.enableScreenShare();
 			this.isScreenSharing = true;
+			logger.info({
+				event: "rtc.screenshare.started",
+				outcome: "success",
+			});
 			return true;
-		} catch {
+		} catch (err) {
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "rtc.screenshare.error",
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
 			return false;
 		}
 	}
@@ -275,12 +413,26 @@ export class RTCManager {
 	 * Stop screen sharing
 	 */
 	async stopScreenShare(): Promise<void> {
+		logger.info({
+			event: "rtc.screenshare.stop",
+			wasSharing: this.isScreenSharing,
+		});
+
 		if (this.rtkClient) {
 			try {
 				await this.rtkClient.self.disableScreenShare();
 				this.isScreenSharing = false;
-			} catch {
-				// Silently ignore error
+				logger.info({
+					event: "rtc.screenshare.stopped",
+					outcome: "success",
+				});
+			} catch (err) {
+				const error = err instanceof Error ? err : new Error(String(err));
+				logger.error({
+					event: "rtc.screenshare.error",
+					outcome: "error",
+					error: { message: error.message, type: error.name },
+				});
 			}
 		}
 	}
@@ -303,7 +455,21 @@ export class RTCManager {
 		video: boolean = true,
 		audio: boolean = true,
 	): Promise<MediaStream> {
+		const startTime = Date.now();
+
+		logger.info({
+			event: "rtc.stream.get.start",
+			constraints: { video, audio },
+			cameraFacing: this.cameraFacingMode,
+		});
+
 		if (!mediaDevices) {
+			logger.error({
+				event: "rtc.stream.get.error",
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: "WebRTC not available", type: "ModuleError" },
+			});
 			throw new Error("WebRTC not available on this device");
 		}
 
@@ -326,8 +492,26 @@ export class RTCManager {
 
 		try {
 			this.localStream = await mediaDevices.getUserMedia(constraints);
+
+			logger.info({
+				event: "rtc.stream.get.complete",
+				duration_ms: Date.now() - startTime,
+				outcome: "success",
+				tracks: {
+					video: this.localStream.getVideoTracks().length,
+					audio: this.localStream.getAudioTracks().length,
+				},
+			});
+
 			return this.localStream;
 		} catch (err) {
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "rtc.stream.get.error",
+				duration_ms: Date.now() - startTime,
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
 			throw err;
 		}
 	}
@@ -339,34 +523,61 @@ export class RTCManager {
 	async enumerateDevices(): Promise<MediaDeviceInfo[]> {
 		// Return mock devices on simulator to avoid native crash
 		if (!mediaDevices || isIOSSimulator) {
-			return [
+			const mockDevices = [
 				{
 					deviceId: "mock-camera-front",
 					label: "Front Camera",
-					kind: "videoinput",
+					kind: "videoinput" as const,
 				},
 				{
 					deviceId: "mock-camera-back",
 					label: "Back Camera",
-					kind: "videoinput",
+					kind: "videoinput" as const,
 				},
 				{
 					deviceId: "mock-mic",
 					label: "Built-in Microphone",
-					kind: "audioinput",
+					kind: "audioinput" as const,
 				},
 				{
 					deviceId: "mock-speaker",
 					label: "Built-in Speaker",
-					kind: "audiooutput",
+					kind: "audiooutput" as const,
 				},
 			];
+
+			logger.info({
+				event: "rtc.devices.enumerate",
+				outcome: "mock",
+				reason: isIOSSimulator ? "ios_simulator" : "no_media_devices",
+				deviceCount: mockDevices.length,
+			});
+
+			return mockDevices;
 		}
 
 		try {
 			const devices = await mediaDevices.enumerateDevices();
+
+			logger.info({
+				event: "rtc.devices.enumerate",
+				outcome: "success",
+				deviceCount: devices.length,
+				devices: {
+					videoinput: devices.filter((d) => d.kind === "videoinput").length,
+					audioinput: devices.filter((d) => d.kind === "audioinput").length,
+					audiooutput: devices.filter((d) => d.kind === "audiooutput").length,
+				},
+			});
+
 			return devices as MediaDeviceInfo[];
-		} catch {
+		} catch (err) {
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "rtc.devices.enumerate.error",
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
 			return [];
 		}
 	}
@@ -399,7 +610,20 @@ export class RTCManager {
 	 * Switch between front and back camera
 	 */
 	async switchCamera(): Promise<void> {
+		const previousFacing = this.cameraFacingMode;
+
+		logger.info({
+			event: "rtc.camera.switch.start",
+			previousFacing,
+			targetFacing: previousFacing === "user" ? "environment" : "user",
+		});
+
 		if (!this.localStream) {
+			logger.error({
+				event: "rtc.camera.switch.error",
+				outcome: "error",
+				error: { message: "No local stream available", type: "StateError" },
+			});
 			throw new Error("No local stream available");
 		}
 
@@ -416,15 +640,35 @@ export class RTCManager {
 					)._switchCamera();
 					this.cameraFacingMode =
 						this.cameraFacingMode === "user" ? "environment" : "user";
+
+					logger.info({
+						event: "rtc.camera.switch.complete",
+						outcome: "success",
+						method: "native",
+						newFacing: this.cameraFacingMode,
+					});
 				} else {
 					// Fallback: stop current stream and get new one
 					await this.stopVideo();
 					this.cameraFacingMode =
 						this.cameraFacingMode === "user" ? "environment" : "user";
 					await this.startVideo();
+
+					logger.info({
+						event: "rtc.camera.switch.complete",
+						outcome: "success",
+						method: "fallback",
+						newFacing: this.cameraFacingMode,
+					});
 				}
 			}
 		} catch (err) {
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error({
+				event: "rtc.camera.switch.error",
+				outcome: "error",
+				error: { message: error.message, type: error.name },
+			});
 			throw err;
 		}
 	}
@@ -579,6 +823,13 @@ export class RTCManager {
 	 * Clean up resources
 	 */
 	cleanup(): void {
+		logger.info({
+			event: "rtc.cleanup.start",
+			hasRtkClient: !!this.rtkClient,
+			hasLocalStream: !!this.localStream,
+			peerConnectionCount: this.peerConnections.size,
+		});
+
 		// Clean up RealtimeKit
 		if (this.rtkClient) {
 			this.rtkClient.leave().catch(() => {
@@ -604,5 +855,10 @@ export class RTCManager {
 
 		this.isUsingRealtimeKit = false;
 		this.isScreenSharing = false;
+
+		logger.info({
+			event: "rtc.cleanup.complete",
+			outcome: "success",
+		});
 	}
 }

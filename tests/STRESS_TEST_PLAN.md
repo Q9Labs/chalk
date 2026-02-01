@@ -1,6 +1,6 @@
 # Chalk Stress Test Plan
 
-## Status: Implementation Complete - Ready for Execution
+## Status: Ready for Execution (k6 complete; Artillery/WebRTC optional)
 
 ---
 
@@ -13,10 +13,10 @@ All test files have been created and are ready to use:
 - [x] `tests/load/k6/helpers/auth.js` - Token generation (getAuthToken, refreshToken)
 - [x] `tests/load/k6/helpers/websocket.js` - WS message types matching API's messages.go
 - [x] `tests/load/k6/scenarios/smoke.js` - Baseline verification (10 VUs, 1m)
-- [x] `tests/load/k6/scenarios/room-creation.js` - Room creation storm (100 req/s, 8m)
-- [x] `tests/load/k6/scenarios/participant-churn.js` - Join/leave churn (100 VUs, 17m)
-- [x] `tests/load/k6/scenarios/large-room.js` - 150 participants single room (22m)
-- [x] `tests/load/k6/scenarios/ws-storm.js` - Message flood rate limit test (50 VUs, 5m)
+- [x] `tests/load/k6/scenarios/room-creation.js` - Room creation storm (scaled by `K6_ACTIVE_USERS`, default 3000)
+- [x] `tests/load/k6/scenarios/participant-churn.js` - Join/leave churn (scaled by `K6_ACTIVE_USERS`, default 3000)
+- [x] `tests/load/k6/scenarios/large-room.js` - Large room join + broadcast (scaled by `K6_ACTIVE_USERS`, default 3000)
+- [x] `tests/load/k6/scenarios/ws-storm.js` - Message flood rate limit test (scaled by `K6_ACTIVE_USERS`, default 3000)
 
 ### Artillery WebSocket Scenarios
 - [x] `tests/load/artillery/config.yml` - Base configuration
@@ -49,21 +49,22 @@ All test files have been created and are ready to use:
 ## Next Steps (Phase 2: Execution)
 
 ### Prerequisites
-1. **AWS credentials configured** - `aws configure` or environment variables
+1. **AWS credentials configured** - `aws configure` or `AWS_PROFILE=q9labs`
 2. **Terraform state bucket exists** - `chalk-terraform-state` in us-east-1
-3. **k6 installed locally** - `brew install k6` or from https://k6.io
-4. **jq installed** - `brew install jq` (for result parsing)
-5. **API Docker image available** - `ghcr.io/q9labs/chalk-api:latest`
+3. **k6 installed locally** - `brew install k6`
+4. **jq installed** - `brew install jq`
+5. **Docker installed** - for building the API image
+6. **AWS CLI installed** - for ECR/ECS operations
 
 ### Day 1: Infrastructure Setup
 ```bash
 # 1. Review and customize Terraform variables
 cd tests/infrastructure/terraform/stress-test
 cp terraform.tfvars.example terraform.tfvars  # Create if needed
-# Edit: db_username, db_password, api_image
+# Edit: db_username, db_password, cloudflare_* (and optional sizing)
 
-# 2. Provision infrastructure
-./tests/scripts/setup-test-env.sh
+# 2. Provision infrastructure + push API image to ECR
+AWS_PROFILE=q9labs ./tests/scripts/setup-test-env.sh
 
 # 3. Verify outputs
 # - API endpoint URL
@@ -75,7 +76,7 @@ cp terraform.tfvars.example terraform.tfvars  # Create if needed
 ### Day 1: Smoke Test
 ```bash
 # Run baseline verification
-./tests/scripts/run-tests.sh smoke
+K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh smoke
 
 # Expected: All checks pass, p95 < 500ms, 0% errors
 # Results auto-appended to tests/results/STRESS_TEST_RESULTS.md
@@ -83,11 +84,11 @@ cp terraform.tfvars.example terraform.tfvars  # Create if needed
 
 ### Day 2-3: Load Tests
 ```bash
-# Room creation storm (100 rooms/sec for 5 min)
-./tests/scripts/run-tests.sh room-creation
+# Room creation storm (scaled by K6_ACTIVE_USERS)
+K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh room-creation
 
 # Participant join/leave churn
-./tests/scripts/run-tests.sh participant-churn
+K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh participant-churn
 
 # Check CloudWatch dashboard between tests
 # Cool down 60 seconds between scenarios
@@ -95,11 +96,11 @@ cp terraform.tfvars.example terraform.tfvars  # Create if needed
 
 ### Day 4-5: Stress Tests
 ```bash
-# Large room (150 concurrent participants)
-./tests/scripts/run-tests.sh large-room
+# Large room (scaled by K6_ACTIVE_USERS)
+K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh large-room
 
 # WebSocket message flood (rate limit verification)
-./tests/scripts/run-tests.sh ws-storm
+K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh ws-storm
 ```
 
 ### Day 6: Spike Testing (Manual)

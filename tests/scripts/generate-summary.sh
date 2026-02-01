@@ -16,9 +16,9 @@ if [ ! -f "$RESULTS_FILE" ]; then
 fi
 
 # Count results
-TOTAL_TESTS=$(grep -c "^### " "$RESULTS_FILE" || echo 0)
-PASSED=$(grep -c "✅ PASS" "$RESULTS_FILE" || echo 0)
-FAILED=$(grep -c "❌ FAIL" "$RESULTS_FILE" || echo 0)
+TOTAL_TESTS=$(grep -c "^### " "$RESULTS_FILE" || true)
+PASSED=$(grep -c "✅ PASS" "$RESULTS_FILE" || true)
+FAILED=$(grep -c "❌ FAIL" "$RESULTS_FILE" || true)
 
 # Calculate pass rate
 if [ "$TOTAL_TESTS" -gt 0 ]; then

@@ -1,5 +1,5 @@
 config:
-  target: "wss://api-stress.chalk.example.com"
+  target: "{{ $processEnvironment.WS_URL }}"
   phases:
     - duration: 60
       arrivalRate: 10
@@ -8,6 +8,7 @@ config:
   ws:
     rejectUnauthorized: false
   processor: "./functions.js"
+  beforeScenario: "setupParticipant"
 
 scenarios:
   - name: "Chat participant"

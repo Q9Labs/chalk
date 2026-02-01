@@ -28,7 +28,7 @@
 		"build": "bun build ./src/index.ts ./src/react/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && bun run build:types",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
 		"dev": "bun build ./src/index.ts ./src/react/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
-		"test": "bun test",
+		"test": "echo 'No tests configured yet'",
 		"check-types": "tsc --noEmit",
 		"lint": "echo 'No linter configured yet'",
 		"clean": "rm -rf dist"

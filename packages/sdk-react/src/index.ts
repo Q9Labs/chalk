@@ -151,6 +151,9 @@ export {
 	// Logging
 	useLogger,
 	type UseLoggerReturn,
+	// Per-participant volume
+	useParticipantVolume,
+	type UseParticipantVolumeReturn,
 } from "./hooks";
 
 // ============================================================================

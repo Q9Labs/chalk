@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from 'bun:test';
-import { render, fireEvent } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatPanel } from '../../components/composite/ChatPanel';
 
@@ -14,8 +14,8 @@ describe('ChatPanel', () => {
   ];
 
   it('renders messages correctly', () => {
-    const { getByText } = render(<ChatPanel messages={messages} onSendMessage={() => {}} />);
-    expect(getByText('Alice')).toBeDefined();
+    const { getByText, getByLabelText } = render(<ChatPanel messages={messages} onSendMessage={() => {}} />);
+    expect(getByLabelText('Avatar for Alice')).toBeDefined();
     expect(getByText('Hello')).toBeDefined();
     expect(getByText('Hi')).toBeDefined();
   });
@@ -25,10 +25,13 @@ describe('ChatPanel', () => {
     const { getByPlaceholderText, getByLabelText } = render(
       <ChatPanel messages={[]} onSendMessage={onSendMessage} />
     );
+    const user = userEvent.setup();
     const textarea = getByPlaceholderText('Type a message...');
-    fireEvent.change(textarea, { target: { value: 'New message' } });
-    fireEvent.click(getByLabelText('Send message'));
-    expect(onSendMessage).toHaveBeenCalled();
+
+    await user.type(textarea, 'New message');
+    await user.click(getByLabelText('Send message'));
+
+    expect(onSendMessage).toHaveBeenCalledWith('New message');
   });
 
   it('displays empty state message', () => {
