@@ -48,6 +48,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	missingR2 := []string{}
+	if cfg.Storage.R2AccountID == "" {
+		missingR2 = append(missingR2, "R2_ACCOUNT_ID")
+	}
+	if cfg.Storage.R2AccessKeyID == "" {
+		missingR2 = append(missingR2, "R2_ACCESS_KEY_ID")
+	}
+	if cfg.Storage.R2SecretAccessKey == "" {
+		missingR2 = append(missingR2, "R2_SECRET_ACCESS_KEY")
+	}
+	if cfg.Storage.R2BucketName == "" {
+		missingR2 = append(missingR2, "R2_BUCKET_NAME")
+	}
+	if len(missingR2) > 0 {
+		slog.Warn("r2 storage not fully configured", "missing", missingR2)
+	} else {
+		slog.Info("r2 storage configuration detected")
+	}
+
 	slog.Info("starting server", "env", cfg.Server.Env)
 
 	dbPort := 5432
