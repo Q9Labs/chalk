@@ -235,7 +235,7 @@ resource "aws_lb" "main" {
     for_each = var.enable_alb_access_logs ? [1] : []
     content {
       bucket  = aws_s3_bucket.alb_logs[0].bucket
-      prefix  = var.alb_access_logs_prefix
+      prefix  = local.alb_access_logs_prefix
       enabled = true
     }
   }
@@ -288,6 +288,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "alb_logs" {
     id     = "expire-logs"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     expiration {
       days = var.alb_access_logs_retention_days
     }
@@ -305,10 +309,10 @@ resource "aws_s3_bucket_policy" "alb_logs" {
         Sid    = "AWSLogDeliveryWrite"
         Effect = "Allow"
         Principal = {
-          Service = "logdelivery.elasticloadbalancing.amazonaws.com"
+          AWS = data.aws_elb_service_account.main.arn
         }
         Action   = "s3:PutObject"
-        Resource = "arn:aws:s3:::${aws_s3_bucket.alb_logs[0].bucket}/${var.alb_access_logs_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+        Resource = local.alb_access_logs_prefix != "" ? "arn:aws:s3:::${aws_s3_bucket.alb_logs[0].bucket}/${local.alb_access_logs_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*" : "arn:aws:s3:::${aws_s3_bucket.alb_logs[0].bucket}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
@@ -319,7 +323,7 @@ resource "aws_s3_bucket_policy" "alb_logs" {
         Sid    = "AWSLogDeliveryAclCheck"
         Effect = "Allow"
         Principal = {
-          Service = "logdelivery.elasticloadbalancing.amazonaws.com"
+          AWS = data.aws_elb_service_account.main.arn
         }
         Action   = "s3:GetBucketAcl"
         Resource = "arn:aws:s3:::${aws_s3_bucket.alb_logs[0].bucket}"
