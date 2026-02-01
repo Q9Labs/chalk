@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD: Use full SHA tags for API images** — Avoids ECR immutable tag collisions during force deploy.
 - **API: Log missing R2 env vars at startup** — Clear warning when storage credentials/bucket config are absent.
 - **Infra: Require R2 credentials in prod when Cloudflare enabled** — Prevents silent misconfig in production.
+- **Infra: Pass R2 credentials in workflow** — Terraform CI now injects R2 access/secret keys and falls back to GitHub secret for webhook secret.
 - **API: Restore Cloudflare mock config** — Keeps local/tests working when Cloudflare credentials are absent.
 
 ### Added

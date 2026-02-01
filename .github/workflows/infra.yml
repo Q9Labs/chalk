@@ -152,6 +152,10 @@ jobs:
           CF_WEBHOOK_SECRET=$(aws ssm get-parameter --name "/chalk/prod/cloudflare-webhook-secret" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
           echo "::add-mask::$CF_WEBHOOK_SECRET"
           echo "cf_webhook_secret=$CF_WEBHOOK_SECRET" >> $GITHUB_OUTPUT
+          if [ -z "$CF_WEBHOOK_SECRET" ]; then
+            echo "::notice::SSM cloudflare-webhook-secret is empty; falling back to GitHub secret"
+            echo "cf_webhook_secret=${{ secrets.CLOUDFLARE_WEBHOOK_SECRET }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Terraform Plan
         id: plan
@@ -159,6 +163,8 @@ jobs:
           terraform plan \
             -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -var="r2_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}" \
+            -var="r2_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}" \
             -var="axiom_token=${{ steps.ssm.outputs.axiom_token }}" \
             -var="cloudflare_webhook_secret=${{ steps.ssm.outputs.cf_webhook_secret }}" \
             -out=tfplan \
