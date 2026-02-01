@@ -42,7 +42,7 @@
     "build:copy-sounds": "for f in ./src/assets/sounds/*.mp3; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/sounds/; done",
     "build:copy-logos": "for f in ./src/assets/logos/*; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/logos/; done",
     "build:types": "tsc --project tsconfig.json",
-    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
+    "dev": "bun run build:styles && bun run build:assets && bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
     "test": "bun test ./src/__tests__ --preload ./src/__tests__/setup.ts",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",

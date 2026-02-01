@@ -35,31 +35,6 @@ func NewWebhookHandler(recordingService *recording.Service, queries *db.Queries,
 	}
 }
 
-// RecordingStatusWebhook matches Cloudflare RealtimeKit's recording.statusUpdate payload
-type RecordingStatusWebhook struct {
-	Event     string               `json:"event"`
-	Recording RecordingWebhookData `json:"recording"`
-	Meeting   MeetingWebhookData   `json:"meeting"`
-}
-
-type RecordingWebhookData struct {
-	ID                string  `json:"id"`
-	DownloadURL       *string `json:"download_url"`
-	DownloadURLExpiry *string `json:"download_url_expiry"`
-	FileSize          *int64  `json:"file_size"`
-	SessionID         string  `json:"session_id"`
-	OutputFileName    string  `json:"output_file_name"`
-	Status            string  `json:"status"` // INVOKED, RECORDING, UPLOADING, COMPLETED
-	InvokedTime       string  `json:"invoked_time"`
-	StartedTime       *string `json:"started_time"`
-	StoppedTime       *string `json:"stopped_time"`
-}
-
-type MeetingWebhookData struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-}
-
 func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	start := time.Now()
 	requestID := c.GetHeader("X-Request-Id")
@@ -111,6 +86,7 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload: " + err.Error()})
 		return
 	}
+	normalizeRecordingWebhook(&webhook)
 	evt["parse_ok"] = true
 	evt["cf_recording_id"] = webhook.Recording.ID
 	evt["cf_session_id"] = webhook.Recording.SessionID
@@ -124,8 +100,8 @@ func (h *WebhookHandler) HandleRecordingReady(c *gin.Context) {
 	evt["cf_stopped_time"] = webhook.Recording.StoppedTime
 	evt["has_download_url"] = webhook.Recording.DownloadURL != nil
 
-	// Only process COMPLETED recordings (download_url is available)
-	if webhook.Recording.Status != "COMPLETED" {
+	// Only process recordings once they have been uploaded (download_url is available).
+	if !shouldProcessRecording(webhook.Recording.Status) {
 		evt["outcome"] = "acknowledged"
 		evt["status_code"] = http.StatusOK
 		c.JSON(http.StatusOK, gin.H{
@@ -178,15 +154,15 @@ func (h *WebhookHandler) processRecording(rec *db.Recording, webhook RecordingSt
 	defer cancel()
 
 	evt := map[string]any{
-		"event":              "recording.process",
-		"request_id":         requestID,
-		"recording_id":       rec.ID,
-		"room_id":            rec.RoomID,
-		"cf_recording_id":    webhook.Recording.ID,
-		"cf_session_id":      webhook.Recording.SessionID,
-		"cf_meeting_id":      webhook.Meeting.ID,
+		"event":               "recording.process",
+		"request_id":          requestID,
+		"recording_id":        rec.ID,
+		"room_id":             rec.RoomID,
+		"cf_recording_id":     webhook.Recording.ID,
+		"cf_session_id":       webhook.Recording.SessionID,
+		"cf_meeting_id":       webhook.Meeting.ID,
 		"cf_output_file_name": webhook.Recording.OutputFileName,
-		"cf_file_size":       webhook.Recording.FileSize,
+		"cf_file_size":        webhook.Recording.FileSize,
 	}
 	defer func() {
 		evt["total_duration_ms"] = time.Since(startTime).Milliseconds()
@@ -367,32 +343,4 @@ func parsePostMeetingWebhookConfig(tenantConfig []byte) (*postMeetingWebhookConf
 	}
 
 	return config.PostMeetingWebhook, nil
-}
-
-func streamDownload(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("download failed: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("download failed: status=%d content_type=%s content_length=%d",
-			resp.StatusCode, resp.Header.Get("Content-Type"), resp.ContentLength)
-	}
-
-	return resp, nil
-}
-
-func mapToSlogAttrs(m map[string]any) []any {
-	attrs := make([]any, 0, len(m)*2)
-	for k, v := range m {
-		attrs = append(attrs, k, v)
-	}
-	return attrs
 }

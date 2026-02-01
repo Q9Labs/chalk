@@ -3,10 +3,14 @@ package jobs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/webhook"
@@ -69,6 +73,7 @@ func (w *WebhookWorker) processPendingDeliveries(ctx context.Context) {
 
 func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookDelivery) {
 	start := time.Now()
+	attempt := delivery.Attempts + 1
 	evt := map[string]any{
 		"event":        "recording.webhook_delivered",
 		"delivery_id":  delivery.ID,
@@ -76,9 +81,14 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 		"room_id":      delivery.RoomID,
 		"event_type":   delivery.EventType,
 		"webhook_url":  delivery.WebhookUrl,
-		"attempt":      delivery.Attempts + 1,
+		"attempt":      attempt,
 		"max_attempts": delivery.MaxAttempts,
 		"payload_size": len(delivery.Payload),
+		"raw_body":     string(delivery.Payload),
+	}
+	// Log total elapsed since first attempt on retries
+	if attempt > 1 && !delivery.CreatedAt.IsZero() {
+		evt["total_elapsed_ms"] = time.Since(delivery.CreatedAt).Milliseconds()
 	}
 	defer func() {
 		evt["duration_ms"] = time.Since(start).Milliseconds()
@@ -125,6 +135,7 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 	// Generate signature
 	timestamp := time.Now().Unix()
 	signature := webhook.GenerateSignature(secret, timestamp, delivery.Payload)
+	evt["signature_timestamp"] = timestamp
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "POST", delivery.WebhookUrl, bytes.NewReader(delivery.Payload))
@@ -142,10 +153,14 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 	req.Header.Set("X-Chalk-Delivery-ID", delivery.ID.String())
 	req.Header.Set("User-Agent", "Chalk-Webhook/1.0")
 
+	// Log all request headers for signature debugging
+	evt["req_headers"] = headerMap(req.Header)
+
 	// Send request
 	resp, err := w.client.Do(req)
 	if err != nil {
 		evt["error"] = "request failed: " + err.Error()
+		evt["error_class"] = classifyHTTPError(err)
 		evt["outcome"] = w.scheduleRetryForEvent(ctx, delivery, evt["error"].(string), evt)
 		return
 	}
@@ -165,6 +180,43 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 		evt["error"] = errMsg
 		evt["outcome"] = w.scheduleRetryForEvent(ctx, delivery, errMsg, evt)
 	}
+}
+
+// classifyHTTPError categorises a client.Do error for debugging.
+func classifyHTTPError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if os.IsTimeout(err) {
+		return "timeout"
+	}
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		if netErr.Op == "dial" {
+			if strings.Contains(netErr.Err.Error(), "no such host") {
+				return "dns_failure"
+			}
+			return "connection_refused"
+		}
+		return "network_error"
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return "dns_failure"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout"
+	}
+	return "unknown"
+}
+
+// headerMap converts http.Header to a flat map for structured logging.
+func headerMap(h http.Header) map[string]string {
+	m := make(map[string]string, len(h))
+	for k, v := range h {
+		m[k] = strings.Join(v, ", ")
+	}
+	return m
 }
 
 // scheduleRetryForEvent schedules a retry or marks permanently failed.

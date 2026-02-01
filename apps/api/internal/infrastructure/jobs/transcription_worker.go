@@ -98,105 +98,98 @@ func (w *TranscriptionWorker) processPendingJobs(ctx context.Context) {
 		return
 	}
 
-	w.logger.Info("[chalk] processing pending transcripts", "count", len(pending))
-
 	for _, transcript := range pending {
-		start := time.Now()
-		tenantAPIKey := w.getTenantAPIKey(ctx, transcript.RoomID)
-
-		w.logger.Info("[chalk] starting transcription job",
-			"transcript_id", transcript.ID,
-			"recording_id", transcript.RecordingID,
-			"room_id", transcript.RoomID,
-			"provider", transcript.Provider,
-			"byok", tenantAPIKey != "")
-
-		if err := w.service.ProcessTranscription(ctx, transcript.ID, tenantAPIKey); err != nil {
-			w.logger.Error("[chalk] transcription job failed",
-				"transcript_id", transcript.ID,
-				"recording_id", transcript.RecordingID,
-				"error", err,
-				"duration_ms", time.Since(start).Milliseconds())
-			// Still try to send webhook with error info
-			w.logger.Debug("[chalk] sending webhook with transcription error",
-				"transcript_id", transcript.ID)
-			w.sendWebhook(ctx, transcript.RecordingID, transcript.ID)
-			continue
-		}
-
-		transcriptionDuration := time.Since(start)
-		w.logger.Info("[chalk] transcription job completed",
-			"transcript_id", transcript.ID,
-			"recording_id", transcript.RecordingID,
-			"duration_ms", transcriptionDuration.Milliseconds())
-
-		// Generate AI summary if configured
-		aiStart := time.Now()
-		w.logger.Debug("[chalk] checking AI summary generation",
-			"transcript_id", transcript.ID)
-		w.generateAISummary(ctx, transcript)
-		aiDuration := time.Since(aiStart)
-		if aiDuration > time.Second {
-			w.logger.Info("[chalk] AI summary generation completed",
-				"transcript_id", transcript.ID,
-				"duration_ms", aiDuration.Milliseconds())
-		}
-
-		// Send webhook after transcription (and AI) completes
-		w.logger.Debug("[chalk] sending webhook after transcription",
-			"transcript_id", transcript.ID,
-			"recording_id", transcript.RecordingID)
-		w.sendWebhook(ctx, transcript.RecordingID, transcript.ID)
-
-		w.logger.Info("[chalk] transcription job fully processed",
-			"transcript_id", transcript.ID,
-			"recording_id", transcript.RecordingID,
-			"transcription_ms", transcriptionDuration.Milliseconds(),
-			"ai_ms", aiDuration.Milliseconds(),
-			"total_duration_ms", time.Since(start).Milliseconds())
+		w.processOneJob(ctx, transcript)
 	}
 }
 
-func (w *TranscriptionWorker) generateAISummary(ctx context.Context, transcript db.PostMeetingTranscript) {
-	if w.aiService == nil {
-		w.logger.Debug("[chalk] AI service not available, skipping summary",
-			"transcript_id", transcript.ID)
+// processOneJob handles a single transcript — one wide event emitted on exit.
+func (w *TranscriptionWorker) processOneJob(ctx context.Context, transcript db.PostMeetingTranscript) {
+	start := time.Now()
+	tenantAPIKey := w.getTenantAPIKey(ctx, transcript.RoomID)
+
+	evt := map[string]any{
+		"event":         "transcription.job_processed",
+		"transcript_id": transcript.ID,
+		"recording_id":  transcript.RecordingID,
+		"room_id":       transcript.RoomID,
+		"provider":      transcript.Provider,
+		"byok":          tenantAPIKey != "",
+	}
+	defer func() {
+		evt["total_duration_ms"] = time.Since(start).Milliseconds()
+		if evt["error"] != nil {
+			slog.Error("transcription.job_processed", mapToSlogAttrs(evt)...)
+		} else {
+			slog.Info("transcription.job_processed", mapToSlogAttrs(evt)...)
+		}
+	}()
+
+	// --- Stage 1: Transcription ---
+	transcribeStart := time.Now()
+	if err := w.service.ProcessTranscription(ctx, transcript.ID, tenantAPIKey); err != nil {
+		evt["transcribe_duration_ms"] = time.Since(transcribeStart).Milliseconds()
+		evt["error"] = err.Error()
+		evt["outcome"] = "transcription_failed"
+		// Still attempt webhook delivery with error info
+		evt["webhook_sent"] = w.trySendWebhook(ctx, transcript.RecordingID, transcript.ID)
 		return
 	}
+	transcriptionDuration := time.Since(transcribeStart)
+	evt["transcribe_duration_ms"] = transcriptionDuration.Milliseconds()
 
-	// Get tenant config to check if AI is enabled
+	// --- Stage 2: AI Summary ---
+	aiStart := time.Now()
+	aiResult := w.generateAISummaryResult(ctx, transcript)
+	aiDuration := time.Since(aiStart)
+	evt["ai_duration_ms"] = aiDuration.Milliseconds()
+	evt["ai_outcome"] = aiResult.outcome
+	if aiResult.summaryLen > 0 {
+		evt["ai_summary_length"] = aiResult.summaryLen
+	}
+	if aiResult.actionItemsCount > 0 {
+		evt["ai_action_items_count"] = aiResult.actionItemsCount
+	}
+	if aiResult.err != "" {
+		evt["ai_error"] = aiResult.err
+	}
+
+	// --- Stage 3: Webhook ---
+	evt["webhook_sent"] = w.trySendWebhook(ctx, transcript.RecordingID, transcript.ID)
+	evt["outcome"] = "completed"
+}
+
+type aiSummaryResult struct {
+	outcome          string
+	summaryLen       int
+	actionItemsCount int
+	err              string
+}
+
+func (w *TranscriptionWorker) generateAISummaryResult(ctx context.Context, transcript db.PostMeetingTranscript) aiSummaryResult {
+	if w.aiService == nil {
+		return aiSummaryResult{outcome: "skipped_no_service"}
+	}
+
 	tenant, err := w.tenantGetter.GetTenantByRoomID(ctx, transcript.RoomID)
 	if err != nil {
-		w.logger.Warn("[chalk] failed to get tenant for AI summary", "error", err)
-		return
+		return aiSummaryResult{outcome: "skipped_tenant_error", err: err.Error()}
 	}
 
 	config := w.parseTenantConfig(tenant.TenantConfig)
 	if !config.includeSummary && !config.includeActionItems {
-		w.logger.Debug("[chalk] AI summary not requested for tenant",
-			"transcript_id", transcript.ID,
-			"tenant_id", tenant.ID)
-		return
+		return aiSummaryResult{outcome: "skipped_not_configured"}
 	}
 
-	w.logger.Debug("[chalk] AI summary requested",
-		"transcript_id", transcript.ID,
-		"include_summary", config.includeSummary,
-		"include_action_items", config.includeActionItems)
-
-	// Get the transcript text
 	fullTranscript, err := w.queries.GetPostMeetingTranscript(ctx, transcript.ID)
 	if err != nil || fullTranscript.TranscriptText == nil {
-		w.logger.Warn("[chalk] transcript text not available for AI", "transcript_id", transcript.ID, "error", err)
-		return
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		return aiSummaryResult{outcome: "skipped_no_text", err: errMsg}
 	}
 
-	textLen := len(*fullTranscript.TranscriptText)
-	w.logger.Debug("[chalk] generating AI summary",
-		"transcript_id", transcript.ID,
-		"text_length", textLen)
-
-	// Generate summary
 	result, err := w.aiService.GenerateFromTranscript(
 		ctx,
 		transcript.ID,
@@ -206,45 +199,22 @@ func (w *TranscriptionWorker) generateAISummary(ctx context.Context, transcript 
 		nil, // TODO: BYOK AI provider
 	)
 	if err != nil {
-		w.logger.Error("[chalk] AI summary generation failed",
-			"transcript_id", transcript.ID,
-			"error", err)
-	} else {
-		summaryLen := 0
-		actionItemsCount := 0
-		if result != nil {
-			summaryLen = len(result.Summary)
-			actionItemsCount = len(result.ActionItems)
-		}
-		w.logger.Info("[chalk] AI summary generated",
-			"transcript_id", transcript.ID,
-			"summary_length", summaryLen,
-			"action_items_count", actionItemsCount)
+		return aiSummaryResult{outcome: "error", err: err.Error()}
 	}
+
+	res := aiSummaryResult{outcome: "completed"}
+	if result != nil {
+		res.summaryLen = len(result.Summary)
+		res.actionItemsCount = len(result.ActionItems)
+	}
+	return res
 }
 
-func (w *TranscriptionWorker) sendWebhook(ctx context.Context, recordingID, transcriptID uuid.UUID) {
+func (w *TranscriptionWorker) trySendWebhook(ctx context.Context, recordingID, transcriptID uuid.UUID) bool {
 	if w.webhookSender == nil {
-		w.logger.Debug("[chalk] webhook sender not available, skipping",
-			"recording_id", recordingID,
-			"transcript_id", transcriptID)
-		return
+		return false
 	}
-
-	w.logger.Debug("[chalk] triggering webhook send",
-		"recording_id", recordingID,
-		"transcript_id", transcriptID)
-
-	if err := w.webhookSender.SendWebhookAfterTranscription(ctx, recordingID, transcriptID); err != nil {
-		w.logger.Error("[chalk] failed to send webhook after transcription",
-			"recording_id", recordingID,
-			"transcript_id", transcriptID,
-			"error", err)
-	} else {
-		w.logger.Debug("[chalk] webhook send triggered successfully",
-			"recording_id", recordingID,
-			"transcript_id", transcriptID)
-	}
+	return w.webhookSender.SendWebhookAfterTranscription(ctx, recordingID, transcriptID) == nil
 }
 
 type tenantAIConfig struct {

@@ -132,6 +132,18 @@ func (h *LocalPostMeetingWebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	// Staleness check — reject timestamps older than 5 minutes
+	timestampAge := time.Since(time.Unix(timestamp, 0))
+	evt["timestamp_age_ms"] = timestampAge.Milliseconds()
+	evt["signature_timestamp"] = timestamp
+	const maxTimestampAge = 5 * time.Minute
+	if timestampAge > maxTimestampAge || timestampAge < -maxTimestampAge {
+		evt["error"] = "timestamp too old or in future"
+		evt["outcome"] = "unauthorized"
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "timestamp expired"})
+		return
+	}
+
 	signatureValid := webhook.VerifySignature(secret, timestamp, body, signature)
 	evt["signature_valid"] = signatureValid
 	if !signatureValid {

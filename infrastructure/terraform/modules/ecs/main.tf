@@ -17,7 +17,7 @@ locals {
     Module      = "ecs"
   })
 
-  container_port = 8080
+  container_port       = 8080
   alb_logs_bucket_name = "${local.name}-alb-logs"
 }
 

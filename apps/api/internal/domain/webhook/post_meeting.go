@@ -240,6 +240,13 @@ func (s *PostMeetingService) SendWebhookAfterTranscription(
 		errors,
 	)
 
+	evt["queue_webhook_url"] = config.URL
+	evt["has_recording"] = payload.Recording != nil
+	evt["has_transcript"] = payload.Transcript != nil
+	evt["has_summary"] = payload.Summary != nil
+	evt["has_action_items"] = len(payload.ActionItems) > 0
+	evt["has_errors"] = len(payload.Errors) > 0
+
 	deliveryID, err := s.webhookService.QueueDelivery(
 		ctx,
 		room.TenantID,
@@ -302,6 +309,12 @@ func (s *PostMeetingService) sendWebhookWithRecordingOnly(
 		nil,
 	)
 
+	evt["queue_webhook_url"] = config.URL
+	evt["has_recording"] = payload.Recording != nil
+	evt["has_transcript"] = false
+	evt["has_summary"] = false
+	evt["has_action_items"] = false
+
 	deliveryID, err := s.webhookService.QueueDelivery(
 		ctx,
 		room.TenantID,
@@ -331,13 +344,13 @@ func (s *PostMeetingService) getParticipantCount(ctx context.Context, roomID uui
 }
 
 type tenantWebhookConfig struct {
-	Enabled            bool                        `json:"enabled"`
-	URL                string                      `json:"url,omitempty"`
-	Secret             string                      `json:"secret,omitempty"`
-	IncludeRecording   bool                        `json:"include_recording"`
-	IncludeTranscript  bool                        `json:"include_transcript"`
-	IncludeSummary     bool                        `json:"include_summary"`
-	IncludeActionItems bool                        `json:"include_action_items"`
+	Enabled            bool                         `json:"enabled"`
+	URL                string                       `json:"url,omitempty"`
+	Secret             string                       `json:"secret,omitempty"`
+	IncludeRecording   bool                         `json:"include_recording"`
+	IncludeTranscript  bool                         `json:"include_transcript"`
+	IncludeSummary     bool                         `json:"include_summary"`
+	IncludeActionItems bool                         `json:"include_action_items"`
 	Transcription      *transcriptionProviderConfig `json:"transcription,omitempty"`
 	AI                 *aiProviderConfig            `json:"ai,omitempty"`
 }

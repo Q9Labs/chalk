@@ -29,7 +29,12 @@ func streamDownload(ctx context.Context, url string) (*http.Response, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
+		return nil, fmt.Errorf(
+			"download failed: status=%d content_type=%s content_length=%d",
+			resp.StatusCode,
+			resp.Header.Get("Content-Type"),
+			resp.ContentLength,
+		)
 	}
 
 	return resp, nil

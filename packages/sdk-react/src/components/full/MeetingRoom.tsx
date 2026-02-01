@@ -4,7 +4,7 @@ import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { ColumnIcon, LayoutGridIcon, Maximize01Icon, Moon02Icon, Sun02Icon } from "../../utils/icons";
 import { AudioRenderer, ReactionBubble } from "../atomic";
-import { Toggle, Tooltip, TooltipTrigger, TooltipContent } from "../ui";
+import { Tooltip, TooltipTrigger, TooltipContent } from "../ui";
 import {
 	ChatPanel,
 	ConnectionLostOverlay,

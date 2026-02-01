@@ -75,7 +75,13 @@ func (p *WhisperProvider) Transcribe(ctx context.Context, audioURL string) (*dom
 		}
 
 		if whisperResult.Status == "failed" {
-			return nil, fmt.Errorf("whisper transcription failed: %s", whisperResult.Error)
+			return nil, fmt.Errorf(
+				"whisper transcription failed: %s (stage=%s class=%s download_status=%d)",
+				whisperResult.Error,
+				whisperResult.ErrorStage,
+				whisperResult.ErrorClass,
+				whisperResult.DownloadHTTPStatus,
+			)
 		}
 
 		// Cleanup result key
@@ -115,4 +121,9 @@ type whisperJobResult struct {
 	DurationSeconds int              `json:"duration_seconds"`
 	WordCount       int              `json:"word_count"`
 	Error           string           `json:"error"`
+	// Diagnostic fields populated on failure
+	ErrorClass         string `json:"error_class,omitempty"`
+	ErrorStage         string `json:"error_stage,omitempty"`
+	DownloadHTTPStatus int    `json:"download_http_status,omitempty"`
+	DownloadSizeBytes  int    `json:"download_size_bytes,omitempty"`
 }

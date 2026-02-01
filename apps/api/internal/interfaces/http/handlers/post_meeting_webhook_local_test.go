@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/webhook"
 	"github.com/gin-gonic/gin"
@@ -83,7 +84,7 @@ func TestLocalPostMeetingWebhook_BadSignature_401(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/local/post-meeting", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Chalk-Timestamp", "1738281600")
+	req.Header.Set("X-Chalk-Timestamp", strconv.FormatInt(time.Now().Unix(), 10))
 	req.Header.Set("X-Chalk-Signature", "sha256=bad")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -113,7 +114,7 @@ func TestLocalPostMeetingWebhook_ValidSignature_200(t *testing.T) {
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	timestamp := int64(1738281600)
+	timestamp := time.Now().Unix()
 	signature := webhook.GenerateSignature(secret, timestamp, body)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/local/post-meeting", bytes.NewBuffer(body))
