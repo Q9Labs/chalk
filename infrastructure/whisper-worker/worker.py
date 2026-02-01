@@ -2,44 +2,24 @@
 """
 Whisper Transcription Worker
 
-Polls Redis queue for transcription jobs, processes with faster-whisper,
-and stores results back in Redis.
-
-Redis Job Schema (queue: transcription:jobs):
-{
-    "job_id": "uuid",
-    "audio_url": "https://presigned-r2-url...",
-    "language": "en",  # optional, auto-detect if not provided
-    "created_at": "2024-01-15T10:00:00Z"
-}
-
-Redis Result Schema (key: transcription:result:{job_id}, TTL: 24h):
-{
-    "job_id": "uuid",
-    "status": "completed" | "failed",
-    "text": "Full transcript...",
-    "segments": [{"start": 0.0, "end": 5.2, "text": "..."}],
-    "language": "en",
-    "duration_seconds": 3600,
-    "word_count": 5000,
-    "processing_time_seconds": 120,
-    "error": null | "error message"
-}
+Polls Redis queue `transcription:jobs`, transcribes via faster-whisper, stores result at `transcription:result:{job_id}` (TTL 24h).
+Failure payload includes diagnostic fields (`error_stage`, `error_class`, `download_http_status`, `download_size_bytes`) consumed by apps/api.
 """
-
 import json
 import logging
 import os
 import sys
 import tempfile
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 import redis
-from faster_whisper import WhisperModel
+from transcriber import WhisperTranscriber
+from worker_types import TranscriptionJob, TranscriptionResult
 
 # Configure logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -58,129 +38,79 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 JOB_QUEUE = "transcription:jobs"
 RESULT_KEY_PREFIX = "transcription:result:"
 RESULT_TTL_SECONDS = 24 * 60 * 60  # 24 hours
-MODEL_SIZE = os.getenv("WHISPER_MODEL", "large-v3")
-COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "float16")  # float16 for GPU
-DEVICE = os.getenv("WHISPER_DEVICE", "cuda")  # cuda or cpu
 POLL_TIMEOUT_SECONDS = 30
-
-
-@dataclass
-class TranscriptionJob:
-    job_id: str
-    audio_url: str
-    language: Optional[str] = None
-    created_at: Optional[str] = None
-
-
-@dataclass
-class TranscriptionSegment:
-    start: float
-    end: float
-    text: str
-    speaker: Optional[str] = None
-
-
-@dataclass
-class TranscriptionResult:
-    job_id: str
-    status: str  # "completed" or "failed"
-    text: Optional[str] = None
-    segments: Optional[list] = None
-    language: Optional[str] = None
-    duration_seconds: Optional[int] = None  # API expects int
-    word_count: Optional[int] = None
-    processing_time_seconds: Optional[float] = None
-    error: Optional[str] = None
-
 
 class WhisperWorker:
     def __init__(self):
-        logger.info(f"Initializing Whisper worker with model={MODEL_SIZE}, device={DEVICE}")
         self.redis = redis.from_url(REDIS_URL, decode_responses=True)
-        self.model = None
-        self._load_model()
+        self.transcriber = WhisperTranscriber()
 
-    def _load_model(self):
-        """Load the Whisper model."""
-        logger.info(f"Loading Whisper model: {MODEL_SIZE} on {DEVICE}")
-        start = time.time()
-        self.model = WhisperModel(
-            MODEL_SIZE,
-            device=DEVICE,
-            compute_type=COMPUTE_TYPE,
-        )
-        elapsed = time.time() - start
-        logger.info(f"Model loaded in {elapsed:.2f}s")
-
-    def _download_audio(self, url: str) -> str:
+    def _download_audio(self, url: str) -> tuple[str, Optional[int], int]:
         """Download audio to a temporary file."""
         logger.debug(f"Downloading audio from {url[:50]}...")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
-            with urlopen(url, timeout=300) as response:
-                while chunk := response.read(8192):
-                    f.write(chunk)
-            return f.name
-
-    def _transcribe(self, audio_path: str, language: Optional[str] = None) -> TranscriptionResult:
-        """Transcribe audio file using Whisper."""
-        start = time.time()
-
-        segments_list = []
-        full_text_parts = []
-
-        # Transcribe with faster-whisper
-        segments, info = self.model.transcribe(
-            audio_path,
-            language=language,
-            beam_size=5,
-            vad_filter=True,  # Filter out non-speech
-            vad_parameters=dict(min_silence_duration_ms=500),
-        )
-
-        for segment in segments:
-            segments_list.append(
-                asdict(
-                    TranscriptionSegment(
-                        start=round(segment.start, 2),
-                        end=round(segment.end, 2),
-                        text=segment.text.strip(),
+            tmp_path = f.name
+            size_bytes = 0
+            http_status: Optional[int] = None
+            success = False
+            try:
+                with urlopen(url, timeout=300) as response:
+                    http_status = (
+                        getattr(response, "status", None) or response.getcode()
                     )
-                )
-            )
-            full_text_parts.append(segment.text.strip())
+                    while chunk := response.read(8192):
+                        f.write(chunk)
+                        size_bytes += len(chunk)
+                success = True
+                return tmp_path, http_status, size_bytes
+            except HTTPError as e:
+                http_status = e.code
+                raise
+            except URLError:
+                raise
+            finally:
+                if not success and os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
 
-        full_text = " ".join(full_text_parts)
-        word_count = len(full_text.split())
-        processing_time = time.time() - start
-
-        return TranscriptionResult(
-            job_id="",  # Will be set by caller
-            status="completed",
-            text=full_text,
-            segments=segments_list,
-            language=info.language,
-            duration_seconds=int(info.duration),  # API expects int
-            word_count=word_count,
-            processing_time_seconds=round(processing_time, 2),
-        )
-
-    def process_job(self, job: TranscriptionJob) -> TranscriptionResult:
+    def process_job(self, job: TranscriptionJob, *, use_batched: bool) -> TranscriptionResult:
         """Process a single transcription job."""
-        logger.info(f"Processing job {job.job_id}")
+        logger.info("Processing job %s (use_batched=%s)", job.job_id, use_batched)
         audio_path = None
+        download_http_status: Optional[int] = None
+        download_size_bytes: Optional[int] = None
+        error_stage: Optional[str] = None
 
         try:
             # Download audio
-            audio_path = self._download_audio(job.audio_url)
+            error_stage = "download"
+            try:
+                audio_path, download_http_status, download_size_bytes = (
+                    self._download_audio(job.audio_url)
+                )
+            except HTTPError as e:
+                download_http_status = e.code
+                download_size_bytes = 0
+                raise
+
+            if download_size_bytes == 0:
+                raise ValueError("downloaded 0 bytes")
             logger.debug(f"Audio downloaded to {audio_path}")
 
             # Transcribe
-            result = self._transcribe(audio_path, job.language)
+            error_stage = "transcribe"
+            result = self.transcriber.transcribe(
+                audio_path,
+                language=job.language,
+                use_batched=use_batched,
+            )
             result.job_id = job.job_id
 
             logger.info(
-                f"Job {job.job_id} completed: {result.word_count} words, "
-                f"{result.duration_seconds}s audio, {result.processing_time_seconds}s processing"
+                "Job completed %s: word_count=%s duration_seconds=%s processing_time_seconds=%s",
+                job.job_id,
+                result.word_count,
+                result.duration_seconds,
+                result.processing_time_seconds,
             )
             return result
 
@@ -190,6 +120,10 @@ class WhisperWorker:
                 job_id=job.job_id,
                 status="failed",
                 error=str(e),
+                error_class=e.__class__.__name__,
+                error_stage=error_stage,
+                download_http_status=download_http_status,
+                download_size_bytes=download_size_bytes if download_size_bytes is not None else 0,
             )
 
         finally:
@@ -224,7 +158,9 @@ class WhisperWorker:
                         {
                             "Namespace": "Chalk/Whisper",
                             "Dimensions": [["Environment"]],
-                            "Metrics": [{"Name": "TranscriptionQueueDepth", "Unit": "Count"}],
+                            "Metrics": [
+                                {"Name": "TranscriptionQueueDepth", "Unit": "Count"}
+                            ],
                         }
                     ],
                 },
@@ -264,8 +200,13 @@ class WhisperWorker:
                     logger.error(f"Invalid job data: {e}")
                     continue
 
+                # Heuristic: if backlog exists, use batched inference for throughput.
+                # Note: brpop already removed this job; remaining depth + 1 approximates total depth.
+                remaining = self.redis.llen(JOB_QUEUE)
+                use_batched = remaining >= 1
+
                 # Process and store result
-                transcription_result = self.process_job(job)
+                transcription_result = self.process_job(job, use_batched=use_batched)
                 self.store_result(transcription_result)
 
             except redis.ConnectionError as e:

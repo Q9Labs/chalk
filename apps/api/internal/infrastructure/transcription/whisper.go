@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	whisperDefaultTimeout   = 10 * time.Minute
-	whisperPollInterval     = 5 * time.Second
-	whisperResultKeyPrefix  = "transcription:result:"
+	whisperDefaultTimeout  = 10 * time.Minute
+	whisperPollInterval    = 5 * time.Second
+	whisperResultKeyPrefix = "transcription:result:"
 )
 
 // WhisperProvider implements transcription using a self-hosted Whisper worker.
@@ -76,11 +76,12 @@ func (p *WhisperProvider) Transcribe(ctx context.Context, audioURL string) (*dom
 
 		if whisperResult.Status == "failed" {
 			return nil, fmt.Errorf(
-				"whisper transcription failed: %s (stage=%s class=%s download_status=%d)",
+				"whisper transcription failed: %s (stage=%s class=%s download_http_status=%d download_size_bytes=%d)",
 				whisperResult.Error,
 				whisperResult.ErrorStage,
 				whisperResult.ErrorClass,
 				whisperResult.DownloadHTTPStatus,
+				whisperResult.DownloadSizeBytes,
 			)
 		}
 
@@ -108,8 +109,10 @@ func (p *WhisperProvider) MaxFileSize() int64 {
 }
 
 type whisperJob struct {
-	JobID     string `json:"job_id"`
-	AudioURL  string `json:"audio_url"`
+	JobID    string `json:"job_id"`
+	AudioURL string `json:"audio_url"`
+	// TODO(hasan): include language to skip auto-detect + avoid language-detect edge-cases on silent audio.
+	Language  string `json:"language,omitempty"`
 	CreatedAt string `json:"created_at"`
 }
 

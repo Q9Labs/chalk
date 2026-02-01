@@ -2,7 +2,7 @@
 
 # Faster-whisper: CTranslate2-based Whisper implementation
 # 4x faster than OpenAI whisper with same accuracy
-faster-whisper==1.0.3
+faster-whisper==1.2.1
 
 # Redis client for job queue
 redis==5.0.1

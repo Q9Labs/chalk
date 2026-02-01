@@ -36,6 +36,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 Thumbs.db
 
+# Python
+__pycache__/
+*.pyc
+
 # Go
 *.exe
 *.exe~
@@ -47,4 +51,3 @@ apps/api/server
 # Terraform (handled in infrastructure/.gitignore)
 # *.tfstate
 # .terraform/
-

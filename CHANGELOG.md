@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Whisper Worker: Silence-safe transcription + faster-whisper v1.2.1** — upgraded worker to `faster-whisper==1.2.1`, added batched inference for queue backlogs (OOM-safe batch fallback), switched container installs to `uv`, and treat silent/near-silent recordings as `completed` with empty transcript instead of failing.
+
 - **API: Parse Cloudflare webhook list response** — Support `data` response shape to avoid empty webhook lists.
 - **SDK-Core: iPadOS/Safari screen share reliability** — `getDisplayMedia` now retries with safer constraints (no-audio, then video-only) to support iPadOS/Safari/WebKit while preserving Chrome/Firefox behavior
 - **API: Stop recordings when rooms end** — `EndRoom()` now calls `StopRecording()` on Cloudflare before ending the meeting, preventing recordings from staying stuck in "recording" status forever

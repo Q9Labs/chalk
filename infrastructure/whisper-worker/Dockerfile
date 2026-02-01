@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
-    python3-pip \
+    python3-venv \
     ffmpeg \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -17,18 +17,29 @@ WORKDIR /app
 # Create log directory
 RUN mkdir -p /var/log && touch /var/log/whisper-worker.log
 
+# Install uv (Python package manager)
+ENV UV_NO_MODIFY_PATH=1
+ENV UV_CACHE_DIR=/tmp/uv-cache
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Create virtualenv + install deps
+RUN uv venv /app/.venv
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN uv pip install -r requirements.txt && rm -rf /tmp/uv-cache
 
 # Pre-download the Whisper model to bake it into the image
 # This avoids downloading on every container start
-ARG WHISPER_MODEL=large-v3
+ARG WHISPER_MODEL=distil-large-v3.5
 ENV WHISPER_MODEL=${WHISPER_MODEL}
 RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL}', device='cpu')"
 
-# Copy worker script
-COPY worker.py .
+# Copy worker script + modules
+COPY worker.py worker_types.py transcriber.py .
 
 # Default environment variables
 ENV REDIS_URL=redis://localhost:6379
