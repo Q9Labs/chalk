@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.0.52] - 2026-02-02
+
 ### Changed
 
 - **API: Record webhook payload and gate downloadable statuses** — webhook handler now stores the raw Cloudflare request body in the wide event log and only begins download/upload once the recording status reaches `UPLOADED`/`COMPLETED`, which matches RealtimeKit’s documented lifecycle and prevents missing the download URL.
