@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -18,6 +19,13 @@ type Config struct {
 	Axiom       AxiomConfig
 	CORSOrigins CORSOriginsConfig
 	PostMeeting PostMeetingConfig
+	Admin       AdminConfig
+}
+
+type AdminConfig struct {
+	Secret     string
+	AllowedIPs []string
+	Enabled    bool
 }
 
 type ServerConfig struct {
@@ -208,6 +216,13 @@ func Load() (*Config, error) {
 		},
 	}
 
+	env := cfg.Server.Env
+	cfg.Admin = AdminConfig{
+		Secret:     getEnv("ADMIN_SECRET", "admin-dev-secret-change-in-production"),
+		AllowedIPs: parseCommaSeparated(getEnv("ADMIN_ALLOWED_IPS", "127.0.0.1,::1")),
+		Enabled:    getEnvBool("ADMIN_ENABLED", env == "development"),
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -226,6 +241,10 @@ func (c *Config) validate() error {
 	}
 	if isDevSecret && c.IsProduction() {
 		return fmt.Errorf("JWT_SIGNING_KEY must be set to a secure value in production (not empty or default)")
+	}
+
+	if c.Admin.Enabled && c.IsProduction() && c.Admin.Secret == "admin-dev-secret-change-in-production" {
+		return fmt.Errorf("ADMIN_SECRET must be set to a secure value in production")
 	}
 
 	if !c.Cloudflare.Mock && c.Cloudflare.AccountID == "" {
@@ -263,6 +282,21 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+func parseCommaSeparated(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }
 
 func getEnvBool(key string, defaultValue bool) bool {

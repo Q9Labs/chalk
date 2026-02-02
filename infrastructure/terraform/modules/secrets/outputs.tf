@@ -58,6 +58,11 @@ output "cloudflare_webhook_secret_arn" {
   value       = aws_secretsmanager_secret.cloudflare_webhook.arn
 }
 
+output "admin_secret_arn" {
+  description = "Admin dashboard secret ARN"
+  value       = aws_secretsmanager_secret.admin_secret.arn
+}
+
 output "secret_arns" {
   description = "All secret ARNs"
   value = [
@@ -69,6 +74,7 @@ output "secret_arns" {
     aws_secretsmanager_secret.axiom.arn,
     aws_secretsmanager_secret.groq_api.arn,
     aws_secretsmanager_secret.openrouter_api.arn,
-    aws_secretsmanager_secret.cloudflare_webhook.arn
+    aws_secretsmanager_secret.cloudflare_webhook.arn,
+    aws_secretsmanager_secret.admin_secret.arn
   ]
 }

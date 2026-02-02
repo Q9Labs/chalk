@@ -24,7 +24,8 @@ variable "cors_allowed_origins" {
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3070",
-    "http://127.0.0.1:5173"
+    "http://127.0.0.1:5173",
+    "http://localhost:3090"
   ]
 }
 
@@ -132,4 +133,11 @@ variable "cloudflare_webhook_secret" {
   type        = string
   sensitive   = true
   default     = "" # Set via -var or TF_VAR_cloudflare_webhook_secret
+}
+
+# Admin dashboard
+variable "admin_allowed_ips" {
+  description = "Comma-separated IPs allowed to access admin endpoints"
+  type        = string
+  default     = "124.29.228.126"
 }

@@ -9,7 +9,8 @@
 		"apps/web",
 		"apps/mobile",
 		"apps/mobile2",
-		"apps/docs"
+		"apps/docs",
+		"apps/admin"
 	],
 	"scripts": {
 		"build": "turbo build",

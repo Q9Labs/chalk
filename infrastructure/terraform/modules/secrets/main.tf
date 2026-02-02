@@ -185,6 +185,28 @@ resource "aws_secretsmanager_secret_version" "cloudflare_webhook" {
   secret_string = var.cloudflare_webhook_secret
 }
 
+# =============================================================================
+# Admin Dashboard Secret
+# =============================================================================
+
+resource "random_password" "admin_secret" {
+  length  = 64
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "admin_secret" {
+  name        = "chalk/${var.environment}/admin-secret"
+  description = "Admin dashboard secret for Chalk API"
+  kms_key_id  = aws_kms_key.secrets.arn
+
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "admin_secret" {
+  secret_id     = aws_secretsmanager_secret.admin_secret.id
+  secret_string = random_password.admin_secret.result
+}
+
 resource "aws_iam_policy" "secrets_read" {
   name        = "${local.name}-secrets-read"
   description = "Policy to read Chalk secrets"
@@ -207,7 +229,8 @@ resource "aws_iam_policy" "secrets_read" {
           aws_secretsmanager_secret.axiom.arn,
           aws_secretsmanager_secret.groq_api.arn,
           aws_secretsmanager_secret.openrouter_api.arn,
-          aws_secretsmanager_secret.cloudflare_webhook.arn
+          aws_secretsmanager_secret.cloudflare_webhook.arn,
+          aws_secretsmanager_secret.admin_secret.arn
         ]
       },
       {
