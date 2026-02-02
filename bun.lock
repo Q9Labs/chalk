@@ -216,7 +216,7 @@
     },
     "packages/chalk-whiteboard": {
       "name": "@q9labs/chalk-whiteboard",
-      "version": "0.0.50",
+      "version": "0.0.52",
       "dependencies": {
         "@excalidraw/excalidraw": "^0.17.0",
       },
@@ -232,7 +232,7 @@
     },
     "packages/sdk-core": {
       "name": "@q9labs/chalk-core",
-      "version": "0.0.50",
+      "version": "0.0.52",
       "dependencies": {
         "@cloudflare/realtimekit": "^1.2.2",
         "@effect/schema": "^0.75.5",
@@ -250,7 +250,7 @@
     },
     "packages/sdk-react": {
       "name": "@q9labs/chalk-react",
-      "version": "0.0.50",
+      "version": "0.0.52",
       "dependencies": {
         "@base-ui/react": "^1.0.0-alpha.11",
         "@cloudflare/realtimekit": "^1.2.2",
@@ -299,7 +299,7 @@
     },
     "packages/sdk-react-native": {
       "name": "@q9labs/chalk-react-native",
-      "version": "0.0.50",
+      "version": "0.0.52",
       "dependencies": {
         "@lineiconshq/free-icons": "^1.0.4",
         "@lineiconshq/react-native-lineicons": "^0.0.3",
@@ -351,7 +351,7 @@
     },
     "packages/ui": {
       "name": "@q9labs/chalk-ui",
-      "version": "0.0.50",
+      "version": "0.0.52",
       "dependencies": {
         "@base-ui/react": "^1.0.0",
         "@q9labs/chalk-core": "workspace:^",

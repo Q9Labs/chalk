@@ -102,6 +102,8 @@ func NewCORSOriginsService(cfg CORSOriginsConfig, queries *db.Queries, logger *s
 			"https://portal.tuitionhighway.com",
 			"https://backend.tuitionhighway.com",
 			"https://backend-dev.tuitionhighway.com",
+			"http://localhost:3090",
+			"http://127.0.0.1:3090",
 		},
 		enabled: true,
 		logger:  logger,

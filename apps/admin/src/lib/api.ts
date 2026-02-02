@@ -1,4 +1,5 @@
 const ENV_KEY = "chalk-admin-env"
+const SECRET_KEY = "chalk-admin-secret-prod"
 
 type Env = "local" | "prod"
 
@@ -24,11 +25,12 @@ export function getSecret(): string {
   if (env === "local") {
     return import.meta.env.VITE_ADMIN_SECRET || "admin-dev-secret-change-in-production"
   }
-  return ""
+  return localStorage.getItem(SECRET_KEY) || ""
 }
 
 export function setSecret(secret: string) {
   runtimeSecret = secret
+  localStorage.setItem(SECRET_KEY, secret)
 }
 
 export function getBaseUrl(): string {
