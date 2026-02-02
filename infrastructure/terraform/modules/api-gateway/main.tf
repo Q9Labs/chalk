@@ -114,7 +114,7 @@ resource "aws_apigatewayv2_api" "http" {
   description   = "HTTP API for Chalk ${var.environment}"
 
   cors_configuration {
-    allow_headers = ["content-type", "authorization", "x-api-key", "x-amz-date", "origin"]
+    allow_headers = ["content-type", "authorization", "x-api-key", "x-amz-date", "origin", "x-admin-secret"]
     allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     allow_origins = local.cors_origins
     max_age       = 86400
