@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Admin: Persist production secret across reloads** — production admin API calls now keep the secret in local storage so refreshes don't drop auth.
 - **API Gateway: Allow admin localhost origin for CORS** — add `http://localhost:3090`/`127.0.0.1:3090` to aggregated origins so local admin can call prod API.
 - **API Gateway: Allow X-Admin-Secret header for CORS** — preflight now allows admin secret header to reach prod API.
+- **Admin: Temporarily disable IP allowlist** — removes IP restriction so admin access is not blocked.
 
 ## [0.0.52] - 2026-02-02
 

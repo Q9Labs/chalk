@@ -23,21 +23,7 @@ func (m *AdminMiddleware) RequireAdmin() gin.HandlerFunc {
 			return
 		}
 
-		// IP restriction
-		if len(m.config.AllowedIPs) > 0 {
-			clientIP := c.ClientIP()
-			allowed := false
-			for _, ip := range m.config.AllowedIPs {
-				if clientIP == ip {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "IP not allowed"})
-				return
-			}
-		}
+		// IP restriction disabled temporarily.
 
 		// Secret check (constant-time)
 		secret := c.GetHeader("X-Admin-Secret")
