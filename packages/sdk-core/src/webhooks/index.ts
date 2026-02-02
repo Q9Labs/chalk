@@ -5,6 +5,12 @@
  * @module @q9labs/chalk-core/webhooks
  */
 
+export {
+	WebhookPayloadError,
+	WebhookSignatureError,
+	WebhookTimestampError,
+	type WebhookVerifyError,
+} from "./errors";
 export { chalkWebhookMiddleware } from "./express";
 export {
 	createWebhookHandler,
@@ -16,6 +22,7 @@ export {
 	WebhookError,
 	WebhookMeeting,
 	WebhookPayload,
+	WebhookPayloadFromJson,
 	WebhookRecording,
 	WebhookTranscript,
 } from "./schemas";

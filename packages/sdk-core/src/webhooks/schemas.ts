@@ -74,3 +74,9 @@ export const WebhookPayload = Schema.Struct({
 	action_items: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
 	errors: Schema.optional(Schema.Array(WebhookError)),
 });
+
+/**
+ * Parses JSON string AND validates against WebhookPayload in one step.
+ * Replaces manual JSON.parse() + Schema.decodeUnknownSync().
+ */
+export const WebhookPayloadFromJson = Schema.parseJson(WebhookPayload);

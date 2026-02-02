@@ -28,6 +28,14 @@ git tag -l 'v*' | sort -V | tail -1
 | ---------------------------------- | ------------------------------------------------ |
 | Added, Changed, Fixed              | Developer Experience, Refactoring, Infrastructure |
 
+**User-facing tone rules:**
+- Write for non-technical end users (teachers, students, admins)
+- Describe **what changed for the user**, not how it was fixed
+- NO: implementation details, API names, hook names, SSR, framework-specific terms
+- YES: "Reactions now display properly", "Sound effects now play"
+- NO: "Fixed `activeReactions` from `useInteractions` hook", "SSR compatibility"
+- Move all technical details (code references, framework fixes, internal changes) to Technical Notes
+
 2. **Suggest version:**
 
 | Change Type     | Bump  |
@@ -88,15 +96,15 @@ Execute release vX.X.X - [CODENAME]
 <!-- whats-new -->
 ## Features
 
-- **[Feature Name]** — [1-sentence user-friendly description]
+- **[Feature Name]** — [1-sentence plain-language description, no code/framework terms]
 
 ## Improvements
 
-- **[Enhancement]** — [1-sentence description]
+- **[Enhancement]** — [1-sentence plain-language description, no code/framework terms]
 
 ## Bug Fixes
 
-- [Fix description]
+- [Plain-language fix description — what the user sees fixed, not how]
 <!-- /whats-new -->
 
 ## Technical Notes

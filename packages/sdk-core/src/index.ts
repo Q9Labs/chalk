@@ -19,146 +19,146 @@
  * ```
  */
 
-// Main client
-export { ChalkClient } from "./client.ts";
 // API client (for React Native SDK which uses its own RTK integration)
 export { APIClient } from "./api-client.ts";
+// Main client
+export { ChalkClient } from "./client.ts";
 // Event emitter (for advanced use cases)
 export { EventEmitter } from "./events.ts";
 // Room
 export { Room, type Transcript } from "./room.ts";
-// WebSocket client (for advanced/React Native integrations)
-export { WSClient } from "./ws-client.ts";
 export {
 	camelToSnake,
 	camelToSnakeString,
 	snakeToCamel,
 	snakeToCamelString,
 } from "./transforms.ts";
+// WebSocket client (for advanced/React Native integrations)
+export { WSClient } from "./ws-client.ts";
 
 // ============================================================================
 // New Phase 1 Exports (typed events, errors, utilities)
 // ============================================================================
 
-// Typed event emitter utility
-export { TypedEventEmitter } from "./utils/typed-emitter.ts";
-
-// Wide Events - canonical log lines for comprehensive event tracking
-export {
-	wideEvents,
-	configureWideEvents,
-	WideEventContext,
-	WideEventCollector,
-	wideEventsCollector,
-} from "./wide-events/index.ts";
-export type {
-	WideEvent,
-	WideEventConfig,
-	WideEventOutcome,
-	WideEventPlatform,
-	WideEventSdk,
-	WideEventError,
-	WideEventType,
-} from "./wide-events/index.ts";
-
 // Error handling
-export { ChalkError as ChalkErrorClass, ChalkErrorCode as ErrorCode } from "./errors/chalk-error.ts";
-
-// Namespaced type exports
-export * as types from "./types/index.ts";
-
+export {
+	ChalkError as ChalkErrorClass,
+	ChalkErrorCode as ErrorCode,
+} from "./errors/chalk-error.ts";
+// Wire protocol helpers
+export {
+	clientMessageTypeMap,
+	serverMessageTypeMap,
+} from "./types/events/client-events.ts";
 // Direct type exports for convenience
 export type {
-	// Event maps
-	ServerEventMap,
+	ChatMessagePayload,
+	// Client event payloads
+	ChatSendPayload,
 	ClientEventMap,
-	ServerEventName,
 	ClientEventName,
 	// Server event payloads
 	ConnectedPayload,
+	HandLoweredPayload,
+	HandRaisedPayload,
 	ParticipantJoinedPayload,
 	ParticipantLeftPayload,
 	ParticipantUpdatedPayload,
-	ChatMessagePayload,
+	PermissionChangedPayload,
 	ReactionPayload,
-	HandRaisedPayload,
-	HandLoweredPayload,
-	RoomSnapshotPayload,
+	ReactionSendPayload,
 	RecordingStartedPayload,
 	RecordingStoppedPayload,
+	RoomSnapshotPayload,
+	// Event maps
+	ServerEventMap,
+	ServerEventName,
+	WhiteboardCursorPayload,
 	WhiteboardDataPayload,
 	WhiteboardSnapshotPayload,
-	WhiteboardCursorPayload,
-	PermissionChangedPayload,
-	// Client event payloads
-	ChatSendPayload,
-	ReactionSendPayload,
 	WhiteboardUpdatePayload,
 } from "./types/events/index.ts";
-
-// Wire protocol helpers
+// Namespaced type exports
+export * as types from "./types/index.ts";
+// Typed event emitter utility
+export { TypedEventEmitter } from "./utils/typed-emitter.ts";
+export type {
+	WideEvent,
+	WideEventConfig,
+	WideEventError,
+	WideEventOutcome,
+	WideEventPlatform,
+	WideEventSdk,
+	WideEventType,
+} from "./wide-events/index.ts";
+// Wide Events - canonical log lines for comprehensive event tracking
 export {
-	serverMessageTypeMap,
-	clientMessageTypeMap,
-} from "./types/events/client-events.ts";
+	configureWideEvents,
+	WideEventCollector,
+	WideEventContext,
+	wideEvents,
+	wideEventsCollector,
+} from "./wide-events/index.ts";
 
 // ============================================================================
 // Phase 2: Managers and Session (new SDK architecture)
 // ============================================================================
 
-// State container base class
-export { StateContainer } from "./state/state-container.ts";
-
-// ChalkSession - main orchestrator
-export { ChalkSession } from "./session/chalk-session.ts";
-export type { ChalkSessionConfig, ChalkSessionEvents } from "./session/chalk-session.ts";
-
-// Individual managers (non-Effect)
-export {
-  ScreenShareManager,
-  ChatManager,
-  RecordingManager,
-  InteractionManager,
-  UIManager,
-  WhiteboardManager,
-} from "./managers/index.ts";
-
 // Manager state types
 export type {
-  RoomState,
-  RoomManagerEvents,
-  JoinOptions,
-  LeaveOptions,
-  ParticipantState,
-  ParticipantManagerEvents,
-  MediaState,
-  MediaManagerEvents,
-  ScreenShareState,
-  ScreenShareManagerEvents,
-  ChatState,
-  ChatManagerEvents,
-  RecordingState,
-  RecordingManagerEvents,
-  InteractionState,
-  InteractionManagerEvents,
-  ActiveReaction,
-  UIState,
-  UIManagerEvents,
-  LayoutMode,
-  PanelType,
-  Notification,
-  NotificationSeverity,
-  WhiteboardState,
-  WhiteboardManagerEvents,
+	ActiveReaction,
+	ChatManagerEvents,
+	ChatState,
+	InteractionManagerEvents,
+	InteractionState,
+	JoinOptions,
+	LayoutMode,
+	LeaveOptions,
+	MediaManagerEvents,
+	MediaState,
+	Notification,
+	NotificationSeverity,
+	PanelType,
+	ParticipantManagerEvents,
+	ParticipantState,
+	RecordingManagerEvents,
+	RecordingState,
+	RoomManagerEvents,
+	RoomState,
+	ScreenShareManagerEvents,
+	ScreenShareState,
+	UIManagerEvents,
+	UIState,
+	WhiteboardManagerEvents,
+	WhiteboardState,
 } from "./managers/index.ts";
-
-// Whiteboard types
-export type { WhiteboardCursor, WhiteboardUpdate, WhiteboardSnapshot } from "./types/entities/whiteboard.ts";
-
 // Namespace exports for managers
 export * as managers from "./managers/index.ts";
+// Individual managers (non-Effect)
+export {
+	ChatManager,
+	InteractionManager,
+	RecordingManager,
+	ScreenShareManager,
+	UIManager,
+	WhiteboardManager,
+} from "./managers/index.ts";
+export type {
+	ChalkSessionConfig,
+	ChalkSessionEvents,
+} from "./session/chalk-session.ts";
+// ChalkSession - main orchestrator
+export { ChalkSession } from "./session/chalk-session.ts";
 export * as session from "./session/index.ts";
 export * as state from "./state/index.ts";
+// State container base class
+export { StateContainer } from "./state/state-container.ts";
+// Whiteboard types
+export type {
+	WhiteboardCursor,
+	WhiteboardSnapshot,
+	WhiteboardUpdate,
+} from "./types/entities/whiteboard.ts";
 
 // ============================================================================
 // Legacy exports (backward compatibility with existing code)
@@ -204,26 +204,26 @@ export { ChalkErrorCode, err, ok } from "./types.ts";
 // Token Provider Utility
 // ============================================================================
 
-export { createTokenProvider } from "./token-provider.ts";
 export type {
 	CreateTokenProviderConfig,
 	TokenStorage,
 } from "./token-provider.ts";
+export { createTokenProvider } from "./token-provider.ts";
 
 // ============================================================================
 // Webhooks
 // ============================================================================
 
 export {
-	createWebhookHandler,
 	chalkWebhookMiddleware,
-	type WebhookHandlerOptions,
+	createWebhookHandler,
 	type WebhookEvent,
+	type WebhookHandlerOptions,
 } from "./webhooks/index.ts";
 export {
-	WebhookPayload,
+	WebhookError,
 	WebhookMeeting,
+	WebhookPayload,
 	WebhookRecording,
 	WebhookTranscript,
-	WebhookError,
 } from "./webhooks/schemas.ts";

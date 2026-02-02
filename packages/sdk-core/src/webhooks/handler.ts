@@ -6,8 +6,14 @@
  */
 
 import { Schema } from "@effect/schema";
+import { Effect } from "effect";
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
-import { WebhookPayload } from "./schemas";
+import {
+	WebhookPayloadError,
+	WebhookSignatureError,
+	WebhookTimestampError,
+} from "./errors";
+import { type WebhookPayload, WebhookPayloadFromJson } from "./schemas";
 
 /**
  * Constant-time string comparison to prevent timing attacks.
@@ -61,6 +67,100 @@ export interface WebhookEvent {
 }
 
 /**
+ * Effect pipeline that verifies signature, timestamp, and schema in sequence.
+ */
+function verifyEffect(
+	body: string,
+	signature: string,
+	timestamp: string,
+	secret: string,
+	tolerance: number,
+) {
+	return Effect.gen(function* () {
+		// 1. Input guards
+		if (typeof body !== "string" || body.length === 0) {
+			return yield* new WebhookPayloadError({
+				message: "Webhook body must be a non-empty string",
+				recoverable: false,
+			});
+		}
+		if (typeof signature !== "string" || signature.length === 0) {
+			return yield* new WebhookSignatureError({
+				message: "Webhook signature header is missing",
+				recoverable: false,
+			});
+		}
+		if (typeof timestamp !== "string" || timestamp.length === 0) {
+			return yield* new WebhookTimestampError({
+				message: "Webhook timestamp header is missing",
+				recoverable: false,
+				receivedTimestamp: String(timestamp),
+				toleranceSeconds: tolerance,
+			});
+		}
+
+		// 2. Timestamp freshness
+		const ts = parseInt(timestamp, 10);
+		const now = Math.floor(Date.now() / 1000);
+		const drift = Math.abs(now - ts);
+
+		if (Number.isNaN(ts) || drift > tolerance) {
+			return yield* new WebhookTimestampError({
+				message: "Webhook timestamp outside tolerance window",
+				recoverable: false,
+				receivedTimestamp: timestamp,
+				toleranceSeconds: tolerance,
+			});
+		}
+
+		yield* Effect.logDebug("Webhook timestamp verified").pipe(
+			Effect.annotateLogs({ timestamp, drift }),
+		);
+
+		// 3. HMAC signature verification
+		const hash = yield* Effect.tryPromise({
+			try: () => createHmacSignature(secret, `${timestamp}.${body}`),
+			catch: (err) =>
+				new WebhookSignatureError({
+					message: `HMAC computation failed: ${err instanceof Error ? err.message : String(err)}`,
+					recoverable: false,
+				}),
+		});
+
+		const expectedSig = `sha256=${hash}`;
+		if (!constantTimeEqual(signature, expectedSig)) {
+			return yield* new WebhookSignatureError({
+				message: "Invalid webhook signature",
+				recoverable: false,
+			});
+		}
+
+		yield* Effect.logDebug("Webhook signature verified");
+
+		// 4. Parse JSON + validate schema atomically
+		const result = yield* Schema.decode(WebhookPayloadFromJson)(body).pipe(
+			Effect.mapError(
+				(parseError) =>
+					new WebhookPayloadError({
+						message: "Webhook payload validation failed",
+						recoverable: false,
+						cause: parseError,
+					}),
+			),
+		);
+
+		yield* Effect.logDebug("Webhook payload validated").pipe(
+			Effect.annotateLogs({
+				event: result.event,
+				meetingId: result.meeting.id,
+			}),
+		);
+
+		return { type: result.event, payload: result } satisfies WebhookEvent;
+	});
+}
+
+/**
  * Create a webhook handler for verifying and parsing Chalk webhooks
  *
  * @example
@@ -89,53 +189,39 @@ export function createWebhookHandler(options: WebhookHandlerOptions) {
 		 * @param timestamp - X-Chalk-Timestamp header
 		 * @throws {ChalkError} If verification fails
 		 */
-		async verify(
+		verify(
 			body: string,
 			signature: string,
 			timestamp: string,
 		): Promise<WebhookEvent> {
-			// 1. Verify timestamp freshness
-			const ts = parseInt(timestamp, 10);
-			const now = Math.floor(Date.now() / 1000);
-			if (isNaN(ts) || Math.abs(now - ts) > tolerance) {
-				throw new ChalkError(
-					ChalkErrorCode.WEBHOOK_TIMESTAMP_EXPIRED,
-					"Webhook timestamp outside tolerance window",
-				);
-			}
-
-			// 2. Verify HMAC signature
-			const hash = await createHmacSignature(secret, `${timestamp}.${body}`);
-			const expectedSig = `sha256=${hash}`;
-
-			if (!constantTimeEqual(signature, expectedSig)) {
-				throw new ChalkError(
-					ChalkErrorCode.WEBHOOK_SIGNATURE_INVALID,
-					"Invalid webhook signature",
-				);
-			}
-
-			// 3. Parse and validate payload
-			let parsed: unknown;
-			try {
-				parsed = JSON.parse(body);
-			} catch {
-				throw new ChalkError(
-					ChalkErrorCode.WEBHOOK_PAYLOAD_INVALID,
-					"Invalid JSON in webhook body",
-				);
-			}
-
-			try {
-				const result = Schema.decodeUnknownSync(WebhookPayload)(parsed);
-				return { type: result.event, payload: result };
-			} catch (err) {
-				throw new ChalkError(
-					ChalkErrorCode.WEBHOOK_PAYLOAD_INVALID,
-					"Webhook payload validation failed",
-					{ cause: err instanceof Error ? err : undefined },
-				);
-			}
+			return Effect.runPromise(
+				verifyEffect(body, signature, timestamp, secret, tolerance).pipe(
+					Effect.catchTags({
+						WebhookTimestampError: (e) =>
+							Effect.fail(
+								new ChalkError(
+									ChalkErrorCode.WEBHOOK_TIMESTAMP_EXPIRED,
+									e.message,
+								),
+							),
+						WebhookSignatureError: (e) =>
+							Effect.fail(
+								new ChalkError(
+									ChalkErrorCode.WEBHOOK_SIGNATURE_INVALID,
+									e.message,
+								),
+							),
+						WebhookPayloadError: (e) =>
+							Effect.fail(
+								new ChalkError(
+									ChalkErrorCode.WEBHOOK_PAYLOAD_INVALID,
+									e.message,
+									{ cause: e.cause instanceof Error ? e.cause : undefined },
+								),
+							),
+					}),
+				),
+			);
 		},
 	};
 }
