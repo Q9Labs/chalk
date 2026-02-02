@@ -286,6 +286,34 @@ func (r *Router) setupRoutes() {
 
 		localPostMeeting := handlers.NewLocalPostMeetingWebhookHandler(r.queries)
 		v1.POST("/webhooks/local/post-meeting", localPostMeeting.Handle)
+
+		// Admin dashboard endpoints
+		if r.appConfig.Admin.Enabled {
+			adminMw := middleware.NewAdminMiddleware(&r.appConfig.Admin)
+			adminHandler := handlers.NewAdminHandler(r.queries, r.apiKeyService, r.corsOriginsService)
+			admin := v1.Group("/admin")
+			admin.Use(adminMw.RequireAdmin())
+			{
+				admin.GET("/overview", adminHandler.Overview)
+				admin.GET("/tenants", adminHandler.ListTenants)
+				admin.GET("/tenants/:id", adminHandler.GetTenant)
+				admin.POST("/tenants", adminHandler.CreateTenant)
+				admin.PATCH("/tenants/:id", adminHandler.UpdateTenant)
+				admin.PATCH("/tenants/:id/config", adminHandler.UpdateTenantConfig)
+				admin.PATCH("/tenants/:id/whiteboard-config", adminHandler.UpdateWhiteboardConfig)
+				admin.POST("/tenants/:id/rotate-key", adminHandler.RotateKey)
+				admin.PATCH("/tenants/:id/activate", adminHandler.ActivateTenant)
+				admin.PATCH("/tenants/:id/deactivate", adminHandler.DeactivateTenant)
+				admin.DELETE("/tenants/:id", adminHandler.DeleteTenant)
+				admin.GET("/rooms", adminHandler.ListRooms)
+				admin.GET("/rooms/:id", adminHandler.GetRoom)
+				admin.GET("/recordings", adminHandler.ListRecordings)
+				admin.GET("/transcripts", adminHandler.ListTranscripts)
+				admin.GET("/webhooks", adminHandler.ListWebhooks)
+				admin.GET("/audit-logs", adminHandler.ListAuditLogs)
+				admin.GET("/usage", adminHandler.Usage)
+			}
+		}
 	}
 }
 

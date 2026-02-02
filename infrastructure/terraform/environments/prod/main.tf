@@ -132,6 +132,9 @@ module "ecs" {
     { name = "POST_MEETING_WHISPER_REDIS_QUEUE", value = "transcription:jobs" },
     # Cloudflare webhook registration
     { name = "API_PUBLIC_URL", value = "https://${var.api_domain_name}" },
+    # Admin dashboard
+    { name = "ADMIN_ENABLED", value = "true" },
+    { name = "ADMIN_ALLOWED_IPS", value = var.admin_allowed_ips },
   ]
 
   task_role_policy_arns = [module.cors_origins.write_policy_arn]
@@ -149,6 +152,8 @@ module "ecs" {
     { name = "POST_MEETING_OPENROUTER_API_KEY", valueFrom = module.secrets.openrouter_api_secret_arn },
     # Cloudflare webhook verification
     { name = "CLOUDFLARE_WEBHOOK_SECRET", valueFrom = module.secrets.cloudflare_webhook_secret_arn },
+    # Admin dashboard
+    { name = "ADMIN_SECRET", valueFrom = module.secrets.admin_secret_arn },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets

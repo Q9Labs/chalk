@@ -14,6 +14,21 @@ import (
 
 type Querier interface {
 	ActivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
+	AdminGetMeetingDurations(ctx context.Context) ([]AdminGetMeetingDurationsRow, error)
+	// Admin Queries
+	// Cross-tenant queries for the admin dashboard
+	AdminGetOverview(ctx context.Context) (AdminGetOverviewRow, error)
+	AdminGetRoom(ctx context.Context, id uuid.UUID) (AdminGetRoomRow, error)
+	AdminGetStorageByProvider(ctx context.Context) ([]AdminGetStorageByProviderRow, error)
+	AdminGetWebhookStats(ctx context.Context) (AdminGetWebhookStatsRow, error)
+	AdminListAuditLogs(ctx context.Context, arg AdminListAuditLogsParams) ([]AdminListAuditLogsRow, error)
+	AdminListRecordings(ctx context.Context, arg AdminListRecordingsParams) ([]AdminListRecordingsRow, error)
+	AdminListRoomParticipants(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
+	AdminListRooms(ctx context.Context, arg AdminListRoomsParams) ([]AdminListRoomsRow, error)
+	AdminListTenants(ctx context.Context, arg AdminListTenantsParams) ([]AdminListTenantsRow, error)
+	AdminListTranscripts(ctx context.Context, arg AdminListTranscriptsParams) ([]AdminListTranscriptsRow, error)
+	AdminListWebhookDeliveries(ctx context.Context, arg AdminListWebhookDeliveriesParams) ([]AdminListWebhookDeliveriesRow, error)
+	AdminUpdateWhiteboardConfig(ctx context.Context, arg AdminUpdateWhiteboardConfigParams) (Tenant, error)
 	ArchiveRecording(ctx context.Context, id uuid.UUID) (Recording, error)
 	ArchiveRecordingWithPath(ctx context.Context, arg ArchiveRecordingWithPathParams) (Recording, error)
 	CompleteRecording(ctx context.Context, arg CompleteRecordingParams) (Recording, error)
