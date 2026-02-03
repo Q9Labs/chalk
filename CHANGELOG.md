@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.53] - 2026-02-03
+
+### Added
+
 - **Whisper Worker: Axiom wide-event logging** — emits one structured wide event per job (`whisper.transcription`) plus periodic queue depth (`whisper.queue_depth`) for fast debugging and analytics.
 - **Stress Tests: VU sweep runner (200→750)** — adds `run-sweep.sh` to automate incremental capacity checks without manually rerunning scenarios.
 
