@@ -14,7 +14,7 @@ from axiom_py.logging import AxiomHandler
 SERVICE_NAME = "whisper-worker"
 ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 HOSTNAME = socket.gethostname()
-AXIOM_DATASET = os.getenv("AXIOM_DATASET", "chalk-whisper-work")
+AXIOM_DATASET = os.getenv("AXIOM_DATASET", "chalk-whisper-worker")
 
 
 def setup_axiom_logging(*, log_level: str) -> Optional[AxiomHandler]:
@@ -52,4 +52,3 @@ def emit_event(logger: logging.Logger, *, level: int, event: dict[str, Any]) -> 
 
     payload = {**base, **event}
     logger.log(level, str(payload.get("event", "log")), extra=payload)
-

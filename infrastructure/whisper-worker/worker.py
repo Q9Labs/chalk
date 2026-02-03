@@ -30,6 +30,23 @@ from observability import audio_url_meta, emit_event, setup_axiom_logging
 from transcriber import WhisperTranscriber
 from worker_types import TranscriptionJob, TranscriptionResult
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -45,6 +62,8 @@ setup_axiom_logging(log_level=LOG_LEVEL)
 
 # Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+LOG_TRANSCRIPT = _env_bool("WHISPER_LOG_TRANSCRIPT", False)
+LOG_TRANSCRIPT_MAX_CHARS = _env_int("WHISPER_LOG_TRANSCRIPT_MAX_CHARS", 4000)
 JOB_QUEUE = "transcription:jobs"
 RESULT_KEY_PREFIX = "transcription:result:"
 RESULT_TTL_SECONDS = 24 * 60 * 60  # 24 hours
@@ -136,6 +155,16 @@ class WhisperWorker:
                     "no_speech": self.transcriber.last_no_speech,
                 }
             )
+            if LOG_TRANSCRIPT and result.text:
+                transcript_text = result.text
+                transcript_chars = len(transcript_text)
+                wide_event["transcript_chars"] = transcript_chars
+                if LOG_TRANSCRIPT_MAX_CHARS > 0 and transcript_chars > LOG_TRANSCRIPT_MAX_CHARS:
+                    wide_event["transcript"] = transcript_text[:LOG_TRANSCRIPT_MAX_CHARS]
+                    wide_event["transcript_truncated"] = True
+                else:
+                    wide_event["transcript"] = transcript_text
+                    wide_event["transcript_truncated"] = False
             emit_event(logger, level=logging.INFO, event=wide_event)
             return result
 
@@ -293,4 +322,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

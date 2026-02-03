@@ -293,8 +293,11 @@ resource "aws_launch_template" "whisper" {
     ENVIRONMENT="${var.environment}"
     AWS_REGION="${data.aws_region.current.name}"
     LOG_LEVEL="${var.log_level}"
+    WHISPER_LOG_TRANSCRIPT="true"
+    WHISPER_LOG_TRANSCRIPT_MAX_CHARS="4000"
 
-    export REDIS_URL AXIOM_TOKEN AXIOM_DATASET ENVIRONMENT AWS_REGION LOG_LEVEL
+    export REDIS_URL AXIOM_TOKEN AXIOM_DATASET ENVIRONMENT AWS_REGION LOG_LEVEL \
+      WHISPER_LOG_TRANSCRIPT WHISPER_LOG_TRANSCRIPT_MAX_CHARS
 
     # Authenticate with ECR
     ECR_REGISTRY=$(echo "${var.ecr_repository_url}" | cut -d'/' -f1)
@@ -314,6 +317,8 @@ resource "aws_launch_template" "whisper" {
       -e AXIOM_TOKEN \
       -e AXIOM_DATASET \
       -e ENVIRONMENT \
+      -e WHISPER_LOG_TRANSCRIPT \
+      -e WHISPER_LOG_TRANSCRIPT_MAX_CHARS \
       -v /var/log:/var/log \
       ${var.ecr_repository_url}:${var.worker_image_tag}
   EOF

@@ -1,0 +1,75 @@
+# Whisper Worker Ops Guide
+
+## Overview
+- Service: GPU whisper transcription worker (faster-whisper)
+- Queue key: `transcription:jobs`
+- Result key: `transcription:result:{job_id}` (TTL 24h)
+- Axiom dataset: `chalk-whisper-worker` (env `AXIOM_DATASET`)
+- Log file: `/var/log/whisper-worker.log`
+- CloudWatch log group: `/aws/ec2/chalk-whisper-<env>`
+- Metrics: CloudWatch EMF event `TranscriptionQueueDepth` (namespace `Chalk/Whisper`)
+
+## Deploy (Prod)
+1. Make code/infra changes in `infrastructure/whisper-worker` and/or `infrastructure/terraform`.
+2. Run gate locally:
+   - `bun run lint`
+   - `bun run check-types`
+   - `bun run test`
+   - `bun run --cwd apps/docs build`
+   - `cd infrastructure/terraform && terraform fmt -check -recursive`
+   - `cd infrastructure/terraform/environments/prod && AWS_PROFILE=q9labs AWS_REGION=us-east-1 terraform init -input=false && terraform validate`
+   - `python3 -m py_compile infrastructure/whisper-worker/*.py`
+3. Update `CHANGELOG.md` under `[Unreleased]`.
+4. Commit (Conventional Commits) and push to `master`.
+5. Build image: `gh workflow run whisper-worker.yml` and wait for green.
+6. Apply infra: `gh workflow run infra.yml -f environment=prod -f action=apply` and wait for green.
+7. Roll instances:
+   - `aws --profile q9labs --region us-east-1 autoscaling start-instance-refresh --auto-scaling-group-name <asg> --preferences MinHealthyPercentage=0,InstanceWarmup=300`
+
+## Runtime Env Vars
+- `REDIS_URL` from Secrets Manager (auth token). Injected via user-data.
+- `AXIOM_TOKEN` from Secrets Manager `chalk/<env>/axiom` (seeded by SSM `/chalk/prod/axiom-token`).
+- `AXIOM_DATASET` set by Terraform (`chalk-whisper-worker`).
+- `ENVIRONMENT` from Terraform (`prod`).
+- `LOG_LEVEL` defaults to `INFO` unless overridden.
+- `WHISPER_LOG_TRANSCRIPT=true` to include transcript in `whisper.transcription` events.
+- `WHISPER_LOG_TRANSCRIPT_MAX_CHARS=4000` to cap size per event.
+
+## Observability
+- Axiom events:
+  - `worker.start`
+  - `whisper.queue_depth`
+  - `whisper.transcription` (success/error)
+  - `metrics.publish_failed` (Axiom ingestion failures)
+  - `worker.unexpected_error`
+- Transcript logging is on by default for testing. Reduce or disable in prod when needed.
+
+## Quick Health Checks (SSM)
+- Container status:
+  - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"`
+- Logs:
+  - `tail -n 200 /var/log/whisper-worker.log`
+  - `docker logs --tail 200 whisper-worker`
+- Env:
+  - `docker exec whisper-worker env | egrep "AXIOM|ENVIRONMENT|WHISPER_LOG_TRANSCRIPT"`
+- Redis ping:
+  - `docker exec whisper-worker python -c 'import os, redis; r=redis.from_url(os.environ["REDIS_URL"], decode_responses=True, socket_connect_timeout=2, socket_timeout=2); print(r.ping())'`
+- Axiom ingest smoke:
+  - `docker exec whisper-worker python -c 'import axiom_py; c=axiom_py.Client(); print(c.ingest_events("chalk-whisper-worker", [{"event":"axiom-smoke"}]))'`
+
+## Troubleshooting
+- `metrics.publish_failed` + Axiom 404:
+  - Dataset name mismatch. Confirm `AXIOM_DATASET` and dataset exists in Axiom.
+- Axiom 403:
+  - Token lacks permissions. Use token with ingest permissions for `chalk-whisper-worker`.
+- Redis timeouts:
+  - Security group ingress missing on Redis SG.
+  - Terraform resource: `aws_security_group_rule.redis_from_whisper`.
+  - If Terraform drifted, re-apply or add rule with AWS CLI and then reconcile state.
+- Worker not starting:
+  - Check `/var/log/cloud-init-output.log` for user-data errors.
+  - Validate `AXIOM_TOKEN` and `REDIS_URL` from Secrets Manager.
+
+## Notes
+- Do not log full `audio_url`. Only scheme/host is recorded.
+- High-cardinality `job_id` is expected in Axiom.
