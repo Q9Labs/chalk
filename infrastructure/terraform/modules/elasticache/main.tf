@@ -47,6 +47,15 @@ resource "aws_security_group" "redis" {
     security_groups = var.allowed_security_group_ids
   }
 
+  # NOTE: Some environments attach additional ingress rules (e.g. Whisper workers)
+  # via separate `aws_security_group_rule` resources to avoid module dependency
+  # cycles. Inline ingress blocks and standalone rule resources can fight each
+  # other; we ignore ingress diffs here so external rules aren't continuously
+  # revoked.
+  lifecycle {
+    ignore_changes = [ingress]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
