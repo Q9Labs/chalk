@@ -57,9 +57,9 @@ function UsagePage() {
           {storage.length === 0 ? (
             <p className="text-muted-foreground col-span-3">No storage data.</p>
           ) : (
-            storage.map((s: any) => (
-              <StatCard
-                key={s.storage_provider}
+	            storage.map((s) => (
+	              <StatCard
+	                key={s.storage_provider}
                 title={s.storage_provider}
                 value={formatBytes(s.total_bytes)}
                 description={`${s.recording_count} recordings`}

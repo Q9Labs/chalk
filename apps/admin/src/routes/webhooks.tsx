@@ -66,8 +66,8 @@ function WebhooksPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {deliveries.map((d: any) => (
-              <>
+	            {deliveries.map((d) => (
+	              <>
                 <TableRow
                   key={d.id}
                   className="cursor-pointer hover:bg-accent"
@@ -75,9 +75,9 @@ function WebhooksPage() {
                 >
                   <TableCell className="font-mono text-xs">{d.event_type}</TableCell>
                   <TableCell>{d.tenant_name}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusColors[d.status] ?? "outline"}>{d.status}</Badge>
-                  </TableCell>
+	                  <TableCell>
+	                    <Badge variant={statusColors[d.status ?? ""] ?? "outline"}>{d.status}</Badge>
+	                  </TableCell>
                   <TableCell>{d.attempts}/{d.max_attempts}</TableCell>
                   <TableCell className="max-w-[200px] truncate text-xs">{d.webhook_url}</TableCell>
                   <TableCell>{format(new Date(d.created_at), "PPp")}</TableCell>

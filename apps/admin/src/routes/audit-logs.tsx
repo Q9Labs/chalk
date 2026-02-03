@@ -59,10 +59,10 @@ function AuditLogsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {logs.map((log: any) => (
-              <>
-                <TableRow
-                  key={log.id}
+	            {logs.map((log) => (
+	              <>
+	                <TableRow
+	                  key={log.id}
                   className="cursor-pointer hover:bg-accent"
                   onClick={() => setExpanded(expanded === log.id ? null : log.id)}
                 >

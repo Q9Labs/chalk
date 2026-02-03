@@ -56,7 +56,7 @@ function RoomDetailPage() {
           </CardContent>
         </Card>
 
-        {room?.config && (
+        {room?.config != null && (
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Config</CardTitle>

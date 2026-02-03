@@ -65,8 +65,8 @@ function TranscriptsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transcripts.map((t: any) => (
-              <>
+	            {transcripts.map((t) => (
+	              <>
                 <TableRow
                   key={t.id}
                   className="cursor-pointer hover:bg-accent"
@@ -74,9 +74,9 @@ function TranscriptsPage() {
                 >
                   <TableCell>{t.room_name || "—"}</TableCell>
                   <TableCell>{t.tenant_name}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusColors[t.status] ?? "outline"}>{t.status}</Badge>
-                  </TableCell>
+	                  <TableCell>
+	                    <Badge variant={statusColors[t.status ?? ""] ?? "outline"}>{t.status}</Badge>
+	                  </TableCell>
                   <TableCell>{t.provider || "—"}</TableCell>
                   <TableCell>{t.word_count ?? "—"}</TableCell>
                   <TableCell>{format(new Date(t.created_at), "PPp")}</TableCell>
@@ -95,9 +95,9 @@ function TranscriptsPage() {
                           <div>
                             <div className="text-xs font-semibold mb-1">Action Items</div>
                             <ul className="list-disc list-inside text-sm space-y-0.5">
-                              {t.action_items.map((item: string, i: number) => (
-                                <li key={i}>{item}</li>
-                              ))}
+	                              {t.action_items.map((item, i) => (
+	                                <li key={i}>{item}</li>
+	                              ))}
                             </ul>
                           </div>
                         )}

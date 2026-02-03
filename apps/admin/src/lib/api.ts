@@ -1,3 +1,16 @@
+import type {
+	AuditLog,
+	OverviewResponse,
+	RecordingSummary,
+	RoomDetailResponse,
+	RoomSummary,
+	TranscriptSummary,
+	TenantSummary,
+	TenantDetail,
+	UsageResponse,
+	WebhookDelivery,
+} from "./api-types"
+
 const ENV_KEY = "chalk-admin-env"
 const SECRET_KEY = "chalk-admin-secret-prod"
 
@@ -64,53 +77,53 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // ── API Methods ──
 
 export const api = {
-  getOverview: () => request<any>("/overview"),
+  getOverview: () => request<OverviewResponse>("/overview"),
 
   listTenants: (limit = 50, offset = 0) =>
-    request<any[]>(`/tenants?limit=${limit}&offset=${offset}`),
+    request<TenantSummary[]>(`/tenants?limit=${limit}&offset=${offset}`),
 
-  getTenant: (id: string) => request<any>(`/tenants/${id}`),
+  getTenant: (id: string) => request<TenantDetail>(`/tenants/${id}`),
 
   createTenant: (data: { name: string; max_concurrent_rooms?: number; max_participants_per_room?: number; max_recording_duration_minutes?: number }) =>
-    request<any>("/tenants", { method: "POST", body: JSON.stringify(data) }),
+    request<unknown>("/tenants", { method: "POST", body: JSON.stringify(data) }),
 
   updateTenant: (id: string, data: Record<string, unknown>) =>
-    request<any>(`/tenants/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    request<unknown>(`/tenants/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   updateTenantConfig: (id: string, config: Record<string, unknown>) =>
-    request<any>(`/tenants/${id}/config`, { method: "PATCH", body: JSON.stringify(config) }),
+    request<unknown>(`/tenants/${id}/config`, { method: "PATCH", body: JSON.stringify(config) }),
 
   updateWhiteboardConfig: (id: string, config: Record<string, unknown>) =>
-    request<any>(`/tenants/${id}/whiteboard-config`, { method: "PATCH", body: JSON.stringify(config) }),
+    request<unknown>(`/tenants/${id}/whiteboard-config`, { method: "PATCH", body: JSON.stringify(config) }),
 
   rotateKey: (id: string) =>
     request<{ api_key: string }>(`/tenants/${id}/rotate-key`, { method: "POST" }),
 
   activateTenant: (id: string) =>
-    request<any>(`/tenants/${id}/activate`, { method: "PATCH" }),
+    request<unknown>(`/tenants/${id}/activate`, { method: "PATCH" }),
 
   deactivateTenant: (id: string) =>
-    request<any>(`/tenants/${id}/deactivate`, { method: "PATCH" }),
+    request<unknown>(`/tenants/${id}/deactivate`, { method: "PATCH" }),
 
   deleteTenant: (id: string) =>
     request<void>(`/tenants/${id}`, { method: "DELETE" }),
 
   listRooms: (limit = 50, offset = 0) =>
-    request<any[]>(`/rooms?limit=${limit}&offset=${offset}`),
+    request<RoomSummary[]>(`/rooms?limit=${limit}&offset=${offset}`),
 
-  getRoom: (id: string) => request<any>(`/rooms/${id}`),
+  getRoom: (id: string) => request<RoomDetailResponse>(`/rooms/${id}`),
 
   listRecordings: (limit = 50, offset = 0) =>
-    request<any[]>(`/recordings?limit=${limit}&offset=${offset}`),
+    request<RecordingSummary[]>(`/recordings?limit=${limit}&offset=${offset}`),
 
   listTranscripts: (limit = 50, offset = 0) =>
-    request<any[]>(`/transcripts?limit=${limit}&offset=${offset}`),
+    request<TranscriptSummary[]>(`/transcripts?limit=${limit}&offset=${offset}`),
 
   listWebhooks: (limit = 50, offset = 0) =>
-    request<any[]>(`/webhooks?limit=${limit}&offset=${offset}`),
+    request<WebhookDelivery[]>(`/webhooks?limit=${limit}&offset=${offset}`),
 
   listAuditLogs: (limit = 50, offset = 0) =>
-    request<any[]>(`/audit-logs?limit=${limit}&offset=${offset}`),
+    request<AuditLog[]>(`/audit-logs?limit=${limit}&offset=${offset}`),
 
-  getUsage: () => request<any>("/usage"),
+  getUsage: () => request<UsageResponse>("/usage"),
 }
