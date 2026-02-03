@@ -147,7 +147,8 @@ resource "aws_iam_role_policy" "whisper_secrets" {
         ]
         Resource = [
           "arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:chalk/whisper/*",
-          var.redis_auth_secret_arn
+          var.redis_auth_secret_arn,
+          var.axiom_secret_arn
         ]
       }
     ]
@@ -246,7 +247,7 @@ resource "aws_launch_template" "whisper" {
     systemctl restart docker
 
     # Install CloudWatch agent
-    yum install -y amazon-cloudwatch-agent
+    yum install -y amazon-cloudwatch-agent jq
     cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCONFIG'
     {
       "logs": {
@@ -273,6 +274,19 @@ resource "aws_launch_template" "whisper" {
 
     REDIS_URL="rediss://:$REDIS_AUTH@${var.redis_endpoint}:${var.redis_port}"
 
+    # Fetch Axiom token from Secrets Manager (dataset is non-secret, configured via Terraform)
+    AXIOM_JSON=$(aws secretsmanager get-secret-value \
+      --secret-id "${var.axiom_secret_arn}" \
+      --query SecretString --output text)
+    AXIOM_TOKEN=$(echo "$AXIOM_JSON" | jq -r '.token // empty')
+
+    AXIOM_DATASET="${var.axiom_dataset_whisper}"
+    ENVIRONMENT="${var.environment}"
+    AWS_REGION="${data.aws_region.current.name}"
+    LOG_LEVEL="${var.log_level}"
+
+    export REDIS_URL AXIOM_TOKEN AXIOM_DATASET ENVIRONMENT AWS_REGION LOG_LEVEL
+
     # Authenticate with ECR
     ECR_REGISTRY=$(echo "${var.ecr_repository_url}" | cut -d'/' -f1)
     aws ecr get-login-password --region ${data.aws_region.current.name} | \
@@ -285,9 +299,12 @@ resource "aws_launch_template" "whisper" {
       --name whisper-worker \
       --restart always \
       --gpus all \
-      -e REDIS_URL="$REDIS_URL" \
-      -e AWS_REGION="${data.aws_region.current.name}" \
-      -e LOG_LEVEL="${var.log_level}" \
+      -e REDIS_URL \
+      -e AWS_REGION \
+      -e LOG_LEVEL \
+      -e AXIOM_TOKEN \
+      -e AXIOM_DATASET \
+      -e ENVIRONMENT \
       -v /var/log:/var/log \
       ${var.ecr_repository_url}:${var.worker_image_tag}
   EOF

@@ -7,6 +7,9 @@ faster-whisper==1.2.1
 # Redis client for job queue
 redis==5.0.1
 
+# Axiom logging (structured wide events)
+axiom-py==0.9.1
+
 # HTTP client (required by faster-whisper for model downloads)
 requests>=2.31.0
 

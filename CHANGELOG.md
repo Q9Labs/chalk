@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Whisper Worker: Axiom wide-event logging** — emits one structured wide event per job (`whisper.transcription`) plus periodic queue depth (`whisper.queue_depth`) for fast debugging and analytics.
+
 ### Changed
+
+- **Infra: Whisper Worker Axiom wiring** — pass `AXIOM_TOKEN` from Secrets Manager (seeded via SSM `/chalk/prod/axiom-token`) and set `AXIOM_DATASET=chalk-whisper-work` without leaking secrets into EC2 user-data command lines.
 
 ### Fixed
 

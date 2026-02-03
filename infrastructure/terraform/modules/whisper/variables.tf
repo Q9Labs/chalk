@@ -25,6 +25,17 @@ variable "redis_auth_secret_arn" {
   type        = string
 }
 
+variable "axiom_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing Axiom credentials"
+  type        = string
+}
+
+variable "axiom_dataset_whisper" {
+  description = "Axiom dataset name for whisper-worker logs (non-secret)"
+  type        = string
+  default     = "chalk-whisper-work"
+}
+
 variable "redis_endpoint" {
   description = "Redis endpoint address"
   type        = string

@@ -39,7 +39,7 @@ ENV WHISPER_MODEL=${WHISPER_MODEL}
 RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL}', device='cpu')"
 
 # Copy worker script + modules
-COPY worker.py worker_types.py transcriber.py .
+COPY worker.py worker_types.py transcriber.py observability.py .
 
 # Default environment variables
 ENV REDIS_URL=redis://localhost:6379

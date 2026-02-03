@@ -52,14 +52,22 @@ class WhisperTranscriber:
         )
         self.batch_size_min = int(os.getenv("WHISPER_BATCH_SIZE_MIN", "1"))
 
+        self.last_inference_mode: Optional[str] = None
+        self.last_batch_size: Optional[int] = None
+        self.last_oom_retries = 0
+        self.last_no_speech = False
+
         logger.info(
-            "Loading faster-whisper model: model=%s device=%s compute_type=%s cpu_threads=%d beam_size=%d multilingual=%s",
-            self.model_name,
-            self.device,
-            self.compute_type,
-            self.cpu_threads,
-            self.beam_size,
-            self.multilingual,
+            "whisper.model_load_start",
+            extra={
+                "event": "whisper.model_load_start",
+                "model": self.model_name,
+                "device": self.device,
+                "compute_type": self.compute_type,
+                "cpu_threads": self.cpu_threads,
+                "beam_size": self.beam_size,
+                "multilingual": self.multilingual,
+            },
         )
         load_start = time.time()
         self.model = WhisperModel(
@@ -69,7 +77,14 @@ class WhisperTranscriber:
             cpu_threads=self.cpu_threads,
         )
         self.pipeline = BatchedInferencePipeline(self.model)
-        logger.info("Model loaded in %.2fs", time.time() - load_start)
+        logger.info(
+            "whisper.model_load_complete",
+            extra={
+                "event": "whisper.model_load_complete",
+                "model": self.model_name,
+                "load_seconds": round(time.time() - load_start, 2),
+            },
+        )
 
     def _segments_to_payload(self, segments) -> tuple[list, str]:
         segments_list = []
@@ -120,6 +135,10 @@ class WhisperTranscriber:
     def _transcribe_single(
         self, audio_path: str, *, language: Optional[str], start: float
     ) -> TranscriptionResult:
+        self.last_inference_mode = "single"
+        self.last_batch_size = None
+        self.last_oom_retries = 0
+        self.last_no_speech = False
         try:
             segments, info = self.model.transcribe(
                 audio_path,
@@ -157,10 +176,7 @@ class WhisperTranscriber:
             if "max() arg is an empty sequence" in str(e):
                 audio = decode_audio(audio_path, sampling_rate=16000)
                 duration_seconds = int(round(audio.shape[0] / 16000))
-                logger.info(
-                    "No speech detected (treated as empty transcript): duration_seconds=%d",
-                    duration_seconds,
-                )
+                self.last_no_speech = True
                 return self._empty_result(
                     duration_seconds=duration_seconds,
                     processing_time_seconds=round(time.time() - start, 2),
@@ -172,6 +188,9 @@ class WhisperTranscriber:
         self, audio_path: str, *, language: Optional[str], start: float
     ) -> TranscriptionResult:
         batch_size = max(self.batch_size_min, self.batch_size_max)
+        oom_retries = 0
+        self.last_inference_mode = "batched"
+        self.last_no_speech = False
 
         while True:
             try:
@@ -194,6 +213,8 @@ class WhisperTranscriber:
 
                 segments_list, full_text = self._segments_to_payload(segments)
                 word_count = len(full_text.split())
+                self.last_batch_size = batch_size
+                self.last_oom_retries = oom_retries
 
                 return TranscriptionResult(
                     job_id="",
@@ -207,19 +228,30 @@ class WhisperTranscriber:
                 )
 
             except Exception as e:
+                # v1.2.1 edge-case: silent audio + VAD can yield empty features and crash language detection.
+                # Requirement: treat silent/near-silent recordings as completed with empty transcript.
+                if "max() arg is an empty sequence" in str(e):
+                    audio = decode_audio(audio_path, sampling_rate=16000)
+                    duration_seconds = int(round(audio.shape[0] / 16000))
+                    self.last_no_speech = True
+                    self.last_batch_size = batch_size
+                    self.last_oom_retries = oom_retries
+                    return self._empty_result(
+                        duration_seconds=duration_seconds,
+                        processing_time_seconds=round(time.time() - start, 2),
+                    )
+
                 # OOM guard: step down batch size and retry.
                 msg = str(e).lower()
                 oom = "out of memory" in msg or "cuda" in msg and "memory" in msg
                 if not oom:
                     raise
 
+                oom_retries += 1
                 next_batch_size = batch_size // 2
                 if next_batch_size < self.batch_size_min:
+                    self.last_batch_size = batch_size
+                    self.last_oom_retries = oom_retries
                     raise
 
-                logger.warning(
-                    "OOM during batched transcription; retrying with smaller batch_size: batch_size=%d next_batch_size=%d",
-                    batch_size,
-                    next_batch_size,
-                )
                 batch_size = next_batch_size

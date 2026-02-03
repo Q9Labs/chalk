@@ -366,6 +366,8 @@ module "whisper" {
   vpc_cidr              = "10.2.0.0/16"
   subnet_ids            = module.vpc.private_subnet_ids
   redis_auth_secret_arn = module.elasticache.auth_token_secret_arn
+  axiom_secret_arn      = module.secrets.axiom_secret_arn
+  axiom_dataset_whisper = "chalk-whisper-work"
   redis_endpoint        = module.elasticache.primary_endpoint
   redis_port            = module.elasticache.port
   ecr_repository_url    = module.ecr.whisper_repository_url
