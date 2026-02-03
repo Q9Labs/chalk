@@ -8,16 +8,16 @@ from typing import Optional
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 
+from env_utils import (
+    env_bool,
+    env_bool_relaxed,
+    env_float,
+    env_int,
+    env_optional_positive_int,
+)
 from worker_types import TranscriptionResult, TranscriptionSegment
 
 logger = logging.getLogger("whisper-worker")
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
 
 def _default_batch_size_max(model_name: str) -> int:
@@ -35,13 +35,35 @@ class WhisperTranscriber:
         self.cpu_threads = int(os.getenv("WHISPER_CPU_THREADS", "4"))
 
         self.beam_size = int(os.getenv("WHISPER_BEAM_SIZE", "5"))
-        self.multilingual = _env_bool("WHISPER_MULTILINGUAL", True)
+        self.multilingual = env_bool("WHISPER_MULTILINGUAL", True)
+
+        default_chunk_length_seconds = 15 if self.multilingual else None
+        chunk_length_set, chunk_length_override = env_optional_positive_int(
+            "WHISPER_CHUNK_LENGTH_SECONDS"
+        )
+        self.chunk_length_seconds = (
+            default_chunk_length_seconds
+            if not chunk_length_set
+            else chunk_length_override
+        )
+
+        default_condition_on_prev = not self.multilingual
+        self.condition_on_previous_text = env_bool_relaxed(
+            "WHISPER_CONDITION_ON_PREVIOUS_TEXT", default_condition_on_prev
+        )
+
+        self.language_detection_segments = max(
+            1, env_int("WHISPER_LANGUAGE_DETECTION_SEGMENTS", 1)
+        )
+        self.language_detection_threshold = min(
+            1.0, max(0.0, env_float("WHISPER_LANGUAGE_DETECTION_THRESHOLD", 0.5))
+        )
 
         # Segment-level timestamps are desired; keep timestamps enabled by default.
-        self.without_timestamps = _env_bool("WHISPER_WITHOUT_TIMESTAMPS", False)
+        self.without_timestamps = env_bool("WHISPER_WITHOUT_TIMESTAMPS", False)
 
         # VAD tuning for meetings; keep fairly small silence splits for better batching/latency.
-        self.vad_filter = _env_bool("WHISPER_VAD_FILTER", True)
+        self.vad_filter = env_bool("WHISPER_VAD_FILTER", True)
         self.vad_min_silence_ms = int(os.getenv("WHISPER_VAD_MIN_SILENCE_MS", "500"))
 
         batch_size_env = os.getenv("WHISPER_BATCH_SIZE_MAX")
@@ -67,6 +89,10 @@ class WhisperTranscriber:
                 "cpu_threads": self.cpu_threads,
                 "beam_size": self.beam_size,
                 "multilingual": self.multilingual,
+                "chunk_length_seconds": self.chunk_length_seconds,
+                "condition_on_previous_text": self.condition_on_previous_text,
+                "language_detection_segments": self.language_detection_segments,
+                "language_detection_threshold": self.language_detection_threshold,
             },
         )
         load_start = time.time()
@@ -154,6 +180,10 @@ class WhisperTranscriber:
                 ),
                 without_timestamps=self.without_timestamps,
                 word_timestamps=False,
+                chunk_length=self.chunk_length_seconds,
+                condition_on_previous_text=self.condition_on_previous_text,
+                language_detection_segments=self.language_detection_segments,
+                language_detection_threshold=self.language_detection_threshold,
             )
 
             segments_list, full_text = self._segments_to_payload(segments)
@@ -209,6 +239,9 @@ class WhisperTranscriber:
                     without_timestamps=self.without_timestamps,
                     word_timestamps=False,
                     batch_size=batch_size,
+                    chunk_length=self.chunk_length_seconds,
+                    language_detection_segments=self.language_detection_segments,
+                    language_detection_threshold=self.language_detection_threshold,
                 )
 
                 segments_list, full_text = self._segments_to_payload(segments)

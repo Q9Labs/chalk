@@ -112,6 +112,9 @@ class WhisperWorker:
             "language": job.language,
             "queue_depth": queue_depth,
             "use_batched": use_batched,
+            "multilingual": self.transcriber.multilingual,
+            "chunk_length_seconds": self.transcriber.chunk_length_seconds,
+            "condition_on_previous_text": self.transcriber.condition_on_previous_text,
             **audio_url_meta(job.audio_url),
         }
 

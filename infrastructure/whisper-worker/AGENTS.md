@@ -32,6 +32,14 @@
 - `AXIOM_DATASET` set by Terraform (`chalk-whisper-worker`).
 - `ENVIRONMENT` from Terraform (`prod`).
 - `LOG_LEVEL` defaults to `INFO` unless overridden.
+- `WHISPER_CHUNK_LENGTH_SECONDS` controls segment/window size for language detection.
+  - Default: `15` when `WHISPER_MULTILINGUAL=true`
+  - Set to `0`/empty/invalid to fall back to model defaults (no override)
+- `WHISPER_CONDITION_ON_PREVIOUS_TEXT` controls prompt carryover between segments.
+  - Default: `false` when `WHISPER_MULTILINGUAL=true` (better code-switching)
+  - Default: `true` when `WHISPER_MULTILINGUAL=false`
+- `WHISPER_LANGUAGE_DETECTION_SEGMENTS` number of segments to consider for initial language detection (default: `1`).
+- `WHISPER_LANGUAGE_DETECTION_THRESHOLD` min probability to accept detected language (default: `0.5`).
 - `WHISPER_LOG_TRANSCRIPT=true` to include transcript in `whisper.transcription` events.
 - `WHISPER_LOG_TRANSCRIPT_MAX_CHARS=4000` to cap size per event.
 
