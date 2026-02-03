@@ -368,6 +368,7 @@ module "whisper" {
   redis_auth_secret_arn = module.elasticache.auth_token_secret_arn
   axiom_secret_arn      = module.secrets.axiom_secret_arn
   axiom_dataset_whisper = "chalk-whisper-work"
+  secrets_kms_key_arn   = module.secrets.kms_key_arn
   redis_endpoint        = module.elasticache.primary_endpoint
   redis_port            = module.elasticache.port
   ecr_repository_url    = module.ecr.whisper_repository_url

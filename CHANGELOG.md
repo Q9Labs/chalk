@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Infra: Whisper Worker secrets decrypt** — grant `kms:Decrypt` for Secrets Manager KMS key so worker can read Axiom token during boot.
 - **Stress Tests: Fix large-room broadcast latency measurement** — restores deterministic sender-echo detection (no substring matching) and prevents skewed p95/p99 from flaky parsing.
 - **Stress Tests: Align ws-storm short runs to active VUs** — short runs now use the target VU count and correct storm duration.
 - **Stress Tests: WS token handling + debug logs** — k6 scenarios now guard missing websocket tokens and only log failures in debug mode.

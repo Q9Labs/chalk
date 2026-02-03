@@ -36,6 +36,11 @@ variable "axiom_dataset_whisper" {
   default     = "chalk-whisper-work"
 }
 
+variable "secrets_kms_key_arn" {
+  description = "KMS key ARN used to encrypt Secrets Manager secrets"
+  type        = string
+}
+
 variable "redis_endpoint" {
   description = "Redis endpoint address"
   type        = string

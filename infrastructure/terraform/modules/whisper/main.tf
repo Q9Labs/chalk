@@ -150,6 +150,15 @@ resource "aws_iam_role_policy" "whisper_secrets" {
           var.redis_auth_secret_arn,
           var.axiom_secret_arn
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = [
+          var.secrets_kms_key_arn
+        ]
       }
     ]
   })
