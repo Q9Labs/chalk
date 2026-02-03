@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Infra: Align Axiom dataset in prod** — route API Axiom logs to the existing `chalk-whisper-worker` dataset to prevent 404 dataset errors during transcription logging.
+
 ## [0.0.53] - 2026-02-03
 
 ### Added
