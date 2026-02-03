@@ -13,41 +13,34 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
-import tempfile
 import time
 import traceback
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
 
 import redis
-
+from audio_download import download_audio
 from observability import audio_url_meta, emit_event, setup_axiom_logging
 from transcriber import WhisperTranscriber
+from worker_config import (
+    JOB_QUEUE,
+    LOG_LEVEL,
+    LOG_TRANSCRIPT,
+    LOG_TRANSCRIPT_MAX_CHARS,
+    POLL_TIMEOUT_SECONDS,
+    REDIS_CONNECT_TIMEOUT,
+    REDIS_HEALTHCHECK_INTERVAL,
+    REDIS_RETRY_ON_TIMEOUT,
+    REDIS_SOCKET_TIMEOUT,
+    REDIS_URL,
+    RESULT_KEY_PREFIX,
+    RESULT_TTL_SECONDS,
+)
 from worker_types import TranscriptionJob, TranscriptionResult
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -60,38 +53,17 @@ logger = logging.getLogger("whisper-worker")
 
 setup_axiom_logging(log_level=LOG_LEVEL)
 
-# Configuration
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-LOG_TRANSCRIPT = _env_bool("WHISPER_LOG_TRANSCRIPT", False)
-LOG_TRANSCRIPT_MAX_CHARS = _env_int("WHISPER_LOG_TRANSCRIPT_MAX_CHARS", 4000)
-JOB_QUEUE = "transcription:jobs"
-RESULT_KEY_PREFIX = "transcription:result:"
-RESULT_TTL_SECONDS = 24 * 60 * 60  # 24 hours
-POLL_TIMEOUT_SECONDS = 30
-
-
 class WhisperWorker:
     def __init__(self) -> None:
-        self.redis = redis.from_url(REDIS_URL, decode_responses=True)
+        self.redis = redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=REDIS_CONNECT_TIMEOUT,
+            socket_timeout=REDIS_SOCKET_TIMEOUT,
+            retry_on_timeout=REDIS_RETRY_ON_TIMEOUT,
+            health_check_interval=REDIS_HEALTHCHECK_INTERVAL,
+        )
         self.transcriber = WhisperTranscriber()
-
-    def _download_audio(self, url: str) -> tuple[str, Optional[int], int]:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
-            tmp_path = f.name
-            size_bytes = 0
-            http_status: Optional[int] = None
-            success = False
-            try:
-                with urlopen(url, timeout=300) as response:
-                    http_status = getattr(response, "status", None) or response.getcode()
-                    while chunk := response.read(8192):
-                        f.write(chunk)
-                        size_bytes += len(chunk)
-                success = True
-                return tmp_path, http_status, size_bytes
-            finally:
-                if not success and os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
 
     def process_job(
         self,
@@ -121,7 +93,7 @@ class WhisperWorker:
         try:
             error_stage = "download"
             try:
-                audio_path, download_http_status, download_size_bytes = self._download_audio(
+                audio_path, download_http_status, download_size_bytes = download_audio(
                     job.audio_url
                 )
             except HTTPError as e:
@@ -288,7 +260,7 @@ class WhisperWorker:
                 )
                 self.store_result(transcription_result)
 
-            except redis.ConnectionError as e:
+            except (redis.ConnectionError, redis.exceptions.TimeoutError) as e:
                 emit_event(
                     logger,
                     level=logging.ERROR,

@@ -40,6 +40,10 @@
   - Default: `true` when `WHISPER_MULTILINGUAL=false`
 - `WHISPER_LANGUAGE_DETECTION_SEGMENTS` number of segments to consider for initial language detection (default: `1`).
 - `WHISPER_LANGUAGE_DETECTION_THRESHOLD` min probability to accept detected language (default: `0.5`).
+- `REDIS_CONNECT_TIMEOUT` socket connect timeout in seconds (default: `5`).
+- `REDIS_SOCKET_TIMEOUT` command socket timeout in seconds (default: `30`).
+- `REDIS_RETRY_ON_TIMEOUT` retry commands on timeout (default: `true`).
+- `REDIS_HEALTHCHECK_INTERVAL` seconds between health checks (default: `30`).
 - `WHISPER_LOG_TRANSCRIPT=true` to include transcript in `whisper.transcription` events.
 - `WHISPER_LOG_TRANSCRIPT_MAX_CHARS=4000` to cap size per event.
 

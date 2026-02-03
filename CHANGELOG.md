@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Infra: Align Axiom dataset in prod** — route API Axiom logs to the existing `chalk-whisper-worker` dataset to prevent 404 dataset errors during transcription logging.
 - **Whisper Worker: Multilingual code-switching** — enable per-segment language detection (shorter chunking) and disable prompt carryover in multilingual mode to prevent missing later-language speech.
+- **Whisper Worker: Redis timeout handling** — configure Redis socket timeouts and retry-on-timeout so transient connection timeouts don’t crash the worker loop.
 
 ## [0.0.53] - 2026-02-03
 
