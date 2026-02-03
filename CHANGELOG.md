@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Whisper Worker: Axiom wide-event logging** — emits one structured wide event per job (`whisper.transcription`) plus periodic queue depth (`whisper.queue_depth`) for fast debugging and analytics.
+- **Stress Tests: VU sweep runner (200→750)** — adds `run-sweep.sh` to automate incremental capacity checks without manually rerunning scenarios.
 
 ### Changed
 
@@ -17,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Stress Tests: Fix large-room broadcast latency measurement** — restores deterministic sender-echo detection (no substring matching) and prevents skewed p95/p99 from flaky parsing.
+- **Stress Tests: Align ws-storm short runs to active VUs** — short runs now use the target VU count and correct storm duration.
 - **Admin: Persist production secret across reloads** — production admin API calls now keep the secret in local storage so refreshes don't drop auth.
 - **API Gateway: Allow admin localhost origin for CORS** — add `http://localhost:3090`/`127.0.0.1:3090` to aggregated origins so local admin can call prod API.
 - **API Gateway: Allow X-Admin-Secret header for CORS** — preflight now allows admin secret header to reach prod API.

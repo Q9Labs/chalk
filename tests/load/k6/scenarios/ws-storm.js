@@ -16,9 +16,12 @@ const messagesErrored = new Counter("messages_errored");
 const messageErrorRate = new Rate("message_error_rate");
 const isShort = __ENV.K6_SHORT === "true";
 const activeUsers = Number(__ENV.K6_ACTIVE_USERS || 3000);
-const stormVUs = isShort ? 20 : Number(__ENV.WS_STORM_VUS || activeUsers);
+const stormVUs = Number(__ENV.WS_STORM_VUS || activeUsers);
 const stormDuration = isShort ? "1m" : "5m";
-const minMessagesAttempted = isShort ? 500 : Math.max(5000, stormVUs * 50);
+const stormDurationMs = isShort ? 60000 : 300000;
+const minMessagesAttempted = isShort
+	? Math.max(500, stormVUs * 10)
+	: Math.max(5000, stormVUs * 50);
 
 export const options = {
 	scenarios: {
@@ -108,10 +111,10 @@ export default function (data) {
 			}
 		}, 50); // 20 messages/second
 
-		// Close after 1 minute
+		// Close after storm duration
 		socket.setTimeout(() => {
 			socket.close();
-		}, 60000);
+		}, stormDurationMs);
 	});
 
 	check(wsRes, { "ws connected": (r) => r && r.status === 101 });
