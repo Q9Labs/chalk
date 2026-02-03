@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import json
 import logging
 import os
 import socket
@@ -51,4 +52,12 @@ def emit_event(logger: logging.Logger, *, level: int, event: dict[str, Any]) -> 
     }
 
     payload = {**base, **event}
-    logger.log(level, str(payload.get("event", "log")), extra=payload)
+    try:
+        logger.log(level, str(payload.get("event", "log")), extra=payload)
+    except Exception as exc:
+        fallback = {
+            **payload,
+            "logging_error": str(exc),
+            "logging_error_class": exc.__class__.__name__,
+        }
+        print(json.dumps(fallback, default=str), flush=True)

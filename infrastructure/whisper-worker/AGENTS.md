@@ -43,6 +43,7 @@
   - `metrics.publish_failed` (Axiom ingestion failures)
   - `worker.unexpected_error`
 - Transcript logging is on by default for testing. Reduce or disable in prod when needed.
+ - Axiom ingest failures no longer block jobs; events fall back to stdout JSON.
 
 ## Quick Health Checks (SSM)
 - Container status:
