@@ -367,7 +367,7 @@ module "whisper" {
   subnet_ids            = module.vpc.private_subnet_ids
   redis_auth_secret_arn = module.elasticache.auth_token_secret_arn
   axiom_secret_arn      = module.secrets.axiom_secret_arn
-  axiom_dataset_whisper = "chalk-whisper-work"
+  axiom_dataset_whisper = "chalk-whisper-worker"
   secrets_kms_key_arn   = module.secrets.kms_key_arn
   redis_endpoint        = module.elasticache.primary_endpoint
   redis_port            = module.elasticache.port

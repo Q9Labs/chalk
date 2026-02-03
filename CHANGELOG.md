@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Webhooks: Include participant metadata + external IDs in tenant payloads** — post-meeting webhook payloads now include participant metadata (from VideoConference join) plus `external_id`/`external_user_id` for easier tenant identification; sdk-core webhook schema updated accordingly.
-- **Infra: Whisper Worker Axiom wiring** — pass `AXIOM_TOKEN` from Secrets Manager (seeded via SSM `/chalk/prod/axiom-token`) and set `AXIOM_DATASET=chalk-whisper-work` without leaking secrets into EC2 user-data command lines.
+- **Infra: Whisper Worker Axiom wiring** — pass `AXIOM_TOKEN` from Secrets Manager (seeded via SSM `/chalk/prod/axiom-token`) and set `AXIOM_DATASET=chalk-whisper-worker` without leaking secrets into EC2 user-data command lines.
 - **SDK-React: Remove Storybook from package** — drop Storybook config/stories and simplify SDK surface for consumers.
 - **SDK-React/UI: Dev scripts** — ensure `dev` builds include CSS/assets to prevent missing styles in local SDK builds.
 - **SDK-React/UI: Meeting room polish** — draggable room-name pill plus ControlBar/PreJoinLobby interaction + accessibility tweaks.
