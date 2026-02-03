@@ -37,20 +37,29 @@ echo "Target: $BASE_URL"
 run_k6() {
   local scenario=$1
   local script=$2
-  local output="$RESULTS_DIR/${scenario}-$(date +%Y%m%d-%H%M%S).json"
+  local timestamp
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  local output_jsonl="$RESULTS_DIR/${scenario}-${timestamp}.jsonl"
+  local output_summary="$RESULTS_DIR/${scenario}-${timestamp}-summary.json"
 
+  set +e
   k6 run \
+    --quiet \
     -e BASE_URL="$BASE_URL" \
     -e WS_URL="$WS_URL" \
     -e TENANT_ID="$TENANT_ID" \
     -e API_KEY="$API_KEY" \
     -e K6_SHORT="${K6_SHORT:-false}" \
     -e K6_ACTIVE_USERS="${K6_ACTIVE_USERS:-3000}" \
-    --summary-export "$output" \
+    --out "json=$output_jsonl" \
+    --summary-export "$output_summary" \
     "$script"
+  local k6_exit=$?
+  set -e
 
   # Append results to persistent file
-  "$SCRIPT_DIR/append-results.sh" "$scenario" "$output" "$?"
+  "$SCRIPT_DIR/append-results.sh" "$scenario" "$output_summary" "$k6_exit" "$output_jsonl"
+  return $k6_exit
 }
 
 case "$PHASE" in
@@ -75,15 +84,22 @@ case "$PHASE" in
     ;;
 
   all)
+    failures=0
     for scenario in smoke room-creation participant-churn large-room ws-storm; do
       echo ""
       echo "=== Running $scenario ==="
-      "$0" "$scenario"
+      if ! "$0" "$scenario"; then
+        failures=$((failures + 1))
+      fi
       echo "Cooling down for 60 seconds..."
       sleep 60
     done
     # Generate summary after all tests
     "$SCRIPT_DIR/generate-summary.sh"
+    if [ "$failures" -gt 0 ]; then
+      echo "$failures scenario(s) failed."
+      exit 1
+    fi
     ;;
 
   *)

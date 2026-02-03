@@ -5,10 +5,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Usage: ./append-results.sh <scenario> <k6-json-output> [k6-exit-code]
+# Usage: ./append-results.sh <scenario> <k6-summary-json> <k6-exit-code> [k6-jsonl-output]
 SCENARIO=$1
 K6_OUTPUT=$2
 K6_EXIT_CODE=${3:-}
+K6_JSONL=${4:-}
 RESULTS_FILE="$PROJECT_ROOT/tests/results/STRESS_TEST_RESULTS.md"
 
 # Ensure results directory exists
@@ -49,7 +50,8 @@ BROADCAST_P95=$(jq -r '.metrics.broadcast_latency["p(95)"] // .metrics.broadcast
 WS_SENT_RATE=$(jq -r '.metrics.ws_msgs_sent.rate // .metrics.ws_msgs_sent.values.rate // 0' "$K6_OUTPUT")
 WS_RECV_RATE=$(jq -r '.metrics.ws_msgs_received.rate // .metrics.ws_msgs_received.values.rate // 0' "$K6_OUTPUT")
 MESSAGES_ATTEMPTED=$(jq -r '.metrics.messages_attempted.count // .metrics.messages_attempted.values.count // 0' "$K6_OUTPUT")
-MESSAGE_ERROR_RATE=$(jq -r '.metrics.message_error_rate.value // .metrics.message_error_rate.rate // .metrics.message_error_rate.values.rate // 0' "$K6_OUTPUT")
+MESSAGES_RATE_LIMITED=$(jq -r '.metrics.messages_rate_limited.count // .metrics.messages_rate_limited.values.count // 0' "$K6_OUTPUT")
+RATE_LIMIT_RATE=$(jq -r '.metrics.rate_limit_rate.value // .metrics.rate_limit_rate.rate // .metrics.rate_limit_rate.values.rate // 0' "$K6_OUTPUT")
 
 # Calculate pass/fail status
 PASS_THRESHOLD_P95=2000  # 2 seconds
@@ -70,12 +72,19 @@ else
   fi
 fi
 
+SUMMARY_NAME="$(basename "$K6_OUTPUT")"
+ARTIFACTS="summary=${SUMMARY_NAME}"
+if [ -n "${K6_JSONL:-}" ]; then
+  ARTIFACTS="${ARTIFACTS}, k6_jsonl=$(basename "$K6_JSONL")"
+fi
+
 # Append results
 cat >> "$RESULTS_FILE" << EOF
 
 ### $SCENARIO - $TIMESTAMP
 
 **Status**: $STATUS
+**Artifacts**: $ARTIFACTS
 
 | Metric | Value | Threshold |
 |--------|-------|-----------|
@@ -92,7 +101,8 @@ cat >> "$RESULTS_FILE" << EOF
 | WS Msgs Sent (rate) | $(printf "%.2f" $WS_SENT_RATE)/s | - |
 | WS Msgs Recv (rate) | $(printf "%.2f" $WS_RECV_RATE)/s | - |
 | Messages Attempted | $MESSAGES_ATTEMPTED | - |
-| Message Error Rate | $(printf "%.4f" $MESSAGE_ERROR_RATE) | - |
+| Messages Rate Limited | $MESSAGES_RATE_LIMITED | - |
+| Rate Limit Rate | $(printf "%.4f" $RATE_LIMIT_RATE) | - |
 
 <details>
 <summary>Raw Output</summary>

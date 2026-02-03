@@ -73,26 +73,9 @@ docker push "$ECR_IMAGE"
 CLUSTER_NAME=$(terraform -chdir="$TERRAFORM_DIR" output -raw ecs_cluster_name)
 SERVICE_NAME="${CLUSTER_NAME/-cluster/-api}"
 
-# Force ECS to use the newly pushed image digest
-IMAGE_DIGEST=$(aws "${AWS_CLI_ARGS[@]}" ecr describe-images --region "$AWS_REGION" \
-  --repository-name "$(basename "$ECR_REPO")" \
-  --image-ids imageTag=latest \
-  --query 'imageDetails[0].imageDigest' --output text)
-
-CURRENT_TD=$(aws "${AWS_CLI_ARGS[@]}" ecs describe-services --region "$AWS_REGION" --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" \
-  --query 'services[0].taskDefinition' --output text)
-
-NEW_TD_JSON=$(aws "${AWS_CLI_ARGS[@]}" ecs describe-task-definition --region "$AWS_REGION" --task-definition "$CURRENT_TD" \
-  --query 'taskDefinition' --output json | \
-  jq --arg img "${ECR_REPO}@${IMAGE_DIGEST}" '
-    .containerDefinitions |= map(if .name == "api" then .image = $img else . end) |
-    del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
-
-NEW_TD_ARN=$(aws "${AWS_CLI_ARGS[@]}" ecs register-task-definition --region "$AWS_REGION" --cli-input-json "$NEW_TD_JSON" \
-  --query 'taskDefinition.taskDefinitionArn' --output text)
-
+# Force ECS to pick up the latest image for the existing task definition
 aws "${AWS_CLI_ARGS[@]}" ecs update-service --region "$AWS_REGION" --cluster "$CLUSTER_NAME" --service "$SERVICE_NAME" \
-  --task-definition "$NEW_TD_ARN" --force-new-deployment
+  --force-new-deployment
 
 # Wait for API health
 echo ""

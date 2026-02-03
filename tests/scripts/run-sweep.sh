@@ -37,14 +37,16 @@ run_one() {
   local scenario="$1"
   local vu="$2"
   local short="$3"
-  local json_file=""
+  local summary_file=""
+  local jsonl_file=""
   local status=0
   local log_file="$RESULTS_DIR/sweep-${scenario}-${vu}-$(date +%Y%m%d-%H%M%S).log"
 
   K6_ACTIVE_USERS="$vu" K6_SHORT="$short" "$RUN_TESTS" "$scenario" >"$log_file" 2>&1 || status=$?
-  json_file="$(ls -1t "$RESULTS_DIR/${scenario}-"*.json 2>/dev/null | head -1 || true)"
+  summary_file="$(ls -1t "$RESULTS_DIR/${scenario}-"*"-summary.json" 2>/dev/null | head -1 || true)"
+  jsonl_file="$(ls -1t "$RESULTS_DIR/${scenario}-"*.jsonl 2>/dev/null | head -1 || true)"
 
-  echo "$status|$json_file|$log_file"
+  echo "$status|$summary_file|$jsonl_file|$log_file"
 }
 
 mkdir -p "$RESULTS_DIR"
@@ -105,11 +107,12 @@ for ((vu = K6_SWEEP_START; vu <= K6_SWEEP_END; vu += K6_SWEEP_STEP)); do
 
   for scenario in "${scenarios[@]}"; do
     out="$(run_one "$scenario" "$vu" "true")"
-    IFS='|' read -r status json log_file <<<"$out"
+    IFS='|' read -r status summary jsonl log_file <<<"$out"
 
     cell="PASS"
     [ "$status" -eq 0 ] || cell="FAIL"
-    [ -n "$json" ] && cell="$cell ($(basename "$json"))"
+    [ -n "$summary" ] && cell="$cell ($(basename "$summary"))"
+    [ -n "$jsonl" ] && cell="$cell [k6:$(basename "$jsonl")]"
     [ -n "$log_file" ] && cell="$cell [log:$(basename "$log_file")]"
 
     case "$scenario" in

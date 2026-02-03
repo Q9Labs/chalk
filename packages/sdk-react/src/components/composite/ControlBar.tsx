@@ -1,5 +1,9 @@
+import React from "react";
+import { cn } from "../../utils/cn";
 import {
+	CallEnd01Icon,
 	CircleIcon,
+	Edit02Icon,
 	FileTextIcon,
 	HandIcon,
 	InformationCircleIcon,
@@ -9,8 +13,6 @@ import {
 	Monitor01Icon,
 	MonitorOffIcon,
 	MoreHorizontalIcon,
-	Edit02Icon,
-	CallEnd01Icon,
 	Settings01Icon,
 	SmileIcon,
 	ThumbsUpIcon,
@@ -18,8 +20,6 @@ import {
 	Video01Icon,
 	VideoOffIcon,
 } from "../../utils/icons";
-import React from "react";
-import { cn } from "../../utils/cn";
 import { ControlButton } from "../atomic";
 
 export type ControlBarButton =
@@ -81,9 +81,9 @@ const formatDuration = (seconds: number) => {
 	const secs = seconds % 60;
 
 	if (hours > 0) {
-		return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+		return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 	}
-	return `${minutes}:${String(secs).padStart(2, '0')}`;
+	return `${minutes}:${String(secs).padStart(2, "0")}`;
 };
 
 export const ControlBar = React.memo(
@@ -160,7 +160,13 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="mic"
-							icon={isMuted ? <MicrophoneOff01Icon className="text-[#dc2626]" /> : <Microphone01Icon />}
+							icon={
+								isMuted ? (
+									<MicrophoneOff01Icon className="text-[#dc2626]" />
+								) : (
+									<Microphone01Icon />
+								)
+							}
 							label={isMuted ? "Unmute" : "Mute"}
 							onClick={onToggleMute}
 							active={!isMuted}
@@ -172,7 +178,13 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="video"
-							icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[#dc2626]" />}
+							icon={
+								isVideoEnabled ? (
+									<Video01Icon />
+								) : (
+									<VideoOffIcon className="text-[#dc2626]" />
+								)
+							}
 							label={isVideoEnabled ? "Stop Video" : "Start Video"}
 							onClick={onToggleVideo}
 							active={isVideoEnabled}
@@ -197,7 +209,9 @@ export const ControlBar = React.memo(
 					return (
 						<ControlButton
 							key="record"
-							icon={<CircleIcon className={isRecording ? "fill-current" : ""} />}
+							icon={
+								<CircleIcon className={isRecording ? "fill-current" : ""} />
+							}
 							label={isRecording ? "Stop Recording" : "Record"}
 							onClick={onToggleRecording}
 							active={isRecording}
@@ -268,6 +282,7 @@ export const ControlBar = React.memo(
 							icon={<SmileIcon />}
 							label="Reactions"
 							onClick={onOpenReactions}
+							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
 							showLabel={showLabels}
 						/>
 					);
@@ -321,6 +336,7 @@ export const ControlBar = React.memo(
 						<ControlButton
 							key="thumbsup"
 							icon={<ThumbsUpIcon size={20} className="text-[#FFD700]" />}
+							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
 							label="Reactions"
 							onClick={onOpenReactions}
 							noBorder
@@ -354,7 +370,7 @@ export const ControlBar = React.memo(
 						onClick={onToggleMute}
 						className={cn(
 							"flex items-center justify-center w-12 h-12 rounded-full transition-all active:scale-95",
-							isMuted ? "bg-red-500/20" : "bg-white/10"
+							isMuted ? "bg-red-500/20" : "bg-white/10",
 						)}
 						aria-label={isMuted ? "Unmute" : "Mute"}
 						aria-pressed={!isMuted}
@@ -372,7 +388,7 @@ export const ControlBar = React.memo(
 						onClick={onToggleVideo}
 						className={cn(
 							"flex items-center justify-center w-12 h-12 rounded-full transition-all active:scale-95",
-							!isVideoEnabled ? "bg-red-500/20" : "bg-white/10"
+							!isVideoEnabled ? "bg-red-500/20" : "bg-white/10",
 						)}
 						aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
 						aria-pressed={isVideoEnabled}
@@ -411,13 +427,9 @@ export const ControlBar = React.memo(
 			return (
 				<div className="relative flex items-end justify-center w-full pointer-events-none">
 					{/* Left: Timer section - Absolute positioned */}
-					<div
-						className="absolute left-6 bottom-3 flex items-center rounded-full px-3 py-1.5 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-lg pointer-events-auto"
-					>
+					<div className="absolute left-6 bottom-3 flex items-center rounded-full px-3 py-1.5 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-lg pointer-events-auto">
 						<div className="flex items-center gap-2">
-							<div
-								className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"
-							/>
+							<div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
 							<span className="text-xs font-medium tracking-wide tabular-nums text-zinc-900 dark:text-white/90">
 								{formatDuration(meetingDuration)}
 							</span>
@@ -440,7 +452,7 @@ export const ControlBar = React.memo(
 								{renderButton("mic")}
 								{renderButton("video")}
 							</div>
-							
+
 							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
 								{renderButton("screenshare")}
 								{renderButton("whiteboard")}
@@ -497,9 +509,13 @@ export const ControlBar = React.memo(
 					<div className="flex items-center gap-3">
 						<div
 							className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.65)]"
-							style={{ outline: "2px solid var(--chalk-pill-dot-ring)", outlineOffset: "2px" }}
+							style={{
+								outline: "2px solid var(--chalk-pill-dot-ring)",
+								outlineOffset: "2px",
+							}}
 						/>
-						<span className="text-[14px] font-semibold tracking-wide tabular-nums"
+						<span
+							className="text-[14px] font-semibold tracking-wide tabular-nums"
 							style={{ color: "var(--chalk-pill-text)" }}
 						>
 							{formatDuration(meetingDuration)}

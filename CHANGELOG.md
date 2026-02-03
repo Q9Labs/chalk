@@ -15,11 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Infra: Whisper Worker Axiom wiring** — pass `AXIOM_TOKEN` from Secrets Manager (seeded via SSM `/chalk/prod/axiom-token`) and set `AXIOM_DATASET=chalk-whisper-work` without leaking secrets into EC2 user-data command lines.
+- **SDK-React: Remove Storybook from package** — drop Storybook config/stories and simplify SDK surface for consumers.
+- **SDK-React/UI: Dev scripts** — ensure `dev` builds include CSS/assets to prevent missing styles in local SDK builds.
+- **SDK-React/UI: Meeting room polish** — draggable room-name pill plus ControlBar/PreJoinLobby interaction + accessibility tweaks.
 
 ### Fixed
 
 - **Stress Tests: Fix large-room broadcast latency measurement** — restores deterministic sender-echo detection (no substring matching) and prevents skewed p95/p99 from flaky parsing.
 - **Stress Tests: Align ws-storm short runs to active VUs** — short runs now use the target VU count and correct storm duration.
+- **Stress Tests: WS token handling + debug logs** — k6 scenarios now guard missing websocket tokens and only log failures in debug mode.
+- **Stress Tests: Persist per-run artifacts** — k6 now writes `.jsonl` output plus `-summary.json` exports and results link to both for debugging.
 - **Admin: Persist production secret across reloads** — production admin API calls now keep the secret in local storage so refreshes don't drop auth.
 - **API Gateway: Allow admin localhost origin for CORS** — add `http://localhost:3090`/`127.0.0.1:3090` to aggregated origins so local admin can call prod API.
 - **API Gateway: Allow X-Admin-Secret header for CORS** — preflight now allows admin secret header to reach prod API.

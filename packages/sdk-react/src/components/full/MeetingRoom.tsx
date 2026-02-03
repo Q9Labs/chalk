@@ -1,6 +1,7 @@
 import type React from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIsMobile } from "../../hooks/useMediaQuery";
+import { useDraggable } from "../../hooks/ui/useDraggable";
 import { cn } from "../../utils/cn";
 import { ColumnIcon, LayoutGridIcon, Maximize01Icon, Moon02Icon, Sun02Icon } from "../../utils/icons";
 import { AudioRenderer, ReactionBubble } from "../atomic";
@@ -211,6 +212,16 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 		return theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 	});
 
+	const containerRef = useRef<HTMLDivElement>(null);
+	const pillRef = useRef<HTMLDivElement>(null);
+	const { dragHandlers: pillDragHandlers } = useDraggable(pillRef, {
+		boundaryRef: containerRef,
+		snapToCorners: true,
+		cornerMargin: 24,
+		bounce: 0.2, // Less bounce for snapping
+		friction: 0.94,
+	});
+
 	const handleLeave = useCallback(() => {
 		setIsExiting(true);
 		if (leaveTimeoutRef.current !== null) {
@@ -271,7 +282,12 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName))
+			const target = e.target as HTMLElement;
+			// Prevent shortcuts when typing in inputs, textareas, or contentEditable elements
+			if (
+				["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+				target.isContentEditable
+			)
 				return;
 			if (e.metaKey || e.ctrlKey || e.altKey) return;
 
@@ -317,6 +333,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 
 	return (
 		<div
+			ref={containerRef}
 			data-chalk
 			className={cn(
 				"chalk-root chalk-theme-transition relative h-screen w-full overflow-hidden flex flex-col bg-background text-foreground",
@@ -327,19 +344,24 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 		>
 			{/* Room Name Pill */}
 			{!isMobile && (
-				<div className="absolute top-4 left-6 z-30 pointer-events-none">
-					<div className="px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
+				<div
+					ref={pillRef}
+					{...pillDragHandlers}
+					className="absolute top-4 left-6 z-30"
+				>
+					<div className="px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10 select-none">
 						<span className="text-xs font-medium text-zinc-200 tracking-tight">
 							{roomName}
 						</span>
 					</div>
 				</div>
 			)}
-
 			{/* Layout Switcher - Option 2 Redesign: Active State Expander */}
 			{!isMobile && !activePanel && (
 				<div
 					className="absolute top-4 right-4 z-20 group"
+					role="region"
+					aria-label="Layout controls"
 					onMouseEnter={(e) => (e.currentTarget.dataset.hovered = "true")}
 					onMouseLeave={(e) => (e.currentTarget.dataset.hovered = "false")}
 				>
@@ -352,14 +374,15 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						</div>
 
 						{/* Expandable Menu - Revealed on hover */}
-						<div className="flex items-center gap-1 max-w-0 overflow-hidden opacity-0 group-hover:max-w-[200px] group-hover:opacity-100 transition-all duration-300 ease-in-out">
+						<div className="flex items-center gap-1 max-w-0 overflow-hidden opacity-0 group-hover:max-w-[200px] group-hover:opacity-100 group-focus-within:max-w-[200px] group-focus-within:opacity-100 transition-all duration-300 ease-in-out">
 							{/* Theme Toggle */}
 							<Tooltip>
 								<TooltipTrigger
 									render={
 										<button
+											type="button"
 											onClick={toggleTheme}
-											className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+											className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
 											aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
 										>
 											{isDarkMode ? <Sun02Icon className="w-3.5 h-3.5" /> : <Moon02Icon className="w-3.5 h-3.5" />}
@@ -377,8 +400,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 									<TooltipTrigger
 										render={
 											<button
+												type="button"
 												onClick={() => setLayout("grid")}
-												className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+												className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
 												aria-label="Grid layout"
 											>
 												<LayoutGridIcon className="w-3.5 h-3.5" />
@@ -393,8 +417,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 									<TooltipTrigger
 										render={
 											<button
+												type="button"
 												onClick={() => setLayout("spotlight")}
-												className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+												className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
 												aria-label="Spotlight layout"
 											>
 												<Maximize01Icon className="w-3.5 h-3.5" />
@@ -409,8 +434,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 									<TooltipTrigger
 										render={
 											<button
+												type="button"
 												onClick={() => setLayout("sidebar")}
-												className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+												className="flex items-center justify-center rounded-md w-7 h-7 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
 												aria-label="Sidebar layout"
 											>
 												<ColumnIcon className="w-3.5 h-3.5" />

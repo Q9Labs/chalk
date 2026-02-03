@@ -50,18 +50,27 @@ export const ControlButton = React.memo(
 					size === "lg" && "h-14 w-14 rounded-full",
 					disabled && "cursor-not-allowed opacity-50",
 					// Default state
-					!disabled && !active && !danger && !noBorder &&
+					!disabled &&
+						!active &&
+						!danger &&
+						!noBorder &&
 						"bg-[var(--secondary)] shadow-lg hover:brightness-110",
 					// No Border state (Ghost)
-					!disabled && !active && !danger && noBorder &&
+					!disabled &&
+						!active &&
+						!danger &&
+						noBorder &&
 						"bg-[var(--secondary)]",
 					// Active state
-					!disabled && active && !activeClassName &&
+					!disabled &&
+						active &&
+						!activeClassName &&
 						"bg-[var(--secondary)] border-transparent hover:bg-[var(--accent)]",
 					// Custom active state
 					!disabled && active && activeClassName && activeClassName,
 					// Danger state - vibrant red for visibility
-					danger && "bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]",
+					danger &&
+						"bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]",
 					className,
 				)}
 				aria-label={label}

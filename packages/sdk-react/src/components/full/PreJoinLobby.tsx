@@ -9,7 +9,7 @@ import {
 	Moon02Icon,
 	ArrowDown01Icon,
 } from "../../utils/icons";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { Avatar, Toast } from "../atomic";
 import { DeviceSelector } from "../composite";
@@ -113,11 +113,11 @@ function PreJoinLobbyBase({
 	const activeAudioLevel = audioLevel || localAudioLevel;
 
 	// Use provided devices or locally enumerated devices
-	const effectiveVideoDevices = videoDevices.length > 0 ? videoDevices : localVideoDevices;
-	const effectiveAudioInputDevices = audioInputDevices.length > 0 ? audioInputDevices : localAudioInputDevices;
+	const effectiveVideoDevices = useMemo(() => videoDevices.length > 0 ? videoDevices : localVideoDevices, [videoDevices, localVideoDevices]);
+	const effectiveAudioInputDevices = useMemo(() => audioInputDevices.length > 0 ? audioInputDevices : localAudioInputDevices, [audioInputDevices, localAudioInputDevices]);
 
 	// Enumerate devices
-	const enumerateDevices = async () => {
+	const enumerateDevices = useCallback(async () => {
 		try {
 			const devices = await navigator.mediaDevices.enumerateDevices();
 			setLocalVideoDevices(devices.filter((d) => d.kind === "videoinput"));
@@ -125,7 +125,7 @@ function PreJoinLobbyBase({
 		} catch {
 			// Ignore enumeration errors
 		}
-	};
+	}, []);
 
 	// Enumerate devices on mount (labels may be empty until permissions granted)
 	useEffect(() => {
@@ -135,7 +135,7 @@ function PreJoinLobbyBase({
 		return () => {
 			navigator.mediaDevices?.removeEventListener("devicechange", enumerateDevices);
 		};
-	}, []);
+	}, [enumerateDevices]);
 
 	// Request local video when enabled (only if no external track provided)
 	useEffect(() => {
@@ -157,7 +157,7 @@ function PreJoinLobbyBase({
 			})
 			.then((stream) => {
 				if (cancelled) {
-					stream.getTracks().forEach((t) => t.stop());
+					stream.getTracks().forEach((t) => { t.stop(); });
 					return;
 				}
 				const track = stream.getVideoTracks()[0];
@@ -175,7 +175,7 @@ function PreJoinLobbyBase({
 		return () => {
 			cancelled = true;
 		};
-	}, [isVideoEnabled, videoTrack, selectedVideoDevice]);
+	}, [isVideoEnabled, videoTrack, selectedVideoDevice, enumerateDevices, localVideoTrack]);
 
 	// Request local audio when enabled (only if no external track provided)
 	useEffect(() => {
@@ -196,7 +196,7 @@ function PreJoinLobbyBase({
 			})
 			.then((stream) => {
 				if (cancelled) {
-					stream.getTracks().forEach((t) => t.stop());
+					stream.getTracks().forEach((t) => { t.stop(); });
 					return;
 				}
 				const track = stream.getAudioTracks()[0];
@@ -213,7 +213,7 @@ function PreJoinLobbyBase({
 		return () => {
 			cancelled = true;
 		};
-	}, [isAudioEnabled, selectedAudioInput]);
+	}, [isAudioEnabled, selectedAudioInput, enumerateDevices, localAudioTrack]);
 
 	// Audio level monitoring
 	useEffect(() => {
@@ -306,7 +306,7 @@ function PreJoinLobbyBase({
 
 	useEffect(() => {
 		if (userName && !displayName) setDisplayName(userName);
-	}, [userName]);
+	}, [userName, displayName]);
 
 	// Close dropdown when clicking outside
 	useEffect(() => {
@@ -379,25 +379,40 @@ function PreJoinLobbyBase({
 			>
 				{/* Settings Modal */}
 				{showSettings && (
-					<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm">
+					<div
+						className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm"
+					>
+						<div 
+							className="absolute inset-0" 
+							onClick={() => setShowSettings(false)} 
+							aria-hidden="true" 
+						/>
 						<div
-							className="rounded-2xl border p-6 w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200 overflow-visible"
+							className="rounded-2xl border p-6 w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200 overflow-visible z-10"
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="settings-title"
+							tabIndex={-1}
+							onKeyDown={(e) => {
+								if (e.key === "Escape") setShowSettings(false);
+							}}
 							style={{
 								background: "var(--chalk-lobby-glass-bg)",
 								borderColor: "var(--chalk-lobby-glass-border)",
 								backdropFilter: "blur(20px)",
 								boxShadow: "var(--chalk-shadow-xl)",
 							}}
-							onClick={(e) => e.stopPropagation()}
 						>
 							<button
+								type="button"
 								onClick={() => setShowSettings(false)}
-								className="absolute top-4 right-4 p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors text-(--muted-foreground) hover:text-(--foreground)"
+								aria-label="Close settings"
+								className="absolute top-4 right-4 p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors text-(--muted-foreground) hover:text-(--foreground) outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]"
 							>
 								<Cancel01Icon size={20} />
 							</button>
 
-							<h2 className="text-xl font-semibold text-(--foreground) mb-6">
+							<h2 id="settings-title" className="text-xl font-semibold text-(--foreground) mb-6">
 								Settings
 							</h2>
 
@@ -439,8 +454,9 @@ function PreJoinLobbyBase({
 
 							<div className="mt-6 flex justify-end">
 								<button
+									type="button"
 									onClick={() => setShowSettings(false)}
-									className="px-5 py-2.5 bg-[#1bb6a6] text-white rounded-full hover:bg-[#19a396] transition-colors font-medium"
+									className="px-5 py-2.5 bg-[#1bb6a6] text-white rounded-full hover:bg-[#19a396] transition-colors font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] focus-visible:ring-offset-2"
 								>
 									Done
 								</button>
@@ -470,6 +486,7 @@ function PreJoinLobbyBase({
 
 					{/* Theme Toggle */}
 					<button
+						type="button"
 						onClick={toggleTheme}
 						title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
 						className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/10 text-(--foreground)"
@@ -588,6 +605,7 @@ function PreJoinLobbyBase({
 														: selectedVideoDevice === device.deviceId;
 													return (
 														<button
+															type="button"
 															key={device.deviceId}
 															onClick={() => {
 																if (openDropdown === "audio") {
@@ -598,7 +616,7 @@ function PreJoinLobbyBase({
 																setOpenDropdown(null);
 															}}
 															className={cn(
-																"w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center gap-3",
+																"w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center gap-3 outline-none focus-visible:bg-white/10",
 																isSelected
 																	? "bg-[#1bb6a6]/20 text-[#1bb6a6]"
 																	: "text-white/90 hover:bg-white/10",
@@ -629,10 +647,11 @@ function PreJoinLobbyBase({
 										{/* Mic toggle with dropdown */}
 										<div className="flex items-center gap-1.5">
 											<button
+												type="button"
 												onClick={toggleAudio}
 												title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
 												className={cn(
-													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200",
+													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
 													!isAudioEnabled
 														? "bg-red-500 text-white hover:bg-red-600"
 														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -646,13 +665,17 @@ function PreJoinLobbyBase({
 											</button>
 											{hasAudioInput && (
 												<button
+													type="button"
 													onClick={(e) => {
 														e.stopPropagation();
 														setOpenDropdown(openDropdown === "audio" ? null : "audio");
 													}}
 													title="Select microphone"
+													aria-label="Select microphone"
+													aria-haspopup="true"
+													aria-expanded={openDropdown === "audio"}
 													className={cn(
-														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200",
+														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
 														openDropdown === "audio"
 															? "bg-[#1bb6a6] text-white"
 															: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -666,10 +689,11 @@ function PreJoinLobbyBase({
 										{/* Video toggle with dropdown */}
 										<div className="flex items-center gap-1.5">
 											<button
+												type="button"
 												onClick={toggleVideo}
 												title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
 												className={cn(
-													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200",
+													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
 													!isVideoEnabled
 														? "bg-red-500 text-white hover:bg-red-600"
 														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -683,13 +707,17 @@ function PreJoinLobbyBase({
 											</button>
 											{hasVideoDevices && (
 												<button
+													type="button"
 													onClick={(e) => {
 														e.stopPropagation();
 														setOpenDropdown(openDropdown === "video" ? null : "video");
 													}}
 													title="Select camera"
+													aria-label="Select camera"
+													aria-haspopup="true"
+													aria-expanded={openDropdown === "video"}
 													className={cn(
-														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200",
+														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
 														openDropdown === "video"
 															? "bg-[#1bb6a6] text-white"
 															: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -705,9 +733,10 @@ function PreJoinLobbyBase({
 
 										{/* Settings */}
 										<button
+											type="button"
 											onClick={toggleSettings}
 											title="Settings"
-											className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200"
+											className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]"
 										>
 											<MoreVerticalIcon size={18} />
 										</button>
@@ -740,30 +769,24 @@ function PreJoinLobbyBase({
 										onChange={(e) => setDisplayName(e.target.value)}
 										placeholder="Enter your name"
 										disabled={isLoading}
-										className="w-full h-12 px-4 rounded-xl text-base transition-all outline-none text-(--foreground) placeholder:text-(--muted-foreground) disabled:opacity-50"
-										style={{
-											background: "var(--chalk-lobby-glass-bg)",
-											border: "1px solid var(--chalk-lobby-glass-border)",
-											backdropFilter: "blur(12px)",
-										}}
-										onFocus={(e) => {
-											e.target.style.borderColor = "#1bb6a6";
-											e.target.style.boxShadow =
-												"0 0 0 3px rgba(27, 182, 166, 0.15)";
-										}}
-										onBlur={(e) => {
-											e.target.style.borderColor =
-												"var(--chalk-lobby-glass-border)";
-											e.target.style.boxShadow = "none";
-										}}
+										className={cn(
+											"w-full h-12 px-4 rounded-xl text-base transition-all outline-none text-(--foreground) placeholder:text-(--muted-foreground) disabled:opacity-50",
+											"border bg-[var(--chalk-lobby-glass-bg)] backdrop-blur-md",
+											"border-[var(--chalk-lobby-glass-border)]",
+											"focus-visible:border-[#1bb6a6] focus-visible:ring-4 focus-visible:ring-[#1bb6a6]/15"
+										)}
 									/>
 								</div>
 
 								{/* Join button with gradient and shimmer */}
 								<button
+									type="button"
 									onClick={handleJoin}
 									disabled={!displayName.trim() || isLoading}
-									className="relative w-full h-12 rounded-full font-semibold text-base text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group"
+									className={cn(
+										"relative w-full h-12 rounded-full font-semibold text-base text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group",
+										"outline-none focus-visible:ring-4 focus-visible:ring-[#1bb6a6]/30"
+									)}
 									style={{
 										background:
 											"linear-gradient(135deg, #1bb6a6 0%, #14a89a 50%, #0d9488 100%)",

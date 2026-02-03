@@ -33,3 +33,11 @@ After packages → export → use in demo apps for user testing.
 
 Never add client-side business logic to demo apps.
 
+## Notes
+
+- When asked, proactively run CI and deploy; verify no jobs were skipped and confirm deployment finished so the user can test without extra prompts.
+
+## Skills
+
+- `chalk-stress-testing` — project skill for stress test planning/execution.
+- `release` — Codex local release skill (project only).

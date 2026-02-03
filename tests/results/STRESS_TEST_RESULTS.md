@@ -2856,3 +2856,134 @@
 </details>
 
 ---
+
+### large-room - 2026-02-03 10:05:13 UTC
+
+**Status**: ✅ PASS
+
+| Metric | Value | Threshold |
+|--------|-------|-----------|
+| Total Requests | 456 | - |
+| Error Rate | 0.0000 | < 0.01 |
+| p95 Latency | 1659 ms | < 2000 ms |
+| p99 Latency | 0 ms | < 5000 ms |
+| Checks Passed | 270 | - |
+| Checks Failed | 0 | 0 |
+| Rooms Created | 0 | - |
+| Participant Joins | 0 | - |
+| Participants Joined | 454 | - |
+| Broadcast p95 | 293 ms | - |
+| WS Msgs Sent (rate) | 27.29/s | - |
+| WS Msgs Recv (rate) | 4157.72/s | - |
+| Messages Attempted | 0 | - |
+| Message Error Rate | 0.0000 | - |
+
+<details>
+<summary>Raw Output</summary>
+
+```
+{
+    "root_group": {
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "ws connected": {
+                    "name": "ws connected",
+                    "path": "::ws connected",
+                    "id": "b890c791400ee254856ecce8133edded",
+                    "passes": 270,
+                    "fails": 0
+                }
+            },
+        "name": ""
+    },
+    "metrics": {
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 456,
+            "value": 0
+        },
+        "http_req_connecting": {
+            "p(95)": 223.55175,
+            "avg": 211.38830482456154,
+            "min": 0,
+            "med": 210.041,
+            "max": 246.363,
+            "p(90)": 221.5075
+        },
+        "ws_connecting": {
+            "med": 423.3440625,
+            "max": 689.474833,
+            "p(90)": 467.49480370000003,
+            "p(95)": 495.8935374,
+            "avg": 434.8879831343611,
+            "min": 404.0625
+        },
+        "http_req_waiting": {
+            "p(90)": 1375.026,
+            "p(95)": 1658.6889999999994,
+            "avg": 1122.1565263157897,
+            "min": 738.865,
+            "med": 1025.9055,
+            "max": 3815.204
+        },
+        "http_req_receiving": {
+            "min": 0.031,
+            "med": 0.088,
+            "max": 2.63,
+            "p(90)": 0.19150000000000003,
+            "p(95)": 0.30449999999999994,
+            "avg": 0.14142105263157898
+        },
+        "ws_session_duration": {
+            "avg": 600434.6024147774,
+            "min": 600406.344625,
+            "med": 600422.8751875,
+            "max": 600689.965625,
+            "p(90)": 600476.1563417,
+            "p(95)": 600497.5726997
+        },
+        "vus": {
+            "value": 1,
+            "min": 0,
+            "max": 200
+        },
+        "broadcast_latency": {
+            "avg": 231.59320284934424,
+            "min": 201,
+            "med": 218,
+            "max": 1058,
+            "p(90)": 274,
+            "p(95)": 293,
+            "thresholds": {
+                "p(95)<500": false,
+                "p(99)<1000": false
+            }
+        },
+        "http_req_sending": {
+            "max": 1.307,
+            "p(90)": 0.143,
+            "p(95)": 0.168,
+            "avg": 0.09360745614035078,
+            "min": 0.023,
+            "med": 0.0755
+        },
+        "participants_joined": {
+            "count": 454,
+            "rate": 0.33571440996981583,
+            "thresholds": {
+                "count>120": false
+            }
+        },
+        "data_sent": {
+            "count": 3692175,
+            "rate": 2730.2122282605833
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 1122.3915548245623,
+```
+
+</details>
+
+---
