@@ -110,7 +110,7 @@ variable "axiom_token" {
 variable "axiom_dataset" {
   description = "Axiom dataset name"
   type        = string
-  default     = "chalk-whisper-worker"
+  default     = "chalk-api"
 }
 
 # Post-meeting transcription & AI
