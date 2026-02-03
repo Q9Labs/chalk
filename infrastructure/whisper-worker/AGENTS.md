@@ -41,7 +41,8 @@
 - `WHISPER_LANGUAGE_DETECTION_SEGMENTS` number of segments to consider for initial language detection (default: `1`).
 - `WHISPER_LANGUAGE_DETECTION_THRESHOLD` min probability to accept detected language (default: `0.5`).
 - `REDIS_CONNECT_TIMEOUT` socket connect timeout in seconds (default: `5`).
-- `REDIS_SOCKET_TIMEOUT` command socket timeout in seconds (default: `30`).
+- `REDIS_SOCKET_TIMEOUT` command socket timeout in seconds (default: `POLL_TIMEOUT_SECONDS + 5`).
+  - Must be greater than `POLL_TIMEOUT_SECONDS` to avoid BRPOP read timeouts.
 - `REDIS_RETRY_ON_TIMEOUT` retry commands on timeout (default: `true`).
 - `REDIS_HEALTHCHECK_INTERVAL` seconds between health checks (default: `30`).
 - `WHISPER_LOG_TRANSCRIPT=true` to include transcript in `whisper.transcription` events.
