@@ -21,6 +21,7 @@ export {
 	TranscriptSegment,
 	WebhookError,
 	WebhookMeeting,
+	WebhookParticipant,
 	WebhookPayload,
 	WebhookPayloadFromJson,
 	WebhookRecording,

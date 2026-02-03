@@ -70,6 +70,7 @@ type JoinRoomInput struct {
 	DisplayName    string
 	ExternalUserID string
 	Role           string
+	Metadata       json.RawMessage
 }
 
 // TenantConfigOutput contains tenant configuration relevant to the room
@@ -85,9 +86,9 @@ type JoinRoomOutput struct {
 	TokenPair            *auth.TokenPair
 	CFAuthToken          string
 	Room                 *db.Room
-	RoomCreated          bool              // True if room was just created (not pre-existing)
+	RoomCreated          bool               // True if room was just created (not pre-existing)
 	TenantConfig         TenantConfigOutput // Tenant configuration for this room
-	ShouldStartRecording bool              // True if tenant has force_recording and this is first host
+	ShouldStartRecording bool               // True if tenant has force_recording and this is first host
 }
 
 func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomOutput, error) {
@@ -293,6 +294,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		return nil, fmt.Errorf("cloudflare add participant failed: %w", err)
 	}
 
+	metadata := normalizeMetadata(input.Metadata)
 	participant, err := s.db.CreateParticipant(ctx, db.CreateParticipantParams{
 		ID:                      participantID,
 		RoomID:                  input.RoomID,
@@ -300,6 +302,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		ExternalUserID:          strPtr(input.ExternalUserID),
 		DisplayName:             strPtr(input.DisplayName),
 		Role:                    role,
+		Metadata:                metadata,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("database insert failed: %w", err)
@@ -515,4 +518,14 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func normalizeMetadata(raw json.RawMessage) []byte {
+	if len(raw) == 0 {
+		return []byte(`{}`)
+	}
+	if json.Valid(raw) {
+		return raw
+	}
+	return []byte(`{}`)
 }

@@ -1653,6 +1653,12 @@ components:
             - host
             - participant
           example: participant
+        metadata:
+          type: object
+          description: Custom metadata attached to the participant
+          additionalProperties: true
+          example:
+            externalId: user_12345
 
     AddParticipantResponse:
       type: object

@@ -34,9 +34,10 @@ INSERT INTO participants (
     external_user_id,
     display_name,
     role,
-    joined_at
+    joined_at,
+    metadata
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, NOW()
+    $1, $2, $3, $4, $5, $6, NOW(), $7
 )
 RETURNING id, room_id, cloudflare_participant_id, external_user_id, display_name, role, joined_at, left_at, created_at, metadata
 `
@@ -48,6 +49,7 @@ type CreateParticipantParams struct {
 	ExternalUserID          *string   `db:"external_user_id" json:"external_user_id"`
 	DisplayName             *string   `db:"display_name" json:"display_name"`
 	Role                    string    `db:"role" json:"role"`
+	Metadata                []byte    `db:"metadata" json:"metadata"`
 }
 
 // Participant Queries
@@ -60,6 +62,7 @@ func (q *Queries) CreateParticipant(ctx context.Context, arg CreateParticipantPa
 		arg.ExternalUserID,
 		arg.DisplayName,
 		arg.Role,
+		arg.Metadata,
 	)
 	var i Participant
 	err := row.Scan(

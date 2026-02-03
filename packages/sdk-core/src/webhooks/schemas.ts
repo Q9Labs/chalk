@@ -20,6 +20,22 @@ export const WebhookMeeting = Schema.Struct({
 });
 
 /**
+ * Participant info included in webhook payload
+ */
+export const WebhookParticipant = Schema.Struct({
+	id: Schema.String,
+	external_user_id: Schema.optional(Schema.NullOr(Schema.String)),
+	external_id: Schema.optional(Schema.NullOr(Schema.String)),
+	display_name: Schema.String,
+	role: Schema.String,
+	joined_at: Schema.String,
+	left_at: Schema.optional(Schema.NullOr(Schema.String)),
+	metadata: Schema.optional(
+		Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+	),
+});
+
+/**
  * Recording info (optional based on include_recording)
  */
 export const WebhookRecording = Schema.Struct({
@@ -68,6 +84,7 @@ export const WebhookPayload = Schema.Struct({
 	event: Schema.Literal("meeting.recording_ready"),
 	timestamp: Schema.String,
 	meeting: WebhookMeeting,
+	participants: Schema.optional(Schema.Array(WebhookParticipant)),
 	recording: Schema.optional(Schema.NullOr(WebhookRecording)),
 	transcript: Schema.optional(Schema.NullOr(WebhookTranscript)),
 	summary: Schema.optional(Schema.NullOr(Schema.String)),

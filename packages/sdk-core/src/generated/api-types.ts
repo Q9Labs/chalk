@@ -420,27 +420,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/demo/join": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Demo join room
-         * @description Join a demo room without authentication. Only available when
-         *     CHALK_ENABLE_DEMO=true is set. Creates tenant and room if needed.
-         */
-        post: operations["demoJoin"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/webhooks/cloudflare/recording": {
         parameters: {
             query?: never;
@@ -456,6 +435,27 @@ export interface paths {
          *     Downloads the recording and uploads it to R2 storage.
          */
         post: operations["handleRecordingReadyWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/local/post-meeting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Local post-meeting webhook receiver (test only)
+         * @description Local endpoint for testing post-meeting webhook delivery.
+         *     Intended for self-calls in development/testing environments.
+         */
+        post: operations["handleLocalPostMeetingWebhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -827,6 +827,15 @@ export interface components {
              * @enum {string}
              */
             role?: "host" | "participant";
+            /**
+             * @description Custom metadata attached to the participant
+             * @example {
+             *       "externalId": "user_12345"
+             *     }
+             */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         AddParticipantResponse: {
             participant: components["schemas"]["Participant"];
@@ -1055,66 +1064,6 @@ export interface components {
              */
             id: string;
         };
-        DemoJoinRequest: {
-            /**
-             * @description Room name/ID to join (created if not exists)
-             * @example demo-room-1
-             */
-            room_id: string;
-            /**
-             * @description Display name in the room
-             * @example Demo User
-             */
-            display_name: string;
-        };
-        DemoJoinResponse: {
-            /**
-             * @description Whether join was successful
-             * @example true
-             */
-            success: boolean;
-            /**
-             * @description Room UUID
-             * @example 550e8400-e29b-41d4-a716-446655440001
-             */
-            room_id: string;
-            /**
-             * @description Participant UUID
-             * @example 550e8400-e29b-41d4-a716-446655440002
-             */
-            participant_id: string;
-            /**
-             * @description JWT access token
-             * @example eyJhbGciOiJIUzI1NiIs...
-             */
-            token: string;
-            /**
-             * @description Cloudflare RealtimeKit token for SDK
-             * @example cf_auth_token_xyz
-             */
-            auth_token: string;
-            room: {
-                /**
-                 * @description Room UUID
-                 * @example 550e8400-e29b-41d4-a716-446655440001
-                 */
-                id: string;
-                /**
-                 * @description Room name
-                 * @example demo-room-1
-                 */
-                name: string;
-            };
-        };
-        DemoErrorResponse: {
-            /** @example false */
-            success: boolean;
-            /**
-             * @description Error message
-             * @example demo mode is disabled
-             */
-            error: string;
-        };
         RecordingReadyWebhook: {
             /**
              * @description Webhook event type
@@ -1154,6 +1103,39 @@ export interface components {
              * @example video/webm
              */
             content_type: string;
+        };
+        PostMeetingWebhookPayload: {
+            /**
+             * @description Webhook event type
+             * @example meeting.recording_ready
+             */
+            event: string;
+            /**
+             * Format: date-time
+             * @description UTC timestamp for the event
+             * @example 2026-01-31T00:00:00Z
+             */
+            timestamp: string;
+            meeting: {
+                /**
+                 * Format: uuid
+                 * @description Room ID
+                 * @example 550e8400-e29b-41d4-a716-446655440001
+                 */
+                id: string;
+                /**
+                 * @description Room name
+                 * @example Algebra 101
+                 */
+                name?: string;
+            };
+        };
+        WebhookAckResponse: {
+            /**
+             * @description Whether the webhook was accepted
+             * @example true
+             */
+            received: boolean;
         };
         WebhookRecordingResponse: {
             /**
@@ -1302,10 +1284,16 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        /** @example ok */
+                        /** @example healthy */
                         status?: string;
                         /** @example connected */
                         database?: string;
+                        /**
+                         * Format: double
+                         * @description Server uptime in seconds
+                         * @example 3600.5
+                         */
+                        uptime?: number;
                     };
                 };
             };
@@ -2656,57 +2644,6 @@ export interface operations {
             };
         };
     };
-    demoJoin: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DemoJoinRequest"];
-            };
-        };
-        responses: {
-            /** @description Successfully joined demo room */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DemoJoinResponse"];
-                };
-            };
-            /** @description Invalid request body */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DemoErrorResponse"];
-                };
-            };
-            /** @description Demo mode is disabled */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DemoErrorResponse"];
-                };
-            };
-            /** @description Internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DemoErrorResponse"];
-                };
-            };
-        };
-    };
     handleRecordingReadyWebhook: {
         parameters: {
             query?: never;
@@ -2739,6 +2676,66 @@ export interface operations {
                 };
             };
             /** @description Recording not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    handleLocalPostMeetingWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostMeetingWebhookPayload"];
+            };
+        };
+        responses: {
+            /** @description Webhook received */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookAckResponse"];
+                };
+            };
+            /** @description Invalid webhook payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Signature verification failed */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Room or tenant not found */
             404: {
                 headers: {
                     [name: string]: unknown;

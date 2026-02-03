@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -25,9 +26,10 @@ func NewParticipantHandler(participantService *participant.Service, roomService 
 }
 
 type AddParticipantRequest struct {
-	ExternalUserID string `json:"external_user_id"`
-	DisplayName    string `json:"display_name" binding:"required"`
-	Role           string `json:"role"`
+	ExternalUserID string          `json:"external_user_id"`
+	DisplayName    string          `json:"display_name" binding:"required"`
+	Role           string          `json:"role"`
+	Metadata       json.RawMessage `json:"metadata"`
 }
 
 type RoomResponse struct {
@@ -98,6 +100,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		DisplayName:    req.DisplayName,
 		ExternalUserID: req.ExternalUserID,
 		Role:           req.Role,
+		Metadata:       req.Metadata,
 	})
 	if err != nil {
 		if errors.Is(err, participant.ErrRoomNotAvailable) {
@@ -285,9 +288,10 @@ func (h *ParticipantHandler) RefreshToken(c *gin.Context) {
 
 type BulkAddRequest struct {
 	Participants []struct {
-		DisplayName    string `json:"display_name" binding:"required"`
-		ExternalUserID string `json:"external_user_id"`
-		Role           string `json:"role"`
+		DisplayName    string          `json:"display_name" binding:"required"`
+		ExternalUserID string          `json:"external_user_id"`
+		Role           string          `json:"role"`
+		Metadata       json.RawMessage `json:"metadata"`
 	} `json:"participants" binding:"required,dive"`
 }
 
@@ -343,6 +347,7 @@ func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
 			DisplayName:    p.DisplayName,
 			ExternalUserID: p.ExternalUserID,
 			Role:           p.Role,
+			Metadata:       p.Metadata,
 		})
 		if err != nil {
 			results = append(results, gin.H{

@@ -9,9 +9,10 @@ INSERT INTO participants (
     external_user_id,
     display_name,
     role,
-    joined_at
+    joined_at,
+    metadata
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, NOW()
+    $1, $2, $3, $4, $5, $6, NOW(), $7
 )
 RETURNING *;
 

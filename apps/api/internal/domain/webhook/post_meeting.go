@@ -209,6 +209,8 @@ func (s *PostMeetingService) SendWebhookAfterTranscription(
 	participantCount := s.getParticipantCount(ctx, room.ID)
 	evt["participant_count"] = participantCount
 
+	participants := s.getParticipants(ctx, room.ID)
+
 	var transcriptPtr *db.PostMeetingTranscript
 	if transcript.ID != uuid.Nil {
 		transcriptPtr = &transcript
@@ -237,6 +239,7 @@ func (s *PostMeetingService) SendWebhookAfterTranscription(
 		},
 		presignedURL,
 		participantCount,
+		participants,
 		errors,
 	)
 
@@ -292,6 +295,8 @@ func (s *PostMeetingService) sendWebhookWithRecordingOnly(
 	participantCount := s.getParticipantCount(ctx, room.ID)
 	evt["participant_count"] = participantCount
 
+	participants := s.getParticipants(ctx, room.ID)
+
 	payload := s.webhookService.BuildPayload(
 		room,
 		&recording,
@@ -306,6 +311,7 @@ func (s *PostMeetingService) sendWebhookWithRecordingOnly(
 		},
 		presignedURL,
 		participantCount,
+		participants,
 		nil,
 	)
 
@@ -341,6 +347,14 @@ func (s *PostMeetingService) getParticipantCount(ctx context.Context, roomID uui
 		return 0
 	}
 	return int(roomWithCount.ActiveParticipantCount)
+}
+
+func (s *PostMeetingService) getParticipants(ctx context.Context, roomID uuid.UUID) []db.Participant {
+	participants, err := s.queries.ListParticipantsByRoom(ctx, roomID)
+	if err != nil {
+		return nil
+	}
+	return participants
 }
 
 type tenantWebhookConfig struct {

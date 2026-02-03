@@ -21,14 +21,15 @@ func NewService(queries *db.Queries) *Service {
 
 // WebhookPayload represents the full webhook payload sent to tenant endpoints.
 type WebhookPayload struct {
-	Event       string          `json:"event"`
-	Timestamp   string          `json:"timestamp"`
-	Meeting     MeetingInfo     `json:"meeting"`
-	Recording   *RecordingInfo  `json:"recording,omitempty"`
-	Transcript  *TranscriptInfo `json:"transcript,omitempty"`
-	Summary     *string         `json:"summary,omitempty"`
-	ActionItems []string        `json:"action_items,omitempty"`
-	Errors      []ErrorInfo     `json:"errors,omitempty"`
+	Event        string            `json:"event"`
+	Timestamp    string            `json:"timestamp"`
+	Meeting      MeetingInfo       `json:"meeting"`
+	Participants []ParticipantInfo `json:"participants"`
+	Recording    *RecordingInfo    `json:"recording,omitempty"`
+	Transcript   *TranscriptInfo   `json:"transcript,omitempty"`
+	Summary      *string           `json:"summary,omitempty"`
+	ActionItems  []string          `json:"action_items,omitempty"`
+	Errors       []ErrorInfo       `json:"errors,omitempty"`
 }
 
 type MeetingInfo struct {
@@ -38,6 +39,17 @@ type MeetingInfo struct {
 	EndedAt          string `json:"ended_at"`
 	DurationSeconds  int    `json:"duration_seconds"`
 	ParticipantCount int    `json:"participant_count"`
+}
+
+type ParticipantInfo struct {
+	ID             string         `json:"id"`
+	ExternalUserID *string        `json:"external_user_id,omitempty"`
+	ExternalID     *string        `json:"external_id,omitempty"`
+	DisplayName    string         `json:"display_name"`
+	Role           string         `json:"role"`
+	JoinedAt       string         `json:"joined_at"`
+	LeftAt         *string        `json:"left_at,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
 }
 
 type RecordingInfo struct {
@@ -129,6 +141,7 @@ func (s *Service) BuildPayload(
 	config PostMeetingWebhookConfig,
 	presignedURL string,
 	participantCount int,
+	participants []db.Participant,
 	errors []ErrorInfo,
 ) WebhookPayload {
 	roomName := ""
@@ -149,8 +162,9 @@ func (s *Service) BuildPayload(
 	}
 
 	payload := WebhookPayload{
-		Event:     "meeting.recording_ready",
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Event:        "meeting.recording_ready",
+		Timestamp:    time.Now().UTC().Format(time.RFC3339),
+		Participants: buildParticipantInfos(participants),
 		Meeting: MeetingInfo{
 			ID:               room.ID.String(),
 			Name:             roomName,
@@ -219,6 +233,76 @@ func (s *Service) BuildPayload(
 	}
 
 	return payload
+}
+
+func buildParticipantInfos(participants []db.Participant) []ParticipantInfo {
+	if len(participants) == 0 {
+		return []ParticipantInfo{}
+	}
+
+	infos := make([]ParticipantInfo, 0, len(participants))
+	for _, participant := range participants {
+		displayName := ""
+		if participant.DisplayName != nil {
+			displayName = *participant.DisplayName
+		}
+
+		joinedAt := ""
+		if participant.JoinedAt.Valid {
+			joinedAt = participant.JoinedAt.Time.Format(time.RFC3339)
+		}
+
+		var leftAt *string
+		if participant.LeftAt.Valid {
+			formatted := participant.LeftAt.Time.Format(time.RFC3339)
+			leftAt = &formatted
+		}
+
+		metadata, externalID := decodeParticipantMetadata(participant.Metadata)
+
+		infos = append(infos, ParticipantInfo{
+			ID:             participant.ID.String(),
+			ExternalUserID: participant.ExternalUserID,
+			ExternalID:     externalID,
+			DisplayName:    displayName,
+			Role:           participant.Role,
+			JoinedAt:       joinedAt,
+			LeftAt:         leftAt,
+			Metadata:       metadata,
+		})
+	}
+
+	return infos
+}
+
+func decodeParticipantMetadata(raw []byte) (map[string]any, *string) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, nil
+	}
+	if len(decoded) == 0 {
+		return nil, nil
+	}
+
+	var externalID *string
+	if value, ok := decoded["externalId"]; ok {
+		if str, ok := value.(string); ok && str != "" {
+			externalID = &str
+		}
+	}
+	if externalID == nil {
+		if value, ok := decoded["external_id"]; ok {
+			if str, ok := value.(string); ok && str != "" {
+				externalID = &str
+			}
+		}
+	}
+
+	return decoded, externalID
 }
 
 // GetDeliveriesByRoom returns all webhook deliveries for a room.

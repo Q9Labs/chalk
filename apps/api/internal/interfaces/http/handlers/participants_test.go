@@ -267,7 +267,8 @@ func TestAddParticipantRequest_OptionalFields(t *testing.T) {
 	req := AddParticipantRequest{
 		DisplayName: "Jane Doe",
 		// ExternalUserID is optional
-		Role: "host",
+		Role:     "host",
+		Metadata: json.RawMessage(`{"externalId":"user_123"}`),
 	}
 
 	data, err := json.Marshal(req)
@@ -280,6 +281,7 @@ func TestAddParticipantRequest_OptionalFields(t *testing.T) {
 	assert.Empty(t, parsed.ExternalUserID, "Optional field should be empty")
 	assert.Equal(t, "Jane Doe", parsed.DisplayName)
 	assert.Equal(t, "host", parsed.Role)
+	assert.JSONEq(t, `{"externalId":"user_123"}`, string(parsed.Metadata))
 }
 
 // TestParticipantHandler_Add_RoleValidation tests different role values

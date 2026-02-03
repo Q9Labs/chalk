@@ -152,6 +152,22 @@ When `post_meeting_webhook.enabled` is `true`, Chalk sends webhook events to you
     "duration_seconds": 1800,
     "participant_count": 5
   },
+  "participants": [
+    {
+      "id": "880e8400-e29b-41d4-a716-446655440003",
+      "external_user_id": "user_12345",
+      "external_id": "student-42",
+      "display_name": "Jane Doe",
+      "role": "host",
+      "joined_at": "2026-01-15T09:58:40Z",
+      "left_at": "2026-01-15T10:30:05Z",
+      "metadata": {
+        "externalId": "student-42",
+        "role": "teacher",
+        "cohort": "A1"
+      }
+    }
+  ],
   "recording": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "duration_seconds": 1800,
@@ -198,11 +214,14 @@ Fields are included based on your `post_meeting_webhook` configuration:
 | `event` | Always | Event type: `meeting.recording_ready` |
 | `timestamp` | Always | ISO 8601 timestamp of webhook generation |
 | `meeting` | Always | Meeting metadata |
+| `participants` | Always | Participant list with metadata + external IDs |
 | `recording` | `include_recording: true` | Recording details with download URL |
 | `transcript` | `include_transcript: true` | Full transcript with segments |
 | `summary` | `include_summary: true` | AI-generated meeting summary |
 | `action_items` | `include_action_items: true` | Extracted action items array |
 | `errors` | On failures | Graceful degradation error details |
+
+`participants` entries include `metadata` from join (e.g., `VideoConference` `metadata` prop), plus `external_id` (derived from `metadata.externalId` or `metadata.external_id`) and `external_user_id` (if supplied via API).
 
 ### Graceful Degradation
 
