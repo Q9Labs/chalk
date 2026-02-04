@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Whisper Worker: Multilingual code-switching** — enable per-segment language detection (shorter chunking) and disable prompt carryover in multilingual mode to prevent missing later-language speech.
 - **Whisper Worker: Redis timeout handling** — configure Redis socket timeouts and retry-on-timeout so transient connection timeouts don’t crash the worker loop.
 - **Whisper Worker: BRPOP socket timeout** — default Redis socket timeout now exceeds BRPOP poll timeout to avoid spurious read timeouts.
-- **API: Axiom dataset default** — use `chalk-api-prod` when `ENV=production` to prevent Axiom 404 dataset errors.
+- **Infra: Axiom dataset for API** — default prod `AXIOM_DATASET` to `chalk-api-prod` so Axiom ingest doesn’t 404.
 - **Infra: Redis ingress for Whisper** — stop ElastiCache SG ingress drift so the Whisper→Redis security group rule is not revoked, preventing Redis connection timeouts in the worker.
 
 ## [0.0.53] - 2026-02-03
