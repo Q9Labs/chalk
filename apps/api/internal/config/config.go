@@ -111,6 +111,7 @@ type PostMeetingConfig struct {
 }
 
 func Load() (*Config, error) {
+	env := getEnv("ENV", "development")
 	dbURL := getEnv("DATABASE_URL", "postgres://postgres:hello123@localhost:5432/chalk?sslmode=disable")
 	dbHost := getEnv("DATABASE_HOST", "localhost")
 	dbPort := getEnv("DATABASE_PORT", "5432")
@@ -145,10 +146,15 @@ func Load() (*Config, error) {
 		}
 	}
 
+	axiomDatasetDefault := "chalk-api"
+	if env == "production" {
+		axiomDatasetDefault = "chalk-api-prod"
+	}
+
 	cfg := &Config{
 		Server: ServerConfig{
 			Port: getEnv("PORT", "8080"),
-			Env:  getEnv("ENV", "development"),
+			Env:  env,
 		},
 		Database: DatabaseConfig{
 			URL:      dbURL,
@@ -199,7 +205,7 @@ func Load() (*Config, error) {
 		},
 		Axiom: AxiomConfig{
 			Token:   getEnv("AXIOM_TOKEN", ""),
-			Dataset: getEnv("AXIOM_DATASET", "chalk-api"),
+			Dataset: getEnv("AXIOM_DATASET", axiomDatasetDefault),
 		},
 		CORSOrigins: CORSOriginsConfig{
 			Bucket: getEnv("CORS_ORIGINS_BUCKET", ""),
@@ -216,7 +222,6 @@ func Load() (*Config, error) {
 		},
 	}
 
-	env := cfg.Server.Env
 	cfg.Admin = AdminConfig{
 		Secret:     getEnv("ADMIN_SECRET", "admin-dev-secret-change-in-production"),
 		AllowedIPs: parseCommaSeparated(getEnv("ADMIN_ALLOWED_IPS", "127.0.0.1,::1")),

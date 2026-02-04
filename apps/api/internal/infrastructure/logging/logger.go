@@ -14,12 +14,21 @@ var stdoutLogger *slog.Logger
 // Init initializes the global slog logger with environment context.
 // If AXIOM_TOKEN is set, logs go to Axiom; otherwise JSON to stdout.
 func Init() {
+	env := getEnv("ENV", "development")
+	if os.Getenv("AXIOM_DATASET") == "" {
+		if env == "production" {
+			os.Setenv("AXIOM_DATASET", "chalk-api-prod")
+		} else {
+			os.Setenv("AXIOM_DATASET", "chalk-api")
+		}
+	}
+
 	// Build base attributes for all log events
 	attrs := []slog.Attr{
 		slog.String("service", "chalk-api"),
 		slog.String("version", version.Version),
 		slog.String("commit_sha", version.CommitSHA),
-		slog.String("env", getEnv("ENV", "development")),
+		slog.String("env", env),
 		slog.String("region", getEnv("AWS_REGION", "unknown")),
 	}
 
