@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Docs: Excalidraw sync notes** — add deep-dive sync reference notes for upcoming whiteboard work.
+
 ### Changed
 
 ### Fixed
