@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    runs-on: depot-ubuntu-latest
+    runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
@@ -27,15 +27,15 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
         id: login-ecr
 
-      - name: Set up Depot CLI
-        uses: depot/setup-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push
-        uses: depot/build-push-action@v1
+        uses: docker/build-push-action@v6
         with:
-          project: 2dh05v2lvk
           context: infrastructure/whisper-worker
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:${{ github.sha }}
             ${{ steps.login-ecr.outputs.registry }}/chalk-prod-whisper:latest
+          platforms: linux/amd64

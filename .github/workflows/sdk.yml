@@ -28,7 +28,7 @@ permissions:
 jobs:
   publish:
     name: Build & Publish
-    runs-on: depot-ubuntu-latest
+    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     env:
       NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || github.token }}
