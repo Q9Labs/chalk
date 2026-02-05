@@ -10,3 +10,4 @@
 ### Fixed
 
 - **Axiom dataset default**: Use `chalk-api-prod` when `ENV=production` so prod logs don't 404 on missing datasets.
+- **Axiom ingest spam guardrail**: If the configured dataset is missing/unauthorized, fall back to stdout logger instead of retry-spamming stderr.
