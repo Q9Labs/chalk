@@ -128,7 +128,7 @@ export function useInteractions(): UseInteractionsReturn {
 			syncRaisedHands(raised);
 		});
 
-		const unsubscribeSync = wsClient.on("room-sync", (snapshot) => {
+		const unsubscribeSync = wsClient.on("room.sync", (snapshot) => {
 			const raised = snapshot.participants
 				.filter((p) => p.handRaised)
 				.map((p) => p.id);

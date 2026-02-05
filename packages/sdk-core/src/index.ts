@@ -50,6 +50,12 @@ export {
 	clientMessageTypeMap,
 	serverMessageTypeMap,
 } from "./types/events/client-events.ts";
+
+// WebSocket schema maps (runtime validation + inferred types)
+export {
+	WSOutboundPayloadSchemas,
+	type WSOutboundMessageType,
+} from "./effect/schemas/index.ts";
 // Direct type exports for convenience
 export type {
 	ChatMessagePayload,

@@ -66,7 +66,7 @@ export function useRecording(): UseRecordingResult {
 			setDurationSeconds(0);
 		});
 
-		const unsubscribeSync = wsClient.on("room-sync", (snapshot) => {
+		const unsubscribeSync = wsClient.on("room.sync", (snapshot) => {
 			setIsRecording(snapshot.isRecording);
 			setRecordingId(snapshot.recordingId ?? null);
 			setDurationSeconds(0);

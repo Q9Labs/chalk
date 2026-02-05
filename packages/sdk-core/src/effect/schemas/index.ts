@@ -10,6 +10,8 @@ export {
   // Message envelope
   WSMessage,
   type WSMessage as WSMessageType,
+  // Heartbeat
+  HeartbeatPayload,
   // Participant schemas
   ParticipantPayload,
   ParticipantJoinedPayload,
@@ -38,10 +40,18 @@ export {
   WhiteboardClosedPayload,
   // Error schema
   ErrorPayload,
+  // Transcript
+  TranscriptAckPayload,
   // Schema map
   WSPayloadSchemas,
   type WSMessageType as WSMessageTypeName,
 } from "./ws-events";
+
+// WebSocket outbound schemas
+export {
+  WSOutboundPayloadSchemas,
+  type WSOutboundMessageType,
+} from "./ws-outbound";
 
 // API response schemas
 export {

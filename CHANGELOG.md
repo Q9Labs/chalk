@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **SDK-Core: WSClient refactor (schema-first)** — modular ws-client (decoder/transforms/outbound), runtime payload validation via Effect Schema, typed outbound messages, transcript payload casing fix, and `room-sync` event renamed to `room.sync`.
+
 ### Fixed
 
 - **Whisper Worker: Multilingual code-switching** — enable per-segment language detection (shorter chunking) and disable prompt carryover in multilingual mode to prevent missing later-language speech.

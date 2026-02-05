@@ -165,7 +165,10 @@ export function ChalkProvider({
 		const manager = new RTCManager();
 		setRtcManager(manager);
 
-		const ws = new WSClient(resolvedWsUrl, debug ?? __DEV__, tokenProvider);
+		const ws = new WSClient(resolvedWsUrl, {
+			debug: debug ?? __DEV__,
+			tokenProvider,
+		});
 		setWsClient(ws);
 		setWsConnectionState("disconnected");
 

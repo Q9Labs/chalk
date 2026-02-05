@@ -289,7 +289,10 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         // Optional WebSocket signaling (chat, reactions, whiteboard, etc.)
         let wsClient: WSClient | null = null;
         if (this.wsUrl) {
-          wsClient = new WSClient(this.wsUrl, this.debug, this.tokenProvider);
+          wsClient = new WSClient(this.wsUrl, {
+            debug: this.debug,
+            tokenProvider: this.tokenProvider,
+          });
           wsClient.on("token-expired", (error) => {
             this.emit("token-expired", error);
           });

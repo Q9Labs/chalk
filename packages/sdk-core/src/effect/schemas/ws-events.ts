@@ -20,11 +20,27 @@ export const WSMessage = Schema.Struct({
 export type WSMessage = Schema.Schema.Type<typeof WSMessage>;
 
 /**
+ * ping / pong heartbeat payload
+ *
+ * Server typically includes a timestamp, but accept `void` for compatibility.
+ */
+export const HeartbeatPayload = Schema.Union(
+	Schema.Void,
+	Schema.Struct({
+		timestamp: Schema.optional(Schema.Union(Schema.String, Schema.DateFromSelf)),
+	}),
+);
+export type HeartbeatPayload = Schema.Schema.Type<typeof HeartbeatPayload>;
+
+/**
  * Participant schema (embedded in various events)
  */
 export const ParticipantPayload = Schema.Struct({
   id: Schema.String,
+  roomId: Schema.optional(Schema.String),
   displayName: Schema.String,
+  isActive: Schema.optional(Schema.Boolean),
+  joinedAt: Schema.optional(Schema.Union(Schema.String, Schema.DateFromSelf)),
   role: Schema.optional(Schema.Union(Schema.Literal("host"), Schema.Literal("participant"))),
   isLocal: Schema.optional(Schema.Boolean),
   videoEnabled: Schema.optional(Schema.Boolean),
@@ -242,6 +258,18 @@ export const ErrorPayload = Schema.Struct({
 export type ErrorPayload = Schema.Schema.Type<typeof ErrorPayload>;
 
 /**
+ * transcript.ack payload
+ */
+export const TranscriptAckPayload = Schema.Union(
+	Schema.Void,
+	Schema.Struct({
+		id: Schema.String,
+		timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
+	}),
+);
+export type TranscriptAckPayload = Schema.Schema.Type<typeof TranscriptAckPayload>;
+
+/**
  * Map of message type to payload schema
  */
 export const WSPayloadSchemas = {
@@ -266,6 +294,9 @@ export const WSPayloadSchemas = {
   "permission.changed": PermissionChangedPayload,
   "whiteboard.opened": WhiteboardOpenedPayload,
   "whiteboard.closed": WhiteboardClosedPayload,
+  ping: HeartbeatPayload,
+  pong: HeartbeatPayload,
+  "transcript.ack": TranscriptAckPayload,
   "error": ErrorPayload,
 } as const;
 

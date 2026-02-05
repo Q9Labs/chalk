@@ -110,7 +110,7 @@ export function useParticipants(): UseParticipantsResult {
 			setParticipants(next);
 		});
 
-		const unsubscribeSync = wsClient.on("room-sync", (snapshot) => {
+		const unsubscribeSync = wsClient.on("room.sync", (snapshot) => {
 			const next = snapshot.participants.map((p) => ({
 				...p,
 				isLocal: localId ? p.id === localId : p.isLocal,
