@@ -65,6 +65,11 @@ type RouterConfig struct {
 }
 
 func NewRouter(cfg RouterConfig) *Router {
+	// Gin's debug/release mode is controlled independently from our ENV var.
+	// In ECS we don't set GIN_MODE, so force release mode when running in prod.
+	if cfg.AppConfig.Server.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	engine := gin.Default()
 
 	engine.Use(middleware.CORS())

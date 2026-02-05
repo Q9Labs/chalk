@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Whisper Worker: BRPOP socket timeout** — default Redis socket timeout now exceeds BRPOP poll timeout to avoid spurious read timeouts.
 - **Infra: Axiom dataset for API** — default prod `AXIOM_DATASET` to `chalk-api-prod` so Axiom ingest doesn’t 404.
 - **API: Axiom ingest guardrail** — if the configured dataset is missing/unauthorized, disable Axiom handler to prevent stderr retry spam.
+- **API: Gin release mode** — force Gin into release mode when `ENV=production` so ECS runs without verbose debug/preview logging.
 - **Infra: Redis ingress for Whisper** — stop ElastiCache SG ingress drift so the Whisper→Redis security group rule is not revoked, preventing Redis connection timeouts in the worker.
 
 ## [0.0.53] - 2026-02-03
