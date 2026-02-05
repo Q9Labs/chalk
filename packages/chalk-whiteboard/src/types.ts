@@ -1,5 +1,4 @@
 // Excalidraw types used by our whiteboard sync
-import type { AppState as ExcalidrawAppState } from "@excalidraw/excalidraw/types";
 
 export interface ExcalidrawElement {
 	id: string;
@@ -9,7 +8,7 @@ export interface ExcalidrawElement {
 	[key: string]: unknown;
 }
 
-export type AppState = ExcalidrawAppState;
+export type AppState = Record<string, unknown>;
 
 export type BinaryFiles = Record<string, BinaryFileData>;
 
