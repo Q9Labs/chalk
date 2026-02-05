@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Whiteboard: AppState type import** — align AppState with Excalidraw’s public types export so schema/type resolution works.
+- **Whisper Worker: Temp file cleanup NameError** — add missing `os` import so worker can delete downloaded audio files safely.
 - **Whisper Worker: Multilingual code-switching** — enable per-segment language detection (shorter chunking) and disable prompt carryover in multilingual mode to prevent missing later-language speech.
 - **Whisper Worker: Redis timeout handling** — configure Redis socket timeouts and retry-on-timeout so transient connection timeouts don’t crash the worker loop.
 - **Whisper Worker: BRPOP socket timeout** — default Redis socket timeout now exceeds BRPOP poll timeout to avoid spurious read timeouts.
