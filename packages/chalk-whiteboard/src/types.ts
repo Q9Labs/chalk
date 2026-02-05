@@ -1,5 +1,5 @@
 // Excalidraw types used by our whiteboard sync
-import type { AppState as ExcalidrawAppState } from "@excalidraw/excalidraw/types/types";
+import type { AppState as ExcalidrawAppState } from "@excalidraw/excalidraw/types";
 
 export interface ExcalidrawElement {
 	id: string;

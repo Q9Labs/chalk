@@ -228,7 +228,7 @@ export type WhiteboardCursorPayload = Schema.Schema.Type<typeof WhiteboardCursor
  */
 export const PermissionChangedPayload = Schema.Struct({
   participantId: Schema.String,
-  feature: Schema.String,
+  feature: Schema.Union(Schema.Literal("whiteboard"), Schema.Literal("annotations")),
   canDraw: Schema.Boolean,
   grantedBy: Schema.String,
   timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
