@@ -7,48 +7,48 @@
 
 // WebSocket event schemas
 export {
-  // Whiteboard app state
-  AppStateSchema,
-  AppStatePartialSchema,
-  // Message envelope
-  WSMessage,
-  type WSMessage as WSMessageType,
-  // Heartbeat
-  HeartbeatPayload,
-  // Participant schemas
-  ParticipantPayload,
-  ParticipantJoinedPayload,
-  ParticipantLeftPayload,
-  ParticipantUpdatedPayload,
-  ParticipantControlPayload,
-  // Chat schemas
-  ChatMessagePayload,
-  // Reaction schemas
-  ReactionPayload,
-  // Hand schemas
-  HandPayload,
-  // Recording schemas
-  RecordingStartedPayload,
-  RecordingStoppedPayload,
-  // Room schemas
-  RoomUpdatedPayload,
-  RoomSnapshotPayload,
-  RegisteredPayload,
-  // Whiteboard schemas
-  WhiteboardDataPayload,
-  WhiteboardSnapshotPayload,
-  WhiteboardCursorPayload,
-  PermissionChangedPayload,
-  WhiteboardOpenedPayload,
-  WhiteboardClosedPayload,
-  // Error schema
-  ErrorPayload,
-  // Transcript
-  TranscriptAckPayload,
-  // Schema map
-  WSPayloadSchemas,
-  type WSMessageType as WSMessageTypeName,
+	// Message envelope
+	WSMessage,
+	type WSMessage as WSMessageType,
+	// Heartbeat
+	HeartbeatPayload,
+	// Participant schemas
+	ParticipantPayload,
+	ParticipantJoinedPayload,
+	ParticipantLeftPayload,
+	ParticipantUpdatedPayload,
+	ParticipantControlPayload,
+	// Chat schemas
+	ChatMessagePayload,
+	// Reaction schemas
+	ReactionPayload,
+	// Hand schemas
+	HandPayload,
+	// Recording schemas
+	RecordingStartedPayload,
+	RecordingStoppedPayload,
+	// Room schemas
+	RoomUpdatedPayload,
+	RoomSnapshotPayload,
+	RegisteredPayload,
+	// Whiteboard schemas
+	WhiteboardDataPayload,
+	WhiteboardSnapshotPayload,
+	WhiteboardCursorPayload,
+	PermissionChangedPayload,
+	WhiteboardOpenedPayload,
+	WhiteboardClosedPayload,
+	// Error schema
+	ErrorPayload,
+	// Transcript
+	TranscriptAckPayload,
+	// Schema map
+	WSPayloadSchemas,
+	type WSMessageType as WSMessageTypeName,
 } from "./ws-events";
+
+// Whiteboard schemas
+export { AppStateSchema, AppStatePartialSchema } from "./whiteboard";
 
 // WSClient emitted event schemas
 export { WSEventSchemas } from "./ws-emitted";

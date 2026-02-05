@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import type { Schema } from "@effect/schema";
 import { WSEventSchemas } from "../effect/schemas/ws-emitted.ts";
 
 export type WSEvents = {
