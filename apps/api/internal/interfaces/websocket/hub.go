@@ -140,6 +140,7 @@ func (h *Hub) Run(ctx context.Context) {
 		case <-ticker.C:
 			now := snapshotWSMetrics()
 			deltaDrops := now.sendDrops - last.sendDrops
+			deltaBackpressureCloses := now.backpressureCloses - last.backpressureCloses
 			deltaWriteErrors := now.writeErrors - last.writeErrors
 			deltaPingErrors := now.pingErrors - last.pingErrors
 			deltaEnqueued := now.sendEnqueued - last.sendEnqueued
@@ -158,6 +159,8 @@ func (h *Hub) Run(ctx context.Context) {
 				"sends_enqueued_total", now.sendEnqueued,
 				"sends_dropped", deltaDrops,
 				"sends_dropped_total", now.sendDrops,
+				"backpressure_closes", deltaBackpressureCloses,
+				"backpressure_closes_total", now.backpressureCloses,
 				"write_errors", deltaWriteErrors,
 				"write_errors_total", now.writeErrors,
 				"ping_errors", deltaPingErrors,
@@ -208,14 +211,14 @@ func (h *Hub) registerClient(client *Client) {
 		TenantID:      client.tenantID,
 	})
 	connData, _ := json.Marshal(connMsg)
-	client.Send(connData)
+	client.SendReliable(connData)
 
 	snapshot := h.getRoomSnapshotLocked(client.roomID)
 	h.mu.Unlock()
 
 	snapshotMsg, _ := NewMessage(MessageTypeRoomSnapshot, snapshot)
 	snapshotData, _ := json.Marshal(snapshotMsg)
-	client.Send(snapshotData)
+	client.SendReliable(snapshotData)
 
 	meta := h.GetParticipantMetadata(client.participantID)
 	joinedMsg, _ := NewMessage(MessageTypeParticipantJoined, ParticipantJoinedPayload{
@@ -278,6 +281,16 @@ func (h *Hub) unregisterClient(client *Client) {
 
 	// Now clean up empty room
 	if roomEmpty {
+		// Clear persisted whiteboard state for privacy/ephemeral behavior.
+		if h.whiteboardStore != nil {
+			if err := h.whiteboardStore.Save(h.ctx, client.roomID, nil); err != nil {
+				h.logger.Error("failed to clear persisted whiteboard state",
+					"room_id", client.roomID,
+					"error", err.Error(),
+				)
+			}
+		}
+
 		h.mu.Lock()
 		delete(h.rooms, client.roomID)
 		delete(h.roomRecording, client.roomID)
@@ -296,6 +309,28 @@ func (h *Hub) unregisterClient(client *Client) {
 
 // BroadcastToRoom broadcasts a message to all clients in a room
 func (h *Hub) BroadcastToRoom(roomID uuid.UUID, message []byte, excludeParticipantID string) {
+	h.BroadcastToRoomReliable(roomID, message, excludeParticipantID)
+}
+
+// BroadcastToRoomReliable broadcasts a message to all clients in a room and
+// disconnects slow consumers (no silent drops).
+func (h *Hub) BroadcastToRoomReliable(roomID uuid.UUID, message []byte, excludeParticipantID string) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if room, ok := h.rooms[roomID]; ok {
+		for participantID, client := range room {
+			if excludeParticipantID != "" && participantID.String() == excludeParticipantID {
+				continue
+			}
+			client.SendReliable(message)
+		}
+	}
+}
+
+// BroadcastToRoomVolatile broadcasts a message to all clients in a room but may
+// drop if a client is slow. Use for high-frequency ephemeral messages (cursor).
+func (h *Hub) BroadcastToRoomVolatile(roomID uuid.UUID, message []byte, excludeParticipantID string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -316,7 +351,7 @@ func (h *Hub) SendToParticipant(participantID uuid.UUID, message []byte) {
 	h.mu.RUnlock()
 
 	if ok {
-		client.Send(message)
+		client.SendReliable(message)
 	}
 }
 

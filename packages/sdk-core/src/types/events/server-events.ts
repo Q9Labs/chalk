@@ -7,6 +7,7 @@
  * @packageDocumentation
  * @module @q9labs/chalk-core/types
  */
+import type { AppState } from "@q9labs/chalk-whiteboard";
 
 // Server payloads use their own participant shape (ServerParticipant)
 // rather than the full Participant entity from entities/
@@ -127,6 +128,12 @@ export interface PingPayload {
 
 /** Whiteboard data broadcast */
 export interface WhiteboardDataPayload {
+	/** Wire schema version (v2 = 2) */
+	schemaVersion?: number;
+	/** Scene epoch; changes on clear */
+	sceneId?: string;
+	/** Whether this update represents a full-scene sync */
+	syncAll?: boolean;
 	participantId: string;
 	displayName: string;
 	elements: unknown[];
@@ -137,10 +144,16 @@ export interface WhiteboardDataPayload {
 
 /** Whiteboard full state */
 export interface WhiteboardSnapshotPayload {
+	/** Wire schema version (v2 = 2) */
+	schemaVersion?: number;
 	roomId: string;
+	/** Scene epoch; changes on clear */
+	sceneId?: string;
 	elements: unknown[];
 	files: Record<string, unknown>;
-	appState: Record<string, unknown>;
+	appState: AppState;
+	/** Snapshot updated timestamp (ms) */
+	updatedAtMs?: number;
 	lastSeq: number;
 }
 

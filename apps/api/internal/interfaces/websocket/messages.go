@@ -209,8 +209,22 @@ type WhiteboardUpdatePayload struct {
 	Seq      int64           `json:"seq"`       // Sequence number for ordering
 }
 
+// WhiteboardUpdateV2Payload - client sends drawing changes (v2)
+//
+// NOTE: Elements are Excalidraw-native JSON objects; do not transform nested keys.
+type WhiteboardUpdateV2Payload struct {
+	SchemaVersion int64           `json:"schema_version"` // must be 2
+	SceneID       string          `json:"scene_id"`
+	SyncAll       bool            `json:"sync_all"`
+	Elements      json.RawMessage `json:"elements"` // Excalidraw elements array
+	Seq           int64           `json:"seq"`      // monotonic per-sender
+}
+
 // WhiteboardDataPayload - server broadcasts to room
 type WhiteboardDataPayload struct {
+	SchemaVersion *int64          `json:"schema_version,omitempty"`
+	SceneID       *string         `json:"scene_id,omitempty"`
+	SyncAll       *bool           `json:"sync_all,omitempty"`
 	ParticipantID uuid.UUID       `json:"participant_id"`
 	DisplayName   string          `json:"display_name"`
 	Elements      json.RawMessage `json:"elements"`
@@ -221,11 +235,14 @@ type WhiteboardDataPayload struct {
 
 // WhiteboardSnapshotPayload - full state sent on join
 type WhiteboardSnapshotPayload struct {
-	RoomID   uuid.UUID       `json:"room_id"`
-	Elements json.RawMessage `json:"elements"`
-	Files    json.RawMessage `json:"files"`
-	AppState json.RawMessage `json:"app_state"`
-	LastSeq  int64           `json:"last_seq"`
+	SchemaVersion *int64          `json:"schema_version,omitempty"`
+	RoomID        uuid.UUID       `json:"room_id"`
+	SceneID       *string         `json:"scene_id,omitempty"`
+	Elements      json.RawMessage `json:"elements"`
+	Files         json.RawMessage `json:"files"`
+	AppState      json.RawMessage `json:"app_state"`
+	UpdatedAtMs   *int64          `json:"updated_at_ms,omitempty"`
+	LastSeq       int64           `json:"last_seq"`
 }
 
 // WhiteboardCursorPayload - cursor position updates

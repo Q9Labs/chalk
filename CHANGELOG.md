@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Docs: Excalidraw sync notes** — add deep-dive sync reference notes for upcoming whiteboard work.
+- **Whiteboard: Sync v2 (Excalidraw-native)** — new collab engine using Excalidraw primitives (`restoreElements`/`reconcileElements`), pointer-up flush, periodic full-scene heal, and cursor presence forwarding.
+- **API: Whiteboard file presign** — add R2 presigned upload/download endpoints for image sync (no WS data URLs).
 
 ### Changed
 
 - **SDK-Core: WSClient refactor (schema-first)** — modular ws-client (decoder/transforms/outbound), runtime payload validation via Effect Schema, typed outbound messages, transcript payload casing fix, and `room-sync` event renamed to `room.sync`.
+- **API: Whiteboard WS hub** — relay-only v2 updates with reliable backpressure handling, snapshot persistence (tombstones + `versionNonce` tie-break), and scene epoch semantics for clear.
 
 ### Fixed
 

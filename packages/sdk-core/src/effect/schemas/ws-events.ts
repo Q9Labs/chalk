@@ -9,6 +9,7 @@
  */
 
 import { Schema } from "@effect/schema";
+import { AppStateSchema } from "./whiteboard";
 
 /**
  * WebSocket message envelope
@@ -183,6 +184,9 @@ export type RegisteredPayload = Schema.Schema.Type<typeof RegisteredPayload>;
  * whiteboard.data event payload
  */
 export const WhiteboardDataPayload = Schema.Struct({
+  schemaVersion: Schema.optional(Schema.Number),
+  sceneId: Schema.optional(Schema.String),
+  syncAll: Schema.optional(Schema.Boolean),
   participantId: Schema.String,
   displayName: Schema.String,
   elements: Schema.Array(Schema.Unknown),
@@ -196,10 +200,13 @@ export type WhiteboardDataPayload = Schema.Schema.Type<typeof WhiteboardDataPayl
  * whiteboard.snapshot event payload
  */
 export const WhiteboardSnapshotPayload = Schema.Struct({
+  schemaVersion: Schema.optional(Schema.Number),
   roomId: Schema.String,
+  sceneId: Schema.optional(Schema.String),
   elements: Schema.Array(Schema.Unknown),
   files: Schema.Record({ key: Schema.String, value: Schema.Unknown }),
-  appState: Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+  appState: AppStateSchema,
+  updatedAtMs: Schema.optional(Schema.Number),
   lastSeq: Schema.Number,
 });
 export type WhiteboardSnapshotPayload = Schema.Schema.Type<typeof WhiteboardSnapshotPayload>;

@@ -380,4 +380,28 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			`/api/v1/recordings/${recordingId}/download`,
 		);
 	}
+
+	// Whiteboard file presign (R2)
+	async presignWhiteboardUpload(
+		roomId: string,
+		fileId: string,
+		mimeType: string,
+	): Promise<ApiResponse<{ uploadUrl: string; expiresAtMs: number }>> {
+		return this.request<{ uploadUrl: string; expiresAtMs: number }>(
+			"POST",
+			`/api/v1/rooms/${roomId}/whiteboard/files/presign-upload`,
+			{ fileId, mimeType },
+		);
+	}
+
+	async presignWhiteboardDownload(
+		roomId: string,
+		fileId: string,
+	): Promise<ApiResponse<{ downloadUrl: string; expiresAtMs: number }>> {
+		return this.request<{ downloadUrl: string; expiresAtMs: number }>(
+			"POST",
+			`/api/v1/rooms/${roomId}/whiteboard/files/presign-download`,
+			{ fileId },
+		);
+	}
 }

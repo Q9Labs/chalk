@@ -237,6 +237,11 @@ func (r *Router) setupRoutes() {
 			roomsGroup.DELETE("/:id/participants/:pid", authMw.RequireHost(), participants.Remove)
 			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
 
+			// Whiteboard files (R2 presigned URLs)
+			whiteboardFiles := handlers.NewWhiteboardFilesHandler(r.storageR2)
+			roomsGroup.POST("/:id/whiteboard/files/presign-upload", whiteboardFiles.PresignUpload)
+			roomsGroup.POST("/:id/whiteboard/files/presign-download", whiteboardFiles.PresignDownload)
+
 			// API-HIGH-05: Recording start/stop/archive require host role
 			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService, r.cfClient)
 			roomsGroup.POST("/:id/recordings/start", authMw.RequireHost(), recordings.Start)

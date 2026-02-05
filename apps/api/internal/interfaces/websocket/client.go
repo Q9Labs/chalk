@@ -73,6 +73,24 @@ func (c *Client) Send(msg []byte) {
 	}
 }
 
+// SendReliable sends a message to the client or disconnects the client if it
+// cannot keep up.
+//
+// This is used for messages where dropping would cause state divergence
+// (e.g. whiteboard scene updates/snapshots, permission changes).
+func (c *Client) SendReliable(msg []byte) {
+	select {
+	case c.send <- msg:
+		recordWSSendEnqueued()
+	case <-c.done:
+		// Client already closed
+	default:
+		recordWSSendBackpressureClose()
+		c.logger().Warn("websocket send buffer full; closing slow client")
+		_ = c.Close()
+	}
+}
+
 // Wait blocks until the client is closed
 func (c *Client) Wait() {
 	<-c.done
@@ -296,61 +314,117 @@ func (c *Client) sendErrorMessage(code, message string) {
 
 // handleWhiteboardUpdate processes a whiteboard update and broadcasts it
 func (c *Client) handleWhiteboardUpdate(msg *Message) {
-	var payload WhiteboardUpdatePayload
-	if err := msg.UnmarshalPayload(&payload); err != nil {
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+
+	var v2 WhiteboardUpdateV2Payload
+	if err := msg.UnmarshalPayload(&v2); err != nil {
 		c.sendErrorMessage("invalid_payload", "Failed to parse whiteboard update")
 		return
 	}
 
-	meta := c.hub.GetParticipantMetadata(c.participantID)
+	// v2 message (schema_version: 2)
+	if v2.SchemaVersion == 2 {
+		if v2.SceneID == "" {
+			c.sendErrorMessage("invalid_payload", "scene_id is required for schema_version=2")
+			return
+		}
 
-	// Merge update into in-memory state for durability and sync requests
-	c.hub.UpdateWhiteboardState(c.roomID, payload)
+		sceneID, applied := c.hub.UpdateWhiteboardState(c.roomID, v2)
+		if !applied {
+			// Stale epoch; heal sender with a fresh snapshot.
+			payload := c.hub.GetWhiteboardSnapshot(c.roomID)
+			snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, payload)
+			data, _ := json.Marshal(snapshot)
+			c.SendReliable(data)
+			return
+		}
 
-	// Broadcast to all participants in room
+		schema := int64(2)
+		syncAll := v2.SyncAll
+		dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
+			SchemaVersion: &schema,
+			SceneID:       &sceneID,
+			SyncAll:       &syncAll,
+			ParticipantID: c.participantID,
+			DisplayName:   meta.DisplayName,
+			Elements:      v2.Elements,
+			Seq:           v2.Seq,
+			Timestamp:     time.Now(),
+		})
+
+		msgData, _ := json.Marshal(dataMsg)
+		// Relay to everyone except sender (no echo).
+		c.hub.BroadcastToRoomReliable(c.roomID, msgData, c.participantID.String())
+		return
+	}
+
+	// v1 message fallback → treat as v2 update with current epoch.
+	var v1 WhiteboardUpdatePayload
+	if err := msg.UnmarshalPayload(&v1); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse whiteboard update")
+		return
+	}
+
+	snapshot := c.hub.GetWhiteboardSnapshot(c.roomID)
+	sceneID := derefString(snapshot.SceneID)
+	internal := WhiteboardUpdateV2Payload{
+		SchemaVersion: 2,
+		SceneID:       sceneID,
+		SyncAll:       false,
+		Elements:      v1.Elements,
+		Seq:           v1.Seq,
+	}
+	_, _ = c.hub.UpdateWhiteboardState(c.roomID, internal)
+
+	schema := int64(2)
+	syncAll := false
 	dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
+		SchemaVersion: &schema,
+		SceneID:       &sceneID,
+		SyncAll:       &syncAll,
 		ParticipantID: c.participantID,
 		DisplayName:   meta.DisplayName,
-		Elements:      payload.Elements,
-		Files:         payload.Files,
-		Seq:           payload.Seq,
+		Elements:      v1.Elements,
+		Files:         v1.Files,
+		Seq:           v1.Seq,
 		Timestamp:     time.Now(),
 	})
 
 	msgData, _ := json.Marshal(dataMsg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.BroadcastToRoomReliable(c.roomID, msgData, c.participantID.String())
 }
 
 // handleWhiteboardSync sends the current whiteboard state to the requesting client
 func (c *Client) handleWhiteboardSync() {
-	// Send cached snapshot if available; otherwise return empty state
-	payload, ok := c.hub.GetWhiteboardSnapshot(c.roomID)
-	if !ok {
-		c.sendErrorMessage("whiteboard_state_empty", "No whiteboard state available")
-		return
-	}
+	payload := c.hub.GetWhiteboardSnapshot(c.roomID)
 	snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, payload)
 	data, _ := json.Marshal(snapshot)
-	c.Send(data)
+	c.SendReliable(data)
 }
 
 // handleWhiteboardClear broadcasts a whiteboard clear event
 func (c *Client) handleWhiteboardClear() {
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 
-	c.hub.ClearWhiteboardState(c.roomID)
+	sceneID := c.hub.ClearWhiteboardState(c.roomID)
 
+	schema := int64(2)
+	syncAll := true
+	seq := time.Now().UnixMilli()
 	clearMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
+		SchemaVersion: &schema,
+		SceneID:       &sceneID,
+		SyncAll:       &syncAll,
 		ParticipantID: c.participantID,
 		DisplayName:   meta.DisplayName,
 		Elements:      json.RawMessage("[]"),
 		Files:         json.RawMessage("{}"),
-		Seq:           0,
+		Seq:           seq,
 		Timestamp:     time.Now(),
 	})
 
 	msgData, _ := json.Marshal(clearMsg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.BroadcastToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleWhiteboardCursor broadcasts cursor position to other participants
@@ -375,7 +449,7 @@ func (c *Client) handleWhiteboardCursor(msg *Message) {
 
 	msgData, _ := json.Marshal(cursorMsg)
 	// Broadcast to others (not self) - exclude sender
-	c.hub.BroadcastToRoom(c.roomID, msgData, c.participantID.String())
+	c.hub.BroadcastToRoomVolatile(c.roomID, msgData, c.participantID.String())
 }
 
 // handlePermissionGrant broadcasts a permission grant event

@@ -4,6 +4,7 @@
  * @packageDocumentation
  * @module @q9labs/chalk-core/types
  */
+import type { AppState } from "@q9labs/chalk-whiteboard";
 
 /**
  * Whiteboard permission feature
@@ -37,8 +38,14 @@ export interface WhiteboardCursor {
  * (all participants leave).
  */
 export interface WhiteboardSnapshot {
+	/** Wire schema version (v2 = 2) */
+	schemaVersion?: number;
+
 	/** Room ID */
 	roomId: string;
+
+	/** Scene epoch; changes on clear */
+	sceneId?: string;
 
 	/** Excalidraw elements array */
 	elements: unknown[];
@@ -47,7 +54,10 @@ export interface WhiteboardSnapshot {
 	files: Record<string, unknown>;
 
 	/** Excalidraw app state (view settings) */
-	appState: Record<string, unknown>;
+	appState: AppState;
+
+	/** Snapshot updated timestamp (ms) */
+	updatedAtMs?: number;
 
 	/** Last sequence number for ordering */
 	lastSeq: number;
@@ -57,6 +67,15 @@ export interface WhiteboardSnapshot {
  * Whiteboard update from a participant
  */
 export interface WhiteboardUpdate {
+	/** Wire schema version (v2 = 2) */
+	schemaVersion?: number;
+
+	/** Scene epoch; changes on clear */
+	sceneId?: string;
+
+	/** Whether this update represents a full-scene sync */
+	syncAll?: boolean;
+
 	/** Participant ID who made the update */
 	participantId: string;
 

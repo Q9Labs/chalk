@@ -17,6 +17,9 @@ type StorageClient interface {
 	// GetPresignedURL generates a time-limited download URL
 	GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 
+	// GetPresignedUploadURL generates a time-limited upload URL
+	GetPresignedUploadURL(ctx context.Context, key string, contentType string, expiry time.Duration) (string, error)
+
 	// Delete removes a file from storage
 	Delete(ctx context.Context, key string) error
 

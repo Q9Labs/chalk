@@ -5,7 +5,15 @@
  * Handles sync, permissions, and participant thumbnails.
  */
 
-import { createElement, memo, useEffect, useRef, useState, useCallback } from "react";
+import {
+	createElement,
+	memo,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { useSession } from "../../context/chalk-provider";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
 import { cn } from "../../utils/cn";
@@ -17,28 +25,6 @@ import {
 	ArrowDown01Icon,
 	ArrowUp01Icon,
 } from "../../utils/icons";
-
-const CURSOR_STALE_MS = 10000;
-const CURSOR_COLORS = [
-	{ stroke: "#FF5D5D", background: "rgba(255, 93, 93, 0.2)" },
-	{ stroke: "#4CB9FF", background: "rgba(76, 185, 255, 0.2)" },
-	{ stroke: "#8B5CF6", background: "rgba(139, 92, 246, 0.2)" },
-	{ stroke: "#10B981", background: "rgba(16, 185, 129, 0.2)" },
-	{ stroke: "#F59E0B", background: "rgba(245, 158, 11, 0.2)" },
-	{ stroke: "#EC4899", background: "rgba(236, 72, 153, 0.2)" },
-	{ stroke: "#22D3EE", background: "rgba(34, 211, 238, 0.2)" },
-	{ stroke: "#A3E635", background: "rgba(163, 230, 53, 0.2)" },
-];
-
-const getCursorColor = (id: string) => {
-	let hash = 0;
-	for (let i = 0; i < id.length; i += 1) {
-		hash = (hash << 5) - hash + id.charCodeAt(i);
-		hash |= 0;
-	}
-	const index = Math.abs(hash) % CURSOR_COLORS.length;
-	return CURSOR_COLORS[index];
-};
 
 const LockIcon = () => (
 	<svg
@@ -91,7 +77,7 @@ const PencilIcon = () => (
 	</svg>
 );
 
-/** Excalidraw element type (simplified for our needs) */
+/** Excalidraw element type (simplified for legacy sync) */
 interface ExcalidrawElement {
 	id: string;
 	version: number;
@@ -102,9 +88,35 @@ interface ExcalidrawElement {
 /** Binary files type */
 type BinaryFiles = Record<string, unknown>;
 
-// SyncEngine is dynamically imported from chalk-whiteboard
+// ExcalidrawCollabEngine is dynamically imported from chalk-whiteboard/collab
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CollabEngine = any;
+
+// SyncEngine is dynamically imported from chalk-whiteboard (legacy v1)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SyncEngine = any;
+
+const CURSOR_STALE_MS = 10000;
+const CURSOR_COLORS = [
+	{ stroke: "#FF5D5D", background: "rgba(255, 93, 93, 0.2)" },
+	{ stroke: "#4CB9FF", background: "rgba(76, 185, 255, 0.2)" },
+	{ stroke: "#8B5CF6", background: "rgba(139, 92, 246, 0.2)" },
+	{ stroke: "#10B981", background: "rgba(16, 185, 129, 0.2)" },
+	{ stroke: "#F59E0B", background: "rgba(245, 158, 11, 0.2)" },
+	{ stroke: "#EC4899", background: "rgba(236, 72, 153, 0.2)" },
+	{ stroke: "#22D3EE", background: "rgba(34, 211, 238, 0.2)" },
+	{ stroke: "#A3E635", background: "rgba(163, 230, 53, 0.2)" },
+];
+
+const getCursorColor = (id: string) => {
+	let hash = 0;
+	for (let i = 0; i < id.length; i += 1) {
+		hash = (hash << 5) - hash + id.charCodeAt(i);
+		hash |= 0;
+	}
+	const index = Math.abs(hash) % CURSOR_COLORS.length;
+	return CURSOR_COLORS[index];
+};
 
 /** CDN URL for Excalidraw CSS - includes fonts via relative paths */
 const EXCALIDRAW_CSS_CDN =
@@ -148,6 +160,7 @@ function WhiteboardPanelBase({
 	showThumbnails = true,
 	thumbnailPosition = "bottom",
 }: WhiteboardPanelProps): React.JSX.Element {
+	const session = useSession();
 	const {
 		canDraw,
 		cursors,
@@ -159,7 +172,10 @@ function WhiteboardPanelBase({
 	} = useWhiteboard();
 	const { canGrant, grantAll, revokeAll } = useWhiteboardPermissions();
 
+	const useV2 = session.whiteboardSyncV2 ?? true;
+
 	const syncEngineRef = useRef<SyncEngine | null>(null);
+	const collabEngineRef = useRef<CollabEngine | null>(null);
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const excalidrawRef = useRef<any>(null);
 	const elementsRef = useRef<readonly ExcalidrawElement[]>([]);
@@ -197,12 +213,20 @@ function WhiteboardPanelBase({
 
 		const loadExcalidraw = async () => {
 			try {
+				const collabPromise = useV2
+					? import("@q9labs/chalk-whiteboard/collab").catch(() => null)
+					: Promise.resolve(null);
+				const legacyPromise = useV2
+					? Promise.resolve(null)
+					: import("@q9labs/chalk-whiteboard").catch(() => null);
+
 				// Dynamic imports
-				const [{ Excalidraw }, { createRoot }, chalkWhiteboard] =
+				const [{ Excalidraw }, { createRoot }, chalkWhiteboardCollab, chalkWhiteboardLegacy] =
 					await Promise.all([
 						import("@excalidraw/excalidraw"),
 						import("react-dom/client"),
-						import("@q9labs/chalk-whiteboard").catch(() => null),
+						collabPromise,
+						legacyPromise,
 					]);
 
 				// Check if Excalidraw CSS is already loaded (via global import or previous mount)
@@ -225,30 +249,8 @@ function WhiteboardPanelBase({
 
 				if (!mounted || !containerRef.current) return;
 
-				// Initialize SyncEngine if chalk-whiteboard is available
-				if (chalkWhiteboard?.SyncEngine) {
-					syncEngineRef.current = new chalkWhiteboard.SyncEngine(
-						(type: string, payload: unknown) => {
-							if (type === "whiteboard.update") {
-								const p = payload as {
-									elements: unknown[];
-									files?: Record<string, unknown>;
-									seq: number;
-								};
-								sendUpdate(p.elements, p.files, p.seq);
-							} else if (type === "whiteboard.cursor") {
-								const p = payload as { x: number; y: number };
-								sendCursor(p.x, p.y);
-							}
-						},
-						{
-							debounceMs: 150,
-							cursorThrottleMs: 16,
-							maxPayloadBytes: 32 * 1024 * 1024,
-							maxFileBytes: 32 * 1024 * 1024,
-						},
-					);
-				}
+				const CollabEngineCtor = (chalkWhiteboardCollab as any)?.ExcalidrawCollabEngine;
+				const SyncEngineCtor = (chalkWhiteboardLegacy as any)?.SyncEngine;
 
 				// Create isolated root for Excalidraw
 				root = createRoot(containerRef.current);
@@ -256,19 +258,35 @@ function WhiteboardPanelBase({
 				const ExcalidrawWrapper = () => {
 					const handleChange = useCallback(
 						(
-							elements: readonly ExcalidrawElement[],
+							elements: readonly unknown[],
 							_appState: unknown,
 							files: BinaryFiles,
 						) => {
+							if (useV2) {
+								collabEngineRef.current?.handleChange(
+									elements as any,
+									_appState as any,
+									files,
+								);
+								return;
+							}
+
 							if (!canDraw) return;
-							elementsRef.current = elements;
-							syncEngineRef.current?.handleChange(elements, files);
+							elementsRef.current = elements as readonly ExcalidrawElement[];
+							syncEngineRef.current?.handleChange(
+								elements as readonly ExcalidrawElement[],
+								files,
+							);
 						},
 						[],
 					);
 
 					const handlePointerUpdate = useCallback(
 						(payload: { pointer: { x: number; y: number } }) => {
+							if (useV2) {
+								collabEngineRef.current?.handlePointerUpdate(payload);
+								return;
+							}
 							syncEngineRef.current?.sendCursor(
 								payload.pointer.x,
 								payload.pointer.y,
@@ -286,6 +304,65 @@ function WhiteboardPanelBase({
 					return createElement(Excalidraw, {
 						excalidrawAPI: (api: unknown) => {
 							excalidrawRef.current = api;
+							if (useV2 && !collabEngineRef.current && CollabEngineCtor) {
+								collabEngineRef.current = new CollabEngineCtor({
+									excalidrawAPI: api,
+									canDraw,
+									sendUpdateV2: (payload: any) => {
+										const room = session.room.getRoom();
+										room?.sendWhiteboardUpdateV2({
+											sceneId: payload.sceneId,
+											syncAll: payload.syncAll,
+											elements: payload.elements,
+											seq: payload.seq,
+										});
+									},
+									sendCursor: (payload: { x: number; y: number }) => {
+										const room = session.room.getRoom();
+										room?.sendWhiteboardCursor(payload.x, payload.y);
+									},
+									requestSync: () => {
+										const room = session.room.getRoom();
+										room?.requestWhiteboardSync();
+									},
+									sendClear: () => {
+										const room = session.room.getRoom();
+										room?.clearWhiteboard();
+									},
+									presignUpload: async (fileId: string, mimeType: string) => {
+										const res = await session.whiteboardPresignUpload(fileId, mimeType);
+										return { uploadUrl: res.uploadUrl };
+									},
+									presignDownload: async (fileId: string) => {
+										const res = await session.whiteboardPresignDownload(fileId);
+										return { downloadUrl: res.downloadUrl };
+									},
+								});
+							}
+
+							if (!useV2 && !syncEngineRef.current && SyncEngineCtor) {
+								syncEngineRef.current = new SyncEngineCtor(
+									(type: string, payload: unknown) => {
+										if (type === "whiteboard.update") {
+											const p = payload as {
+												elements: unknown[];
+												files?: Record<string, unknown>;
+												seq: number;
+											};
+											sendUpdate(p.elements, p.files, p.seq);
+										} else if (type === "whiteboard.cursor") {
+											const p = payload as { x: number; y: number };
+											sendCursor(p.x, p.y);
+										}
+									},
+									{
+										debounceMs: 150,
+										cursorThrottleMs: 16,
+										maxPayloadBytes: 32 * 1024 * 1024,
+										maxFileBytes: 32 * 1024 * 1024,
+									},
+								);
+							}
 						},
 						isCollaborating: true,
 						theme: resolvedTheme,
@@ -326,33 +403,56 @@ function WhiteboardPanelBase({
 
 		return () => {
 			mounted = false;
+			collabEngineRef.current?.dispose?.();
+			collabEngineRef.current = null;
+			syncEngineRef.current?.reset?.();
+			syncEngineRef.current = null;
 			// Cleanup after delay to avoid React 19 timing issues
 			setTimeout(() => {
 				root?.unmount();
 			}, 0);
 		};
-	}, [canDraw, excalidrawCssPath, resolvedTheme, sendCursor, sendUpdate]);
+	}, [
+		canDraw,
+		excalidrawCssPath,
+		resolvedTheme,
+		session,
+		sendCursor,
+		sendUpdate,
+		useV2,
+	]);
 
 	// Request initial sync
 	useEffect(() => {
 		requestSync();
-		return () => {
-			syncEngineRef.current?.reset();
-		};
 	}, [requestSync]);
 
 	useEffect(() => {
+		if (useV2) return;
 		const interval = setInterval(() => {
 			setCursorTick((prev) => prev + 1);
 		}, 1000);
 		return () => clearInterval(interval);
-	}, []);
+	}, [useV2]);
+
+	useEffect(() => {
+		if (!useV2) return;
+		collabEngineRef.current?.setCanDraw?.(canDraw);
+	}, [canDraw, useV2]);
 
 	// Apply remote updates
 	useEffect(() => {
-		if (!latestUpdate || !syncEngineRef.current || !excalidrawRef.current) {
+		if (!latestUpdate) return;
+		if (useV2) {
+			collabEngineRef.current?.handleRemoteData({
+				sceneId: latestUpdate.sceneId,
+				syncAll: latestUpdate.syncAll,
+				elements: latestUpdate.elements as unknown[],
+			});
 			return;
 		}
+
+		if (!syncEngineRef.current || !excalidrawRef.current) return;
 
 		const merged = syncEngineRef.current.applyRemoteUpdate(elementsRef.current, {
 			elements: latestUpdate.elements as ExcalidrawElement[],
@@ -368,13 +468,20 @@ function WhiteboardPanelBase({
 			elements: merged,
 			files: filesRef.current,
 		});
-	}, [latestUpdate]);
+	}, [latestUpdate, useV2]);
 
 	// Apply snapshot (full state)
 	useEffect(() => {
-		if (!latestSnapshot || !excalidrawRef.current) {
+		if (!latestSnapshot) return;
+		if (useV2) {
+			collabEngineRef.current?.handleRemoteSnapshot({
+				sceneId: latestSnapshot.sceneId,
+				elements: latestSnapshot.elements as unknown[],
+			});
 			return;
 		}
+
+		if (!excalidrawRef.current) return;
 
 		elementsRef.current = latestSnapshot.elements as ExcalidrawElement[];
 		filesRef.current = latestSnapshot.files ?? {};
@@ -387,9 +494,23 @@ function WhiteboardPanelBase({
 			files: latestSnapshot.files,
 			appState: latestSnapshot.appState,
 		});
-	}, [latestSnapshot]);
+	}, [latestSnapshot, useV2]);
 
 	useEffect(() => {
+		if (useV2) {
+			return session.whiteboard.on("cursor", (cursor) => {
+				collabEngineRef.current?.handleRemoteCursor({
+					participantId: cursor.participantId,
+					displayName: cursor.displayName,
+					x: cursor.x,
+					y: cursor.y,
+					timestamp: cursor.timestamp instanceof Date
+						? cursor.timestamp
+						: new Date(cursor.timestamp as unknown as string),
+				});
+			});
+		}
+
 		if (!excalidrawRef.current) {
 			return;
 		}
@@ -421,7 +542,7 @@ function WhiteboardPanelBase({
 		}
 
 		excalidrawRef.current.updateScene({ collaborators });
-	}, [cursors, cursorTick]);
+	}, [cursors, cursorTick, session, useV2]);
 
 	// UI styling based on canvas background
 	const isDarkTheme = resolvedTheme === "dark";

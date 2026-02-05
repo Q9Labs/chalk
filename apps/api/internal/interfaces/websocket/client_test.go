@@ -110,6 +110,25 @@ func TestClient_Send_DoesNotBlockWhenBufferFull(t *testing.T) {
 	}
 }
 
+func TestClient_SendReliable_ClosesOnFullBuffer(t *testing.T) {
+	hub := newTestHub()
+	client := NewClient(nil, hub, uuid.New(), uuid.New(), uuid.New())
+
+	// Fill send buffer.
+	for i := 0; i < cap(client.send); i++ {
+		client.send <- []byte("message")
+	}
+
+	client.SendReliable([]byte("extra"))
+
+	select {
+	case <-client.done:
+		// ok
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected client to close on backpressure")
+	}
+}
+
 func TestClient_Wait_AfterClose(t *testing.T) {
 	hub := newTestHub()
 	client := NewClient(nil, hub, uuid.New(), uuid.New(), uuid.New())

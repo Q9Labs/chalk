@@ -7,7 +7,7 @@
 
 import { Effect, ManagedRuntime } from "effect";
 import { ChalkClient } from "../client";
-import { ChalkError } from "../errors/chalk-error";
+import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import { ChatManager } from "../managers/chat-manager";
 import { InteractionManager } from "../managers/interaction-manager";
 import { RecordingManager } from "../managers/recording-manager";
@@ -49,6 +49,8 @@ export interface ChalkSessionConfig {
 	debug?: boolean;
 	/** Use demo API endpoints (demoJoin instead of addParticipant) */
 	demoMode?: boolean;
+	/** Enable Excalidraw-native whiteboard sync (v2) */
+	whiteboardSyncV2?: boolean;
 }
 
 /** ChalkSession events */
@@ -112,6 +114,8 @@ type MediaManagerEvents = {
 };
 
 export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
+	/** Whiteboard sync v2 toggle */
+	readonly whiteboardSyncV2: boolean;
 	/** Room API object with state and events */
 	readonly room: {
 		readonly getState: () => RoomState;
@@ -200,6 +204,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	constructor(config: ChalkSessionConfig) {
 		super();
 		const debug = config.debug ?? false;
+		this.whiteboardSyncV2 = config.whiteboardSyncV2 ?? true;
 
 		// Initialize ChalkClient for API/WebRTC
 		this.client = new ChalkClient({
@@ -845,6 +850,47 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	unmuteParticipant(participantId: string): void {
 		const room = this.room.getRoom();
 		room?.unmuteParticipant(participantId);
+	}
+
+	async whiteboardPresignUpload(
+		fileId: string,
+		mimeType: string,
+	): Promise<{ uploadUrl: string; expiresAtMs: number }> {
+		const roomId = this.room.getState().roomId;
+		if (!roomId) {
+			throw new ChalkError(
+				ChalkErrorCode.NOT_IN_ROOM,
+				"Not connected to a room",
+			);
+		}
+
+		try {
+			return await this.client.presignWhiteboardUpload(roomId, fileId, mimeType);
+		} catch (err) {
+			const error = ChalkError.wrap(err);
+			this.emit("error", error);
+			throw error;
+		}
+	}
+
+	async whiteboardPresignDownload(
+		fileId: string,
+	): Promise<{ downloadUrl: string; expiresAtMs: number }> {
+		const roomId = this.room.getState().roomId;
+		if (!roomId) {
+			throw new ChalkError(
+				ChalkErrorCode.NOT_IN_ROOM,
+				"Not connected to a room",
+			);
+		}
+
+		try {
+			return await this.client.presignWhiteboardDownload(roomId, fileId);
+		} catch (err) {
+			const error = ChalkError.wrap(err);
+			this.emit("error", error);
+			throw error;
+		}
 	}
 
 	/** Get current connection status */

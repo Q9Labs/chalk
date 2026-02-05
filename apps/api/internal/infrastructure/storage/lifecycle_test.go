@@ -58,6 +58,10 @@ func (m *MockR2Client) GetPresignedURL(ctx context.Context, key string, expiry t
 	return fmt.Sprintf("https://mock.storage/%s?expires=%d", key, expiry.Milliseconds()), nil
 }
 
+func (m *MockR2Client) GetPresignedUploadURL(ctx context.Context, key string, contentType string, expiry time.Duration) (string, error) {
+	return fmt.Sprintf("https://mock.storage/%s?upload=1&content_type=%s&expires=%d", key, contentType, expiry.Milliseconds()), nil
+}
+
 func (m *MockR2Client) Delete(ctx context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

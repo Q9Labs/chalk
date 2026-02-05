@@ -96,6 +96,7 @@ func TestHubBroadcastToRoom(t *testing.T) {
 
 	// Create mock clients with send channels
 	client1 := &Client{
+		hub:           hub,
 		participantID: uuid.New(),
 		roomID:        roomID,
 		send:          make(chan []byte, 10),
@@ -103,6 +104,7 @@ func TestHubBroadcastToRoom(t *testing.T) {
 	}
 
 	client2 := &Client{
+		hub:           hub,
 		participantID: uuid.New(),
 		roomID:        roomID,
 		send:          make(chan []byte, 10),
@@ -138,6 +140,7 @@ func TestHubBroadcastToRoomExclude(t *testing.T) {
 	excludeID := uuid.New()
 
 	client1 := &Client{
+		hub:           hub,
 		participantID: excludeID,
 		roomID:        roomID,
 		send:          make(chan []byte, 10),
@@ -145,6 +148,7 @@ func TestHubBroadcastToRoomExclude(t *testing.T) {
 	}
 
 	client2 := &Client{
+		hub:           hub,
 		participantID: uuid.New(),
 		roomID:        roomID,
 		send:          make(chan []byte, 10),
@@ -187,6 +191,7 @@ func TestHubSendToParticipant(t *testing.T) {
 
 	participantID := uuid.New()
 	client := &Client{
+		hub:           hub,
 		participantID: participantID,
 		roomID:        uuid.New(),
 		send:          make(chan []byte, 10),
@@ -213,6 +218,7 @@ func TestHubClose(t *testing.T) {
 	hub := NewHub(mockRedis, nil)
 
 	client := &Client{
+		hub:           hub,
 		participantID: uuid.New(),
 		roomID:        uuid.New(),
 		send:          make(chan []byte, 10),

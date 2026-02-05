@@ -73,7 +73,7 @@ export const toWhiteboardSnapshot = (payload: WhiteboardSnapshotPayload) => ({
 	...payload,
 	elements: payload.elements as unknown[],
 	files: payload.files as Record<string, unknown>,
-	appState: payload.appState as Record<string, unknown>,
+	appState: payload.appState,
 });
 
 export const toWhiteboardCursor = (payload: WhiteboardCursorPayload) => ({

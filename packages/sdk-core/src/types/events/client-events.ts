@@ -7,6 +7,7 @@
  * @packageDocumentation
  * @module @q9labs/chalk-core/types
  */
+import type { AppState } from "@q9labs/chalk-whiteboard";
 
 // ============================================================================
 // Payload Types (matching Go structs in messages.go)
@@ -34,9 +35,15 @@ export interface PongPayload {
 
 /** Send whiteboard update */
 export interface WhiteboardUpdatePayload {
+	/** Wire schema version (v2 = 2) */
+	schemaVersion?: 2;
+	/** Scene epoch; changes on clear */
+	sceneId?: string;
+	/** Whether this update represents a full-scene sync */
+	syncAll?: boolean;
 	elements: unknown[];
 	files?: Record<string, unknown>;
-	appState?: Record<string, unknown>;
+	appState?: Partial<AppState>;
 	seq: number;
 }
 

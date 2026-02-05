@@ -135,6 +135,9 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
 		this.room.on("whiteboard-update", (data) => {
 			const update: WhiteboardUpdate = {
+				schemaVersion: data.schemaVersion,
+				sceneId: data.sceneId,
+				syncAll: data.syncAll,
 				participantId: data.participantId,
 				displayName: data.displayName,
 				elements: data.elements,
@@ -142,6 +145,13 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 				seq: data.seq,
 				timestamp: new Date(),
 			};
+
+			if (data.schemaVersion === 2) {
+				const currentState = this.getState();
+				this.setState({ lastSeq: Math.max(currentState.lastSeq, data.seq) });
+				this.events.emit("update", update);
+				return;
+			}
 
 			// Only apply if sequence is newer
 			const lastSeq = this.lastSeqByParticipant.get(data.participantId) ?? 0;
@@ -167,10 +177,13 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
 		this.room.on("whiteboard-snapshot", (data) => {
 			const snapshot: WhiteboardSnapshot = {
+				schemaVersion: data.schemaVersion,
 				roomId: data.roomId,
+				sceneId: data.sceneId,
 				elements: data.elements,
 				files: data.files,
 				appState: data.appState,
+				updatedAtMs: data.updatedAtMs,
 				lastSeq: data.lastSeq,
 			};
 
@@ -222,18 +235,6 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 				participantId: data.participantId,
 				displayName: data.displayName,
 			});
-
-			// If we have whiteboard open with elements, send full state to help new joiner sync
-			const state = this.getState();
-			if (state.isOpen && state.elements.length > 0) {
-				const seq = Date.now();
-				this.room?.sendWhiteboardUpdate(
-					state.elements as unknown[],
-					state.files as Record<string, unknown>,
-					seq,
-				);
-				this.setState({ lastSeq: seq });
-			}
 		});
 
 		this.room.on("whiteboard-closed", (data) => {

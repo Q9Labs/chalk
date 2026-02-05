@@ -40,6 +40,24 @@ export class WSClient extends WSClientBase {
 		});
 	}
 
+	sendWhiteboardUpdateV2(payload: {
+		sceneId: string;
+		syncAll: boolean;
+		elements: unknown[];
+		seq?: number;
+	}): void {
+		this.send({
+			type: "whiteboard.update",
+			payload: {
+				schemaVersion: 2,
+				sceneId: payload.sceneId,
+				syncAll: payload.syncAll,
+				elements: payload.elements,
+				seq: payload.seq ?? this.now(),
+			},
+		});
+	}
+
 	sendWhiteboardCursor(x: number, y: number): void {
 		this.send({ type: "whiteboard.cursor", payload: { x, y } });
 	}

@@ -1,6 +1,5 @@
-// Simplified Excalidraw types for our whiteboard sync
-// Full types are complex and have module resolution issues
-// We only need the essential properties for sync
+// Excalidraw types used by our whiteboard sync
+import type { AppState as ExcalidrawAppState } from "@excalidraw/excalidraw/types/types";
 
 export interface ExcalidrawElement {
 	id: string;
@@ -10,12 +9,7 @@ export interface ExcalidrawElement {
 	[key: string]: unknown;
 }
 
-export interface AppState {
-	viewBackgroundColor?: string;
-	theme?: "light" | "dark";
-	// Other properties are passed through as-is
-	[key: string]: unknown;
-}
+export type AppState = ExcalidrawAppState;
 
 export type BinaryFiles = Record<string, BinaryFileData>;
 

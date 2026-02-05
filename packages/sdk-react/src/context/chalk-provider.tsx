@@ -53,6 +53,8 @@ export interface ChalkProviderProps {
 	debug?: boolean;
 	/** Use demo API endpoints (demoJoin instead of addParticipant) */
 	demoMode?: boolean;
+	/** Enable Excalidraw-native whiteboard sync (v2) */
+	whiteboardSyncV2?: boolean;
 }
 
 /** Context value providing access to ChalkSession */
@@ -104,6 +106,7 @@ export function ChalkProvider({
 	userName,
 	debug,
 	demoMode,
+	whiteboardSyncV2,
 }: ChalkProviderProps): JSX.Element {
 	const [isConnected, setIsConnected] = useState(false);
 	const [rtkMeeting, setRtkMeeting] = useState<RealtimeKitClient | null>(null);
@@ -126,6 +129,7 @@ export function ChalkProvider({
 			apiKey,
 			debug,
 			demoMode,
+			whiteboardSyncV2,
 		};
 		const newSession = new ChalkSession(config);
 		sessionCache.set(cacheKey, newSession);

@@ -4,6 +4,7 @@
  */
 
 import type RealtimeKitClient from "@cloudflare/realtimekit";
+import type { AppState } from "@q9labs/chalk-whiteboard";
 import { EventEmitter } from "./events.ts";
 import type {
   ChalkError,
@@ -59,6 +60,9 @@ interface RoomEvents {
   transcript: Transcript;
   error: ChalkError;
   "whiteboard-update": {
+    schemaVersion?: number;
+    sceneId?: string;
+    syncAll?: boolean;
     participantId: string;
     displayName: string;
     elements: unknown[];
@@ -66,10 +70,13 @@ interface RoomEvents {
     seq: number;
   };
   "whiteboard-snapshot": {
+    schemaVersion?: number;
     roomId: string;
+    sceneId?: string;
     elements: unknown[];
     files: Record<string, unknown>;
-    appState: Record<string, unknown>;
+    appState: AppState;
+    updatedAtMs?: number;
     lastSeq: number;
   };
   "whiteboard-cursor": {
@@ -405,6 +412,9 @@ export class Room extends EventEmitter<RoomEvents> {
     // Whiteboard events
     this.wsClient.on("whiteboard.data", (data) => {
       this.emit("whiteboard-update", {
+        schemaVersion: data.schemaVersion,
+        sceneId: data.sceneId,
+        syncAll: data.syncAll,
         participantId: data.participantId,
         displayName: data.displayName,
         elements: data.elements,
@@ -1562,6 +1572,15 @@ export class Room extends EventEmitter<RoomEvents> {
     seq?: number,
   ): void {
     this.wsClient?.sendWhiteboardUpdate(elements, files, seq);
+  }
+
+  sendWhiteboardUpdateV2(payload: {
+    sceneId: string;
+    syncAll: boolean;
+    elements: unknown[];
+    seq?: number;
+  }): void {
+    this.wsClient?.sendWhiteboardUpdateV2(payload);
   }
 
   /**

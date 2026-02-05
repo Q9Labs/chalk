@@ -469,6 +469,55 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     }
   }
 
+  async presignWhiteboardUpload(
+    roomId: string,
+    fileId: string,
+    mimeType: string,
+  ): Promise<{ uploadUrl: string; expiresAtMs: number }> {
+    const ctx = wideEvents.start("whiteboard.presign_upload");
+    ctx.set("input", { roomId, fileId, mimeType });
+
+    try {
+      const response = await this.apiClient.presignWhiteboardUpload(
+        roomId,
+        fileId,
+        mimeType,
+      );
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error?.message ?? "Failed to presign upload");
+      }
+
+      ctx.complete("success");
+      return response.data;
+    } catch (error) {
+      ctx.complete("error", error);
+      throw error;
+    }
+  }
+
+  async presignWhiteboardDownload(
+    roomId: string,
+    fileId: string,
+  ): Promise<{ downloadUrl: string; expiresAtMs: number }> {
+    const ctx = wideEvents.start("whiteboard.presign_download");
+    ctx.set("input", { roomId, fileId });
+
+    try {
+      const response = await this.apiClient.presignWhiteboardDownload(roomId, fileId);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error?.message ?? "Failed to presign download");
+      }
+
+      ctx.complete("success");
+      return response.data;
+    } catch (error) {
+      ctx.complete("error", error);
+      throw error;
+    }
+  }
+
   /**
    * Get the current room
    */

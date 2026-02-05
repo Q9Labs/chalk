@@ -21,20 +21,24 @@
 		"./react": {
 			"import": "./dist/react/index.js",
 			"types": "./dist/react/index.d.ts"
+		},
+		"./collab": {
+			"import": "./dist/collab/index.js",
+			"types": "./dist/collab/index.d.ts"
 		}
 	},
 	"files": ["dist"],
 	"scripts": {
-		"build": "bun build ./src/index.ts ./src/react/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && bun run build:types",
+		"build": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && bun run build:types",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-		"dev": "bun build ./src/index.ts ./src/react/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
+		"dev": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
 		"test": "echo 'No tests configured yet'",
 		"check-types": "tsc --noEmit",
 		"lint": "echo 'No linter configured yet'",
 		"clean": "rm -rf dist"
 	},
 	"dependencies": {
-		"@excalidraw/excalidraw": "^0.17.0"
+		"@excalidraw/excalidraw": "^0.18.0"
 	},
 	"peerDependencies": {
 		"react": "^18.0.0 || ^19.0.0",

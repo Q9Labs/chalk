@@ -8,6 +8,7 @@
  */
 
 import { Schema } from "@effect/schema";
+import { AppStatePartialSchema } from "./whiteboard";
 
 /**
  * chat.send payload
@@ -37,12 +38,25 @@ export type ParticipantControlPayload = Schema.Schema.Type<typeof ParticipantCon
 /**
  * whiteboard.update payload
  */
-export const WhiteboardUpdatePayload = Schema.Struct({
+export const WhiteboardUpdateV1Payload = Schema.Struct({
   elements: Schema.Array(Schema.Unknown),
   files: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
-  appState: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
+  appState: Schema.optional(AppStatePartialSchema),
   seq: Schema.Number,
 });
+
+export const WhiteboardUpdateV2Payload = Schema.Struct({
+  schemaVersion: Schema.Literal(2),
+  sceneId: Schema.String,
+  syncAll: Schema.Boolean,
+  elements: Schema.Array(Schema.Unknown),
+  seq: Schema.Number,
+});
+
+export const WhiteboardUpdatePayload = Schema.Union(
+  WhiteboardUpdateV1Payload,
+  WhiteboardUpdateV2Payload,
+);
 export type WhiteboardUpdatePayload = Schema.Schema.Type<typeof WhiteboardUpdatePayload>;
 
 /**
@@ -103,4 +117,3 @@ export const WSOutboundPayloadSchemas = {
 } as const;
 
 export type WSOutboundMessageType = keyof typeof WSOutboundPayloadSchemas;
-

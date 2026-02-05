@@ -7,6 +7,9 @@
 
 // WebSocket event schemas
 export {
+  // Whiteboard app state
+  AppStateSchema,
+  AppStatePartialSchema,
   // Message envelope
   WSMessage,
   type WSMessage as WSMessageType,
@@ -46,6 +49,9 @@ export {
   WSPayloadSchemas,
   type WSMessageType as WSMessageTypeName,
 } from "./ws-events";
+
+// WSClient emitted event schemas
+export { WSEventSchemas } from "./ws-emitted";
 
 // WebSocket outbound schemas
 export {
