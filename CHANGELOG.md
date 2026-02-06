@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.54] - 2026-02-06
+
+### Added
+
 - **Docs: Excalidraw sync notes** — add deep-dive sync reference notes for upcoming whiteboard work.
 - **Whiteboard: Sync v2 (Excalidraw-native)** — new collab engine using Excalidraw primitives (`restoreElements`/`reconcileElements`), pointer-up flush, periodic full-scene heal, and cursor presence forwarding.
 - **API: Whiteboard file presign** — add R2 presigned upload/download endpoints for image sync (no WS data URLs).
