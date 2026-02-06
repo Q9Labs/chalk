@@ -17,9 +17,14 @@ git tag -l 'v*' | sort -V | tail -1
 
 ---
 
-## Phase 2: Analyze, Present, and Ask
+## Phase 2: Analyze (No-Ask Default)
 
-**Show the user your analysis, then ask in one interaction:**
+**Default behavior (autonomous):**
+- Version bump: **patch** (ex: `v0.0.53` -> `v0.0.54`)
+- Codename: **auto-pick** (Latin-esque)
+- Image: **skip** (no `imageKey`)
+
+**Only ask** if the user explicitly requests a different bump (major/minor) or wants an image key.
 
 1. **Categorize changes** (show as table):
 
@@ -43,9 +48,9 @@ git tag -l 'v*' | sort -V | tail -1
 | New feature     | Minor |
 | Bug fix only    | Patch |
 
-3. **Generate 3 codename options** — Latin-esque (e.g., "Nexus Primus", "Lumina Invicta")
+3. **Generate codename** — Latin-esque (e.g., "Nexus Primus", "Lumina Invicta")
 
-4. **Generate image prompt** (show to user):
+4. **Generate image prompt** (only if user wants an image):
 
 > Abstract minimalist illustration for video conferencing software release.  
 > Soft gradients in [PALETTE]. Flowing organic shapes with subtle geometric elements.  
@@ -61,12 +66,7 @@ git tag -l 'v*' | sort -V | tail -1
 | Performance         | lime, mint, emerald   |
 | UI, Design          | teal, purple, cyan    |
 
-5. **AskUserQuestion** (after showing above):
-   - Version: confirm or override
-   - Codename: pick from 3
-   - Image key: "Skip" or "Provide key" (user pastes in Other field)
-
-R2 upload command (show before asking):
+R2 upload command (only if user wants an image):
 ```bash
 aws s3 cp hero.png s3://chalk-recordings/whats-new/vX.X.X/hero.png \
   --endpoint-url https://5281943bd26d5bdcf4c3915606cd6bfb.r2.cloudflarestorage.com
