@@ -3,24 +3,25 @@
 <!-- whats-new -->
 ## Features
 
-- **Participant volume controls** — Dragging the slider now changes volume immediately, and the mute icon sets volume to zero.
+- **New whiteboard sync engine** — Whiteboards now stay in sync more reliably during fast drawing and multi-person edits.
+- **Whiteboard image uploads** — Upload and share images on the whiteboard via secure, direct-to-storage transfers.
 
 ## Improvements
 
-- **Recording reliability** — Recordings now wait until they are ready before download and stop automatically when rooms end.
-- **Webhook processing stability** — Recording uploads continue even if a request times out, so deliveries complete more consistently.
-- **Screen share on iPadOS/Safari** — Sharing is more reliable on Apple tablets and Safari-based browsers.
+- **More stable whiteboard sessions** — Better handling for backpressure and recovery keeps sessions responsive when activity spikes.
+- **Cleaner production logging** — Production services run with less noisy logs, making issues easier to spot.
 
 ## Bug Fixes
 
-- Silent or near‑silent recordings no longer fail transcription.
-- Webhooks now accept camelCase fields, preventing missing download links.
-- Whiteboard no longer breaks in production due to duplicate React instances.
+- Fixed an issue where multilingual speech could be missed later in a recording.
+- Fixed occasional worker crashes during temporary file cleanup.
+- Reduced transcription worker timeouts when Redis is slow or transiently unavailable.
+- Prevented analytics logging from spamming errors when the dataset is misconfigured.
 <!-- /whats-new -->
 
 ## Technical Notes
 
-- CI/CD migrated to Depot runners with cached builds and full‑SHA image tags.
-- Added startup warnings and stricter R2 credential requirements in production.
-- Added WebSocket backpressure metrics and CloudWatch alarms for drops/errors.
-- Externalized Excalidraw from sdk-react builds to reduce bundle size.
+- Whiteboard v2 sync: Excalidraw-native reconcile/restore, snapshot healing, cursor presence forwarding.
+- sdk-core: schema-first WS client refactor; runtime payload validation; event rename `room-sync` -> `room.sync`.
+- API: whiteboard websocket hub backpressure; R2 presign endpoints; Axiom ingest guardrails.
+- CI: move workflows back to GitHub-hosted runners + Buildx when Depot is unavailable.
