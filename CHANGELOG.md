@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-React: Participant volume slider drag** — fix per-participant volume slider to be continuously adjustable (single-value slider now uses `value={number}` instead of range-mode array).
+
 ## [0.0.55] - 2026-02-06
 
 ### Added

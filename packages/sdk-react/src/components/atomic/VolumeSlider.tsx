@@ -24,8 +24,10 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
   orientation = 'horizontal',
   className,
 }) => {
-  const handleValueChange = (newValue: number[]) => {
-    const val = newValue[0];
+  // Base UI Slider uses a `number` for single-value sliders and `number[]` for range sliders.
+  // We only render a single thumb; treat any array as "use the first thumb".
+  const handleValueChange = (newValue: number | readonly number[]) => {
+    const val = Array.isArray(newValue) ? newValue[0] : newValue;
     if (val !== undefined) onChange(val);
   };
 
@@ -61,7 +63,7 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
       </button>
 
       <Slider.Root
-        value={[sliderValue]}
+        value={sliderValue}
         onValueChange={handleValueChange}
         min={0}
         max={100}
