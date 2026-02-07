@@ -74,7 +74,9 @@ describe('ParticipantList', () => {
       />
     );
 
-    await user.click(getByLabelText('Mute'));
+    // Volume control should be accessible even when canManageParticipants=false
+    await user.click(getByLabelText('Options for Bob'));
+    await user.click(getByLabelText('Mute volume'));
     expect(onParticipantVolumeChange).toHaveBeenCalledWith('2', 0);
   });
 });

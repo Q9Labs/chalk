@@ -51,9 +51,9 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
           'hover:bg-accent',
           size === 'sm' ? 'p-1' : 'p-1.5',
           muted ? 'text-muted-foreground' : 'text-foreground',
-          !onMuteToggle && 'opacity-50 pointer-events-none'
+        !onMuteToggle && 'opacity-50 pointer-events-none'
         )}
-        aria-label={muted ? 'Unmute' : 'Mute'}
+        aria-label={muted ? 'Unmute volume' : 'Mute volume'}
       >
         {muted || value === 0 ? (
           <VolumeMute01Icon size={size === 'sm' ? 14 : 18} />
@@ -106,7 +106,7 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({
 
       {showValue && (
         <span className="text-xs text-muted-foreground min-w-[2rem] text-center">
-          {Math.round(value)}%
+          {Math.round(sliderValue)}%
         </span>
       )}
     </div>

@@ -25,7 +25,7 @@ describe('VolumeSlider', () => {
     const { getByLabelText } = render(
       <VolumeSlider value={50} onChange={() => {}} onMuteToggle={onMuteToggle} />
     );
-    fireEvent.click(getByLabelText('Mute'));
+    fireEvent.click(getByLabelText('Mute volume'));
     expect(onMuteToggle).toHaveBeenCalledTimes(1);
   });
 
@@ -36,6 +36,6 @@ describe('VolumeSlider', () => {
 
   it('shows unmute label when muted is true', () => {
     const { getByLabelText } = render(<VolumeSlider value={50} onChange={() => {}} muted />);
-    expect(getByLabelText('Unmute')).toBeDefined();
+    expect(getByLabelText('Unmute volume')).toBeDefined();
   });
 });
