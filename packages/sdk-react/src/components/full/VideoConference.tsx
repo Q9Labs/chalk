@@ -168,6 +168,8 @@ export interface MeetingEndData {
 
 export interface VideoConferenceProps {
 	roomId: string;
+	/** Optional display name for the room (used in lobby + meeting UI). Defaults to roomId. */
+	roomName?: string;
 	userName: string;
 	/** Participant role - host gets recording controls, force_recording triggers */
 	role?: "host" | "participant";
@@ -192,6 +194,7 @@ export interface VideoConferenceProps {
 
 function VideoConferenceBase({
 	roomId,
+	roomName,
 	userName,
 	role,
 	metadata,
@@ -215,6 +218,8 @@ function VideoConferenceBase({
 	const [joinStartTime, setJoinStartTime] = useState<number | null>(null);
 	const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 	const [isExiting, setIsExiting] = useState(false);
+
+	const effectiveRoomName = roomName ?? roomId;
 
 	// Participant history tracking
 	const participantHistoryRef = useRef<Map<string, ParticipantSession>>(new Map());
@@ -663,7 +668,7 @@ function VideoConferenceBase({
 	if (phase === "lobby" || phase === "joining") {
 		return (
 			<PreJoinLobby
-				roomName={roomId}
+				roomName={effectiveRoomName}
 				userName={userName}
 				onJoin={handleJoin}
 				videoTrack={localParticipant?.videoTrack}
@@ -688,7 +693,7 @@ function VideoConferenceBase({
 	if (phase === "end") {
 		return (
 			<EndScreen
-				roomName={roomId}
+				roomName={effectiveRoomName}
 				duration={meetingDuration}
 				participantCount={participantCount}
 				hasRecording={recording.recordingId !== null}
@@ -749,7 +754,7 @@ function VideoConferenceBase({
 	return (
 		<>
 			<MeetingRoom
-				roomName={roomId}
+				roomName={effectiveRoomName}
 				localParticipant={localMeetingParticipant}
 				participants={allParticipants}
 				canManageParticipants={canManageParticipants}

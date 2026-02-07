@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **SDK-React: Participant volume slider drag** — fix per-participant volume slider to be continuously adjustable (single-value slider now uses `value={number}` instead of range-mode array).
+- **SDK-React: VideoConference roomName prop** — add `roomName` prop and thread it through to `PreJoinLobby` + `MeetingRoom` (displayed as the room title instead of `roomId`).
 
 ## [0.0.55] - 2026-02-06
 
