@@ -669,14 +669,16 @@ resource "aws_cloudwatch_dashboard" "main" {
           title  = "Redis Metrics"
           region = data.aws_region.current.name
           metrics = jsondecode(
-            length(var.redis_cache_cluster_ids) > 0 ? jsonencode(flatten([
-              for id in var.redis_cache_cluster_ids : [
-                ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", id, { label = "${id} CPU", yAxis = "left" }],
-                [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "${id} Memory", yAxis = "right" }]
-              ]
-              ])) : var.redis_replication_group_id != null && var.redis_replication_group_id != "" ? jsonencode([
-              ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", var.redis_replication_group_id, { label = "CPU", yAxis = "left" }],
-              [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "Memory", yAxis = "right" }]
+            length(var.redis_cache_cluster_ids) > 0 ? jsonencode(
+              concat([
+                for id in var.redis_cache_cluster_ids : [
+                  ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", id, { label = "${id} CPU", yAxis = "left" }],
+                  [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "${id} Memory", yAxis = "right" }]
+                ]
+              ]...)
+              ) : var.redis_replication_group_id != null && var.redis_replication_group_id != "" ? jsonencode([
+                ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", var.redis_replication_group_id, { label = "CPU", yAxis = "left" }],
+                [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "Memory", yAxis = "right" }]
             ]) : "[]"
           )
           period = 300
