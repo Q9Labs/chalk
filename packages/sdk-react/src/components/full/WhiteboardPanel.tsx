@@ -298,8 +298,8 @@ function WhiteboardPanelBase({
 					// Theme-aware colors: dark theme = dark canvas, light theme = light canvas
 					const isDark = resolvedTheme === "dark";
 					const backgroundColor = isDark ? "#121212" : "#ffffff";
-					// Stroke color: contrasts with canvas (light on dark, dark on light)
-					const strokeColor = isDark ? "#ffffff" : "#1e1e1e";
+					// Default stroke color: blue (readable on both light/dark canvases)
+					const strokeColor = "#4CB9FF";
 
 					return createElement(Excalidraw, {
 						excalidrawAPI: (api: unknown) => {

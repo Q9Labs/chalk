@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React: Participant volume UX** — move per-participant volume controls into the 3-dot options menu so it’s usable on mobile (no hover).
 - **SDK-React: VideoConference roomName prop** — add `roomName` prop and thread it through to `PreJoinLobby` + `MeetingRoom` (displayed as the room title instead of `roomId`).
 - **SDK-React: Pre-join lobby display name** — allow clearing the default "Guest" name without it reappearing.
+- **SDK-React: Layout switcher icon visibility** — increase layout option icon contrast (less washed out on dark background).
+- **SDK-React: Whiteboard default stroke color** — default Excalidraw stroke color is now blue.
 
 ## [0.0.55] - 2026-02-06
 
