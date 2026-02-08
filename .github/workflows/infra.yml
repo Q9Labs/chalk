@@ -43,7 +43,7 @@ env:
   AWS_REGION: us-east-1
   TF_INPUT: 'false'
   TF_IN_AUTOMATION: 'true'
-  TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
 
 permissions:
   id-token: write
@@ -59,12 +59,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create plugin cache dir
-        run: mkdir -p ~/.terraform.d/plugin-cache
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
 
       - name: Cache Terraform providers
         uses: actions/cache@v4
         with:
-          path: ~/.terraform.d/plugin-cache
+          path: /home/runner/.terraform.d/plugin-cache
           key: terraform-${{ runner.os }}-${{ hashFiles('infrastructure/terraform/**/*.tf') }}
           restore-keys: terraform-${{ runner.os }}-
 
@@ -107,12 +107,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create plugin cache dir
-        run: mkdir -p ~/.terraform.d/plugin-cache
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
 
       - name: Cache Terraform providers
         uses: actions/cache@v4
         with:
-          path: ~/.terraform.d/plugin-cache
+          path: /home/runner/.terraform.d/plugin-cache
           key: terraform-${{ runner.os }}-${{ hashFiles('infrastructure/terraform/**/*.tf') }}
           restore-keys: terraform-${{ runner.os }}-
 
@@ -206,12 +206,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create plugin cache dir
-        run: mkdir -p ~/.terraform.d/plugin-cache
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
 
       - name: Cache Terraform providers
         uses: actions/cache@v4
         with:
-          path: ~/.terraform.d/plugin-cache
+          path: /home/runner/.terraform.d/plugin-cache
           key: terraform-${{ runner.os }}-${{ hashFiles('infrastructure/terraform/**/*.tf') }}
           restore-keys: terraform-${{ runner.os }}-
 
@@ -262,12 +262,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create plugin cache dir
-        run: mkdir -p ~/.terraform.d/plugin-cache
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
 
       - name: Cache Terraform providers
         uses: actions/cache@v4
         with:
-          path: ~/.terraform.d/plugin-cache
+          path: /home/runner/.terraform.d/plugin-cache
           key: terraform-${{ runner.os }}-${{ hashFiles('infrastructure/terraform/**/*.tf') }}
           restore-keys: terraform-${{ runner.os }}-
 
@@ -325,12 +325,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create plugin cache dir
-        run: mkdir -p ~/.terraform.d/plugin-cache
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
 
       - name: Cache Terraform providers
         uses: actions/cache@v4
         with:
-          path: ~/.terraform.d/plugin-cache
+          path: /home/runner/.terraform.d/plugin-cache
           key: terraform-${{ runner.os }}-${{ hashFiles('infrastructure/terraform/**/*.tf') }}
           restore-keys: terraform-${{ runner.os }}-
 
