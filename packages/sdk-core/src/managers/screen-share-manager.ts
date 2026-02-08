@@ -17,6 +17,8 @@ export interface ScreenShareState {
 	readonly isActive: boolean;
 	/** Whether screen share is starting */
 	readonly isStarting: boolean;
+	/** Whether the current sharer is the local participant */
+	readonly isLocalSharer: boolean;
 	/** Participant ID who is sharing (null if no one) */
 	readonly sharerParticipantId: string | null;
 	/** Screen share video track */
@@ -46,6 +48,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 		super({
 			isActive: false,
 			isStarting: false,
+			isLocalSharer: false,
 			sharerParticipantId: null,
 			videoTrack: null,
 			audioTrack: null,
@@ -75,6 +78,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 		if (localParticipant?.isScreenSharing) {
 			this.setState({
 				isActive: true,
+				isLocalSharer: true,
 				sharerParticipantId: localParticipant.id,
 				videoTrack: localParticipant.screenShareTrack ?? null,
 				audioTrack: localParticipant.screenShareAudioTrack ?? null,
@@ -87,6 +91,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			if (participant.isScreenSharing) {
 				this.setState({
 					isActive: true,
+					isLocalSharer: false,
 					sharerParticipantId: participant.id,
 					videoTrack: participant.screenShareTrack ?? null,
 					audioTrack: participant.screenShareAudioTrack ?? null,
@@ -108,6 +113,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 				const isLocal = participant.isLocal;
 				this.setState({
 					isActive: true,
+					isLocalSharer: isLocal,
 					sharerParticipantId: participantId,
 					videoTrack: participant.screenShareTrack ?? null,
 					audioTrack: participant.screenShareAudioTrack ?? null,
@@ -117,6 +123,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 				// Stopped sharing
 				this.setState({
 					isActive: false,
+					isLocalSharer: false,
 					sharerParticipantId: null,
 					videoTrack: null,
 					audioTrack: null,
@@ -167,6 +174,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 				this.setState({
 					isActive: true,
 					isStarting: false,
+					isLocalSharer: true,
 					sharerParticipantId: this.room.localParticipant.id,
 					videoTrack: this.room.localParticipant.screenShareTrack ?? null,
 					audioTrack: this.room.localParticipant.screenShareAudioTrack ?? null,
@@ -178,7 +186,16 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			} else {
 				this.setState({ isStarting: false });
 				// Room.startScreenShare returns false on failure (it emits a room error event).
-				// Avoid double-emitting a generic manager error; callers should listen to session/room errors.
+				// Surface a manager-level error so UI hooks can react consistently.
+				if (!this.getState().isActive) {
+					this.events.emit(
+						"error",
+						new ChalkError(
+							ChalkErrorCode.SCREEN_SHARE_FAILED,
+							"Failed to start screen sharing",
+						),
+					);
+				}
 			}
 
 			return result;
@@ -200,10 +217,9 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 		}
 
 		const state = this.getState();
-		const localId = this.room.localParticipant?.id;
-
-		// Can only stop own screen share
-		if (state.sharerParticipantId !== localId) {
+		// Can only stop own screen share. Prefer local/remote marker rather than
+		// comparing ids, since stable participant ids can change during a session.
+		if (!state.isLocalSharer) {
 			return;
 		}
 
@@ -211,23 +227,21 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 
 		this.setState({
 			isActive: false,
+			isLocalSharer: false,
 			sharerParticipantId: null,
 			videoTrack: null,
 			audioTrack: null,
 		});
 
-		if (localId) {
-			this.events.emit("stopped", { participantId: localId });
+		if (state.sharerParticipantId) {
+			this.events.emit("stopped", { participantId: state.sharerParticipantId });
 		}
 	}
 
 	/** Whether local user is the one sharing */
 	get isLocalSharing(): boolean {
 		const state = this.getState();
-		return (
-			state.isActive &&
-			state.sharerParticipantId === this.room?.localParticipant?.id
-		);
+		return state.isActive && state.isLocalSharer;
 	}
 
 	/** Cleanup resources */
