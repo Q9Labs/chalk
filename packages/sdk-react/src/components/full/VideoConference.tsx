@@ -674,7 +674,10 @@ function VideoConferenceBase({
 							: null,
 						userAgent:
 							typeof navigator !== "undefined" ? navigator.userAgent : undefined,
-						url: typeof location !== "undefined" ? location.href : undefined,
+						url:
+							typeof location !== "undefined"
+								? `${location.origin}${location.pathname}`
+								: undefined,
 					};
 
 					try {
