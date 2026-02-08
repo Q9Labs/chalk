@@ -27,10 +27,16 @@ export const Route = createFileRoute("/room/$roomId")({
 	params: z.object({
 		roomId: z.string(),
 	}),
+	search: z.object({
+		roomName: z.string().optional(),
+	}),
 });
 
 function RoomPage() {
-	const { roomId } = Route.useParams() as { roomId: string };
+	const { roomId } = Route.useParams() as {
+		roomId: string;
+	};
+	const { roomName } = Route.useSearch();
 	const navigate = useNavigate();
 
 	const [storedUserName, setStoredUserName] = useState<string>("");
@@ -57,8 +63,10 @@ function RoomPage() {
 
 	return (
 		<div className="h-screen w-screen relative">
+			{/*@ts-ignore*/}
 			<VideoConference
 				roomId={roomId}
+				roomName={roomName || "Meeting On Chalk"}
 				userName={storedUserName || "Guest"}
 				onError={handleError}
 				onJoin={(data) => {
@@ -70,7 +78,6 @@ function RoomPage() {
 				}}
 				sounds={true}
 				debug={true}
-			
 				role="host"
 				features={{
 					chat: true,

@@ -51,3 +51,7 @@ apps/api/server
 # Terraform (handled in infrastructure/.gitignore)
 # *.tfstate
 # .terraform/
+
+
+# Worktrees
+.worktrees/

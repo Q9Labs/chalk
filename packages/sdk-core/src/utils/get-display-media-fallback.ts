@@ -65,10 +65,6 @@ export const withPatchedGetDisplayMedia = async (
 	const withAudio = opts?.withAudio === true;
 
 	const originalFn = md.getDisplayMedia;
-	const originalOwnDescriptor = Object.getOwnPropertyDescriptor(
-		md,
-		"getDisplayMedia",
-	);
 	const callOriginal = (constraints: unknown) =>
 		(originalFn as any).call(md, constraints);
 
@@ -108,32 +104,13 @@ export const withPatchedGetDisplayMedia = async (
 		}
 	};
 
-	// Some browsers expose getDisplayMedia as non-writable; try defineProperty; fail open.
+	// Some browsers expose getDisplayMedia as a non-writable property; fail open.
 	let patched = false;
-	let patchedViaDefineProperty = false;
 	try {
 		md.getDisplayMedia = wrapped;
 		patched = md.getDisplayMedia === wrapped;
 	} catch {
 		patched = false;
-	}
-	if (!patched) {
-		try {
-			// Only possible if configurable, or if it's inherited (no own descriptor).
-			if (originalOwnDescriptor?.configurable === false) {
-				patched = false;
-			} else {
-				Object.defineProperty(md, "getDisplayMedia", {
-					value: wrapped,
-					writable: true,
-					configurable: true,
-				});
-				patched = md.getDisplayMedia === wrapped;
-				patchedViaDefineProperty = patched;
-			}
-		} catch {
-			patched = false;
-		}
 	}
 
 	try {
@@ -141,15 +118,7 @@ export const withPatchedGetDisplayMedia = async (
 	} finally {
 		if (!patched) return;
 		try {
-			if (patchedViaDefineProperty) {
-				if (originalOwnDescriptor) {
-					Object.defineProperty(md, "getDisplayMedia", originalOwnDescriptor);
-				} else {
-					delete md.getDisplayMedia;
-				}
-			} else {
-				md.getDisplayMedia = originalFn;
-			}
+			md.getDisplayMedia = originalFn;
 		} catch {
 			// ignore
 		}

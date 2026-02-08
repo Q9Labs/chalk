@@ -1,11 +1,20 @@
 import type React from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useIsMobile } from "../../hooks/useMediaQuery";
 import { useDraggable } from "../../hooks/ui/useDraggable";
+import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
-import { ColumnIcon, LayoutGridIcon, Maximize01Icon, Moon02Icon, Sun02Icon } from "../../utils/icons";
-import { AudioRenderer, ReactionBubble } from "../atomic";
-import { Tooltip, TooltipTrigger, TooltipContent } from "../ui";
+import {
+	ArrowDown01Icon,
+	ArrowLeft01Icon,
+	ArrowRight01Icon,
+	ArrowUp01Icon,
+	ColumnIcon,
+	LayoutGridIcon,
+	Maximize01Icon,
+	Moon02Icon,
+	Sun02Icon,
+} from "../../utils/icons";
+import { AudioRenderer, ReactionBubble, VideoTile } from "../atomic";
 import {
 	ChatPanel,
 	ConnectionLostOverlay,
@@ -21,7 +30,9 @@ import {
 	TranscriptionPanel,
 	VideoGrid,
 } from "../composite";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui";
 import { GuidedTour } from "./GuidedTour";
+import { SplitStage } from "./SplitStage";
 import { WhiteboardPanel } from "./WhiteboardPanel";
 
 export interface Participant {
@@ -197,6 +208,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	const [layout, setLayout] = useState<"grid" | "spotlight" | "sidebar">(
 		defaultLayout || "grid",
 	);
+	const [isFilmstripOpen, setIsFilmstripOpen] = useState(true);
 	const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
 	const [showInviteModal, setShowInviteModal] = useState(false);
 	const [showInviteToast, setShowInviteToast] = useState(showInviteToastOnJoin);
@@ -206,10 +218,18 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	const leaveTimeoutRef = useRef<number | null>(null);
 	const isMobile = useIsMobile();
 	const [isDarkMode, setIsDarkMode] = useState(() => {
-		if (typeof document !== "undefined" && document.documentElement.classList.contains("dark")) {
+		if (
+			typeof document !== "undefined" &&
+			document.documentElement.classList.contains("dark")
+		) {
 			return true;
 		}
-		return theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+		return (
+			theme === "dark" ||
+			(theme === "system" &&
+				typeof window !== "undefined" &&
+				window.matchMedia("(prefers-color-scheme: dark)").matches)
+		);
 	});
 
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -307,6 +327,12 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 
 	const screenSharer = participants.find((p) => p.isScreenSharing);
 	const showScreenShare = !!screenSharer;
+	const isSplit =
+		!isMobile && enableWhiteboard && isWhiteboardOpen && showScreenShare;
+	const isStageMode =
+		isSplit ||
+		(enableWhiteboard && isWhiteboardOpen) ||
+		(showScreenShare && !!screenSharer?.screenShareTrack);
 
 	const allParticipants = useMemo(() => {
 		// Filter out localParticipant from participants to avoid duplicates
@@ -369,7 +395,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						{/* Active Layout Icon - Always visible */}
 						<div className="flex items-center justify-center rounded-md w-7 h-7 text-white bg-teal-600 cursor-default shadow-sm">
 							{layout === "grid" && <LayoutGridIcon className="w-3.5 h-3.5" />}
-							{layout === "spotlight" && <Maximize01Icon className="w-3.5 h-3.5" />}
+							{layout === "spotlight" && (
+								<Maximize01Icon className="w-3.5 h-3.5" />
+							)}
 							{layout === "sidebar" && <ColumnIcon className="w-3.5 h-3.5" />}
 						</div>
 
@@ -379,21 +407,27 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 							<Tooltip>
 								<TooltipTrigger
 									render={
-											<button
-												type="button"
-												onClick={toggleTheme}
-												className="flex items-center justify-center rounded-md w-7 h-7 text-white/80 hover:text-white hover:bg-white/10 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
-												aria-label={
-													isDarkMode
-														? "Switch to light mode"
-														: "Switch to dark mode"
-												}
+										<button
+											type="button"
+											onClick={toggleTheme}
+											className="flex items-center justify-center rounded-md w-7 h-7 text-white/80 hover:text-white hover:bg-white/10 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+											aria-label={
+												isDarkMode
+													? "Switch to light mode"
+													: "Switch to dark mode"
+											}
 										>
-											{isDarkMode ? <Sun02Icon className="w-3.5 h-3.5" /> : <Moon02Icon className="w-3.5 h-3.5" />}
+											{isDarkMode ? (
+												<Sun02Icon className="w-3.5 h-3.5" />
+											) : (
+												<Moon02Icon className="w-3.5 h-3.5" />
+											)}
 										</button>
 									}
 								/>
-								<TooltipContent side="bottom">{isDarkMode ? "Light Mode" : "Dark Mode"}</TooltipContent>
+								<TooltipContent side="bottom">
+									{isDarkMode ? "Light Mode" : "Dark Mode"}
+								</TooltipContent>
 							</Tooltip>
 
 							<div className="w-px h-4 bg-white/10 mx-1" />
@@ -460,33 +494,138 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				className={cn(
 					"flex-1 min-h-0 relative flex flex-row overflow-hidden",
 					isMobile ? "gap-2 pt-2" : "gap-4 px-4 pt-4",
-					isExiting && "pointer-events-none"
+					isExiting && "pointer-events-none",
 				)}
 			>
 				{/* Stage / Video Grid */}
-				<div className={cn(
-					"flex-1 h-full min-w-0 relative flex flex-col rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]",
-					isExiting && "chalk-animate-void-exit"
-				)}>
-					{enableWhiteboard && isWhiteboardOpen ? (
-						<WhiteboardPanel
-							participants={allParticipants}
-							thumbnailPosition={layout === "sidebar" ? "right" : "bottom"}
-							theme={theme === "system" ? "auto" : theme}
-						/>
-					) : showScreenShare && screenSharer?.screenShareTrack ? (
-						<ScreenShareView
-							screenShareTrack={screenSharer.screenShareTrack}
-							sharedByName={screenSharer.displayName || "Unknown"}
-							participants={allParticipants}
-							thumbnailPosition={layout === "sidebar" ? "right" : "bottom"}
-						/>
+				<div
+					className={cn(
+						"flex-1 h-full min-w-0 relative flex rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]",
+						isStageMode && layout === "sidebar" ? "flex-row" : "flex-col",
+						isExiting && "chalk-animate-void-exit",
+					)}
+				>
+					{isStageMode ? (
+						<>
+							<div className="flex-1 relative min-h-0 min-w-0">
+								{isSplit && screenSharer?.screenShareTrack ? (
+									<SplitStage
+										leftPanel={
+											<ScreenShareView
+												screenShareTrack={screenSharer.screenShareTrack}
+												sharedByName={screenSharer.displayName || "Unknown"}
+												participants={allParticipants}
+												showThumbnails={false}
+											/>
+										}
+										rightPanel={
+											<WhiteboardPanel
+												participants={allParticipants}
+												showThumbnails={false}
+												theme={theme === "system" ? "auto" : theme}
+											/>
+										}
+									/>
+								) : enableWhiteboard && isWhiteboardOpen ? (
+									<WhiteboardPanel
+										participants={allParticipants}
+										showThumbnails={false}
+										theme={theme === "system" ? "auto" : theme}
+									/>
+								) : (
+									<ScreenShareView
+										screenShareTrack={screenSharer?.screenShareTrack!}
+										sharedByName={screenSharer?.displayName || "Unknown"}
+										participants={allParticipants}
+										showThumbnails={false}
+									/>
+								)}
+
+								{/* Stage-wide Collapse Button */}
+								{allParticipants.length > 0 && (
+									<button
+										type="button"
+										onClick={() => setIsFilmstripOpen(!isFilmstripOpen)}
+										className={cn(
+											"absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",
+											layout === "sidebar"
+												? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl"
+												: "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl",
+										)}
+										aria-label={
+											isFilmstripOpen
+												? "Collapse filmstrip"
+												: "Expand filmstrip"
+										}
+									>
+										{layout === "sidebar" ? (
+											isFilmstripOpen ? (
+												<ArrowRight01Icon size={16} />
+											) : (
+												<ArrowLeft01Icon size={16} />
+											)
+										) : isFilmstripOpen ? (
+											<ArrowDown01Icon size={16} />
+										) : (
+											<ArrowUp01Icon size={16} />
+										)}
+									</button>
+								)}
+							</div>
+
+							{/* Unified Filmstrip */}
+							{isFilmstripOpen && allParticipants.length > 0 && (
+								<div
+									className={cn(
+										"flex gap-2 transition-all duration-500 ease-in-out",
+										layout === "sidebar"
+											? "flex-col p-2 w-64 h-full overflow-y-auto border-l border-white/5"
+											: "flex-row items-center p-2 h-40 w-full overflow-x-auto overflow-y-hidden scrollbar-none",
+									)}
+								>
+									{allParticipants.map((p, index) => (
+										<div
+											key={p.id}
+											className={cn(
+												"shrink-0 relative transition-all duration-300 hover:scale-[1.02]",
+												layout === "sidebar"
+													? "aspect-video w-full"
+													: "aspect-video h-full",
+											)}
+										>
+											<VideoTile
+												participant={{
+													id: p.id,
+													displayName: p.displayName,
+													isLocal: p.isLocal,
+													isSpeaking: p.isSpeaking,
+													isMuted: p.isMuted,
+													isVideoEnabled: p.isVideoEnabled,
+													isScreenSharing: p.isScreenSharing,
+													isHandRaised: p.isHandRaised,
+													connectionQuality:
+														p.connectionQuality && p.connectionQuality > 0
+															? (p.connectionQuality as 1 | 2 | 3 | 4)
+															: undefined,
+													avatarUrl: p.avatarUrl,
+												}}
+												videoTrack={p.videoTrack}
+												className="w-full h-full chalk-animate-tile-pop"
+												style={{ animationDelay: `${index * 100}ms` }}
+												showName={true}
+												showStatus={true}
+											/>
+										</div>
+									))}
+								</div>
+							)}
+						</>
 					) : (
 						<VideoGrid
 							participants={allParticipants}
 							layout={layout}
 							variant={isMobile ? "mobile" : "desktop"}
-							className="p-4" // Add internal padding to the grid
+							className="p-4"
 						/>
 					)}
 
@@ -513,7 +652,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 					<div
 						className={cn(
 							"w-[360px] shrink-0 h-full rounded-3xl overflow-hidden flex flex-col bg-card/80 backdrop-blur-xl border border-border/50 shadow-xl transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
-							"animate-in slide-in-from-right-10 fade-in duration-300"
+							"animate-in slide-in-from-right-10 fade-in duration-300",
 						)}
 					>
 						{activePanel === "chat" && (
@@ -686,7 +825,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
 						className={cn(
 							isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2" : "",
-							isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up"
+							isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up",
 						)}
 					/>
 					{enableReactions && !isMobile && (
@@ -712,8 +851,6 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				onRetry={onRetryConnection}
 			/>
 
-
-
 			{enableTour && (
 				<GuidedTour
 					isOpen={showTour}
@@ -738,7 +875,10 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 			/>
 
 			{/* Hidden audio renderer for remote participant audio */}
-			<AudioRenderer participants={allParticipants} getParticipantVolume={getParticipantVolume} />
+			<AudioRenderer
+				participants={allParticipants}
+				getParticipantVolume={getParticipantVolume}
+			/>
 		</div>
 	);
 };

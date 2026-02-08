@@ -8,6 +8,7 @@ export type { MeetingRoomProps } from "./MeetingRoom";
 export { MeetingRoom } from "./MeetingRoom";
 export type { JoinSettings, PreJoinLobbyProps } from "./PreJoinLobby";
 export { PreJoinLobby } from "./PreJoinLobby";
+export { SplitStage } from "./SplitStage";
 export type { VideoConferenceProps } from "./VideoConference";
 export { VideoConference } from "./VideoConference";
 export type { WhiteboardPanelProps } from "./WhiteboardPanel";

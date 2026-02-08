@@ -1,100 +1,101 @@
 {
-  "name": "@q9labs/chalk-react",
-  "version": "0.0.55",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Q9Labs/chalk.git",
-    "directory": "packages/sdk-react"
-  },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "default": "./dist/index.js"
-    },
-    "./styles.css": {
-      "import": "./dist/styles/styles.css",
-      "require": "./dist/styles/styles.css",
-      "default": "./dist/styles/styles.css"
-    },
-    "./src/styles.css": "./src/styles/styles.css",
-    "./styles/*": "./dist/styles/*",
-    "./dist/styles/*": "./dist/styles/*",
-    "./sounds/*": "./dist/assets/sounds/*",
-    "./logos/*": "./dist/assets/logos/*"
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw && bun run build:fix-use-client && bun run build:types && bun run build:styles && bun run build:assets",
-    "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
-    "build:styles": "mkdir -p ./dist/styles && cp ./src/styles/styles.css ./dist/styles/",
-    "build:assets": "mkdir -p ./dist/assets/sounds ./dist/assets/logos && bun run build:copy-sounds && bun run build:copy-logos",
-    "build:copy-sounds": "for f in ./src/assets/sounds/*.mp3; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/sounds/; done",
-    "build:copy-logos": "for f in ./src/assets/logos/*; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/logos/; done",
-    "build:types": "tsc --project tsconfig.json",
-    "dev": "bun run build:styles && bun run build:assets && bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --watch",
-    "test": "bun test ./src/__tests__ --preload ./src/__tests__/setup.ts",
-    "check-types": "tsc --noEmit",
-    "lint": "echo 'No linter configured yet'",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@base-ui/react": "^1.0.0-alpha.11",
-    "@cloudflare/realtimekit": "^1.2.2",
-    "@cloudflare/realtimekit-react": "^1.2.2",
-    "@hugeicons/core-free-icons": "^3.1.0",
-    "@hugeicons/react": "^1.0.16",
-    "@q9labs/chalk-core": "workspace:^",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "react-markdown": "^10.1.0",
-    "sonner": "^2.0.3",
-    "tailwind-merge": "^3.4.0",
-    "tw-animate-css": "^1.3.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.1.18",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.1",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/bun": "latest",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitest/browser-playwright": "^4.0.16",
-    "@vitest/coverage-v8": "^4.0.16",
-    "autoprefixer": "^10.4.23",
-    "happy-dom": "^20.0.11",
-    "jsdom": "^27.4.0",
-    "playwright": "^1.57.0",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.18",
-    "typescript": "^5.7.2",
-    "vitest": "^4.0.16"
-  },
-  "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0",
-    "typescript": "^5",
-    "@q9labs/chalk-whiteboard": "workspace:^",
-    "@excalidraw/excalidraw": "^0.17.0 || ^0.18.0"
-  },
-  "peerDependenciesMeta": {
-    "@q9labs/chalk-whiteboard": {
-      "optional": true
-    },
-    "@excalidraw/excalidraw": {
-      "optional": true
-    }
-  }
+	"name": "@q9labs/chalk-react",
+	"version": "0.0.55",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Q9Labs/chalk.git",
+		"directory": "packages/sdk-react"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com/"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./styles.css": {
+			"import": "./dist/styles/styles.css",
+			"require": "./dist/styles/styles.css",
+			"default": "./dist/styles/styles.css"
+		},
+		"./src/styles.css": "./src/styles/styles.css",
+		"./styles/*": "./dist/styles/*",
+		"./dist/styles/*": "./dist/styles/*",
+		"./sounds/*": "./dist/assets/sounds/*",
+		"./logos/*": "./dist/assets/logos/*"
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw --external react-resizable-panels && bun run build:fix-use-client && bun run build:types && bun run build:styles && bun run build:assets",
+		"build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
+		"build:styles": "mkdir -p ./dist/styles && cp ./src/styles/styles.css ./dist/styles/",
+		"build:assets": "mkdir -p ./dist/assets/sounds ./dist/assets/logos && bun run build:copy-sounds && bun run build:copy-logos",
+		"build:copy-sounds": "for f in ./src/assets/sounds/*.mp3; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/sounds/; done",
+		"build:copy-logos": "for f in ./src/assets/logos/*; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/logos/; done",
+		"build:types": "tsc --project tsconfig.json",
+		"dev": "bun run build:styles && bun run build:assets && bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external react-resizable-panels --watch",
+		"test": "bun test ./src/__tests__ --preload ./src/__tests__/setup.ts",
+		"check-types": "tsc --noEmit",
+		"lint": "echo 'No linter configured yet'",
+		"clean": "rm -rf dist"
+	},
+	"dependencies": {
+		"@base-ui/react": "^1.0.0-alpha.11",
+		"@cloudflare/realtimekit": "^1.2.2",
+		"@cloudflare/realtimekit-react": "^1.2.2",
+		"@hugeicons/core-free-icons": "^3.1.0",
+		"@hugeicons/react": "^1.0.16",
+		"@q9labs/chalk-core": "workspace:^",
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
+		"react-markdown": "^10.1.0",
+		"react-resizable-panels": "^4.6.2",
+		"sonner": "^2.0.3",
+		"tailwind-merge": "^3.4.0",
+		"tw-animate-css": "^1.3.0"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "^4.1.18",
+		"@testing-library/dom": "^10.4.1",
+		"@testing-library/jest-dom": "^6.9.1",
+		"@testing-library/react": "^16.3.1",
+		"@testing-library/user-event": "^14.6.1",
+		"@types/bun": "latest",
+		"@types/react": "^19.0.0",
+		"@types/react-dom": "^19.0.0",
+		"@vitest/browser-playwright": "^4.0.16",
+		"@vitest/coverage-v8": "^4.0.16",
+		"autoprefixer": "^10.4.23",
+		"happy-dom": "^20.0.11",
+		"jsdom": "^27.4.0",
+		"playwright": "^1.57.0",
+		"postcss": "^8.5.6",
+		"tailwindcss": "^4.1.18",
+		"typescript": "^5.7.2",
+		"vitest": "^4.0.16"
+	},
+	"peerDependencies": {
+		"react": "^18.0.0 || ^19.0.0",
+		"react-dom": "^18.0.0 || ^19.0.0",
+		"typescript": "^5",
+		"@q9labs/chalk-whiteboard": "workspace:^",
+		"@excalidraw/excalidraw": "^0.17.0 || ^0.18.0"
+	},
+	"peerDependenciesMeta": {
+		"@q9labs/chalk-whiteboard": {
+			"optional": true
+		},
+		"@excalidraw/excalidraw": {
+			"optional": true
+		}
+	}
 }

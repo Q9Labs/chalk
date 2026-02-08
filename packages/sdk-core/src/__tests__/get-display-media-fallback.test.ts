@@ -111,38 +111,5 @@ describe("withPatchedGetDisplayMedia", () => {
 
 		expect(md.getDisplayMedia).toBe(before);
 	});
-
-	it("patches via defineProperty when getDisplayMedia is non-writable", async () => {
-		const calls: any[] = [];
-		const getDisplayMedia = mock(async (constraints: any) => {
-			calls.push(constraints);
-			return { ok: true };
-		});
-
-		const md = {};
-		Object.defineProperty(md, "getDisplayMedia", {
-			value: getDisplayMedia,
-			writable: false,
-			configurable: true,
-		});
-		setNavigator({ mediaDevices: md });
-
-		await withPatchedGetDisplayMedia(
-			async () => {
-				await (navigator as any).mediaDevices.getDisplayMedia({
-					audio: true,
-					video: true,
-				});
-				return true;
-			},
-			{ withAudio: false },
-		);
-
-		expect(calls.length).toBe(1);
-		expect(calls[0].audio).toBe(false);
-
-		const restored = Object.getOwnPropertyDescriptor(md, "getDisplayMedia");
-		expect(restored?.value).toBe(getDisplayMedia);
-		expect(restored?.writable).toBe(false);
-	});
 });
+

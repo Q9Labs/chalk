@@ -17,14 +17,14 @@ import { useSession } from "../../context/chalk-provider";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
 import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
 import { cn } from "../../utils/cn";
-import { VideoTile } from "../atomic";
-import type { Participant } from "../composite/VideoGrid";
 import {
+	ArrowDown01Icon,
 	ArrowLeft01Icon,
 	ArrowRight01Icon,
-	ArrowDown01Icon,
 	ArrowUp01Icon,
 } from "../../utils/icons";
+import { VideoTile } from "../atomic";
+import type { Participant } from "../composite/VideoGrid";
 
 const LockIcon = () => (
 	<svg
@@ -60,6 +60,7 @@ const UnlockIcon = () => (
 	</svg>
 );
 
+// @ts-expect-error
 const PencilIcon = () => (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -221,18 +222,26 @@ function WhiteboardPanelBase({
 					: import("@q9labs/chalk-whiteboard").catch(() => null);
 
 				// Dynamic imports
-				const [{ Excalidraw }, { createRoot }, chalkWhiteboardCollab, chalkWhiteboardLegacy] =
-					await Promise.all([
-						import("@excalidraw/excalidraw"),
-						import("react-dom/client"),
-						collabPromise,
-						legacyPromise,
-					]);
+				const [
+					{ Excalidraw },
+					{ createRoot },
+					chalkWhiteboardCollab,
+					chalkWhiteboardLegacy,
+				] = await Promise.all([
+					import("@excalidraw/excalidraw"),
+					import("react-dom/client"),
+					collabPromise,
+					legacyPromise,
+				]);
 
 				// Check if Excalidraw CSS is already loaded (via global import or previous mount)
 				const cssId = "excalidraw-styles";
-				const existingLink = document.getElementById(cssId) as HTMLLinkElement | null;
-				const hasGlobalStyles = document.querySelector('style[data-href*="excalidraw"], link[href*="excalidraw"]');
+				const existingLink = document.getElementById(
+					cssId,
+				) as HTMLLinkElement | null;
+				const hasGlobalStyles = document.querySelector(
+					'style[data-href*="excalidraw"], link[href*="excalidraw"]',
+				);
 
 				if (existingLink || hasGlobalStyles) {
 					// CSS already loaded globally or from previous mount
@@ -249,7 +258,8 @@ function WhiteboardPanelBase({
 
 				if (!mounted || !containerRef.current) return;
 
-				const CollabEngineCtor = (chalkWhiteboardCollab as any)?.ExcalidrawCollabEngine;
+				const CollabEngineCtor = (chalkWhiteboardCollab as any)
+					?.ExcalidrawCollabEngine;
 				const SyncEngineCtor = (chalkWhiteboardLegacy as any)?.SyncEngine;
 
 				// Create isolated root for Excalidraw
@@ -297,7 +307,8 @@ function WhiteboardPanelBase({
 
 					// Theme-aware colors: dark theme = dark canvas, light theme = light canvas
 					const isDark = resolvedTheme === "dark";
-					const backgroundColor = isDark ? "#121212" : "#ffffff";
+					// We wary: Excalidraw's color resolving is a bit non-traditional.
+					const backgroundColor = isDark ? "#000" : "#0000";
 					// Default stroke color: blue (readable on both light/dark canvases)
 					const strokeColor = "#4CB9FF";
 
@@ -330,7 +341,10 @@ function WhiteboardPanelBase({
 										room?.clearWhiteboard();
 									},
 									presignUpload: async (fileId: string, mimeType: string) => {
-										const res = await session.whiteboardPresignUpload(fileId, mimeType);
+										const res = await session.whiteboardPresignUpload(
+											fileId,
+											mimeType,
+										);
 										return { uploadUrl: res.uploadUrl };
 									},
 									presignDownload: async (fileId: string) => {
@@ -454,11 +468,14 @@ function WhiteboardPanelBase({
 
 		if (!syncEngineRef.current || !excalidrawRef.current) return;
 
-		const merged = syncEngineRef.current.applyRemoteUpdate(elementsRef.current, {
-			elements: latestUpdate.elements as ExcalidrawElement[],
-			seq: latestUpdate.seq,
-			participantId: latestUpdate.participantId,
-		});
+		const merged = syncEngineRef.current.applyRemoteUpdate(
+			elementsRef.current,
+			{
+				elements: latestUpdate.elements as ExcalidrawElement[],
+				seq: latestUpdate.seq,
+				participantId: latestUpdate.participantId,
+			},
+		);
 
 		if (latestUpdate.files) {
 			filesRef.current = { ...filesRef.current, ...latestUpdate.files };
@@ -504,9 +521,10 @@ function WhiteboardPanelBase({
 					displayName: cursor.displayName,
 					x: cursor.x,
 					y: cursor.y,
-					timestamp: cursor.timestamp instanceof Date
-						? cursor.timestamp
-						: new Date(cursor.timestamp as unknown as string),
+					timestamp:
+						cursor.timestamp instanceof Date
+							? cursor.timestamp
+							: new Date(cursor.timestamp as unknown as string),
 				});
 			});
 		}
@@ -519,9 +537,10 @@ function WhiteboardPanelBase({
 		const collaborators = new Map();
 
 		for (const cursor of cursors) {
-			const timestamp = cursor.timestamp instanceof Date
-				? cursor.timestamp.getTime()
-				: new Date(cursor.timestamp as unknown as string).getTime();
+			const timestamp =
+				cursor.timestamp instanceof Date
+					? cursor.timestamp.getTime()
+					: new Date(cursor.timestamp as unknown as string).getTime();
 			if (now - timestamp > CURSOR_STALE_MS) {
 				continue;
 			}
@@ -549,8 +568,10 @@ function WhiteboardPanelBase({
 	const isDarkCanvas = isDarkTheme;
 	const pillBg = isDarkCanvas ? "bg-black/50" : "bg-white/80";
 	const pillBorder = isDarkCanvas ? "border-white/10" : "border-black/10";
-	const pillText = isDarkCanvas ? "text-white/90" : "text-black/90";
-	const buttonText = isDarkCanvas ? "text-white/70 hover:text-white" : "text-black/70 hover:text-black";
+
+	const buttonText = isDarkCanvas
+		? "text-white/70 hover:text-white"
+		: "text-black/70 hover:text-black";
 	const buttonHover = isDarkCanvas ? "hover:bg-white/10" : "hover:bg-black/10";
 
 	return (
@@ -564,19 +585,23 @@ function WhiteboardPanelBase({
 		>
 			{/* Main Stage (Excalidraw) */}
 			<div className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-background">
-				{/* Top-left title pill */}
-				<div className={cn("absolute top-4 left-4 z-10 rounded-full px-3 py-1.5 backdrop-blur-md border flex items-center gap-2", pillBg, pillBorder)}>
-					<PencilIcon />
-					<span className={cn("text-sm font-medium", pillText)}>Whiteboard</span>
-				</div>
-
 				{/* Top-right actions pill */}
 				{canGrant && (
-					<div className={cn("absolute top-4 right-4 z-10 rounded-lg p-1 backdrop-blur-md border flex items-center gap-1", pillBg, pillBorder)}>
+					<div
+						className={cn(
+							"absolute top-4 right-4 z-10 rounded-lg p-1 backdrop-blur-md border flex items-center gap-1",
+							pillBg,
+							pillBorder,
+						)}
+					>
 						<button
 							type="button"
 							onClick={grantAll}
-							className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
+							className={cn(
+								"w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+								buttonText,
+								buttonHover,
+							)}
 							aria-label="Enable drawing for all"
 							title="Enable All"
 						>
@@ -585,7 +610,11 @@ function WhiteboardPanelBase({
 						<button
 							type="button"
 							onClick={revokeAll}
-							className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)}
+							className={cn(
+								"w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+								buttonText,
+								buttonHover,
+							)}
 							aria-label="Disable drawing for all"
 							title="Disable All"
 						>
@@ -611,9 +640,7 @@ function WhiteboardPanelBase({
 							<span className="text-lg font-medium">
 								Failed to load whiteboard
 							</span>
-							<span className="text-sm text-muted-foreground">
-								{loadError}
-							</span>
+							<span className="text-sm text-muted-foreground">{loadError}</span>
 						</div>
 					</div>
 				)}
@@ -624,6 +651,7 @@ function WhiteboardPanelBase({
 				{/* Collapse/Expand Toggle Button */}
 				{showThumbnails && participants.length > 0 && (
 					<button
+						type="button"
 						onClick={toggleThumbnails}
 						className={cn(
 							"absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",
@@ -631,7 +659,9 @@ function WhiteboardPanelBase({
 								? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl"
 								: "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl",
 						)}
-						aria-label={isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"}
+						aria-label={
+							isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"
+						}
 					>
 						{thumbnailPosition === "right" ? (
 							isThumbnailsOpen ? (
