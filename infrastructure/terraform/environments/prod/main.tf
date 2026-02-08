@@ -176,7 +176,7 @@ module "aurora" {
   database_name  = "chalk"
 
   min_capacity   = 0.5 # Downsized from 2 ACU ($350→$44/mo)
-  max_capacity   = 2   # Downsized from 16 ACU (still auto-scales if needed)
+  max_capacity   = 8   # Increased for headroom (Serverless v2 was frequently at 2 ACU ceiling)
   instance_count = 1   # Downsized from 2 (no HA for 200 MAU)
 
   backup_retention_period = 7     # Reduced from 14
@@ -342,7 +342,9 @@ module "monitoring" {
 
   aurora_cluster_id          = module.aurora.cluster_identifier
   aurora_max_connections     = 100 # Reduced from 500 (0.5 ACU has fewer connections)
+  aurora_max_capacity_acu    = 8
   redis_replication_group_id = module.elasticache.replication_group_id
+  redis_cache_cluster_ids    = module.elasticache.member_cache_cluster_ids
   api_gateway_id             = module.api_gateway.http_api_id
 
   alert_emails = var.alert_emails

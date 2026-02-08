@@ -184,6 +184,29 @@ resource "aws_iam_role_policy" "whisper_logs" {
   })
 }
 
+resource "aws_iam_role_policy" "whisper_metrics" {
+  name = "${local.name}-metrics"
+  role = aws_iam_role.whisper.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "Chalk/Whisper"
+          }
+        }
+      }
+    ]
+  })
+}
+
 # SSM for remote management
 resource "aws_iam_role_policy_attachment" "whisper_ssm" {
   role       = aws_iam_role.whisper.name
@@ -421,8 +444,13 @@ resource "aws_cloudwatch_metric_alarm" "queue_depth_high" {
   period              = 60
   statistic           = "Average"
   threshold           = var.scale_up_threshold
+  treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_autoscaling_policy.scale_up[0].arn]
+
+  dimensions = {
+    Environment = var.environment
+  }
 
   tags = local.tags
 }
@@ -438,8 +466,13 @@ resource "aws_cloudwatch_metric_alarm" "queue_depth_low" {
   period              = 60
   statistic           = "Average"
   threshold           = var.scale_down_threshold
+  treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_autoscaling_policy.scale_down[0].arn]
+
+  dimensions = {
+    Environment = var.environment
+  }
 
   tags = local.tags
 }

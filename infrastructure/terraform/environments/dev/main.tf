@@ -169,7 +169,9 @@ module "monitoring" {
   alb_target_group_arn_suffix = element(split("targetgroup/", module.ecs.target_group_arn), 1)
 
   aurora_cluster_id          = module.aurora.cluster_identifier
+  aurora_max_capacity_acu    = 2
   redis_replication_group_id = module.elasticache.replication_group_id
+  redis_cache_cluster_ids    = module.elasticache.member_cache_cluster_ids
   api_gateway_id             = module.api_gateway.http_api_id
 
   alert_emails = var.alert_emails

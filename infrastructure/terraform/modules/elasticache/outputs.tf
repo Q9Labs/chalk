@@ -3,6 +3,11 @@ output "replication_group_id" {
   value       = aws_elasticache_replication_group.redis.id
 }
 
+output "member_cache_cluster_ids" {
+  description = "Redis member cache cluster IDs (for per-node CloudWatch metrics)"
+  value       = aws_elasticache_replication_group.redis.member_clusters
+}
+
 output "replication_group_arn" {
   description = "Redis replication group ARN"
   value       = aws_elasticache_replication_group.redis.arn

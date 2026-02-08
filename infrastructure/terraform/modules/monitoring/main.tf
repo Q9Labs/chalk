@@ -33,7 +33,7 @@ resource "aws_sns_topic_subscription" "email" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
-  count = var.ecs_cluster_name != "" && var.enable_ecs_alarms ? 1 : 0
+  count = var.ecs_cluster_name != null && var.ecs_cluster_name != "" && var.enable_ecs_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-ecs-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -56,7 +56,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
-  count = var.ecs_cluster_name != "" && var.enable_ecs_alarms ? 1 : 0
+  count = var.ecs_cluster_name != null && var.ecs_cluster_name != "" && var.enable_ecs_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-ecs-memory-high"
   comparison_operator = "GreaterThanThreshold"
@@ -362,7 +362,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_target_connection_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
-  count = var.aurora_cluster_id != "" && var.enable_aurora_alarms ? 1 : 0
+  count = var.aurora_cluster_id != null && var.aurora_cluster_id != "" && var.enable_aurora_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-aurora-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -384,7 +384,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
-  count = var.aurora_cluster_id != "" && var.enable_aurora_alarms ? 1 : 0
+  count = var.aurora_cluster_id != null && var.aurora_cluster_id != "" && var.enable_aurora_alarms ? 1 : 0
 
   alarm_name          = "${local.name}-aurora-connections-high"
   comparison_operator = "GreaterThanThreshold"
@@ -405,8 +405,54 @@ resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
   tags = local.tags
 }
 
+resource "aws_cloudwatch_metric_alarm" "aurora_acu_near_max" {
+  count = var.aurora_cluster_id != null && var.aurora_cluster_id != "" && var.enable_aurora_alarms && var.aurora_max_capacity_acu != null ? 1 : 0
+
+  alarm_name          = "${local.name}-aurora-acu-near-max"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ServerlessDatabaseCapacity"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.aurora_max_capacity_acu * 0.90
+  alarm_description   = "Aurora Serverless v2 ACU is nearing max capacity"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBClusterIdentifier = var.aurora_cluster_id
+  }
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "aurora_acu_at_max" {
+  count = var.aurora_cluster_id != null && var.aurora_cluster_id != "" && var.enable_aurora_alarms && var.aurora_max_capacity_acu != null ? 1 : 0
+
+  alarm_name          = "${local.name}-aurora-acu-at-max"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ServerlessDatabaseCapacity"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.aurora_max_capacity_acu * 0.99
+  alarm_description   = "Aurora Serverless v2 ACU is at max capacity"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBClusterIdentifier = var.aurora_cluster_id
+  }
+
+  tags = local.tags
+}
+
 resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
-  count = var.enable_redis_alarms ? 1 : 0
+  count = var.enable_redis_alarms && length(var.redis_cache_cluster_ids) == 0 && var.redis_replication_group_id != null && var.redis_replication_group_id != "" ? 1 : 0
 
   alarm_name          = "${local.name}-redis-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -419,6 +465,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
   alarm_description   = "Redis CPU utilization exceeds 75%"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
 
   dimensions = {
     CacheClusterId = var.redis_replication_group_id
@@ -428,7 +475,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_memory" {
-  count = var.enable_redis_alarms ? 1 : 0
+  count = var.enable_redis_alarms && length(var.redis_cache_cluster_ids) == 0 && var.redis_replication_group_id != null && var.redis_replication_group_id != "" ? 1 : 0
 
   alarm_name          = "${local.name}-redis-memory-high"
   comparison_operator = "GreaterThanThreshold"
@@ -441,9 +488,56 @@ resource "aws_cloudwatch_metric_alarm" "redis_memory" {
   alarm_description   = "Redis memory usage exceeds 80%"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
 
   dimensions = {
     CacheClusterId = var.redis_replication_group_id
+  }
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "redis_cpu_node" {
+  for_each = var.enable_redis_alarms ? toset(var.redis_cache_cluster_ids) : toset([])
+
+  alarm_name          = "${local.name}-redis-${trimprefix(each.value, "${local.name}-redis-")}-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ElastiCache"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 75
+  alarm_description   = "Redis CPU utilization exceeds 75%"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    CacheClusterId = each.value
+  }
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "redis_memory_node" {
+  for_each = var.enable_redis_alarms ? toset(var.redis_cache_cluster_ids) : toset([])
+
+  alarm_name          = "${local.name}-redis-${trimprefix(each.value, "${local.name}-redis-")}-memory-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "DatabaseMemoryUsagePercentage"
+  namespace           = "AWS/ElastiCache"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "Redis memory usage exceeds 80%"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    CacheClusterId = each.value
   }
 
   tags = local.tags
@@ -557,9 +651,10 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "Aurora Metrics"
           region = data.aws_region.current.name
-          metrics = var.aurora_cluster_id != "" ? [
+          metrics = var.aurora_cluster_id != null && var.aurora_cluster_id != "" ? [
             ["AWS/RDS", "CPUUtilization", "DBClusterIdentifier", var.aurora_cluster_id, { label = "CPU" }],
-            [".", "DatabaseConnections", ".", ".", { label = "Connections", yAxis = "right" }]
+            [".", "DatabaseConnections", ".", ".", { label = "Connections", yAxis = "right" }],
+            [".", "ServerlessDatabaseCapacity", ".", ".", { label = "ACU (max)", stat = "Maximum", yAxis = "right" }]
           ] : []
           period = 300
         }
@@ -573,9 +668,14 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "Redis Metrics"
           region = data.aws_region.current.name
-          metrics = var.redis_replication_group_id != "" ? [
+          metrics = length(var.redis_cache_cluster_ids) > 0 ? flatten([
+            for id in var.redis_cache_cluster_ids : [
+              ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", id, { label = "${id} CPU" }],
+              [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "${id} Memory", yAxis = "right" }]
+            ]
+            ]) : var.redis_replication_group_id != null && var.redis_replication_group_id != "" ? [
             ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", var.redis_replication_group_id, { label = "CPU" }],
-            [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "Memory" }]
+            [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "Memory", yAxis = "right" }]
           ] : []
           period = 300
         }

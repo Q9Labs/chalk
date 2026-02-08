@@ -57,10 +57,22 @@ variable "aurora_max_connections" {
   default     = 100
 }
 
+variable "aurora_max_capacity_acu" {
+  description = "Aurora Serverless v2 max ACU capacity (used for ServerlessDatabaseCapacity alarms)"
+  type        = number
+  default     = null
+}
+
 variable "redis_replication_group_id" {
   description = "Redis replication group ID for monitoring"
   type        = string
   default     = null
+}
+
+variable "redis_cache_cluster_ids" {
+  description = "Redis cache cluster IDs (member clusters) for per-node monitoring/alarms"
+  type        = list(string)
+  default     = []
 }
 
 variable "api_gateway_id" {

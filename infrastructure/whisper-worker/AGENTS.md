@@ -7,7 +7,7 @@
 - Axiom dataset: `chalk-whisper-worker` (env `AXIOM_DATASET`)
 - Log file: `/var/log/whisper-worker.log`
 - CloudWatch log group: `/aws/ec2/chalk-whisper-<env>`
-- Metrics: CloudWatch EMF event `TranscriptionQueueDepth` (namespace `Chalk/Whisper`)
+- Metrics: CloudWatch PutMetricData `TranscriptionQueueDepth` (namespace `Chalk/Whisper`, dimension `Environment`)
 
 ## Deploy (Prod)
 1. Make code/infra changes in `infrastructure/whisper-worker` and/or `infrastructure/terraform`.

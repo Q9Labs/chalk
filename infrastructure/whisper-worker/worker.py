@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.error import HTTPError, URLError
 
+import boto3
 import redis
 from audio_download import download_audio
 from observability import audio_url_meta, emit_event, setup_axiom_logging
@@ -65,6 +66,7 @@ class WhisperWorker:
             health_check_interval=REDIS_HEALTHCHECK_INTERVAL,
         )
         self.transcriber = WhisperTranscriber()
+        self.cloudwatch = boto3.client("cloudwatch", region_name=os.getenv("AWS_REGION") or None)
 
     def process_job(
         self,
@@ -186,21 +188,19 @@ class WhisperWorker:
     def publish_queue_metrics(self) -> None:
         try:
             queue_depth = self.redis.llen(JOB_QUEUE)
-            metric = {
-                "_aws": {
-                    "Timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
-                    "CloudWatchMetrics": [
-                        {
-                            "Namespace": "Chalk/Whisper",
-                            "Dimensions": [["Environment"]],
-                            "Metrics": [{"Name": "TranscriptionQueueDepth", "Unit": "Count"}],
-                        }
-                    ],
-                },
-                "Environment": os.getenv("ENVIRONMENT", "dev"),
-                "TranscriptionQueueDepth": queue_depth,
-            }
-            print(json.dumps(metric), flush=True)
+            environment = os.getenv("ENVIRONMENT", "dev")
+            self.cloudwatch.put_metric_data(
+                Namespace="Chalk/Whisper",
+                MetricData=[
+                    {
+                        "MetricName": "TranscriptionQueueDepth",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Count",
+                        "Value": queue_depth,
+                    }
+                ],
+            )
             emit_event(
                 logger,
                 level=logging.INFO,
