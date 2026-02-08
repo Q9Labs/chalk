@@ -670,11 +670,11 @@ resource "aws_cloudwatch_dashboard" "main" {
           region = data.aws_region.current.name
           metrics = length(var.redis_cache_cluster_ids) > 0 ? tolist(flatten([
             for id in var.redis_cache_cluster_ids : [
-              ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", id, { label = "${id} CPU" }],
+              ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", id, { label = "${id} CPU", yAxis = "left" }],
               [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "${id} Memory", yAxis = "right" }]
             ]
             ])) : var.redis_replication_group_id != null && var.redis_replication_group_id != "" ? tolist([
-            ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", var.redis_replication_group_id, { label = "CPU" }],
+            ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", var.redis_replication_group_id, { label = "CPU", yAxis = "left" }],
             [".", "DatabaseMemoryUsagePercentage", ".", ".", { label = "Memory", yAxis = "right" }]
           ]) : []
           period = 300
