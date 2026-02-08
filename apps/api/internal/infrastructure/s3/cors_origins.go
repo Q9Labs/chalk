@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
@@ -44,6 +46,24 @@ type CORSOriginsConfig struct {
 type CORSOriginsFile struct {
 	Origins   []string  `json:"origins"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func mergeAndSortOrigins(staticOrigins []string, tenantOrigins []string) []string {
+	originSet := make(map[string]struct{}, len(staticOrigins)+len(tenantOrigins))
+	for _, o := range staticOrigins {
+		originSet[o] = struct{}{}
+	}
+	for _, o := range tenantOrigins {
+		originSet[o] = struct{}{}
+	}
+
+	origins := make([]string, 0, len(originSet))
+	for o := range originSet {
+		origins = append(origins, o)
+	}
+
+	sort.Strings(origins)
+	return origins
 }
 
 // NewCORSOriginsService creates a new CORS origins service
@@ -123,20 +143,7 @@ func (s *CORSOriginsService) AggregateAndUpload(ctx context.Context) error {
 		return fmt.Errorf("failed to get tenant origins: %w", err)
 	}
 
-	// Combine static + tenant origins (deduplicated)
-	originSet := make(map[string]struct{})
-	for _, o := range s.staticOrigins {
-		originSet[o] = struct{}{}
-	}
-	for _, o := range tenantOrigins {
-		originSet[o] = struct{}{}
-	}
-
-	// Convert to slice
-	origins := make([]string, 0, len(originSet))
-	for o := range originSet {
-		origins = append(origins, o)
-	}
+	origins := mergeAndSortOrigins(s.staticOrigins, tenantOrigins)
 
 	// Create JSON file
 	file := CORSOriginsFile{
@@ -189,28 +196,59 @@ func (s *CORSOriginsService) triggerGitHubWorkflow(ctx context.Context) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", "Bearer "+s.githubToken)
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("attempt %d: request failed: %w", attempt, err)
+		} else {
+			func() {
+				defer resp.Body.Close()
+
+				if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
+					s.logger.Info("triggered GitHub workflow", "repo", s.githubRepo, "attempt", attempt)
+					lastErr = nil
+					return
+				}
+
+				const maxBody = 2048
+				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+				reqID := resp.Header.Get("X-GitHub-Request-Id")
+
+				lastErr = fmt.Errorf("attempt %d: GitHub API status %d (x-github-request-id=%s): %s",
+					attempt, resp.StatusCode, reqID, string(bodyBytes),
+				)
+			}()
+
+			if lastErr == nil {
+				return nil
+			}
+		}
+
+		s.logger.Warn("failed to trigger GitHub workflow", "repo", s.githubRepo, "attempt", attempt, "error", lastErr)
+
+		switch attempt {
+		case 1:
+			time.Sleep(500 * time.Millisecond)
+		case 2:
+			time.Sleep(1 * time.Second)
+		default:
+		}
 	}
 
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+s.githubToken)
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to trigger workflow: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	s.logger.Info("triggered GitHub workflow", "repo", s.githubRepo)
-	return nil
+	return lastErr
 }
 
 // IsEnabled returns whether the service is enabled

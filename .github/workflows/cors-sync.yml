@@ -3,6 +3,8 @@ name: Sync CORS Origins
 on:
   repository_dispatch:
     types: [cors-origins-updated]
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       environment:
@@ -84,3 +86,23 @@ jobs:
           echo "## CORS Origins Sync Complete" >> $GITHUB_STEP_SUMMARY
           echo "API Gateway CORS configuration updated from S3" >> $GITHUB_STEP_SUMMARY
           echo "Triggered by: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summarize Origins File (S3)
+        run: |
+          set -euo pipefail
+
+          BUCKET="chalk-cors-origins-prod"
+          KEY="cors/allowed-origins.json"
+          TMP="$(mktemp)"
+
+          aws s3api get-object --bucket "$BUCKET" --key "$KEY" "$TMP" >/dev/null
+
+          UPDATED_AT="$(jq -r '.updated_at // "unknown"' "$TMP")"
+          ORIGIN_COUNT="$(jq -r '.origins | length' "$TMP")"
+          ORIGIN_HASH="$(jq -r '.origins[]' "$TMP" | sort | sha256sum | awk '{print $1}')"
+
+          echo "### Origins Source" >> $GITHUB_STEP_SUMMARY
+          echo "- S3: s3://$BUCKET/$KEY" >> $GITHUB_STEP_SUMMARY
+          echo "- updated_at: $UPDATED_AT" >> $GITHUB_STEP_SUMMARY
+          echo "- origins: $ORIGIN_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "- sha256(sorted origins): $ORIGIN_HASH" >> $GITHUB_STEP_SUMMARY
