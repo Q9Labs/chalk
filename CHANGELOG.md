@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.0.57] - 2026-02-08
+
+### Added
+
+### Changed
+
+### Fixed
+
 - **Infra: Aurora headroom + alarms** — increase prod Aurora Serverless v2 max capacity and add CloudWatch alarms for ACU nearing the ceiling; fix Redis and Whisper alarms/metrics so they stop showing `INSUFFICIENT_DATA`.
 - **Infra: CORS auto-heal + tracing headers** — add hourly `cors-sync` reconcile, improve S3 origins upload determinism + dispatch retry logging, and allow common tracing headers (`baggage`, `sentry-trace`, `traceparent`) so tenant portals don’t hit preflight CORS failures.
 - **SDK-React: Participant volume slider drag** — fix per-participant volume slider to be continuously adjustable (single-value slider now uses `value={number}` instead of range-mode array).
