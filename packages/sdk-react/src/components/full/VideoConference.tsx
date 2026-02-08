@@ -233,11 +233,13 @@ function VideoConferenceBase({
 	const screenShareCountRef = useRef(0);
 	const whiteboardOpenedRef = useRef(false);
 	const prevScreenShareStateRef = useRef(false);
+	const roomIdRef = useRef(roomId);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
 	const { participants, localParticipant, participantCount } =
 		useParticipants();
+	const localParticipantIdRef = useRef(localParticipant?.id ?? null);
 	const { activeSpeaker } = useActiveSpeaker();
 	const media = useMedia();
 	const screenShare = useScreenShare();
@@ -277,6 +279,14 @@ function VideoConferenceBase({
 	useEffect(() => {
 		refreshDevices();
 	}, [refreshDevices]);
+
+	useEffect(() => {
+		roomIdRef.current = roomId;
+	}, [roomId]);
+
+	useEffect(() => {
+		localParticipantIdRef.current = localParticipant?.id ?? null;
+	}, [localParticipant?.id]);
 
 	useEffect(() => {
 		if (phase === "meeting" && !joinStartTime) {
@@ -648,8 +658,8 @@ function VideoConferenceBase({
 						timestamp: new Date().toISOString(),
 						operation: "screenshare",
 						phase,
-						roomId,
-						participantId: localParticipant?.id ?? null,
+						roomId: roomIdRef.current,
+						participantId: localParticipantIdRef.current,
 						code: err.code,
 						message: err.message,
 						details: err.details ?? null,
