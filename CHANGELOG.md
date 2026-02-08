@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Infra: CORS origins auto-heal** — add hourly `cors-sync` reconcile and improve S3 origins upload determinism + dispatch retry logging to prevent CORS drift from breaking consumers.
+- **Infra: CORS auto-heal + tracing headers** — add hourly `cors-sync` reconcile, improve S3 origins upload determinism + dispatch retry logging, and allow common tracing headers (`baggage`, `sentry-trace`, `traceparent`) so tenant portals don’t hit preflight CORS failures.
 - **SDK-React: Participant volume slider drag** — fix per-participant volume slider to be continuously adjustable (single-value slider now uses `value={number}` instead of range-mode array).
 - **SDK-React: Participant volume UX** — move per-participant volume controls into the 3-dot options menu so it’s usable on mobile (no hover).
 - **SDK-React: VideoConference roomName prop** — add `roomName` prop and thread it through to `PreJoinLobby` + `MeetingRoom` (displayed as the room title instead of `roomId`).

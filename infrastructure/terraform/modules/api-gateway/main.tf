@@ -114,7 +114,19 @@ resource "aws_apigatewayv2_api" "http" {
   description   = "HTTP API for Chalk ${var.environment}"
 
   cors_configuration {
-    allow_headers = ["content-type", "authorization", "x-api-key", "x-amz-date", "origin", "x-admin-secret"]
+    # Portal clients may include Sentry/OTel tracing headers in preflight requests (baggage, sentry-trace, traceparent).
+    allow_headers = [
+      "content-type",
+      "authorization",
+      "x-api-key",
+      "x-amz-date",
+      "origin",
+      "x-admin-secret",
+      "baggage",
+      "sentry-trace",
+      "traceparent",
+      "tracestate",
+    ]
     allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     allow_origins = local.cors_origins
     max_age       = 86400
