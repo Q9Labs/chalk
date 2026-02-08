@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	domain "github.com/Q9Labs/chalk/internal/domain/ai"
@@ -113,25 +114,57 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
 		"status", resp.StatusCode,
 		"duration_ms", time.Since(start).Milliseconds())
 
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		slog.Error("[chalk] OpenRouter: failed to read response body", "error", err)
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
 	var openRouterResp struct {
+		ID    string `json:"id"`
 		Choices []struct {
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Error json.RawMessage `json:"error"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&openRouterResp); err != nil {
-		slog.Error("[chalk] OpenRouter: failed to decode response", "error", err)
+	if err := json.Unmarshal(bodyBytes, &openRouterResp); err != nil {
+		slog.Error("[chalk] OpenRouter: failed to decode response",
+			"error", err,
+			"body_preview", string(bodyBytes[:min(len(bodyBytes), 500)]))
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
+	if len(openRouterResp.Error) > 0 && string(openRouterResp.Error) != "null" {
+		slog.Error("[chalk] OpenRouter: response error payload",
+			"response_id", openRouterResp.ID,
+			"error", string(openRouterResp.Error),
+			"duration_ms", time.Since(start).Milliseconds())
+		return nil, fmt.Errorf("openrouter response error: %s", string(openRouterResp.Error))
+	}
+
 	if len(openRouterResp.Choices) == 0 {
-		slog.Error("[chalk] OpenRouter: no choices in response")
-		return nil, fmt.Errorf("no response from AI model")
+		slog.Error("[chalk] OpenRouter: no choices in response",
+			"response_id", openRouterResp.ID,
+			"body_preview", string(bodyBytes[:min(len(bodyBytes), 500)]))
+		if openRouterResp.ID != "" {
+			return nil, fmt.Errorf("no response from AI model (openrouter): empty choices (id=%s)", openRouterResp.ID)
+		}
+		return nil, fmt.Errorf("no response from AI model (openrouter): empty choices")
 	}
 
 	content := openRouterResp.Choices[0].Message.Content
+	if strings.TrimSpace(content) == "" {
+		slog.Error("[chalk] OpenRouter: empty content in first choice",
+			"response_id", openRouterResp.ID,
+			"body_preview", string(bodyBytes[:min(len(bodyBytes), 500)]))
+		if openRouterResp.ID != "" {
+			return nil, fmt.Errorf("no response from AI model (openrouter): empty content (id=%s)", openRouterResp.ID)
+		}
+		return nil, fmt.Errorf("no response from AI model (openrouter): empty content")
+	}
 	slog.Debug("[chalk] OpenRouter: parsing AI response",
 		"content_length", len(content))
 

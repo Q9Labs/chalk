@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
@@ -37,6 +38,14 @@ func (s *Service) GenerateFromTranscript(
 	if !includeSummary && !includeActionItems {
 		slog.Debug("[chalk] AI generation skipped: no features requested",
 			"transcript_id", transcriptID)
+		return nil, nil
+	}
+
+	if strings.TrimSpace(transcriptText) == "" {
+		slog.Info("[chalk] AI generation skipped: empty transcript",
+			"transcript_id", transcriptID,
+			"include_summary", includeSummary,
+			"include_action_items", includeActionItems)
 		return nil, nil
 	}
 
