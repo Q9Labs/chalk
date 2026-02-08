@@ -178,16 +178,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			} else {
 				this.setState({ isStarting: false });
 				// Room.startScreenShare returns false on failure (it emits a room error event).
-				// Surface a manager-level error so UI hooks can react consistently.
-				if (!this.getState().isActive) {
-					this.events.emit(
-						"error",
-						new ChalkError(
-							ChalkErrorCode.SCREEN_SHARE_FAILED,
-							"Failed to start screen sharing",
-						),
-					);
-				}
+				// Avoid double-emitting a generic manager error; callers should listen to session/room errors.
 			}
 
 			return result;

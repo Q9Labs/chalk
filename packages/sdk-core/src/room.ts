@@ -1178,6 +1178,25 @@ export class Room extends EventEmitter<RoomEvents> {
     const ctx = wideEvents.start("screenshare.start");
 
     try {
+      const md =
+        typeof navigator !== "undefined" ? (navigator as any).mediaDevices : undefined;
+      if (!md || typeof md.getDisplayMedia !== "function") {
+        const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+        const isIPad =
+          /\biPad\b/i.test(ua) ||
+          (/\bMacintosh\b/i.test(ua) && (navigator as any)?.maxTouchPoints > 1);
+
+        this.emit("error", {
+          code: ChalkErrorCode.SCREEN_SHARE_FAILED,
+          message: isIPad
+            ? "Screen sharing isn't supported in iPad browsers. Use a desktop browser to share your screen."
+            : "Screen sharing isn't supported in this browser.",
+          details: { name: "NotSupportedError", missingGetDisplayMedia: true, isIPad },
+        });
+        ctx.complete("error", new Error("getDisplayMedia is not available"));
+        return false;
+      }
+
       // iPadOS/Safari/WebKit frequently fails when RealtimeKit requests
       // getDisplayMedia({ audio: true, video: {...} }). Patch + retry with safer
       // constraints to make screensharing cross-platform.

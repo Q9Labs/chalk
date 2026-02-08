@@ -11,6 +11,7 @@ import type {
 	ReactionEmoji,
 	Transcript,
 } from "@q9labs/chalk-core";
+import { ChalkErrorCode } from "@q9labs/chalk-core";
 import type React from "react";
 import type { ComponentType, ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -568,7 +569,7 @@ function VideoConferenceBase({
 	}, [media]);
 
 	const handleToggleScreenShare = useCallback(() => {
-		screenShare.toggle();
+		void screenShare.toggle();
 	}, [screenShare]);
 
 	const handleToggleRecording = useCallback(() => {
@@ -627,6 +628,16 @@ function VideoConferenceBase({
 			// Ignore "Already connected" errors - these are handled in handleJoin
 			if (err.message?.includes("Already connected")) {
 				return;
+			}
+			if (
+				phase === "meeting" &&
+				(err.code === ChalkErrorCode.SCREEN_SHARE_FAILED ||
+					err.code === ChalkErrorCode.SCREEN_SHARE_CANCELLED ||
+					err.code === ChalkErrorCode.OVERCONSTRAINED)
+			) {
+				toast.error(err.message || "Failed to start screen sharing", {
+					duration: 5000,
+				});
 			}
 			setError(err.message);
 			onError?.(err);
