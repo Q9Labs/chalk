@@ -1,5 +1,11 @@
-import React, { useEffect, useRef } from 'react';
-import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from '../../utils/icons';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Cancel01Icon,
+  Copy01Icon,
+  Mail01Icon,
+  Calendar01Icon,
+  Link01Icon,
+} from '../../utils/icons';
 import { cn } from '../../utils/cn';
 import { Input } from '../atomic/Input';
 import { IconButton } from '../atomic/IconButton';
@@ -10,7 +16,7 @@ export interface InviteModalProps {
   onClose: () => void;
   meetingLink: string;
   meetingId?: string;
-  onCopyLink?: () => void;
+  onCopyLink?: () => void | Promise<void>;
   onShareEmail?: () => void;
   onShareCalendar?: () => void;
   className?: string;
@@ -28,6 +34,8 @@ export const InviteModal = React.memo<InviteModalProps>(({
 }: InviteModalProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
+  const copyResetTimeoutRef = useRef<number | null>(null);
+  const [isCopyFeedbackVisible, setIsCopyFeedbackVisible] = useState(false);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -38,6 +46,28 @@ export const InviteModal = React.memo<InviteModalProps>(({
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+        copyResetTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleCopyLink = async () => {
+    if (!onCopyLink) return;
+    await onCopyLink();
+    setIsCopyFeedbackVisible(true);
+    if (copyResetTimeoutRef.current) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setIsCopyFeedbackVisible(false);
+      copyResetTimeoutRef.current = null;
+    }, 1200);
+  };
 
   if (!isOpen) return null;
 
@@ -86,15 +116,21 @@ export const InviteModal = React.memo<InviteModalProps>(({
             />
             {onCopyLink && (
               <button
-                onClick={onCopyLink}
+                type="button"
+                onClick={handleCopyLink}
+                disabled={isCopyFeedbackVisible}
                 className={cn(
                   "w-full flex items-center justify-center gap-2 py-2.5 rounded-md font-medium transition-colors",
                   "bg-primary text-primary-foreground",
-                  "hover:opacity-90"
+                  "hover:opacity-90",
+                  isCopyFeedbackVisible && "opacity-90 cursor-default"
                 )}
               >
                 <Copy01Icon size={18} />
-                Copy Link
+                {isCopyFeedbackVisible ? 'Copied' : 'Copy Link'}
+                <span className="sr-only" aria-live="polite">
+                  {isCopyFeedbackVisible ? 'Copied meeting link to clipboard' : ''}
+                </span>
               </button>
             )}
           </div>

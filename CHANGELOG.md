@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React: Layout switcher icon visibility** — increase layout option icon contrast (less washed out on dark background).
 - **SDK-React: Whiteboard default stroke color** — default Excalidraw stroke color is now blue.
 - **SDK: iPad screen share feedback + WebKit patching** — show a toast when screen share fails in-meeting (no silent click), guard missing `getDisplayMedia`, and patch non-writable `getDisplayMedia` via `defineProperty` where possible.
+- **SDK-React: Invite modal Copy Link feedback** — show a brief "Copied" state after clicking.
 
 ## [0.0.55] - 2026-02-06
 
