@@ -629,14 +629,76 @@ function VideoConferenceBase({
 			if (err.message?.includes("Already connected")) {
 				return;
 			}
-			if (
-				phase === "meeting" &&
-				(err.code === ChalkErrorCode.SCREEN_SHARE_FAILED ||
-					err.code === ChalkErrorCode.SCREEN_SHARE_CANCELLED ||
-					err.code === ChalkErrorCode.OVERCONSTRAINED)
-			) {
-				toast.error(err.message || "Failed to start screen sharing", {
-					duration: 5000,
+
+			const isScreenShareError =
+				err.code === ChalkErrorCode.SCREEN_SHARE_FAILED ||
+				err.code === ChalkErrorCode.SCREEN_SHARE_CANCELLED ||
+				err.code === ChalkErrorCode.OVERCONSTRAINED;
+
+			if (phase === "meeting" && isScreenShareError) {
+				const debugId =
+					typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+						? crypto.randomUUID()
+						: `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+				const buildCopyText = () => {
+					const cause = (err as any).cause as any;
+					const payload = {
+						debugId,
+						timestamp: new Date().toISOString(),
+						operation: "screenshare",
+						phase,
+						roomId,
+						participantId: localParticipant?.id ?? null,
+						code: err.code,
+						message: err.message,
+						details: err.details ?? null,
+						cause: cause
+							? {
+									name: typeof cause?.name === "string" ? cause.name : undefined,
+									message:
+										typeof cause?.message === "string"
+											? cause.message
+											: undefined,
+							  }
+							: null,
+						userAgent:
+							typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+						url: typeof location !== "undefined" ? location.href : undefined,
+					};
+
+					try {
+						return JSON.stringify(payload, null, 2);
+					} catch {
+						return `Chalk error debug\nid: ${debugId}\ncode: ${err.code}\nmessage: ${err.message}`;
+					}
+				};
+
+				const copyToClipboard = async (text: string) => {
+					try {
+						await navigator.clipboard.writeText(text);
+						return;
+					} catch {
+						const textArea = document.createElement("textarea");
+						textArea.value = text;
+						document.body.appendChild(textArea);
+						textArea.select();
+						document.execCommand("copy");
+						document.body.removeChild(textArea);
+					}
+				};
+
+				toast.error(err.message || "Screen sharing failed", {
+					duration: 15000,
+					action: {
+						label: "Copy error",
+						onClick: () => {
+							void (async () => {
+								await copyToClipboard(buildCopyText());
+								toast.success("Copied error details", { duration: 2500 });
+							})();
+						},
+					},
 				});
 			}
 			setError(err.message);
