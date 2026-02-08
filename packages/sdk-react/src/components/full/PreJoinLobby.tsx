@@ -82,6 +82,7 @@ function PreJoinLobbyBase({
 	className,
 }: PreJoinLobbyProps) {
 	const [displayName, setDisplayName] = useState(userName);
+	const displayNameTouchedRef = useRef(false);
 	const [isVideoEnabled, setIsVideoEnabled] = useState(initialVideoEnabled);
 	const [isAudioEnabled, setIsAudioEnabled] = useState(initialAudioEnabled);
 	const [showSettings, setShowSettings] = useState(initialShowSettings);
@@ -305,8 +306,9 @@ function PreJoinLobbyBase({
 	};
 
 	useEffect(() => {
-		if (userName && !displayName) setDisplayName(userName);
-	}, [userName, displayName]);
+		// Keep in sync with `userName` (e.g. async auth) until the user edits the input.
+		if (!displayNameTouchedRef.current) setDisplayName(userName);
+	}, [userName]);
 
 	// Close dropdown when clicking outside
 	useEffect(() => {
@@ -766,7 +768,10 @@ function PreJoinLobbyBase({
 										id="display-name"
 										type="text"
 										value={displayName}
-										onChange={(e) => setDisplayName(e.target.value)}
+										onChange={(e) => {
+											displayNameTouchedRef.current = true;
+											setDisplayName(e.target.value);
+										}}
 										placeholder="Enter your name"
 										disabled={isLoading}
 										className={cn(
