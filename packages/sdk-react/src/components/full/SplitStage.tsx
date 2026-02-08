@@ -2,7 +2,7 @@
 "use client";
 
 import * as resizablePanelsPkg from "react-resizable-panels";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
     ArrowLeft01Icon,
     ArrowRight01Icon,
@@ -11,14 +11,8 @@ import {
 import { cn } from "../../utils/cn";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui";
 
-const { ResizableHandle, ResizablePanel, ResizablePanelGroup } =
+const { Group, Panel, Separator, useDefaultLayout, useGroupRef, usePanelRef } =
     resizablePanelsPkg as any;
-
-// Define it manually if import fails
-type ImperativePanelHandle = {
-    collapse: () => void;
-    resize: (size: number) => void;
-};
 
 interface SplitStageProps {
     leftPanel: React.ReactNode;
@@ -33,14 +27,29 @@ export function SplitStage({
     className,
     onLayoutChange,
 }: SplitStageProps) {
-    const leftPanelRef = useRef<ImperativePanelHandle>(null);
-    const rightPanelRef = useRef<ImperativePanelHandle>(null);
+    const leftPanelId = "chalk-split-left";
+    const rightPanelId = "chalk-split-right";
+    const defaultLayoutId = "chalk-split-view";
+
+    const groupRef = useGroupRef();
+    const leftPanelRef = usePanelRef();
+    const rightPanelRef = usePanelRef();
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
     const [isRightCollapsed, setIsRightCollapsed] = useState(false);
 
-    const handleLayout = (sizes: number[]) => {
-        onLayoutChange?.(sizes);
-    };
+    const panelIds = useMemo(() => [leftPanelId, rightPanelId], []);
+    const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+        id: defaultLayoutId,
+        panelIds,
+    });
+
+    const handleLayoutChanged = useCallback(
+        (layout: Record<string, number>) => {
+            onLayoutChanged?.(layout);
+            onLayoutChange?.([layout[leftPanelId] ?? 0, layout[rightPanelId] ?? 0]);
+        },
+        [leftPanelId, onLayoutChange, onLayoutChanged, rightPanelId],
+    );
 
     const maximizeLeft = useCallback(() => {
         const right = rightPanelRef.current;
@@ -57,38 +66,36 @@ export function SplitStage({
     }, []);
 
     const resetSplit = useCallback(() => {
-        const left = leftPanelRef.current;
-        const right = rightPanelRef.current;
-        if (left && right) {
-            left.resize(50);
-            right.resize(50);
-        }
-    }, []);
+        groupRef.current?.setLayout({
+            [leftPanelId]: 50,
+            [rightPanelId]: 50,
+        });
+    }, [groupRef, leftPanelId, rightPanelId]);
 
     return (
-        <ResizablePanelGroup
-            direction="horizontal"
+        <Group
+            orientation="horizontal"
             className={cn("h-full w-full", className)}
-            onLayout={handleLayout}
-            autoSaveId="chalk-split-view"
+            defaultLayout={defaultLayout}
+            onLayoutChanged={handleLayoutChanged}
+            groupRef={groupRef}
         >
-            <ResizablePanel
-                ref={leftPanelRef}
-                defaultSize={50}
-                minSize={0}
+            <Panel
+                id={leftPanelId}
+                panelRef={leftPanelRef}
+                defaultSize="50%"
+                minSize="0%"
                 collapsible={true}
-                onCollapse={() => setIsLeftCollapsed(true)}
-                onExpand={() => setIsLeftCollapsed(false)}
+                onResize={(size) => setIsLeftCollapsed(size.asPercentage <= 0)}
                 className={cn(
                     "relative transition-all duration-300 ease-in-out",
                     isLeftCollapsed && "min-w-[0px] w-[0px] overflow-hidden",
                 )}
             >
                 {leftPanel}
-            </ResizablePanel>
+            </Panel>
 
-            <ResizableHandle
-                withHandle={false}
+            <Separator
                 className="relative w-2 bg-transparent hover:bg-white/10 transition-colors group z-50 flex items-center justify-center -ml-1 -mr-1 focus:outline-none"
             >
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
@@ -100,23 +107,23 @@ export function SplitStage({
                         onReset={resetSplit}
                     />
                 </div>
-            </ResizableHandle>
+            </Separator>
 
-            <ResizablePanel
-                ref={rightPanelRef}
-                defaultSize={50}
-                minSize={0}
+            <Panel
+                id={rightPanelId}
+                panelRef={rightPanelRef}
+                defaultSize="50%"
+                minSize="0%"
                 collapsible={true}
-                onCollapse={() => setIsRightCollapsed(true)}
-                onExpand={() => setIsRightCollapsed(false)}
+                onResize={(size) => setIsRightCollapsed(size.asPercentage <= 0)}
                 className={cn(
                     "relative transition-all duration-300 ease-in-out",
                     isRightCollapsed && "min-w-[0px] w-[0px] overflow-hidden",
                 )}
             >
                 {rightPanel}
-            </ResizablePanel>
-        </ResizablePanelGroup>
+            </Panel>
+        </Group>
     );
 }
 
