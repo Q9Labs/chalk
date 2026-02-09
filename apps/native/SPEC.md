@@ -2,12 +2,28 @@
 
 Decision: build `apps/ios` + `apps/android` first. Extract SDKs later once UX + stability proven.
 
+Companion docs:
+- Deep baseline + protocol notes: `apps/native/FINDINGS.md`
+- App requirements + acceptance criteria: `apps/native/REQUIREMENTS.md`
+
 ## Scope (MVP)
 
 - Multi-participant meeting (group call)
 - Screen sharing
 - Recording (RealtimeKit composite recording)
 - Cloudflare RealtimeKit as RTC backend + client SDK
+
+## UI (custom, not implemented here)
+
+Design references (provided by you):
+- `apps/native/lobby-mobile.png`
+- `apps/native/meeting-mobile.png`
+
+UI requirements (MVP):
+- Pre-join lobby: name entry, device preview, mic/cam toggles, join button, error states.
+- Meeting: grid + active-speaker layout, controls (mic/cam/speaker, leave, screenshare, chat, reactions, hand raise, recording), participant list.
+- Whiteboard: open/close panel, drawing permission UX, cursor presence.
+- Recording UX: clear indicator when recording is active; start/stop confirmation for host.
 
 ## User Stories (Dev)
 
@@ -34,6 +50,19 @@ RealtimeKit is already implemented in `sdk-core` (web/TS) and should be the beha
 - Room wrapper mapping RTK participants/tracks → Chalk types: `packages/sdk-core/src/room.ts`
 - Token flow expects API to return `tokens.rtcToken` (RealtimeKit auth token): `packages/sdk-core/src/types.ts`
 - Recording state/webhooks scaffolding: `packages/sdk-core/src/managers/recording-manager.ts`, `packages/sdk-core/src/webhooks/*`
+
+## Backend Integration (essential)
+
+RealtimeKit handles A/V transport. Our backend still owns the room “product”:
+chat, whiteboard sync, participant state sync, reactions, hand raise, recording control/state, transcript persistence.
+
+Native apps must replicate the proven web flow:
+1) HTTP `addParticipant` → receive `accessToken` (API/WS) + `rtcToken` (RTK).
+2) Connect Chalk WebSocket `/ws` using `Sec-WebSocket-Protocol: chalk, token.<accessToken>` (preferred).
+3) Init/join RTK meeting using `rtcToken`.
+4) Use Chalk WS events as source of truth for non-media features; use RTK events/tracks for media + screenshare.
+
+Details + message catalogs live in `apps/native/FINDINGS.md`.
 
 ### Meeting + Participants
 
