@@ -1,4 +1,0 @@
-[install]
-# Don't hoist packages - keep them in local node_modules
-# This is needed for expo/metro to correctly detect the project root
-hoist = false

@@ -15,7 +15,9 @@ chalk/
 ├── apps/
 │   ├── api/                   # Go backend (Gin, sqlc, Clean Architecture)
 │   ├── web/                   # Demo app (Vite + React 19 + TanStack Router)
-│   ├── mobile2/               # Expo mobile app (SDK 54, React Native 0.81)
+│   ├── ios/                   # Native iOS app (WIP)
+│   ├── android/               # Native Android app (WIP)
+│   ├── native/                # Native app specs + findings (living docs)
 │   ├── docs/                  # Documentation site (Astro + Starlight)
 │   └── e2e/                   # End-to-end test suite
 ├── infrastructure/
@@ -40,12 +42,7 @@ bun run generate     # Generate OpenAPI types from apps/api/openapi.yaml
 
 ### Mobile
 
-```bash
-bun run mobile:prebuild          # Generate native projects
-bun run mobile:ios               # Run on iOS
-bun run mobile:android           # Run on Android
-bun run mobile:start             # Start Expo dev server
-```
+Native app specs + integration notes live in `apps/native/`.
 
 ## Architecture
 

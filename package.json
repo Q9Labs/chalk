@@ -7,8 +7,6 @@
 		"packages/sdk-react-native/example",
 		"apps/e2e",
 		"apps/web",
-		"apps/mobile",
-		"apps/mobile2",
 		"apps/docs",
 		"apps/admin"
 	],
@@ -21,12 +19,7 @@
 		"lint": "turbo lint",
 		"check-types": "turbo check-types",
 		"clean": "turbo clean && rm -rf node_modules",
-		"generate": "turbo run generate:types",
-		"mobile:ios": "cd apps/mobile2 && npx expo run:ios",
-		"mobile:android": "cd apps/mobile2 && npx expo run:android",
-		"mobile:start": "cd apps/mobile2 && npx expo start --dev-client --clear",
-		"mobile:prebuild": "cd apps/mobile2 && npx expo prebuild --clean",
-		"mobile:verify": "bun run scripts/verify-mobile.ts"
+		"generate": "turbo run generate:types"
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "^1.17.1",

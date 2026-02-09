@@ -199,7 +199,20 @@ Native apps must ensure RTK is initialized so that RTK participants carry the st
 
 ## Decommission Plan Notes (RN apps)
 
-If/when deleting `apps/mobile` and `apps/mobile2`, preserve these learnings for native:
-- iOS/Android permissions + background modes: `apps/mobile2/app.json`
-- Stable constraints: Hermes ON, New Arch OFF, Reanimated v3 (historical stability): `apps/mobile2/README.md`
-- Env contract for API/WS/key/debug: `apps/mobile2/.env.example`, `apps/mobile2/lib/env.ts`
+RN demo apps were hard-deleted. Kept here as “do not forget” config that mattered:
+
+- Identity:
+  - iOS bundle id: `ai.q9labs.chalk`
+  - Android package: `ai.q9labs.chalk`
+  - Scheme: `chalk`
+- iOS Info.plist strings:
+  - Camera + microphone + Bluetooth usage descriptions
+  - Background modes: `audio`, `voip`
+- Runtime constraints that were chosen for stability:
+  - Hermes: ON
+  - New Architecture: OFF
+  - Reanimated: v3 line (avoid breaking worklet compatibility)
+- Env contract shape:
+  - `API_URL` (example `https://chalk-api.q9labs.ai`)
+  - `WS_URL` (example `wss://chalk-api.q9labs.ai`)
+  - `CHALK_API_KEY` (if doing api-key-to-token flow)
