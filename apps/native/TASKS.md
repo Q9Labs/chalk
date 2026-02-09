@@ -4,8 +4,8 @@ Order matters. Spike risky stuff first.
 
 ## P0 — “Vertical Slice”
 
-- [ ] iOS app skeleton: config (api/ws), join room, connect WS, init/join RTK (no UI polish)
-- [ ] Android app skeleton: config (api/ws), join room, connect WS, init/join RTK (no UI polish)
+- [ ] iOS app skeleton: config (api/ws), join room, connect WS, init/join RTK (UI wired)
+- [ ] Android app skeleton: config (api/ws), join room, connect WS, init/join RTK (UI wired)
 - [ ] Participant ID mapping proof: Chalk `participantId` == RTK `userId` via backend `client_specific_id` (`apps/api/internal/domain/participant/service.go:252`)
 - [ ] WS auth (subprotocol token): offer `chalk` + `token.<jwt>`; no query-param auth
 - [ ] Room snapshot → participant roster rendering (basic list)
