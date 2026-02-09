@@ -27,9 +27,12 @@ fun LobbyScreen(
     displayName: String,
     onDisplayNameChange: (String) -> Unit,
     onJoin: () -> Unit,
+    onShareLogs: () -> Unit,
+    onClearLogs: () -> Unit,
 ) {
     var isMicOn by remember { mutableStateOf(true) }
     var isCamOn by remember { mutableStateOf(true) }
+    var showMenu by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -103,12 +106,32 @@ fun LobbyScreen(
                     onClick = { isCamOn = !isCamOn }
                 )
                 IconButton(
-                    onClick = { },
+                    onClick = { showMenu = true },
                     modifier = Modifier
                         .background(ChalkSurface, CircleShape)
                         .padding(4.dp)
                 ) {
                     Icon(Icons.Default.MoreHoriz, contentDescription = "More", tint = Color.White)
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Share logs") },
+                        onClick = {
+                            showMenu = false
+                            onShareLogs()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Clear logs") },
+                        onClick = {
+                            showMenu = false
+                            onClearLogs()
+                        },
+                    )
                 }
             }
         }

@@ -10,6 +10,7 @@ public enum ChalkWsEvent: Equatable {
 final class ChalkWsClient {
 	private var task: URLSessionWebSocketTask?
 	private let json = JSONDecoder()
+	private let log = ChalkFileLogger.shared
 
 	func connect(
 		wsUrl: URL,
@@ -39,6 +40,7 @@ final class ChalkWsClient {
 			guard let self else { return }
 			switch result {
 			case .failure(let err):
+				self.log.log(.error, "ws.receive_failed", meta: ["err": err.localizedDescription])
 				onError(err.localizedDescription)
 			case .success(let msg):
 				switch msg {
@@ -97,6 +99,7 @@ final class ChalkWsClient {
 				break
 			}
 		} catch {
+			log.log(.error, "ws.decode_failed", meta: ["err": error.localizedDescription])
 			onError(error.localizedDescription)
 		}
 	}

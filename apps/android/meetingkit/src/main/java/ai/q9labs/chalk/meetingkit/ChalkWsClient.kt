@@ -100,6 +100,7 @@ data class WsPermissionChanged(
 class ChalkWsClient {
 	private val client = OkHttpClient()
 	private var socket: WebSocket? = null
+	private val log = ChalkFileLogger
 
 	private val json = Json {
 		ignoreUnknownKeys = true
@@ -125,21 +126,27 @@ class ChalkWsClient {
 			object : WebSocketListener() {
 				override fun onOpen(webSocket: WebSocket, response: Response) {
 					onState("ws_connected")
+					log.log(ChalkLogLevel.DEBUG, "ws.open")
 				}
 
 				override fun onMessage(webSocket: WebSocket, text: String) {
 					runCatching {
 						val env = json.decodeFromString(WsEnvelope.serializer(), text)
 						handle(env, onEvent)
-					}.onFailure { onError(it.message ?: "ws decode failed") }
+					}.onFailure {
+						log.log(ChalkLogLevel.ERROR, "ws.decode_failed", meta = mapOf("err" to (it.message ?: "unknown")), err = it)
+						onError(it.message ?: "ws decode failed")
+					}
 				}
 
 				override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+					log.log(ChalkLogLevel.ERROR, "ws.failure", meta = mapOf("err" to (t.message ?: "unknown")), err = t)
 					onError(t.message ?: "ws failure")
 					onState("ws_failed")
 				}
 
 				override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+					log.log(ChalkLogLevel.DEBUG, "ws.closed", meta = mapOf("code" to code.toString(), "reason" to reason))
 					onState("ws_closed")
 				}
 			},

@@ -30,11 +30,13 @@ class ChalkMeetingController(
 	private var refreshToken: String? = null
 	private var meeting: RealtimeKitClient? = null
 	private var roomId: String? = null
+	private val log = ChalkFileLogger
 
 	val whiteboardEvents = MutableSharedFlow<ChalkWhiteboardEvent>(extraBufferCapacity = 64)
 
 	suspend fun join(activity: Activity, payload: ChalkJoinPayload) {
 		_state.update { it.copy(connection = "connecting", lastError = null) }
+		log.log(ChalkLogLevel.INFO, "join.start", meta = mapOf("ws" to payload.wsUrl))
 
 		roomId = payload.roomId
 		refreshToken = payload.refreshToken
@@ -47,8 +49,14 @@ class ChalkMeetingController(
 			wsUrl = payload.wsUrl,
 			accessToken = payload.accessToken,
 			onEvent = ::handleWsEvent,
-			onError = { err -> _state.update { it.copy(lastError = err, connection = "failed") } },
-			onState = { s -> _state.update { it.copy(connection = s) } },
+			onError = { err ->
+				log.log(ChalkLogLevel.ERROR, "ws.error", meta = mapOf("err" to err))
+				_state.update { it.copy(lastError = err, connection = "failed") }
+			},
+			onState = { s ->
+				log.log(ChalkLogLevel.DEBUG, "ws.state", meta = mapOf("state" to s))
+				_state.update { it.copy(connection = s) }
+			},
 		)
 
 		initRtk(activity, payload.rtcToken)
@@ -63,6 +71,7 @@ class ChalkMeetingController(
 		displayName: String,
 	) {
 		_state.update { it.copy(connection = "connecting", lastError = null) }
+		log.log(ChalkLogLevel.INFO, "bootstrap.start", meta = mapOf("apiUrl" to apiUrl, "wsUrl" to wsUrl, "roomName" to roomName))
 
 		val bootstrap = ChalkBootstrapClient(apiUrl)
 		val tenant = withContext(Dispatchers.IO) { bootstrap.exchangeApiKey(apiKey) }
@@ -84,6 +93,7 @@ class ChalkMeetingController(
 	}
 
 	suspend fun leave() {
+		log.log(ChalkLogLevel.INFO, "leave.start")
 		_state.update { it.copy(connection = "leaving") }
 		ws.close()
 		api = null
@@ -93,6 +103,7 @@ class ChalkMeetingController(
 		meeting?.release(onSuccess = {}, onFailure = {})
 		meeting = null
 		_state.update { it.copy(connection = "disconnected", participants = emptyList()) }
+		log.log(ChalkLogLevel.INFO, "leave.done")
 	}
 
 	fun sendWhiteboardUpdateV2(update: ChalkWhiteboardUpdateV2) {
@@ -143,6 +154,7 @@ class ChalkMeetingController(
 		rtk.addMeetingRoomEventListener(object : RtkMeetingRoomEventListener {
 			override fun onMeetingInitCompleted(meeting: RealtimeKitClient) {}
 			override fun onMeetingInitFailed(error: MeetingError) {
+				log.log(ChalkLogLevel.ERROR, "rtk.init_failed", meta = mapOf("err" to (error.message ?: "unknown")))
 				_state.update { it.copy(lastError = error.message, connection = "failed") }
 			}
 
@@ -150,15 +162,18 @@ class ChalkMeetingController(
 
 			override fun onMeetingRoomJoinCompleted(meeting: RealtimeKitClient) {
 				_state.update { it.copy(connection = "connected") }
+				log.log(ChalkLogLevel.INFO, "rtk.join_ok")
 			}
 
 			override fun onMeetingRoomJoinFailed(error: MeetingError) {
+				log.log(ChalkLogLevel.ERROR, "rtk.join_failed", meta = mapOf("err" to (error.message ?: "unknown")))
 				_state.update { it.copy(lastError = error.message, connection = "failed") }
 			}
 
 			override fun onMeetingRoomJoinStarted() {}
 
 			override fun onMeetingEnded() {
+				log.log(ChalkLogLevel.INFO, "rtk.meeting_ended")
 				scope.launch { leave() }
 			}
 
@@ -174,12 +189,20 @@ class ChalkMeetingController(
 			override fun onActiveParticipantsChanged(active: List<RtkRemoteParticipant>) {}
 		})
 
-		rtk.init(meetingInfo, onSuccess = { rtk.joinRoom({}, {}) }, onFailure = { _state.update { it.copy(connection = "failed") } })
+		rtk.init(
+			meetingInfo,
+			onSuccess = { rtk.joinRoom({}, {}) },
+			onFailure = {
+				log.log(ChalkLogLevel.ERROR, "rtk.init_failed", meta = mapOf("err" to "init failure callback"))
+				_state.update { it.copy(connection = "failed") }
+			},
+		)
 	}
 
 	private fun handleWsEvent(event: ChalkWsEvent) {
 		when (event) {
 			is ChalkWsEvent.RoomSnapshot -> {
+				log.log(ChalkLogLevel.DEBUG, "ws.room_snapshot", meta = mapOf("participants" to event.participants.size.toString()))
 				val participants = event.participants.map {
 					ChalkParticipant(
 						id = it.id,
@@ -192,12 +215,15 @@ class ChalkMeetingController(
 				_state.update { it.copy(participants = participants) }
 			}
 			is ChalkWsEvent.ParticipantJoined -> {
+				log.log(ChalkLogLevel.DEBUG, "ws.participant_joined", meta = mapOf("participantId" to event.participant.id))
 				_state.update { it.copy(participants = (it.participants + event.participant).distinctBy { p -> p.id }) }
 			}
 			is ChalkWsEvent.ParticipantLeft -> {
+				log.log(ChalkLogLevel.DEBUG, "ws.participant_left", meta = mapOf("participantId" to event.participantId))
 				_state.update { it.copy(participants = it.participants.filterNot { p -> p.id == event.participantId }) }
 			}
 			is ChalkWsEvent.ParticipantUpdated -> {
+				log.log(ChalkLogLevel.DEBUG, "ws.participant_updated", meta = mapOf("participantId" to event.participantId))
 				_state.update {
 					it.copy(
 						participants = it.participants.map { p ->

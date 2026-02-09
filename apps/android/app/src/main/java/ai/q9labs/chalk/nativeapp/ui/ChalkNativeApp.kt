@@ -17,7 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.q9labs.chalk.meetingkit.ChalkFileLogger
+import ai.q9labs.chalk.meetingkit.ChalkLogLevel
 import ai.q9labs.chalk.nativeapp.MainViewModel
+import ai.q9labs.chalk.nativeapp.logging.ChalkLogSharing
 import ai.q9labs.chalk.nativeapp.ui.screens.LobbyScreen
 import ai.q9labs.chalk.nativeapp.ui.screens.MeetingScreen
 import ai.q9labs.chalk.nativeapp.ui.theme.ChalkBackground
@@ -53,8 +56,13 @@ fun ChalkNativeApp(vm: MainViewModel) {
                         onJoin = {
                             val activity = ctx as? android.app.Activity ?: return@LobbyScreen
                             runCatching { vm.joinFromEnv(activity, displayName) }
-                                .onFailure { showConfigHint = true }
-                        }
+                                .onFailure {
+                                    ChalkFileLogger.log(ChalkLogLevel.ERROR, "bootstrap.join_failed", meta = mapOf("err" to (it.message ?: "unknown")), err = it)
+                                    showConfigHint = true
+                                }
+                        },
+                        onShareLogs = { ChalkLogSharing.shareLogs(ctx) },
+                        onClearLogs = { ChalkLogSharing.clearLogs() },
                     )
                 }
             }

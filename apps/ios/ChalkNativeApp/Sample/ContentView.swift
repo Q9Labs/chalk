@@ -1,11 +1,23 @@
 import ChalkMeetingKit
 import SwiftUI
+import UIKit
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
 
 struct ContentView: View {
     @StateObject private var meeting = ChalkMeetingController()
     
     @State private var displayName = "Guest"
     @State private var showConfig = false
+    @State private var showShareLogs = false
     @State private var bootstrapError: String? = nil
     private let bootstrap = ChalkBootstrap()
 
@@ -59,6 +71,22 @@ struct ContentView: View {
                     Section("Env (apps/native/.env)") {
                         Text("Values come from `apps/native/.env` copied into the app bundle as `chalk.env`.")
                     }
+
+                    Section("Logs") {
+                        Button("Share logs") { showShareLogs = true }
+                        Button("Clear logs", role: .destructive) { ChalkFileLogger.shared.clear() }
+
+                        let files = ChalkFileLogger.shared.files()
+                        if files.isEmpty {
+                            Text("No logs yet.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(files, id: \.path) { url in
+                                Text(url.lastPathComponent)
+                                    .font(.caption)
+                            }
+                        }
+                    }
                 }
                 .navigationTitle("Config")
                 .toolbar {
@@ -68,10 +96,14 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(isPresented: $showShareLogs) {
+            ActivityView(activityItems: ChalkFileLogger.shared.files().map { $0 as Any })
+        }
     }
     
     func joinMeeting() {
         bootstrapError = nil
+        ChalkFileLogger.shared.log(.info, "bootstrap.join_start")
         Task {
             do {
                 let env = try ChalkEnv.load()
@@ -96,6 +128,7 @@ struct ContentView: View {
                 )
             } catch {
                 bootstrapError = error.localizedDescription
+                ChalkFileLogger.shared.log(.error, "bootstrap.join_failed", meta: ["err": error.localizedDescription])
                 showConfig = true
             }
         }
