@@ -74,14 +74,13 @@ struct LobbyView: View {
                                 .clipShape(Circle())
                         }
                         
-                        Button(action: {}) {
+                        Button(action: onOpenConfig) {
                             Image(systemName: "ellipsis")
                                 .padding()
                                 .background(Color.chalkSurface)
                                 .clipShape(Circle())
                         }
                         .accessibilityLabel("Config")
-                        .onTapGesture { onOpenConfig() }
                     }
                     .padding(.bottom, 20)
                 }

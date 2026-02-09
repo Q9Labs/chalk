@@ -12,7 +12,7 @@ struct ContentView: View {
     @State private var rtcToken = ""
     @State private var roomId = ""
     @State private var participantId = UUID().uuidString
-    @State private var showConfig = true
+    @State private var showConfig = false
 
     var body: some View {
         ZStack {
