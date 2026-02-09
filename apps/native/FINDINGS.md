@@ -7,6 +7,8 @@ Goal: build `apps/ios` + `apps/android` (custom UI) that replicate the *behavior
 Companion docs:
 - Spec + user stories + UI references: `apps/native/SPEC.md`
 - App requirements (what we must implement): `apps/native/REQUIREMENTS.md`
+- Risk spike research (screenshare): `apps/native/RESEARCH_SCREENSHARE.md`
+- Risk spike research (background/audio): `apps/native/RESEARCH_AUDIO.md`
 
 ## Reference Baseline (existing)
 

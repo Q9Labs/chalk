@@ -21,9 +21,9 @@ Order matters. Spike risky stuff first.
 
 ## P0 — Risk Spikes (do early)
 
-- [ ] iOS screenshare: ReplayKit broadcast upload extension + app group + RTK screenshare
-- [ ] Android screenshare: MediaProjection + RTK screenshare
-- [ ] Background/foreground resilience (audio focus / interruptions)
+- [ ] iOS screenshare: ReplayKit broadcast upload extension + app group + RTK screenshare (see `apps/native/RESEARCH_SCREENSHARE.md`)
+- [ ] Android screenshare: MediaProjection + RTK screenshare (see `apps/native/RESEARCH_SCREENSHARE.md`)
+- [ ] Background/foreground resilience (audio focus / interruptions) (see `apps/native/RESEARCH_AUDIO.md`)
 
 ## P1 — Hardening
 
@@ -31,4 +31,3 @@ Order matters. Spike risky stuff first.
 - [ ] Retry strategy parity with `sdk-core` for RTK join timeouts
 - [ ] Large payload handling (whiteboard) + WS read limit awareness
 - [ ] Observability: structured logs + session context (roomId/participantId/tenantId)
-
