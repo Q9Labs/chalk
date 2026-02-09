@@ -40,15 +40,22 @@ struct MeetingView: View {
                 
                 // Video Grid Area
                 ScrollView {
-                    let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: gridColumns)
-                    LazyVGrid(columns: columns, spacing: 8) {
+                    let columnsCount = gridColumns
+                    let gridSpacing = CGFloat(8)
+                    let gridPadding = CGFloat(8)
+                    
+                    // Force square tiles. Rely on the available width instead of SwiftUI's
+                    // intrinsic sizing, which can yield stretched rectangles on iOS.
+                    let tileWidth = (geometry.size.width - (gridPadding * 2) - (CGFloat(columnsCount - 1) * gridSpacing)) / CGFloat(columnsCount)
+                    
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: gridSpacing), count: columnsCount)
+                    LazyVGrid(columns: columns, spacing: gridSpacing) {
                         ForEach(meeting.state.participants) { participant in
                             ParticipantTile(participant: participant)
-                                .aspectRatio(contentMode: .fit) // Square tiles
-                                .frame(minHeight: 120) // Minimum height
+                                .frame(width: tileWidth, height: tileWidth)
                         }
                     }
-                    .padding(8)
+                    .padding(gridPadding)
                 }
                 .frame(maxHeight: .infinity)
                 // Layout 3: Shrink if panel is open (simplified simulation)
