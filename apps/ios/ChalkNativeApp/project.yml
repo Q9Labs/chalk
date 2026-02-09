@@ -1,0 +1,44 @@
+name: ChalkNativeApp
+options:
+  bundleIdPrefix: ai.q9labs.chalk
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""
+targets:
+  ChalkNativeApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sample
+        excludes:
+          - "**/*.md"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.q9labs.chalk.nativeapp
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Camera access for video calls."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone access for audio calls."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Local network access for connectivity."
+      configurations:
+        Debug:
+          CODE_SIGNING_ALLOWED: NO
+          CODE_SIGNING_REQUIRED: NO
+          CODE_SIGN_IDENTITY: ""
+    dependencies:
+      - package: ChalkMeetingKit
+        product: ChalkMeetingKit
+    preBuildScripts:
+      - name: Build whiteboard web assets
+        script: |
+          set -euo pipefail
+          ROOT="${SRCROOT}/../../.."
+          bash "${ROOT}/apps/native/whiteboard-web/build.sh"
+          OUT="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/whiteboard"
+          mkdir -p "${OUT}"
+          rsync -a --delete "${ROOT}/apps/native/whiteboard-web/dist/" "${OUT}/"
+        showEnvVars: false
+packages:
+  ChalkMeetingKit:
+    path: ../ChalkMeetingKit
