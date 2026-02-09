@@ -9,6 +9,15 @@ Order matters. Spike risky stuff first.
 - [ ] Participant ID mapping proof: Chalk `participantId` == RTK `userId` via backend `client_specific_id` (`apps/api/internal/domain/participant/service.go:252`)
 - [ ] WS auth (subprotocol token): offer `chalk` + `token.<jwt>`; no query-param auth
 - [ ] Room snapshot → participant roster rendering (basic list)
+- [ ] MeetingKit boundary: UI never touches WS/HTTP/RTK directly (only view-model state + actions)
+- [ ] Add `apps/native/PROGRESS.md` and keep it updated per PR/commit
+
+## P0 — UI Contract (for UI implementer)
+
+- [ ] UI screens: Lobby, Meeting, Chat panel, Participants panel, Whiteboard panel, End screen (see `apps/native/SPEC.md`)
+- [ ] UI binds only to MeetingKit state: connection, participants, local media, recording, chat, whiteboard, errors
+- [ ] UI triggers only MeetingKit actions: join/leave, toggles, chat send, reaction, handraise, recording, screenshare, whiteboard open/close, permission grant/revoke
+- [ ] UX: error + retry for join/ws/rtk failures (no silent failures)
 
 ## P0 — Core Features (non-media)
 
@@ -18,6 +27,13 @@ Order matters. Spike risky stuff first.
 - [ ] Recording control (HTTP): start/stop + WS state
 - [ ] Whiteboard sync: `whiteboard.sync` + `whiteboard.snapshot` + `whiteboard.update` + cursors + permissions
 - [ ] Transcript persistence: RTK finals → WS `transcript` + `transcript.ack`
+
+## P0 — Whiteboard (Excalidraw in WebView)
+
+- [ ] WebView host bundle: local assets (no CDN), deterministic build, loads Excalidraw + `@q9labs/chalk-whiteboard/collab`
+- [ ] Bridge protocol implemented (native <-> WebView): `wb.init`, `wb.snapshot`, `wb.update`, `wb.cursor`, presign upload/download request/response
+- [ ] Native forwards Chalk WS `whiteboard.*` to WebView; WebView emits `wb.sendUpdateV2`/cursor/sync/clear back to native
+- [ ] Images: presign upload/download flows work end-to-end (best effort, with error state)
 
 ## P0 — Risk Spikes (do early)
 

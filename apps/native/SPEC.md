@@ -19,11 +19,40 @@ Design references (provided by you):
 - `apps/native/lobby-mobile.png`
 - `apps/native/meeting-mobile.png`
 
-UI requirements (MVP):
-- Pre-join lobby: name entry, device preview, mic/cam toggles, join button, error states.
-- Meeting: grid + active-speaker layout, controls (mic/cam/speaker, leave, screenshare, chat, reactions, hand raise, recording), participant list.
-- Whiteboard: open/close panel, drawing permission UX, cursor presence.
-- Recording UX: clear indicator when recording is active; start/stop confirmation for host.
+UI implementer contract:
+- Treat the PNGs as the source of truth for layout, spacing, typography, and control placement.
+- Implement in native UI frameworks (SwiftUI/UIKit, Android Compose/View). No business logic in UI layer.
+- UI must only bind to MeetingKit view-model state + invoke MeetingKit actions (no direct WS/HTTP/RTK calls).
+- UI must surface errors with a clear retry path (join failure, WS disconnect, RTK init/join failure).
+
+UI requirements (MVP screens):
+- Lobby (pre-join)
+  - Inputs: display name, optional room code/id (if not deep-linked)
+  - Device preview: local camera tile + mic level (best-effort)
+  - Toggles: mic, camera
+  - Primary: Join
+  - Secondary: Settings (optional), back
+  - Error states: missing permissions, token/join failure, network offline
+- Meeting
+  - Header: room title/code, connection badge, recording badge (if active)
+  - Video area: grid + active speaker emphasis (switchable)
+  - Local controls: mic, cam, switch camera, speaker route, leave
+  - Feature controls: chat, participants, whiteboard, reactions, hand raise, screenshare, recording (host-only)
+  - Panels: chat thread, participant list (with host controls), whiteboard panel
+- Whiteboard (panel)
+  - WebView canvas (Excalidraw)
+  - Read-only mode when `canDraw=false` (view mode)
+  - Cursor presence (remote cursors)
+  - Image insert supported (files sync via presigned URLs)
+- End screen
+  - Left/ended state; actions: rejoin, back to lobby, report issue (optional)
+
+UI requirements (interaction specifics):
+- Panels: open/close must preserve meeting state; never leave the room.
+- Recording: show always-on indicator when active; require confirm on stop (host-only).
+- Screenshare: start/stop affordance; clear "sharing" state; handle "permission revoked" gracefully.
+- Permission: when drawing permission changes, UI updates immediately (disable tools if read-only).
+- Orientation: portrait-first; landscape must not break controls; safe-area respected.
 
 ## User Stories (Dev)
 

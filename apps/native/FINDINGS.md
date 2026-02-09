@@ -185,6 +185,20 @@ Server state/persist logic:
 - `apps/api/internal/interfaces/websocket/whiteboard_state.go`
 - `apps/api/internal/interfaces/websocket/whiteboard_state_persist.go`
 
+### Whiteboard UI integration (Excalidraw via WebView)
+
+Decision: Excalidraw runs in a WebView. Native owns WS + presign HTTP and bridges JSON messages.
+
+Source of truth:
+- Web host: `apps/native/whiteboard-web/src/host.tsx` (`window.__chalkNativeOnMessage` + outbound `ChalkNativeBridge.postMessage`)
+- Collab engine: `packages/chalk-whiteboard/src/collab/engine.ts` + `packages/chalk-whiteboard/src/collab/files.ts`
+
+Android implementation (prototype):
+- WebView bridge UI: `apps/android/app/src/main/java/ai/q9labs/chalk/nativeapp/ui/WhiteboardWebView.kt`
+- Envelope encoder: `apps/android/meetingkit/src/main/java/ai/q9labs/chalk/meetingkit/ChalkWhiteboardWebViewCodec.kt`
+
+Known risk: WebView file origin + presigned URL `fetch()` relies on bucket CORS (PUT/GET). If CORS blocks, move upload/download to native and feed results into WebView over the bridge.
+
 ## Critical ID Mapping (don’t hand-wave)
 
 We must align identity across:

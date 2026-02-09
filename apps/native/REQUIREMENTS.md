@@ -107,12 +107,46 @@ Transport: Chalk WS.
 Requirements:
 - Must support initial sync on join: request `whiteboard.sync` and render `whiteboard.snapshot`.
 - Must support live updates (`whiteboard.update` → `whiteboard.data`) + cursor presence.
-- Must support file uploads via presigned R2 URLs:
+- Must support file uploads via presigned URLs:
   - `presign-upload` then PUT to upload URL
   - `presign-download` then GET from download URL
 - Must support permissions (`permission.changed`; host grant/revoke messages).
 
 Note: protocol supports both v1 and v2 updates. Prefer v2 long-term (sceneId, syncAll).
+
+### Whiteboard UI Strategy (native apps)
+
+Decision: Excalidraw runs in a WebView. Native owns:
+- Chalk WS connection + whiteboard message I/O
+- Presign API calls (Chalk HTTP)
+- Bridging (JSON messages) between WebView and native view-model
+
+Web host implementation:
+- `apps/native/whiteboard-web` (bundled; no CDN)
+- Collab engine: `packages/chalk-whiteboard/src/collab/*`
+
+Bridge protocol (WebView <-> native):
+- Native -> WebView (call `window.__chalkNativeOnMessage(JSON_STRING)`):
+  - `wb.init { canDraw, theme? }`
+  - `wb.snapshot { sceneId?, elements[] }`
+  - `wb.update { sceneId?, syncAll?, elements[] }`
+  - `wb.cursor { participantId, displayName, x, y, timestampIso? }`
+  - `wb.presignUpload.result { uploadUrl, expiresAtMs }` / `{ error }` (with `requestId`)
+  - `wb.presignDownload.result { downloadUrl, expiresAtMs }` / `{ error }` (with `requestId`)
+- WebView -> native (via `window.ChalkNativeBridge.postMessage(JSON_STRING)` or iOS WK handler):
+  - `wb.sendUpdateV2 { schemaVersion:2, sceneId, syncAll, elements[], seq }`
+  - `wb.sendCursor { x, y }`
+  - `wb.requestSync`
+  - `wb.sendClear`
+  - `wb.presignUpload { fileId, mimeType }` (with `requestId`)
+  - `wb.presignDownload { fileId }` (with `requestId`)
+
+Hardening pitfalls (plan for them explicitly):
+- CORS from WebView origin: uploads/downloads use `fetch(presignedUrl)` inside WebView. If presigned host/bucket CORS is restrictive, this can fail. If it fails, fallback plan: perform PUT/GET in native, then deliver `dataURL` into WebView (requires new bridge messages).
+- Message size: `elements[]` can be large. Must avoid UI-thread JSON work; consider chunking or compression if server/client limits hit.
+- Touch/stylus: validate pointer events in Android WebView + iOS WKWebView (pinch/zoom, palm rejection, Apple Pencil). Disable conflicting scroll containers around WebView.
+- Reconnect: on WS reconnect, native must re-request `whiteboard.sync` and forward snapshot to WebView.
+- Permissions: when `permission.changed` toggles `canDraw`, WebView must immediately switch between edit and view-only.
 
 ## Recording
 
@@ -162,4 +196,3 @@ Do not start SDK extraction until:
 - Whiteboard sync is stable under multi-user concurrent editing.
 - Recording start/stop + download flow works end-to-end.
 - Screen share works on real devices (iOS extension included).
-
