@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		03A09DC58FB20279DD957207 /* ChalkMeetingKit in Frameworks */ = {isa = PBXBuildFile; productRef = D2517F506BC50497809F69FA /* ChalkMeetingKit */; };
 		22BFFBE48AA1A306D653DC5E /* LobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7FE3D6B20ADA2715B792A8 /* LobbyView.swift */; };
+		91CF910FA0FD3735C0FECA9F /* ChalkEnv.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DCCB4A19754C9D1E64EFE0 /* ChalkEnv.swift */; };
 		ADC90025E5BCE8302936AF61 /* WhiteboardWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A426202CEB3D7D3C647EFDC /* WhiteboardWebView.swift */; };
 		C9EE2F21E747D5156B4C7561 /* ParticipantTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB296D2BDD993A3BA273810 /* ParticipantTile.swift */; };
 		D8C0D7770720A6F24850F636 /* MeetingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C590F95BB16EDD730D0956B3 /* MeetingView.swift */; };
@@ -22,6 +23,7 @@
 		55EE75AB28B2BCDF2CFF09FB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		7A426202CEB3D7D3C647EFDC /* WhiteboardWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhiteboardWebView.swift; sourceTree = "<group>"; };
 		82D026ABBFA76F987B82AA8D /* ChalkNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChalkNativeApp.swift; sourceTree = "<group>"; };
+		96DCCB4A19754C9D1E64EFE0 /* ChalkEnv.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChalkEnv.swift; sourceTree = "<group>"; };
 		9A1510549D03A5931DEF1B6B /* ChalkNativeApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ChalkNativeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A441A97FE6286B2BA734F28E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		C590F95BB16EDD730D0956B3 /* MeetingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingView.swift; sourceTree = "<group>"; };
@@ -105,6 +107,7 @@
 		F6F363CBB5BAFB911DB33543 /* Sample */ = {
 			isa = PBXGroup;
 			children = (
+				96DCCB4A19754C9D1E64EFE0 /* ChalkEnv.swift */,
 				82D026ABBFA76F987B82AA8D /* ChalkNativeApp.swift */,
 				55EE75AB28B2BCDF2CFF09FB /* ContentView.swift */,
 				B9AB3977927963E47689B686 /* UI */,
@@ -120,6 +123,7 @@
 			buildConfigurationList = DC48C7BE9EE5D5252628DD14 /* Build configuration list for PBXNativeTarget "ChalkNativeApp" */;
 			buildPhases = (
 				5C78D38BEACFC589E6A6AF2C /* Build whiteboard web assets */,
+				3AAAE969547480B15BDCAF73 /* Bundle chalk env (dev) */,
 				483F791ACC61D697F3322A4A /* Sources */,
 				5B5E4AB675ECE5FDC785BC9D /* Frameworks */,
 			);
@@ -172,6 +176,25 @@
 /* End PBXProject section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		3AAAE969547480B15BDCAF73 /* Bundle chalk env (dev) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle chalk env (dev)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nROOT=\"${SRCROOT}/../../..\"\nENV=\"${ROOT}/apps/native/.env\"\nif [ ! -f \"${ENV}\" ]; then\n  ENV=\"${ROOT}/apps/native/.env.example\"\nfi\nOUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/chalk.env\"\ncp \"${ENV}\" \"${OUT}\"\n";
+			showEnvVarsInLog = 0;
+		};
 		5C78D38BEACFC589E6A6AF2C /* Build whiteboard web assets */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -198,6 +221,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				91CF910FA0FD3735C0FECA9F /* ChalkEnv.swift in Sources */,
 				E02AAA6F978CB125520FEE79 /* ChalkNativeApp.swift in Sources */,
 				E17779ABC6B93536830B2F8B /* ContentView.swift in Sources */,
 				22BFFBE48AA1A306D653DC5E /* LobbyView.swift in Sources */,
