@@ -7,8 +7,8 @@ backgrounding, focus loss, device route changes, and OS interruptions.
 
 References:
 - AVAudioSession: https://developer.apple.com/documentation/avfaudio/avaudiosession
-- Handling interruptions (concept): https://developer.apple.com/documentation/avfaudio/avaudiosession/interruption_handling
-- Route change notifications: https://developer.apple.com/documentation/avfaudio/avaudiosession/1616501-routechangenotification
+- Handling audio interruptions (concept): https://developer.apple.com/library/archive/documentation/Audio/Conceptual/AudioSessionProgrammingGuide/HandlingAudioInterruptions/HandlingAudioInterruptions.html
+- Handling hardware route changes (concept): https://developer.apple.com/library/archive/documentation/Audio/Conceptual/AudioSessionProgrammingGuide/HandlingAudioHardwareRouteChanges/HandlingAudioHardwareRouteChanges.html
 - RealtimeKit iOS media devices (device switching): https://docs.realtime.cloudflare.com/ios-core/local-user/manage-media-devices
 
 ### Baseline configuration (voice/video call)
@@ -18,7 +18,8 @@ Expected app-level audio session:
 - Mode: `.voiceChat` or `.videoChat` (pick one; validate with RTK + Bluetooth in spike)
 - Options:
   - `.defaultToSpeaker` (meeting UX expects speaker by default)
-  - `.allowBluetooth` / `.allowBluetoothA2DP` (headsets)
+  - `.allowBluetooth` (headsets)
+  - `.allowBluetoothA2DP` (output-only; validate in spike, may be undesirable for 2-way voice)
 
 Important: RealtimeKit may also configure `AVAudioSession` internally. Treat the spike as “ensure our config doesn’t fight the SDK”:
 - Log current category/mode/options before + after joining
@@ -124,4 +125,3 @@ Also handle:
 - Bluetooth connect/disconnect mid-call doesn’t wedge audio.
 - Phone call interruption: meeting recovers without app restart.
 - Background for 30–60s then foreground: reconnect behavior is predictable (no “stuck muted”).
-

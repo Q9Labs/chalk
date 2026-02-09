@@ -116,7 +116,9 @@ Also practical needs:
 
 ### Permission + lifecycle flow (must respect order)
 
-Android 14+ requirement (important): call `MediaProjectionManager.createScreenCaptureIntent()` **before** starting the foreground service; user must grant capture permission before you create the service / projection. See Android docs above.
+Android requirement (important): call `MediaProjectionManager.createScreenCaptureIntent()` **before** calling `MediaProjectionManager.getMediaProjection(...)`. See Android docs above.
+
+Practical (Android 14+ / targetSdk 34+): ensure the capture flow is paired with a foreground service that declares `mediaProjection` type + permission, and start/stop it tightly with the projection lifecycle.
 
 For RealtimeKit specifically:
 - App should treat `meeting.localUser.enableScreenShare()` as a “start projection + publish track” operation.
@@ -141,4 +143,3 @@ For RealtimeKit specifically:
 - Stop screenshare reliably; projection stopped; foreground service removed.
 - Rotate screen during share; no permanent freeze.
 - Lock/unlock while sharing; graceful resume or clean stop with UI state update.
-
