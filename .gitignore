@@ -27,6 +27,20 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 .turbo
+.gradle
+**/.gradle
+**/build
+
+# Android
+**/.idea
+
+# iOS / Xcode
+DerivedData
+**/*.xcuserstate
+**/xcuserdata
+**/*.xccheckout
+.build
+**/.build
 
 # IDEs
 .idea
