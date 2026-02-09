@@ -117,6 +117,7 @@ class ChalkWsClient {
 		val req = Request.Builder()
 			.url(wsUrl)
 			.header("Sec-WebSocket-Protocol", "chalk, token.$accessToken")
+			.header("Origin", "https://chalk.q9labs.ai")
 			.build()
 
 		onState("ws_connecting")

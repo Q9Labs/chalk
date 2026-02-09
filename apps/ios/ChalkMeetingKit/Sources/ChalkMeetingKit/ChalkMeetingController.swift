@@ -51,15 +51,16 @@ public final class ChalkMeetingController: ObservableObject {
 
 		let client = RealtimeKitiOSClientBuilder().build()
 		rtk = client
-		client.doInit(meetingInfo: meetingInfo, onSuccess: {}, onFailure: { [weak self] err in
+		client.doInit(meetingInfo: meetingInfo, onSuccess: { [weak self] in
+			client.joinRoom(onSuccess: {}, onFailure: { [weak self] err in
+				self?.state.connection = "failed"
+				self?.state.lastError = err.message
+				self?.log.log(.error, "rtk.join_failed", meta: ["err": err.message])
+			})
+		}, onFailure: { [weak self] err in
 			self?.state.connection = "failed"
 			self?.state.lastError = err.message
 			self?.log.log(.error, "rtk.init_failed", meta: ["err": err.message])
-		})
-		client.joinRoom(onSuccess: {}, onFailure: { [weak self] err in
-			self?.state.connection = "failed"
-			self?.state.lastError = err.message
-			self?.log.log(.error, "rtk.join_failed", meta: ["err": err.message])
 		})
 	}
 

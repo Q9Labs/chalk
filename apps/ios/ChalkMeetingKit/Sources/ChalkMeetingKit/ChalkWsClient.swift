@@ -7,10 +7,13 @@ public enum ChalkWsEvent: Equatable {
 	case participantUpdated(id: String, displayName: String?, audioEnabled: Bool?, videoEnabled: Bool?)
 }
 
-final class ChalkWsClient {
+final class ChalkWsClient: NSObject, URLSessionWebSocketDelegate {
 	private var task: URLSessionWebSocketTask?
+	private var session: URLSession?
 	private let json = JSONDecoder()
 	private let log = ChalkFileLogger.shared
+	private var onState: ((String) -> Void)?
+	private var onError: ((String) -> Void)?
 
 	func connect(
 		wsUrl: URL,
@@ -19,20 +22,40 @@ final class ChalkWsClient {
 		onError: @escaping (String) -> Void,
 		onEvent: @escaping (ChalkWsEvent) -> Void
 	) {
+		self.onState = onState
+		self.onError = onError
+
 		var req = URLRequest(url: wsUrl)
 		req.setValue("chalk, token.\(accessToken)", forHTTPHeaderField: "Sec-WebSocket-Protocol")
+		// Server enables origin checks; native clients should send an allowed Origin.
+		req.setValue("https://chalk.q9labs.ai", forHTTPHeaderField: "Origin")
 
-		let t = URLSession(configuration: .default).webSocketTask(with: req)
+		let s = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+		session = s
+		let t = s.webSocketTask(with: req)
 		task = t
 		onState("ws_connecting")
 		t.resume()
-		onState("ws_connected")
 		receiveLoop(onError: onError, onEvent: onEvent)
 	}
 
 	func close() {
 		task?.cancel(with: .goingAway, reason: nil)
 		task = nil
+		session?.invalidateAndCancel()
+		session = nil
+	}
+
+	func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+		DispatchQueue.main.async { [weak self] in
+			self?.onState?("ws_connected")
+		}
+	}
+
+	func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+		DispatchQueue.main.async { [weak self] in
+			self?.onState?("ws_closed")
+		}
 	}
 
 	private func receiveLoop(onError: @escaping (String) -> Void, onEvent: @escaping (ChalkWsEvent) -> Void) {
@@ -41,6 +64,7 @@ final class ChalkWsClient {
 			switch result {
 			case .failure(let err):
 				self.log.log(.error, "ws.receive_failed", meta: ["err": err.localizedDescription])
+				DispatchQueue.main.async { [weak self] in self?.onState?("ws_failed") }
 				onError(err.localizedDescription)
 			case .success(let msg):
 				switch msg {
