@@ -26,6 +26,15 @@ Decision: build `apps/ios` + `apps/android` first. Extract SDKs later once UX + 
 
 ## Requirements
 
+## Reference (existing implementation)
+
+RealtimeKit is already implemented in `sdk-core` (web/TS) and should be the behavioral baseline for native apps:
+
+- RealtimeKit init/join + retry/timeouts: `packages/sdk-core/src/client.ts`
+- Room wrapper mapping RTK participants/tracks → Chalk types: `packages/sdk-core/src/room.ts`
+- Token flow expects API to return `tokens.rtcToken` (RealtimeKit auth token): `packages/sdk-core/src/types.ts`
+- Recording state/webhooks scaffolding: `packages/sdk-core/src/managers/recording-manager.ts`, `packages/sdk-core/src/webhooks/*`
+
 ### Meeting + Participants
 
 - Must support multiple participants (grid + active speaker layouts).
