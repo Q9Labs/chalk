@@ -1,6 +1,5 @@
 package ai.q9labs.chalk.nativeapp.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -27,19 +26,10 @@ import ai.q9labs.chalk.nativeapp.ui.theme.ChalkSurface
 fun LobbyScreen(
     displayName: String,
     onDisplayNameChange: (String) -> Unit,
-    wsUrl: String,
-    onWsUrlChange: (String) -> Unit,
-    roomId: String,
-    onRoomIdChange: (String) -> Unit,
-    accessToken: String,
-    onAccessTokenChange: (String) -> Unit,
-    rtcToken: String,
-    onRtcTokenChange: (String) -> Unit,
     onJoin: () -> Unit,
 ) {
     var isMicOn by remember { mutableStateOf(true) }
     var isCamOn by remember { mutableStateOf(true) }
-    var showAdvanced by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -152,72 +142,12 @@ fun LobbyScreen(
                 )
             )
 
-            TextButton(
-                onClick = { showAdvanced = !showAdvanced },
-                modifier = Modifier.align(Alignment.Start),
-            ) {
-                Text(if (showAdvanced) "Hide advanced" else "Show advanced", color = ChalkPrimary)
-            }
-
-            AnimatedVisibility(visible = showAdvanced) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = wsUrl,
-                        onValueChange = onWsUrlChange,
-                        label = { Text("wsUrl (wss://.../ws)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ChalkPrimary,
-                            unfocusedBorderColor = ChalkSurface,
-                            focusedLabelColor = ChalkPrimary
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = roomId,
-                        onValueChange = onRoomIdChange,
-                        label = { Text("roomId") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ChalkPrimary,
-                            unfocusedBorderColor = ChalkSurface,
-                            focusedLabelColor = ChalkPrimary
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = accessToken,
-                        onValueChange = onAccessTokenChange,
-                        label = { Text("accessToken (Chalk WS)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ChalkPrimary,
-                            unfocusedBorderColor = ChalkSurface,
-                            focusedLabelColor = ChalkPrimary
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = rtcToken,
-                        onValueChange = onRtcTokenChange,
-                        label = { Text("rtcToken (RealtimeKit)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ChalkPrimary,
-                            unfocusedBorderColor = ChalkSurface,
-                            focusedLabelColor = ChalkPrimary
-                        ),
-                    )
-                }
-            }
-
             Button(
                 onClick = onJoin,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
-                enabled = displayName.isNotBlank() && wsUrl.isNotBlank() && roomId.isNotBlank() && accessToken.isNotBlank() && rtcToken.isNotBlank(),
+                enabled = displayName.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = ChalkPrimary,
                     disabledContainerColor = Color.Gray.copy(alpha = 0.3f)

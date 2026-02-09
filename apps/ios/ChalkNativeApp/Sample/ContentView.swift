@@ -4,15 +4,10 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var meeting = ChalkMeetingController()
     
-    // Config (Hardcoded for demo, normally from Deep Link or API)
     @State private var displayName = "Guest"
-    // TODO: Fetch these from backend in real flow
-    @State private var wsUrl = ""
-    @State private var accessToken = ""
-    @State private var rtcToken = ""
-    @State private var roomId = ""
-    @State private var participantId = UUID().uuidString
     @State private var showConfig = false
+    @State private var bootstrapError: String? = nil
+    private let bootstrap = ChalkBootstrap()
 
     var body: some View {
         ZStack {
@@ -42,7 +37,7 @@ struct ContentView: View {
                 }
                 
                 // Error Toast
-                if let error = meeting.state.lastError {
+                if let error = (bootstrapError ?? meeting.state.lastError) {
                     VStack {
                         Spacer()
                         Text("Error: \(error)")
@@ -61,22 +56,8 @@ struct ContentView: View {
         .sheet(isPresented: $showConfig) {
             NavigationStack {
                 Form {
-                    Section("Join Config (debug)") {
-                        TextField("wsUrl (wss://.../ws)", text: $wsUrl)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        TextField("accessToken (Chalk WS)", text: $accessToken)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        TextField("rtcToken (RealtimeKit)", text: $rtcToken)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        TextField("roomId", text: $roomId)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        TextField("participantId", text: $participantId)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
+                    Section("Env (apps/native/.env)") {
+                        Text("Values come from `apps/native/.env` copied into the app bundle as `chalk.env`.")
                     }
                 }
                 .navigationTitle("Config")
@@ -90,25 +71,34 @@ struct ContentView: View {
     }
     
     func joinMeeting() {
-        // In a real app, we'd hit the HTTP API here to get tokens first.
-        // For this UI demo, we assume tokens are pre-filled or handled by the controller's mock.
-        guard !wsUrl.isEmpty, !accessToken.isEmpty, !rtcToken.isEmpty, !roomId.isEmpty else {
-            showConfig = true
-            return
+        bootstrapError = nil
+        Task {
+            do {
+                let env = try ChalkEnv.load()
+                let roomName = "\(env.roomPrefix)-\(UUID().uuidString.prefix(8))"
+                let joined = try await bootstrap.bootstrapJoin(
+                    apiUrl: env.apiUrl,
+                    wsUrl: env.wsUrl,
+                    apiKey: env.apiKey,
+                    roomName: String(roomName),
+                    displayName: displayName
+                )
+                meeting.join(
+                    .init(
+                        apiUrl: env.apiUrl,
+                        wsUrl: env.wsUrl,
+                        accessToken: joined.accessToken,
+                        rtcToken: joined.rtcToken,
+                        roomId: joined.roomId,
+                        participantId: joined.participantId,
+                        displayName: displayName
+                    )
+                )
+            } catch {
+                bootstrapError = error.localizedDescription
+                showConfig = true
+            }
         }
-        guard let url = URL(string: wsUrl) else { return }
-        meeting.join(
-            .init(
-                apiUrl: nil, // Not used in this simplified join
-                wsUrl: url,
-                accessToken: accessToken,
-                rtcToken: rtcToken,
-                roomId: roomId,
-                participantId: participantId,
-                displayName: displayName
-            )
-        )
-        showConfig = false
     }
 }
 

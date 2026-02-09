@@ -39,6 +39,17 @@ targets:
           mkdir -p "${OUT}"
           rsync -a --delete "${ROOT}/apps/native/whiteboard-web/dist/" "${OUT}/"
         showEnvVars: false
+      - name: Bundle chalk env (dev)
+        script: |
+          set -euo pipefail
+          ROOT="${SRCROOT}/../../.."
+          ENV="${ROOT}/apps/native/.env"
+          if [ ! -f "${ENV}" ]; then
+            ENV="${ROOT}/apps/native/.env.example"
+          fi
+          OUT="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/chalk.env"
+          cp "${ENV}" "${OUT}"
+        showEnvVars: false
 packages:
   ChalkMeetingKit:
     path: ../ChalkMeetingKit

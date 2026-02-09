@@ -68,10 +68,19 @@ val copyWhiteboardAssets = tasks.register<Copy>("copyWhiteboardAssets") {
 	dependsOn(buildWhiteboardWeb)
 
 	val dist = rootProject.file("../native/whiteboard-web/dist")
+	val env = rootProject.file("../native/.env")
+	val envExample = rootProject.file("../native/.env.example")
 	val outDir = layout.buildDirectory.dir("generated/whiteboard").get().asFile
 
 	from(dist)
 	into(outDir.resolve("whiteboard"))
+
+	// Bundle env for dev bootstrap (app reads `assets/chalk.env` at runtime).
+	// Prefer `apps/native/.env` (gitignored). Fallback to `.env.example`.
+	from(if (env.exists()) env else envExample) {
+		rename { "chalk.env" }
+		into(outDir)
+	}
 }
 
 android.sourceSets.named("main") {

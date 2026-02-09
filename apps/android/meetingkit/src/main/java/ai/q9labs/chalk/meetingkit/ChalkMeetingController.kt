@@ -27,6 +27,7 @@ class ChalkMeetingController(
 
 	private val ws = ChalkWsClient()
 	private var api: ChalkApiClient? = null
+	private var refreshToken: String? = null
 	private var meeting: RealtimeKitClient? = null
 	private var roomId: String? = null
 
@@ -36,6 +37,7 @@ class ChalkMeetingController(
 		_state.update { it.copy(connection = "connecting", lastError = null) }
 
 		roomId = payload.roomId
+		refreshToken = payload.refreshToken
 		api = ChalkApiClient(
 			apiBaseUrl = payload.apiUrl ?: ChalkApiClient.inferApiBaseUrl(payload.wsUrl),
 			accessToken = payload.accessToken,
@@ -52,11 +54,41 @@ class ChalkMeetingController(
 		initRtk(activity, payload.rtcToken)
 	}
 
+	suspend fun bootstrapAndJoin(
+		activity: Activity,
+		apiUrl: String,
+		wsUrl: String,
+		apiKey: String,
+		roomName: String,
+		displayName: String,
+	) {
+		_state.update { it.copy(connection = "connecting", lastError = null) }
+
+		val bootstrap = ChalkBootstrapClient(apiUrl)
+		val tenant = withContext(Dispatchers.IO) { bootstrap.exchangeApiKey(apiKey) }
+		val joined = withContext(Dispatchers.IO) { bootstrap.addParticipant(tenant.accessToken, roomName, displayName) }
+
+		join(
+			activity,
+			ChalkJoinPayload(
+				apiUrl = apiUrl,
+				wsUrl = wsUrl,
+				accessToken = joined.accessToken,
+				refreshToken = joined.refreshToken,
+				rtcToken = joined.rtcToken,
+				roomId = joined.room.id,
+				participantId = joined.participant.id,
+				displayName = displayName,
+			),
+		)
+	}
+
 	suspend fun leave() {
 		_state.update { it.copy(connection = "leaving") }
 		ws.close()
 		api = null
 		roomId = null
+		refreshToken = null
 		meeting?.leaveRoom(onSuccess = {}, onFailure = {})
 		meeting?.release(onSuccess = {}, onFailure = {})
 		meeting = null

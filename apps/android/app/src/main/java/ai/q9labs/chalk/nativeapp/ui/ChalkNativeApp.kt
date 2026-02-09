@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ai.q9labs.chalk.meetingkit.ChalkJoinPayload
 import ai.q9labs.chalk.nativeapp.MainViewModel
 import ai.q9labs.chalk.nativeapp.ui.screens.LobbyScreen
 import ai.q9labs.chalk.nativeapp.ui.screens.MeetingScreen
@@ -29,12 +28,9 @@ fun ChalkNativeApp(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val ctx = LocalContext.current
 
-    // Debug join (until HTTP join flow is wired)
+    // Dev bootstrap join uses `apps/native/.env` copied into assets as `chalk.env`
     var displayName by remember { mutableStateOf("Guest") }
-    var wsUrl by remember { mutableStateOf("") }
-    var roomId by remember { mutableStateOf("") }
-    var accessToken by remember { mutableStateOf("") }
-    var rtcToken by remember { mutableStateOf("") }
+    var showConfigHint by remember { mutableStateOf(false) }
     
     Box(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -46,7 +42,7 @@ fun ChalkNativeApp(vm: MainViewModel) {
                 if (isConnected) {
                     MeetingScreen(
                         vm = vm,
-                        roomTitle = roomId.ifBlank { "Chalk" },
+                        roomTitle = "Chalk",
                         participants = state.participants,
                         onLeave = { vm.leave() }
                     )
@@ -54,27 +50,10 @@ fun ChalkNativeApp(vm: MainViewModel) {
                     LobbyScreen(
                         displayName = displayName,
                         onDisplayNameChange = { displayName = it },
-                        wsUrl = wsUrl,
-                        onWsUrlChange = { wsUrl = it },
-                        roomId = roomId,
-                        onRoomIdChange = { roomId = it },
-                        accessToken = accessToken,
-                        onAccessTokenChange = { accessToken = it },
-                        rtcToken = rtcToken,
-                        onRtcTokenChange = { rtcToken = it },
                         onJoin = {
                             val activity = ctx as? android.app.Activity ?: return@LobbyScreen
-                            vm.join(
-                                activity,
-                                ChalkJoinPayload(
-                                    wsUrl = wsUrl,
-                                    accessToken = accessToken,
-                                    rtcToken = rtcToken,
-                                    roomId = roomId,
-                                    participantId = java.util.UUID.randomUUID().toString(),
-                                    displayName = displayName
-                                )
-                            )
+                            runCatching { vm.joinFromEnv(activity, displayName) }
+                                .onFailure { showConfigHint = true }
                         }
                     )
                 }
@@ -112,6 +91,26 @@ fun ChalkNativeApp(vm: MainViewModel) {
                     text = "Error: ${state.lastError}",
                     color = Color.White,
                     fontSize = 14.sp
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showConfigHint,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    text = "Missing env. Create `apps/native/.env` (see `apps/native/.env.example`).",
+                    color = Color.White,
+                    fontSize = 12.sp,
                 )
             }
         }

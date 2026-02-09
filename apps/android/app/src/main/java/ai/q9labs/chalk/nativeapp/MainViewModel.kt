@@ -11,6 +11,7 @@ import ai.q9labs.chalk.meetingkit.ChalkWhiteboardUpdateV2
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
 	private val controller = ChalkMeetingController(viewModelScope)
@@ -21,6 +22,21 @@ class MainViewModel(app: android.app.Application) : AndroidViewModel(app) {
 
 	fun join(activity: Activity, payload: ChalkJoinPayload) {
 		viewModelScope.launch { controller.join(activity, payload) }
+	}
+
+	fun joinFromEnv(activity: Activity, displayName: String) {
+		viewModelScope.launch {
+			val env = ChalkEnv.load(getApplication())
+			val roomName = "${env.roomPrefix}-${UUID.randomUUID().toString().take(8)}"
+			controller.bootstrapAndJoin(
+				activity = activity,
+				apiUrl = env.apiUrl,
+				wsUrl = env.wsUrl,
+				apiKey = env.apiKey,
+				roomName = roomName,
+				displayName = displayName,
+			)
+		}
 	}
 
 	fun leave() {
