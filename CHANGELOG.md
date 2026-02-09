@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **iOS: Meeting grid tile distortion** — force square participant tiles in the prototype iOS app so the grid doesn’t render stretched rectangles.
+- **iOS: Lobby join button blocked** — fix preview card overlays expanding beyond their frame and intercepting taps on “Ask to join”.
 
 ## [0.0.57] - 2026-02-08
 
