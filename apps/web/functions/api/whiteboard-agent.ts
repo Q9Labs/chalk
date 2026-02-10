@@ -1,5 +1,5 @@
-import { createOpenAI } from "@ai-sdk/openai";
-import { convertToModelMessages, streamText, tool } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { convertToModelMessages, streamText, tool, type UIMessage } from "ai";
 import { z } from "zod";
 
 type Env = {
@@ -8,6 +8,8 @@ type Env = {
 	OPENROUTER_SITE_URL?: string;
 	OPENROUTER_APP_NAME?: string;
 };
+
+const DEFAULT_MODEL = "moonshotai/kimi-k2.5";
 
 const WhiteboardContextSchema = z
 	.object({
@@ -120,23 +122,23 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
 	const appName = context.env.OPENROUTER_APP_NAME ?? "Chalk Whiteboard Agent";
 
-	// OpenRouter is OpenAI-compatible; use OpenAI provider with a custom baseURL.
-	const openrouter = createOpenAI({
+	const openrouter = createOpenRouter({
 		apiKey,
-		baseURL: "https://openrouter.ai/api/v1",
 		headers: {
 			"HTTP-Referer": referer,
 			"X-Title": appName,
 		},
 	});
 
-	const modelName =
-		model ?? context.env.OPENROUTER_DEFAULT_MODEL ?? "openai/gpt-4o-mini";
+	const modelName = model ?? context.env.OPENROUTER_DEFAULT_MODEL ?? DEFAULT_MODEL;
+
+	const uiMessages = messages as Array<Omit<UIMessage, "id">>;
+	const modelMessages = await convertToModelMessages(uiMessages, { tools });
 
 	const result = streamText({
-		model: openrouter(modelName),
+		model: openrouter.chat(modelName),
 		system: buildSystemPrompt(whiteboardContext),
-		messages: convertToModelMessages(messages),
+		messages: modelMessages,
 		tools,
 		temperature: 0.2,
 	});

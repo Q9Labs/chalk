@@ -12,9 +12,10 @@ type Props = {
 	excalidrawAPI: ExcalidrawImperativeAPI | null;
 };
 
-const DEFAULT_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_MODEL = "moonshotai/kimi-k2.5";
 
 const MODEL_OPTIONS = [
+	{ value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
 	{ value: "openai/gpt-4o-mini", label: "GPT-4o mini" },
 	{ value: "anthropic/claude-3.5-sonnet", label: "Claude 3.5 Sonnet" },
 	{ value: "google/gemini-2.0-flash", label: "Gemini 2.0 Flash" },

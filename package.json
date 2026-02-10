@@ -13,6 +13,7 @@
 	"scripts": {
 		"build": "turbo build",
 		"dev": "turbo dev",
+		"dev:web:pages": "bun run --cwd apps/web dev:pages",
 		"test": "turbo test",
 		"test:e2e": "CHALK_E2E_RUN=1 bun run --cwd apps/e2e src/index.ts --run",
 		"test:e2e:require": "CHALK_E2E_RUN=1 CHALK_E2E_REQUIRE=1 bun run --cwd apps/e2e src/index.ts --run --require",
