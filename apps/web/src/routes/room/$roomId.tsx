@@ -12,15 +12,17 @@
  * - Keyboard shortcut 'W' to toggle whiteboard
  */
 
-import {
-	useInteractions,
-	useWhiteboard,
-	VideoConference,
-} from "@q9labs/chalk-react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
-import z from "zod";
-import { ReactionBubbles } from "@/features/room/components";
+	import {
+		useInteractions,
+		useWhiteboard,
+		VideoConference,
+	} from "@q9labs/chalk-react";
+	import { createFileRoute, useNavigate } from "@tanstack/react-router";
+	import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+	import { useCallback, useEffect, useState } from "react";
+	import z from "zod";
+	import { ReactionBubbles } from "@/features/room/components";
+	import { WhiteboardAgentOverlay } from "@/features/whiteboard-agent/WhiteboardAgentOverlay";
 
 export const Route = createFileRoute("/room/$roomId")({
 	component: RoomPage,
@@ -32,14 +34,16 @@ export const Route = createFileRoute("/room/$roomId")({
 	}),
 });
 
-function RoomPage() {
+	function RoomPage() {
 	const { roomId } = Route.useParams() as {
 		roomId: string;
 	};
 	const { roomName } = Route.useSearch();
 	const navigate = useNavigate();
 
-	const [storedUserName, setStoredUserName] = useState<string>("");
+		const [storedUserName, setStoredUserName] = useState<string>("");
+		const [excalidrawAPI, setExcalidrawAPI] =
+			useState<ExcalidrawImperativeAPI | null>(null);
 
 	// Load username from sessionStorage after mount
 	useEffect(() => {
@@ -64,7 +68,7 @@ function RoomPage() {
 	return (
 		<div className="h-screen w-screen relative">
 			{/*@ts-ignore*/}
-			<VideoConference
+				<VideoConference
 				roomId={roomId}
 				roomName={roomName || "Meeting On Chalk"}
 				userName={storedUserName || "Guest"}
@@ -79,29 +83,33 @@ function RoomPage() {
 				sounds={true}
 				debug={true}
 				role="host"
-				features={{
-					chat: true,
-					recording: true,
-					screenShare: true,
-					whiteboard: true,
-					reactions: true,
-					handRaise: true,
-					tour: false,
-				}}
-				defaults={{
-					videoEnabled: false,
-					layout: "grid",
-					audioEnabled: false,
-				}}
-				className="h-full w-full"
-			/>
+					features={{
+						chat: true,
+						recording: true,
+						screenShare: true,
+						whiteboard: true,
+						reactions: true,
+						handRaise: true,
+						tour: false,
+					}}
+					whiteboard={{
+						onExcalidrawApiReady: (api) => setExcalidrawAPI(api),
+					}}
+					defaults={{
+						videoEnabled: false,
+						layout: "grid",
+						audioEnabled: false,
+					}}
+					className="h-full w-full"
+				/>
 
-			{/* App-specific overlays */}
-			<WhiteboardKeyboardShortcut />
-			<ReactionBubblesOverlay />
-		</div>
-	);
-}
+				{/* App-specific overlays */}
+				<WhiteboardKeyboardShortcut />
+				<ReactionBubblesOverlay />
+				<WhiteboardAgentOverlay excalidrawAPI={excalidrawAPI} />
+			</div>
+		);
+	}
 
 /**
  * Keyboard shortcut 'W' to toggle whiteboard

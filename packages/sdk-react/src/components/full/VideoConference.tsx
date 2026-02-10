@@ -5,16 +5,17 @@
  * Handles the full flow: lobby → joining → meeting → end.
  */
 
-import type {
-	ChalkError,
-	Participant,
-	ReactionEmoji,
-	Transcript,
-} from "@q9labs/chalk-core";
-import { ChalkErrorCode } from "@q9labs/chalk-core";
-import type React from "react";
-import type { ComponentType, ReactNode } from "react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+	import type {
+		ChalkError,
+		Participant,
+		ReactionEmoji,
+		Transcript,
+	} from "@q9labs/chalk-core";
+	import { ChalkErrorCode } from "@q9labs/chalk-core";
+	import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+	import type React from "react";
+	import type { ComponentType, ReactNode } from "react";
+	import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { toast } from "sonner";
 import { useChalkSession } from "../../context/chalk-provider";
@@ -167,7 +168,7 @@ export interface MeetingEndData {
 	stats: MeetingStats;
 }
 
-export interface VideoConferenceProps {
+	export interface VideoConferenceProps {
 	roomId: string;
 	/** Optional display name for the room (used in lobby + meeting UI). Defaults to roomId. */
 	roomName?: string;
@@ -189,11 +190,15 @@ export interface VideoConferenceProps {
 	/** Fires when meeting ends (leave or disconnect) with meeting data */
 	onEnd?: (data: MeetingEndData) => void;
 	onError?: (error: ChalkError) => void;
-	onAddPeople?: () => void;
-	className?: string;
-}
+		onAddPeople?: () => void;
+		whiteboard?: {
+			/** Exposes Excalidraw imperative API when whiteboard mounts. */
+			onExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
+		};
+		className?: string;
+	}
 
-function VideoConferenceBase({
+	function VideoConferenceBase({
 	roomId,
 	roomName,
 	userName,
@@ -209,10 +214,11 @@ function VideoConferenceBase({
 	onJoin,
 	onLeave,
 	onEnd,
-	onError,
-	onAddPeople,
-	className,
-}: VideoConferenceProps): React.JSX.Element {
+		onError,
+		onAddPeople,
+		whiteboard: whiteboardOpts,
+		className,
+	}: VideoConferenceProps): React.JSX.Element {
 	const [phase, setPhase] = useState<Phase>("lobby");
 	const [error, setError] = useState<string | null>(null);
 	const [meetingDuration, setMeetingDuration] = useState(0);
@@ -839,7 +845,7 @@ function VideoConferenceBase({
 
 	return (
 		<>
-			<MeetingRoom
+				<MeetingRoom
 				roomName={effectiveRoomName}
 				localParticipant={localMeetingParticipant}
 				participants={allParticipants}
@@ -881,8 +887,9 @@ function VideoConferenceBase({
 				onToggleWhiteboard={whiteboard.toggle}
 				onSendReaction={handleSendReaction}
 				onLeave={handleLeave}
-				onAddPeople={onAddPeople}
-				participantVolumes={participantVolumes}
+					onAddPeople={onAddPeople}
+					onWhiteboardExcalidrawApiReady={whiteboardOpts?.onExcalidrawApiReady}
+					participantVolumes={participantVolumes}
 				onParticipantVolumeChange={setParticipantVolume}
 				getParticipantVolume={getAudioVolume}
 				connectionStatus={connectionStatus}

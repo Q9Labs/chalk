@@ -1,5 +1,6 @@
 import type React from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useDraggable } from "../../hooks/ui/useDraggable";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -138,6 +139,8 @@ export interface MeetingRoomProps {
 	/** Get normalized volume (0-1) for a participant. Used by AudioRenderer. */
 	getParticipantVolume?: (participantId: string) => number;
 	theme?: "light" | "dark" | "system";
+	/** Exposes Excalidraw imperative API when whiteboard mounts. */
+	onWhiteboardExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
 	className?: string;
 }
 
@@ -194,6 +197,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	onParticipantVolumeChange,
 	getParticipantVolume,
 	theme = "system",
+	onWhiteboardExcalidrawApiReady,
 	className,
 }) => {
 	const [activePanel, setActivePanel] = useState<
@@ -523,16 +527,18 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 												participants={allParticipants}
 												showThumbnails={false}
 												theme={theme === "system" ? "auto" : theme}
+												onExcalidrawApiReady={onWhiteboardExcalidrawApiReady}
 											/>
 										}
 									/>
-								) : enableWhiteboard && isWhiteboardOpen ? (
-									<WhiteboardPanel
-										participants={allParticipants}
-										showThumbnails={false}
-										theme={theme === "system" ? "auto" : theme}
-									/>
-								) : (
+									) : enableWhiteboard && isWhiteboardOpen ? (
+										<WhiteboardPanel
+											participants={allParticipants}
+											showThumbnails={false}
+											theme={theme === "system" ? "auto" : theme}
+											onExcalidrawApiReady={onWhiteboardExcalidrawApiReady}
+										/>
+									) : (
 									<ScreenShareView
 										screenShareTrack={screenSharer?.screenShareTrack!}
 										sharedByName={screenSharer?.displayName || "Unknown"}
