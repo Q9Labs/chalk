@@ -6,11 +6,26 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import viteTsConfigPaths from "vite-tsconfig-paths";
 
+const pagesDevPort = process.env.CHALK_PAGES_DEV_PORT;
+const pagesDevTarget = pagesDevPort
+	? `http://localhost:${pagesDevPort}`
+	: undefined;
+
 // SPA mode for Cloudflare Pages deployment
 // SSR requires Cloudflare Workers, but our token only has Pages permission
 const config = defineConfig({
 	server: {
 		port: 3070,
+		...(pagesDevTarget
+			? {
+					proxy: {
+						"/api": {
+							target: pagesDevTarget,
+							changeOrigin: true,
+						},
+					},
+				}
+			: {}),
 	},
 	resolve: {
 		dedupe: [
