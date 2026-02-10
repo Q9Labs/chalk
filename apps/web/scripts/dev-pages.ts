@@ -1,0 +1,59 @@
+import { existsSync } from "node:fs";
+
+const WEB_DIR = new URL("..", import.meta.url).pathname;
+
+const pagesPort = Number(process.env.PAGES_PORT ?? "3070");
+const vitePort = Number(process.env.VITE_PORT ?? "3071");
+
+const devVarsPath = `${WEB_DIR}/.dev.vars`;
+if (!existsSync(devVarsPath)) {
+	// Keep output short; this is the #1 local footgun.
+	console.warn(`[web] missing .dev.vars at ${devVarsPath}`);
+	console.warn(`[web] add OPENROUTER_API_KEY=... (required for /api/whiteboard-agent)`);
+}
+
+const start = (cmd: string[]) => {
+	const proc = Bun.spawn(cmd, {
+		cwd: WEB_DIR,
+		stdout: "inherit",
+		stderr: "inherit",
+		env: process.env,
+	});
+	if (proc.pid) console.log(`[web] started: ${cmd.join(" ")} (pid=${proc.pid})`);
+	return proc;
+};
+
+const vite = start(["bunx", "vite", "dev", "--port", String(vitePort)]);
+const pages = start([
+	"bunx",
+	"wrangler",
+	"pages",
+	"dev",
+	"--proxy",
+	String(vitePort),
+	"--port",
+	String(pagesPort),
+]);
+
+const shutdown = () => {
+	try {
+		vite.kill("SIGTERM");
+	} catch {}
+	try {
+		pages.kill("SIGTERM");
+	} catch {}
+};
+
+process.on("SIGINT", () => {
+	shutdown();
+	process.exit(0);
+});
+process.on("SIGTERM", () => {
+	shutdown();
+	process.exit(0);
+});
+
+await Promise.race([vite.exited, pages.exited]);
+shutdown();
+process.exit(1);
+
