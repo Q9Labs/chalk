@@ -5,20 +5,20 @@
  * Handles sync, permissions, and participant thumbnails.
  */
 
-	import {
-		createElement,
-		memo,
-		useCallback,
-		useEffect,
-		useRef,
-		useState,
-	} from "react";
-	import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-	import { useSession } from "../../context/chalk-provider";
-	import { useWhiteboard } from "../../hooks/features/useWhiteboard";
-	import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
-	import { cn } from "../../utils/cn";
-	import {
+import {
+	createElement,
+	memo,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { useSession } from "../../context/chalk-provider";
+import { useWhiteboard } from "../../hooks/features/useWhiteboard";
+import { useWhiteboardPermissions } from "../../hooks/useWhiteboardPermissions";
+import { cn } from "../../utils/cn";
+import {
 	ArrowDown01Icon,
 	ArrowLeft01Icon,
 	ArrowRight01Icon,
@@ -124,7 +124,7 @@ const getCursorColor = (id: string) => {
 const EXCALIDRAW_CSS_CDN =
 	"https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.0/dist/prod/index.css";
 
-	export interface WhiteboardPanelProps {
+export interface WhiteboardPanelProps {
 	/** Called when whiteboard should close */
 	onClose?: () => void;
 	/** Controls visibility without unmounting (preserves state) */
@@ -143,11 +143,11 @@ const EXCALIDRAW_CSS_CDN =
 	participants?: Participant[];
 	/** Whether to show participant thumbnails */
 	showThumbnails?: boolean;
-		/** Position of thumbnails relative to whiteboard */
-		thumbnailPosition?: "bottom" | "right";
-		/** Exposes Excalidraw imperative API (for overlays/extensions). Called once per mount. */
-		onExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
-	}
+	/** Position of thumbnails relative to whiteboard */
+	thumbnailPosition?: "bottom" | "right";
+	/** Exposes Excalidraw imperative API (for overlays/extensions). Called once per mount. */
+	onExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
+}
 
 /**
  * Integrated collaborative whiteboard panel
@@ -155,16 +155,16 @@ const EXCALIDRAW_CSS_CDN =
  * Uses Excalidraw with real-time sync via the SDK's whiteboard system.
  * Automatically handles permissions, cursors, and element syncing.
  */
-	function WhiteboardPanelBase({
-		isVisible = true,
-		className,
-		excalidrawCssPath = EXCALIDRAW_CSS_CDN,
-		theme = "auto",
-		participants = [],
-		showThumbnails = true,
-		thumbnailPosition = "bottom",
-		onExcalidrawApiReady,
-	}: WhiteboardPanelProps): React.JSX.Element {
+function WhiteboardPanelBase({
+	isVisible = true,
+	className,
+	excalidrawCssPath = EXCALIDRAW_CSS_CDN,
+	theme = "auto",
+	participants = [],
+	showThumbnails = true,
+	thumbnailPosition = "bottom",
+	onExcalidrawApiReady,
+}: WhiteboardPanelProps): React.JSX.Element {
 	const session = useSession();
 	const {
 		canDraw,
@@ -185,8 +185,8 @@ const EXCALIDRAW_CSS_CDN =
 	const excalidrawRef = useRef<any>(null);
 	const elementsRef = useRef<readonly ExcalidrawElement[]>([]);
 	const filesRef = useRef<Record<string, unknown>>({});
-		const containerRef = useRef<HTMLDivElement>(null);
-		const didReportApiRef = useRef(false);
+	const containerRef = useRef<HTMLDivElement>(null);
+	const didReportApiRef = useRef(false);
 
 	const [isReady, setIsReady] = useState(false);
 	const [cssLoaded, setCssLoaded] = useState(false);
