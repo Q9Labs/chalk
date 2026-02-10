@@ -13,7 +13,7 @@ const DEFAULT_MODEL = "moonshotai/kimi-k2.5";
 
 const WhiteboardContextSchema = z
 	.object({
-		viewport: z.record(z.unknown()).optional(),
+		viewport: z.record(z.string(), z.unknown()).optional(),
 		selectedElementIds: z.array(z.string()).optional(),
 		visibleElements: z
 			.array(
@@ -43,7 +43,7 @@ const tools = {
 		description:
 			"Create new Excalidraw elements. Prefer a few simple shapes + text labels; avoid tiny/overlapping elements.",
 		parameters: z.object({
-			elements: z.array(z.record(z.unknown())).max(50),
+			elements: z.array(z.record(z.string(), z.unknown())).max(50),
 			regenerateIds: z.boolean().optional(),
 		}),
 	}),
@@ -55,7 +55,7 @@ const tools = {
 				.array(
 					z.object({
 						id: z.string(),
-						patch: z.record(z.unknown()),
+						patch: z.record(z.string(), z.unknown()),
 					}),
 				)
 				.max(50),
