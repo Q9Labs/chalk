@@ -6,7 +6,7 @@ from typing import Optional
 try:
     from opentelemetry import propagate, trace  # type: ignore
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # type: ignore
-    from opentelemetry.propagators.textmap import DictGetter  # type: ignore
+    from opentelemetry.propagators.textmap import Getter  # type: ignore
     from opentelemetry.sdk.resources import Resource  # type: ignore
     from opentelemetry.sdk.trace import TracerProvider  # type: ignore
     from opentelemetry.sdk.trace.export import BatchSpanProcessor  # type: ignore
@@ -14,13 +14,13 @@ except Exception:  # pragma: no cover
     propagate = None
     trace = None
     OTLPSpanExporter = None
-    DictGetter = object
+    Getter = object
     Resource = None
     TracerProvider = None
     BatchSpanProcessor = None
 
 
-class _CarrierGetter(DictGetter):
+class _CarrierGetter(Getter):
     def get(self, carrier, key):  # type: ignore[override]
         if carrier is None:
             return []
