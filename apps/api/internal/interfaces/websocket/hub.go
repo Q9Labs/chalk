@@ -471,6 +471,33 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 	pubsub := h.redisClient.Subscribe(ctx, channelName)
 	defer pubsub.Close()
 
+	h.logger.Info("redis subscribe started",
+		"event", "ws.redis.subscribe_start",
+		"room_id", roomID,
+		"channel", channelName,
+	)
+	if logging.AxiomEnabled() {
+		logging.Stdout().Info("redis subscribe started",
+			"event", "ws.redis.subscribe_start",
+			"room_id", roomID,
+			"channel", channelName,
+		)
+	}
+	defer func() {
+		h.logger.Info("redis subscribe stopped",
+			"event", "ws.redis.subscribe_stop",
+			"room_id", roomID,
+			"channel", channelName,
+		)
+		if logging.AxiomEnabled() {
+			logging.Stdout().Info("redis subscribe stopped",
+				"event", "ws.redis.subscribe_stop",
+				"room_id", roomID,
+				"channel", channelName,
+			)
+		}
+	}()
+
 	for {
 		msg, err := pubsub.ReceiveMessage(ctx)
 		if err != nil {
@@ -478,10 +505,19 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 				return
 			}
 			h.logger.Error("redis subscription error",
+				"event", "ws.redis.subscribe_error",
 				"room_id", roomID,
 				"channel", channelName,
 				"error", err.Error(),
 			)
+			if logging.AxiomEnabled() {
+				logging.Stdout().Error("redis subscription error",
+					"event", "ws.redis.subscribe_error",
+					"room_id", roomID,
+					"channel", channelName,
+					"error", err.Error(),
+				)
+			}
 			continue
 		}
 
@@ -493,7 +529,26 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 // PublishToRedis publishes a message to Redis for cross-instance broadcast
 func (h *Hub) PublishToRedis(roomID uuid.UUID, message []byte) error {
 	channelName := "room:" + roomID.String()
-	return h.redisClient.Publish(h.ctx, channelName, message)
+	err := h.redisClient.Publish(h.ctx, channelName, message)
+	if err != nil {
+		h.logger.Error("redis publish error",
+			"event", "ws.redis.publish_error",
+			"room_id", roomID,
+			"channel", channelName,
+			"payload_bytes", len(message),
+			"error", err.Error(),
+		)
+		if logging.AxiomEnabled() {
+			logging.Stdout().Error("redis publish error",
+				"event", "ws.redis.publish_error",
+				"room_id", roomID,
+				"channel", channelName,
+				"payload_bytes", len(message),
+				"error", err.Error(),
+			)
+		}
+	}
+	return err
 }
 
 // Close gracefully closes the hub

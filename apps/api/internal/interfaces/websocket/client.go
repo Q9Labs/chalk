@@ -135,6 +135,8 @@ func (c *Client) SendReliable(msg []byte) {
 			"event", "websocket.error",
 			"error_kind", "backpressure",
 			"reason", "send_buffer_full",
+			"close_code", int(websocket.StatusPolicyViolation),
+			"close_reason", "backpressure",
 			"buffer_len", len(c.send),
 			"buffer_cap", cap(c.send),
 		}
@@ -194,10 +196,13 @@ func (c *Client) readPump(ctx context.Context) {
 					peerReason = "peer_close"
 				}
 				c.setDisconnect("peer", cerr.Code, peerReason, nil)
+				// Acknowledge close + ensure done is closed so writePump exits.
+				_ = c.CloseWith(cerr.Code, "")
 				return
 			}
 			if ctx.Err() != nil {
-				c.setDisconnect("server", websocket.StatusGoingAway, "context_canceled", ctx.Err())
+				// Server shutdown / request context cancellation.
+				_ = c.CloseWith(websocket.StatusGoingAway, "context_canceled")
 				return
 			}
 			// No close frame; treat as internal/network failure and close with 1011.
@@ -249,7 +254,7 @@ func (c *Client) writePump(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			c.setDisconnect("server", websocket.StatusGoingAway, "context_canceled", ctx.Err())
+			_ = c.CloseWith(websocket.StatusGoingAway, "context_canceled")
 			return
 
 		case <-c.done:
@@ -365,7 +370,14 @@ func (c *Client) handleMessage(msg *Message) {
 	case MessageTypeTranscript:
 		c.handleTranscript(msg)
 	default:
-		c.logger().Warn("unknown message type", "type", msg.Type)
+		c.logger().Warn("unknown message type", "event", "websocket.error", "error_kind", "unknown_message_type", "type", msg.Type)
+		if logging.AxiomEnabled() {
+			logging.Stdout().Warn("unknown message type", append(c.baseAttrs(),
+				"event", "websocket.error",
+				"error_kind", "unknown_message_type",
+				"type", msg.Type,
+			)...)
+		}
 	}
 }
 
@@ -443,6 +455,19 @@ func (c *Client) handleHandLower() {
 
 // sendErrorMessage sends an error message to the client
 func (c *Client) sendErrorMessage(code, message string) {
+	c.logger().Warn("websocket error message sent",
+		"event", "websocket.app_error",
+		"app_error_code", code,
+		"app_error_message", message,
+	)
+	if logging.AxiomEnabled() {
+		logging.Stdout().Warn("websocket error message sent", append(c.baseAttrs(),
+			"event", "websocket.app_error",
+			"app_error_code", code,
+			"app_error_message", message,
+		)...)
+	}
+
 	msg, _ := NewMessage(MessageTypeError, ErrorPayload{
 		Code:    code,
 		Message: message,
