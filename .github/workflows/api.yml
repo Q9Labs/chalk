@@ -67,6 +67,7 @@ jobs:
         with:
           version: latest
           working-directory: apps/api
+          args: --timeout=5m
 
   test:
     name: Test
