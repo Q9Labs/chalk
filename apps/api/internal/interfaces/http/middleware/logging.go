@@ -58,6 +58,7 @@ func RequestLogger() gin.HandlerFunc {
 			"path", path,
 			"status_code", statusCode,
 			"status_class", statusClass,
+			"duration_ms", latency.Milliseconds(),
 			"latency_ms", latency.Milliseconds(),
 			"tenant_id", extractTenantID(c),
 			"room_id", extractRoomID(c),
