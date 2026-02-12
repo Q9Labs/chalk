@@ -14,11 +14,9 @@
 
 import { useInteractions, useWhiteboard, VideoConference } from "@q9labs/chalk-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useCallback, useEffect, useState } from "react";
 import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
-import { WhiteboardAgentOverlay } from "@/features/whiteboard-agent/WhiteboardAgentOverlay";
 
 export const Route = createFileRoute("/room/$roomId")({
 	component: RoomPage,
@@ -38,8 +36,6 @@ function RoomPage() {
 	const navigate = useNavigate();
 
 	const [storedUserName, setStoredUserName] = useState<string>("");
-	const [excalidrawAPI, setExcalidrawAPI] =
-		useState<ExcalidrawImperativeAPI | null>(null);
 
 	// Load username from sessionStorage after mount
 	useEffect(() => {
@@ -88,9 +84,6 @@ function RoomPage() {
 						handRaise: true,
 						tour: false,
 					}}
-					whiteboard={{
-						onExcalidrawApiReady: (api) => setExcalidrawAPI(api),
-					}}
 					defaults={{
 						videoEnabled: false,
 						layout: "grid",
@@ -102,7 +95,6 @@ function RoomPage() {
 				{/* App-specific overlays */}
 				<WhiteboardKeyboardShortcut />
 				<ReactionBubblesOverlay />
-				<WhiteboardAgentOverlay excalidrawAPI={excalidrawAPI} />
 			</div>
 		);
 	}

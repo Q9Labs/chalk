@@ -13,7 +13,6 @@ const devVarsPath = `${WEB_DIR}/.dev.vars`;
 if (!existsSync(devVarsPath)) {
 	// Keep output short; this is the #1 local footgun.
 	console.warn(`[web] missing .dev.vars at ${devVarsPath}`);
-	console.warn(`[web] add OPENROUTER_API_KEY=... (required for /api/whiteboard-agent)`);
 }
 
 const start = (cmd: string[]) => {

@@ -10,9 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Native: File-based logs (iOS/Android)** — write app + MeetingKit events/errors to `chalk.log`, `chalk.debug.log`, `chalk.error.log`, and add in-app “Share logs” so errors are copyable without fighting Simulator/Logcat selection.
-- **Web: Whiteboard agent (tool-calling)** — add an OpenRouter-backed agent endpoint + in-room overlay that can create/update/delete/select Excalidraw elements via tool calls.
 
 ### Changed
+
+### Removed
+
+- **Web: Whiteboard agent (tool-calling)** — removed the OpenRouter-backed agent endpoint + in-room overlay.
 
 ### Fixed
 
