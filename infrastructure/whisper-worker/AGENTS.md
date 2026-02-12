@@ -70,13 +70,13 @@
 - Redis ping:
   - `docker exec whisper-worker python -c 'import os, redis; r=redis.from_url(os.environ["REDIS_URL"], decode_responses=True, socket_connect_timeout=2, socket_timeout=2); print(r.ping())'`
 - Axiom ingest smoke:
-  - `docker exec whisper-worker python -c 'import axiom_py; c=axiom_py.Client(); print(c.ingest_events("chalk-whisper-worker", [{"event":"axiom-smoke"}]))'`
+  - `docker exec whisper-worker python -c 'import os, axiom_py; c=axiom_py.Client(); ds=os.environ.get("AXIOM_DATASET",""); print(c.ingest_events(ds, [{"event":"axiom-smoke"}]))'`
 
 ## Troubleshooting
 - `metrics.publish_failed` + Axiom 404:
   - Dataset name mismatch. Confirm `AXIOM_DATASET` and dataset exists in Axiom.
 - Axiom 403:
-  - Token lacks permissions. Use token with ingest permissions for `chalk-whisper-worker`.
+  - Token lacks permissions. Use token with ingest permissions for `AXIOM_DATASET`.
 - Redis timeouts:
   - Security group ingress missing on Redis SG.
   - Terraform resource: `aws_security_group_rule.redis_from_whisper`.
