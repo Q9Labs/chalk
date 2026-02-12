@@ -543,6 +543,75 @@ resource "aws_cloudwatch_metric_alarm" "redis_memory_node" {
   tags = local.tags
 }
 
+resource "aws_cloudwatch_metric_alarm" "whisper_queue_depth_high" {
+  count = var.whisper_enabled && var.enable_whisper_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-whisper-queue-depth-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "TranscriptionQueueDepth"
+  namespace           = var.whisper_metric_namespace
+  period              = 300
+  statistic           = "Average"
+  threshold           = 20
+  alarm_description   = "Whisper transcription queue depth is elevated"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Environment = var.environment
+  }
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "whisper_queue_wait_high" {
+  count = var.whisper_enabled && var.enable_whisper_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-whisper-queue-wait-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "QueueWaitMs"
+  namespace           = var.whisper_metric_namespace
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = 300000
+  alarm_description   = "Whisper queue wait p95 exceeds 5 minutes"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Environment = var.environment
+  }
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "whisper_failures_high" {
+  count = var.whisper_enabled && var.enable_whisper_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-whisper-failures-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "TranscriptionsFailed"
+  namespace           = var.whisper_metric_namespace
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 3
+  alarm_description   = "Whisper transcription failures spiked in the last 5 minutes"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Environment = var.environment
+  }
+
+  tags = local.tags
+}
+
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${local.name}-overview"
 
@@ -717,6 +786,55 @@ resource "aws_cloudwatch_dashboard" "main" {
             [".", "${local.name}-ws-rooms", { label = "Rooms", stat = "Average", yAxis = "right" }]
           ] : []
           period = 60
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 19
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Whisper Queue Health"
+          region = data.aws_region.current.name
+          metrics = var.whisper_enabled ? [
+            [var.whisper_metric_namespace, "TranscriptionQueueDepth", "Environment", var.environment, { label = "Queue Depth", stat = "Average", yAxis = "left" }],
+            [".", "QueueWaitMs", ".", ".", { label = "Queue Wait p95", stat = "p95", yAxis = "right" }]
+          ] : []
+          period = 60
+        }
+      },
+      {
+        type   = "metric"
+        x      = 8
+        y      = 19
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Whisper Throughput & Failures"
+          region = data.aws_region.current.name
+          metrics = var.whisper_enabled ? [
+            [var.whisper_metric_namespace, "TranscriptionsCompleted", "Environment", var.environment, { label = "Completed", stat = "Sum", color = "#2ca02c" }],
+            [".", "TranscriptionsFailed", ".", ".", { label = "Failed", stat = "Sum", color = "#d62728" }]
+          ] : []
+          period = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 16
+        y      = 19
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Whisper Duration"
+          region = data.aws_region.current.name
+          metrics = var.whisper_enabled ? [
+            [var.whisper_metric_namespace, "TranscriptionDurationMs", "Environment", var.environment, { label = "Duration p50", stat = "p50" }],
+            [".", "TranscriptionDurationMs", ".", ".", { label = "Duration p95", stat = "p95" }],
+            [".", "ProcessingTimeSeconds", ".", ".", { label = "Process Time p95 (s)", stat = "p95", yAxis = "right" }]
+          ] : []
+          period = 300
         }
       }
     ]

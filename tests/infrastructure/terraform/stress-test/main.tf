@@ -54,7 +54,7 @@ resource "aws_ecr_repository" "api" {
   tags = local.tags
 }
 
- 
+
 
 # Dedicated VPC for stress testing
 resource "aws_vpc" "stress" {
@@ -481,14 +481,14 @@ resource "aws_db_subnet_group" "stress" {
 }
 
 resource "aws_rds_cluster" "stress" {
-  cluster_identifier     = "${local.name_prefix}-db"
-  engine                 = "aurora-postgresql"
-  engine_version         = "16.4"
-  database_name          = "chalk_stress"
-  master_username        = var.db_username
-  master_password        = var.db_password
-  skip_final_snapshot    = true
-  deletion_protection    = false
+  cluster_identifier  = "${local.name_prefix}-db"
+  engine              = "aurora-postgresql"
+  engine_version      = "16.4"
+  database_name       = "chalk_stress"
+  master_username     = var.db_username
+  master_password     = var.db_password
+  skip_final_snapshot = true
+  deletion_protection = false
 
   serverlessv2_scaling_configuration {
     min_capacity = var.aurora_min_capacity
@@ -647,6 +647,41 @@ resource "aws_cloudwatch_dashboard" "stress" {
             ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.stress.arn_suffix],
             [".", "TargetResponseTime", ".", ".", { stat = "p95" }],
           ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 12
+        width  = 12
+        height = 6
+        properties = {
+          title  = "ALB HTTP Errors"
+          region = var.aws_region
+          metrics = [
+            ["AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", "LoadBalancer", aws_lb.stress.arn_suffix, { label = "ELB 5XX", stat = "Sum", color = "#d62728" }],
+            [".", "HTTPCode_Target_5XX_Count", ".", ".", "TargetGroup", aws_lb_target_group.api.arn_suffix, { label = "Target 5XX", stat = "Sum", color = "#ff7f0e" }]
+          ]
+          period = 60
+          stat   = "Sum"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 12
+        width  = 12
+        height = 6
+        properties = {
+          title  = "ECS Service Saturation"
+          region = var.aws_region
+          metrics = [
+            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.stress.name, "ServiceName", aws_ecs_service.api.name, { label = "Running", stat = "Average", yAxis = "left" }],
+            [".", "PendingTaskCount", ".", ".", ".", ".", { label = "Pending", stat = "Average", yAxis = "left" }],
+            [".", "CPUUtilization", ".", ".", ".", ".", { label = "CPU", stat = "Maximum", yAxis = "right" }],
+            [".", "MemoryUtilization", ".", ".", ".", ".", { label = "Memory", stat = "Maximum", yAxis = "right" }]
+          ]
+          period = 60
         }
       }
     ]

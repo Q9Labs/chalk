@@ -28,6 +28,31 @@ output "ecs_cluster_name" {
   value       = aws_ecs_cluster.stress.name
 }
 
+output "ecs_service_name" {
+  description = "ECS service name"
+  value       = aws_ecs_service.api.name
+}
+
+output "alb_arn_suffix" {
+  description = "ALB ARN suffix for CloudWatch metrics"
+  value       = aws_lb.stress.arn_suffix
+}
+
+output "target_group_arn_suffix" {
+  description = "ALB target group ARN suffix for CloudWatch metrics"
+  value       = aws_lb_target_group.api.arn_suffix
+}
+
+output "aurora_cluster_identifier" {
+  description = "Aurora cluster identifier"
+  value       = aws_rds_cluster.stress.cluster_identifier
+}
+
+output "redis_replication_group_id" {
+  description = "ElastiCache replication group ID"
+  value       = aws_elasticache_replication_group.stress.id
+}
+
 output "ecr_repository_url" {
   description = "ECR repository URL for the API image"
   value       = aws_ecr_repository.api.repository_url

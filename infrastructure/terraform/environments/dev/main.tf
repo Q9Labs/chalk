@@ -163,6 +163,7 @@ module "monitoring" {
   environment = local.environment
 
   ecs_cluster_name            = module.ecs.cluster_name
+  ecs_service_name            = module.ecs.service_name
   ecs_log_group_name          = module.ecs.log_group_name
   alb_arn                     = module.ecs.alb_arn
   alb_arn_suffix              = element(split("loadbalancer/", module.ecs.alb_arn), 1)

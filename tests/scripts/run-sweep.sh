@@ -7,6 +7,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 ENV_FILE="$PROJECT_ROOT/tests/load/k6/.env"
 RUN_TESTS="$PROJECT_ROOT/tests/scripts/run-tests.sh"
+COLLECT_INFRA_SNAPSHOT="$PROJECT_ROOT/tests/scripts/collect-infra-snapshot.sh"
 RESULTS_DIR="$PROJECT_ROOT/tests/results"
 SWEEP_RESULTS_FILE="$RESULTS_DIR/SWEEP_RESULTS.md"
 LOCK_FILE="/tmp/chalk-stress-sweep.lock"
@@ -17,6 +18,7 @@ K6_SWEEP_STEP="${K6_SWEEP_STEP:-50}"
 K6_SWEEP_SCENARIOS="${K6_SWEEP_SCENARIOS:-large-room,ws-storm}"
 K6_SWEEP_LONG_POINTS="${K6_SWEEP_LONG_POINTS:-200,first-fail,750}"
 K6_SWEEP_COOLDOWN_SECONDS="${K6_SWEEP_COOLDOWN_SECONDS:-60}"
+K6_COLLECT_INFRA_SNAPSHOT="${K6_COLLECT_INFRA_SNAPSHOT:-true}"
 
 die() {
   echo "Error: $*" >&2
@@ -31,6 +33,23 @@ contains_token() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "$1 not found"
+}
+
+collect_snapshot() {
+  local start_time="$1"
+  local end_time="$2"
+  local label="$3"
+
+  [ "$K6_COLLECT_INFRA_SNAPSHOT" = "true" ] || return 0
+
+  if [ ! -f "$COLLECT_INFRA_SNAPSHOT" ]; then
+    echo "Warn: missing $COLLECT_INFRA_SNAPSHOT; skipping infra snapshot."
+    return 0
+  fi
+
+  if ! bash "$COLLECT_INFRA_SNAPSHOT" "$start_time" "$end_time" "$label"; then
+    echo "Warn: infra snapshot failed for $label; continuing sweep."
+  fi
 }
 
 run_one() {
@@ -71,6 +90,10 @@ echo "Cooldown: ${K6_SWEEP_COOLDOWN_SECONDS}s"
 require_cmd k6
 require_cmd jq
 require_cmd bc
+if [ "$K6_COLLECT_INFRA_SNAPSHOT" = "true" ]; then
+  require_cmd terraform
+  require_cmd aws
+fi
 
 IFS=',' read -r -a scenarios <<<"$K6_SWEEP_SCENARIOS"
 
@@ -97,6 +120,7 @@ K6_ACTIVE_USERS="$K6_SWEEP_START" K6_SHORT=true "$RUN_TESTS" smoke || true
 for ((vu = K6_SWEEP_START; vu <= K6_SWEEP_END; vu += K6_SWEEP_STEP)); do
   echo ""
   echo "=== Step: ${vu} VUs (short) ==="
+  step_start_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   large_room_cell=""
   ws_storm_cell=""
@@ -161,6 +185,13 @@ for ((vu = K6_SWEEP_START; vu <= K6_SWEEP_END; vu += K6_SWEEP_STEP)); do
   if [ "$step_failed" = "true" ]; then
     notes="thresholds failed"
   fi
+
+  step_end_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  snapshot_label="sweep-vu-${vu}"
+  if [ "$step_failed" = "true" ]; then
+    snapshot_label="${snapshot_label}-failed"
+  fi
+  collect_snapshot "$step_start_time" "$step_end_time" "$snapshot_label"
 
   {
     echo "| $vu | ${large_room_cell:-N/A} | ${ws_storm_cell:-N/A} | ${first_fail_confirmed} | ${notes:-} |"

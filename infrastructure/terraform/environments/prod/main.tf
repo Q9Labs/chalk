@@ -339,6 +339,7 @@ module "monitoring" {
   environment = local.environment
 
   ecs_cluster_name            = module.ecs.cluster_name
+  ecs_service_name            = module.ecs.service_name
   ecs_log_group_name          = module.ecs.log_group_name
   alb_arn                     = module.ecs.alb_arn
   alb_arn_suffix              = element(split("loadbalancer/", module.ecs.alb_arn), 1)
@@ -350,6 +351,7 @@ module "monitoring" {
   redis_replication_group_id = module.elasticache.replication_group_id
   redis_cache_cluster_ids    = module.elasticache.member_cache_cluster_ids
   api_gateway_id             = module.api_gateway.http_api_id
+  whisper_enabled            = true
 
   alert_emails = var.alert_emails
 }

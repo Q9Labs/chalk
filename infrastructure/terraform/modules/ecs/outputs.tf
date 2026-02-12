@@ -13,6 +13,11 @@ output "cluster_arn" {
   value       = aws_ecs_cluster.main.arn
 }
 
+output "service_name" {
+  description = "ECS service name"
+  value       = try(aws_ecs_service.api[0].name, null)
+}
+
 output "capacity_provider_name" {
   description = "ECS Capacity Provider name"
   value       = aws_ecs_capacity_provider.main.name

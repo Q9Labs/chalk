@@ -68,7 +68,117 @@ class WhisperWorker:
             health_check_interval=REDIS_HEALTHCHECK_INTERVAL,
         )
         self.transcriber = WhisperTranscriber()
+        self.metric_namespace = os.getenv("WHISPER_METRIC_NAMESPACE", "Chalk/Whisper")
         self.cloudwatch = boto3.client("cloudwatch", region_name=os.getenv("AWS_REGION") or None)
+
+    def _compute_queue_wait_ms(self, created_at: Optional[str]) -> Optional[int]:
+        if not created_at:
+            return None
+
+        try:
+            created_at_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            wait_ms = (datetime.now(timezone.utc) - created_at_dt).total_seconds() * 1000
+            return max(0, round(wait_ms))
+        except Exception:
+            return None
+
+    def publish_transcription_metrics(
+        self,
+        *,
+        outcome: str,
+        duration_ms: int,
+        queue_wait_ms: Optional[int],
+        download_size_bytes: Optional[int],
+        processing_time_seconds: Optional[float],
+    ) -> None:
+        try:
+            environment = os.getenv("ENVIRONMENT", "dev")
+            metric_data = [
+                {
+                    "MetricName": "TranscriptionsTotal",
+                    "Dimensions": [{"Name": "Environment", "Value": environment}],
+                    "Timestamp": datetime.now(timezone.utc),
+                    "Unit": "Count",
+                    "Value": 1,
+                },
+                {
+                    "MetricName": "TranscriptionDurationMs",
+                    "Dimensions": [{"Name": "Environment", "Value": environment}],
+                    "Timestamp": datetime.now(timezone.utc),
+                    "Unit": "Milliseconds",
+                    "Value": duration_ms,
+                },
+            ]
+
+            if outcome == "completed":
+                metric_data.append(
+                    {
+                        "MetricName": "TranscriptionsCompleted",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Count",
+                        "Value": 1,
+                    }
+                )
+            else:
+                metric_data.append(
+                    {
+                        "MetricName": "TranscriptionsFailed",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Count",
+                        "Value": 1,
+                    }
+                )
+
+            if queue_wait_ms is not None:
+                metric_data.append(
+                    {
+                        "MetricName": "QueueWaitMs",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Milliseconds",
+                        "Value": queue_wait_ms,
+                    }
+                )
+
+            if processing_time_seconds is not None:
+                metric_data.append(
+                    {
+                        "MetricName": "ProcessingTimeSeconds",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Seconds",
+                        "Value": processing_time_seconds,
+                    }
+                )
+
+            if download_size_bytes is not None and download_size_bytes > 0:
+                metric_data.append(
+                    {
+                        "MetricName": "DownloadSizeBytes",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Bytes",
+                        "Value": download_size_bytes,
+                    }
+                )
+
+            self.cloudwatch.put_metric_data(
+                Namespace=self.metric_namespace,
+                MetricData=metric_data,
+            )
+        except Exception as e:
+            emit_event(
+                logger,
+                level=logging.WARNING,
+                event={
+                    "event": "metrics.transcription_publish_failed",
+                    "error": str(e),
+                    "error_class": e.__class__.__name__,
+                    "error_stack": traceback.format_exc(),
+                },
+            )
 
     def process_job(
         self,
@@ -82,12 +192,14 @@ class WhisperWorker:
         download_http_status: Optional[int] = None
         download_size_bytes: Optional[int] = None
         audio_path: Optional[str] = None
+        queue_wait_ms = self._compute_queue_wait_ms(job.created_at)
 
         wide_event = {
             "event": "whisper.transcription",
             "job_id": job.job_id,
             "language": job.language,
             "queue_depth": queue_depth,
+            "queue_wait_ms": queue_wait_ms,
             "use_batched": use_batched,
             "multilingual": self.transcriber.multilingual,
             "chunk_length_seconds": self.transcriber.chunk_length_seconds,
@@ -181,6 +293,13 @@ class WhisperWorker:
             if result.text:
                 wide_event["transcript_chars"] = len(result.text)
             emit_event(logger, level=logging.INFO, event=wide_event)
+            self.publish_transcription_metrics(
+                outcome="completed",
+                duration_ms=wide_event["duration_ms"],
+                queue_wait_ms=queue_wait_ms,
+                download_size_bytes=download_size_bytes,
+                processing_time_seconds=result.processing_time_seconds,
+            )
             return result
 
         except Exception as e:
@@ -202,6 +321,13 @@ class WhisperWorker:
                 }
             )
             emit_event(logger, level=logging.ERROR, event=wide_event)
+            self.publish_transcription_metrics(
+                outcome="failed",
+                duration_ms=wide_event["duration_ms"],
+                queue_wait_ms=queue_wait_ms,
+                download_size_bytes=download_size_bytes,
+                processing_time_seconds=None,
+            )
             return TranscriptionResult(
                 job_id=job.job_id,
                 status="failed",
@@ -227,7 +353,7 @@ class WhisperWorker:
             queue_depth = self.redis.llen(JOB_QUEUE)
             environment = os.getenv("ENVIRONMENT", "dev")
             self.cloudwatch.put_metric_data(
-                Namespace="Chalk/Whisper",
+                Namespace=self.metric_namespace,
                 MetricData=[
                     {
                         "MetricName": "TranscriptionQueueDepth",

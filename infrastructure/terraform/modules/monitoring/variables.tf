@@ -81,6 +81,18 @@ variable "api_gateway_id" {
   default     = null
 }
 
+variable "whisper_enabled" {
+  description = "Whether Whisper worker monitoring should be enabled"
+  type        = bool
+  default     = false
+}
+
+variable "whisper_metric_namespace" {
+  description = "CloudWatch namespace for Whisper worker custom metrics"
+  type        = string
+  default     = "Chalk/Whisper"
+}
+
 variable "enable_ecs_alarms" {
   description = "Enable ECS CloudWatch alarms"
   type        = bool
@@ -113,6 +125,12 @@ variable "enable_aurora_alarms" {
 
 variable "enable_redis_alarms" {
   description = "Enable Redis CloudWatch alarms"
+  type        = bool
+  default     = true
+}
+
+variable "enable_whisper_alarms" {
+  description = "Enable Whisper worker CloudWatch alarms"
   type        = bool
   default     = true
 }
