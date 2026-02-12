@@ -205,3 +205,76 @@ Next decision inputs (not implemented here):
 - Where should the agent run (client vs server) for Chalk rooms?
 - What is the tool contract (create/update/delete/select/viewport/export) and permission model?
 - How to prevent abuse (rate limits, max element count, allowed props, room scoping)?
+
+---
+
+## Chalk Recommendation (Client-Run Agent)
+
+Constraint from Hasan: agent should run on the client.
+
+Decision: **do not adopt the official Excalidraw MCP as-is** for Chalk.
+
+Why:
+- Official MCP is an MCP App: it renders its own Excalidraw widget inside the MCP client (Claude/ChatGPT/etc.).
+- Chalk already has an embedded Excalidraw whiteboard (in-room) plus sync; we need to mutate that live instance.
+- Official tool surface is basically `create_view` (send full element array). We want element-level ops and tight control.
+
+What to borrow from the official MCP:
+- "Pseudo-elements" idea for edits: `delete` + `restoreCheckpoint` (conceptually).
+- Viewport framing as a first-class action (`cameraUpdate` concept).
+- User edit feedback loop: compute a diff and feed back into agent context (but in Chalk we'd use actual element state + selection).
+
+### Proposed Architecture
+
+Client responsibilities (in-room):
+- UI: prompt input + run/stop + "apply preview" toggle.
+- Collect context from Excalidraw API:
+  - selection ids
+  - visible elements summary (ids/types/x/y/w/h/text)
+  - optionally current viewport (scrollX/scrollY/zoom)
+- Execute tool calls locally against `ExcalidrawImperativeAPI`:
+  - create/update/delete/select
+  - optional viewport changes (scroll/zoom)
+- Let existing whiteboard sync broadcast the resulting element changes (same as any other local edit).
+
+LLM responsibilities:
+- Convert natural language intent into tool calls with constrained schemas.
+- No direct access to the whiteboard; only via tool calls + provided context.
+
+LLM call placement (still compatible with "client-run"):
+- Recommend: **client calls a Chalk-owned backend endpoint** that talks to the model (keeps model keys private).
+- If we truly require "no server", then need BYO key + direct client-to-model, which is a product/security decision.
+
+### Tool Contract (minimal set)
+
+Start with 4 tools (mirrors what we prototyped before, but as a stable SDK feature):
+- `whiteboard_create(elements[], regenerateIds?)`
+- `whiteboard_update(updates[{id, patch}])` with strict allow-list of patch keys
+- `whiteboard_delete(ids[])` (soft delete via `isDeleted: true`)
+- `whiteboard_select(ids[])` (optional; nice UX)
+
+Later:
+- `whiteboard_viewport({scrollX,scrollY,zoom}|{zoomToFit:true}|{centerOnIds:[...]})`
+- `whiteboard_describe()` and/or screenshot-based verification for iterative refinement
+
+### Safety / Abuse Controls (client-side + server-side)
+
+Client:
+- Max element operations per request (e.g. <= 50 creates/updates, <= 200 deletes).
+- Patch allow-list (position/size/text/colors/stroke/etc; forbid anything that breaks sync or embeds external resources).
+- Enforce min font sizes / avoid micro-elements (quality guardrails).
+
+Server (if used for LLM):
+- Rate-limit per room + per participant.
+- Cap context size: summarize elements (top N) instead of full scene.
+- Optional: require host permission to run agent, or require whiteboard draw permission.
+
+### Integration Point In Chalk
+
+Best home:
+- `packages/sdk-react/src/components/full/WhiteboardPanel.tsx`
+  - already owns the `ExcalidrawImperativeAPI` ref and sync wiring
+  - agent UI can be an overlay inside this panel
+
+Avoid:
+- demo-app-only overlays (we removed the previous `apps/web` experiment already).
