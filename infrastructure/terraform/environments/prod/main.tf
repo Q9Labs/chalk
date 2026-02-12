@@ -133,6 +133,7 @@ module "ecs" {
     { name = "CORS_ORIGINS_KEY", value = module.cors_origins.origins_key },
     { name = "POST_MEETING_WHISPER_ENABLED", value = "true" },
     { name = "POST_MEETING_WHISPER_REDIS_QUEUE", value = "transcription:jobs" },
+    { name = "POST_MEETING_WHISPER_TIMEOUT", value = "30m" },
     # Cloudflare webhook registration
     { name = "API_PUBLIC_URL", value = "https://${var.api_domain_name}" },
     # Admin dashboard

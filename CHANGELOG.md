@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **iOS: Lobby join button blocked** — fix preview card overlays expanding beyond their frame and intercepting taps on “Ask to join”.
 - **API: WebSocket observability** — add WS auth/upgrade/connect/disconnect/error logs (close codes, backpressure, ping/write/read errors), plus presence diagnostics (`expected_active_participants` vs local) and `hostname`/`pid` to quickly confirm multi-instance split-brain.
 - **API: WebSocket error coverage** — always emit a structured `websocket.app_error` log when the server sends an `error` message, and add Redis pubsub error/start/stop logs for cross-instance WS investigation.
+- **API: Whisper transcription timeout** — replace hardcoded 10m wait with configurable `POST_MEETING_WHISPER_TIMEOUT` (default `30m`) so longer self-hosted Whisper jobs complete instead of being marked failed at exactly 10 minutes.
 
 ## [0.0.57] - 2026-02-08
 

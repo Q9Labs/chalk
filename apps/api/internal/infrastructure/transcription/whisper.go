@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,9 +18,10 @@ import (
 )
 
 const (
-	whisperDefaultTimeout  = 10 * time.Minute
+	whisperDefaultTimeout  = 30 * time.Minute
 	whisperPollInterval    = 5 * time.Second
 	whisperResultKeyPrefix = "transcription:result:"
+	whisperTimeoutEnvVar   = "POST_MEETING_WHISPER_TIMEOUT"
 )
 
 // WhisperProvider implements transcription using a self-hosted Whisper worker.
@@ -33,8 +37,27 @@ func NewWhisperProvider(redisClient *goredis.Client, queueKey string) *WhisperPr
 	return &WhisperProvider{
 		redis:    redisClient,
 		queueKey: queueKey,
-		timeout:  whisperDefaultTimeout,
+		timeout:  loadWhisperTimeout(),
 	}
+}
+
+func loadWhisperTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(whisperTimeoutEnvVar))
+	if raw == "" {
+		return whisperDefaultTimeout
+	}
+
+	timeout, err := time.ParseDuration(raw)
+	if err != nil || timeout <= 0 {
+		slog.Warn("[chalk] invalid whisper timeout; using default",
+			"env", whisperTimeoutEnvVar,
+			"value", raw,
+			"default", whisperDefaultTimeout.String(),
+			"error", err)
+		return whisperDefaultTimeout
+	}
+
+	return timeout
 }
 
 func (p *WhisperProvider) Transcribe(ctx context.Context, audioURL string) (*domain.TranscriptionResult, error) {
