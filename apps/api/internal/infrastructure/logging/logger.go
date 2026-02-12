@@ -5,11 +5,12 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/version"
-	"github.com/axiomhq/axiom-go/axiom"
 	axiomslog "github.com/axiomhq/axiom-go/adapters/slog"
+	"github.com/axiomhq/axiom-go/axiom"
 )
 
 var handler *axiomslog.Handler
@@ -27,6 +28,9 @@ func Init() {
 		}
 	}
 
+	hostname, _ := os.Hostname()
+	pid := os.Getpid()
+
 	// Build base attributes for all log events
 	attrs := []slog.Attr{
 		slog.String("service", "chalk-api"),
@@ -34,6 +38,8 @@ func Init() {
 		slog.String("commit_sha", version.CommitSHA),
 		slog.String("env", env),
 		slog.String("region", getEnv("AWS_REGION", "unknown")),
+		slog.String("hostname", hostname),
+		slog.String("pid", strconv.Itoa(pid)),
 	}
 
 	// Always have a JSON logger to stdout for CloudWatch and local debugging,
@@ -89,6 +95,13 @@ func Init() {
 
 	// Fallback: JSON to stdout with base attrs
 	slog.SetDefault(stdoutLogger)
+}
+
+// AxiomEnabled reports whether the global slog default logger is routed to Axiom.
+// Useful for selectively dual-logging high-value operational events to stdout
+// (CloudWatch) to avoid duplicating all logs in local/dev environments.
+func AxiomEnabled() bool {
+	return handler != nil
 }
 
 // Close flushes and closes the Axiom handler if initialized.

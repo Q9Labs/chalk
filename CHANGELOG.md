@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **iOS: Meeting grid tile distortion** — force square participant tiles in the prototype iOS app so the grid doesn’t render stretched rectangles.
 - **iOS: Lobby join button blocked** — fix preview card overlays expanding beyond their frame and intercepting taps on “Ask to join”.
+- **API: WebSocket observability** — add WS auth/upgrade/connect/disconnect/error logs (close codes, backpressure, ping/write/read errors), plus presence diagnostics (`expected_active_participants` vs local) and `hostname`/`pid` to quickly confirm multi-instance split-brain.
 
 ## [0.0.57] - 2026-02-08
 

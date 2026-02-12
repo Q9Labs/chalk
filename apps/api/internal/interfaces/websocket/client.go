@@ -3,9 +3,12 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/infrastructure/logging"
 	"github.com/google/uuid"
 	"nhooyr.io/websocket"
 )
@@ -14,6 +17,13 @@ const (
 	writeDeadline = 5 * time.Second
 	readTimeout   = 0 // unlimited
 )
+
+type disconnectInfo struct {
+	by     string
+	code   websocket.StatusCode
+	reason string
+	err    string
+}
 
 // Client represents a single WebSocket connection
 type Client struct {
@@ -24,6 +34,9 @@ type Client struct {
 	tenantID      uuid.UUID
 	send          chan []byte
 	done          chan struct{}
+
+	disconnectMu   sync.Mutex
+	disconnectInfo disconnectInfo
 }
 
 // NewClient creates a new WebSocket client
@@ -47,6 +60,11 @@ func (c *Client) Start(ctx context.Context) {
 
 // Close closes the client connection
 func (c *Client) Close() error {
+	return c.CloseWith(websocket.StatusNormalClosure, "closing")
+}
+
+// CloseWith closes the client connection using the provided close code/reason.
+func (c *Client) CloseWith(code websocket.StatusCode, reason string) error {
 	select {
 	case <-c.done:
 		return nil
@@ -55,9 +73,32 @@ func (c *Client) Close() error {
 	}
 
 	if c.conn != nil {
-		return c.conn.Close(websocket.StatusNormalClosure, "closing")
+		return c.conn.Close(code, reason)
 	}
 	return nil
+}
+
+func (c *Client) setDisconnect(by string, code websocket.StatusCode, reason string, err error) {
+	c.disconnectMu.Lock()
+	defer c.disconnectMu.Unlock()
+
+	// First writer wins; we only want one coherent reason in logs.
+	if c.disconnectInfo.by != "" {
+		return
+	}
+
+	c.disconnectInfo.by = by
+	c.disconnectInfo.code = code
+	c.disconnectInfo.reason = reason
+	if err != nil {
+		c.disconnectInfo.err = err.Error()
+	}
+}
+
+func (c *Client) DisconnectInfo() (by string, code websocket.StatusCode, reason string, err string) {
+	c.disconnectMu.Lock()
+	defer c.disconnectMu.Unlock()
+	return c.disconnectInfo.by, c.disconnectInfo.code, c.disconnectInfo.reason, c.disconnectInfo.err
 }
 
 // Send sends a message to the client
@@ -86,8 +127,19 @@ func (c *Client) SendReliable(msg []byte) {
 		// Client already closed
 	default:
 		recordWSSendBackpressureClose()
-		c.logger().Warn("websocket send buffer full; closing slow client")
-		_ = c.Close()
+		attrs := []any{
+			"event", "websocket.error",
+			"error_kind", "backpressure",
+			"reason", "send_buffer_full",
+			"buffer_len", len(c.send),
+			"buffer_cap", cap(c.send),
+		}
+		c.logger().Warn("websocket send buffer full; closing slow client", attrs...)
+		if logging.AxiomEnabled() {
+			logging.Stdout().Warn("websocket send buffer full; closing slow client", append(c.baseAttrs(), attrs...)...)
+		}
+		c.setDisconnect("server", websocket.StatusPolicyViolation, "backpressure: send buffer full", nil)
+		_ = c.CloseWith(websocket.StatusPolicyViolation, "backpressure")
 	}
 }
 
@@ -96,10 +148,20 @@ func (c *Client) Wait() {
 	<-c.done
 }
 
-func (c *Client) logger() *slog.Logger {
-	return c.hub.logger.With(
+func (c *Client) baseAttrs() []any {
+	return []any{
 		"participant_id", c.participantID,
 		"room_id", c.roomID,
+		"tenant_id", c.tenantID,
+	}
+}
+
+func (c *Client) logger() *slog.Logger {
+	return slog.Default().With(
+		"component", "ws_client",
+		"participant_id", c.participantID,
+		"room_id", c.roomID,
+		"tenant_id", c.tenantID,
 	)
 }
 
@@ -120,18 +182,57 @@ func (c *Client) readPump(ctx context.Context) {
 		_, data, err := c.conn.Read(ctx)
 		if err != nil {
 			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				// Normal close. Keep it low-noise but preserve close code/reason for disconnect log.
+				code := websocket.CloseStatus(err)
+				reason := "normal_closure"
+				var cerr websocket.CloseError
+				if errors.As(err, &cerr) {
+					code = cerr.Code
+					if cerr.Reason != "" {
+						reason = cerr.Reason
+					}
+				}
+				c.setDisconnect("peer", code, reason, nil)
 				return
 			}
 			if ctx.Err() != nil {
+				c.setDisconnect("server", websocket.StatusGoingAway, "context_canceled", ctx.Err())
 				return
 			}
-			c.logger().Error("websocket read error", "error", err.Error())
+			code := websocket.CloseStatus(err)
+			reason := "read_error"
+			var cerr websocket.CloseError
+			if errors.As(err, &cerr) {
+				code = cerr.Code
+				if cerr.Reason != "" {
+					reason = cerr.Reason
+				}
+			}
+			c.setDisconnect("peer", code, reason, err)
+			c.logger().Error("websocket read error", "event", "websocket.error", "error_kind", "read", "error", err.Error(), "close_code", int(code), "close_reason", reason)
+			if logging.AxiomEnabled() {
+				logging.Stdout().Error("websocket read error", append(c.baseAttrs(),
+					"event", "websocket.error",
+					"error_kind", "read",
+					"error", err.Error(),
+					"close_code", int(code),
+					"close_reason", reason,
+				)...)
+			}
+			_ = c.CloseWith(websocket.StatusInternalError, "read error")
 			return
 		}
 
 		var message Message
 		if err := json.Unmarshal(data, &message); err != nil {
-			c.logger().Warn("failed to unmarshal message", "error", err.Error())
+			c.logger().Warn("failed to unmarshal message", "event", "websocket.error", "error_kind", "invalid_message", "error", err.Error())
+			if logging.AxiomEnabled() {
+				logging.Stdout().Warn("failed to unmarshal message", append(c.baseAttrs(),
+					"event", "websocket.error",
+					"error_kind", "invalid_message",
+					"error", err.Error(),
+				)...)
+			}
 			c.sendErrorMessage("invalid_message", "Failed to parse message")
 			continue
 		}
@@ -148,9 +249,11 @@ func (c *Client) writePump(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			c.setDisconnect("server", websocket.StatusGoingAway, "context_canceled", ctx.Err())
 			return
 
 		case <-c.done:
+			c.setDisconnect("server", websocket.StatusNormalClosure, "done_closed", nil)
 			return
 
 		case data := <-c.send:
@@ -160,9 +263,28 @@ func (c *Client) writePump(ctx context.Context) {
 
 			if err != nil {
 				recordWSWriteError()
-				c.logger().Error("websocket write error", "error", err.Error())
+				code := websocket.CloseStatus(err)
+				reason := "write_error"
+				var cerr websocket.CloseError
+				if errors.As(err, &cerr) {
+					code = cerr.Code
+					if cerr.Reason != "" {
+						reason = cerr.Reason
+					}
+				}
+				c.setDisconnect("server", code, reason, err)
+				c.logger().Error("websocket write error", "event", "websocket.error", "error_kind", "write", "error", err.Error(), "close_code", int(code), "close_reason", reason)
+				if logging.AxiomEnabled() {
+					logging.Stdout().Error("websocket write error", append(c.baseAttrs(),
+						"event", "websocket.error",
+						"error_kind", "write",
+						"error", err.Error(),
+						"close_code", int(code),
+						"close_reason", reason,
+					)...)
+				}
 				// Ensure we don't leave a half-dead client registered with a growing send buffer.
-				_ = c.Close()
+				_ = c.CloseWith(websocket.StatusInternalError, "write error")
 				return
 			}
 
@@ -179,8 +301,27 @@ func (c *Client) writePump(ctx context.Context) {
 
 			if err != nil {
 				recordWSPingError()
-				c.logger().Error("failed to send ping", "error", err.Error())
-				_ = c.Close()
+				code := websocket.CloseStatus(err)
+				reason := "ping_error"
+				var cerr websocket.CloseError
+				if errors.As(err, &cerr) {
+					code = cerr.Code
+					if cerr.Reason != "" {
+						reason = cerr.Reason
+					}
+				}
+				c.setDisconnect("server", code, reason, err)
+				c.logger().Error("failed to send ping", "event", "websocket.error", "error_kind", "ping", "error", err.Error(), "close_code", int(code), "close_reason", reason)
+				if logging.AxiomEnabled() {
+					logging.Stdout().Error("failed to send ping", append(c.baseAttrs(),
+						"event", "websocket.error",
+						"error_kind", "ping",
+						"error", err.Error(),
+						"close_code", int(code),
+						"close_reason", reason,
+					)...)
+				}
+				_ = c.CloseWith(websocket.StatusInternalError, "ping error")
 				return
 			}
 		}

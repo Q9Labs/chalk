@@ -2,18 +2,20 @@ package handlers
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	wsocket "github.com/Q9Labs/chalk/internal/interfaces/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 	"nhooyr.io/websocket"
 )
 
@@ -29,53 +31,7 @@ type WebSocketHandler struct {
 
 // NewWebSocketHandler creates a new WebSocket handler
 func NewWebSocketHandler(jwtService *auth.JWTService, hub *wsocket.Hub, queries *db.Queries) *WebSocketHandler {
-	// Parse allowed origins from environment
-	originsEnv := os.Getenv("ALLOWED_WS_ORIGINS")
-	var origins []string
-	if originsEnv != "" {
-		origins = strings.Split(originsEnv, ",")
-		for i := range origins {
-			origins[i] = strings.TrimSpace(origins[i])
-		}
-	}
-	// Add default development origins
-	if os.Getenv("ENV") != "production" {
-		origins = append(origins,
-			"http://localhost:*",
-			"http://127.0.0.1:*",
-			"localhost:*", // Some browsers send origin without scheme
-			"127.0.0.1:*",
-		)
-	}
-
-	// Production/staging origins (always allowed)
-	// Include patterns with and without scheme for compatibility
-	origins = append(origins,
-		"https://chalk.q9labs.ai",
-		"chalk.q9labs.ai", // Some requests may not include scheme
-		"https://collabdash-dev.vercel.app",
-		"collabdash-dev.vercel.app",
-		"https://app.collabdash.io",
-		"app.collabdash.io",
-		// TuitionHighway origins
-		"https://dev.dwd4jsk5p7j52.amplifyapp.com",
-		"dev.dwd4jsk5p7j52.amplifyapp.com",
-		"https://dev.d17jmjn2v13h91.amplifyapp.com",
-		"dev.d17jmjn2v13h91.amplifyapp.com",
-		"https://portal-dev.tuitionhighway.com",
-		"portal-dev.tuitionhighway.com",
-		"https://portal.tuitionhighway.com",
-		"portal.tuitionhighway.com",
-		"https://backend.tuitionhighway.com",
-		"backend.tuitionhighway.com",
-		"https://backend-dev.tuitionhighway.com",
-		"backend-dev.tuitionhighway.com",
-		// Allow localhost for development/testing even in production
-		"http://localhost:*",
-		"localhost:*",
-		"http://127.0.0.1:*",
-		"127.0.0.1:*",
-	)
+	origins := buildAllowedWSOrigins()
 
 	return &WebSocketHandler{
 		jwtService:     jwtService,
@@ -119,11 +75,18 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	if token == "" {
 		token = c.Query("token")
 		if token != "" {
-			slog.Warn("websocket token passed via query param (deprecated, use subprotocol)")
+			wsWarn(
+				"websocket token passed via query param (deprecated, use subprotocol)",
+				append([]any{"event", "websocket.auth.deprecated_query_token"}, wsBaseAttrs(c)...)...,
+			)
 		}
 	}
 
 	if token == "" {
+		wsWarn(
+			"websocket auth failed: missing token",
+			append([]any{"event", "websocket.auth_failed", "reason", "missing_token"}, wsBaseAttrs(c)...)...,
+		)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 		return
 	}
@@ -131,18 +94,34 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Validate JWT token
 	claims, err := h.jwtService.ValidateToken(token)
 	if err != nil {
-		slog.Debug("invalid websocket token", "error", err.Error())
+		wsWarn(
+			"websocket auth failed: invalid token",
+			append([]any{"event", "websocket.auth_failed", "reason", "invalid_token", "error", err.Error()}, wsBaseAttrs(c)...)...,
+		)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
 	}
 
+	// Best-effort: log if token is near expiry to debug reconnect/kick patterns.
+	// Server does not proactively disconnect on JWT expiry, but clients may reconnect
+	// with an expired token.
+	secsToExpiry := int64(time.Until(claims.ExpiresAt).Seconds())
+
 	// Extract required IDs from claims
 	if claims.RoomID.String() == "00000000-0000-0000-0000-000000000000" {
+		wsWarn(
+			"websocket auth failed: missing room_id in token",
+			append([]any{"event", "websocket.auth_failed", "reason", "missing_room_id", "tenant_id", claims.TenantID}, wsBaseAttrs(c)...)...,
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing room_id in token"})
 		return
 	}
 
 	if claims.Subject == "" {
+		wsWarn(
+			"websocket auth failed: missing participant_id in token",
+			append([]any{"event", "websocket.auth_failed", "reason", "missing_participant_id", "tenant_id", claims.TenantID, "room_id", claims.RoomID}, wsBaseAttrs(c)...)...,
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing participant_id in token"})
 		return
 	}
@@ -153,9 +132,15 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		tenant, err := h.queries.GetTenant(c.Request.Context(), claims.TenantID)
 		if err == nil {
 			if !middleware.IsOriginAllowedForTenant(origin, &tenant) {
-				slog.Warn("websocket origin not allowed for tenant",
-					"origin", origin,
-					"tenant_id", claims.TenantID,
+				wsWarn(
+					"websocket origin forbidden",
+					append([]any{
+						"event", "websocket.origin_forbidden",
+						"origin", origin,
+						"tenant_id", claims.TenantID,
+						"room_id", claims.RoomID,
+						"participant_id", claims.Subject,
+					}, wsBaseAttrs(c)...)...,
 				)
 				c.JSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
 				return
@@ -179,12 +164,24 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		acceptOpts.OriginPatterns = h.allowedOrigins
 	} else {
 		// No origins configured - strict mode (will reject cross-origin)
-		slog.Warn("no ALLOWED_WS_ORIGINS configured, WebSocket will reject cross-origin requests")
+		wsWarn(
+			"no ALLOWED_WS_ORIGINS configured, WebSocket will reject cross-origin requests",
+			append([]any{"event", "websocket.config.missing_allowed_origins"}, wsBaseAttrs(c)...)...,
+		)
 	}
 
 	ws, err := websocket.Accept(writer, c.Request, acceptOpts)
 	if err != nil {
-		slog.Error("websocket upgrade failed", "error", err.Error())
+		wsError(
+			"websocket upgrade failed",
+			append([]any{
+				"event", "websocket.upgrade_failed",
+				"error", err.Error(),
+				"tenant_id", claims.TenantID,
+				"room_id", claims.RoomID,
+				"participant_id", claims.Subject,
+			}, wsBaseAttrs(c)...)...,
+		)
 		return
 	}
 	ws.SetReadLimit(getWsReadLimitBytes())
@@ -192,9 +189,85 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Parse participant ID from claims.Subject
 	participantID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		slog.Error("invalid participant ID in token", "error", err.Error())
+		wsError(
+			"invalid participant ID in token",
+			append([]any{
+				"event", "websocket.auth_failed",
+				"reason", "invalid_participant_id",
+				"error", err.Error(),
+				"tenant_id", claims.TenantID,
+				"room_id", claims.RoomID,
+			}, wsBaseAttrs(c)...)...,
+		)
 		ws.Close(websocket.StatusInternalError, "invalid participant id")
 		return
+	}
+
+	sc := trace.SpanContextFromContext(c.Request.Context())
+	traceID := ""
+	spanID := ""
+	if sc.IsValid() {
+		traceID = sc.TraceID().String()
+		spanID = sc.SpanID().String()
+	}
+
+	// Presence diagnostics: helps debug "same room_id but users can't see each other".
+	// If expected_active_participants > local_room_clients, likely multi-instance WS
+	// with no cross-instance fanout (or sticky sessions issues).
+	localRoomClients := len(h.hub.GetParticipantsInRoom(claims.RoomID))
+	expectedActive := int64(-1)
+	if h.queries != nil {
+		if n, err := h.queries.CountActiveParticipantsByRoom(c.Request.Context(), claims.RoomID); err == nil {
+			expectedActive = n
+		}
+	}
+	wsInfo(
+		"websocket presence snapshot",
+		append([]any{
+			"event", "websocket.presence",
+			"tenant_id", claims.TenantID,
+			"room_id", claims.RoomID,
+			"participant_id", participantID,
+			"local_room_clients", localRoomClients,
+			"expected_active_participants", expectedActive,
+		}, wsBaseAttrs(c)...)...,
+	)
+
+	wsInfo(
+		"websocket upgrade ok",
+		append([]any{
+			"event", "websocket.upgrade_ok",
+			"tenant_id", claims.TenantID,
+			"room_id", claims.RoomID,
+			"participant_id", participantID,
+			"token_expires_at", claims.ExpiresAt.UTC().Format(time.RFC3339Nano),
+			"token_secs_to_expiry", secsToExpiry,
+			"trace_id", traceID,
+			"span_id", spanID,
+			"ws_read_limit_bytes", getWsReadLimitBytes(),
+			"local_room_clients", localRoomClients,
+			"expected_active_participants", expectedActive,
+		}, wsBaseAttrs(c)...)...,
+	)
+
+	// Best-effort: hydrate participant metadata on *this* instance.
+	// WS may land on a different API instance than the /participants join request.
+	if h.queries != nil {
+		if p, err := h.queries.GetParticipant(c.Request.Context(), participantID); err == nil {
+			displayName := ""
+			if p.DisplayName != nil {
+				displayName = *p.DisplayName
+			}
+			joinedAt := time.Now()
+			if p.JoinedAt.Valid {
+				joinedAt = p.JoinedAt.Time
+			}
+			h.hub.SetParticipantMetadata(participantID, domain.ParticipantMetadata{
+				DisplayName: displayName,
+				Role:        p.Role,
+				JoinedAt:    joinedAt,
+			})
+		}
 	}
 
 	// Create client

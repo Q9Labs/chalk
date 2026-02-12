@@ -198,12 +198,17 @@ func (h *Hub) registerClient(client *Client) {
 
 	roomSize := len(h.rooms[client.roomID])
 
-	h.logger.Info("client registered",
+	attrs := []any{
+		"event", "websocket.connect",
 		"participant_id", client.participantID,
 		"room_id", client.roomID,
 		"tenant_id", client.tenantID,
 		"room_size", roomSize,
-	)
+	}
+	if logging.AxiomEnabled() {
+		logging.Stdout().Info("websocket.connect", attrs...)
+	}
+	h.logger.Info("websocket.connect", attrs...)
 
 	connMsg, _ := NewMessage(MessageTypeConnected, ConnectedPayload{
 		ParticipantID: client.participantID,
@@ -264,11 +269,25 @@ func (h *Hub) unregisterClient(client *Client) {
 
 	// Use client.Close() which has proper channel close protection
 	client.Close()
-	h.logger.Info("client unregistered",
+
+	by, code, reason, discErr := client.DisconnectInfo()
+	unregAttrs := []any{
+		"event", "websocket.disconnect",
 		"participant_id", client.participantID,
 		"room_id", client.roomID,
+		"tenant_id", client.tenantID,
 		"room_size", roomSize,
-	)
+		"disconnect_by", by,
+		"close_code", int(code),
+		"close_reason", reason,
+	}
+	if discErr != "" {
+		unregAttrs = append(unregAttrs, "error", discErr)
+	}
+	if logging.AxiomEnabled() {
+		logging.Stdout().Info("websocket.disconnect", unregAttrs...)
+	}
+	h.logger.Info("websocket.disconnect", unregAttrs...)
 
 	// Broadcast participant_left BEFORE removing room (only if room has other participants)
 	if !roomEmpty {
