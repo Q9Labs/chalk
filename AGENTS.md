@@ -1,6 +1,6 @@
 # Chalk
 
-Ultra low-latency video conferencing for education (Cloudflare RealtimeKit).
+Ultra low-latency video conferencing for education (Built ontop of Cloudflare RealtimeKit, leveraging Cloudflare's global network).
 Monorepo: Turbo + Bun. Packages → GitHub Packages `@q9labs/*`.
 
 ## Commands
@@ -9,35 +9,37 @@ Monorepo: Turbo + Bun. Packages → GitHub Packages `@q9labs/*`.
 bun install                    # Install deps
 bun run dev|build|test|lint    # All packages
 bun run check-types            # Type check
-cd apps/api && go run ./cmd/main.go
+bun run generate               # Re-generate openapi.yml when suitable after making changes to the apps/api
+cd apps/api && go run ./cmd/main.go # Run API server
 ```
 
 ## Where to Write Code
 
 **Packages first, then demo in apps:**
+
 Why? Because the sdk's are the source of truth. Demo apps are just for testing and verification.
 
-- **sdk-core**: Client logic, WebRTC, room management
-- **sdk-react**: React hooks, components
-- **sdk-react-native**: React Native bindings
-- **ui**: Shared UI primitives
-- **chalk-whiteboard**: Whiteboard features
-- **api**: Go backend (`apps/api`)
-- **terraform**: AWS IaC (`infrastructure/terraform`)
+All apps & packages:
 
-**Demo apps (`apps/web`, `apps/next-pages-demo`, `apps/mobile2`) are for testing only.**
+- **sdk-core**: Client logic, WebRTC, room management (stable)
+- **sdk-react**: React hooks, components (stable)
+- **sdk-react-native**: React Native bindings (in-progress)
+- **ui**: Shared UI primitives (mostly unused)
+- **chalk-whiteboard**: Whiteboard features (stable)
+- **api**: Go backend API (`apps/api`, stable)
+- **terraform**: AWS IaC (`infrastructure/terraform`, stable)
+- **admin**: Admin management app (limited-access, for owner only)
+- **docs**: Chalk docs (`docs.chalk.q9labs.ai`, stable)
+  **Demo apps (`apps/web`, `apps/next-pages-demo`, `apps/mobile2`) are for testing only.**
 
-`apps/mobile` is deprecated
+`apps/mobile` is deprecated and is soon to be deleted or replaced
 
 After packages → export → use in demo apps for user testing.
+Sometimes (rarely) the user might want to directly work on the app and later create the sdk.
 
 Never add client-side business logic to demo apps.
-
-## Notes
-
-- When asked, proactively run CI and deploy; verify no jobs were skipped and confirm deployment finished so the user can test without extra prompts.
 
 ## Skills
 
 - `chalk-stress-testing` — project skill for stress test planning/execution.
-- `release` — Codex local release skill (project only).
+- `release` — release skill (project only).

@@ -11,6 +11,7 @@
 		"postinstall": "mkdir -p public/vendor && cp ../../node_modules/@excalidraw/excalidraw/dist/prod/index.css public/vendor/excalidraw.css 2>/dev/null || true && cp -r ../../node_modules/@excalidraw/excalidraw/dist/prod/fonts public/vendor/fonts 2>/dev/null || true"
 	},
 	"dependencies": {
+		"@ai-sdk/devtools": "^0.0.13",
 		"@ai-sdk/react": "^3.0.80",
 		"@base-ui/react": "^1.0.0",
 		"@cloudflare/vite-plugin": "^1.17.1",
@@ -32,9 +33,9 @@
 		"@tanstack/react-router-ssr-query": "^1.131.7",
 		"@tanstack/react-start": "^1.132.0",
 		"@tanstack/router-plugin": "^1.132.0",
+		"ai": "^6.0.78",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
-		"ai": "^6.0.78",
 		"lucide-react": "^0.561.0",
 		"nitro": "latest",
 		"react": "^19.2.0",

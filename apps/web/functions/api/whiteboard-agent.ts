@@ -1,5 +1,13 @@
+import { devToolsMiddleware } from "@ai-sdk/devtools";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { convertToModelMessages, streamText, tool, type UIMessage } from "ai";
+import {
+	convertToModelMessages,
+	gateway,
+	streamText,
+	tool,
+	type UIMessage,
+	wrapLanguageModel,
+} from "ai";
 import { z } from "zod";
 
 type Env = {
@@ -42,7 +50,7 @@ const tools = {
 	whiteboard_create: tool({
 		description:
 			"Create new Excalidraw elements. Prefer a few simple shapes + text labels; avoid tiny/overlapping elements.",
-		parameters: z.object({
+		inputSchema: z.object({
 			elements: z.array(z.record(z.string(), z.unknown())).max(50),
 			regenerateIds: z.boolean().optional(),
 		}),
@@ -50,7 +58,7 @@ const tools = {
 	whiteboard_update: tool({
 		description:
 			"Update existing Excalidraw elements by id. Only provide the fields you want to change.",
-		parameters: z.object({
+		inputSchema: z.object({
 			updates: z
 				.array(
 					z.object({
@@ -63,13 +71,13 @@ const tools = {
 	}),
 	whiteboard_delete: tool({
 		description: "Delete elements by id (soft-delete).",
-		parameters: z.object({
+		inputSchema: z.object({
 			ids: z.array(z.string()).max(100),
 		}),
 	}),
 	whiteboard_select: tool({
 		description: "Select elements by id.",
-		parameters: z.object({
+		inputSchema: z.object({
 			ids: z.array(z.string()).max(100),
 		}),
 	}),
@@ -130,13 +138,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 		},
 	});
 
-	const modelName = model ?? context.env.OPENROUTER_DEFAULT_MODEL ?? DEFAULT_MODEL;
+	const modelName =
+		model ?? context.env.OPENROUTER_DEFAULT_MODEL ?? DEFAULT_MODEL;
 
 	const uiMessages = messages as Array<Omit<UIMessage, "id">>;
 	const modelMessages = await convertToModelMessages(uiMessages, { tools });
+	const oberservableModel = wrapLanguageModel({
+		model: openrouter.chat(modelName),
+		middleware: devToolsMiddleware(),
+	});
 
 	const result = streamText({
-		model: openrouter.chat(modelName),
+		model: oberservableModel,
 		system: buildSystemPrompt(whiteboardContext),
 		messages: modelMessages,
 		tools,
