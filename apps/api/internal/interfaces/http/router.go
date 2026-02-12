@@ -205,6 +205,12 @@ func (r *Router) setupRoutes() {
 		v1.POST("/auth/token", authHandler.Token)
 		v1.POST("/auth/refresh", authHandler.Refresh)
 
+		debug := handlers.NewDebugHandler()
+		v1.HEAD("/debug/ping", debug.Ping)
+		debugGroup := v1.Group("/debug")
+		debugGroup.Use(authMw.RequireJWT())
+		debugGroup.GET("/auth", debug.Auth)
+
 		// What's New - public endpoints for release info
 		whatsNew := handlers.NewWhatsNewHandler(r.githubClient, r.redisClient, r.storageR2, r.appConfig.GitHub.CacheTTL)
 		v1.GET("/whats-new", whatsNew.Get)

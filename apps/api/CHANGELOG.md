@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Debug diagnostics endpoints**: Add `GET /api/v1/debug/auth` (token/server/build introspection) and `HEAD /api/v1/debug/ping` (latency probe) for client System Health.
+
 ### Changed
 
 - **Post-meeting webhook payloads**: Include participant metadata and external IDs in tenant webhook payloads for easier identification.

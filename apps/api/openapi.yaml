@@ -25,6 +25,8 @@ servers:
 tags:
   - name: Auth
     description: Authentication and token management
+  - name: Debug
+    description: Debug and diagnostics endpoints for client support tooling
   - name: Tenants
     description: Tenant (organization) management
   - name: Rooms
@@ -66,6 +68,46 @@ paths:
                     format: double
                     description: Server uptime in seconds
                     example: 3600.5
+
+  # ============================================================================
+  # DEBUG ENDPOINTS
+  # ============================================================================
+  /api/v1/debug/auth:
+    get:
+      summary: Debug auth status
+      description: |
+        Returns server-side interpretation of the presented JWT (claims, expiry),
+        plus server clock and build metadata for support diagnostics.
+      operationId: debugAuth
+      tags:
+        - Debug
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Debug auth response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugAuthResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/debug/ping:
+    head:
+      summary: Debug ping
+      description: Lightweight endpoint for reachability and latency checks.
+      operationId: debugPing
+      tags:
+        - Debug
+      security: []
+      responses:
+        '204':
+          description: No Content
 
   # ============================================================================
   # AUTH ENDPOINTS
@@ -1299,6 +1341,108 @@ components:
           type: string
           description: Refresh token from previous authentication
           example: eyJhbGciOiJIUzI1NiIs...
+
+    DebugPermissions:
+      type: object
+      required:
+        - can_record
+        - can_screen_share
+        - can_kick
+        - can_mute
+      properties:
+        can_record:
+          type: boolean
+          example: true
+        can_screen_share:
+          type: boolean
+          example: true
+        can_kick:
+          type: boolean
+          example: true
+        can_mute:
+          type: boolean
+          example: true
+
+    DebugAuthResponse:
+      type: object
+      required:
+        - user_id
+        - tenant_id
+        - room_id
+        - display_name
+        - role
+        - permissions
+        - scopes
+        - token_issued_at
+        - token_expires_at
+        - token_expires_in_seconds
+        - server_time
+        - api_version
+        - api_commit_sha
+        - api_build_time
+        - request_id
+        - trace_id
+      properties:
+        user_id:
+          type: string
+          description: Token subject (participant id or tenant id)
+          example: user-123
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+        room_id:
+          type: string
+          format: uuid
+          nullable: true
+        display_name:
+          type: string
+          nullable: true
+          example: Hasan
+        role:
+          type: string
+          nullable: true
+          example: host
+        permissions:
+          $ref: '#/components/schemas/DebugPermissions'
+        scopes:
+          type: array
+          items:
+            type: string
+          example:
+            - recording:control
+            - room:screenshare
+        token_issued_at:
+          type: string
+          format: date-time
+          description: JWT issued-at time (server truth)
+        token_expires_at:
+          type: string
+          format: date-time
+          description: JWT expiry time (server truth)
+        token_expires_in_seconds:
+          type: integer
+          description: Seconds until expiry as computed by the server
+          example: 3600
+        server_time:
+          type: string
+          format: date-time
+          description: Server time for clock drift detection
+        api_version:
+          type: string
+          description: API version identifier (build-stamped)
+        api_commit_sha:
+          type: string
+          description: Git commit SHA (build-stamped)
+        api_build_time:
+          type: string
+          description: Build time (build-stamped)
+        request_id:
+          type: string
+          description: Request correlation id (X-Request-ID)
+        trace_id:
+          type: string
+          description: OpenTelemetry trace id when available (may be empty)
 
     # =========================================================================
     # TENANT SCHEMAS

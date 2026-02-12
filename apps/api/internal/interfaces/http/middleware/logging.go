@@ -13,7 +13,8 @@ import (
 
 // Paths to skip logging (high-frequency, low-value)
 var skipPaths = map[string]bool{
-	"/health": true,
+	"/health":            true,
+	"/api/v1/debug/ping": true,
 }
 
 // RequestLogger logs each request with structured fields for Axiom

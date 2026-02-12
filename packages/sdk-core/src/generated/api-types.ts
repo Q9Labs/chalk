@@ -24,6 +24,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/debug/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Debug auth status
+         * @description Returns server-side interpretation of the presented JWT (claims, expiry),
+         *     plus server clock and build metadata for support diagnostics.
+         */
+        get: operations["debugAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/debug/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Debug ping
+         * @description Lightweight endpoint for reachability and latency checks.
+         */
+        head: operations["debugPing"];
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/token": {
         parameters: {
             query?: never;
@@ -508,6 +549,69 @@ export interface components {
              * @example eyJhbGciOiJIUzI1NiIs...
              */
             refresh_token: string;
+        };
+        DebugPermissions: {
+            /** @example true */
+            can_record: boolean;
+            /** @example true */
+            can_screen_share: boolean;
+            /** @example true */
+            can_kick: boolean;
+            /** @example true */
+            can_mute: boolean;
+        };
+        DebugAuthResponse: {
+            /**
+             * @description Token subject (participant id or tenant id)
+             * @example user-123
+             */
+            user_id: string;
+            /** Format: uuid */
+            tenant_id: string | null;
+            /** Format: uuid */
+            room_id: string | null;
+            /** @example Hasan */
+            display_name: string | null;
+            /** @example host */
+            role: string | null;
+            permissions: components["schemas"]["DebugPermissions"];
+            /**
+             * @example [
+             *       "recording:control",
+             *       "room:screenshare"
+             *     ]
+             */
+            scopes: string[];
+            /**
+             * Format: date-time
+             * @description JWT issued-at time (server truth)
+             */
+            token_issued_at: string;
+            /**
+             * Format: date-time
+             * @description JWT expiry time (server truth)
+             */
+            token_expires_at: string;
+            /**
+             * @description Seconds until expiry as computed by the server
+             * @example 3600
+             */
+            token_expires_in_seconds: number;
+            /**
+             * Format: date-time
+             * @description Server time for clock drift detection
+             */
+            server_time: string;
+            /** @description API version identifier (build-stamped) */
+            api_version: string;
+            /** @description Git commit SHA (build-stamped) */
+            api_commit_sha: string;
+            /** @description Build time (build-stamped) */
+            api_build_time: string;
+            /** @description Request correlation id (X-Request-ID) */
+            request_id: string;
+            /** @description OpenTelemetry trace id when available (may be empty) */
+            trace_id: string;
         };
         Tenant: {
             /**
@@ -1296,6 +1400,53 @@ export interface operations {
                         uptime?: number;
                     };
                 };
+            };
+        };
+    };
+    debugAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Debug auth response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebugAuthResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    debugPing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

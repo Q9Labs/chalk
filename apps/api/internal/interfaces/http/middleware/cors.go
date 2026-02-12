@@ -13,16 +13,16 @@ var localhostPattern = regexp.MustCompile(`^http://(localhost|127\.0\.0\.1)(:\d+
 
 // PlatformOrigins are the static origins always allowed by the platform
 var PlatformOrigins = map[string]bool{
-	"https://chalk.q9labs.ai":                      true,
-	"https://chalk-5bc.pages.dev":                  true,
-	"https://collabdash-dev.vercel.app":            true,
-	"https://app.collabdash.io":                    true,
-	"https://dev.dwd4jsk5p7j52.amplifyapp.com":     true,
-	"https://dev.d17jmjn2v13h91.amplifyapp.com":    true,
-	"https://portal-dev.tuitionhighway.com":        true,
-	"https://portal.tuitionhighway.com":            true,
-	"https://backend.tuitionhighway.com":           true,
-	"https://backend-dev.tuitionhighway.com":       true,
+	"https://chalk.q9labs.ai":                   true,
+	"https://chalk-5bc.pages.dev":               true,
+	"https://collabdash-dev.vercel.app":         true,
+	"https://app.collabdash.io":                 true,
+	"https://dev.dwd4jsk5p7j52.amplifyapp.com":  true,
+	"https://dev.d17jmjn2v13h91.amplifyapp.com": true,
+	"https://portal-dev.tuitionhighway.com":     true,
+	"https://portal.tuitionhighway.com":         true,
+	"https://backend.tuitionhighway.com":        true,
+	"https://backend-dev.tuitionhighway.com":    true,
 }
 
 // CORS returns a middleware that handles Cross-Origin Resource Sharing
@@ -43,7 +43,7 @@ func CORS() gin.HandlerFunc {
 		}
 
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-API-Key, X-Admin-Secret, accept, origin, Cache-Control, X-Requested-With")
-		c.Header("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
+		c.Header("Access-Control-Allow-Methods", "POST, OPTIONS, GET, HEAD, PUT, PATCH, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
