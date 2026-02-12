@@ -65,6 +65,10 @@ func (c *Client) Close() error {
 
 // CloseWith closes the client connection using the provided close code/reason.
 func (c *Client) CloseWith(code websocket.StatusCode, reason string) error {
+	// Ensure disconnect logs reflect the close frame we intend to send (when server-initiated).
+	// First writer wins: peer close details from readPump won't get overwritten.
+	c.setDisconnect("server", code, reason, nil)
+
 	select {
 	case <-c.done:
 		return nil
@@ -138,7 +142,8 @@ func (c *Client) SendReliable(msg []byte) {
 		if logging.AxiomEnabled() {
 			logging.Stdout().Warn("websocket send buffer full; closing slow client", append(c.baseAttrs(), attrs...)...)
 		}
-		c.setDisconnect("server", websocket.StatusPolicyViolation, "backpressure: send buffer full", nil)
+		// 1008 Policy Violation: we explicitly disconnect slow consumers to keep room state consistent.
+		c.setDisconnect("server", websocket.StatusPolicyViolation, "backpressure", nil)
 		_ = c.CloseWith(websocket.StatusPolicyViolation, "backpressure")
 	}
 }
@@ -181,45 +186,40 @@ func (c *Client) readPump(ctx context.Context) {
 
 		_, data, err := c.conn.Read(ctx)
 		if err != nil {
-			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
-				// Normal close. Keep it low-noise but preserve close code/reason for disconnect log.
-				code := websocket.CloseStatus(err)
-				reason := "normal_closure"
-				var cerr websocket.CloseError
-				if errors.As(err, &cerr) {
-					code = cerr.Code
-					if cerr.Reason != "" {
-						reason = cerr.Reason
-					}
+			// If we got a close frame, treat it as peer-initiated. Preserve exact code/reason.
+			var cerr websocket.CloseError
+			if errors.As(err, &cerr) {
+				peerReason := cerr.Reason
+				if peerReason == "" {
+					peerReason = "peer_close"
 				}
-				c.setDisconnect("peer", code, reason, nil)
+				c.setDisconnect("peer", cerr.Code, peerReason, nil)
 				return
 			}
 			if ctx.Err() != nil {
 				c.setDisconnect("server", websocket.StatusGoingAway, "context_canceled", ctx.Err())
 				return
 			}
-			code := websocket.CloseStatus(err)
-			reason := "read_error"
-			var cerr websocket.CloseError
-			if errors.As(err, &cerr) {
-				code = cerr.Code
-				if cerr.Reason != "" {
-					reason = cerr.Reason
-				}
-			}
-			c.setDisconnect("peer", code, reason, err)
-			c.logger().Error("websocket read error", "event", "websocket.error", "error_kind", "read", "error", err.Error(), "close_code", int(code), "close_reason", reason)
+			// No close frame; treat as internal/network failure and close with 1011.
+			c.setDisconnect("server", websocket.StatusInternalError, "read_error", err)
+			c.logger().Error(
+				"websocket read error",
+				"event", "websocket.error",
+				"error_kind", "read",
+				"error", err.Error(),
+				"close_code", int(websocket.StatusInternalError),
+				"close_reason", "read_error",
+			)
 			if logging.AxiomEnabled() {
 				logging.Stdout().Error("websocket read error", append(c.baseAttrs(),
 					"event", "websocket.error",
 					"error_kind", "read",
 					"error", err.Error(),
-					"close_code", int(code),
-					"close_reason", reason,
+					"close_code", int(websocket.StatusInternalError),
+					"close_reason", "read_error",
 				)...)
 			}
-			_ = c.CloseWith(websocket.StatusInternalError, "read error")
+			_ = c.CloseWith(websocket.StatusInternalError, "read_error")
 			return
 		}
 
@@ -263,28 +263,27 @@ func (c *Client) writePump(ctx context.Context) {
 
 			if err != nil {
 				recordWSWriteError()
-				code := websocket.CloseStatus(err)
-				reason := "write_error"
-				var cerr websocket.CloseError
-				if errors.As(err, &cerr) {
-					code = cerr.Code
-					if cerr.Reason != "" {
-						reason = cerr.Reason
-					}
-				}
-				c.setDisconnect("server", code, reason, err)
-				c.logger().Error("websocket write error", "event", "websocket.error", "error_kind", "write", "error", err.Error(), "close_code", int(code), "close_reason", reason)
+				// Treat write failures as internal errors; close with 1011.
+				c.setDisconnect("server", websocket.StatusInternalError, "write_error", err)
+				c.logger().Error(
+					"websocket write error",
+					"event", "websocket.error",
+					"error_kind", "write",
+					"error", err.Error(),
+					"close_code", int(websocket.StatusInternalError),
+					"close_reason", "write_error",
+				)
 				if logging.AxiomEnabled() {
 					logging.Stdout().Error("websocket write error", append(c.baseAttrs(),
 						"event", "websocket.error",
 						"error_kind", "write",
 						"error", err.Error(),
-						"close_code", int(code),
-						"close_reason", reason,
+						"close_code", int(websocket.StatusInternalError),
+						"close_reason", "write_error",
 					)...)
 				}
 				// Ensure we don't leave a half-dead client registered with a growing send buffer.
-				_ = c.CloseWith(websocket.StatusInternalError, "write error")
+				_ = c.CloseWith(websocket.StatusInternalError, "write_error")
 				return
 			}
 
@@ -301,27 +300,26 @@ func (c *Client) writePump(ctx context.Context) {
 
 			if err != nil {
 				recordWSPingError()
-				code := websocket.CloseStatus(err)
-				reason := "ping_error"
-				var cerr websocket.CloseError
-				if errors.As(err, &cerr) {
-					code = cerr.Code
-					if cerr.Reason != "" {
-						reason = cerr.Reason
-					}
-				}
-				c.setDisconnect("server", code, reason, err)
-				c.logger().Error("failed to send ping", "event", "websocket.error", "error_kind", "ping", "error", err.Error(), "close_code", int(code), "close_reason", reason)
+				// Treat ping failures as internal errors; close with 1011.
+				c.setDisconnect("server", websocket.StatusInternalError, "ping_error", err)
+				c.logger().Error(
+					"failed to send ping",
+					"event", "websocket.error",
+					"error_kind", "ping",
+					"error", err.Error(),
+					"close_code", int(websocket.StatusInternalError),
+					"close_reason", "ping_error",
+				)
 				if logging.AxiomEnabled() {
 					logging.Stdout().Error("failed to send ping", append(c.baseAttrs(),
 						"event", "websocket.error",
 						"error_kind", "ping",
 						"error", err.Error(),
-						"close_code", int(code),
-						"close_reason", reason,
+						"close_code", int(websocket.StatusInternalError),
+						"close_reason", "ping_error",
 					)...)
 				}
-				_ = c.CloseWith(websocket.StatusInternalError, "ping error")
+				_ = c.CloseWith(websocket.StatusInternalError, "ping_error")
 				return
 			}
 		}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -94,9 +95,18 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Validate JWT token
 	claims, err := h.jwtService.ValidateToken(token)
 	if err != nil {
+		reason := "invalid_token"
+		switch {
+		case errors.Is(err, auth.ErrExpiredToken):
+			reason = "expired_token"
+		case errors.Is(err, auth.ErrWrongTokenType):
+			reason = "wrong_token_type"
+		case errors.Is(err, auth.ErrInvalidClaim):
+			reason = "invalid_claim"
+		}
 		wsWarn(
 			"websocket auth failed: invalid token",
-			append([]any{"event", "websocket.auth_failed", "reason", "invalid_token", "error", err.Error()}, wsBaseAttrs(c)...)...,
+			append([]any{"event", "websocket.auth_failed", "reason", reason, "error", err.Error()}, wsBaseAttrs(c)...)...,
 		)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
