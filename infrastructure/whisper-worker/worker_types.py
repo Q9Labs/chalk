@@ -8,6 +8,7 @@ from typing import Optional
 class TranscriptionJob:
     job_id: str
     audio_url: str
+    traceparent: Optional[str] = None
     language: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -36,4 +37,3 @@ class TranscriptionResult:
     error_stage: Optional[str] = None
     download_http_status: Optional[int] = None
     download_size_bytes: Optional[int] = None
-

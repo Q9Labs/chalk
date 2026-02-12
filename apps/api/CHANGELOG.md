@@ -6,6 +6,7 @@
 
 - **Post-meeting webhook payloads**: Include participant metadata and external IDs in tenant webhook payloads for easier identification.
 - **Wide event logging for recording & webhook flow**: Replaced ~60 scattered `slog.Info/Debug/Error` calls with 5 canonical wide events (`recording.webhook_received`, `recording.process`, `recording.post_meeting`, `recording.webhook_delivered`, `recording.stalled_check`). Each event is emitted once per operation via `defer`, accumulating all context (IDs, durations, outcomes, errors) into a single structured log line queryable in Axiom. Removed `[chalk]` prefix convention — event names are self-describing.
+- **OpenTelemetry tracing**: Added OTEL tracing middleware + outbound HTTP instrumentation and propagation into Whisper jobs via `traceparent`. Logs now include `trace_id`/`span_id`, and the API returns `X-Chalk-Trace-Id` for support/debug.
 
 ### Fixed
 

@@ -10,6 +10,8 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	domain "github.com/Q9Labs/chalk/internal/domain/transcription"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -38,10 +40,15 @@ func NewWhisperProvider(redisClient *goredis.Client, queueKey string) *WhisperPr
 func (p *WhisperProvider) Transcribe(ctx context.Context, audioURL string) (*domain.TranscriptionResult, error) {
 	jobID := uuid.New().String()
 
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	traceparent := carrier.Get("traceparent")
+
 	job := whisperJob{
-		JobID:     jobID,
-		AudioURL:  audioURL,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		JobID:       jobID,
+		AudioURL:    audioURL,
+		Traceparent: traceparent,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 	jobData, err := json.Marshal(job)
 	if err != nil {
@@ -111,6 +118,8 @@ func (p *WhisperProvider) MaxFileSize() int64 {
 type whisperJob struct {
 	JobID    string `json:"job_id"`
 	AudioURL string `json:"audio_url"`
+	// W3C Trace Context. Used to continue distributed traces in whisper-worker.
+	Traceparent string `json:"traceparent,omitempty"`
 	// TODO(hasan): include language to skip auto-detect + avoid language-detect edge-cases on silent audio.
 	Language  string `json:"language,omitempty"`
 	CreatedAt string `json:"created_at"`

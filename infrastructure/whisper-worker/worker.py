@@ -26,6 +26,7 @@ import boto3
 import redis
 from audio_download import download_audio
 from observability import audio_url_meta, emit_event, setup_axiom_logging
+from otel import extract_context_from_traceparent, init_tracing
 from transcriber import WhisperTranscriber
 from worker_config import (
     JOB_QUEUE,
@@ -54,6 +55,7 @@ logging.basicConfig(
 logger = logging.getLogger("whisper-worker")
 
 setup_axiom_logging(log_level=LOG_LEVEL)
+init_tracing(service_name="whisper-worker", env=os.getenv("ENVIRONMENT", "dev"))
 
 class WhisperWorker:
     def __init__(self) -> None:
@@ -93,29 +95,72 @@ class WhisperWorker:
             **audio_url_meta(job.audio_url),
         }
 
+        parent_ctx = extract_context_from_traceparent(job.traceparent)
+
         try:
-            error_stage = "download"
-            try:
-                audio_path, download_http_status, download_size_bytes = download_audio(
-                    job.audio_url
+            from opentelemetry import trace as ot_trace
+
+            tracer = ot_trace.get_tracer("whisper-worker")
+        except Exception:
+            tracer = None
+
+        try:
+            if tracer is not None:
+                with tracer.start_as_current_span(
+                    "whisper.transcription",
+                    context=parent_ctx,
+                    attributes={
+                        "chalk.job_id": job.job_id,
+                        "chalk.queue_depth": queue_depth,
+                    },
+                ):
+                    error_stage = "download"
+                    try:
+                        with tracer.start_as_current_span("whisper.download_audio"):
+                            audio_path, download_http_status, download_size_bytes = download_audio(
+                                job.audio_url
+                            )
+                    except HTTPError as e:
+                        download_http_status = e.code
+                        download_size_bytes = 0
+                        raise
+                    except URLError:
+                        raise
+
+                    if download_size_bytes == 0:
+                        raise ValueError("downloaded 0 bytes")
+
+                    error_stage = "transcribe"
+                    with tracer.start_as_current_span("whisper.transcribe"):
+                        result = self.transcriber.transcribe(
+                            audio_path,
+                            language=job.language,
+                            use_batched=use_batched,
+                        )
+                    result.job_id = job.job_id
+            else:
+                error_stage = "download"
+                try:
+                    audio_path, download_http_status, download_size_bytes = download_audio(
+                        job.audio_url
+                    )
+                except HTTPError as e:
+                    download_http_status = e.code
+                    download_size_bytes = 0
+                    raise
+                except URLError:
+                    raise
+
+                if download_size_bytes == 0:
+                    raise ValueError("downloaded 0 bytes")
+
+                error_stage = "transcribe"
+                result = self.transcriber.transcribe(
+                    audio_path,
+                    language=job.language,
+                    use_batched=use_batched,
                 )
-            except HTTPError as e:
-                download_http_status = e.code
-                download_size_bytes = 0
-                raise
-            except URLError:
-                raise
-
-            if download_size_bytes == 0:
-                raise ValueError("downloaded 0 bytes")
-
-            error_stage = "transcribe"
-            result = self.transcriber.transcribe(
-                audio_path,
-                language=job.language,
-                use_batched=use_batched,
-            )
-            result.job_id = job.job_id
+                result.job_id = job.job_id
 
             wide_event.update(
                 {
@@ -133,16 +178,8 @@ class WhisperWorker:
                     "no_speech": self.transcriber.last_no_speech,
                 }
             )
-            if LOG_TRANSCRIPT and result.text:
-                transcript_text = result.text
-                transcript_chars = len(transcript_text)
-                wide_event["transcript_chars"] = transcript_chars
-                if LOG_TRANSCRIPT_MAX_CHARS > 0 and transcript_chars > LOG_TRANSCRIPT_MAX_CHARS:
-                    wide_event["transcript"] = transcript_text[:LOG_TRANSCRIPT_MAX_CHARS]
-                    wide_event["transcript_truncated"] = True
-                else:
-                    wide_event["transcript"] = transcript_text
-                    wide_event["transcript_truncated"] = False
+            if result.text:
+                wide_event["transcript_chars"] = len(result.text)
             emit_event(logger, level=logging.INFO, event=wide_event)
             return result
 

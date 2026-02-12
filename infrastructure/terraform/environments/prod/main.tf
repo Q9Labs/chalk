@@ -126,6 +126,9 @@ module "ecs" {
     { name = "GITHUB_OWNER", value = "Q9Labs" },
     { name = "GITHUB_REPO", value = "chalk" },
     { name = "AXIOM_DATASET", value = var.axiom_dataset },
+    { name = "AXIOM_DOMAIN", value = "api.axiom.co" },
+    { name = "AXIOM_TRACES_DATASET", value = "chalk-prod-traces" },
+    { name = "OTEL_TRACE_SAMPLER_RATIO", value = "0.1" },
     { name = "CORS_ORIGINS_BUCKET", value = module.cors_origins.bucket_name },
     { name = "CORS_ORIGINS_KEY", value = module.cors_origins.origins_key },
     { name = "POST_MEETING_WHISPER_ENABLED", value = "true" },
@@ -369,7 +372,7 @@ module "whisper" {
   subnet_ids            = module.vpc.private_subnet_ids
   redis_auth_secret_arn = module.elasticache.auth_token_secret_arn
   axiom_secret_arn      = module.secrets.axiom_secret_arn
-  axiom_dataset_whisper = "chalk-whisper-worker"
+  axiom_dataset_whisper = var.axiom_dataset
   secrets_kms_key_arn   = module.secrets.kms_key_arn
   redis_endpoint        = module.elasticache.primary_endpoint
   redis_port            = module.elasticache.port

@@ -27,6 +27,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/interfaces/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type Router struct {
@@ -72,8 +73,11 @@ func NewRouter(cfg RouterConfig) *Router {
 	}
 	engine := gin.Default()
 
+	engine.Use(otelgin.Middleware("chalk-api"))
+
 	engine.Use(middleware.CORS())
 	engine.Use(middleware.RequestID())
+	engine.Use(middleware.TraceIDHeader())
 	engine.Use(middleware.RequestLogger())
 
 	queries := db.New(cfg.Pool)

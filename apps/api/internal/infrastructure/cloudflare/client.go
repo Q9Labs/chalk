@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Client is the Cloudflare RealtimeKit API client
@@ -32,8 +33,10 @@ type Config struct {
 
 // NewClient creates a new Cloudflare RealtimeKit client
 func NewClient(cfg Config) *Client {
+	baseTransport := http.DefaultTransport
+	transport := otelhttp.NewTransport(baseTransport)
 	return &Client{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: transport},
 		baseURL:    "https://api.cloudflare.com/client/v4",
 		accountID:  cfg.AccountID,
 		appID:      cfg.AppID,

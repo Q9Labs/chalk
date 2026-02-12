@@ -18,6 +18,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/jobs"
 	"github.com/Q9Labs/chalk/internal/infrastructure/logging"
+	infratel "github.com/Q9Labs/chalk/internal/infrastructure/otel"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
@@ -41,6 +42,9 @@ func main() {
 
 	logging.Init()
 	defer logging.Close()
+
+	infratel.Init(ctx)
+	defer infratel.Shutdown(ctx)
 
 	cfg, err := config.Load()
 	if err != nil {

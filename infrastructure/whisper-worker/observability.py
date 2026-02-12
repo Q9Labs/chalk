@@ -13,7 +13,7 @@ import axiom_py
 from axiom_py.logging import AxiomHandler
 
 SERVICE_NAME = "whisper-worker"
-ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
+ENV = os.getenv("ENVIRONMENT", "dev")
 HOSTNAME = socket.gethostname()
 AXIOM_DATASET = os.getenv("AXIOM_DATASET", "chalk-whisper-worker")
 
@@ -43,12 +43,26 @@ def audio_url_meta(url: str) -> dict[str, Optional[str]]:
 
 
 def emit_event(logger: logging.Logger, *, level: int, event: dict[str, Any]) -> None:
+    trace_id = None
+    span_id = None
+    try:
+        from opentelemetry import trace as ot_trace  # type: ignore
+
+        sc = ot_trace.get_current_span().get_span_context()
+        if sc and sc.is_valid:
+            trace_id = format(sc.trace_id, "032x")
+            span_id = format(sc.span_id, "016x")
+    except Exception:
+        pass
+
     base = {
         "_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "service": SERVICE_NAME,
-        "environment": ENVIRONMENT,
+        "env": ENV,
         "host": HOSTNAME,
         "pid": os.getpid(),
+        "trace_id": trace_id,
+        "span_id": span_id,
     }
 
     payload = {**base, **event}

@@ -310,17 +310,19 @@ resource "aws_launch_template" "whisper" {
     AXIOM_JSON=$(aws secretsmanager get-secret-value \
       --secret-id "${var.axiom_secret_arn}" \
       --query SecretString --output text)
-    AXIOM_TOKEN=$(echo "$AXIOM_JSON" | jq -r '.token // empty')
+	    AXIOM_TOKEN=$(echo "$AXIOM_JSON" | jq -r '.token // empty')
 
-    AXIOM_DATASET="${var.axiom_dataset_whisper}"
-    ENVIRONMENT="${var.environment}"
-    AWS_REGION="${data.aws_region.current.name}"
-    LOG_LEVEL="${var.log_level}"
-    WHISPER_LOG_TRANSCRIPT="true"
-    WHISPER_LOG_TRANSCRIPT_MAX_CHARS="4000"
+	    AXIOM_DATASET="${var.axiom_dataset_whisper}"
+	    AXIOM_DOMAIN="api.axiom.co"
+	    AXIOM_TRACES_DATASET="chalk-prod-traces"
+	    ENVIRONMENT="${var.environment}"
+	    AWS_REGION="${data.aws_region.current.name}"
+	    LOG_LEVEL="${var.log_level}"
+	    WHISPER_LOG_TRANSCRIPT="false"
+	    WHISPER_LOG_TRANSCRIPT_MAX_CHARS="0"
 
-    export REDIS_URL AXIOM_TOKEN AXIOM_DATASET ENVIRONMENT AWS_REGION LOG_LEVEL \
-      WHISPER_LOG_TRANSCRIPT WHISPER_LOG_TRANSCRIPT_MAX_CHARS
+	    export REDIS_URL AXIOM_TOKEN AXIOM_DATASET ENVIRONMENT AWS_REGION LOG_LEVEL \
+	      AXIOM_DOMAIN AXIOM_TRACES_DATASET WHISPER_LOG_TRANSCRIPT WHISPER_LOG_TRANSCRIPT_MAX_CHARS
 
     # Authenticate with ECR
     ECR_REGISTRY=$(echo "${var.ecr_repository_url}" | cut -d'/' -f1)
@@ -337,11 +339,13 @@ resource "aws_launch_template" "whisper" {
       -e REDIS_URL \
       -e AWS_REGION \
       -e LOG_LEVEL \
-      -e AXIOM_TOKEN \
-      -e AXIOM_DATASET \
-      -e ENVIRONMENT \
-      -e WHISPER_LOG_TRANSCRIPT \
-      -e WHISPER_LOG_TRANSCRIPT_MAX_CHARS \
+	      -e AXIOM_TOKEN \
+	      -e AXIOM_DATASET \
+	      -e AXIOM_DOMAIN \
+	      -e AXIOM_TRACES_DATASET \
+	      -e ENVIRONMENT \
+	      -e WHISPER_LOG_TRANSCRIPT \
+	      -e WHISPER_LOG_TRANSCRIPT_MAX_CHARS \
       -v /var/log:/var/log \
       ${var.ecr_repository_url}:${var.worker_image_tag}
   EOF

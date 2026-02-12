@@ -4,7 +4,7 @@
 - Service: GPU whisper transcription worker (faster-whisper)
 - Queue key: `transcription:jobs`
 - Result key: `transcription:result:{job_id}` (TTL 24h)
-- Axiom dataset: `chalk-whisper-worker` (env `AXIOM_DATASET`)
+- Axiom dataset: `chalk-api-prod` (shared prod dataset; env `AXIOM_DATASET`)
 - Log file: `/var/log/whisper-worker.log`
 - CloudWatch log group: `/aws/ec2/chalk-whisper-<env>`
 - Metrics: CloudWatch PutMetricData `TranscriptionQueueDepth` (namespace `Chalk/Whisper`, dimension `Environment`)
@@ -29,7 +29,9 @@
 ## Runtime Env Vars
 - `REDIS_URL` from Secrets Manager (auth token). Injected via user-data.
 - `AXIOM_TOKEN` from Secrets Manager `chalk/<env>/axiom` (seeded by SSM `/chalk/prod/axiom-token`).
-- `AXIOM_DATASET` set by Terraform (`chalk-whisper-worker`).
+- `AXIOM_DATASET` set by Terraform (`chalk-api-prod`).
+- `AXIOM_DOMAIN` set by Terraform (`api.axiom.co`).
+- `AXIOM_TRACES_DATASET` set by Terraform (`chalk-prod-traces`).
 - `ENVIRONMENT` from Terraform (`prod`).
 - `LOG_LEVEL` defaults to `INFO` unless overridden.
 - `WHISPER_CHUNK_LENGTH_SECONDS` controls segment/window size for language detection.
@@ -45,8 +47,7 @@
   - Must be greater than `POLL_TIMEOUT_SECONDS` to avoid BRPOP read timeouts.
 - `REDIS_RETRY_ON_TIMEOUT` retry commands on timeout (default: `true`).
 - `REDIS_HEALTHCHECK_INTERVAL` seconds between health checks (default: `30`).
-- `WHISPER_LOG_TRANSCRIPT=true` to include transcript in `whisper.transcription` events.
-- `WHISPER_LOG_TRANSCRIPT_MAX_CHARS=4000` to cap size per event.
+- Transcript logging is disabled in prod (no raw transcript in Axiom logs).
 
 ## Observability
 - Axiom events:
@@ -55,8 +56,8 @@
   - `whisper.transcription` (success/error)
   - `metrics.publish_failed` (Axiom ingestion failures)
   - `worker.unexpected_error`
-- Transcript logging is on by default for testing. Reduce or disable in prod when needed.
- - Axiom ingest failures no longer block jobs; events fall back to stdout JSON.
+- `traceparent` from queued jobs is used to continue distributed traces from the API.
+- Axiom ingest failures no longer block jobs; events fall back to stdout JSON.
 
 ## Quick Health Checks (SSM)
 - Container status:

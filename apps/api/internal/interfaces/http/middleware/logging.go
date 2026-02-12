@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Paths to skip logging (high-frequency, low-value)
@@ -19,6 +20,10 @@ var skipPaths = map[string]bool{
 func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
+		route := c.FullPath()
+		if route == "" {
+			route = path
+		}
 
 		// Skip noisy endpoints
 		if skipPaths[path] {
@@ -32,35 +37,50 @@ func RequestLogger() gin.HandlerFunc {
 		c.Next()
 
 		latency := time.Since(start)
-		status := c.Writer.Status()
+		statusCode := c.Writer.Status()
+		statusClass := statusCode / 100
+
+		sc := trace.SpanContextFromContext(c.Request.Context())
+		traceID := ""
+		spanID := ""
+		if sc.IsValid() {
+			traceID = sc.TraceID().String()
+			spanID = sc.SpanID().String()
+		}
 
 		attrs := []any{
+			"event", "http.request",
 			"request_id", GetRequestID(c),
-			"method", method,
+			"trace_id", traceID,
+			"span_id", spanID,
+			"http_method", method,
+			"route", route,
 			"path", path,
-			"status", status,
+			"status_code", statusCode,
+			"status_class", statusClass,
 			"latency_ms", latency.Milliseconds(),
 			"tenant_id", extractTenantID(c),
 			"room_id", extractRoomID(c),
 			"participant_id", extractParticipantID(c),
 			"client_ip", c.ClientIP(),
+			"user_agent", c.GetHeader("User-Agent"),
 		}
 
 		// Add error context for non-2xx responses
-		if status >= 400 {
+		if statusCode >= 400 {
 			if errMsg := c.Errors.String(); errMsg != "" {
 				attrs = append(attrs, "error", errMsg)
 			}
-			if status >= 500 {
+			if statusCode >= 500 {
 				attrs = append(attrs, "stack", captureStack(3))
-				slog.Error("http request", attrs...)
+				slog.Error("http.request", attrs...)
 				return
 			}
-			slog.Warn("http request", attrs...)
+			slog.Warn("http.request", attrs...)
 			return
 		}
 
-		slog.Info("http request", attrs...)
+		slog.Info("http.request", attrs...)
 	}
 }
 

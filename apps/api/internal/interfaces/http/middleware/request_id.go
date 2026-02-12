@@ -3,6 +3,8 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const RequestIDKey = "request_id"
@@ -16,6 +18,13 @@ func RequestID() gin.HandlerFunc {
 		}
 		c.Set(RequestIDKey, requestID)
 		c.Header("X-Request-ID", requestID)
+
+		// Attach to active span if tracing is enabled.
+		span := trace.SpanFromContext(c.Request.Context())
+		if span.SpanContext().IsValid() {
+			span.SetAttributes(attribute.String("chalk.request_id", requestID))
+		}
+
 		c.Next()
 	}
 }
