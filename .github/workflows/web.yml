@@ -73,7 +73,6 @@ jobs:
         run: cd out && bun run build --filter=web 2>&1 | tee build.log
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
-          VITE_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Check build exit code
@@ -104,11 +103,17 @@ jobs:
           # Remove _redirects - Cloudflare auto-handles SPA routing
           rm -f _redirects
 
+      - name: Flatten deploy directory
+        run: |
+          rm -rf out/deploy
+          mkdir -p out/deploy
+          cp -R out/apps/web/dist/client/* out/deploy/
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: out/apps/web/dist/client
+          path: out/deploy
           retention-days: 7
 
   deploy:
