@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Native: File-based logs (iOS/Android)** — write app + MeetingKit events/errors to `chalk.log`, `chalk.debug.log`, `chalk.error.log`, and add in-app “Share logs” so errors are copyable without fighting Simulator/Logcat selection.
 - **API: Debug diagnostics endpoints** — add `GET /api/v1/debug/auth` (token/server/build introspection) and `HEAD /api/v1/debug/ping` (latency probe) for the client System Health dialog.
+- **API: Internal tenant auth groundwork** — add `tenants.tenant_kind` (`external|internal`), plus `users`, `user_sessions`, and `tenant_claims` schema to support email login + cross-device dashboard without client API keys.
 - **Stress Tests: Infra capacity snapshots** — add `tests/scripts/collect-infra-snapshot.sh` and wire `tests/scripts/run-sweep.sh` to auto-capture ECS/ALB/Aurora/Redis metrics per VU step into `tests/results/INFRA_CAPACITY_SNAPSHOTS.jsonl` for downsize analysis.
 
 ### Changed
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **iOS: Meeting grid tile distortion** — force square participant tiles in the prototype iOS app so the grid doesn’t render stretched rectangles.
 - **iOS: Lobby join button blocked** — fix preview card overlays expanding beyond their frame and intercepting taps on “Ask to join”.
+- **API: Recording endpoint access** — require `CanRecord` permission for `/api/v1/recordings/*` to prevent participant JWTs from listing/downloading recordings.
 - **API: WebSocket observability** — add WS auth/upgrade/connect/disconnect/error logs (close codes, backpressure, ping/write/read errors), plus presence diagnostics (`expected_active_participants` vs local) and `hostname`/`pid` to quickly confirm multi-instance split-brain.
 - **API: WebSocket error coverage** — always emit a structured `websocket.app_error` log when the server sends an `error` message, and add Redis pubsub error/start/stop logs for cross-instance WS investigation.
 - **API: Whisper transcription timeout** — replace hardcoded 10m wait with configurable `POST_MEETING_WHISPER_TIMEOUT` (default `30m`) so longer self-hosted Whisper jobs complete instead of being marked failed at exactly 10 minutes.

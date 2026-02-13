@@ -343,11 +343,84 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_tenant_id ON webhook_deliveries(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status ON webhook_deliveries(status);
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_next_retry ON webhook_deliveries(next_retry_at) WHERE status IN ('pending', 'failed');
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_room_id ON webhook_deliveries(room_id);
-`
+	CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_tenant_id ON webhook_deliveries(tenant_id);
+	CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status ON webhook_deliveries(status);
+	CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_next_retry ON webhook_deliveries(next_retry_at) WHERE status IN ('pending', 'failed');
+	CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_room_id ON webhook_deliveries(room_id);
+
+	-- ============================================================================
+	-- MIGRATION 008: Internal tenants + end-user auth primitives
+	-- ============================================================================
+	CREATE TABLE IF NOT EXISTS users (
+	    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	    email TEXT NOT NULL,
+	    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower_unique ON users (lower(email));
+
+	DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+	CREATE TRIGGER update_users_updated_at
+	    BEFORE UPDATE ON users
+	    FOR EACH ROW
+	    EXECUTE FUNCTION update_updated_at_column();
+
+	CREATE TABLE IF NOT EXISTS user_sessions (
+	    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	    refresh_token_hash TEXT NOT NULL,
+	    expires_at TIMESTAMPTZ NOT NULL,
+	    revoked_at TIMESTAMPTZ,
+	    last_used_at TIMESTAMPTZ,
+	    ip_address INET,
+	    user_agent TEXT,
+	    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+	CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+	CREATE INDEX IF NOT EXISTS idx_user_sessions_refresh_token_hash ON user_sessions(refresh_token_hash);
+
+	ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_kind TEXT NOT NULL DEFAULT 'external';
+	ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_user_id UUID;
+	ALTER TABLE tenants ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+
+	DO $$
+	BEGIN
+	    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenants_tenant_kind_check') THEN
+	        ALTER TABLE tenants
+	            ADD CONSTRAINT tenants_tenant_kind_check
+	            CHECK (tenant_kind IN ('external', 'internal'));
+	    END IF;
+	END$$;
+
+	DO $$
+	BEGIN
+	    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenants_owner_user_id_fkey') THEN
+	        ALTER TABLE tenants
+	            ADD CONSTRAINT tenants_owner_user_id_fkey
+	            FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL;
+	    END IF;
+	END$$;
+
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_internal_owner_user_id_unique
+	    ON tenants(owner_user_id)
+	    WHERE tenant_kind = 'internal' AND owner_user_id IS NOT NULL;
+
+	CREATE TABLE IF NOT EXISTS tenant_claims (
+	    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+	    secret_hash TEXT NOT NULL,
+	    expires_at TIMESTAMPTZ NOT NULL,
+	    used_at TIMESTAMPTZ,
+	    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_tenant_claims_tenant_id ON tenant_claims(tenant_id);
+	CREATE INDEX IF NOT EXISTS idx_tenant_claims_expires_at ON tenant_claims(expires_at);
+	CREATE INDEX IF NOT EXISTS idx_tenant_claims_secret_hash ON tenant_claims(secret_hash);
+	`
 	_, err := p.Exec(ctx, schema)
 	if err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)

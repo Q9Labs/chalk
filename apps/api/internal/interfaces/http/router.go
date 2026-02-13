@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/config"
+	domainAuth "github.com/Q9Labs/chalk/internal/domain/auth"
 	"github.com/Q9Labs/chalk/internal/domain/participant"
 	"github.com/Q9Labs/chalk/internal/domain/recording"
 	"github.com/Q9Labs/chalk/internal/domain/room"
@@ -266,6 +267,7 @@ func (r *Router) setupRoutes() {
 
 		recordingsGroup := v1.Group("/recordings")
 		recordingsGroup.Use(authMw.RequireJWT())
+		recordingsGroup.Use(authMw.RequirePermission(func(p domainAuth.Permissions) bool { return p.CanRecord }))
 		{
 			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService, r.cfClient)
 			recordingsGroup.GET("", recordings.List)
