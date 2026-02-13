@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **iOS: Meeting grid tile distortion** — force square participant tiles in the prototype iOS app so the grid doesn’t render stretched rectangles.
 - **iOS: Lobby join button blocked** — fix preview card overlays expanding beyond their frame and intercepting taps on “Ask to join”.
+- **Web: SPA deep links** — add Cloudflare Pages `_redirects` SPA fallback so routes like `/dashboard` don’t 404 on direct navigation/refresh.
 - **API: Recording endpoint access** — require `CanRecord` permission for `/api/v1/recordings/*` to prevent participant JWTs from listing/downloading recordings.
 - **API: WebSocket observability** — add WS auth/upgrade/connect/disconnect/error logs (close codes, backpressure, ping/write/read errors), plus presence diagnostics (`expected_active_participants` vs local) and `hostname`/`pid` to quickly confirm multi-instance split-brain.
 - **API: WebSocket error coverage** — always emit a structured `websocket.app_error` log when the server sends an `error` message, and add Redis pubsub error/start/stop logs for cross-instance WS investigation.
