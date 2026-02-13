@@ -100,8 +100,7 @@ jobs:
           # Cloudflare Pages needs index.html for SPA fallback
           cd out/apps/web/dist/client
           cp _shell.html index.html
-          # Remove _redirects - Cloudflare auto-handles SPA routing
-          rm -f _redirects
+          # Keep _redirects for SPA deep-link routing (e.g. /dashboard)
 
       - name: Flatten deploy directory
         run: |

@@ -8,3 +8,4 @@
 - 14:38 PKT: Dashboard plan kickoff: locked tenant model `external|internal`, host-only dashboard via email magic-link (Resend), opaque join links, signed share links, 7d hard-delete recordings.
 - 14:39 PKT: Implemented API groundwork: `tenant_kind` + user/session/claim schema, and gated `/api/v1/recordings/*` behind `CanRecord` permission; ran full gates (go test + turbo lint/typecheck/test).
 - 17:49 PKT: Prod web issue: direct navigation to `/dashboard` 404 on Cloudflare Pages; add SPA fallback via `apps/web/public/_redirects` to serve `index.html` for client-side routes.
+- 17:52 PKT: CI fix: stop deleting `_redirects` during Cloudflare Pages deploy (`.github/workflows/web.yml`), otherwise SPA routes still 404 in prod.
