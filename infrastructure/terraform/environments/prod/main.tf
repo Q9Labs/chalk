@@ -381,7 +381,9 @@ module "whisper" {
   redis_port            = module.elasticache.port
   ecr_repository_url    = module.ecr.whisper_repository_url
   worker_image_tag      = "latest"
-  min_capacity          = 0
+  # Prevent scale-to-zero: the queue depth metric is emitted by the worker itself,
+  # so if desired/min hit 0 it cannot auto-scale back up and transcripts will time out.
+  min_capacity          = 1
   desired_capacity      = 1
   max_capacity          = 2
   enable_autoscaling    = true
