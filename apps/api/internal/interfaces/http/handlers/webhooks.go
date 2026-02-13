@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,9 +12,11 @@ import (
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/recording"
+	postmeetingtranscription "github.com/Q9Labs/chalk/internal/domain/transcription"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // PostMeetingTrigger is called after recording completion to trigger post-meeting processing.
@@ -22,16 +25,18 @@ type PostMeetingTrigger interface {
 }
 
 type WebhookHandler struct {
-	recordingService   *recording.Service
-	queries            *db.Queries
-	postMeetingTrigger PostMeetingTrigger
+	recordingService     *recording.Service
+	queries              *db.Queries
+	postMeetingTrigger   PostMeetingTrigger
+	transcriptionService *postmeetingtranscription.Service
 }
 
-func NewWebhookHandler(recordingService *recording.Service, queries *db.Queries, postMeetingTrigger PostMeetingTrigger) *WebhookHandler {
+func NewWebhookHandler(recordingService *recording.Service, queries *db.Queries, postMeetingTrigger PostMeetingTrigger, transcriptionService *postmeetingtranscription.Service) *WebhookHandler {
 	return &WebhookHandler{
-		recordingService:   recordingService,
-		queries:            queries,
-		postMeetingTrigger: postMeetingTrigger,
+		recordingService:     recordingService,
+		queries:              queries,
+		postMeetingTrigger:   postMeetingTrigger,
+		transcriptionService: transcriptionService,
 	}
 }
 
@@ -242,6 +247,10 @@ func (h *WebhookHandler) processRecording(rec *db.Recording, webhook RecordingSt
 	// Trigger post-meeting processing if configured
 	postMeetingTriggered := h.triggerPostMeetingProcessing(ctx, completed.ID, completed.RoomID)
 	evt["post_meeting_triggered"] = postMeetingTriggered
+
+	// For internal tenants: always-on post-meeting transcription (default provider).
+	internalTranscriptionQueued := h.queueInternalTranscription(ctx, completed.ID, completed.RoomID)
+	evt["internal_transcription_queued"] = internalTranscriptionQueued
 }
 
 // triggerPostMeetingProcessing checks tenant config and triggers post-meeting webhook flow.
@@ -313,6 +322,37 @@ func (h *WebhookHandler) triggerPostMeetingProcessing(ctx context.Context, recor
 	evt["outcome"] = "skipped"
 	evt["skip_reason"] = "trigger_nil"
 	return false
+}
+
+func (h *WebhookHandler) queueInternalTranscription(ctx context.Context, recordingID, roomID uuid.UUID) bool {
+	if h.queries == nil || h.transcriptionService == nil {
+		return false
+	}
+
+	room, err := h.queries.GetRoom(ctx, roomID)
+	if err != nil {
+		return false
+	}
+
+	tenant, err := h.queries.GetTenant(ctx, room.TenantID)
+	if err != nil {
+		return false
+	}
+	if tenant.TenantKind != "internal" {
+		return false
+	}
+
+	// Idempotency: if any transcript already exists for this recording, don't queue again.
+	if _, err := h.queries.GetPostMeetingTranscriptByRecordingID(ctx, recordingID); err == nil {
+		return false
+	} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+
+	if _, err := h.transcriptionService.QueueTranscription(ctx, recordingID, roomID, ""); err != nil {
+		return false
+	}
+	return true
 }
 
 // postMeetingWebhookConfig mirrors the tenant config structure.

@@ -443,7 +443,7 @@ func (q *Queries) AdminListRooms(ctx context.Context, arg AdminListRoomsParams) 
 
 const adminListTenants = `-- name: AdminListTenants :many
 SELECT
-    t.id, t.name, t.api_key_hash, t.config, t.max_concurrent_rooms, t.max_participants_per_room, t.max_recording_duration_minutes, t.max_total_minutes_of_meetings, t.is_active, t.created_at, t.updated_at, t.whiteboard_config, t.tenant_config,
+    t.id, t.name, t.api_key_hash, t.config, t.max_concurrent_rooms, t.max_participants_per_room, t.max_recording_duration_minutes, t.max_total_minutes_of_meetings, t.is_active, t.created_at, t.updated_at, t.whiteboard_config, t.tenant_config, t.tenant_kind, t.owner_user_id, t.claimed_at,
     (SELECT COUNT(*) FROM rooms r WHERE r.tenant_id = t.id AND r.status = 'active') AS active_rooms,
     (SELECT COUNT(*) FROM rooms r WHERE r.tenant_id = t.id) AS total_rooms,
     (SELECT COUNT(*) FROM recordings rec JOIN rooms r ON r.id = rec.room_id WHERE r.tenant_id = t.id) AS total_recordings,
@@ -460,24 +460,27 @@ type AdminListTenantsParams struct {
 }
 
 type AdminListTenantsRow struct {
-	ID                          uuid.UUID   `db:"id" json:"id"`
-	Name                        string      `db:"name" json:"name"`
-	ApiKeyHash                  string      `db:"api_key_hash" json:"api_key_hash"`
-	Config                      []byte      `db:"config" json:"config"`
-	MaxConcurrentRooms          int32       `db:"max_concurrent_rooms" json:"max_concurrent_rooms"`
-	MaxParticipantsPerRoom      int32       `db:"max_participants_per_room" json:"max_participants_per_room"`
-	MaxRecordingDurationMinutes int32       `db:"max_recording_duration_minutes" json:"max_recording_duration_minutes"`
-	MaxTotalMinutesOfMeetings   int32       `db:"max_total_minutes_of_meetings" json:"max_total_minutes_of_meetings"`
-	IsActive                    bool        `db:"is_active" json:"is_active"`
-	CreatedAt                   time.Time   `db:"created_at" json:"created_at"`
-	UpdatedAt                   time.Time   `db:"updated_at" json:"updated_at"`
-	WhiteboardConfig            []byte      `db:"whiteboard_config" json:"whiteboard_config"`
-	TenantConfig                []byte      `db:"tenant_config" json:"tenant_config"`
-	ActiveRooms                 int64       `db:"active_rooms" json:"active_rooms"`
-	TotalRooms                  int64       `db:"total_rooms" json:"total_rooms"`
-	TotalRecordings             int64       `db:"total_recordings" json:"total_recordings"`
-	StorageBytes                interface{} `db:"storage_bytes" json:"storage_bytes"`
-	TotalParticipants           int64       `db:"total_participants" json:"total_participants"`
+	ID                          uuid.UUID          `db:"id" json:"id"`
+	Name                        string             `db:"name" json:"name"`
+	ApiKeyHash                  string             `db:"api_key_hash" json:"api_key_hash"`
+	Config                      []byte             `db:"config" json:"config"`
+	MaxConcurrentRooms          int32              `db:"max_concurrent_rooms" json:"max_concurrent_rooms"`
+	MaxParticipantsPerRoom      int32              `db:"max_participants_per_room" json:"max_participants_per_room"`
+	MaxRecordingDurationMinutes int32              `db:"max_recording_duration_minutes" json:"max_recording_duration_minutes"`
+	MaxTotalMinutesOfMeetings   int32              `db:"max_total_minutes_of_meetings" json:"max_total_minutes_of_meetings"`
+	IsActive                    bool               `db:"is_active" json:"is_active"`
+	CreatedAt                   time.Time          `db:"created_at" json:"created_at"`
+	UpdatedAt                   time.Time          `db:"updated_at" json:"updated_at"`
+	WhiteboardConfig            []byte             `db:"whiteboard_config" json:"whiteboard_config"`
+	TenantConfig                []byte             `db:"tenant_config" json:"tenant_config"`
+	TenantKind                  string             `db:"tenant_kind" json:"tenant_kind"`
+	OwnerUserID                 pgtype.UUID        `db:"owner_user_id" json:"owner_user_id"`
+	ClaimedAt                   pgtype.Timestamptz `db:"claimed_at" json:"claimed_at"`
+	ActiveRooms                 int64              `db:"active_rooms" json:"active_rooms"`
+	TotalRooms                  int64              `db:"total_rooms" json:"total_rooms"`
+	TotalRecordings             int64              `db:"total_recordings" json:"total_recordings"`
+	StorageBytes                interface{}        `db:"storage_bytes" json:"storage_bytes"`
+	TotalParticipants           int64              `db:"total_participants" json:"total_participants"`
 }
 
 func (q *Queries) AdminListTenants(ctx context.Context, arg AdminListTenantsParams) ([]AdminListTenantsRow, error) {
@@ -503,6 +506,9 @@ func (q *Queries) AdminListTenants(ctx context.Context, arg AdminListTenantsPara
 			&i.UpdatedAt,
 			&i.WhiteboardConfig,
 			&i.TenantConfig,
+			&i.TenantKind,
+			&i.OwnerUserID,
+			&i.ClaimedAt,
 			&i.ActiveRooms,
 			&i.TotalRooms,
 			&i.TotalRecordings,
@@ -677,7 +683,7 @@ const adminUpdateWhiteboardConfig = `-- name: AdminUpdateWhiteboardConfig :one
 UPDATE tenants
 SET whiteboard_config = $2
 WHERE id = $1
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
 `
 
 type AdminUpdateWhiteboardConfigParams struct {
@@ -702,6 +708,9 @@ func (q *Queries) AdminUpdateWhiteboardConfig(ctx context.Context, arg AdminUpda
 		&i.UpdatedAt,
 		&i.WhiteboardConfig,
 		&i.TenantConfig,
+		&i.TenantKind,
+		&i.OwnerUserID,
+		&i.ClaimedAt,
 	)
 	return i, err
 }

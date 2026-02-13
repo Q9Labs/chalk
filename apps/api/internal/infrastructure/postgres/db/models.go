@@ -101,8 +101,20 @@ type Tenant struct {
 	CreatedAt                   time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt                   time.Time `db:"updated_at" json:"updated_at"`
 	// Whiteboard permission config: default_access (all/host_only/none), host_can_override (boolean)
-	WhiteboardConfig []byte `db:"whiteboard_config" json:"whiteboard_config"`
-	TenantConfig     []byte `db:"tenant_config" json:"tenant_config"`
+	WhiteboardConfig []byte             `db:"whiteboard_config" json:"whiteboard_config"`
+	TenantConfig     []byte             `db:"tenant_config" json:"tenant_config"`
+	TenantKind       string             `db:"tenant_kind" json:"tenant_kind"`
+	OwnerUserID      pgtype.UUID        `db:"owner_user_id" json:"owner_user_id"`
+	ClaimedAt        pgtype.Timestamptz `db:"claimed_at" json:"claimed_at"`
+}
+
+type TenantClaim struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SecretHash string             `db:"secret_hash" json:"secret_hash"`
+	ExpiresAt  time.Time          `db:"expires_at" json:"expires_at"`
+	UsedAt     pgtype.Timestamptz `db:"used_at" json:"used_at"`
+	CreatedAt  time.Time          `db:"created_at" json:"created_at"`
 }
 
 type Transcript struct {
@@ -117,6 +129,25 @@ type Transcript struct {
 	ExternalID              *string     `db:"external_id" json:"external_id"`
 	Timestamp               time.Time   `db:"timestamp" json:"timestamp"`
 	CreatedAt               time.Time   `db:"created_at" json:"created_at"`
+}
+
+type User struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Email     string    `db:"email" json:"email"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type UserSession struct {
+	ID               uuid.UUID          `db:"id" json:"id"`
+	UserID           uuid.UUID          `db:"user_id" json:"user_id"`
+	RefreshTokenHash string             `db:"refresh_token_hash" json:"refresh_token_hash"`
+	ExpiresAt        time.Time          `db:"expires_at" json:"expires_at"`
+	RevokedAt        pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	LastUsedAt       pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	IpAddress        *netip.Addr        `db:"ip_address" json:"ip_address"`
+	UserAgent        *string            `db:"user_agent" json:"user_agent"`
+	CreatedAt        time.Time          `db:"created_at" json:"created_at"`
 }
 
 type WebhookDelivery struct {

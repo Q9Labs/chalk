@@ -13,7 +13,7 @@ import (
 
 func TestWebhookHandler_HandleRecordingReady_InvalidJSON(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewWebhookHandler(nil, nil, nil)
+	handler := NewWebhookHandler(nil, nil, nil, nil)
 	router.POST("/webhooks/recording", handler.HandleRecordingReady)
 
 	body := bytes.NewBufferString(`{invalid json}`)
@@ -32,7 +32,7 @@ func TestWebhookHandler_HandleRecordingReady_InvalidJSON(t *testing.T) {
 
 func TestWebhookHandler_HandleRecordingReady_NonCompletedStatus(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewWebhookHandler(nil, nil, nil)
+	handler := NewWebhookHandler(nil, nil, nil, nil)
 	router.POST("/webhooks/recording", handler.HandleRecordingReady)
 
 	payload := RecordingStatusWebhook{
@@ -65,7 +65,7 @@ func TestWebhookHandler_HandleRecordingReady_NonCompletedStatus(t *testing.T) {
 
 func TestWebhookHandler_HandleRecordingReady_CompletedNoURL(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewWebhookHandler(nil, nil, nil)
+	handler := NewWebhookHandler(nil, nil, nil, nil)
 	router.POST("/webhooks/recording", handler.HandleRecordingReady)
 
 	payload := RecordingStatusWebhook{

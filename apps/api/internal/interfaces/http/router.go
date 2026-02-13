@@ -234,35 +234,71 @@ func (r *Router) setupRoutes() {
 		roomsGroup := v1.Group("/rooms")
 		roomsGroup.Use(authMw.RequireJWT())
 		{
-			roomsGroup.POST("", rooms.Create)
-			roomsGroup.GET("", rooms.List)
+			// Management endpoints (host-only)
+			roomsGroup.POST("", authMw.RequireHost(), rooms.Create)
+			roomsGroup.GET("", authMw.RequireHost(), rooms.List)
 			roomsGroup.GET("/:id", rooms.Get)
-			roomsGroup.PATCH("/:id", rooms.Update)
-			roomsGroup.DELETE("/:id", rooms.Delete)
-			roomsGroup.POST("/:id/end", rooms.End)
+			roomsGroup.PATCH("/:id", authMw.RequireHost(), rooms.Update)
+			roomsGroup.DELETE("/:id", authMw.RequireHost(), rooms.Delete)
+			roomsGroup.POST("/:id/end", authMw.RequireHost(), rooms.End)
 
 			participants := handlers.NewParticipantHandler(r.participantService, r.roomService)
 			roomsGroup.POST("/:id/participants", participants.Add)
-			roomsGroup.POST("/:id/participants/bulk", participants.BulkAdd)
+			roomsGroup.POST("/:id/participants/bulk", authMw.RequireHost(), participants.BulkAdd)
 			roomsGroup.GET("/:id/participants", participants.List)
 			roomsGroup.DELETE("/:id/participants/:pid", authMw.RequireHost(), participants.Remove)
-			roomsGroup.POST("/:id/participants/:pid/token", participants.RefreshToken)
+			roomsGroup.POST("/:id/participants/:pid/token", authMw.RequireHost(), participants.RefreshToken)
 
 			// Whiteboard files (R2 presigned URLs)
 			whiteboardFiles := handlers.NewWhiteboardFilesHandler(r.storageR2)
 			roomsGroup.POST("/:id/whiteboard/files/presign-upload", whiteboardFiles.PresignUpload)
 			roomsGroup.POST("/:id/whiteboard/files/presign-download", whiteboardFiles.PresignDownload)
 
+			// Opaque join links for internal app (host-only)
+			if r.appConfig != nil && r.appConfig.Auth.LinkSigningKey != "" {
+				internalLinks := handlers.NewInternalLinksHandler(r.appConfig.Auth.LinkSigningKey, r.jwtService, r.queries, r.recordingService, r.roomService)
+				roomsGroup.POST("/:id/join-token", authMw.RequireHost(), internalLinks.CreateJoinToken)
+			}
+
 			// API-HIGH-05: Recording start/stop/archive require host role
 			recordings := handlers.NewRecordingHandler(r.recordingService, r.roomService, r.cfClient)
 			roomsGroup.POST("/:id/recordings/start", authMw.RequireHost(), recordings.Start)
 			roomsGroup.POST("/:id/recordings/stop", authMw.RequireHost(), recordings.Stop)
 			roomsGroup.POST("/:id/recordings/:rid/archive", authMw.RequireHost(), recordings.Archive)
-			roomsGroup.POST("/:id/recordings/sync", recordings.SyncFromCloudflare)
+			roomsGroup.POST("/:id/recordings/sync", authMw.RequireHost(), recordings.SyncFromCloudflare)
 
 			// Transcripts
 			transcripts := handlers.NewTranscriptHandler(r.transcriptService, r.roomService)
 			roomsGroup.GET("/:id/transcripts", transcripts.List)
+		}
+
+		// Internal dashboard + auth (Chalk-hosted apps)
+		internal := v1.Group("/internal")
+		{
+			internalAuth := handlers.NewInternalAuthHandler(r.appConfig, r.queries, r.jwtService, r.apiKeyService, r.redisClient)
+			authGroup := internal.Group("/auth")
+			{
+				authGroup.POST("/start", internalAuth.Start)
+				authGroup.POST("/verify", internalAuth.Verify)
+				authGroup.GET("/access-token", internalAuth.AccessToken)
+			}
+
+			internal.Use(authMw.RequireJWT())
+			internal.Use(authMw.RequireHost())
+			{
+				meetings := handlers.NewInternalMeetingsHandler(r.queries)
+				internal.GET("/meetings", meetings.List)
+			}
+		}
+
+		// Public endpoints for opaque join tokens + signed share links (no auth)
+		if r.appConfig != nil && r.appConfig.Auth.LinkSigningKey != "" {
+			internalLinks := handlers.NewInternalLinksHandler(r.appConfig.Auth.LinkSigningKey, r.jwtService, r.queries, r.recordingService, r.roomService)
+			public := v1.Group("/public")
+			{
+				public.POST("/join-token/exchange", internalLinks.ExchangeJoinToken)
+				public.GET("/share/:token", internalLinks.GetShare)
+			}
 		}
 
 		recordingsGroup := v1.Group("/recordings")
@@ -276,6 +312,12 @@ func (r *Router) setupRoutes() {
 			recordingsGroup.POST("/:id/archive", recordings.Archive)
 			recordingsGroup.POST("/:id/recover", recordings.Recover)
 			recordingsGroup.DELETE("/:id", recordings.Delete)
+
+			// Signed share links (host-only)
+			if r.appConfig != nil && r.appConfig.Auth.LinkSigningKey != "" {
+				internalLinks := handlers.NewInternalLinksHandler(r.appConfig.Auth.LinkSigningKey, r.jwtService, r.queries, r.recordingService, r.roomService)
+				recordingsGroup.POST("/:id/share", authMw.RequireHost(), internalLinks.CreateShareToken)
+			}
 
 			// Post-meeting transcription for recordings
 			if r.postMeetingTranscriptionService != nil {
@@ -303,7 +345,7 @@ func (r *Router) setupRoutes() {
 			postMeetingTrigger = &postMeetingTriggerAdapter{svc: r.postMeetingService}
 		}
 
-		webhooks := handlers.NewWebhookHandler(r.recordingService, r.queries, postMeetingTrigger)
+		webhooks := handlers.NewWebhookHandler(r.recordingService, r.queries, postMeetingTrigger, r.postMeetingTranscriptionService)
 		v1.POST("/webhooks/cloudflare/recording", webhooks.HandleRecordingReady)
 
 		localPostMeeting := handlers.NewLocalPostMeetingWebhookHandler(r.queries)

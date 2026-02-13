@@ -123,7 +123,9 @@ func (s *Service) ProcessTranscription(ctx context.Context, transcriptID uuid.UU
 		"transcript_id", transcriptID,
 		"storage_path", *recording.StoragePath)
 
-	audioURL, err := s.r2Client.GetPresignedURL(ctx, *recording.StoragePath, time.Hour)
+	// Worker + queue-based transcription can be delayed (backlog, scale events). Use a longer TTL
+	// so the presigned URL doesn't expire before the GPU worker downloads it.
+	audioURL, err := s.r2Client.GetPresignedURL(ctx, *recording.StoragePath, 24*time.Hour)
 	if err != nil {
 		slog.Error("[chalk] failed to generate presigned URL",
 			"transcript_id", transcriptID,

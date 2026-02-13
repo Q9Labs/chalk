@@ -270,6 +270,10 @@ func main() {
 	go roomCleanup.Run(ctx, 10*time.Minute, 30) // Check every 10min, cleanup rooms empty for 30min
 	slog.Info("started room cleanup", "interval", "10m", "timeout", "30m")
 
+	internalRetention := jobs.NewInternalRetentionJob(router.Queries(), router.RecordingService(), slog.Default())
+	go internalRetention.Run(ctx)
+	slog.Info("started internal retention job")
+
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

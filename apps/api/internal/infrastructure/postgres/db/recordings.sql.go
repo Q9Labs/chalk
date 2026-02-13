@@ -525,11 +525,14 @@ func (q *Queries) ListRecordingsByTenant(ctx context.Context, arg ListRecordings
 }
 
 const listRecordingsReadyForArchive = `-- name: ListRecordingsReadyForArchive :many
-SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata FROM recordings
-WHERE status = 'ready'
-  AND archived_at IS NULL
-  AND ended_at < NOW() - INTERVAL '7 days'
-ORDER BY ended_at ASC
+SELECT rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata FROM recordings rec
+JOIN rooms r ON r.id = rec.room_id
+JOIN tenants t ON t.id = r.tenant_id
+WHERE rec.status = 'ready'
+  AND rec.archived_at IS NULL
+  AND rec.ended_at < NOW() - INTERVAL '7 days'
+  AND t.tenant_kind != 'internal'
+ORDER BY rec.ended_at ASC
 LIMIT $1
 `
 

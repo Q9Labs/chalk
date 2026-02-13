@@ -31,17 +31,22 @@ type Querier interface {
 	AdminUpdateWhiteboardConfig(ctx context.Context, arg AdminUpdateWhiteboardConfigParams) (Tenant, error)
 	ArchiveRecording(ctx context.Context, id uuid.UUID) (Recording, error)
 	ArchiveRecordingWithPath(ctx context.Context, arg ArchiveRecordingWithPathParams) (Recording, error)
+	BindInternalTenantToOwner(ctx context.Context, arg BindInternalTenantToOwnerParams) (Tenant, error)
 	CompleteRecording(ctx context.Context, arg CompleteRecordingParams) (Recording, error)
 	CountActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	CountActiveRoomsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	CountActiveTenants(ctx context.Context) (int64, error)
 	CountAuditLogsByAction(ctx context.Context, action string) (int64, error)
 	CountAuditLogsByTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	CountMeetingsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	CountTenants(ctx context.Context) (int64, error)
 	CountTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	// Audit Log Queries
 	// Logging operations for compliance and debugging
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
+	// Internal Tenant Queries
+	// Chalk-owned app workspaces (web + mobile)
+	CreateInternalTenant(ctx context.Context, arg CreateInternalTenantParams) (Tenant, error)
 	// Participant Queries
 	// CRUD operations and participant management
 	CreateParticipant(ctx context.Context, arg CreateParticipantParams) (Participant, error)
@@ -58,9 +63,18 @@ type Querier interface {
 	// Tenant Queries
 	// CRUD operations and tenant-specific queries
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
+	// Tenant Claims Queries
+	// Pre-signup internal tenant claim (single-use)
+	CreateTenantClaim(ctx context.Context, arg CreateTenantClaimParams) (TenantClaim, error)
 	// Transcript Queries
 	// CRUD operations for meeting transcriptions
 	CreateTranscript(ctx context.Context, arg CreateTranscriptParams) (Transcript, error)
+	// Users Queries
+	// End-user auth for internal tenants
+	CreateUser(ctx context.Context, email string) (User, error)
+	// User Sessions Queries
+	// Refresh sessions stored as hashed tokens
+	CreateUserSession(ctx context.Context, arg CreateUserSessionParams) (UserSession, error)
 	// Webhook Deliveries Queries
 	// CRUD operations for webhook delivery tracking
 	CreateWebhookDelivery(ctx context.Context, arg CreateWebhookDeliveryParams) (WebhookDelivery, error)
@@ -78,6 +92,7 @@ type Querier interface {
 	GetAuditLog(ctx context.Context, id uuid.UUID) (AuditLog, error)
 	GetAuditLogWithDetails(ctx context.Context, id uuid.UUID) (GetAuditLogWithDetailsRow, error)
 	GetFailedWebhookDeliveries(ctx context.Context, arg GetFailedWebhookDeliveriesParams) ([]WebhookDelivery, error)
+	GetInternalTenantByOwnerUserID(ctx context.Context, ownerUserID pgtype.UUID) (Tenant, error)
 	GetParticipant(ctx context.Context, id uuid.UUID) (Participant, error)
 	GetParticipantByCloudflareID(ctx context.Context, cloudflareParticipantID string) (Participant, error)
 	GetParticipantByExternalUserAndRoom(ctx context.Context, arg GetParticipantByExternalUserAndRoomParams) (Participant, error)
@@ -97,9 +112,13 @@ type Querier interface {
 	GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetTenantByAPIKeyHash(ctx context.Context, apiKeyHash string) (Tenant, error)
 	GetTenantByRoomID(ctx context.Context, id uuid.UUID) (Tenant, error)
+	GetTenantClaimBySecretHash(ctx context.Context, secretHash string) (TenantClaim, error)
 	GetTotalRecordingStorageByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetTranscript(ctx context.Context, id uuid.UUID) (Transcript, error)
 	GetTranscriptByExternalID(ctx context.Context, externalID *string) (Transcript, error)
+	GetUser(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserByEmail(ctx context.Context, lower string) (User, error)
+	GetUserSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (UserSession, error)
 	GetWebhookDeliveriesByRoom(ctx context.Context, roomID uuid.UUID) ([]WebhookDelivery, error)
 	GetWebhookDeliveriesByTenant(ctx context.Context, arg GetWebhookDeliveriesByTenantParams) ([]WebhookDelivery, error)
 	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
@@ -117,6 +136,12 @@ type Querier interface {
 	ListAuditLogsByTenantAndAction(ctx context.Context, arg ListAuditLogsByTenantAndActionParams) ([]AuditLog, error)
 	ListAuditLogsByTenantInDateRange(ctx context.Context, arg ListAuditLogsByTenantInDateRangeParams) ([]AuditLog, error)
 	ListEmptyActiveRooms(ctx context.Context, dollar_1 interface{}) ([]Room, error)
+	// Internal Retention Queries
+	// Delete recordings after retention window (internal tenants only)
+	ListInternalRecordingsForDeletion(ctx context.Context, arg ListInternalRecordingsForDeletionParams) ([]Recording, error)
+	// Internal Meetings Queries
+	// Dashboard rows (room + recording + transcript summary)
+	ListMeetingsByTenant(ctx context.Context, arg ListMeetingsByTenantParams) ([]ListMeetingsByTenantRow, error)
 	ListParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListParticipantsWithRoomInfo(ctx context.Context, arg ListParticipantsWithRoomInfoParams) ([]ListParticipantsWithRoomInfoRow, error)
 	ListPostMeetingTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) ([]PostMeetingTranscript, error)
@@ -133,13 +158,16 @@ type Querier interface {
 	MarkPostMeetingTranscriptProcessing(ctx context.Context, id uuid.UUID) error
 	MarkRecordingDeleted(ctx context.Context, id uuid.UUID) (Recording, error)
 	MarkRecordingFailed(ctx context.Context, id uuid.UUID) (Recording, error)
+	MarkTenantClaimUsed(ctx context.Context, id uuid.UUID) (TenantClaim, error)
 	MarkWebhookDelivered(ctx context.Context, id uuid.UUID) error
 	MarkWebhookSending(ctx context.Context, id uuid.UUID) error
 	ParticipantLeave(ctx context.Context, id uuid.UUID) (Participant, error)
 	ParticipantLeaveByCloudflareID(ctx context.Context, cloudflareParticipantID string) (Participant, error)
 	ReactivateRoom(ctx context.Context, arg ReactivateRoomParams) (Room, error)
+	RevokeUserSession(ctx context.Context, id uuid.UUID) error
 	RotateTenantAPIKey(ctx context.Context, arg RotateTenantAPIKeyParams) (Tenant, error)
 	StopRecording(ctx context.Context, id uuid.UUID) (Recording, error)
+	TouchUserSession(ctx context.Context, id uuid.UUID) error
 	UpdateParticipant(ctx context.Context, arg UpdateParticipantParams) (Participant, error)
 	UpdatePostMeetingTranscriptAI(ctx context.Context, arg UpdatePostMeetingTranscriptAIParams) error
 	UpdatePostMeetingTranscriptResult(ctx context.Context, arg UpdatePostMeetingTranscriptResultParams) error

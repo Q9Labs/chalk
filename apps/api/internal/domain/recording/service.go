@@ -260,6 +260,34 @@ func (s *Service) GetDownloadURL(ctx context.Context, recordingID uuid.UUID, act
 	return "", fmt.Errorf("no storage client configured")
 }
 
+// GetPresignedURL returns a short-lived download URL for a ready recording without audit logging.
+// Intended for internal/public share flows where actor identity is not available.
+func (s *Service) GetPresignedURL(ctx context.Context, recordingID uuid.UUID, expiry time.Duration) (string, error) {
+	recording, err := s.db.GetRecording(ctx, recordingID)
+	if err != nil {
+		return "", ErrRecordingNotFound
+	}
+	if recording.Status != "ready" || recording.StoragePath == nil || *recording.StoragePath == "" {
+		return "", ErrRecordingNotReady
+	}
+
+	if recording.StorageProvider == nil || *recording.StorageProvider == "r2" {
+		if s.r2Client == nil {
+			return "", fmt.Errorf("R2 storage client not configured")
+		}
+		return s.r2Client.GetPresignedURL(ctx, *recording.StoragePath, expiry)
+	}
+
+	if *recording.StorageProvider == "s3_glacier" {
+		if s.s3Client == nil {
+			return "", fmt.Errorf("S3 storage client not configured")
+		}
+		return s.s3Client.GetPresignedURL(ctx, *recording.StoragePath, expiry)
+	}
+
+	return "", fmt.Errorf("unsupported storage provider")
+}
+
 func (s *Service) CompleteRecording(ctx context.Context, recordingID uuid.UUID, storageProvider, storagePath string, sizeBytes int64, durationSeconds int32) (*db.Recording, error) {
 	recording, err := s.db.CompleteRecording(ctx, db.CompleteRecordingParams{
 		ID:              recordingID,

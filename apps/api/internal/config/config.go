@@ -13,6 +13,7 @@ type Config struct {
 	Redis       RedisConfig
 	Cloudflare  CloudflareConfig
 	API         APIConfig
+	Auth        AuthConfig
 	JWT         JWTConfig
 	Storage     StorageConfig
 	GitHub      GitHubConfig
@@ -61,6 +62,23 @@ type CloudflareConfig struct {
 
 type APIConfig struct {
 	PublicURL string // API_PUBLIC_URL - public URL for webhook registration
+}
+
+type AuthConfig struct {
+	// Resend magic-link auth (internal tenants)
+	ResendAPIKey    string
+	ResendFromEmail string
+	// Where the magic link lands (SPA callback route).
+	InternalAppURL string
+
+	// Cookie settings (cross-subdomain in prod).
+	CookieDomain string
+
+	// HMAC signing key for join/share tokens.
+	LinkSigningKey string
+
+	MagicLinkTTLMinutes int // default 15
+	SessionTTLDays      int // default 30
 }
 
 type JWTConfig struct {
@@ -182,6 +200,15 @@ func Load() (*Config, error) {
 		API: APIConfig{
 			PublicURL: getEnv("API_PUBLIC_URL", ""),
 		},
+		Auth: AuthConfig{
+			ResendAPIKey:        getEnv("RESEND_API_KEY", ""),
+			ResendFromEmail:     getEnv("RESEND_FROM_EMAIL", ""),
+			InternalAppURL:      getEnv("INTERNAL_APP_URL", "http://localhost:3070"),
+			CookieDomain:        getEnv("AUTH_COOKIE_DOMAIN", ""),
+			LinkSigningKey:      getEnv("AUTH_LINK_SIGNING_KEY", getEnv("JWT_SIGNING_KEY", "development-secret-key")),
+			MagicLinkTTLMinutes: getEnvInt("AUTH_MAGIC_LINK_TTL_MINUTES", 15),
+			SessionTTLDays:      getEnvInt("AUTH_SESSION_TTL_DAYS", 30),
+		},
 		JWT: JWTConfig{
 			SigningKey:    getEnv("JWT_SIGNING_KEY", "development-secret-key"),
 			ExpiryMinutes: getEnvInt("JWT_EXPIRY_MINUTES", 60),
@@ -214,7 +241,7 @@ func Load() (*Config, error) {
 		PostMeeting: PostMeetingConfig{
 			TranscriptionDefaultProvider: getEnv("POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER", "whisper"),
 			GroqAPIKey:                   getEnv("POST_MEETING_GROQ_API_KEY", ""),
-			WhisperEnabled:               getEnvBool("POST_MEETING_WHISPER_ENABLED", false),
+			WhisperEnabled:               getEnvBool("POST_MEETING_WHISPER_ENABLED", true),
 			WhisperRedisQueue:            getEnv("POST_MEETING_WHISPER_REDIS_QUEUE", "transcription:jobs"),
 			AIDefaultProvider:            getEnv("POST_MEETING_AI_DEFAULT_PROVIDER", "openrouter"),
 			OpenRouterAPIKey:             getEnv("POST_MEETING_OPENROUTER_API_KEY", ""),

@@ -42,11 +42,14 @@ ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListRecordingsReadyForArchive :many
-SELECT * FROM recordings
-WHERE status = 'ready'
-  AND archived_at IS NULL
-  AND ended_at < NOW() - INTERVAL '7 days'
-ORDER BY ended_at ASC
+SELECT rec.* FROM recordings rec
+JOIN rooms r ON r.id = rec.room_id
+JOIN tenants t ON t.id = r.tenant_id
+WHERE rec.status = 'ready'
+  AND rec.archived_at IS NULL
+  AND rec.ended_at < NOW() - INTERVAL '7 days'
+  AND t.tenant_kind != 'internal'
+ORDER BY rec.ended_at ASC
 LIMIT $1;
 
 -- name: StopRecording :one
