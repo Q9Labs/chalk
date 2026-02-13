@@ -1,0 +1,119 @@
+type JoinContextV1 = {
+	joinToken: string;
+	roomName?: string;
+	accessToken?: string;
+	expiresAtMs?: number;
+};
+
+const JOIN_CONTEXT_KEY = "chalk_join_context_v1";
+
+export function getApiUrl() {
+	return import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
+}
+
+export function getJoinContext(): JoinContextV1 | null {
+	if (typeof window === "undefined") return null;
+	try {
+		const raw = sessionStorage.getItem(JOIN_CONTEXT_KEY);
+		if (!raw) return null;
+		return JSON.parse(raw) as JoinContextV1;
+	} catch {
+		return null;
+	}
+}
+
+export function setJoinContext(ctx: JoinContextV1) {
+	if (typeof window === "undefined") return;
+	sessionStorage.setItem(JOIN_CONTEXT_KEY, JSON.stringify(ctx));
+}
+
+export function clearJoinContext() {
+	if (typeof window === "undefined") return;
+	sessionStorage.removeItem(JOIN_CONTEXT_KEY);
+}
+
+export async function fetchInternalAccessToken(apiUrl: string) {
+	const res = await fetch(`${apiUrl}/api/v1/internal/auth/access-token`, {
+		method: "GET",
+		credentials: "include",
+	});
+	if (!res.ok) {
+		throw new Error(`auth failed (${res.status})`);
+	}
+	const data = (await res.json()) as { access_token: string };
+	if (!data.access_token) throw new Error("missing access token");
+	return data.access_token;
+}
+
+export async function startMagicLink(apiUrl: string, email: string) {
+	const res = await fetch(`${apiUrl}/api/v1/internal/auth/start`, {
+		method: "POST",
+		credentials: "include",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ email }),
+	});
+	if (!res.ok) {
+		const data = (await res.json().catch(() => null)) as {
+			error?: string;
+		} | null;
+		throw new Error(data?.error || `failed to send email (${res.status})`);
+	}
+}
+
+export async function verifyMagicLink(apiUrl: string, token: string) {
+	const res = await fetch(`${apiUrl}/api/v1/internal/auth/verify`, {
+		method: "POST",
+		credentials: "include",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ token }),
+	});
+	if (!res.ok) {
+		const data = (await res.json().catch(() => null)) as {
+			error?: string;
+		} | null;
+		throw new Error(data?.error || `invalid link (${res.status})`);
+	}
+}
+
+export async function exchangeJoinToken(apiUrl: string, joinToken: string) {
+	const res = await fetch(`${apiUrl}/api/v1/public/join-token/exchange`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ join_token: joinToken }),
+	});
+	if (!res.ok) {
+		throw new Error(`invalid join link (${res.status})`);
+	}
+	return (await res.json()) as {
+		access_token: string;
+		expires_in: number;
+		room_name: string;
+	};
+}
+
+export function createWebTokenProvider(apiUrl: string) {
+	return async () => {
+		const jc = getJoinContext();
+		if (jc?.joinToken) {
+			if (
+				jc.accessToken &&
+				jc.expiresAtMs &&
+				Date.now() < jc.expiresAtMs - 5_000
+			) {
+				return jc.accessToken;
+			}
+
+			const ex = await exchangeJoinToken(apiUrl, jc.joinToken);
+			const expiresAtMs = Date.now() + ex.expires_in * 1000;
+			setJoinContext({
+				joinToken: jc.joinToken,
+				roomName: ex.room_name,
+				accessToken: ex.access_token,
+				expiresAtMs,
+			});
+			return ex.access_token;
+		}
+
+		return await fetchInternalAccessToken(apiUrl);
+	};
+}

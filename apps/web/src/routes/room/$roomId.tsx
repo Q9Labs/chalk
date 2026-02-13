@@ -12,117 +12,159 @@
  * - Keyboard shortcut 'W' to toggle whiteboard
  */
 
-import { useInteractions, useWhiteboard, VideoConference } from "@q9labs/chalk-react";
+import {
+  useInteractions,
+  useWhiteboard,
+  VideoConference,
+} from "@q9labs/chalk-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
+import {
+  fetchInternalAccessToken,
+  getApiUrl,
+  getJoinContext,
+} from "../../lib/internalAuth";
 
 export const Route = createFileRoute("/room/$roomId")({
-	component: RoomPage,
-	params: z.object({
-		roomId: z.string(),
-	}),
-	search: z.object({
-		roomName: z.string().optional(),
-	}),
+  component: RoomPage,
+  params: z.object({
+    roomId: z.string(),
+  }),
+  search: z.object({
+    roomName: z.string().optional(),
+  }),
 });
 
 function RoomPage() {
-	const { roomId } = Route.useParams() as {
-		roomId: string;
-	};
-	const { roomName } = Route.useSearch();
-	const navigate = useNavigate();
+  const { roomId } = Route.useParams() as {
+    roomId: string;
+  };
+  const { roomName } = Route.useSearch();
+  const navigate = useNavigate();
 
-	const [storedUserName, setStoredUserName] = useState<string>("");
+  const [storedUserName, setStoredUserName] = useState<string>("");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
-	// Load username from sessionStorage after mount
-	useEffect(() => {
-		const savedName = sessionStorage.getItem("chalk_display_name");
-		if (savedName) {
-			setStoredUserName(savedName);
-		}
-	}, []);
+  // Load username from sessionStorage after mount
+  useEffect(() => {
+    const savedName = sessionStorage.getItem("chalk_display_name");
+    if (savedName) {
+      setStoredUserName(savedName);
+    }
+  }, []);
 
-	const handleError = useCallback(
-		(error: unknown) => {
-			const errorMessage =
-				error instanceof Error ? error.message : String(error);
-			navigate({
-				to: "/room/error",
-				search: { message: errorMessage, roomId },
-			});
-		},
-		[navigate, roomId],
-	);
+  const joinCtx = typeof window === "undefined" ? null : getJoinContext();
+  const role = joinCtx ? "participant" : "host";
 
-	return (
-		<div className="h-screen w-screen relative">
-			{/*@ts-ignore*/}
-				<VideoConference
-				roomId={roomId}
-				roomName={roomName || "Meeting On Chalk"}
-				userName={storedUserName || "Guest"}
-				onError={handleError}
-				onJoin={(data) => {
-					console.log("Joined: ", data);
-				}}
-				onEnd={(data) => {
-					localStorage.setItem("data", JSON.stringify(data));
-					navigate({ to: "/room/end", search: { roomId } });
-				}}
-				sounds={true}
-				debug={true}
-				role="host"
-					features={{
-						chat: true,
-						recording: true,
-						screenShare: true,
-						whiteboard: true,
-						reactions: true,
-						handRaise: true,
-						tour: false,
-					}}
-					defaults={{
-						videoEnabled: false,
-						layout: "grid",
-						audioEnabled: false,
-					}}
-					className="h-full w-full"
-				/>
+  const handleError = useCallback(
+    (error: unknown) => {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      navigate({
+        to: "/room/error",
+        search: { message: errorMessage, roomId },
+      });
+    },
+    [navigate, roomId],
+  );
 
-				{/* App-specific overlays */}
-				<WhiteboardKeyboardShortcut />
-				<ReactionBubblesOverlay />
-			</div>
-		);
-	}
+  return (
+    <div className="h-screen w-screen relative">
+      {role === "host" && !import.meta.env.VITE_CHALK_API_KEY && (
+        <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
+          <button
+            type="button"
+            className="rounded-md bg-background/80 backdrop-blur border px-3 py-1.5 text-xs hover:bg-background"
+            onClick={async () => {
+              const apiUrl = getApiUrl();
+              const token = await fetchInternalAccessToken(apiUrl);
+              const res = await fetch(
+                `${apiUrl}/api/v1/rooms/${roomId}/join-token`,
+                {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              );
+              if (!res.ok) throw new Error(`failed (${res.status})`);
+              const data = (await res.json()) as { join_token: string };
+              const url = `${window.location.origin}/j/${data.join_token}`;
+              setInviteLink(url);
+              await navigator.clipboard.writeText(url);
+            }}
+          >
+            Copy invite link
+          </button>
+          {inviteLink && (
+            <span className="text-xs text-muted-foreground">copied</span>
+          )}
+        </div>
+      )}
+      {/*@ts-ignore*/}
+      <VideoConference
+        roomId={roomId}
+        roomName={roomName || "Meeting On Chalk"}
+        userName={storedUserName || (role === "host" ? "Host" : "Guest")}
+        onError={handleError}
+        onJoin={(data) => {
+          console.log("Joined: ", data);
+        }}
+        onEnd={(data) => {
+          localStorage.setItem("data", JSON.stringify(data));
+          navigate({ to: "/room/end", search: { roomId } });
+        }}
+        sounds={true}
+        debug={true}
+        role={role as "host" | "participant"}
+        features={{
+          chat: true,
+          recording: role === "host",
+          screenShare: true,
+          whiteboard: true,
+          reactions: true,
+          handRaise: true,
+          tour: false,
+        }}
+        defaults={{
+          videoEnabled: false,
+          layout: "grid",
+          audioEnabled: false,
+        }}
+        className="h-full w-full"
+      />
+
+      {/* App-specific overlays */}
+      <WhiteboardKeyboardShortcut />
+      <ReactionBubblesOverlay />
+    </div>
+  );
+}
 
 /**
  * Keyboard shortcut 'W' to toggle whiteboard
  * Uses SDK's useWhiteboard hook
  */
 function WhiteboardKeyboardShortcut() {
-	const { toggle } = useWhiteboard();
+  const { toggle } = useWhiteboard();
 
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "w" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-				if (
-					e.target instanceof HTMLInputElement ||
-					e.target instanceof HTMLTextAreaElement
-				) {
-					return;
-				}
-				toggle();
-			}
-		};
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [toggle]);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "w" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (
+          e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement
+        ) {
+          return;
+        }
+        toggle();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggle]);
 
-	return null;
+  return null;
 }
 
 /**
@@ -130,13 +172,13 @@ function WhiteboardKeyboardShortcut() {
  * Uses SDK's useInteractions to get active reactions
  */
 function ReactionBubblesOverlay() {
-	const { activeReactions } = useInteractions();
+  const { activeReactions } = useInteractions();
 
-	if (activeReactions.length === 0) {
-		return null;
-	}
+  if (activeReactions.length === 0) {
+    return null;
+  }
 
-	return <ReactionBubbles reactions={activeReactions} />;
+  return <ReactionBubbles reactions={activeReactions} />;
 }
 
 export default RoomPage;

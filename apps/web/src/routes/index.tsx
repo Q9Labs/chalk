@@ -86,6 +86,12 @@ function App() {
 						>
 							Docs
 						</a>
+						<a
+							href="/dashboard"
+							className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
+						>
+							Dashboard
+						</a>
 						<button
 							type="button"
 							onClick={toggleTheme}
@@ -128,7 +134,7 @@ function App() {
 							<div className="space-y-8">
 								<Badge variant="secondary" className="inline-flex items-center gap-2 px-3 py-1">
 									<span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-									Free &bull; No signup required
+									No signup to join &bull; Optional host dashboard
 								</Badge>
 
 								<h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">

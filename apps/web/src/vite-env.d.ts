@@ -18,3 +18,8 @@ declare module "@excalidraw/excalidraw/dist/prod/index.css?url" {
 	const url: string;
 	export default url;
 }
+
+// Build-time constants
+declare const __COMMIT_HASH__: string;
+declare const __BUILD_TIME__: string;
+declare const __APP_VERSION__: string;

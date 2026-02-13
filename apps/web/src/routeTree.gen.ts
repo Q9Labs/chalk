@@ -10,21 +10,30 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DemoRouteImport } from './routes/demo'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs/index'
+import { Route as ShareTokenRouteImport } from './routes/share/$token'
 import { Route as RoomErrorRouteImport } from './routes/room/error'
 import { Route as RoomEndRouteImport } from './routes/room/end'
 import { Route as RoomRoomIdRouteImport } from './routes/room/$roomId'
+import { Route as JJoinTokenRouteImport } from './routes/j/$joinToken'
 import { Route as DocsSdkReactRouteImport } from './routes/docs/sdk-react'
 import { Route as DocsHooksRouteImport } from './routes/docs/hooks'
 import { Route as DocsGettingStartedRouteImport } from './routes/docs/getting-started'
 import { Route as DocsComponentsRouteImport } from './routes/docs/components'
 import { Route as DocsAuthenticationRouteImport } from './routes/docs/authentication'
 import { Route as DocsApiReferenceRouteImport } from './routes/docs/api-reference'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
 const DemoRoute = DemoRouteImport.update({
   id: '/demo',
   path: '/demo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
 const DocsIndexRoute = DocsIndexRouteImport.update({
   id: '/docs/',
   path: '/docs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RoomErrorRoute = RoomErrorRouteImport.update({
@@ -50,6 +64,11 @@ const RoomEndRoute = RoomEndRouteImport.update({
 const RoomRoomIdRoute = RoomRoomIdRouteImport.update({
   id: '/room/$roomId',
   path: '/room/$roomId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JJoinTokenRoute = JJoinTokenRouteImport.update({
+  id: '/j/$joinToken',
+  path: '/j/$joinToken',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsSdkReactRoute = DocsSdkReactRouteImport.update({
@@ -82,107 +101,140 @@ const DocsApiReferenceRoute = DocsApiReferenceRouteImport.update({
   path: '/docs/api-reference',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/demo': typeof DemoRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
   '/docs/components': typeof DocsComponentsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/docs/hooks': typeof DocsHooksRoute
   '/docs/sdk-react': typeof DocsSdkReactRoute
+  '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
   '/room/error': typeof RoomErrorRoute
+  '/share/$token': typeof ShareTokenRoute
   '/docs': typeof DocsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/demo': typeof DemoRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
   '/docs/components': typeof DocsComponentsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/docs/hooks': typeof DocsHooksRoute
   '/docs/sdk-react': typeof DocsSdkReactRoute
+  '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
   '/room/error': typeof RoomErrorRoute
+  '/share/$token': typeof ShareTokenRoute
   '/docs': typeof DocsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/demo': typeof DemoRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
   '/docs/components': typeof DocsComponentsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/docs/hooks': typeof DocsHooksRoute
   '/docs/sdk-react': typeof DocsSdkReactRoute
+  '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
   '/room/error': typeof RoomErrorRoute
+  '/share/$token': typeof ShareTokenRoute
   '/docs/': typeof DocsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dashboard'
     | '/demo'
+    | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
     | '/docs/components'
     | '/docs/getting-started'
     | '/docs/hooks'
     | '/docs/sdk-react'
+    | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
     | '/room/error'
+    | '/share/$token'
     | '/docs'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dashboard'
     | '/demo'
+    | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
     | '/docs/components'
     | '/docs/getting-started'
     | '/docs/hooks'
     | '/docs/sdk-react'
+    | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
     | '/room/error'
+    | '/share/$token'
     | '/docs'
   id:
     | '__root__'
     | '/'
+    | '/dashboard'
     | '/demo'
+    | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
     | '/docs/components'
     | '/docs/getting-started'
     | '/docs/hooks'
     | '/docs/sdk-react'
+    | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
     | '/room/error'
+    | '/share/$token'
     | '/docs/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
   DemoRoute: typeof DemoRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   DocsApiReferenceRoute: typeof DocsApiReferenceRoute
   DocsAuthenticationRoute: typeof DocsAuthenticationRoute
   DocsComponentsRoute: typeof DocsComponentsRoute
   DocsGettingStartedRoute: typeof DocsGettingStartedRoute
   DocsHooksRoute: typeof DocsHooksRoute
   DocsSdkReactRoute: typeof DocsSdkReactRoute
+  JJoinTokenRoute: typeof JJoinTokenRoute
   RoomRoomIdRoute: typeof RoomRoomIdRoute
   RoomEndRoute: typeof RoomEndRoute
   RoomErrorRoute: typeof RoomErrorRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   DocsIndexRoute: typeof DocsIndexRoute
 }
 
@@ -193,6 +245,13 @@ declare module '@tanstack/react-router' {
       path: '/demo'
       fullPath: '/demo'
       preLoaderRoute: typeof DemoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -207,6 +266,13 @@ declare module '@tanstack/react-router' {
       path: '/docs'
       fullPath: '/docs'
       preLoaderRoute: typeof DocsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/room/error': {
@@ -228,6 +294,13 @@ declare module '@tanstack/react-router' {
       path: '/room/$roomId'
       fullPath: '/room/$roomId'
       preLoaderRoute: typeof RoomRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/j/$joinToken': {
+      id: '/j/$joinToken'
+      path: '/j/$joinToken'
+      fullPath: '/j/$joinToken'
+      preLoaderRoute: typeof JJoinTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/sdk-react': {
@@ -272,21 +345,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsApiReferenceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
   DemoRoute: DemoRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   DocsApiReferenceRoute: DocsApiReferenceRoute,
   DocsAuthenticationRoute: DocsAuthenticationRoute,
   DocsComponentsRoute: DocsComponentsRoute,
   DocsGettingStartedRoute: DocsGettingStartedRoute,
   DocsHooksRoute: DocsHooksRoute,
   DocsSdkReactRoute: DocsSdkReactRoute,
+  JJoinTokenRoute: JJoinTokenRoute,
   RoomRoomIdRoute: RoomRoomIdRoute,
   RoomEndRoute: RoomEndRoute,
   RoomErrorRoute: RoomErrorRoute,
+  ShareTokenRoute: ShareTokenRoute,
   DocsIndexRoute: DocsIndexRoute,
 }
 export const routeTree = rootRouteImport

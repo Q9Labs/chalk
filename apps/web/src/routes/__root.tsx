@@ -11,8 +11,11 @@ import {
 	Outlet,
 	Scripts,
 } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DebugDialog } from "../components/DebugDialog";
+import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
+import { createWebTokenProvider, getApiUrl } from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -73,7 +76,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
 	// API URL for backend - use env var or default to production
-	const apiUrl = import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
+	const apiUrl = getApiUrl();
 	// WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
 	// Note: Production uses separate subdomain because API Gateway doesn't support
 	// mixing HTTP and WebSocket APIs on the same custom domain
@@ -102,16 +105,38 @@ function RootComponent() {
 						apiUrl,
 						storage: "sessionStorage",
 					})
-				: undefined,
+				: createWebTokenProvider(apiUrl),
 		[apiKey, apiUrl],
 	);
 
+	const [isDebugOpen, setIsDebugOpen] = useState(false);
+
 	const content = (
 		<ThemeProvider>
-			<div className="overflow-hidden bg-background text-foreground">
-				<Outlet />
-				<WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
-			</div>
+			<ErrorProvider>
+				<div className="overflow-hidden bg-background text-foreground">
+					<Outlet />
+					<WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
+
+					{/* Version Trigger - Bottom Right */}
+					<div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+						<button
+							onClick={() => setIsDebugOpen(true)}
+							className="text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer select-none"
+							title="System Information"
+						>
+							v{__APP_VERSION__} ({__COMMIT_HASH__})
+						</button>
+					</div>
+
+					{!isServer && (
+						<DebugDialog
+							isOpen={isDebugOpen}
+							onClose={() => setIsDebugOpen(false)}
+						/>
+					)}
+				</div>
+			</ErrorProvider>
 		</ThemeProvider>
 	);
 

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Native: File-based logs (iOS/Android)** — write app + MeetingKit events/errors to `chalk.log`, `chalk.debug.log`, `chalk.error.log`, and add in-app “Share logs” so errors are copyable without fighting Simulator/Logcat selection.
 - **API: Debug diagnostics endpoints** — add `GET /api/v1/debug/auth` (token/server/build introspection) and `HEAD /api/v1/debug/ping` (latency probe) for the client System Health dialog.
 - **API: Internal tenant auth groundwork** — add `tenants.tenant_kind` (`external|internal`), plus `users`, `user_sessions`, and `tenant_claims` schema to support email login + cross-device dashboard without client API keys.
+- **API: Internal auth + dashboard** — add magic-link login endpoints (`/api/v1/internal/auth/*`) and meetings dashboard listing (`GET /api/v1/internal/meetings`) for Chalk-hosted apps.
+- **API: Opaque join + share links** — add host-only join tokens (`POST /api/v1/rooms/:id/join-token`) and recording share links (`POST /api/v1/recordings/:id/share`), plus public exchange/view endpoints under `/api/v1/public/*`.
+- **API: Internal retention job** — hard-delete internal tenant recordings after 7 days (rooms remain as tombstones).
+- **Web: Host dashboard + share pages** — add `/dashboard`, `/share/:token`, `/auth/callback`, `/j/:token` routes and internal tokenProvider (cookies + join-token exchange).
 - **Stress Tests: Infra capacity snapshots** — add `tests/scripts/collect-infra-snapshot.sh` and wire `tests/scripts/run-sweep.sh` to auto-capture ECS/ALB/Aurora/Redis metrics per VU step into `tests/results/INFRA_CAPACITY_SNAPSHOTS.jsonl` for downsize analysis.
 
 ### Changed
