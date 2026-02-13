@@ -34,6 +34,7 @@ from worker_config import (
     LOG_TRANSCRIPT,
     LOG_TRANSCRIPT_MAX_CHARS,
     POLL_TIMEOUT_SECONDS,
+    PROCESSING_QUEUE,
     REDIS_CONNECT_TIMEOUT,
     REDIS_HEALTHCHECK_INTERVAL,
     REDIS_RETRY_ON_TIMEOUT,
@@ -381,9 +382,56 @@ class WhisperWorker:
                 },
             )
 
+    def requeue_processing_jobs(self) -> None:
+        # If the instance/container dies mid-job (common with Spot),
+        # we must requeue items left in the processing list so they're not lost.
+        moved = 0
+        try:
+            while True:
+                job_data = self.redis.rpoplpush(PROCESSING_QUEUE, JOB_QUEUE)
+                if job_data is None:
+                    break
+                moved += 1
+        except Exception as e:
+            emit_event(
+                logger,
+                level=logging.WARNING,
+                event={
+                    "event": "queue.requeue_processing_failed",
+                    "moved": moved,
+                    "error": str(e),
+                    "error_class": e.__class__.__name__,
+                    "error_stack": traceback.format_exc(),
+                },
+            )
+            return
+
+        if moved > 0:
+            emit_event(
+                logger,
+                level=logging.INFO,
+                event={"event": "queue.requeue_processing_done", "moved": moved},
+            )
+
+    def ack_processing_job(self, job_data: str) -> None:
+        try:
+            self.redis.lrem(PROCESSING_QUEUE, 1, job_data)
+        except Exception as e:
+            emit_event(
+                logger,
+                level=logging.WARNING,
+                event={
+                    "event": "queue.ack_failed",
+                    "error": str(e),
+                    "error_class": e.__class__.__name__,
+                    "error_stack": traceback.format_exc(),
+                },
+            )
+
     def run(self) -> None:
         emit_event(logger, level=logging.INFO, event={"event": "worker.start"})
         last_metric_time = 0.0
+        self.requeue_processing_jobs()
 
         while True:
             try:
@@ -392,11 +440,13 @@ class WhisperWorker:
                     self.publish_queue_metrics()
                     last_metric_time = now
 
-                result = self.redis.brpop(JOB_QUEUE, timeout=POLL_TIMEOUT_SECONDS)
-                if result is None:
+                job_data = self.redis.brpoplpush(
+                    JOB_QUEUE,
+                    PROCESSING_QUEUE,
+                    timeout=POLL_TIMEOUT_SECONDS,
+                )
+                if job_data is None:
                     continue
-
-                _, job_data = result
 
                 try:
                     job_dict = json.loads(job_data)
@@ -412,17 +462,21 @@ class WhisperWorker:
                             "error_stack": traceback.format_exc(),
                         },
                     )
+                    self.ack_processing_job(job_data)
                     continue
 
                 remaining = self.redis.llen(JOB_QUEUE)
                 use_batched = remaining >= 1
 
-                transcription_result = self.process_job(
-                    job,
-                    queue_depth=remaining + 1,
-                    use_batched=use_batched,
-                )
-                self.store_result(transcription_result)
+                try:
+                    transcription_result = self.process_job(
+                        job,
+                        queue_depth=remaining + 1,
+                        use_batched=use_batched,
+                    )
+                    self.store_result(transcription_result)
+                finally:
+                    self.ack_processing_job(job_data)
 
             except (redis.ConnectionError, redis.exceptions.TimeoutError) as e:
                 emit_event(

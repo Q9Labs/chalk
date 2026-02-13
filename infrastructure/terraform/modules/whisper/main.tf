@@ -246,6 +246,17 @@ resource "aws_launch_template" "whisper" {
   image_id      = data.aws_ami.gpu.id
   instance_type = var.instance_type
 
+  dynamic "instance_market_options" {
+    for_each = var.use_spot ? [1] : []
+    content {
+      market_type = "spot"
+      spot_options {
+        instance_interruption_behavior = var.spot_instance_interruption_behavior
+        spot_instance_type             = "one-time"
+      }
+    }
+  }
+
   iam_instance_profile {
     name = aws_iam_instance_profile.whisper.name
   }
@@ -385,6 +396,7 @@ resource "aws_autoscaling_group" "whisper" {
   min_size            = var.min_capacity
   max_size            = var.max_capacity
   desired_capacity    = var.desired_capacity
+  capacity_rebalance  = var.use_spot
 
   launch_template {
     id      = aws_launch_template.whisper.id

@@ -69,6 +69,18 @@ variable "instance_type" {
   default     = "g4dn.xlarge" # 1 NVIDIA T4 GPU, 4 vCPU, 16GB RAM
 }
 
+variable "use_spot" {
+  description = "Use Spot instances for Whisper worker capacity (cheaper, interruptible)"
+  type        = bool
+  default     = false
+}
+
+variable "spot_instance_interruption_behavior" {
+  description = "Spot interruption behavior (terminate | stop | hibernate)"
+  type        = string
+  default     = "terminate"
+}
+
 variable "min_capacity" {
   description = "Minimum number of Whisper instances"
   type        = number

@@ -5,6 +5,7 @@ import os
 from env_utils import env_bool, env_float, env_int
 
 JOB_QUEUE = "transcription:jobs"
+PROCESSING_QUEUE = "transcription:jobs:processing"
 RESULT_KEY_PREFIX = "transcription:result:"
 RESULT_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 POLL_TIMEOUT_SECONDS = 30

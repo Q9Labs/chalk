@@ -387,6 +387,11 @@ module "whisper" {
   desired_capacity   = 1
   max_capacity       = 2
   enable_autoscaling = true
+
+  # Spot is safe because the worker queue is Redis-backed and jobs are requeued on worker startup.
+  # Note: Spot is interruptible; if capacity is unavailable for > POST_MEETING_WHISPER_TIMEOUT,
+  # transcripts may still time out.
+  use_spot = true
 }
 
 # Allow whisper workers to access Redis
