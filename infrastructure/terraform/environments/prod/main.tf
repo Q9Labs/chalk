@@ -45,6 +45,14 @@ locals {
   environment = "prod"
 }
 
+data "aws_secretsmanager_secret" "resend_api_key" {
+  name = "chalk/${local.environment}/resend-api-key"
+}
+
+data "aws_secretsmanager_secret" "auth_link_signing_key" {
+  name = "chalk/${local.environment}/auth-link-signing-key"
+}
+
 module "vpc" {
   source = "../../modules/vpc"
 
@@ -134,6 +142,10 @@ module "ecs" {
     { name = "POST_MEETING_WHISPER_ENABLED", value = "true" },
     { name = "POST_MEETING_WHISPER_REDIS_QUEUE", value = "transcription:jobs" },
     { name = "POST_MEETING_WHISPER_TIMEOUT", value = "30m" },
+    # Internal auth (Chalk-hosted apps: web + mobile)
+    { name = "RESEND_FROM_EMAIL", value = "notifications@notifications.q9labs.ai" },
+    { name = "INTERNAL_APP_URL", value = "https://chalk.q9labs.ai" },
+    { name = "AUTH_COOKIE_DOMAIN", value = ".q9labs.ai" },
     # Cloudflare webhook registration
     { name = "API_PUBLIC_URL", value = "https://${var.api_domain_name}" },
     # Admin dashboard
@@ -158,6 +170,9 @@ module "ecs" {
     { name = "CLOUDFLARE_WEBHOOK_SECRET", valueFrom = module.secrets.cloudflare_webhook_secret_arn },
     # Admin dashboard
     { name = "ADMIN_SECRET", valueFrom = module.secrets.admin_secret_arn },
+    # Internal auth (Resend + opaque join/share tokens)
+    { name = "RESEND_API_KEY", valueFrom = data.aws_secretsmanager_secret.resend_api_key.arn },
+    { name = "AUTH_LINK_SIGNING_KEY", valueFrom = data.aws_secretsmanager_secret.auth_link_signing_key.arn },
   ]
 
   # Note: No explicit depends_on needed - implicit dependencies from aurora/elasticache/secrets
