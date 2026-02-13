@@ -127,9 +127,10 @@ resource "aws_apigatewayv2_api" "http" {
       "traceparent",
       "tracestate",
     ]
-    allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    allow_origins = local.cors_origins
-    max_age       = 86400
+    allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    allow_origins     = local.cors_origins
+    allow_credentials = true
+    max_age           = 86400
   }
 
   tags = local.tags
