@@ -5,7 +5,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+	Clipboard,
+	Dimensions,
 	Modal,
+	Platform,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
@@ -72,6 +75,109 @@ interface MeetingRoomProps {
 	style?: ViewStyle;
 }
 
+// Fallback version if not injected
+const SDK_VERSION = "0.0.57";
+
+interface DebugModalProps {
+	visible: boolean;
+	onClose: () => void;
+	wsStatus: string;
+	wsColor: string;
+	roomInfo?: any;
+}
+
+	function DebugModal({
+		visible,
+		onClose,
+		wsStatus,
+		wsColor,
+		roomInfo,
+	}: DebugModalProps) {
+		const [copied, setCopied] = useState(false);
+
+		const handleCopy = useCallback(() => {
+			const { width, height } = Dimensions.get("window");
+			const info = `
+	Chalk RN SDK Debug Info
+	-----------------------
+	SDK Version: ${SDK_VERSION}
+	Platform: ${Platform.OS} ${Platform.Version}
+	WS Status: ${wsStatus}
+	Room ID: ${roomInfo?.roomId || "N/A"}
+	Participant ID: ${roomInfo?.participantId || "N/A"}
+	Screen: ${width}x${height}
+	`.trim();
+
+		Clipboard.setString(info);
+		setCopied(true);
+		setTimeout(() => setCopied(false), 2000);
+	}, [wsStatus, roomInfo]);
+
+	return (
+		<Modal
+			visible={visible}
+			transparent
+			animationType="fade"
+			onRequestClose={onClose}
+		>
+			<View style={styles.debugOverlay}>
+				<View style={styles.debugContent}>
+					<View style={styles.debugHeader}>
+						<Text style={styles.debugTitle}>System Information</Text>
+						<TouchableOpacity onPress={onClose} style={styles.debugCloseBtn}>
+							<Text style={styles.debugCloseText}>✕</Text>
+						</TouchableOpacity>
+					</View>
+
+					<View style={styles.debugBody}>
+						<View style={styles.debugSection}>
+							<Text style={styles.debugLabel}>BUILD & SDK</Text>
+							<Text style={styles.debugValue}>Version: {SDK_VERSION}</Text>
+							<Text style={styles.debugValue}>
+								Platform: {Platform.OS} {Platform.Version}
+							</Text>
+						</View>
+
+						<View style={styles.debugSection}>
+							<Text style={styles.debugLabel}>WS STATUS</Text>
+							<View style={styles.debugRow}>
+								<View
+									style={[styles.wsStatusDot, { backgroundColor: wsColor }]}
+								/>
+								<Text style={[styles.debugValue, { color: wsColor }]}>
+									{wsStatus}
+								</Text>
+							</View>
+						</View>
+
+						<View style={styles.debugSection}>
+							<Text style={styles.debugLabel}>MEETING INFO</Text>
+							<Text style={styles.debugValue}>
+								Room: {roomInfo?.roomId || "N/A"}
+							</Text>
+							<Text style={styles.debugValue}>
+								User: {roomInfo?.participantId || "N/A"}
+							</Text>
+						</View>
+					</View>
+
+					<TouchableOpacity
+						style={[
+							styles.copyBtn,
+							copied && { backgroundColor: CHALK_THEME.colors.status.success },
+						]}
+						onPress={handleCopy}
+					>
+						<Text style={styles.copyBtnText}>
+							{copied ? "Copied!" : "Copy Debug Bundle"}
+						</Text>
+					</TouchableOpacity>
+				</View>
+			</View>
+		</Modal>
+	);
+}
+
 export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
 	const { leaveRoom, roomInfo, wsConnectionState } = useChalk();
 	const { participants, localParticipant } = useParticipants();
@@ -80,6 +186,7 @@ export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
 	const { messages, sendMessage } = useChat();
 
 	const [isChatOpen, setIsChatOpen] = useState(false);
+	const [isDebugOpen, setIsDebugOpen] = useState(false);
 	const [useBottomSheet, setUseBottomSheet] = useState(false);
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const bottomSheetRef = useRef<any>(null);
@@ -163,10 +270,23 @@ export function MeetingRoom({ onLeave, style }: MeetingRoomProps) {
 
 	return (
 		<View style={[styles.container, style]}>
-			<View style={styles.wsStatusBadge}>
+			<TouchableOpacity
+				style={styles.wsStatusBadge}
+				onPress={() => setIsDebugOpen(true)}
+				activeOpacity={0.7}
+			>
 				<View style={[styles.wsStatusDot, { backgroundColor: wsStatusColor }]} />
 				<Text style={styles.wsStatusText}>{wsStatusLabel}</Text>
-			</View>
+			</TouchableOpacity>
+
+			<DebugModal
+				visible={isDebugOpen}
+				onClose={() => setIsDebugOpen(false)}
+				wsStatus={wsStatusLabel}
+				wsColor={wsStatusColor}
+				roomInfo={roomInfo}
+			/>
+
 			{/* Main content area */}
 			<View style={styles.content}>
 				{screenShareStream ? (
@@ -263,7 +383,7 @@ const styles = StyleSheet.create({
 	wsStatusBadge: {
 		position: "absolute",
 		top: CHALK_THEME.spacing.md,
-		left: CHALK_THEME.spacing.md,
+		right: CHALK_THEME.spacing.md,
 		zIndex: 10,
 		flexDirection: "row",
 		alignItems: "center",
@@ -273,6 +393,12 @@ const styles = StyleSheet.create({
 		borderRadius: CHALK_THEME.borderRadius.full,
 		paddingHorizontal: CHALK_THEME.spacing.sm,
 		paddingVertical: 6,
+		// Shadow for depth to indicate it's tappable
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: 1 },
+		shadowOpacity: 0.2,
+		shadowRadius: 1.41,
+		elevation: 2,
 	},
 	wsStatusDot: {
 		width: 8,
@@ -283,6 +409,76 @@ const styles = StyleSheet.create({
 	wsStatusText: {
 		fontSize: 12,
 		color: CHALK_THEME.colors.text.secondary,
+		fontWeight: "500",
+	},
+	// Debug Modal Styles
+	debugOverlay: {
+		flex: 1,
+		backgroundColor: "rgba(0,0,0,0.6)",
+		justifyContent: "center",
+		alignItems: "center",
+		padding: CHALK_THEME.spacing.xl,
+	},
+	debugContent: {
+		backgroundColor: CHALK_THEME.colors.background,
+		borderRadius: CHALK_THEME.borderRadius.lg,
+		width: "100%",
+		maxWidth: 400,
+		overflow: "hidden",
+		borderWidth: 1,
+		borderColor: CHALK_THEME.colors.ui.border,
+	},
+	debugHeader: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		padding: CHALK_THEME.spacing.md,
+		borderBottomWidth: 1,
+		borderBottomColor: CHALK_THEME.colors.ui.border,
+	},
+	debugTitle: {
+		fontSize: 16,
+		fontWeight: "700",
+		color: CHALK_THEME.colors.text.primary,
+	},
+	debugCloseBtn: {
+		padding: 4,
+	},
+	debugCloseText: {
+		fontSize: 18,
+		color: CHALK_THEME.colors.text.muted,
+	},
+	debugBody: {
+		padding: CHALK_THEME.spacing.md,
+	},
+	debugSection: {
+		marginBottom: CHALK_THEME.spacing.md,
+	},
+	debugLabel: {
+		fontSize: 10,
+		fontWeight: "800",
+		color: CHALK_THEME.colors.text.muted,
+		letterSpacing: 1,
+		marginBottom: 4,
+	},
+	debugValue: {
+		fontSize: 13,
+		color: CHALK_THEME.colors.text.primary,
+		fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+	},
+	debugRow: {
+		flexDirection: "row",
+		alignItems: "center",
+	},
+	copyBtn: {
+		backgroundColor: CHALK_THEME.colors.primary,
+		paddingVertical: CHALK_THEME.spacing.md,
+		alignItems: "center",
+	},
+	copyBtnText: {
+		color: "#FFFFFF",
+		fontWeight: "600",
+		fontSize: 14,
 	},
 	content: {
 		flex: 1,
