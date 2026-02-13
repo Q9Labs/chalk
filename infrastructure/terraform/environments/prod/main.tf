@@ -383,10 +383,10 @@ module "whisper" {
   worker_image_tag      = "latest"
   # Prevent scale-to-zero: the queue depth metric is emitted by the worker itself,
   # so if desired/min hit 0 it cannot auto-scale back up and transcripts will time out.
-  min_capacity          = 1
-  desired_capacity      = 1
-  max_capacity          = 2
-  enable_autoscaling    = true
+  min_capacity       = 1
+  desired_capacity   = 1
+  max_capacity       = 2
+  enable_autoscaling = true
 }
 
 # Allow whisper workers to access Redis
