@@ -351,7 +351,11 @@ class WhisperWorker:
 
     def publish_queue_metrics(self) -> None:
         try:
-            queue_depth = self.redis.llen(JOB_QUEUE)
+            # IMPORTANT: with BRPOPLPUSH, in-flight work moves from JOB_QUEUE -> PROCESSING_QUEUE.
+            # Autoscaling and monitoring must consider both or we'll under-report load and scale down too aggressively.
+            job_queue_depth = self.redis.llen(JOB_QUEUE)
+            processing_queue_depth = self.redis.llen(PROCESSING_QUEUE)
+            queue_depth = job_queue_depth + processing_queue_depth
             environment = os.getenv("ENVIRONMENT", "dev")
             self.cloudwatch.put_metric_data(
                 Namespace=self.metric_namespace,
@@ -362,13 +366,32 @@ class WhisperWorker:
                         "Timestamp": datetime.now(timezone.utc),
                         "Unit": "Count",
                         "Value": queue_depth,
-                    }
+                    },
+                    {
+                        "MetricName": "TranscriptionJobQueueDepth",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Count",
+                        "Value": job_queue_depth,
+                    },
+                    {
+                        "MetricName": "TranscriptionProcessingQueueDepth",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Count",
+                        "Value": processing_queue_depth,
+                    },
                 ],
             )
             emit_event(
                 logger,
                 level=logging.INFO,
-                event={"event": "whisper.queue_depth", "queue_depth": queue_depth},
+                event={
+                    "event": "whisper.queue_depth",
+                    "queue_depth": queue_depth,
+                    "job_queue_depth": job_queue_depth,
+                    "processing_queue_depth": processing_queue_depth,
+                },
             )
         except Exception as e:
             emit_event(
