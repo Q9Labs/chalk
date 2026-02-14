@@ -11,11 +11,6 @@ import pkg from "./package.json";
 const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
 const buildTime = new Date().toISOString();
 
-const pagesDevPort = process.env.CHALK_PAGES_DEV_PORT;
-const pagesDevTarget = pagesDevPort
-	? `http://localhost:${pagesDevPort}`
-	: undefined;
-
 // SPA mode for Cloudflare Pages deployment
 // SSR requires Cloudflare Workers, but our token only has Pages permission
 const config = defineConfig({
@@ -26,16 +21,6 @@ const config = defineConfig({
 	},
 	server: {
 		port: 3070,
-		...(pagesDevTarget
-			? {
-					proxy: {
-						"/api": {
-							target: pagesDevTarget,
-							changeOrigin: true,
-						},
-					},
-				}
-			: {}),
 	},
 	resolve: {
 		dedupe: [

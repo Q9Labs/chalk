@@ -17,3 +17,4 @@
 - 14:27 PKT: Stabilization: add client-side auto-reload on chunk-load failures (stale hashed assets after deploy) so long-lived tabs recover automatically.
 - 14:40 PKT: API: retention job now expires recordings by deleting storage + marking DB row `status=deleted` (keeps meeting/transcript metadata); add `recordings.deleted_at` + regenerate sqlc.
 - 14:44 PKT: API: internal meetings list now includes transcript summary/action-items + metadata fields for dashboard rendering.
+- 14:46 PKT: Web DX: remove `wrangler pages dev` local flow (no Pages Functions needed); default `bun run dev` only.
