@@ -1,22 +1,20 @@
-# Work Progress 2026-02-14
+# Work Progress (2026-02-14)
 
-- Plan (reference)
-  - External/internal `kind` naming: `internal` for q9labs first-party apps, `external` for customer/integration.
-  - Auth: email magic-link (Resend) required for dashboard access; hard 1:1 `user`<->`tenant` for now.
-  - Dashboard: host-only view; meetings table: recording + transcript + metadata; signed URL for recording access.
-  - Storage policy: store all meeting metadata; hard-delete recordings after 7 days; keep tombstone (nifact) record.
-  - Transcription: always-on; provider default Whisper.
+## 2026-02-14 00:00
+- Task: websocket robustness: error-handling, logging+tracing (API+SDK), UI toasts for user-reportable errors, Axiom logging in SDK.
+- Constraint: discovery + analysis only before implementation; keep notes here; discuss plan with Hasan before code changes.
 
-- 13:25 PKT: Prod bug: `chalk.q9labs.ai/dashboard` sometimes 404 while `/` works; Pages deployment URL serves deep links correctly.
-- 13:28 PKT: Web fix shipped: add SPA fallback via `_redirects`, and stop CI from deleting it during Pages deploy. Verified Pages deployment deep links work.
-- 13:40 PKT: Root-cause narrowed: custom domain returns empty-body 404 for deep links while Pages `pages.dev` deployment returns SPA HTML for any path (rewrite working). Indicates custom-domain edge/rules not honoring SPA fallback.
-- 13:45 PKT: Infra fix: add Cloudflare Transform Ruleset (prod) to rewrite HTML document navigations to `/` for host `chalk.q9labs.ai` (preserves browser URL; SPA router handles path).
-- 13:52 PKT: Infra apply failed (Cloudflare API token lacks Rulesets permission). Backed out Terraform ruleset; switching to Pages-only fix: `_redirects` rewrite target `/* / 200` (avoid `/index.html` which 404s on custom domain).
-- 13:58 PKT: Web redeploy complete; verified `https://chalk.q9labs.ai/dashboard` now returns `200` (deep links no longer 404).
-- 14:12 PKT: Regression: SPA redirect rewrote `/assets/*` to HTML (MIME errors for JS/CSS). Fix: keep `/* / 200`, add explicit `/assets/*` passthrough redirect rule, and keep `/assets/*` cache header immutable.
-- 14:27 PKT: Stabilization: add client-side auto-reload on chunk-load failures (stale hashed assets after deploy) so long-lived tabs recover automatically.
-- 14:40 PKT: API: retention job now expires recordings by deleting storage + marking DB row `status=deleted` (keeps meeting/transcript metadata); add `recordings.deleted_at` + regenerate sqlc.
-- 14:44 PKT: API: internal meetings list now includes transcript summary/action-items + metadata fields for dashboard rendering.
-- 14:46 PKT: Web DX: remove `wrangler pages dev` local flow (no Pages Functions needed); default `bun run dev` only.
-- 14:49 PKT: Web dashboard: add recording download action + show transcript summary; handle expired recordings (410/Gone).
-- 15:13 PKT: Web routing: ensure `/assets/*` never falls through to SPA HTML (stop-processing redirect + fallback to `/index.html`).
+## 2026-02-14 00:06
+- Repo scan:
+  - SDK-Core already has `WSClient` + schema-first ws-client folder: `packages/sdk-core/src/ws-client/*`.
+  - SDK-Core has “wide events” incl `websocket.connect|disconnect|reconnect`: `packages/sdk-core/src/wide-events/types.ts`.
+  - API already wired to Axiom (`axiom-go` + slog adapter) + OTEL exporter to Axiom traces dataset:
+    - logging: `apps/api/internal/infrastructure/logging/logger.go`
+    - tracing: `apps/api/internal/infrastructure/otel/otel.go`
+    - websocket endpoint: `apps/api/internal/interfaces/http/handlers/websocket.go` mounted at `GET /ws`
+    - ws hub/client logs: `apps/api/internal/interfaces/websocket/hub.go`, `apps/api/internal/interfaces/websocket/client.go`
+  - Existing ws test coverage in SDK-Core: `packages/sdk-core/src/__tests__/ws-client.test.ts`, `packages/sdk-core/src/__tests__/room.test.ts`.
+  - Toast usage spotted in web UI: `packages/sdk-react/src/components/full/MeetingRoom.tsx` (invite toast); likely extend this pattern for ws-sync error toasts.
+
+## 2026-02-14 10:23
+- Web: dashboard UI overhaul (table + stats + search + actions). Redeploy triggered.
