@@ -6,3 +6,4 @@
 - 13:45 PKT: Infra fix: add Cloudflare Transform Ruleset (prod) to rewrite HTML document navigations to `/` for host `chalk.q9labs.ai` (preserves browser URL; SPA router handles path).
 - 13:52 PKT: Infra apply failed (Cloudflare API token lacks Rulesets permission). Backed out Terraform ruleset; switching to Pages-only fix: `_redirects` rewrite target `/* / 200` (avoid `/index.html` which 404s on custom domain).
 - 13:58 PKT: Web redeploy complete; verified `https://chalk.q9labs.ai/dashboard` now returns `200` (deep links no longer 404).
+- 14:12 PKT: Regression: SPA redirect rewrote `/assets/*` to HTML (MIME errors for JS/CSS). Fix: keep `/* / 200`, add explicit `/assets/*` passthrough redirect rule, and keep `/assets/*` cache header immutable.
