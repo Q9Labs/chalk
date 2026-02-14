@@ -139,9 +139,16 @@ func (s *Service) ProcessTranscription(ctx context.Context, transcriptID uuid.UU
 		"transcript_id", transcriptID,
 		"url_length", len(audioURL))
 
-	providerName := "groq"
-	if transcript.Provider != nil {
+	providerName := s.registry.GetDefaultProvider()
+	if transcript.Provider != nil && *transcript.Provider != "" {
 		providerName = *transcript.Provider
+	}
+	if providerName == "" {
+		slog.Error("[chalk] no transcription provider available",
+			"transcript_id", transcriptID,
+			"recording_id", transcript.RecordingID)
+		s.markFailed(ctx, transcriptID, ErrNoProviderAvailable.Error())
+		return ErrNoProviderAvailable
 	}
 
 	slog.Info("[chalk] starting transcription with provider",

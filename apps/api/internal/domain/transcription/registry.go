@@ -57,7 +57,7 @@ func (r *ProviderRegistry) GetAvailableProviders() []ProviderInfo {
 		Type:          "self_hosted",
 		BYOKSupported: false,
 	}
-	if r.whisperEnabled {
+	if r.whisperEnabled && r.redis != nil && r.whisperQueue != "" {
 		whisperInfo.Available = true
 	} else {
 		whisperInfo.Available = false
@@ -71,8 +71,12 @@ func (r *ProviderRegistry) GetAvailableProviders() []ProviderInfo {
 // CreateProvider instantiates a provider by name.
 // tenantAPIKey is used for BYOK; if empty, the platform default is used.
 func (r *ProviderRegistry) CreateProvider(providerName string, tenantAPIKey string) (Provider, error) {
+	if providerName == "" {
+		providerName = r.GetDefaultProvider()
+	}
+
 	switch providerName {
-	case "groq", "":
+	case "groq":
 		apiKey := tenantAPIKey
 		if apiKey == "" {
 			apiKey = r.groqAPIKey
@@ -86,6 +90,9 @@ func (r *ProviderRegistry) CreateProvider(providerName string, tenantAPIKey stri
 		if !r.whisperEnabled {
 			return nil, ErrWhisperNotAvailable
 		}
+		if r.redis == nil || r.whisperQueue == "" {
+			return nil, ErrWhisperNotAvailable
+		}
 		return newWhisperProviderFromRegistry(r.redis, r.whisperQueue), nil
 
 	default:
@@ -95,11 +102,11 @@ func (r *ProviderRegistry) CreateProvider(providerName string, tenantAPIKey stri
 
 // GetDefaultProvider returns the name of the default provider.
 func (r *ProviderRegistry) GetDefaultProvider() string {
+	if r.whisperEnabled && r.redis != nil && r.whisperQueue != "" {
+		return "whisper"
+	}
 	if r.groqAPIKey != "" {
 		return "groq"
-	}
-	if r.whisperEnabled {
-		return "whisper"
 	}
 	return ""
 }
@@ -110,7 +117,7 @@ func (r *ProviderRegistry) HasProvider(name string) bool {
 	case "groq":
 		return r.groqAPIKey != ""
 	case "whisper":
-		return r.whisperEnabled
+		return r.whisperEnabled && r.redis != nil && r.whisperQueue != ""
 	default:
 		return false
 	}

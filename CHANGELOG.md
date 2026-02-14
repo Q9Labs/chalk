@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Web: Host dashboard + share pages** — add `/dashboard`, `/share/:token`, `/auth/callback`, `/j/:token` routes and internal tokenProvider (cookies + join-token exchange).
 - **Stress Tests: Infra capacity snapshots** — add `tests/scripts/collect-infra-snapshot.sh` and wire `tests/scripts/run-sweep.sh` to auto-capture ECS/ALB/Aurora/Redis metrics per VU step into `tests/results/INFRA_CAPACITY_SNAPSHOTS.jsonl` for downsize analysis.
 
+### Fixed
+
+- **API: Transcription default provider** — default now prefers `whisper` (when provisioned) and falls back to `groq`.
+
 ### Changed
 
 - **Infra: Monitoring dashboard + alarms for whisper/capacity** — expand CloudWatch dashboards with ALB 5xx + ECS saturation widgets (stress env) and Whisper queue/throughput/duration widgets + alarms (prod module) to make capacity bottlenecks explicit during load tests.

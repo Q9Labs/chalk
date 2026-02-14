@@ -192,3 +192,10 @@
 - PubSub payload encoding: decided JSON (`json.RawMessage`), no base64.
 - Meeting end policy: decided end only on RTK disconnect; never on WS-only disconnect.
 - WS reconnect requirement: WSClient should auto-reconnect; on reconnect trigger `room.sync` to heal state drift.
+
+## 2026-02-14
+
+- 13:56:52Z API CI/CD run `22018520205` -> `success` (Deploy to ECS + Health Check succeeded)
+- 13:48:28Z Web CI/CD run `22018520195` -> `success` (Cloudflare Pages deploy)
+- 13:48:28Z SDK CI/CD run `22018520198` -> `skipped` (workflow config: tag/manual only)
+- 2026-02-14T14:23:35Z transcription default provider: prefer `whisper` when available; fallback `groq` (fix domain defaults + docs examples)

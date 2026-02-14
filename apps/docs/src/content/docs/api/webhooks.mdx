@@ -54,8 +54,7 @@ Content-Type: application/json
     "include_summary": true,
     "include_action_items": true,
     "transcription": {
-      "provider": "groq",
-      "api_key": "gsk_optional_byok_key"
+      "provider": "whisper"
     },
     "ai": {
       "provider": "openrouter",
@@ -181,7 +180,7 @@ When `post_meeting_webhook.enabled` is `true`, Chalk sends webhook events to you
     "text": "Good morning everyone. Let's start with updates...",
     "word_count": 2500,
     "language": "en",
-    "provider": "groq",
+    "provider": "whisper",
     "segments": [
       {
         "start": 0.0,
