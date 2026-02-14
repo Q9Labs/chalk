@@ -9,6 +9,6 @@
 | API Gateway 5xx             | TLS SNI mismatch                    | `ServerNameToVerify` must match ACM cert, not ALB DNS |
 | DB connection refused       | Missing security group              | ECS has TWO SGs (instances + tasks) - allow both      |
 | CORS errors                 | Domain not allowed                  | Add to CORS middleware config                         |
-| SPA 404 on refresh          | No fallback config                  | Copy to index.html or add `_redirects`                |
+| SPA 404 on refresh          | Missing SPA fallback on Pages       | Generate `index.html` + `404.html` from `_shell.html` |
 | Build ok, deploy fails      | Output path mismatch                | Check build output matches deploy config              |
 | Env vars undefined          | Build vs runtime                    | `VITE_*` baked at build, others at runtime            |

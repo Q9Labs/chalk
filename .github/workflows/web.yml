@@ -96,11 +96,13 @@ jobs:
 
       - name: Prepare SPA for Cloudflare Pages
         run: |
-          # TanStack Start SPA mode outputs _shell.html
-          # Cloudflare Pages needs index.html for SPA fallback
-          cd out/apps/web/dist/client
-          cp _shell.html index.html
-          # Keep _redirects for SPA deep-link routing (e.g. /dashboard)
+          cd out/apps/web
+          node scripts/prepare-pages-spa.mjs
+
+      - name: Verify SPA fallback files exist
+        run: |
+          test -f out/apps/web/dist/client/index.html
+          test -f out/apps/web/dist/client/404.html
 
       - name: Flatten deploy directory
         run: |
