@@ -296,35 +296,6 @@ module "api_gateway" {
   log_retention_days = 14 # Reduced from 90
 }
 
-# Cloudflare: SPA deep-link support for Chalk-hosted web app.
-# Symptom: direct navigation/refresh on client-side routes (e.g. /dashboard, /share/<token>)
-# returns 404 on the custom domain, even though the Pages deployment supports SPA routing.
-# Fix: for HTML document navigations, rewrite the origin request path to "/" so the SPA router
-# boots and handles the actual location pathname.
-resource "cloudflare_ruleset" "chalk_web_spa_deeplinks" {
-  zone_id     = module.dns.cloudflare_zone_id
-  name        = "chalk-web-spa-deeplinks"
-  description = "Rewrite HTML navigations to / for SPA deep links on chalk.q9labs.ai"
-  kind        = "zone"
-  phase       = "http_request_transform"
-
-  rules = [
-    {
-      enabled     = true
-      description = "SPA deep-link rewrite (document navigations)"
-      expression  = "(http.host eq \"chalk.q9labs.ai\" and http.request.method eq \"GET\" and (http.request.headers[\"sec-fetch-dest\"][0] eq \"document\" or http.request.headers[\"sec-fetch-mode\"][0] eq \"navigate\" or http.request.headers[\"accept\"][0] contains \"text/html\") and not starts_with(http.request.uri.path, \"/assets/\"))"
-      action      = "rewrite"
-      action_parameters = {
-        uri = {
-          path = {
-            value = "/"
-          }
-        }
-      }
-    },
-  ]
-}
-
 # Cloudflare DNS record for API Gateway (created after api_gateway module)
 resource "cloudflare_dns_record" "api" {
   # Use explicit flag - value won't be known at plan time
