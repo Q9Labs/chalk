@@ -148,7 +148,7 @@ export interface MeetingEndData {
 	roomId: string;
 	/** Meeting duration in seconds */
 	duration: number;
-	/** All transcripts from the session */
+	/** Committed transcripts from the session */
 	transcripts: Transcript[];
 	/** Recording ID if recording was active, null otherwise */
 	recordingId: string | null;
@@ -267,6 +267,10 @@ function VideoConferenceBase({
 
 	const { play } = useSoundEffects({ enabled: sounds, autoSubscribe: true });
 	const { transcripts: rawTranscripts } = useTranscripts();
+	const committedTranscripts = useMemo(
+		() => rawTranscripts.filter((transcript) => transcript.isInterim !== true),
+		[rawTranscripts],
+	);
 
 	// Map transcripts from SDK format to UI format
 	const transcripts = useMemo(() =>
@@ -449,9 +453,9 @@ function VideoConferenceBase({
 			return {
 				roomId,
 				duration: meetingDuration,
-				transcripts: rawTranscripts,
+				participantCount: Math.max(peakParticipantCountRef.current, participantCount),
+				transcripts: committedTranscripts,
 				recordingId: recording.recordingId,
-				participantCount: peakParticipantCountRef.current,
 				totalParticipants: participantSessions.length,
 				participants: participantSessions,
 				hostId: hostSession?.id ?? null,
@@ -470,10 +474,11 @@ function VideoConferenceBase({
 		[
 			roomId,
 			meetingDuration,
-			rawTranscripts,
 			recording.recordingId,
 			recording.durationSeconds,
 			messages.length,
+			committedTranscripts,
+			participantCount,
 		],
 	);
 

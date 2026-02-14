@@ -17,8 +17,38 @@ import {
   AlertCircleIcon,
   ArrowRight01Icon,
   CheckmarkCircle01Icon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  Sun01Icon,
+  Moon02Icon
 } from "@hugeicons/core-free-icons";
+import { useTheme } from "../context/theme";
+import { toast, Toaster } from "sonner";
+
+function ChalkLogo({ className }: { className?: string }) {
+	return (
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" fill="none" className={className}>
+			<g>
+				<g transform="rotate(-15 20 60)">
+					<rect x="8" y="20" width="14" height="50" rx="7" fill="#A8D5A2"/>
+					<ellipse cx="15" cy="20" rx="7" ry="4" fill="#8BC585"/>
+				</g>
+				<g transform="rotate(-8 32 55)">
+					<rect x="22" y="15" width="14" height="52" rx="7" fill="#F5D76E"/>
+					<ellipse cx="29" cy="15" rx="7" ry="4" fill="#E8C85A"/>
+				</g>
+				<g transform="rotate(12 60 30)">
+					<rect x="35" y="8" width="14" height="55" rx="7" fill="#7EC8E3"/>
+					<ellipse cx="42" cy="8" rx="7" ry="4" fill="#5FB8D9"/>
+				</g>
+				<g transform="rotate(5 55 50)">
+					<rect x="48" y="22" width="14" height="48" rx="7" fill="#F0A0A0"/>
+					<ellipse cx="55" cy="70" rx="7" ry="4" fill="#E88888"/>
+				</g>
+			</g>
+			<text x="90" y="52" fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fontSize="38" fontWeight="600" letterSpacing="-0.02em" fill="currentColor">chalk</text>
+		</svg>
+	);
+}
 
 export const Route = createFileRoute("/dashboard")({
 	component: DashboardPage,
@@ -68,6 +98,7 @@ function formatDuration(seconds: number) {
 
 function DashboardPage() {
 	const apiUrl = useMemo(() => getApiUrl(), []);
+  const { theme, toggleTheme } = useTheme();
 	const [state, setState] = useState<
 		| { kind: "loading" }
 		| { kind: "login" }
@@ -78,6 +109,7 @@ function DashboardPage() {
 	const [email, setEmail] = useState("");
 	const [emailSent, setEmailSent] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -251,19 +283,17 @@ function DashboardPage() {
 	}
 
 	return (
-		<div className="min-h-screen bg-background text-foreground">
+		<div className="flex flex-col min-h-screen bg-background text-foreground">
+      <Toaster position="top-right" theme={theme} />
       {/* Navigation Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground shadow-sm shadow-primary/20">
-                <HugeiconsIcon icon={ZapIcon} size={20} />
-              </div>
-              <span>Chalk</span>
+            <Link to="/" className="flex items-center gap-2">
+              <ChalkLogo className="h-8 w-auto" />
             </Link>
             <div className="h-4 w-px bg-border hidden sm:block" />
-            <h2 className="text-sm font-medium text-muted-foreground hidden sm:block">Dashboard</h2>
+            <h2 className="text-sm font-medium text-muted-foreground hidden sm:block uppercase tracking-widest text-[10px]">Dashboard</h2>
           </div>
           
           <div className="flex items-center gap-3">
@@ -277,6 +307,17 @@ function DashboardPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <button
+							type="button"
+							onClick={toggleTheme}
+							className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+							aria-label="Toggle theme"
+						>
+							<HugeiconsIcon
+								icon={theme === "dark" ? Sun01Icon : Moon02Icon}
+								size={18}
+							/>
+						</button>
             <Link 
               to="/" 
               className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90 transition-all gap-1.5"
@@ -288,13 +329,13 @@ function DashboardPage() {
         </div>
       </header>
 
-			<main className="mx-auto w-full max-w-7xl p-6 space-y-8">
+			<main className="mx-auto w-full max-w-7xl p-6 space-y-8 flex-1">
 				{/* Analytics Strip */}
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 rounded-2xl border bg-card shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-medium uppercase tracking-wider">Meetings</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">Meetings</span>
                 <HugeiconsIcon icon={Video01Icon} size={18} />
               </div>
               <div className="text-2xl font-bold tabular-nums">{stats.totalMeetings}</div>
@@ -303,7 +344,7 @@ function DashboardPage() {
             
             <div className="p-4 rounded-2xl border bg-card shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-medium uppercase tracking-wider">Action Items</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">Action Items</span>
                 <HugeiconsIcon icon={CheckmarkCircle01Icon} size={18} />
               </div>
               <div className="text-2xl font-bold tabular-nums">{stats.totalActionItems}</div>
@@ -312,7 +353,7 @@ function DashboardPage() {
 
             <div className="p-4 rounded-2xl border bg-card shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-medium uppercase tracking-wider">Storage</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">Storage</span>
                 <HugeiconsIcon icon={Database01Icon} size={18} />
               </div>
               <div className="text-2xl font-bold tabular-nums">{formatBytes(stats.totalSize)}</div>
@@ -324,7 +365,7 @@ function DashboardPage() {
               stats.expiringSoon > 0 ? "bg-destructive/5 border-destructive/20 text-destructive" : "bg-card text-foreground"
             )}>
               <div className="flex items-center justify-between opacity-70">
-                <span className="text-xs font-medium uppercase tracking-wider">At Risk</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">At Risk</span>
                 <HugeiconsIcon icon={AlertCircleIcon} size={18} />
               </div>
               <div className="text-2xl font-bold tabular-nums">{stats.expiringSoon}</div>
@@ -344,142 +385,154 @@ function DashboardPage() {
                 </span>
               )}
             </h3>
-            <div className="flex items-center gap-2">
-              {/* Optional: Filter chips could go here */}
-            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredMeetings.map((m) => (
-              <div key={m.id} className="group relative flex flex-col rounded-2xl border bg-card p-5 shadow-sm hover:shadow-md transition-all hover:border-primary/20">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-base group-hover:text-primary transition-colors">
-                      {m.room_name || `Room ${m.room_id.slice(0, 8)}`}
-                    </h4>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <HugeiconsIcon icon={Calendar01Icon} size={14} />
-                        {new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      {m.duration_seconds && (
+            {filteredMeetings.map((m) => {
+              const isExpanded = expandedMeetingId === m.id;
+              return (
+                <div key={m.id} className={cn(
+                  "group relative flex flex-col rounded-2xl border bg-card p-5 shadow-sm hover:shadow-md transition-all",
+                  isExpanded ? "ring-2 ring-primary/20 border-primary/30" : "hover:border-primary/20"
+                )}>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-base group-hover:text-primary transition-colors">
+                        {m.room_name || `Room ${m.room_id.slice(0, 8)}`}
+                      </h4>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <HugeiconsIcon icon={Clock01Icon} size={14} />
-                          {formatDuration(m.duration_seconds)}
+                          <HugeiconsIcon icon={Calendar01Icon} size={14} />
+                          {new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
-                      )}
-                      {m.size_bytes && (
-                        <span className="flex items-center gap-1">
-                          <HugeiconsIcon icon={Database01Icon} size={14} />
-                          {formatBytes(m.size_bytes)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className={cn(
-                    "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-                    m.status === "ready" ? "bg-primary/10 border-primary/20 text-primary" : 
-                    m.status === "deleted" ? "bg-muted text-muted-foreground border-border" :
-                    "bg-orange-500/10 border-orange-500/20 text-orange-600"
-                  )}>
-                    {m.status}
-                  </div>
-                </div>
-
-                {/* Intelligence Layer */}
-                <div className="flex-1 space-y-4 mb-6">
-                  {m.transcript_summary ? (
-                    <div className="space-y-1.5">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                        <HugeiconsIcon icon={File02Icon} size={12} />
-                        Summary
-                      </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-                        {m.transcript_summary}
-                      </p>
-                    </div>
-                  ) : m.status !== "deleted" && (
-                    <div className="py-2 px-3 rounded-xl bg-muted/30 border border-dashed text-xs text-muted-foreground italic">
-                      No summary available yet.
-                    </div>
-                  )}
-
-                  {m.transcript_action_items && m.transcript_action_items.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                        <HugeiconsIcon icon={CheckmarkCircle01Icon} size={12} />
-                        Key Actions
-                      </div>
-                      <ul className="space-y-1.5">
-                        {m.transcript_action_items.slice(0, 2).map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-xs text-foreground/80">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" />
-                            <span className="line-clamp-1">{item}</span>
-                          </li>
-                        ))}
-                        {m.transcript_action_items.length > 2 && (
-                          <li className="text-[10px] font-medium text-primary pl-3.5">
-                            + {m.transcript_action_items.length - 2} more items
-                          </li>
+                        {m.duration_seconds && (
+                          <span className="flex items-center gap-1">
+                            <HugeiconsIcon icon={Clock01Icon} size={14} />
+                            {formatDuration(m.duration_seconds)}
+                          </span>
                         )}
-                      </ul>
+                        {m.size_bytes && (
+                          <span className="flex items-center gap-1">
+                            <HugeiconsIcon icon={Database01Icon} size={14} />
+                            {formatBytes(m.size_bytes)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className={cn(
+                      "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
+                      m.status === "ready" ? "bg-primary/10 border-primary/20 text-primary" : 
+                      m.status === "deleted" ? "bg-muted text-muted-foreground border-border" :
+                      "bg-orange-500/10 border-orange-500/20 text-orange-600"
+                    )}>
+                      {m.status}
+                    </div>
+                  </div>
+
+                  {/* Intelligence Layer */}
+                  <div className="flex-1 space-y-4 mb-6 transition-all duration-300">
+                    {m.transcript_summary ? (
+                      <div className="space-y-1.5">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                          <HugeiconsIcon icon={File02Icon} size={12} />
+                          Summary
+                        </div>
+                        <p className={cn(
+                          "text-sm text-muted-foreground leading-relaxed",
+                          !isExpanded && "line-clamp-2"
+                        )}>
+                          {m.transcript_summary}
+                        </p>
+                      </div>
+                    ) : m.status !== "deleted" && (
+                      <div className="py-2 px-3 rounded-xl bg-muted/30 border border-dashed text-xs text-muted-foreground italic">
+                        No summary available yet.
+                      </div>
+                    )}
+
+                    {m.transcript_action_items && m.transcript_action_items.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                          <HugeiconsIcon icon={CheckmarkCircle01Icon} size={12} />
+                          Key Actions
+                        </div>
+                        <ul className="space-y-1.5">
+                          {(isExpanded ? m.transcript_action_items : m.transcript_action_items.slice(0, 2)).map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-xs text-foreground/80">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" />
+                              <span className={cn(!isExpanded && "line-clamp-1")}>{item}</span>
+                            </li>
+                          ))}
+                          {!isExpanded && m.transcript_action_items.length > 2 && (
+                            <li className="text-[10px] font-medium text-primary pl-3.5">
+                              + {m.transcript_action_items.length - 2} more items
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-4 border-t mt-auto">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={m.status === "deleted" || m.status !== "ready"}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold hover:bg-secondary/80 transition-colors disabled:opacity-30"
+                        onClick={async () => {
+                          try {
+                            await downloadRecording(m.id, state.token);
+                            toast.success("Download started");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : String(e));
+                          }
+                        }}
+                      >
+                        <HugeiconsIcon icon={Download01Icon} size={14} />
+                        Download
+                      </button>
+                      <button
+                        type="button"
+                        disabled={m.status === "deleted" || m.status !== "ready"}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold hover:bg-secondary/80 transition-colors disabled:opacity-30"
+                        onClick={async () => {
+                          try {
+                          await createShareLink(m.id, state.token);
+                          toast.success("Share link copied to clipboard");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : String(e));
+                          }
+                        }}
+                      >
+                        <HugeiconsIcon icon={Share01Icon} size={14} />
+                        Share
+                      </button>
+                    </div>
+                    
+                    <button 
+                      onClick={() => setExpandedMeetingId(isExpanded ? null : m.id)}
+                      className="flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-primary transition-colors group/link"
+                    >
+                      {isExpanded ? "Show Less" : "View Details"}
+                      <HugeiconsIcon icon={ArrowRight01Icon} size={14} className={cn(
+                        "transition-transform",
+                        isExpanded ? "-rotate-90" : "group-hover/link:translate-x-0.5"
+                      )} />
+                    </button>
+                  </div>
+
+                  {m.status === "deleted" && (
+                    <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px] rounded-2xl flex items-center justify-center pointer-events-none">
+                      <div className="bg-muted px-4 py-1 rounded-full border shadow-sm text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        Purged
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-4 border-t mt-auto">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={m.status === "deleted" || m.status !== "ready"}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold hover:bg-secondary/80 transition-colors disabled:opacity-30"
-                      onClick={async () => {
-                        try {
-                          await downloadRecording(m.id, state.token);
-                        } catch (e) {
-                          alert(e instanceof Error ? e.message : String(e));
-                        }
-                      }}
-                    >
-                      <HugeiconsIcon icon={Download01Icon} size={14} />
-                      Download
-                    </button>
-                    <button
-                      type="button"
-                      disabled={m.status === "deleted" || m.status !== "ready"}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold hover:bg-secondary/80 transition-colors disabled:opacity-30"
-                      onClick={async () => {
-                        try {
-                          const url = await createShareLink(m.id, state.token);
-                          // In a real app, maybe show a nice toast here
-                          alert(`Share link copied to clipboard!\n${url}`);
-                        } catch (e) {
-                          alert(e instanceof Error ? e.message : String(e));
-                        }
-                      }}
-                    >
-                      <HugeiconsIcon icon={Share01Icon} size={14} />
-                      Share
-                    </button>
-                  </div>
-                  
-                  <button className="flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-primary transition-colors group/link">
-                    View Details
-                    <HugeiconsIcon icon={ArrowRight01Icon} size={14} className="group-hover/link:translate-x-0.5 transition-transform" />
-                  </button>
-                </div>
-
-                {m.status === "deleted" && (
-                  <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px] rounded-2xl flex items-center justify-center pointer-events-none">
-                    <div className="bg-muted px-4 py-1 rounded-full border shadow-sm text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                      Purged
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
 
             {filteredMeetings.length === 0 && (
               <div className="col-span-full py-20 text-center space-y-4">
@@ -506,17 +559,17 @@ function DashboardPage() {
         </div>
 			</main>
 
-      <footer className="py-12 px-6 border-t mt-20">
+      <footer className="py-12 px-6 border-t">
         <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-6 text-muted-foreground text-xs font-medium">
           <div className="flex items-center gap-2">
             <HugeiconsIcon icon={ZapIcon} size={14} className="text-primary" />
-            <span>&copy; 2026 Chalk Education. All rights reserved.</span>
+            <span>&copy; {new Date().getFullYear()} Chalk Education. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-6">
-            <a href="#" className="hover:text-foreground">Terms</a>
-            <a href="#" className="hover:text-foreground">Privacy</a>
-            <a href="#" className="hover:text-foreground">Status</a>
-            <a href="#" className="hover:text-foreground">Help</a>
+            <a href="#" className="hover:text-foreground transition-colors">Terms</a>
+            <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
+            <a href="#" className="hover:text-foreground transition-colors">Status</a>
+            <a href="#" className="hover:text-foreground transition-colors">Help</a>
           </div>
         </div>
       </footer>

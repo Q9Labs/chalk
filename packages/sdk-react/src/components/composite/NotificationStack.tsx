@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import { cn } from '../../utils/cn';
+import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon } from '../../utils/icons';
 
 export interface Notification {
   id: string;
@@ -35,6 +36,33 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
   maxVisible = 5,
   className,
 }) => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    const handleThemeChange = () => {
+      setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    };
+
+    handleThemeChange();
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          handleThemeChange();
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, { attributes: true });
+
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     const activeIds = new Set<string>();
 
@@ -70,10 +98,37 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
 
   return (
     <Toaster
-      richColors
-      theme="dark"
+      theme={theme}
       position={positionMap[position]}
       visibleToasts={maxVisible}
+      closeButton
+      icons={{
+        info: <InformationCircleIcon size={20} className="text-primary" />,
+        success: <CheckmarkCircle02Icon size={20} className="text-success" />,
+        warning: <Alert02Icon size={20} className="text-warning" />,
+        error: <CancelCircleIcon size={20} className="text-destructive" />,
+      }}
+      toastOptions={{
+        classNames: {
+          toast: cn(
+            'group flex items-start gap-3 p-4 rounded-md shadow-lg min-w-[300px] max-w-md',
+            'bg-card border border-border border-l-4',
+            'data-[type=info]:border-l-primary',
+            'data-[type=success]:border-l-success',
+            'data-[type=warning]:border-l-warning',
+            'data-[type=error]:border-l-destructive',
+            'data-[type=info]:text-primary',
+            'data-[type=success]:text-success',
+            'data-[type=warning]:text-warning',
+            'data-[type=error]:text-destructive',
+            'chalk-animate-toast-in'
+          ),
+          title: 'text-sm font-medium text-foreground',
+          description: 'text-sm text-muted-foreground',
+          actionButton: 'mt-2 text-sm font-semibold text-foreground hover:underline focus:outline-none',
+          closeButton: 'flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors',
+        },
+      }}
       className={cn(className)}
     />
   );
