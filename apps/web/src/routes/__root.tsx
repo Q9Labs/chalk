@@ -15,10 +15,15 @@ import { useEffect, useMemo, useState } from "react";
 import { DebugDialog } from "../components/DebugDialog";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
+import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { createWebTokenProvider, getApiUrl } from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
+
+// If a new deploy removes old hashed chunks, long-lived tabs can start failing
+// on route navigation. Auto-reload once on chunk load failures.
+installChunkLoadAutoReload();
 
 // import "../../../../packages/sdk-react/src/styles/base.css";
 import appCss from "../styles.css?url";
