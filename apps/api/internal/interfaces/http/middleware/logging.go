@@ -15,6 +15,7 @@ import (
 var skipPaths = map[string]bool{
 	"/health":            true,
 	"/api/v1/debug/ping": true,
+	"/ws":                true,
 }
 
 // RequestLogger logs each request with structured fields for Axiom

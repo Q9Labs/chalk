@@ -72,7 +72,11 @@ func NewRouter(cfg RouterConfig) *Router {
 	if cfg.AppConfig.Server.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	engine := gin.Default()
+	// NOTE: use gin.New() (not gin.Default()) so we don't install gin.Logger().
+	// gin.Logger() calls WriteHeaderNow(), which triggers net/http warnings when
+	// the /ws endpoint upgrades and hijacks the connection (WebSocket).
+	engine := gin.New()
+	engine.Use(gin.Recovery())
 
 	engine.Use(otelgin.Middleware("chalk-api"))
 
