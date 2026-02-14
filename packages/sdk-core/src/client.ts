@@ -17,6 +17,7 @@ import type {
   TokenProvider,
 } from "./types.ts";
 import { wideEvents } from "./wide-events/index.ts";
+import { createAxiomWideEventsHandler } from "./wide-events/axiom.ts";
 import { WSClient } from "./ws-client.ts";
 import {
   createOperationLock,
@@ -73,10 +74,31 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       this.emit("token-expired", error);
     });
 
-    // Configure wide events
+    // Configure wide events (optional Axiom helper).
+    const userHandler = config.wideEvents?.handler;
+    const axiomEnabled = config.axiom?.enabled ?? false;
+    const axiomHandler = axiomEnabled
+      ? createAxiomWideEventsHandler({
+          token: config.axiom!.token,
+          dataset: config.axiom!.dataset,
+          endpoint: config.axiom!.endpoint,
+          flushIntervalMs: config.axiom!.flushIntervalMs,
+          maxBatchSize: config.axiom!.maxBatchSize,
+          debug: config.axiom!.debug ?? config.debug ?? false,
+        }).handler
+      : undefined;
+
+    const combinedHandler =
+      userHandler && axiomHandler
+        ? (event: any) => {
+            userHandler(event);
+            axiomHandler(event);
+          }
+        : userHandler ?? axiomHandler;
+
     wideEvents.configure({
       enabled: config.wideEvents?.enabled ?? config.debug ?? false,
-      handler: config.wideEvents?.handler,
+      handler: combinedHandler,
       includeDebugInfo: config.wideEvents?.includeDebugInfo ?? config.debug ?? false,
     });
   }

@@ -167,6 +167,21 @@ export interface ChalkClientConfig {
 		/** Include debug info like stack traces (default: false) */
 		includeDebugInfo?: boolean;
 	};
+
+	/**
+	 * Axiom wide-events ingestion helper.
+	 *
+	 * WARNING: Using a token in the browser exposes it to end users. Prefer proxy ingestion.
+	 */
+	axiom?: {
+		enabled?: boolean;
+		token: string;
+		dataset: string;
+		endpoint?: string;
+		flushIntervalMs?: number;
+		maxBatchSize?: number;
+		debug?: boolean;
+	};
 }
 
 // ============================================================================

@@ -63,6 +63,12 @@ type Hub struct {
 
 	whiteboardPersistTimers map[uuid.UUID]*time.Timer
 
+	instanceID string
+
+	roomSubRefcount map[uuid.UUID]int
+	roomSubCancel   map[uuid.UUID]context.CancelFunc
+	pubsubDedupe    *pubsubDedupe
+
 	mu sync.RWMutex
 
 	ctx context.Context
@@ -82,6 +88,7 @@ func NewHub(redisClient RedisInterface, logger *slog.Logger) *Hub {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	instanceID := logging.InstanceID()
 	return &Hub{
 		clients:                 make(map[uuid.UUID]*Client),
 		rooms:                   make(map[uuid.UUID]map[uuid.UUID]*Client),
@@ -94,7 +101,11 @@ func NewHub(redisClient RedisInterface, logger *slog.Logger) *Hub {
 		ctx:                     context.Background(),
 		stop:                    make(chan struct{}),
 		whiteboardPersistTimers: make(map[uuid.UUID]*time.Timer),
-		logger:                  logger.With("component", "ws_hub"),
+		instanceID:              instanceID,
+		roomSubRefcount:         make(map[uuid.UUID]int),
+		roomSubCancel:           make(map[uuid.UUID]context.CancelFunc),
+		pubsubDedupe:            newPubsubDedupe(2*time.Minute, 10_000),
+		logger:                  logger.With("component", "ws_hub", "instance_id", instanceID),
 	}
 }
 
@@ -152,6 +163,7 @@ func (h *Hub) Run(ctx context.Context) {
 
 			attrs := []any{
 				"event", "ws.metrics",
+				"instance_id", h.instanceID,
 				"interval_s", 60,
 				"clients", clientCount,
 				"rooms", roomCount,
@@ -195,11 +207,23 @@ func (h *Hub) registerClient(client *Client) {
 		h.rooms[client.roomID] = make(map[uuid.UUID]*Client)
 	}
 	h.rooms[client.roomID][client.participantID] = client
+	h.roomSubRefcount[client.roomID]++
+	if h.roomSubRefcount[client.roomID] == 1 && h.redisClient != nil {
+		// Start per-room subscription on first local client.
+		parent := h.ctx
+		if parent == nil {
+			parent = context.Background()
+		}
+		subCtx, cancel := context.WithCancel(parent)
+		h.roomSubCancel[client.roomID] = cancel
+		go h.SubscribeToRoom(subCtx, client.roomID)
+	}
 
 	roomSize := len(h.rooms[client.roomID])
 
 	attrs := []any{
 		"event", "websocket.connect",
+		"instance_id", h.instanceID,
 		"participant_id", client.participantID,
 		"room_id", client.roomID,
 		"tenant_id", client.tenantID,
@@ -236,7 +260,7 @@ func (h *Hub) registerClient(client *Client) {
 		},
 	})
 	joinedData, _ := json.Marshal(joinedMsg)
-	h.BroadcastToRoom(client.roomID, joinedData, client.participantID.String())
+	h.FanoutToRoomReliable(client.roomID, joinedData, client.participantID.String())
 }
 
 func (h *Hub) unregisterClient(client *Client) {
@@ -252,6 +276,20 @@ func (h *Hub) unregisterClient(client *Client) {
 		delete(room, client.participantID)
 		roomSize = len(room)
 		roomEmpty = roomSize == 0
+	}
+
+	// Per-room subscription lifecycle.
+	if n, ok := h.roomSubRefcount[client.roomID]; ok && n > 0 {
+		n--
+		if n <= 0 {
+			delete(h.roomSubRefcount, client.roomID)
+			if cancel, ok := h.roomSubCancel[client.roomID]; ok {
+				cancel()
+				delete(h.roomSubCancel, client.roomID)
+			}
+		} else {
+			h.roomSubRefcount[client.roomID] = n
+		}
 	}
 
 	h.mu.Unlock()
@@ -273,6 +311,7 @@ func (h *Hub) unregisterClient(client *Client) {
 	by, code, reason, discErr := client.DisconnectInfo()
 	unregAttrs := []any{
 		"event", "websocket.disconnect",
+		"instance_id", h.instanceID,
 		"participant_id", client.participantID,
 		"room_id", client.roomID,
 		"tenant_id", client.tenantID,
@@ -295,7 +334,7 @@ func (h *Hub) unregisterClient(client *Client) {
 			ParticipantID: client.participantID,
 		})
 		data, _ := json.Marshal(leftMsg)
-		h.BroadcastToRoom(client.roomID, data, "")
+		h.FanoutToRoomReliable(client.roomID, data, "")
 	}
 
 	// Now clean up empty room
@@ -314,6 +353,11 @@ func (h *Hub) unregisterClient(client *Client) {
 		delete(h.rooms, client.roomID)
 		delete(h.roomRecording, client.roomID)
 		delete(h.whiteboardState, client.roomID)
+		if cancel, ok := h.roomSubCancel[client.roomID]; ok {
+			cancel()
+			delete(h.roomSubCancel, client.roomID)
+		}
+		delete(h.roomSubRefcount, client.roomID)
 		if timer, ok := h.whiteboardPersistTimers[client.roomID]; ok {
 			timer.Stop()
 			delete(h.whiteboardPersistTimers, client.roomID)
@@ -324,6 +368,18 @@ func (h *Hub) unregisterClient(client *Client) {
 			"reason", "last_participant_left",
 		)
 	}
+}
+
+// FanoutToRoomReliable broadcasts to local clients immediately then publishes to Redis for other instances.
+func (h *Hub) FanoutToRoomReliable(roomID uuid.UUID, message []byte, excludeParticipantID string) {
+	h.BroadcastToRoomReliable(roomID, message, excludeParticipantID)
+	h.publishToRedis(roomID, PubSubReliable, message, excludeParticipantID)
+}
+
+// FanoutToRoomVolatile broadcasts to local clients immediately then publishes to Redis for other instances.
+func (h *Hub) FanoutToRoomVolatile(roomID uuid.UUID, message []byte, excludeParticipantID string) {
+	h.BroadcastToRoomVolatile(roomID, message, excludeParticipantID)
+	h.publishToRedis(roomID, PubSubVolatile, message, excludeParticipantID)
 }
 
 // BroadcastToRoom broadcasts a message to all clients in a room
@@ -467,18 +523,40 @@ func (h *Hub) getRoomSnapshotLocked(roomID uuid.UUID) RoomSnapshotPayload {
 
 // SubscribeToRoom subscribes to Redis channel for a room and broadcasts messages to local clients
 func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
+	if h.redisClient == nil {
+		return
+	}
 	channelName := "room:" + roomID.String()
 	pubsub := h.redisClient.Subscribe(ctx, channelName)
+	if pubsub == nil {
+		h.logger.Error("redis subscribe returned nil pubsub",
+			"event", "ws.redis.subscribe_error",
+			"instance_id", h.instanceID,
+			"room_id", roomID,
+			"channel", channelName,
+		)
+		if logging.AxiomEnabled() {
+			logging.Stdout().Error("redis subscribe returned nil pubsub",
+				"event", "ws.redis.subscribe_error",
+				"instance_id", h.instanceID,
+				"room_id", roomID,
+				"channel", channelName,
+			)
+		}
+		return
+	}
 	defer pubsub.Close()
 
 	h.logger.Info("redis subscribe started",
 		"event", "ws.redis.subscribe_start",
+		"instance_id", h.instanceID,
 		"room_id", roomID,
 		"channel", channelName,
 	)
 	if logging.AxiomEnabled() {
 		logging.Stdout().Info("redis subscribe started",
 			"event", "ws.redis.subscribe_start",
+			"instance_id", h.instanceID,
 			"room_id", roomID,
 			"channel", channelName,
 		)
@@ -486,12 +564,14 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 	defer func() {
 		h.logger.Info("redis subscribe stopped",
 			"event", "ws.redis.subscribe_stop",
+			"instance_id", h.instanceID,
 			"room_id", roomID,
 			"channel", channelName,
 		)
 		if logging.AxiomEnabled() {
 			logging.Stdout().Info("redis subscribe stopped",
 				"event", "ws.redis.subscribe_stop",
+				"instance_id", h.instanceID,
 				"room_id", roomID,
 				"channel", channelName,
 			)
@@ -506,6 +586,7 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 			}
 			h.logger.Error("redis subscription error",
 				"event", "ws.redis.subscribe_error",
+				"instance_id", h.instanceID,
 				"room_id", roomID,
 				"channel", channelName,
 				"error", err.Error(),
@@ -513,6 +594,7 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 			if logging.AxiomEnabled() {
 				logging.Stdout().Error("redis subscription error",
 					"event", "ws.redis.subscribe_error",
+					"instance_id", h.instanceID,
 					"room_id", roomID,
 					"channel", channelName,
 					"error", err.Error(),
@@ -521,34 +603,105 @@ func (h *Hub) SubscribeToRoom(ctx context.Context, roomID uuid.UUID) {
 			continue
 		}
 
-		// Broadcast to local clients in this room
-		h.BroadcastToRoom(roomID, []byte(msg.Payload), "")
+		var env PubSubEnvelope
+		if err := json.Unmarshal([]byte(msg.Payload), &env); err != nil {
+			h.logger.Error("redis message decode error",
+				"event", "ws.redis.decode_error",
+				"instance_id", h.instanceID,
+				"room_id", roomID,
+				"channel", channelName,
+				"payload_bytes", len(msg.Payload),
+				"error", err.Error(),
+			)
+			if logging.AxiomEnabled() {
+				logging.Stdout().Error("redis message decode error",
+					"event", "ws.redis.decode_error",
+					"instance_id", h.instanceID,
+					"room_id", roomID,
+					"channel", channelName,
+					"payload_bytes", len(msg.Payload),
+					"error", err.Error(),
+				)
+			}
+			continue
+		}
+
+		if env.OriginInstanceID == h.instanceID {
+			continue
+		}
+		if !h.pubsubDedupe.ShouldProcess(env.MessageID) {
+			continue
+		}
+
+		switch env.Delivery {
+		case PubSubVolatile:
+			h.BroadcastToRoomVolatile(roomID, []byte(env.Data), env.ExcludeParticipantID)
+		default:
+			h.BroadcastToRoomReliable(roomID, []byte(env.Data), env.ExcludeParticipantID)
+		}
 	}
 }
 
-// PublishToRedis publishes a message to Redis for cross-instance broadcast
-func (h *Hub) PublishToRedis(roomID uuid.UUID, message []byte) error {
+func (h *Hub) publishToRedis(roomID uuid.UUID, delivery PubSubDelivery, message []byte, excludeParticipantID string) {
+	if h.redisClient == nil {
+		return
+	}
+
+	env := PubSubEnvelope{
+		MessageID:            uuid.NewString(),
+		OriginInstanceID:     h.instanceID,
+		RoomID:               roomID.String(),
+		ExcludeParticipantID: excludeParticipantID,
+		Delivery:             delivery,
+		Data:                 message,
+	}
+	payload, err := json.Marshal(env)
+	if err != nil {
+		h.logger.Error("failed to marshal pubsub envelope",
+			"event", "ws.redis.publish_error",
+			"instance_id", h.instanceID,
+			"room_id", roomID,
+			"error", err.Error(),
+		)
+		if logging.AxiomEnabled() {
+			logging.Stdout().Error("failed to marshal pubsub envelope",
+				"event", "ws.redis.publish_error",
+				"instance_id", h.instanceID,
+				"room_id", roomID,
+				"error", err.Error(),
+			)
+		}
+		return
+	}
+
 	channelName := "room:" + roomID.String()
-	err := h.redisClient.Publish(h.ctx, channelName, message)
+	err = h.redisClient.Publish(h.ctx, channelName, payload)
 	if err != nil {
 		h.logger.Error("redis publish error",
 			"event", "ws.redis.publish_error",
+			"instance_id", h.instanceID,
 			"room_id", roomID,
 			"channel", channelName,
-			"payload_bytes", len(message),
+			"message_id", env.MessageID,
+			"origin_instance_id", env.OriginInstanceID,
+			"delivery", string(delivery),
+			"payload_bytes", len(payload),
 			"error", err.Error(),
 		)
 		if logging.AxiomEnabled() {
 			logging.Stdout().Error("redis publish error",
 				"event", "ws.redis.publish_error",
+				"instance_id", h.instanceID,
 				"room_id", roomID,
 				"channel", channelName,
-				"payload_bytes", len(message),
+				"message_id", env.MessageID,
+				"origin_instance_id", env.OriginInstanceID,
+				"delivery", string(delivery),
+				"payload_bytes", len(payload),
 				"error", err.Error(),
 			)
 		}
 	}
-	return err
 }
 
 // Close gracefully closes the hub
@@ -557,6 +710,12 @@ func (h *Hub) Close() {
 	defer h.mu.Unlock()
 
 	close(h.stop)
+
+	for _, cancel := range h.roomSubCancel {
+		cancel()
+	}
+	h.roomSubCancel = make(map[uuid.UUID]context.CancelFunc)
+	h.roomSubRefcount = make(map[uuid.UUID]int)
 
 	// Close all client connections
 	for _, client := range h.clients {

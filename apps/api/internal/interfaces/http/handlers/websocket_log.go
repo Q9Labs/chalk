@@ -10,6 +10,7 @@ import (
 
 func wsBaseAttrs(c *gin.Context) []any {
 	return []any{
+		"instance_id", applogging.InstanceID(),
 		"request_id", middleware.GetRequestID(c),
 		"path", c.Request.URL.Path,
 		"client_ip", c.ClientIP(),

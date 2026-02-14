@@ -157,6 +157,7 @@ func (c *Client) Wait() {
 
 func (c *Client) baseAttrs() []any {
 	return []any{
+		"instance_id", logging.InstanceID(),
 		"participant_id", c.participantID,
 		"room_id", c.roomID,
 		"tenant_id", c.tenantID,
@@ -166,6 +167,7 @@ func (c *Client) baseAttrs() []any {
 func (c *Client) logger() *slog.Logger {
 	return slog.Default().With(
 		"component", "ws_client",
+		"instance_id", logging.InstanceID(),
 		"participant_id", c.participantID,
 		"room_id", c.roomID,
 		"tenant_id", c.tenantID,
@@ -334,6 +336,8 @@ func (c *Client) writePump(ctx context.Context) {
 // handleMessage processes a message received from the client
 func (c *Client) handleMessage(msg *Message) {
 	switch msg.Type {
+	case MessageTypeRoomSync:
+		c.handleRoomSync(msg)
 	case MessageTypeChatSend:
 		c.handleChatMessage(msg)
 	case MessageTypeReactionSnd:
@@ -381,6 +385,16 @@ func (c *Client) handleMessage(msg *Message) {
 	}
 }
 
+func (c *Client) handleRoomSync(msg *Message) {
+	var payload RoomSyncPayload
+	_ = msg.UnmarshalPayload(&payload) // best-effort; payload optional
+
+	snapshot := c.hub.GetRoomSnapshot(c.roomID)
+	snapshotMsg, _ := NewMessage(MessageTypeRoomSnapshot, snapshot)
+	snapshotData, _ := json.Marshal(snapshotMsg)
+	c.SendReliable(snapshotData)
+}
+
 func (c *Client) handleChatMessage(msg *Message) {
 	var payload ChatSendPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
@@ -404,7 +418,7 @@ func (c *Client) handleChatMessage(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(chatMsg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleReaction processes a reaction and broadcasts it
@@ -428,7 +442,7 @@ func (c *Client) handleReaction(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(reaction)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleHandRaise broadcasts that a hand was raised
@@ -439,7 +453,7 @@ func (c *Client) handleHandRaise() {
 	})
 
 	msgData, _ := json.Marshal(msg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleHandLower broadcasts that a hand was lowered
@@ -450,7 +464,7 @@ func (c *Client) handleHandLower() {
 	})
 
 	msgData, _ := json.Marshal(msg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // sendErrorMessage sends an error message to the client
@@ -518,7 +532,7 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 
 		msgData, _ := json.Marshal(dataMsg)
 		// Relay to everyone except sender (no echo).
-		c.hub.BroadcastToRoomReliable(c.roomID, msgData, c.participantID.String())
+		c.hub.FanoutToRoomReliable(c.roomID, msgData, c.participantID.String())
 		return
 	}
 
@@ -555,7 +569,7 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(dataMsg)
-	c.hub.BroadcastToRoomReliable(c.roomID, msgData, c.participantID.String())
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, c.participantID.String())
 }
 
 // handleWhiteboardSync sends the current whiteboard state to the requesting client
@@ -588,7 +602,7 @@ func (c *Client) handleWhiteboardClear() {
 	})
 
 	msgData, _ := json.Marshal(clearMsg)
-	c.hub.BroadcastToRoomReliable(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleWhiteboardCursor broadcasts cursor position to other participants
@@ -613,7 +627,7 @@ func (c *Client) handleWhiteboardCursor(msg *Message) {
 
 	msgData, _ := json.Marshal(cursorMsg)
 	// Broadcast to others (not self) - exclude sender
-	c.hub.BroadcastToRoomVolatile(c.roomID, msgData, c.participantID.String())
+	c.hub.FanoutToRoomVolatile(c.roomID, msgData, c.participantID.String())
 }
 
 // handlePermissionGrant broadcasts a permission grant event
@@ -642,7 +656,7 @@ func (c *Client) handlePermissionGrant(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(changeMsg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handlePermissionRevoke broadcasts a permission revoke event
@@ -670,7 +684,7 @@ func (c *Client) handlePermissionRevoke(msg *Message) {
 	})
 
 	msgData, _ := json.Marshal(changeMsg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleWhiteboardOpen broadcasts that this participant opened the whiteboard
@@ -684,7 +698,7 @@ func (c *Client) handleWhiteboardOpen() {
 	})
 
 	msgData, _ := json.Marshal(openedMsg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleWhiteboardClose broadcasts that this participant closed the whiteboard
@@ -695,7 +709,7 @@ func (c *Client) handleWhiteboardClose() {
 	})
 
 	msgData, _ := json.Marshal(closedMsg)
-	c.hub.BroadcastToRoom(c.roomID, msgData, "")
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
 }
 
 // handleTranscript persists a transcript from the client SDK

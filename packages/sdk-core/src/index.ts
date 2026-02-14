@@ -106,6 +106,12 @@ export {
 	wideEventsCollector,
 } from "./wide-events/index.ts";
 
+export {
+	createAxiomWideEventsHandler,
+	type AxiomWideEventsConfig,
+	type AxiomWideEventsHandler,
+} from "./wide-events/axiom.ts";
+
 // ============================================================================
 // Phase 2: Managers and Session (new SDK architecture)
 // ============================================================================

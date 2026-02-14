@@ -134,6 +134,17 @@ globalThis.IntersectionObserver ??= class {
 	disconnect() {}
 };
 
+// Used by NotificationStack theme detection.
+// @ts-ignore
+globalThis.MutationObserver ??= class {
+	constructor(_cb: any) {}
+	observe() {}
+	disconnect() {}
+	takeRecords() {
+		return [];
+	}
+};
+
 // AudioContext used by pre-join audio level metering
 // @ts-ignore
 globalThis.AudioContext ??= class {

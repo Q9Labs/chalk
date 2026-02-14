@@ -11,7 +11,7 @@ import type {
 	ReactionEmoji,
 	Transcript,
 } from "@q9labs/chalk-core";
-import { ChalkErrorCode } from "@q9labs/chalk-core";
+import { ChalkErrorCode, wideEvents } from "@q9labs/chalk-core";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type React from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -239,6 +239,7 @@ function VideoConferenceBase({
 	const screenShareCountRef = useRef(0);
 	const whiteboardOpenedRef = useRef(false);
 	const prevScreenShareStateRef = useRef(false);
+	const lastWsToastAtRef = useRef(0);
 	const roomIdRef = useRef(roomId);
 
 	const { join, leave, isJoining } = useConnection();
@@ -656,6 +657,14 @@ function VideoConferenceBase({
 				err.code === ChalkErrorCode.SCREEN_SHARE_CANCELLED ||
 				err.code === ChalkErrorCode.OVERCONSTRAINED;
 
+			const code = String(err.code);
+			const isWsError =
+				code === "WS_ERROR" ||
+				code === "WS_PARSE_ERROR" ||
+				code === "WS_SEND_ERROR" ||
+				code === "MAX_RECONNECT_ATTEMPTS" ||
+				code === "TOKEN_EXPIRED";
+
 			if (phase === "meeting" && isScreenShareError) {
 				const debugId =
 					typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -724,6 +733,83 @@ function VideoConferenceBase({
 						},
 					},
 				});
+			}
+
+			if (phase === "meeting" && isWsError) {
+				const now = Date.now();
+				// Rate-limit: avoid spamming toasts during flaky networks.
+				if (now - lastWsToastAtRef.current > 15000) {
+					lastWsToastAtRef.current = now;
+
+					const debugId =
+						typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+							? crypto.randomUUID()
+							: `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+					const buildCopyText = () => {
+						const cause = (err as any).cause as any;
+						const payload = {
+							debugId,
+							timestamp: new Date().toISOString(),
+							operation: "websocket",
+							phase,
+							roomId: roomIdRef.current,
+							participantId: localParticipantIdRef.current,
+							sessionId: wideEvents.sessionId,
+							code,
+							message: err.message,
+							details: err.details ?? null,
+							cause: cause
+								? {
+										name: typeof cause?.name === "string" ? cause.name : undefined,
+										message:
+											typeof cause?.message === "string"
+												? cause.message
+												: undefined,
+								  }
+								: null,
+							userAgent:
+								typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+							url:
+								typeof location !== "undefined"
+									? `${location.origin}${location.pathname}`
+									: undefined,
+						};
+
+						try {
+							return JSON.stringify(payload, null, 2);
+						} catch {
+							return `Chalk WS error debug\nid: ${debugId}\ncode: ${err.code}\nmessage: ${err.message}`;
+						}
+					};
+
+					const copyToClipboard = async (text: string) => {
+						try {
+							await navigator.clipboard.writeText(text);
+							return;
+						} catch {
+							const textArea = document.createElement("textarea");
+							textArea.value = text;
+							document.body.appendChild(textArea);
+							textArea.select();
+							document.execCommand("copy");
+							document.body.removeChild(textArea);
+						}
+					};
+
+					toast.error(err.message || "Realtime sync issue", {
+						duration: 15000,
+						action: {
+							label: "Copy error",
+							onClick: () => {
+								void (async () => {
+									await copyToClipboard(buildCopyText());
+									toast.success("Copied error details", { duration: 2500 });
+								})();
+							},
+						},
+					});
+				}
 			}
 			setError(err.message);
 			onError?.(err);

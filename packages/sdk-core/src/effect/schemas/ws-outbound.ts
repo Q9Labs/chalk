@@ -94,9 +94,18 @@ export const TranscriptPayload = Schema.Struct({
 export type TranscriptPayload = Schema.Schema.Type<typeof TranscriptPayload>;
 
 /**
+ * room.sync payload
+ */
+export const RoomSyncPayload = Schema.Struct({
+  lastSeq: Schema.Number,
+});
+export type RoomSyncPayload = Schema.Schema.Type<typeof RoomSyncPayload>;
+
+/**
  * Map of outbound message type → payload schema
  */
 export const WSOutboundPayloadSchemas = {
+  "room.sync": RoomSyncPayload,
   "chat.send": ChatSendPayload,
   "reaction.send": ReactionSendPayload,
   "hand.raise": Schema.Void,

@@ -4,6 +4,10 @@ export { type WSClientOptions } from "./deps.ts";
 
 export class WSClient extends WSClientBase {
 	// Client-to-server actions
+	requestRoomSync(lastSeq?: number): void {
+		this.send({ type: "room.sync", payload: { lastSeq: lastSeq ?? this.now() } });
+	}
+
 	sendChatMessage(content: string): void {
 		this.send({ type: "chat.send", payload: { content } });
 	}

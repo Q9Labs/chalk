@@ -369,6 +369,7 @@ export class Room extends EventEmitter<RoomEvents> {
       this.emit("error", {
         code: data.code,
         message: data.message,
+        details: (data as any).details,
       });
     });
 

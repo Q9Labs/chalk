@@ -18,6 +18,12 @@ export type {
 	WideEventType,
 } from "./types";
 
+export {
+	createAxiomWideEventsHandler,
+	type AxiomWideEventsConfig,
+	type AxiomWideEventsHandler,
+} from "./axiom";
+
 import { wideEventsCollector } from "./collector";
 import type { WideEventConfig } from "./types";
 import { WideEventContext } from "./context";

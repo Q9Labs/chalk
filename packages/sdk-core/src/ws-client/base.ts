@@ -114,6 +114,8 @@ export class WSClientBase extends EventEmitter<WSEvents> {
 		if (!this.ws) return;
 
 		this.ws.onopen = () => {
+			const wasReconnecting = this.state === "reconnecting";
+
 			this.state = "connected";
 			this.reconnectAttempt = 0;
 			this.stopReconnectTimer();
@@ -123,6 +125,11 @@ export class WSClientBase extends EventEmitter<WSEvents> {
 			this.connectContext = null;
 
 			this.emit("connected", undefined);
+
+			// Heal drift after reconnect by requesting a fresh room snapshot.
+			if (wasReconnecting) {
+				this.send({ type: "room.sync", payload: { lastSeq: this.now() } });
+			}
 		};
 
 		this.ws.onclose = (event) => {
@@ -175,6 +182,17 @@ export class WSClientBase extends EventEmitter<WSEvents> {
 	private handleConnectionFailure(): void {
 		this.stopHeartbeat();
 
+		// Ensure we don't keep a half-dead socket around (e.g. heartbeat timeout).
+		// Reconnect should always create a fresh WebSocket instance.
+		if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+			try {
+				this.ws.close(1001, "reconnect");
+			} catch {
+				// Ignore close errors
+			}
+			this.ws = null;
+		}
+
 		if (this.state === "failed" || this.state === "reconnecting") {
 			return;
 		}
@@ -201,6 +219,13 @@ export class WSClientBase extends EventEmitter<WSEvents> {
 			this.emit("error", {
 				code: "MAX_RECONNECT_ATTEMPTS",
 				message: "Failed to reconnect after multiple attempts",
+				details: {
+					roomId: this.roomId,
+					wsUrl: this.wsUrl,
+					reconnectAttempt: this.reconnectAttempt,
+					lastClose: this.lastCloseEvent,
+					lastPongReceived: this.lastPongTime,
+				},
 			});
 			return;
 		}
