@@ -19,6 +19,7 @@ import (
 var (
 	ErrRecordingNotFound = errors.New("recording not found")
 	ErrRecordingNotReady = errors.New("recording not ready")
+	ErrRecordingDeleted  = errors.New("recording deleted")
 	ErrNoActiveRecording = errors.New("no active recording found")
 	ErrRoomNotFound      = errors.New("room not found")
 )
@@ -229,6 +230,9 @@ func (s *Service) GetDownloadURL(ctx context.Context, recordingID uuid.UUID, act
 		return "", ErrRecordingNotFound
 	}
 
+	if recording.Status == "deleted" {
+		return "", ErrRecordingDeleted
+	}
 	if recording.Status != "ready" {
 		return "", ErrRecordingNotReady
 	}
@@ -266,6 +270,9 @@ func (s *Service) GetPresignedURL(ctx context.Context, recordingID uuid.UUID, ex
 	recording, err := s.db.GetRecording(ctx, recordingID)
 	if err != nil {
 		return "", ErrRecordingNotFound
+	}
+	if recording.Status == "deleted" {
+		return "", ErrRecordingDeleted
 	}
 	if recording.Status != "ready" || recording.StoragePath == nil || *recording.StoragePath == "" {
 		return "", ErrRecordingNotReady
@@ -365,6 +372,37 @@ func (s *Service) DeleteRecording(ctx context.Context, recordingID uuid.UUID) er
 	err = s.db.DeleteRecording(ctx, recordingID)
 	if err != nil {
 		return fmt.Errorf("failed to delete recording: %w", err)
+	}
+	return nil
+}
+
+// ExpireRecording hard-deletes the underlying recording file, but keeps the DB row
+// (status='deleted') so internal dashboards can retain meeting history + transcripts.
+func (s *Service) ExpireRecording(ctx context.Context, recordingID uuid.UUID) error {
+	recording, err := s.db.GetRecording(ctx, recordingID)
+	if err != nil {
+		return ErrRecordingNotFound
+	}
+	if recording.Status == "deleted" {
+		return nil
+	}
+
+	if recording.StoragePath != nil && recording.StorageProvider != nil {
+		var storageClient StorageClient
+		switch *recording.StorageProvider {
+		case "r2":
+			storageClient = s.r2Client
+		case "s3_glacier":
+			storageClient = s.s3Client
+		}
+		if storageClient != nil {
+			_ = storageClient.Delete(ctx, *recording.StoragePath)
+		}
+	}
+
+	_, err = s.db.MarkRecordingDeleted(ctx, recordingID)
+	if err != nil {
+		return fmt.Errorf("failed to mark recording deleted: %w", err)
 	}
 	return nil
 }

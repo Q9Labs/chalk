@@ -92,7 +92,12 @@ RETURNING *;
 
 -- name: MarkRecordingDeleted :one
 UPDATE recordings
-SET status = 'deleted'
+SET
+    status = 'deleted',
+    deleted_at = NOW(),
+    -- Keep metadata (duration/size) but remove storage pointers once the file is gone.
+    storage_provider = NULL,
+    storage_path = NULL
 WHERE id = $1
 RETURNING *;
 

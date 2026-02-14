@@ -76,7 +76,7 @@ func (j *InternalRetentionJob) runOnce(ctx context.Context) {
 		}
 
 		for _, rec := range recs {
-			if err := j.recordingSvc.DeleteRecording(ctx, rec.ID); err != nil {
+			if err := j.recordingSvc.ExpireRecording(ctx, rec.ID); err != nil {
 				failed++
 				j.logger.Error("internal retention delete failed", "recording_id", rec.ID, "error", err.Error())
 				continue

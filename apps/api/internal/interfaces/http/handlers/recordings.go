@@ -197,6 +197,14 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 			return
 		}
+		if errors.Is(err, recording.ErrRecordingDeleted) {
+			c.JSON(http.StatusGone, gin.H{
+				"recording_id": id,
+				"status":       "deleted",
+				"message":      "recording has expired",
+			})
+			return
+		}
 		if errors.Is(err, recording.ErrRecordingNotReady) {
 			rec, _ := h.recordingService.GetRecording(c.Request.Context(), id)
 			status := "processing"

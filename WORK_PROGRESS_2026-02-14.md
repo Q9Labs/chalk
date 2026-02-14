@@ -15,3 +15,5 @@
 - 13:58 PKT: Web redeploy complete; verified `https://chalk.q9labs.ai/dashboard` now returns `200` (deep links no longer 404).
 - 14:12 PKT: Regression: SPA redirect rewrote `/assets/*` to HTML (MIME errors for JS/CSS). Fix: keep `/* / 200`, add explicit `/assets/*` passthrough redirect rule, and keep `/assets/*` cache header immutable.
 - 14:27 PKT: Stabilization: add client-side auto-reload on chunk-load failures (stale hashed assets after deploy) so long-lived tabs recover automatically.
+- 14:40 PKT: API: retention job now expires recordings by deleting storage + marking DB row `status=deleted` (keeps meeting/transcript metadata); add `recordings.deleted_at` + regenerate sqlc.
+- 14:44 PKT: API: internal meetings list now includes transcript summary/action-items + metadata fields for dashboard rendering.

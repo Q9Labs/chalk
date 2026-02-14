@@ -20,7 +20,7 @@ SET
     storage_provider = 's3_glacier',
     archived_at = NOW()
 WHERE id = $1
-RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata
+RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at
 `
 
 func (q *Queries) ArchiveRecording(ctx context.Context, id uuid.UUID) (Recording, error) {
@@ -40,6 +40,7 @@ func (q *Queries) ArchiveRecording(ctx context.Context, id uuid.UUID) (Recording
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -52,7 +53,7 @@ SET
     storage_path = $2,
     archived_at = NOW()
 WHERE id = $1
-RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata
+RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at
 `
 
 type ArchiveRecordingWithPathParams struct {
@@ -77,6 +78,7 @@ func (q *Queries) ArchiveRecordingWithPath(ctx context.Context, arg ArchiveRecor
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -90,7 +92,7 @@ SET
     size_bytes = $4,
     duration_seconds = $5
 WHERE id = $1
-RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata
+RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at
 `
 
 type CompleteRecordingParams struct {
@@ -124,6 +126,7 @@ func (q *Queries) CompleteRecording(ctx context.Context, arg CompleteRecordingPa
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -138,7 +141,7 @@ INSERT INTO recordings (
 ) VALUES (
     $1, $2, 'recording', NOW()
 )
-RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata
+RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at
 `
 
 type CreateRecordingParams struct {
@@ -165,6 +168,7 @@ func (q *Queries) CreateRecording(ctx context.Context, arg CreateRecordingParams
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -180,7 +184,7 @@ func (q *Queries) DeleteRecording(ctx context.Context, id uuid.UUID) error {
 }
 
 const getActiveRecordingByRoom = `-- name: GetActiveRecordingByRoom :one
-SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata FROM recordings
+SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at FROM recordings
 WHERE room_id = $1 AND status = 'recording'
 LIMIT 1
 `
@@ -202,12 +206,13 @@ func (q *Queries) GetActiveRecordingByRoom(ctx context.Context, roomID uuid.UUID
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getRecording = `-- name: GetRecording :one
-SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata FROM recordings
+SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at FROM recordings
 WHERE id = $1 LIMIT 1
 `
 
@@ -228,12 +233,13 @@ func (q *Queries) GetRecording(ctx context.Context, id uuid.UUID) (Recording, er
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getRecordingByCloudflareID = `-- name: GetRecordingByCloudflareID :one
-SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata FROM recordings
+SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at FROM recordings
 WHERE cloudflare_recording_id = $1 LIMIT 1
 `
 
@@ -254,13 +260,14 @@ func (q *Queries) GetRecordingByCloudflareID(ctx context.Context, cloudflareReco
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getRecordingWithRoomInfo = `-- name: GetRecordingWithRoomInfo :one
 SELECT
-    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata,
+    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at,
     r.name as room_name,
     r.tenant_id
 FROM recordings rec
@@ -282,6 +289,7 @@ type GetRecordingWithRoomInfoRow struct {
 	ArchivedAt            pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
 	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
 	Metadata              []byte             `db:"metadata" json:"metadata"`
+	DeletedAt             pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
 	RoomName              *string            `db:"room_name" json:"room_name"`
 	TenantID              uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 }
@@ -303,6 +311,7 @@ func (q *Queries) GetRecordingWithRoomInfo(ctx context.Context, id uuid.UUID) (G
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 		&i.RoomName,
 		&i.TenantID,
 	)
@@ -324,7 +333,7 @@ func (q *Queries) GetTotalRecordingStorageByTenant(ctx context.Context, tenantID
 }
 
 const listRecordings = `-- name: ListRecordings :many
-SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata FROM recordings
+SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at FROM recordings
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -357,6 +366,7 @@ func (q *Queries) ListRecordings(ctx context.Context, arg ListRecordingsParams) 
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -369,7 +379,7 @@ func (q *Queries) ListRecordings(ctx context.Context, arg ListRecordingsParams) 
 }
 
 const listRecordingsByRoom = `-- name: ListRecordingsByRoom :many
-SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata FROM recordings
+SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at FROM recordings
 WHERE room_id = $1
 ORDER BY created_at DESC
 `
@@ -397,6 +407,7 @@ func (q *Queries) ListRecordingsByRoom(ctx context.Context, roomID uuid.UUID) ([
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -409,7 +420,7 @@ func (q *Queries) ListRecordingsByRoom(ctx context.Context, roomID uuid.UUID) ([
 }
 
 const listRecordingsByStatus = `-- name: ListRecordingsByStatus :many
-SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata FROM recordings
+SELECT id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at FROM recordings
 WHERE status = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -444,6 +455,7 @@ func (q *Queries) ListRecordingsByStatus(ctx context.Context, arg ListRecordings
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -457,7 +469,7 @@ func (q *Queries) ListRecordingsByStatus(ctx context.Context, arg ListRecordings
 
 const listRecordingsByTenant = `-- name: ListRecordingsByTenant :many
 SELECT
-    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata,
+    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at,
     r.name as room_name
 FROM recordings rec
 JOIN rooms r ON r.id = rec.room_id
@@ -486,6 +498,7 @@ type ListRecordingsByTenantRow struct {
 	ArchivedAt            pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
 	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
 	Metadata              []byte             `db:"metadata" json:"metadata"`
+	DeletedAt             pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
 	RoomName              *string            `db:"room_name" json:"room_name"`
 }
 
@@ -512,6 +525,7 @@ func (q *Queries) ListRecordingsByTenant(ctx context.Context, arg ListRecordings
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 			&i.RoomName,
 		); err != nil {
 			return nil, err
@@ -525,7 +539,7 @@ func (q *Queries) ListRecordingsByTenant(ctx context.Context, arg ListRecordings
 }
 
 const listRecordingsReadyForArchive = `-- name: ListRecordingsReadyForArchive :many
-SELECT rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata FROM recordings rec
+SELECT rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at FROM recordings rec
 JOIN rooms r ON r.id = rec.room_id
 JOIN tenants t ON t.id = r.tenant_id
 WHERE rec.status = 'ready'
@@ -559,6 +573,7 @@ func (q *Queries) ListRecordingsReadyForArchive(ctx context.Context, limit int32
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -572,9 +587,14 @@ func (q *Queries) ListRecordingsReadyForArchive(ctx context.Context, limit int32
 
 const markRecordingDeleted = `-- name: MarkRecordingDeleted :one
 UPDATE recordings
-SET status = 'deleted'
+SET
+    status = 'deleted',
+    deleted_at = NOW(),
+    -- Keep metadata (duration/size) but remove storage pointers once the file is gone.
+    storage_provider = NULL,
+    storage_path = NULL
 WHERE id = $1
-RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata
+RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at
 `
 
 func (q *Queries) MarkRecordingDeleted(ctx context.Context, id uuid.UUID) (Recording, error) {
@@ -594,12 +614,13 @@ func (q *Queries) MarkRecordingDeleted(ctx context.Context, id uuid.UUID) (Recor
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const markRecordingFailed = `-- name: MarkRecordingFailed :one
-UPDATE recordings SET status = 'failed' WHERE id = $1 RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata
+UPDATE recordings SET status = 'failed' WHERE id = $1 RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at
 `
 
 func (q *Queries) MarkRecordingFailed(ctx context.Context, id uuid.UUID) (Recording, error) {
@@ -619,6 +640,7 @@ func (q *Queries) MarkRecordingFailed(ctx context.Context, id uuid.UUID) (Record
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -629,7 +651,7 @@ SET
     status = 'processing',
     ended_at = NOW()
 WHERE id = $1
-RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata
+RETURNING id, room_id, cloudflare_recording_id, storage_provider, storage_path, size_bytes, duration_seconds, status, started_at, ended_at, archived_at, created_at, metadata, deleted_at
 `
 
 func (q *Queries) StopRecording(ctx context.Context, id uuid.UUID) (Recording, error) {
@@ -649,6 +671,7 @@ func (q *Queries) StopRecording(ctx context.Context, id uuid.UUID) (Recording, e
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.Metadata,
+		&i.DeletedAt,
 	)
 	return i, err
 }

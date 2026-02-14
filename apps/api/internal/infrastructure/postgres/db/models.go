@@ -70,6 +70,7 @@ type Recording struct {
 	ArchivedAt            pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
 	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
 	Metadata              []byte             `db:"metadata" json:"metadata"`
+	DeletedAt             pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
 }
 
 type Room struct {

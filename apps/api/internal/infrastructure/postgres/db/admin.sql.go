@@ -267,7 +267,7 @@ func (q *Queries) AdminListAuditLogs(ctx context.Context, arg AdminListAuditLogs
 
 const adminListRecordings = `-- name: AdminListRecordings :many
 SELECT
-    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata,
+    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at,
     r.name AS room_name,
     t.name AS tenant_name
 FROM recordings rec
@@ -296,6 +296,7 @@ type AdminListRecordingsRow struct {
 	ArchivedAt            pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
 	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
 	Metadata              []byte             `db:"metadata" json:"metadata"`
+	DeletedAt             pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
 	RoomName              *string            `db:"room_name" json:"room_name"`
 	TenantName            string             `db:"tenant_name" json:"tenant_name"`
 }
@@ -323,6 +324,7 @@ func (q *Queries) AdminListRecordings(ctx context.Context, arg AdminListRecordin
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 			&i.RoomName,
 			&i.TenantName,
 		); err != nil {

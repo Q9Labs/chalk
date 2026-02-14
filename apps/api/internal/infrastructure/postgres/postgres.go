@@ -420,6 +420,14 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 	CREATE INDEX IF NOT EXISTS idx_tenant_claims_tenant_id ON tenant_claims(tenant_id);
 	CREATE INDEX IF NOT EXISTS idx_tenant_claims_expires_at ON tenant_claims(expires_at);
 	CREATE INDEX IF NOT EXISTS idx_tenant_claims_secret_hash ON tenant_claims(secret_hash);
+
+	-- ============================================================================
+	-- MIGRATION 009: Keep internal meeting history while deleting recording files
+	-- ============================================================================
+	ALTER TABLE recordings
+	ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+	CREATE INDEX IF NOT EXISTS idx_recordings_deleted_at ON recordings(deleted_at);
 	`
 	_, err := p.Exec(ctx, schema)
 	if err != nil {

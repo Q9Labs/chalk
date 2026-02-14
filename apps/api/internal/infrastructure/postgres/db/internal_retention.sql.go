@@ -11,7 +11,7 @@ import (
 
 const listInternalRecordingsForDeletion = `-- name: ListInternalRecordingsForDeletion :many
 
-SELECT rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata FROM recordings rec
+SELECT rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at FROM recordings rec
 JOIN rooms r ON r.id = rec.room_id
 JOIN tenants t ON t.id = r.tenant_id
 WHERE t.tenant_kind = 'internal'
@@ -52,6 +52,7 @@ func (q *Queries) ListInternalRecordingsForDeletion(ctx context.Context, arg Lis
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}

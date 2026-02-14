@@ -29,7 +29,7 @@ func (q *Queries) CountMeetingsByTenant(ctx context.Context, tenantID uuid.UUID)
 const listMeetingsByTenant = `-- name: ListMeetingsByTenant :many
 
 SELECT
-    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata,
+    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at,
     r.name AS room_name,
     r.status AS room_status,
     r.started_at AS room_started_at,
@@ -38,7 +38,14 @@ SELECT
     pmt.id AS transcript_id,
     pmt.status AS transcript_status,
     pmt.created_at AS transcript_created_at,
-    pmt.completed_at AS transcript_completed_at
+    pmt.completed_at AS transcript_completed_at,
+    pmt.language AS transcript_language,
+    pmt.duration_seconds AS transcript_duration_seconds,
+    pmt.word_count AS transcript_word_count,
+    pmt.provider AS transcript_provider,
+    pmt.summary AS transcript_summary,
+    pmt.action_items AS transcript_action_items,
+    pmt.error_message AS transcript_error_message
 FROM recordings rec
 JOIN rooms r ON r.id = rec.room_id
 LEFT JOIN post_meeting_transcripts pmt ON pmt.recording_id = rec.id
@@ -54,28 +61,36 @@ type ListMeetingsByTenantParams struct {
 }
 
 type ListMeetingsByTenantRow struct {
-	ID                    uuid.UUID          `db:"id" json:"id"`
-	RoomID                uuid.UUID          `db:"room_id" json:"room_id"`
-	CloudflareRecordingID *string            `db:"cloudflare_recording_id" json:"cloudflare_recording_id"`
-	StorageProvider       *string            `db:"storage_provider" json:"storage_provider"`
-	StoragePath           *string            `db:"storage_path" json:"storage_path"`
-	SizeBytes             *int64             `db:"size_bytes" json:"size_bytes"`
-	DurationSeconds       *int32             `db:"duration_seconds" json:"duration_seconds"`
-	Status                string             `db:"status" json:"status"`
-	StartedAt             pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	EndedAt               pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
-	ArchivedAt            pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
-	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
-	Metadata              []byte             `db:"metadata" json:"metadata"`
-	RoomName              *string            `db:"room_name" json:"room_name"`
-	RoomStatus            string             `db:"room_status" json:"room_status"`
-	RoomStartedAt         pgtype.Timestamptz `db:"room_started_at" json:"room_started_at"`
-	RoomEndedAt           pgtype.Timestamptz `db:"room_ended_at" json:"room_ended_at"`
-	RoomMetadata          []byte             `db:"room_metadata" json:"room_metadata"`
-	TranscriptID          pgtype.UUID        `db:"transcript_id" json:"transcript_id"`
-	TranscriptStatus      *string            `db:"transcript_status" json:"transcript_status"`
-	TranscriptCreatedAt   pgtype.Timestamptz `db:"transcript_created_at" json:"transcript_created_at"`
-	TranscriptCompletedAt pgtype.Timestamptz `db:"transcript_completed_at" json:"transcript_completed_at"`
+	ID                        uuid.UUID          `db:"id" json:"id"`
+	RoomID                    uuid.UUID          `db:"room_id" json:"room_id"`
+	CloudflareRecordingID     *string            `db:"cloudflare_recording_id" json:"cloudflare_recording_id"`
+	StorageProvider           *string            `db:"storage_provider" json:"storage_provider"`
+	StoragePath               *string            `db:"storage_path" json:"storage_path"`
+	SizeBytes                 *int64             `db:"size_bytes" json:"size_bytes"`
+	DurationSeconds           *int32             `db:"duration_seconds" json:"duration_seconds"`
+	Status                    string             `db:"status" json:"status"`
+	StartedAt                 pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt                   pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	ArchivedAt                pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
+	CreatedAt                 time.Time          `db:"created_at" json:"created_at"`
+	Metadata                  []byte             `db:"metadata" json:"metadata"`
+	DeletedAt                 pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
+	RoomName                  *string            `db:"room_name" json:"room_name"`
+	RoomStatus                string             `db:"room_status" json:"room_status"`
+	RoomStartedAt             pgtype.Timestamptz `db:"room_started_at" json:"room_started_at"`
+	RoomEndedAt               pgtype.Timestamptz `db:"room_ended_at" json:"room_ended_at"`
+	RoomMetadata              []byte             `db:"room_metadata" json:"room_metadata"`
+	TranscriptID              pgtype.UUID        `db:"transcript_id" json:"transcript_id"`
+	TranscriptStatus          *string            `db:"transcript_status" json:"transcript_status"`
+	TranscriptCreatedAt       pgtype.Timestamptz `db:"transcript_created_at" json:"transcript_created_at"`
+	TranscriptCompletedAt     pgtype.Timestamptz `db:"transcript_completed_at" json:"transcript_completed_at"`
+	TranscriptLanguage        *string            `db:"transcript_language" json:"transcript_language"`
+	TranscriptDurationSeconds *int32             `db:"transcript_duration_seconds" json:"transcript_duration_seconds"`
+	TranscriptWordCount       *int32             `db:"transcript_word_count" json:"transcript_word_count"`
+	TranscriptProvider        *string            `db:"transcript_provider" json:"transcript_provider"`
+	TranscriptSummary         *string            `db:"transcript_summary" json:"transcript_summary"`
+	TranscriptActionItems     []string           `db:"transcript_action_items" json:"transcript_action_items"`
+	TranscriptErrorMessage    *string            `db:"transcript_error_message" json:"transcript_error_message"`
 }
 
 // Internal Meetings Queries
@@ -103,6 +118,7 @@ func (q *Queries) ListMeetingsByTenant(ctx context.Context, arg ListMeetingsByTe
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.Metadata,
+			&i.DeletedAt,
 			&i.RoomName,
 			&i.RoomStatus,
 			&i.RoomStartedAt,
@@ -112,6 +128,13 @@ func (q *Queries) ListMeetingsByTenant(ctx context.Context, arg ListMeetingsByTe
 			&i.TranscriptStatus,
 			&i.TranscriptCreatedAt,
 			&i.TranscriptCompletedAt,
+			&i.TranscriptLanguage,
+			&i.TranscriptDurationSeconds,
+			&i.TranscriptWordCount,
+			&i.TranscriptProvider,
+			&i.TranscriptSummary,
+			&i.TranscriptActionItems,
+			&i.TranscriptErrorMessage,
 		); err != nil {
 			return nil, err
 		}
