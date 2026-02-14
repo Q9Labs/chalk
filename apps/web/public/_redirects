@@ -1,3 +1,2 @@
 /assets/* /assets/:splat 200
-/_shell.html /_shell.html 200
-/* /_shell.html 200
+/* / 200
