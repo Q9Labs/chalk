@@ -19,3 +19,4 @@
 - 14:44 PKT: API: internal meetings list now includes transcript summary/action-items + metadata fields for dashboard rendering.
 - 14:46 PKT: Web DX: remove `wrangler pages dev` local flow (no Pages Functions needed); default `bun run dev` only.
 - 14:49 PKT: Web dashboard: add recording download action + show transcript summary; handle expired recordings (410/Gone).
+- 15:13 PKT: Web routing: ensure `/assets/*` never falls through to SPA HTML (stop-processing redirect + fallback to `/index.html`).
