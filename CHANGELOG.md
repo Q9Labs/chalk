@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Native: File-based logs (iOS/Android)** — write app + MeetingKit events/errors to `chalk.log`, `chalk.debug.log`, `chalk.error.log`, and add in-app “Share logs” so errors are copyable without fighting Simulator/Logcat selection.
+- **Native: Dev build/run scripts** — add `bun run ios:*` and `bun run android:*` helpers for consistent local build/install/launch.
 - **API: Debug diagnostics endpoints** — add `GET /api/v1/debug/auth` (token/server/build introspection) and `HEAD /api/v1/debug/ping` (latency probe) for the client System Health dialog.
 - **API: Internal tenant auth groundwork** — add `tenants.tenant_kind` (`external|internal`), plus `users`, `user_sessions`, and `tenant_claims` schema to support email login + cross-device dashboard without client API keys.
 - **API: Internal auth + dashboard** — add magic-link login endpoints (`/api/v1/internal/auth/*`) and meetings dashboard listing (`GET /api/v1/internal/meetings`) for Chalk-hosted apps.
@@ -21,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **API: Transcription default provider** — default now prefers `whisper` (when provisioned) and falls back to `groq`.
+- **SDK-React: Remote audio autoplay recovery** — when browsers (notably iOS Safari) block autoplay, retry remote participant audio on the next user interaction so audio doesn’t stay silent.
+- **SDK-React: Pre-join media hardening** — guard missing `mediaDevices/getUserMedia` and make audio-level metering resilient to `AudioContext` gesture restrictions.
 
 ### Changed
 

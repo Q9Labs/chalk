@@ -120,7 +120,9 @@ function PreJoinLobbyBase({
 	// Enumerate devices
 	const enumerateDevices = useCallback(async () => {
 		try {
-			const devices = await navigator.mediaDevices.enumerateDevices();
+			const md = navigator?.mediaDevices;
+			if (!md?.enumerateDevices) return;
+			const devices = await md.enumerateDevices();
 			setLocalVideoDevices(devices.filter((d) => d.kind === "videoinput"));
 			setLocalAudioInputDevices(devices.filter((d) => d.kind === "audioinput"));
 		} catch {
@@ -132,9 +134,9 @@ function PreJoinLobbyBase({
 	useEffect(() => {
 		enumerateDevices();
 		// Also listen for device changes
-		navigator.mediaDevices?.addEventListener("devicechange", enumerateDevices);
+		navigator.mediaDevices?.addEventListener?.("devicechange", enumerateDevices);
 		return () => {
-			navigator.mediaDevices?.removeEventListener("devicechange", enumerateDevices);
+			navigator.mediaDevices?.removeEventListener?.("devicechange", enumerateDevices);
 		};
 	}, [enumerateDevices]);
 
@@ -150,7 +152,12 @@ function PreJoinLobbyBase({
 		}
 
 		let cancelled = false;
-		navigator.mediaDevices
+		const md = navigator?.mediaDevices;
+		if (!md?.getUserMedia) {
+			setIsVideoEnabled(false);
+			return;
+		}
+		md
 			.getUserMedia({
 				video: selectedVideoDevice
 					? { deviceId: { exact: selectedVideoDevice } }
@@ -189,7 +196,12 @@ function PreJoinLobbyBase({
 		}
 
 		let cancelled = false;
-		navigator.mediaDevices
+		const md = navigator?.mediaDevices;
+		if (!md?.getUserMedia) {
+			setIsAudioEnabled(false);
+			return;
+		}
+		md
 			.getUserMedia({
 				audio: selectedAudioInput
 					? { deviceId: { exact: selectedAudioInput } }
@@ -224,10 +236,25 @@ function PreJoinLobbyBase({
 			return;
 		}
 
-		const audioContext = new AudioContext();
-		// Resume context if suspended (browser autoplay policy)
-		if (audioContext.state === "suspended") {
-			audioContext.resume();
+		const AudioContextCtor =
+			(globalThis as any).AudioContext ?? (globalThis as any).webkitAudioContext;
+		if (!AudioContextCtor) return;
+
+		let audioContext: any;
+		try {
+			audioContext = new AudioContextCtor();
+		} catch {
+			// Some browsers require a user gesture before constructing/resuming.
+			return;
+		}
+
+		// Resume context if suspended (browser autoplay policy). Best-effort.
+		try {
+			if (audioContext.state === "suspended") {
+				audioContext.resume?.().catch?.(() => {});
+			}
+		} catch {
+			// ignore
 		}
 		const stream = new MediaStream([track]);
 		const source = audioContext.createMediaStreamSource(stream);
@@ -237,7 +264,7 @@ function PreJoinLobbyBase({
 		source.connect(analyser);
 
 		const dataArray = new Uint8Array(analyser.frequencyBinCount);
-		let animationId: number;
+		let animationId: number | undefined;
 
 		const updateLevel = () => {
 			// Use frequency data for responsive visual feedback
@@ -257,8 +284,12 @@ function PreJoinLobbyBase({
 		updateLevel();
 
 		return () => {
-			cancelAnimationFrame(animationId);
-			audioContext.close();
+			if (typeof animationId === "number") cancelAnimationFrame(animationId);
+			try {
+				audioContext.close?.();
+			} catch {
+				// ignore
+			}
 		};
 	}, [localAudioTrack, isAudioEnabled]);
 

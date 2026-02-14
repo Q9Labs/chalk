@@ -7,7 +7,7 @@
  * Usage: Place once in your room component, passing all remote participants.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface AudioParticipant {
   id: string;
@@ -35,6 +35,22 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
   // Map of participant ID -> audio element (screen share audio)
   const screenShareAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
+  // When autoplay is blocked (common on iOS/Safari until user gesture), we need to
+  // retry play() on the next interaction. Without this, audio can stay silent.
+  const pendingAutoplayRetryRef = useRef<Set<HTMLMediaElement>>(new Set());
+  const [needsAutoplayUnlock, setNeedsAutoplayUnlock] = useState(false);
+
+  const markAutoplayBlocked = (el: HTMLMediaElement) => {
+    pendingAutoplayRetryRef.current.add(el);
+    // Setting true repeatedly is fine; avoids stale-closure edge cases.
+    setNeedsAutoplayUnlock(true);
+  };
+
+  const clearAutoplayRetryForElement = (el: HTMLMediaElement) => {
+    pendingAutoplayRetryRef.current.delete(el);
+    if (pendingAutoplayRetryRef.current.size === 0) setNeedsAutoplayUnlock(false);
+  };
+
   // Filter to remote participants with valid audio tracks
   const remoteWithAudio = participants.filter((p) => {
     if (p.isLocal) return false;
@@ -57,6 +73,68 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
       return false;
     }
   });
+
+  const unlockEvents = useMemo(
+    () => ['pointerdown', 'touchend', 'click', 'keydown'] as const,
+    []
+  );
+
+  useEffect(() => {
+    if (!needsAutoplayUnlock) return;
+    if (typeof window === 'undefined') return;
+
+    let inFlight = false;
+
+    const tryUnlock = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const els = Array.from(pendingAutoplayRetryRef.current);
+        if (els.length === 0) {
+          setNeedsAutoplayUnlock(false);
+          return;
+        }
+
+        // Retry play() for any elements that previously failed due to autoplay.
+        const results = await Promise.allSettled(els.map((el) => el.play()));
+        pendingAutoplayRetryRef.current.clear();
+        for (const [i, r] of results.entries()) {
+          const el = els[i];
+          if (!el) continue;
+          if (r.status === 'rejected') pendingAutoplayRetryRef.current.add(el);
+        }
+
+        if (pendingAutoplayRetryRef.current.size === 0) {
+          setNeedsAutoplayUnlock(false);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const handler = () => {
+      void tryUnlock();
+    };
+
+    const opts: AddEventListenerOptions = { capture: true, passive: true };
+    for (const ev of unlockEvents) {
+      window.addEventListener(ev, handler, opts);
+    }
+
+    // If the browser already considers the page activated, try immediately.
+    try {
+      const ua = (navigator as any)?.userActivation;
+      if (ua?.isActive || ua?.hasBeenActive) void tryUnlock();
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      for (const ev of unlockEvents) {
+        window.removeEventListener(ev, handler, opts);
+      }
+    };
+  }, [needsAutoplayUnlock, unlockEvents]);
 
   // Attach/update audio elements - NO cleanup on re-render to prevent audio breaks
   useEffect(() => {
@@ -92,8 +170,8 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
 
         // Handle autoplay restrictions
         audioEl.play().catch(() => {
-          // Autoplay was blocked - user interaction required
-          // This is expected on some browsers until user interacts with page
+          // Autoplay was blocked - retry on next user interaction.
+          markAutoplayBlocked(audioEl!);
         });
       }
     }
@@ -105,6 +183,7 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
       if (!activeIds.has(id)) {
         audioEl.srcObject = null;
         audioEl.pause();
+        clearAutoplayRetryForElement(audioEl);
         audioElements.delete(id);
       }
     }
@@ -118,6 +197,7 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
       for (const audioEl of audioElements.values()) {
         audioEl.srcObject = null;
         audioEl.pause();
+        clearAutoplayRetryForElement(audioEl);
       }
       audioElements.clear();
     };
@@ -136,6 +216,7 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
         if (audioEl) {
           audioEl.srcObject = null;
           audioEl.pause();
+          clearAutoplayRetryForElement(audioEl);
           audioElementsRef.current.delete(id);
         }
       };
@@ -187,7 +268,8 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
         const stream = new MediaStream([screenShareAudioTrack]);
         audioEl.srcObject = stream;
         audioEl.play().catch(() => {
-          // Autoplay was blocked - user interaction required
+          // Autoplay was blocked - retry on next user interaction.
+          markAutoplayBlocked(audioEl!);
         });
       }
     }
@@ -198,6 +280,7 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
       if (!activeIds.has(key)) {
         audioEl.srcObject = null;
         audioEl.pause();
+        clearAutoplayRetryForElement(audioEl);
         audioElements.delete(key);
       }
     }
@@ -210,6 +293,7 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
       for (const audioEl of audioElements.values()) {
         audioEl.srcObject = null;
         audioEl.pause();
+        clearAutoplayRetryForElement(audioEl);
       }
       audioElements.clear();
     };
