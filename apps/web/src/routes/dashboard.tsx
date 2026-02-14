@@ -17,9 +17,12 @@ type MeetingRow = {
 	room_name?: string | null;
 	status: string;
 	created_at: string;
+	deleted_at?: string | null;
 	size_bytes?: number | null;
 	duration_seconds?: number | null;
 	transcript_status?: string | null;
+	transcript_summary?: string | null;
+	transcript_action_items?: string[] | null;
 };
 
 type MeetingsResponse = {
@@ -88,6 +91,22 @@ function DashboardPage() {
 		const url = `${window.location.origin}/share/${data.share_token}`;
 		await navigator.clipboard.writeText(url);
 		return url;
+	}
+
+	async function downloadRecording(recordingId: string, token: string) {
+		const res = await fetch(`${apiUrl}/api/v1/recordings/${recordingId}/download`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		const data = (await res.json()) as any;
+		if (res.status === 410) {
+			throw new Error(data?.message || "recording has expired");
+		}
+		if (!res.ok) throw new Error(`download failed (${res.status})`);
+		const url = data?.download_url;
+		if (typeof url !== "string" || !url) {
+			throw new Error(data?.message || "recording is not ready yet");
+		}
+		window.open(url, "_blank", "noopener,noreferrer");
 	}
 
 	if (state.kind === "loading") {
@@ -191,23 +210,48 @@ function DashboardPage() {
 									</td>
 									<td className="p-3">
 										<div className="font-medium">{m.status}</div>
+										{m.status === "deleted" && (
+											<div className="text-xs text-muted-foreground">
+												Expired{m.deleted_at ? ` · ${new Date(m.deleted_at).toLocaleDateString()}` : ""}
+											</div>
+										)}
 									</td>
 									<td className="p-3">
 										<div className="font-medium">
 											{m.transcript_status || "none"}
 										</div>
+										{m.transcript_summary && (
+											<div className="mt-1 text-xs text-muted-foreground">
+												{m.transcript_summary}
+											</div>
+										)}
 									</td>
 									<td className="p-3 text-right">
-										<button
-											type="button"
-											className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
-											onClick={async () => {
-												const url = await createShareLink(m.id, state.token);
-												alert(`Copied: ${url}`);
-											}}
-										>
-											Copy share link
-										</button>
+										<div className="flex items-center justify-end gap-2">
+											<button
+												type="button"
+												className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
+												onClick={async () => {
+													try {
+														await downloadRecording(m.id, state.token);
+													} catch (e) {
+														alert(e instanceof Error ? e.message : String(e));
+													}
+												}}
+											>
+												Download
+											</button>
+											<button
+												type="button"
+												className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
+												onClick={async () => {
+													const url = await createShareLink(m.id, state.token);
+													alert(`Copied: ${url}`);
+												}}
+											>
+												Copy share link
+											</button>
+										</div>
 									</td>
 								</tr>
 							))}
@@ -225,4 +269,3 @@ function DashboardPage() {
 		</div>
 	);
 }
-
