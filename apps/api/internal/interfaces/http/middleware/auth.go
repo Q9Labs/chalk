@@ -12,9 +12,9 @@ import (
 
 const (
 	// Context keys
-	ClaimsKey   = "claims"
-	TenantKey   = "tenant"
-	APIKeyKey   = "api_key"
+	ClaimsKey = "claims"
+	TenantKey = "tenant"
+	APIKeyKey = "api_key"
 )
 
 // AuthMiddleware handles JWT authentication
@@ -122,13 +122,19 @@ func (m *AuthMiddleware) RequireHost() gin.HandlerFunc {
 type APIKeyMiddleware struct {
 	apiKeyService *infraAuth.APIKeyService
 	queries       *db.Queries
+	tenantLookup  *infraAuth.TenantLookup
 }
 
 // NewAPIKeyMiddleware creates a new API key middleware
 func NewAPIKeyMiddleware(apiKeyService *infraAuth.APIKeyService, queries *db.Queries) *APIKeyMiddleware {
+	var tenantLookup *infraAuth.TenantLookup
+	if queries != nil && apiKeyService != nil {
+		tenantLookup = infraAuth.NewTenantLookup(queries, apiKeyService)
+	}
 	return &APIKeyMiddleware{
 		apiKeyService: apiKeyService,
 		queries:       queries,
+		tenantLookup:  tenantLookup,
 	}
 }
 
@@ -159,40 +165,20 @@ func (m *APIKeyMiddleware) RequireAPIKey() gin.HandlerFunc {
 			return
 		}
 
-		// API-MED-01: Paginated API key lookup with no hard limit
-		// TODO: For O(1) lookup, add api_key_prefix column and index
-		var matchedTenant *db.Tenant
-		const pageSize int32 = 100
-		var offset int32 = 0
-		totalChecked := 0
-
-		for matchedTenant == nil {
-			tenants, err := m.queries.ListActiveTenants(c.Request.Context(), db.ListActiveTenantsParams{
-				Limit:  pageSize,
-				Offset: offset,
+		if m.tenantLookup == nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": "auth misconfigured",
 			})
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": "failed to validate API key",
-				})
-				return
-			}
-
-			if len(tenants) == 0 {
-				break // No more tenants to check
-			}
-
-			for _, tenant := range tenants {
-				totalChecked++
-				if m.apiKeyService.VerifyAPIKey(apiKey, tenant.ApiKeyHash) {
-					matchedTenant = &tenant
-					break
-				}
-			}
-
-			offset += pageSize
+			return
 		}
 
+		matchedTenant, err := m.tenantLookup.ResolveActiveTenant(c.Request.Context(), apiKey)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to validate API key",
+			})
+			return
+		}
 		if matchedTenant == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": "invalid API key",

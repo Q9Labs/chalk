@@ -17,3 +17,4 @@
 - **Axiom dataset default**: Use `chalk-api-prod` when `ENV=production` so prod logs don't 404 on missing datasets.
 - **Axiom ingest spam guardrail**: If the configured dataset is missing/unauthorized, fall back to stdout logger instead of retry-spamming stderr.
 - **Gin release mode**: Force Gin into release mode when `ENV=production` so ECS doesn't run with verbose debug logging.
+- **API key auth latency**: `POST /api/v1/auth/token` and `X-API-Key` middleware now avoid loading full tenant configs and parallelize API-key verification, preventing API Gateway 30s timeouts under large tenant counts.

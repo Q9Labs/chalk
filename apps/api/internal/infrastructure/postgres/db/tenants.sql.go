@@ -282,6 +282,45 @@ func (q *Queries) GetTenantByRoomID(ctx context.Context, id uuid.UUID) (Tenant, 
 	return i, err
 }
 
+const listActiveTenantAPIKeys = `-- name: ListActiveTenantAPIKeys :many
+SELECT id, api_key_hash
+FROM tenants
+WHERE is_active = true
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListActiveTenantAPIKeysParams struct {
+	Limit  int32 `db:"limit" json:"limit"`
+	Offset int32 `db:"offset" json:"offset"`
+}
+
+type ListActiveTenantAPIKeysRow struct {
+	ID         uuid.UUID `db:"id" json:"id"`
+	ApiKeyHash string    `db:"api_key_hash" json:"api_key_hash"`
+}
+
+// Minimal rowset for API key verification; avoid pulling large JSON configs for every tenant.
+func (q *Queries) ListActiveTenantAPIKeys(ctx context.Context, arg ListActiveTenantAPIKeysParams) ([]ListActiveTenantAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listActiveTenantAPIKeys, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveTenantAPIKeysRow{}
+	for rows.Next() {
+		var i ListActiveTenantAPIKeysRow
+		if err := rows.Scan(&i.ID, &i.ApiKeyHash); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveTenants = `-- name: ListActiveTenants :many
 SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
 WHERE is_active = true

@@ -15,13 +15,19 @@ type AuthHandler struct {
 	queries       *db.Queries
 	jwtService    *infraAuth.JWTService
 	apiKeyService *infraAuth.APIKeyService
+	tenantLookup  *infraAuth.TenantLookup
 }
 
 func NewAuthHandler(queries *db.Queries, jwtService *infraAuth.JWTService, apiKeyService *infraAuth.APIKeyService) *AuthHandler {
+	var tenantLookup *infraAuth.TenantLookup
+	if queries != nil && apiKeyService != nil {
+		tenantLookup = infraAuth.NewTenantLookup(queries, apiKeyService)
+	}
 	return &AuthHandler{
 		queries:       queries,
 		jwtService:    jwtService,
 		apiKeyService: apiKeyService,
+		tenantLookup:  tenantLookup,
 	}
 }
 
@@ -44,30 +50,27 @@ func (h *AuthHandler) Token(c *gin.Context) {
 		return
 	}
 
-	// Validate API key format
+	if h.apiKeyService == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "auth misconfigured"})
+		return
+	}
+
+	// Validate API key format (fast path; avoids DB work on obviously invalid keys).
 	if err := h.apiKeyService.ValidateAPIKeyFormat(req.APIKey); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid API key format"})
 		return
 	}
 
-	// Find tenant by checking all active tenants
-	tenants, err := h.queries.ListActiveTenants(c.Request.Context(), db.ListActiveTenantsParams{
-		Limit:  1000,
-		Offset: 0,
-	})
+	if h.tenantLookup == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "auth misconfigured"})
+		return
+	}
+
+	matchedTenant, err := h.tenantLookup.ResolveActiveTenant(c.Request.Context(), req.APIKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate API key"})
 		return
 	}
-
-	var matchedTenant *db.Tenant
-	for _, tenant := range tenants {
-		if h.apiKeyService.VerifyAPIKey(req.APIKey, tenant.ApiKeyHash) {
-			matchedTenant = &tenant
-			break
-		}
-	}
-
 	if matchedTenant == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 		return

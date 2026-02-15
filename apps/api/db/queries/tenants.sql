@@ -34,6 +34,14 @@ WHERE is_active = true
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
+-- name: ListActiveTenantAPIKeys :many
+-- Minimal rowset for API key verification; avoid pulling large JSON configs for every tenant.
+SELECT id, api_key_hash
+FROM tenants
+WHERE is_active = true
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
 -- name: UpdateTenant :one
 UPDATE tenants
 SET

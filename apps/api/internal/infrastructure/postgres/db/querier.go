@@ -125,6 +125,8 @@ type Querier interface {
 	ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoomsByTenantParams) ([]Room, error)
 	ListActiveRoomsWithParticipantCount(ctx context.Context, arg ListActiveRoomsWithParticipantCountParams) ([]ListActiveRoomsWithParticipantCountRow, error)
+	// Minimal rowset for API key verification; avoid pulling large JSON configs for every tenant.
+	ListActiveTenantAPIKeys(ctx context.Context, arg ListActiveTenantAPIKeysParams) ([]ListActiveTenantAPIKeysRow, error)
 	ListActiveTenants(ctx context.Context, arg ListActiveTenantsParams) ([]Tenant, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	ListAuditLogsByAction(ctx context.Context, arg ListAuditLogsByActionParams) ([]AuditLog, error)
