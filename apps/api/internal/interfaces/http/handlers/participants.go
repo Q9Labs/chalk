@@ -78,13 +78,6 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		} else {
 			roomID = existingRoom.ID
 		}
-	} else {
-		// UUID provided - verify room belongs to the caller's tenant if it exists
-		existingRoom, lookupErr := h.roomService.GetRoom(c.Request.Context(), roomID)
-		if lookupErr == nil && existingRoom.TenantID != claims.TenantID {
-			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-			return
-		}
 	}
 
 	var req AddParticipantRequest
@@ -103,18 +96,24 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		Metadata:       req.Metadata,
 	})
 	if err != nil {
+		if errors.Is(err, participant.ErrRoomNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
 		if errors.Is(err, participant.ErrRoomNotAvailable) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "room is not active"})
+			return
+		}
+		if errors.Is(err, participant.ErrRoomFull) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "room is full"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add participant: " + err.Error()})
 		return
 	}
 
-	// API-HIGH-08: Handle GetParticipant error instead of ignoring
-	p, err := h.participantService.GetParticipant(c.Request.Context(), output.ParticipantID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve participant: " + err.Error()})
+	if output.Participant == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve participant"})
 		return
 	}
 
@@ -124,7 +123,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, AddParticipantResponse{
-		Participant: *p,
+		Participant: *output.Participant,
 		Room: RoomResponse{
 			ID:     output.Room.ID.String(),
 			Name:   roomName,

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **API: Transcription default provider** — default now prefers `whisper` (when provisioned) and falls back to `groq`.
+- **API: Join room latency** — reduce join DB roundtrips (room+count in one query, avoid post-join participant fetch), and add a perf regression test for `POST /api/v1/rooms/:id/participants`.
 - **SDK-React: Remote audio autoplay recovery** — when browsers (notably iOS Safari) block autoplay, retry remote participant audio on the next user interaction so audio doesn’t stay silent.
 - **SDK-React: Pre-join media hardening** — guard missing `mediaDevices/getUserMedia` and make audio-level metering resilient to `AudioContext` gesture restrictions.
 

@@ -12,10 +12,12 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 var (
 	ErrRoomNotAvailable    = errors.New("room not available")
+	ErrRoomNotFound        = errors.New("room not found")
 	ErrRoomFull            = errors.New("room is full")
 	ErrTenantNotFound      = errors.New("tenant does not exist")
 	ErrParticipantNotFound = errors.New("participant not found")
@@ -45,15 +47,34 @@ type TokenIssuer interface {
 	GenerateTokenPair(claims auth.Claims) (*auth.TokenPair, error)
 }
 
+type participantDB interface {
+	CountActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
+	CreateParticipant(ctx context.Context, arg db.CreateParticipantParams) (db.Participant, error)
+	CreateRoomWithID(ctx context.Context, arg db.CreateRoomWithIDParams) (db.Room, error)
+	GetActiveRecordingByRoom(ctx context.Context, roomID uuid.UUID) (db.Recording, error)
+	GetParticipant(ctx context.Context, id uuid.UUID) (db.Participant, error)
+	GetParticipantByCloudflareID(ctx context.Context, cloudflareParticipantID string) (db.Participant, error)
+	GetParticipantByExternalUserAndRoom(ctx context.Context, arg db.GetParticipantByExternalUserAndRoomParams) (db.Participant, error)
+	GetRoom(ctx context.Context, id uuid.UUID) (db.Room, error)
+	GetRoomHost(ctx context.Context, roomID uuid.UUID) (db.Participant, error)
+	GetRoomWithParticipantCount(ctx context.Context, id uuid.UUID) (db.GetRoomWithParticipantCountRow, error)
+	GetTenant(ctx context.Context, id uuid.UUID) (db.Tenant, error)
+	ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]db.Participant, error)
+	ListParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]db.Participant, error)
+	ParticipantLeave(ctx context.Context, id uuid.UUID) (db.Participant, error)
+	ReactivateRoom(ctx context.Context, arg db.ReactivateRoomParams) (db.Room, error)
+	UpdateParticipant(ctx context.Context, arg db.UpdateParticipantParams) (db.Participant, error)
+}
+
 type Service struct {
-	db          *db.Queries
+	db          participantDB
 	cfClient    CloudflareClient
 	roomState   RoomStateManager
 	tokenIssuer TokenIssuer
 	hub         WebSocketHub
 }
 
-func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateManager, tokenIssuer TokenIssuer, hub WebSocketHub) *Service {
+func NewService(queries participantDB, cf CloudflareClient, roomState RoomStateManager, tokenIssuer TokenIssuer, hub WebSocketHub) *Service {
 	return &Service{
 		db:          queries,
 		cfClient:    cf,
@@ -83,6 +104,7 @@ type TenantConfigOutput struct {
 
 type JoinRoomOutput struct {
 	ParticipantID        uuid.UUID
+	Participant          *db.Participant
 	TokenPair            *auth.TokenPair
 	CFAuthToken          string
 	Room                 *db.Room
@@ -92,58 +114,100 @@ type JoinRoomOutput struct {
 }
 
 func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomOutput, error) {
-	room, err := s.db.GetRoom(ctx, input.RoomID)
-	roomCreated := false
+	type tenantJoinConfig struct {
+		AllowEarlyJoin               bool     `json:"allow_early_join"`
+		TranscriptionEnabled         bool     `json:"transcription_enabled"`
+		TranscriptionLanguage        string   `json:"transcription_language"`
+		TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
+		TranscriptionKeywords        []string `json:"transcription_keywords"`
+		FirstParticipantIsHost       bool     `json:"first_participant_is_host"`
+		ForceRecording               bool     `json:"force_recording"`
+	}
 
-	// Room doesn't exist - auto-create if tenant allows early join
+	parseTenantConfig := func(raw []byte) tenantJoinConfig {
+		var cfg tenantJoinConfig
+		if len(raw) > 0 {
+			_ = json.Unmarshal(raw, &cfg)
+		}
+		return cfg
+	}
+
+	buildCreateMeetingReq := func(title string, cfg tenantJoinConfig) cloudflare.CreateMeetingRequest {
+		if title == "" {
+			title = "Auto-created Room"
+		}
+		req := cloudflare.CreateMeetingRequest{Title: title}
+		if !cfg.TranscriptionEnabled {
+			return req
+		}
+		lang := cfg.TranscriptionLanguage
+		if lang == "" {
+			lang = "en-US"
+		}
+		req.AIConfig = &cloudflare.AIConfig{
+			Transcription: &cloudflare.TranscriptionConfig{
+				Language:        lang,
+				ProfanityFilter: cfg.TranscriptionProfanityFilter,
+				Keywords:        cfg.TranscriptionKeywords,
+			},
+		}
+		return req
+	}
+
+	roomFromCountRow := func(r db.GetRoomWithParticipantCountRow) db.Room {
+		return db.Room{
+			ID:                  r.ID,
+			TenantID:            r.TenantID,
+			CloudflareMeetingID: r.CloudflareMeetingID,
+			Name:                r.Name,
+			Config:              r.Config,
+			Status:              r.Status,
+			StartedAt:           r.StartedAt,
+			EndedAt:             r.EndedAt,
+			CreatedAt:           r.CreatedAt,
+			UpdatedAt:           r.UpdatedAt,
+			WhiteboardState:     r.WhiteboardState,
+			Metadata:            r.Metadata,
+		}
+	}
+
+	var (
+		room                    db.Room
+		roomCreated             bool
+		activeParticipantsCount int64
+
+		tenant       db.Tenant
+		tenantLoaded bool
+		tenantCfg    tenantJoinConfig
+	)
+
+	roomRow, err := s.db.GetRoomWithParticipantCount(ctx, input.RoomID)
 	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("failed to fetch room: %w", err)
+		}
+
+		// Room doesn't exist - auto-create if tenant allows early join.
 		if input.TenantID == uuid.Nil {
 			return nil, ErrRoomNotAvailable
 		}
 
-		tenant, err := s.db.GetTenant(ctx, input.TenantID)
+		t, err := s.db.GetTenant(ctx, input.TenantID)
 		if err != nil {
 			return nil, ErrTenantNotFound
 		}
-
-		// Check if tenant allows early join (auto-creation) and get transcription config
-		var tenantConfig struct {
-			AllowEarlyJoin               bool     `json:"allow_early_join"`
-			TranscriptionEnabled         bool     `json:"transcription_enabled"`
-			TranscriptionLanguage        string   `json:"transcription_language"`
-			TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
-			TranscriptionKeywords        []string `json:"transcription_keywords"`
-		}
+		tenant = t
+		tenantLoaded = true
 		if tenant.TenantConfig != nil {
-			_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
+			tenantCfg = parseTenantConfig(tenant.TenantConfig)
 		}
 
-		if !tenantConfig.AllowEarlyJoin {
+		if !tenantCfg.AllowEarlyJoin {
 			return nil, ErrRoomNotAvailable
 		}
 
-		// Auto-create the room
 		roomName := input.RoomName
-		if roomName == "" {
-			roomName = "Auto-created Room"
-		}
-
-		cfReq := cloudflare.CreateMeetingRequest{Title: roomName}
-		if tenantConfig.TranscriptionEnabled {
-			lang := tenantConfig.TranscriptionLanguage
-			if lang == "" {
-				lang = "en-US"
-			}
-			cfReq.AIConfig = &cloudflare.AIConfig{
-				Transcription: &cloudflare.TranscriptionConfig{
-					Language:        lang,
-					ProfanityFilter: tenantConfig.TranscriptionProfanityFilter,
-					Keywords:        tenantConfig.TranscriptionKeywords,
-				},
-			}
-		}
-
-		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cfReq)
+		cfMeeting, err := s.cfClient.CreateMeeting(ctx, buildCreateMeetingReq(roomName, tenantCfg))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create room: %w", err)
 		}
@@ -160,88 +224,66 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		}
 		room = newRoom
 		roomCreated = true
+		activeParticipantsCount = 0
+	} else {
+		room = roomFromCountRow(roomRow)
+		activeParticipantsCount = roomRow.ActiveParticipantCount
+
+		// Security: if a room exists but belongs to another tenant, act like it's missing.
+		if input.TenantID != uuid.Nil && room.TenantID != input.TenantID {
+			return nil, ErrRoomNotFound
+		}
+
+		// Room exists but is ended - reactivate it.
+		if room.Status != "active" {
+			t, err := s.db.GetTenant(ctx, room.TenantID)
+			if err != nil {
+				return nil, ErrTenantNotFound
+			}
+			tenant = t
+			tenantLoaded = true
+			if tenant.TenantConfig != nil {
+				tenantCfg = parseTenantConfig(tenant.TenantConfig)
+			}
+
+			if !tenantCfg.AllowEarlyJoin {
+				return nil, ErrRoomNotAvailable
+			}
+
+			roomName := ""
+			if room.Name != nil {
+				roomName = *room.Name
+			}
+			cfMeeting, err := s.cfClient.CreateMeeting(ctx, buildCreateMeetingReq(roomName, tenantCfg))
+			if err != nil {
+				return nil, fmt.Errorf("failed to reactivate room: %w", err)
+			}
+
+			room, err = s.db.ReactivateRoom(ctx, db.ReactivateRoomParams{
+				ID:                  input.RoomID,
+				CloudflareMeetingID: cfMeeting.ID,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to reactivate room in database: %w", err)
+			}
+			roomCreated = true // Room was reactivated (new CF meeting).
+		}
 	}
 
-	// Room exists but is ended - reactivate it
-	if room.Status != "active" {
-		tenant, err := s.db.GetTenant(ctx, room.TenantID)
+	if !tenantLoaded {
+		t, err := s.db.GetTenant(ctx, room.TenantID)
 		if err != nil {
 			return nil, ErrTenantNotFound
 		}
-
-		// Check if tenant allows early join (reactivation) and get transcription config
-		var tenantConfig struct {
-			AllowEarlyJoin               bool     `json:"allow_early_join"`
-			TranscriptionEnabled         bool     `json:"transcription_enabled"`
-			TranscriptionLanguage        string   `json:"transcription_language"`
-			TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
-			TranscriptionKeywords        []string `json:"transcription_keywords"`
-		}
+		tenant = t
+		tenantLoaded = true
 		if tenant.TenantConfig != nil {
-			_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
+			tenantCfg = parseTenantConfig(tenant.TenantConfig)
 		}
-
-		if !tenantConfig.AllowEarlyJoin {
-			return nil, ErrRoomNotAvailable
-		}
-
-		// Create new Cloudflare meeting for the reactivated room
-		roomName := ""
-		if room.Name != nil {
-			roomName = *room.Name
-		}
-		cfReq := cloudflare.CreateMeetingRequest{Title: roomName}
-		if tenantConfig.TranscriptionEnabled {
-			lang := tenantConfig.TranscriptionLanguage
-			if lang == "" {
-				lang = "en-US"
-			}
-			cfReq.AIConfig = &cloudflare.AIConfig{
-				Transcription: &cloudflare.TranscriptionConfig{
-					Language:        lang,
-					ProfanityFilter: tenantConfig.TranscriptionProfanityFilter,
-					Keywords:        tenantConfig.TranscriptionKeywords,
-				},
-			}
-		}
-		cfMeeting, err := s.cfClient.CreateMeeting(ctx, cfReq)
-		if err != nil {
-			return nil, fmt.Errorf("failed to reactivate room: %w", err)
-		}
-
-		// Reactivate room in database with new CF meeting ID
-		room, err = s.db.ReactivateRoom(ctx, db.ReactivateRoomParams{
-			ID:                  input.RoomID,
-			CloudflareMeetingID: cfMeeting.ID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to reactivate room in database: %w", err)
-		}
-		roomCreated = true // Room was reactivated (new CF meeting)
 	}
 
-	activeParticipantsCount, err := s.db.CountActiveParticipantsByRoom(ctx, input.RoomID)
-	if err != nil {
-		return nil, errors.New("error fetching participant count")
-	}
-	tenant, err := s.db.GetTenant(ctx, room.TenantID)
-	if err != nil {
-		return nil, ErrTenantNotFound
-	}
 	if activeParticipantsCount >= int64(tenant.MaxParticipantsPerRoom) {
 		return nil, ErrRoomFull
-	}
-
-	// Check for existing active participant (multi-device support)
-	if input.ExternalUserID != "" {
-		existing, err := s.db.GetParticipantByExternalUserAndRoom(ctx, db.GetParticipantByExternalUserAndRoomParams{
-			RoomID:         input.RoomID,
-			ExternalUserID: strPtr(input.ExternalUserID),
-		})
-		// If found and still active (hasn't left), return existing with refreshed token
-		if err == nil && !existing.LeftAt.Valid {
-			return s.RefreshToken(ctx, existing.ID)
-		}
 	}
 
 	presetName := cloudflare.PresetParticipant
@@ -253,17 +295,6 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	// This makes RTK participant.userId match our canonical participant ID.
 	participantID := uuid.New()
 	clientSpecificID := participantID.String()
-
-	// Parse tenant config for all relevant settings
-	var tenantCfg struct {
-		TranscriptionEnabled   bool `json:"transcription_enabled"`
-		FirstParticipantIsHost bool `json:"first_participant_is_host"`
-		ForceRecording         bool `json:"force_recording"`
-		AllowEarlyJoin         bool `json:"allow_early_join"`
-	}
-	if tenant.TenantConfig != nil {
-		_ = json.Unmarshal(tenant.TenantConfig, &tenantCfg)
-	}
 
 	// Build tenant config output for response
 	tenantConfigOutput := TenantConfigOutput{
@@ -281,6 +312,49 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			presetName = cloudflare.PresetHost
 		} else {
 			role = "participant"
+		}
+	}
+
+	// Check for existing active participant (multi-device support).
+	// If found and still active (hasn't left), return existing with refreshed token.
+	if input.ExternalUserID != "" {
+		existing, err := s.db.GetParticipantByExternalUserAndRoom(ctx, db.GetParticipantByExternalUserAndRoomParams{
+			RoomID:         input.RoomID,
+			ExternalUserID: strPtr(input.ExternalUserID),
+		})
+		if err == nil && !existing.LeftAt.Valid {
+			cfParticipant, err := s.cfClient.RefreshParticipantToken(ctx, room.CloudflareMeetingID, existing.CloudflareParticipantID)
+			if err != nil {
+				return nil, fmt.Errorf("cloudflare token refresh failed: %w", err)
+			}
+
+			displayName := ""
+			if existing.DisplayName != nil {
+				displayName = *existing.DisplayName
+			}
+
+			tokenPair, err := s.tokenIssuer.GenerateTokenPair(auth.Claims{
+				Subject:     existing.ID.String(),
+				RoomID:      existing.RoomID,
+				TenantID:    room.TenantID,
+				DisplayName: displayName,
+				Role:        existing.Role,
+				CFAuthToken: cfParticipant.Token,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("token generation failed: %w", err)
+			}
+
+			return &JoinRoomOutput{
+				ParticipantID:        existing.ID,
+				Participant:          &existing,
+				TokenPair:            tokenPair,
+				CFAuthToken:          cfParticipant.Token,
+				Room:                 &room,
+				RoomCreated:          false,
+				TenantConfig:         tenantConfigOutput,
+				ShouldStartRecording: false,
+			}, nil
 		}
 	}
 
@@ -360,6 +434,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 
 	return &JoinRoomOutput{
 		ParticipantID:        participant.ID,
+		Participant:          &participant,
 		TokenPair:            tokenPair,
 		CFAuthToken:          cfParticipant.Token,
 		Room:                 &room,
@@ -507,6 +582,7 @@ func (s *Service) RefreshToken(ctx context.Context, participantID uuid.UUID) (*J
 
 	return &JoinRoomOutput{
 		ParticipantID: participant.ID,
+		Participant:   &participant,
 		TokenPair:     tokenPair,
 		CFAuthToken:   cfParticipant.Token,
 		Room:          &room,
