@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Infra: Monitoring dashboard + alarms for whisper/capacity** — expand CloudWatch dashboards with ALB 5xx + ECS saturation widgets (stress env) and Whisper queue/throughput/duration widgets + alarms (prod module) to make capacity bottlenecks explicit during load tests.
+- **Web: Room UI** — remove “Copy invite link” host overlay.
 
 ### Removed
 

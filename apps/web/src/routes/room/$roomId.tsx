@@ -21,11 +21,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
-import {
-  fetchInternalAccessToken,
-  getApiUrl,
-  getJoinContext,
-} from "../../lib/internalAuth";
+import { getJoinContext } from "../../lib/internalAuth";
 
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
@@ -45,7 +41,6 @@ function RoomPage() {
   const navigate = useNavigate();
 
   const [storedUserName, setStoredUserName] = useState<string>("");
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   // Load username from sessionStorage after mount
   useEffect(() => {
@@ -72,35 +67,6 @@ function RoomPage() {
 
   return (
     <div className="h-screen w-screen relative">
-      {role === "host" && !import.meta.env.VITE_CHALK_API_KEY && (
-        <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
-          <button
-            type="button"
-            className="rounded-md bg-background/80 backdrop-blur border px-3 py-1.5 text-xs hover:bg-background"
-            onClick={async () => {
-              const apiUrl = getApiUrl();
-              const token = await fetchInternalAccessToken(apiUrl);
-              const res = await fetch(
-                `${apiUrl}/api/v1/rooms/${roomId}/join-token`,
-                {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${token}` },
-                },
-              );
-              if (!res.ok) throw new Error(`failed (${res.status})`);
-              const data = (await res.json()) as { join_token: string };
-              const url = `${window.location.origin}/j/${data.join_token}`;
-              setInviteLink(url);
-              await navigator.clipboard.writeText(url);
-            }}
-          >
-            Copy invite link
-          </button>
-          {inviteLink && (
-            <span className="text-xs text-muted-foreground">copied</span>
-          )}
-        </div>
-      )}
       {/*@ts-ignore*/}
       <VideoConference
         roomId={roomId}
