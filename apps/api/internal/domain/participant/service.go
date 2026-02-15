@@ -276,7 +276,6 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			return nil, ErrTenantNotFound
 		}
 		tenant = t
-		tenantLoaded = true
 		if tenant.TenantConfig != nil {
 			tenantCfg = parseTenantConfig(tenant.TenantConfig)
 		}
