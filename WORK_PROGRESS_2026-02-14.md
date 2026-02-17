@@ -199,3 +199,4 @@
 - 13:48:28Z Web CI/CD run `22018520195` -> `success` (Cloudflare Pages deploy)
 - 13:48:28Z SDK CI/CD run `22018520198` -> `skipped` (workflow config: tag/manual only)
 - 2026-02-14T14:23:35Z transcription default provider: prefer `whisper` when available; fallback `groq` (fix domain defaults + docs examples)
+- 2026-02-14T14:41:32Z API CI/CD run `22019111734` -> `success` (default transcription provider prefer whisper)
