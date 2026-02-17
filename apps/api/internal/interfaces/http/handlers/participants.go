@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/participant"
 	"github.com/Q9Labs/chalk/internal/domain/room"
+	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
@@ -65,13 +68,16 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 29*time.Second)
+	defer cancel()
+
 	// Try to parse as UUID first, fall back to room name lookup
 	roomIDParam := c.Param("id")
 	roomID, err := uuid.Parse(roomIDParam)
 
 	if err != nil {
 		// Not a UUID - look up by room name
-		existingRoom, lookupErr := h.roomService.GetRoomByName(c.Request.Context(), roomIDParam, claims.TenantID)
+		existingRoom, lookupErr := h.roomService.GetRoomByName(ctx, roomIDParam, claims.TenantID)
 		if lookupErr != nil {
 			// Room doesn't exist yet - generate UUID for auto-creation (allow_early_join will handle it)
 			roomID = uuid.New()
@@ -86,7 +92,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
-	output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
+	output, err := h.participantService.JoinRoom(ctx, participant.JoinRoomInput{
 		RoomID:         roomID,
 		RoomName:       roomIDParam, // Use original param as room name for auto-creation
 		TenantID:       claims.TenantID,
@@ -96,6 +102,26 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		Metadata:       req.Metadata,
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			h.recordError(c, err, "join_room_context_timeout", nil)
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "request timeout while joining room"})
+			return
+		}
+
+		var cfErr *cloudflare.RequestError
+		if errors.As(err, &cfErr) {
+			h.recordError(c, err, "join_room_cloudflare", map[string]any{
+				"cloudflare_operation": cfErr.Operation,
+				"cloudflare_status":    cfErr.Status,
+			})
+			status := http.StatusBadGateway
+			if cfErr.Status >= 400 && cfErr.Status < 500 {
+				status = http.StatusBadRequest
+			}
+			c.JSON(status, gin.H{"error": "cloudflare join failed"})
+			return
+		}
+
 		if errors.Is(err, participant.ErrRoomNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 			return
@@ -108,6 +134,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "room is full"})
 			return
 		}
+		h.recordError(c, err, "join_room_unexpected", nil)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add participant: " + err.Error()})
 		return
 	}
@@ -143,6 +170,24 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		AuthToken:            output.CFAuthToken,
 		ShouldStartRecording: output.ShouldStartRecording,
 	})
+}
+
+func (h *ParticipantHandler) recordError(c *gin.Context, err error, step string, fields map[string]any) {
+	claims, ok := middleware.GetClaims(c)
+	tenantID := ""
+	if ok && claims != nil {
+		tenantID = claims.TenantID.String()
+	}
+
+	meta := map[string]any{
+		"step":       step,
+		"request_id": middleware.GetRequestID(c),
+		"tenant_id":  tenantID,
+	}
+	for k, v := range fields {
+		meta[k] = v
+	}
+	c.Error(err).SetType(gin.ErrorTypePrivate).SetMeta(meta)
 }
 
 func (h *ParticipantHandler) List(c *gin.Context) {

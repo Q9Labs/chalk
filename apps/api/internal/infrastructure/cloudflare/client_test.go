@@ -187,7 +187,13 @@ func TestCreateMeeting_APIError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, meeting)
-	assert.Contains(t, err.Error(), "cloudflare API error")
+
+	var reqErr *RequestError
+	assert.ErrorAs(t, err, &reqErr)
+	assert.Equal(t, "create meeting", reqErr.Operation)
+	assert.Equal(t, "POST", reqErr.Method)
+	assert.Equal(t, "/meetings", reqErr.Path)
+	assert.Equal(t, http.StatusBadRequest, reqErr.Status)
 }
 
 func TestCreateMeeting_MalformedJSON(t *testing.T) {
@@ -211,7 +217,10 @@ func TestCreateMeeting_MalformedJSON(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, meeting)
-	assert.Contains(t, err.Error(), "decode response")
+	var reqErr *RequestError
+	assert.ErrorAs(t, err, &reqErr)
+	assert.Equal(t, "create meeting", reqErr.Operation)
+	assert.Equal(t, 200, reqErr.Status)
 }
 
 func TestGetMeeting_Success(t *testing.T) {

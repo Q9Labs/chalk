@@ -13,6 +13,40 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+type RequestError struct {
+	Operation string
+	Method    string
+	Path      string
+	Status    int
+	Body      string
+	Err       error
+}
+
+func (e *RequestError) Error() string {
+	if e == nil {
+		return "cloudflare api error"
+	}
+	if e.Err != nil {
+		return fmt.Sprintf("cloudflare %s %s failed: status=%d body=%s: %v", e.Method, e.Path, e.Status, e.Body, e.Err)
+	}
+	return fmt.Sprintf("cloudflare %s %s failed: status=%d body=%s", e.Method, e.Path, e.Status, e.Body)
+}
+
+func (e *RequestError) Unwrap() error {
+	return e.Err
+}
+
+func newAPIError(operation, method, path string, status int, body []byte, err error) *RequestError {
+    return &RequestError{
+		Operation: operation,
+		Method:    method,
+		Path:      path,
+		Status:    status,
+		Body:      string(body),
+		Err:       err,
+	}
+}
+
 // Client is the Cloudflare RealtimeKit API client
 type Client struct {
 	httpClient *http.Client
@@ -90,24 +124,24 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 
 	resp, err := c.doRequest(ctx, "POST", "/meetings", req)
 	if err != nil {
-		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+		return nil, newAPIError("create meeting", "POST", "/meetings", 0, nil, err)
 	}
 	defer resp.Body.Close()
 
 	// Read raw body first for debugging
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, nil, err)
 	}
 
 	// Log response for debugging
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, bodyBytes, nil)
 	}
 
 	var result Response[Meeting]
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, bodyBytes, err)
 	}
 
 	if result.Result != nil {
@@ -115,7 +149,7 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 	}
 
 	if !result.Success {
-		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors))
 	}
 
 	return &result.Data, nil
@@ -208,14 +242,14 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 	path := fmt.Sprintf("/meetings/%s/participants", meetingID)
 	resp, err := c.doRequest(ctx, "POST", path, req)
 	if err != nil {
-		return nil, fmt.Errorf("cloudflare request failed: %w", err)
+		return nil, newAPIError("add participant", "POST", path, 0, nil, err)
 	}
 	defer resp.Body.Close()
 
 	// Read raw body first for debugging
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, nil, err)
 	}
 
 	// DEBUG: Log response from Cloudflare
@@ -223,12 +257,12 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 
 	// Log response for debugging
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("cloudflare API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, bodyBytes, nil)
 	}
 
 	var result Response[Participant]
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, bodyBytes, err)
 	}
 
 	// Check both Data and Result fields
@@ -237,7 +271,7 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 	}
 
 	if !result.Success {
-		return nil, fmt.Errorf("cloudflare error: %v", result.Errors)
+		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors))
 	}
 
 	return &result.Data, nil

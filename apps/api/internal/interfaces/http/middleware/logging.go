@@ -3,6 +3,7 @@ package middleware
 import (
 	"log/slog"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,8 +72,9 @@ func RequestLogger() gin.HandlerFunc {
 
 		// Add error context for non-2xx responses
 		if statusCode >= 400 {
+			attrs = attachGinErrors(attrs, c)
 			if errMsg := c.Errors.String(); errMsg != "" {
-				attrs = append(attrs, "error", errMsg)
+				attrs = append(attrs, "gin_error_chain", errMsg)
 			}
 			if statusCode >= 500 {
 				attrs = append(attrs, "stack", captureStack(3))
@@ -85,6 +87,28 @@ func RequestLogger() gin.HandlerFunc {
 
 		slog.Info("http.request", attrs...)
 	}
+}
+
+func attachGinErrors(attrs []any, c *gin.Context) []any {
+	if len(c.Errors) == 0 {
+		return attrs
+	}
+
+	for i, e := range c.Errors {
+		if e.Err != nil {
+			attrs = append(attrs, "error_"+strconv.Itoa(i), e.Err.Error())
+		}
+		if e.Meta != nil {
+			if m, ok := e.Meta.(map[string]any); ok {
+				for k, v := range m {
+					attrs = append(attrs, k, v)
+				}
+			} else {
+				attrs = append(attrs, "error_meta_"+strconv.Itoa(i), e.Meta)
+			}
+		}
+	}
+	return attrs
 }
 
 // captureStack returns a condensed stack trace starting from skip frames up
