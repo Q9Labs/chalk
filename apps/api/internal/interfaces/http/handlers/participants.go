@@ -187,7 +187,7 @@ func (h *ParticipantHandler) recordError(c *gin.Context, err error, step string,
 	for k, v := range fields {
 		meta[k] = v
 	}
-	c.Error(err).SetType(gin.ErrorTypePrivate).SetMeta(meta)
+	_ = c.Error(err).SetType(gin.ErrorTypePrivate).SetMeta(meta)
 }
 
 func (h *ParticipantHandler) List(c *gin.Context) {
