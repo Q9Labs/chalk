@@ -11,6 +11,11 @@ import {
 } from "../../utils/icons";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
+import {
+	applyThemeToDocument,
+	resolveThemeFromDocument,
+	subscribeToThemeChanges,
+} from "../../utils/theme";
 import { Avatar, Toast } from "../atomic";
 import { DeviceSelector } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
@@ -86,13 +91,13 @@ function PreJoinLobbyBase({
 	const [isVideoEnabled, setIsVideoEnabled] = useState(initialVideoEnabled);
 	const [isAudioEnabled, setIsAudioEnabled] = useState(initialAudioEnabled);
 	const [showSettings, setShowSettings] = useState(initialShowSettings);
-	const [isDarkMode, setIsDarkMode] = useState(() => {
-		// Sync with document theme if available (for app integration)
-		if (typeof document !== "undefined") {
-			return document.documentElement.classList.contains("dark");
-		}
-		return initialTheme === "dark";
-	});
+	const [isDarkMode, setIsDarkMode] = useState(
+		() =>
+			resolveThemeFromDocument({
+				defaultTheme: initialTheme,
+				allowSystem: true,
+			}) === "dark",
+	);
 	const [openDropdown, setOpenDropdown] = useState<"audio" | "video" | null>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -326,15 +331,25 @@ function PreJoinLobbyBase({
 		};
 	}, [activeVideoTrack, isVideoEnabled]);
 
-	const toggleTheme = () => {
-		const newIsDark = !isDarkMode;
-		setIsDarkMode(newIsDark);
-		// Sync with document for app-wide theme (when used with ThemeProvider)
-		if (typeof document !== "undefined") {
-			document.documentElement.classList.remove("light", "dark");
-			document.documentElement.classList.add(newIsDark ? "dark" : "light");
-		}
-	};
+	useEffect(() => {
+		return subscribeToThemeChanges(
+			(theme) => {
+				setIsDarkMode(theme === "dark");
+			},
+			{
+				defaultTheme: initialTheme,
+				allowSystem: true,
+			},
+		);
+	}, [initialTheme]);
+
+	const toggleTheme = useCallback(() => {
+		setIsDarkMode((prev) => {
+			const nextTheme = prev ? "light" : "dark";
+			applyThemeToDocument(nextTheme);
+			return nextTheme === "dark";
+		});
+	}, []);
 
 	useEffect(() => {
 		// Keep in sync with `userName` (e.g. async auth) until the user edits the input.
@@ -384,6 +399,7 @@ function PreJoinLobbyBase({
 		<div
 			ref={containerRef}
 			data-chalk
+			data-chalk-theme={isDarkMode ? "dark" : "light"}
 			className={cn(
 				"chalk-root min-h-screen flex flex-col overflow-hidden relative",
 				isDarkMode && "dark",
@@ -522,6 +538,7 @@ function PreJoinLobbyBase({
 						type="button"
 						onClick={toggleTheme}
 						title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+						aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
 						className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/10 text-(--foreground)"
 					>
 						{isDarkMode ? <Sun02Icon size={20} /> : <Moon02Icon size={20} />}

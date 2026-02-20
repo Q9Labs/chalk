@@ -43,6 +43,7 @@ import { PreJoinLobby } from "./PreJoinLobby";
 import { LeaveConfirmationDialog } from "../composite/LeaveConfirmationDialog";
 
 type Phase = "lobby" | "joining" | "meeting" | "end";
+const DISCONNECT_GRACE_MS = 8000;
 
 interface FeatureContext {
 	participants: readonly Participant[];
@@ -225,6 +226,7 @@ function VideoConferenceBase({
 	const [joinStartTime, setJoinStartTime] = useState<number | null>(null);
 	const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 	const [isExiting, setIsExiting] = useState(false);
+	const [isDisconnectGraceActive, setIsDisconnectGraceActive] = useState(false);
 
 	const effectiveRoomName = roomName ?? roomId;
 
@@ -241,6 +243,8 @@ function VideoConferenceBase({
 	const prevScreenShareStateRef = useRef(false);
 	const lastWsToastAtRef = useRef(0);
 	const roomIdRef = useRef(roomId);
+	const phaseRef = useRef<Phase>("lobby");
+	const disconnectGraceTimeoutRef = useRef<number | null>(null);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
@@ -288,6 +292,17 @@ function VideoConferenceBase({
 	);
 
 	useEffect(() => {
+		phaseRef.current = phase;
+	}, [phase]);
+
+	const clearDisconnectGraceTimeout = useCallback(() => {
+		if (disconnectGraceTimeoutRef.current !== null) {
+			window.clearTimeout(disconnectGraceTimeoutRef.current);
+			disconnectGraceTimeoutRef.current = null;
+		}
+	}, []);
+
+	useEffect(() => {
 		refreshDevices();
 	}, [refreshDevices]);
 
@@ -304,6 +319,26 @@ function VideoConferenceBase({
 			setJoinStartTime(Date.now());
 		}
 	}, [phase, joinStartTime]);
+
+	useEffect(() => {
+		if (phase !== "meeting") {
+			clearDisconnectGraceTimeout();
+			setIsDisconnectGraceActive(false);
+		}
+	}, [phase, clearDisconnectGraceTimeout]);
+
+	useEffect(() => {
+		if (status !== "disconnected") {
+			clearDisconnectGraceTimeout();
+			setIsDisconnectGraceActive(false);
+		}
+	}, [status, clearDisconnectGraceTimeout]);
+
+	useEffect(() => {
+		return () => {
+			clearDisconnectGraceTimeout();
+		};
+	}, [clearDisconnectGraceTimeout]);
 
 	useEffect(() => {
 		if (phase !== "meeting" || !joinStartTime) return;
@@ -543,6 +578,8 @@ function VideoConferenceBase({
 	const initiateLeave = useCallback(async () => {
 		setShowLeaveConfirm(false);
 		setIsExiting(true);
+		clearDisconnectGraceTimeout();
+		setIsDisconnectGraceActive(false);
 
 		// Wait for animation to finish (600ms)
 		await new Promise((resolve) => setTimeout(resolve, 600));
@@ -561,9 +598,11 @@ function VideoConferenceBase({
 		} finally {
 			setIsExiting(false);
 		}
-	}, [leave, play, onEnd, buildEndData, onLeave]);
+	}, [leave, play, onEnd, buildEndData, onLeave, clearDisconnectGraceTimeout]);
 
 	const handleRejoin = useCallback(() => {
+		clearDisconnectGraceTimeout();
+		setIsDisconnectGraceActive(false);
 		setPhase("lobby");
 		setMeetingDuration(0);
 		setJoinStartTime(null);
@@ -576,7 +615,7 @@ function VideoConferenceBase({
 		screenShareCountRef.current = 0;
 		whiteboardOpenedRef.current = false;
 		prevScreenShareStateRef.current = false;
-	}, []);
+	}, [clearDisconnectGraceTimeout]);
 
 	const handleGoHome = useCallback(() => {
 		onLeave?.();
@@ -624,11 +663,18 @@ function VideoConferenceBase({
 
 	const connectionStatus = useMemo(() => {
 		if (status === "connected") return "connected" as const;
-		if (status === "connecting") return "connecting" as const;
 		if (status === "reconnecting") return "reconnecting" as const;
-		if (status === "disconnected") return "connected" as const; // Idle state, not a failure
+		if (status === "connecting") {
+			return phase === "meeting" ? "reconnecting" : "connecting";
+		}
+		if (status === "disconnected") {
+			if (phase === "meeting") {
+				return isDisconnectGraceActive ? "reconnecting" : "failed";
+			}
+			return "connecting";
+		}
 		return "failed" as const;
-	}, [status]);
+	}, [status, phase, isDisconnectGraceActive]);
 
 	// Sync phase with connection state (handles remount after RTKProvider wraps)
 	useEffect(() => {
@@ -639,11 +685,25 @@ function VideoConferenceBase({
 
 	useEffect(() => {
 		const handleDisconnect = session.on("disconnected", () => {
-			if (phase === "meeting") {
-				onEnd?.(buildEndData());
-				setPhase("end");
-				onLeave?.();
-			}
+			if (phaseRef.current !== "meeting") return;
+
+			setIsDisconnectGraceActive(true);
+			clearDisconnectGraceTimeout();
+			disconnectGraceTimeoutRef.current = window.setTimeout(() => {
+				disconnectGraceTimeoutRef.current = null;
+				const latestStatus = session.room.getState().status;
+				if (phaseRef.current !== "meeting") return;
+
+				if (latestStatus === "disconnected" || latestStatus === "failed") {
+					setIsDisconnectGraceActive(false);
+					onEnd?.(buildEndData());
+					setPhase("end");
+					onLeave?.();
+					return;
+				}
+
+				setIsDisconnectGraceActive(false);
+			}, DISCONNECT_GRACE_MS);
 		});
 
 		const handleError = session.on("error", (err) => {
@@ -819,7 +879,7 @@ function VideoConferenceBase({
 			handleDisconnect();
 			handleError();
 		};
-	}, [session, phase, onEnd, buildEndData, onLeave, onError]);
+	}, [session, onEnd, buildEndData, onLeave, onError, clearDisconnectGraceTimeout]);
 
 	const canManageParticipants = localParticipant?.role === "host";
 

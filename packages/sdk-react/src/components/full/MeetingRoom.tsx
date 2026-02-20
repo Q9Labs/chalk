@@ -5,6 +5,11 @@ import { useDraggable } from "../../hooks/ui/useDraggable";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
 import {
+	applyThemeToDocument,
+	resolveThemeFromDocument,
+	subscribeToThemeChanges,
+} from "../../utils/theme";
+import {
 	ArrowDown01Icon,
 	ArrowLeft01Icon,
 	ArrowRight01Icon,
@@ -221,20 +226,13 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	const [isExiting, setIsExiting] = useState(false);
 	const leaveTimeoutRef = useRef<number | null>(null);
 	const isMobile = useIsMobile();
-	const [isDarkMode, setIsDarkMode] = useState(() => {
-		if (
-			typeof document !== "undefined" &&
-			document.documentElement.classList.contains("dark")
-		) {
-			return true;
-		}
-		return (
-			theme === "dark" ||
-			(theme === "system" &&
-				typeof window !== "undefined" &&
-				window.matchMedia("(prefers-color-scheme: dark)").matches)
-		);
-	});
+	const [isDarkMode, setIsDarkMode] = useState(
+		() =>
+			resolveThemeFromDocument({
+				defaultTheme: theme === "dark" ? "dark" : "light",
+				allowSystem: theme === "system",
+			}) === "dark",
+	);
 
 	const containerRef = useRef<HTMLDivElement>(null);
 	const pillRef = useRef<HTMLDivElement>(null);
@@ -261,14 +259,23 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 
 	const toggleTheme = useCallback(() => {
 		setIsDarkMode((prev) => {
-			const newValue = !prev;
-			if (typeof document !== "undefined") {
-				document.documentElement.classList.remove("light", "dark");
-				document.documentElement.classList.add(newValue ? "dark" : "light");
-			}
-			return newValue;
+			const nextTheme = prev ? "light" : "dark";
+			applyThemeToDocument(nextTheme);
+			return nextTheme === "dark";
 		});
 	}, []);
+
+	useEffect(() => {
+		return subscribeToThemeChanges(
+			(nextTheme) => {
+				setIsDarkMode(nextTheme === "dark");
+			},
+			{
+				defaultTheme: theme === "dark" ? "dark" : "light",
+				allowSystem: theme === "system",
+			},
+		);
+	}, [theme]);
 
 	useEffect(() => {
 		if (enableTour && showTourOnFirstVisit) {
