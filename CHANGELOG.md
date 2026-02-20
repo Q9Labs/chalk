@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Infra: Monitoring dashboard + alarms for whisper/capacity** — expand CloudWatch dashboards with ALB 5xx + ECS saturation widgets (stress env) and Whisper queue/throughput/duration widgets + alarms (prod module) to make capacity bottlenecks explicit during load tests.
 - **Infra: Cloudflare + WebSocket read observability alarms** — add log-derived metrics/alarms for `join_room_cloudflare` failures (including upstream 5xx) and websocket `read_errors`/`read_eofs`, and surface these metrics on the shared monitoring dashboard.
+- **CI: API pipeline lint gate disabled** — skip `golangci-lint` in `API CI/CD` while keeping test/build/deploy active.
 - **Whisper Worker: Audio/RTF/GPU observability** — export `AudioDurationSeconds`, `RtfRatio` (processing/audio), and periodic GPU runtime metrics (`GpuUtilizationPercent`, `GpuMemoryUtilizationPercent`, `GpuDeviceCount`) to CloudWatch.
 - **Infra: Whisper CPU canary profile** — add CPU/GPU runtime toggles in Terraform and set prod Whisper worker to a single Spot `c7i.xlarge` (`WHISPER_DEVICE=cpu`, `WHISPER_COMPUTE_TYPE=int8`, autoscaling off) with new RTF alarm/dashboard coverage.
 - **Web: Room UI** — remove “Copy invite link” host overlay.

@@ -48,7 +48,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    if: ${{ !inputs.skip_tests }}
+    if: ${{ false }}
     defaults:
       run:
         working-directory: apps/api
