@@ -1,13 +1,17 @@
 # Whisper Worker Ops Guide
 
 ## Overview
-- Service: GPU whisper transcription worker (faster-whisper)
+- Service: whisper transcription worker (CPU/GPU; faster-whisper)
 - Queue key: `transcription:jobs`
 - Result key: `transcription:result:{job_id}` (TTL 24h)
 - Axiom dataset: `chalk-api-prod` (shared prod dataset; env `AXIOM_DATASET`)
 - Log file: `/var/log/whisper-worker.log`
 - CloudWatch log group: `/aws/ec2/chalk-whisper-<env>`
-- Metrics: CloudWatch PutMetricData `TranscriptionQueueDepth` (namespace `Chalk/Whisper`, dimension `Environment`)
+- Metrics namespace: `Chalk/Whisper` (dimension `Environment`)
+  - Queue: `TranscriptionQueueDepth`, `TranscriptionJobQueueDepth`, `TranscriptionProcessingQueueDepth`, `QueueWaitMs`
+  - Throughput: `TranscriptionsTotal`, `TranscriptionsCompleted`, `TranscriptionsFailed`
+  - Timing: `ProcessingTimeSeconds`, `AudioDurationSeconds`, `RtfRatio`, `TranscriptionDurationMs`
+  - Runtime (GPU nodes): `GpuUtilizationPercent`, `GpuMemoryUtilizationPercent`, `GpuDeviceCount`
 
 ## Deploy (Prod)
 1. Make code/infra changes in `infrastructure/whisper-worker` and/or `infrastructure/terraform`.
@@ -54,7 +58,8 @@
   - `worker.start`
   - `whisper.queue_depth`
   - `whisper.transcription` (success/error)
-  - `metrics.publish_failed` (Axiom ingestion failures)
+  - `metrics.gpu_publish_failed`
+  - `metrics.publish_failed` (CloudWatch queue metric publish failures)
   - `worker.unexpected_error`
 - `traceparent` from queued jobs is used to continue distributed traces from the API.
 - Axiom ingest failures no longer block jobs; events fall back to stdout JSON.

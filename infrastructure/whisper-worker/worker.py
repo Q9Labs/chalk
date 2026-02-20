@@ -25,10 +25,12 @@ from urllib.error import HTTPError, URLError
 import boto3
 import redis
 from audio_download import download_audio
+from gpu_metrics import read_gpu_metrics
 from observability import audio_url_meta, emit_event, setup_axiom_logging
 from otel import extract_context_from_traceparent, init_tracing
 from transcriber import WhisperTranscriber
 from worker_config import (
+    GPU_METRICS_ENABLED,
     JOB_QUEUE,
     LOG_LEVEL,
     LOG_TRANSCRIPT,
@@ -71,6 +73,7 @@ class WhisperWorker:
         self.transcriber = WhisperTranscriber()
         self.metric_namespace = os.getenv("WHISPER_METRIC_NAMESPACE", "Chalk/Whisper")
         self.cloudwatch = boto3.client("cloudwatch", region_name=os.getenv("AWS_REGION") or None)
+        self.enable_gpu_metrics = GPU_METRICS_ENABLED
 
     def _compute_queue_wait_ms(self, created_at: Optional[str]) -> Optional[int]:
         if not created_at:
@@ -91,6 +94,8 @@ class WhisperWorker:
         queue_wait_ms: Optional[int],
         download_size_bytes: Optional[int],
         processing_time_seconds: Optional[float],
+        audio_duration_seconds: Optional[int],
+        rtf_ratio: Optional[float],
     ) -> None:
         try:
             environment = os.getenv("ENVIRONMENT", "dev")
@@ -154,6 +159,28 @@ class WhisperWorker:
                     }
                 )
 
+            if audio_duration_seconds is not None and audio_duration_seconds > 0:
+                metric_data.append(
+                    {
+                        "MetricName": "AudioDurationSeconds",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Seconds",
+                        "Value": audio_duration_seconds,
+                    }
+                )
+
+            if rtf_ratio is not None and rtf_ratio >= 0:
+                metric_data.append(
+                    {
+                        "MetricName": "RtfRatio",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "None",
+                        "Value": rtf_ratio,
+                    }
+                )
+
             if download_size_bytes is not None and download_size_bytes > 0:
                 metric_data.append(
                     {
@@ -175,6 +202,63 @@ class WhisperWorker:
                 level=logging.WARNING,
                 event={
                     "event": "metrics.transcription_publish_failed",
+                    "error": str(e),
+                    "error_class": e.__class__.__name__,
+                    "error_stack": traceback.format_exc(),
+                },
+            )
+
+    def _compute_rtf_ratio(
+        self, processing_time_seconds: Optional[float], audio_duration_seconds: Optional[int]
+    ) -> Optional[float]:
+        if processing_time_seconds is None:
+            return None
+        if audio_duration_seconds is None or audio_duration_seconds <= 0:
+            return None
+        return round(processing_time_seconds / audio_duration_seconds, 6)
+
+    def publish_gpu_metrics(self) -> None:
+        if not self.enable_gpu_metrics:
+            return
+
+        try:
+            gpu_metrics = read_gpu_metrics()
+            if gpu_metrics is None:
+                return
+
+            environment = os.getenv("ENVIRONMENT", "dev")
+            self.cloudwatch.put_metric_data(
+                Namespace=self.metric_namespace,
+                MetricData=[
+                    {
+                        "MetricName": "GpuUtilizationPercent",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Percent",
+                        "Value": gpu_metrics.utilization_gpu_pct,
+                    },
+                    {
+                        "MetricName": "GpuMemoryUtilizationPercent",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Percent",
+                        "Value": gpu_metrics.utilization_memory_pct,
+                    },
+                    {
+                        "MetricName": "GpuDeviceCount",
+                        "Dimensions": [{"Name": "Environment", "Value": environment}],
+                        "Timestamp": datetime.now(timezone.utc),
+                        "Unit": "Count",
+                        "Value": gpu_metrics.device_count,
+                    },
+                ],
+            )
+        except Exception as e:
+            emit_event(
+                logger,
+                level=logging.WARNING,
+                event={
+                    "event": "metrics.gpu_publish_failed",
                     "error": str(e),
                     "error_class": e.__class__.__name__,
                     "error_stack": traceback.format_exc(),
@@ -285,6 +369,10 @@ class WhisperWorker:
                     "duration_seconds": result.duration_seconds,
                     "word_count": result.word_count,
                     "processing_time_seconds": result.processing_time_seconds,
+                    "audio_duration_seconds": result.duration_seconds,
+                    "rtf_ratio": self._compute_rtf_ratio(
+                        result.processing_time_seconds, result.duration_seconds
+                    ),
                     "inference_mode": self.transcriber.last_inference_mode,
                     "batch_size": self.transcriber.last_batch_size,
                     "oom_retries": self.transcriber.last_oom_retries,
@@ -293,6 +381,9 @@ class WhisperWorker:
             )
             if result.text:
                 wide_event["transcript_chars"] = len(result.text)
+                if LOG_TRANSCRIPT:
+                    max_chars = max(0, LOG_TRANSCRIPT_MAX_CHARS)
+                    wide_event["transcript"] = result.text[:max_chars] if max_chars > 0 else ""
             emit_event(logger, level=logging.INFO, event=wide_event)
             self.publish_transcription_metrics(
                 outcome="completed",
@@ -300,6 +391,8 @@ class WhisperWorker:
                 queue_wait_ms=queue_wait_ms,
                 download_size_bytes=download_size_bytes,
                 processing_time_seconds=result.processing_time_seconds,
+                audio_duration_seconds=result.duration_seconds,
+                rtf_ratio=wide_event["rtf_ratio"],
             )
             return result
 
@@ -328,6 +421,8 @@ class WhisperWorker:
                 queue_wait_ms=queue_wait_ms,
                 download_size_bytes=download_size_bytes,
                 processing_time_seconds=None,
+                audio_duration_seconds=None,
+                rtf_ratio=None,
             )
             return TranscriptionResult(
                 job_id=job.job_id,
@@ -461,6 +556,7 @@ class WhisperWorker:
                 now = time.time()
                 if now - last_metric_time >= 60:
                     self.publish_queue_metrics()
+                    self.publish_gpu_metrics()
                     last_metric_time = now
 
                 job_data = self.redis.brpoplpush(

@@ -64,9 +64,15 @@ variable "worker_image_tag" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type (must be GPU instance)"
+  description = "EC2 instance type for Whisper worker"
   type        = string
   default     = "g4dn.xlarge" # 1 NVIDIA T4 GPU, 4 vCPU, 16GB RAM
+}
+
+variable "use_gpu" {
+  description = "Enable GPU runtime for Whisper worker (NVIDIA toolkit + docker --gpus all)"
+  type        = bool
+  default     = true
 }
 
 variable "use_spot" {
@@ -115,6 +121,30 @@ variable "log_level" {
   description = "Log level for whisper worker (DEBUG, INFO, WARNING, ERROR)"
   type        = string
   default     = "INFO"
+}
+
+variable "whisper_device" {
+  description = "WHISPER_DEVICE runtime env value"
+  type        = string
+  default     = "cuda"
+}
+
+variable "whisper_compute_type" {
+  description = "WHISPER_COMPUTE_TYPE runtime env value"
+  type        = string
+  default     = "float16"
+}
+
+variable "whisper_cpu_threads" {
+  description = "WHISPER_CPU_THREADS runtime env value"
+  type        = number
+  default     = 4
+}
+
+variable "whisper_gpu_metrics_enabled" {
+  description = "Enable periodic GPU utilization metric export from the worker"
+  type        = bool
+  default     = true
 }
 
 variable "enable_autoscaling" {

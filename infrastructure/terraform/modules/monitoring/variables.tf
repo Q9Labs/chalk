@@ -93,6 +93,12 @@ variable "whisper_metric_namespace" {
   default     = "Chalk/Whisper"
 }
 
+variable "whisper_rtf_p95_threshold" {
+  description = "Alert threshold for Whisper RTF p95 (processing_time / audio_duration)"
+  type        = number
+  default     = 2
+}
+
 variable "enable_ecs_alarms" {
   description = "Enable ECS CloudWatch alarms"
   type        = bool

@@ -367,6 +367,7 @@ module "monitoring" {
   redis_cache_cluster_ids    = module.elasticache.member_cache_cluster_ids
   api_gateway_id             = module.api_gateway.http_api_id
   whisper_enabled            = true
+  whisper_rtf_p95_threshold  = 2
 
   alert_emails = var.alert_emails
 }
@@ -396,17 +397,23 @@ module "whisper" {
   redis_port            = module.elasticache.port
   ecr_repository_url    = module.ecr.whisper_repository_url
   worker_image_tag      = "latest"
+  instance_type         = "c7i.xlarge"
+  use_gpu               = false
   # Prevent scale-to-zero: the queue depth metric is emitted by the worker itself,
   # so if desired/min hit 0 it cannot auto-scale back up and transcripts will time out.
   min_capacity       = 1
   desired_capacity   = 1
-  max_capacity       = 2
-  enable_autoscaling = true
+  max_capacity       = 1
+  enable_autoscaling = false
 
   # Spot is safe because the worker queue is Redis-backed and jobs are requeued on worker startup.
   # Note: Spot is interruptible; if capacity is unavailable for > POST_MEETING_WHISPER_TIMEOUT,
   # transcripts may still time out.
-  use_spot = true
+  use_spot                    = true
+  whisper_device              = "cpu"
+  whisper_compute_type        = "int8"
+  whisper_cpu_threads         = 8
+  whisper_gpu_metrics_enabled = false
 }
 
 # Allow whisper workers to access Redis

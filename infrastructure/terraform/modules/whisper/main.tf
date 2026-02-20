@@ -1,5 +1,5 @@
 # Whisper Transcription Worker Module
-# Self-hosted faster-whisper on GPU instance for transcription
+# Self-hosted faster-whisper on CPU/GPU instance for transcription
 
 terraform {
   required_version = ">= 1.9"
@@ -19,12 +19,26 @@ locals {
     Environment = var.environment
     Module      = "whisper"
   })
+
+  gpu_setup_script = var.use_gpu ? (
+    <<-GPU_SETUP
+    # Install NVIDIA Container Toolkit
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+    curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.repo | \
+      tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+    yum install -y nvidia-container-toolkit
+    nvidia-ctk runtime configure --runtime=docker
+    systemctl restart docker
+  GPU_SETUP
+  ) : ""
+
+  docker_gpu_args = var.use_gpu ? "--gpus all" : ""
 }
 
 data "aws_region" "current" {}
 
 # -----------------------------------------------------------------------------
-# AMI - Amazon Linux 2 with NVIDIA drivers
+# AMI - Amazon Linux 2 ECS variants
 # -----------------------------------------------------------------------------
 
 data "aws_ami" "gpu" {
@@ -34,6 +48,21 @@ data "aws_ami" "gpu" {
   filter {
     name   = "name"
     values = ["amzn2-ami-ecs-gpu-hvm-*-x86_64-ebs"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+data "aws_ami" "cpu" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-ecs-hvm-*-x86_64-ebs"]
   }
 
   filter {
@@ -243,7 +272,7 @@ resource "aws_cloudwatch_log_group" "whisper" {
 
 resource "aws_launch_template" "whisper" {
   name_prefix   = "${local.name}-"
-  image_id      = data.aws_ami.gpu.id
+  image_id      = var.use_gpu ? data.aws_ami.gpu.id : data.aws_ami.cpu.id
   instance_type = var.instance_type
 
   dynamic "instance_market_options" {
@@ -281,13 +310,7 @@ resource "aws_launch_template" "whisper" {
     systemctl enable docker
     systemctl start docker
 
-    # Install NVIDIA Container Toolkit
-    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-    curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.repo | \
-      tee /etc/yum.repos.d/nvidia-container-toolkit.repo
-    yum install -y nvidia-container-toolkit
-    nvidia-ctk runtime configure --runtime=docker
-    systemctl restart docker
+    ${local.gpu_setup_script}
 
     # Install CloudWatch agent
     yum install -y amazon-cloudwatch-agent jq
@@ -321,19 +344,24 @@ resource "aws_launch_template" "whisper" {
     AXIOM_JSON=$(aws secretsmanager get-secret-value \
       --secret-id "${var.axiom_secret_arn}" \
       --query SecretString --output text)
-	    AXIOM_TOKEN=$(echo "$AXIOM_JSON" | jq -r '.token // empty')
+    AXIOM_TOKEN=$(echo "$AXIOM_JSON" | jq -r '.token // empty')
 
-	    AXIOM_DATASET="${var.axiom_dataset_whisper}"
-	    AXIOM_DOMAIN="api.axiom.co"
-	    AXIOM_TRACES_DATASET="chalk-prod-traces"
-	    ENVIRONMENT="${var.environment}"
-	    AWS_REGION="${data.aws_region.current.name}"
-	    LOG_LEVEL="${var.log_level}"
-	    WHISPER_LOG_TRANSCRIPT="false"
-	    WHISPER_LOG_TRANSCRIPT_MAX_CHARS="0"
+    AXIOM_DATASET="${var.axiom_dataset_whisper}"
+    AXIOM_DOMAIN="api.axiom.co"
+    AXIOM_TRACES_DATASET="chalk-prod-traces"
+    ENVIRONMENT="${var.environment}"
+    AWS_REGION="${data.aws_region.current.name}"
+    LOG_LEVEL="${var.log_level}"
+    WHISPER_LOG_TRANSCRIPT="false"
+    WHISPER_LOG_TRANSCRIPT_MAX_CHARS="0"
+    WHISPER_DEVICE="${var.whisper_device}"
+    WHISPER_COMPUTE_TYPE="${var.whisper_compute_type}"
+    WHISPER_CPU_THREADS="${var.whisper_cpu_threads}"
+    WHISPER_GPU_METRICS_ENABLED="${var.whisper_gpu_metrics_enabled}"
 
-	    export REDIS_URL AXIOM_TOKEN AXIOM_DATASET ENVIRONMENT AWS_REGION LOG_LEVEL \
-	      AXIOM_DOMAIN AXIOM_TRACES_DATASET WHISPER_LOG_TRANSCRIPT WHISPER_LOG_TRANSCRIPT_MAX_CHARS
+    export REDIS_URL AXIOM_TOKEN AXIOM_DATASET ENVIRONMENT AWS_REGION LOG_LEVEL \
+      AXIOM_DOMAIN AXIOM_TRACES_DATASET WHISPER_LOG_TRANSCRIPT WHISPER_LOG_TRANSCRIPT_MAX_CHARS \
+      WHISPER_DEVICE WHISPER_COMPUTE_TYPE WHISPER_CPU_THREADS WHISPER_GPU_METRICS_ENABLED
 
     # Authenticate with ECR
     ECR_REGISTRY=$(echo "${var.ecr_repository_url}" | cut -d'/' -f1)
@@ -343,20 +371,26 @@ resource "aws_launch_template" "whisper" {
     # Pull and run whisper worker
     docker pull ${var.ecr_repository_url}:${var.worker_image_tag}
 
+    DOCKER_GPU_ARGS="${local.docker_gpu_args}"
+
     docker run -d \
       --name whisper-worker \
       --restart always \
-      --gpus all \
+      $DOCKER_GPU_ARGS \
       -e REDIS_URL \
       -e AWS_REGION \
       -e LOG_LEVEL \
-	      -e AXIOM_TOKEN \
-	      -e AXIOM_DATASET \
-	      -e AXIOM_DOMAIN \
-	      -e AXIOM_TRACES_DATASET \
-	      -e ENVIRONMENT \
-	      -e WHISPER_LOG_TRANSCRIPT \
-	      -e WHISPER_LOG_TRANSCRIPT_MAX_CHARS \
+      -e AXIOM_TOKEN \
+      -e AXIOM_DATASET \
+      -e AXIOM_DOMAIN \
+      -e AXIOM_TRACES_DATASET \
+      -e ENVIRONMENT \
+      -e WHISPER_LOG_TRANSCRIPT \
+      -e WHISPER_LOG_TRANSCRIPT_MAX_CHARS \
+      -e WHISPER_DEVICE \
+      -e WHISPER_COMPUTE_TYPE \
+      -e WHISPER_CPU_THREADS \
+      -e WHISPER_GPU_METRICS_ENABLED \
       -v /var/log:/var/log \
       ${var.ecr_repository_url}:${var.worker_image_tag}
   EOF

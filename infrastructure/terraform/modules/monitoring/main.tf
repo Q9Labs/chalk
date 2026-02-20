@@ -612,6 +612,29 @@ resource "aws_cloudwatch_metric_alarm" "whisper_failures_high" {
   tags = local.tags
 }
 
+resource "aws_cloudwatch_metric_alarm" "whisper_rtf_high" {
+  count = var.whisper_enabled && var.enable_whisper_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-whisper-rtf-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "RtfRatio"
+  namespace           = var.whisper_metric_namespace
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = var.whisper_rtf_p95_threshold
+  alarm_description   = "Whisper processing-time/audio-duration ratio p95 is elevated"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Environment = var.environment
+  }
+
+  tags = local.tags
+}
+
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${local.name}-overview"
 
@@ -827,12 +850,30 @@ resource "aws_cloudwatch_dashboard" "main" {
         width  = 8
         height = 6
         properties = {
-          title  = "Whisper Duration"
+          title  = "Whisper Processing vs Audio"
           region = data.aws_region.current.name
           metrics = var.whisper_enabled ? [
-            [var.whisper_metric_namespace, "TranscriptionDurationMs", "Environment", var.environment, { label = "Duration p50", stat = "p50" }],
-            [".", "TranscriptionDurationMs", ".", ".", { label = "Duration p95", stat = "p95" }],
-            [".", "ProcessingTimeSeconds", ".", ".", { label = "Process Time p95 (s)", stat = "p95", yAxis = "right" }]
+            [var.whisper_metric_namespace, "ProcessingTimeSeconds", "Environment", var.environment, { label = "Processing p95 (s)", stat = "p95" }],
+            [".", "AudioDurationSeconds", ".", ".", { label = "Audio p95 (s)", stat = "p95" }],
+            [".", "RtfRatio", ".", ".", { label = "RTF p50", stat = "p50", yAxis = "right" }],
+            [".", "RtfRatio", ".", ".", { label = "RTF p95", stat = "p95", yAxis = "right" }]
+          ] : []
+          period = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 16
+        y      = 25
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Whisper GPU Utilization"
+          region = data.aws_region.current.name
+          metrics = var.whisper_enabled ? [
+            [var.whisper_metric_namespace, "GpuUtilizationPercent", "Environment", var.environment, { label = "GPU Util", stat = "Average" }],
+            [".", "GpuMemoryUtilizationPercent", ".", ".", { label = "GPU Mem Util", stat = "Average" }],
+            [".", "GpuDeviceCount", ".", ".", { label = "GPU Count", stat = "Maximum", yAxis = "right" }]
           ] : []
           period = 300
         }
