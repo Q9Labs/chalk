@@ -23,12 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **API: Transcription default provider** — default now prefers `whisper` (when provisioned) and falls back to `groq`.
 - **API: Join room latency** — reduce join DB roundtrips (room+count in one query, avoid post-join participant fetch), and add a perf regression test for `POST /api/v1/rooms/:id/participants`.
+- **API: Cloudflare meeting/participant resilience** — add bounded retry + jitter/backoff for `CreateMeeting` and `AddParticipant`, include request correlation fields (`tenant_id`, `room_id`, `request_id`), and map participant Cloudflare upstream failures to `502/503` instead of generic 500s.
+- **API: Redis shutdown races** — cancel and drain background workers before router/Redis close to prevent `redis: client is closed` during shutdown.
+- **API: WebSocket read EOF noise** — classify benign EOF/closed-network disconnects as peer disconnects, and emit dedicated `read_eofs`/`read_errors` counters to separate expected disconnects from true internal failures.
 - **SDK-React: Remote audio autoplay recovery** — when browsers (notably iOS Safari) block autoplay, retry remote participant audio on the next user interaction so audio doesn’t stay silent.
 - **SDK-React: Pre-join media hardening** — guard missing `mediaDevices/getUserMedia` and make audio-level metering resilient to `AudioContext` gesture restrictions.
 
 ### Changed
 
 - **Infra: Monitoring dashboard + alarms for whisper/capacity** — expand CloudWatch dashboards with ALB 5xx + ECS saturation widgets (stress env) and Whisper queue/throughput/duration widgets + alarms (prod module) to make capacity bottlenecks explicit during load tests.
+- **Infra: Cloudflare + WebSocket read observability alarms** — add log-derived metrics/alarms for `join_room_cloudflare` failures (including upstream 5xx) and websocket `read_errors`/`read_eofs`, and surface these metrics on the shared monitoring dashboard.
 - **Whisper Worker: Audio/RTF/GPU observability** — export `AudioDurationSeconds`, `RtfRatio` (processing/audio), and periodic GPU runtime metrics (`GpuUtilizationPercent`, `GpuMemoryUtilizationPercent`, `GpuDeviceCount`) to CloudWatch.
 - **Infra: Whisper CPU canary profile** — add CPU/GPU runtime toggles in Terraform and set prod Whisper worker to a single Spot `c7i.xlarge` (`WHISPER_DEVICE=cpu`, `WHISPER_COMPUTE_TYPE=int8`, autoscaling off) with new RTF alarm/dashboard coverage.
 - **Web: Room UI** — remove “Copy invite link” host overlay.

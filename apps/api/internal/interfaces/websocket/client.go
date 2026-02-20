@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -174,6 +177,13 @@ func (c *Client) logger() *slog.Logger {
 	)
 }
 
+func isBenignReadDisconnect(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	return strings.Contains(err.Error(), "use of closed network connection")
+}
+
 // readPump reads messages from the WebSocket connection
 func (c *Client) readPump(ctx context.Context) {
 	defer func() {
@@ -202,12 +212,20 @@ func (c *Client) readPump(ctx context.Context) {
 				_ = c.CloseWith(cerr.Code, "")
 				return
 			}
+			if isBenignReadDisconnect(err) {
+				recordWSReadEOF()
+				c.setDisconnect("peer", websocket.StatusNormalClosure, "read_eof", nil)
+				// Connection is already closed by peer/network; close local side cleanly.
+				_ = c.CloseWith(websocket.StatusNormalClosure, "read_eof")
+				return
+			}
 			if ctx.Err() != nil {
 				// Server shutdown / request context cancellation.
 				_ = c.CloseWith(websocket.StatusGoingAway, "context_canceled")
 				return
 			}
 			// No close frame; treat as internal/network failure and close with 1011.
+			recordWSReadError()
 			c.setDisconnect("server", websocket.StatusInternalError, "read_error", err)
 			c.logger().Error(
 				"websocket read error",

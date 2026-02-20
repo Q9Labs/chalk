@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -223,6 +224,81 @@ func TestCreateMeeting_MalformedJSON(t *testing.T) {
 	assert.Equal(t, 200, reqErr.Status)
 }
 
+func TestCreateMeeting_RetryOnTransientStatus(t *testing.T) {
+	var attempts atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt := attempts.Add(1)
+		if attempt < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"success": false}`))
+			return
+		}
+
+		meetingResp := Response[Meeting]{
+			Success: true,
+			Data: Meeting{
+				ID:     "meeting-123",
+				Title:  "Retry Meeting",
+				Status: MeetingStatusActive,
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(meetingResp)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		AccountID: "acc-123",
+		AppID:     "app-456",
+		APIToken:  "test-token",
+	}
+	client := NewClient(cfg)
+	client.baseURL = server.URL
+
+	meeting, err := client.CreateMeeting(context.Background(), CreateMeetingRequest{
+		Title: "Retry Meeting",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, meeting)
+	assert.Equal(t, "meeting-123", meeting.ID)
+	assert.Equal(t, int32(3), attempts.Load())
+}
+
+func TestCreateMeeting_NoRetryOnClientErrorStatus(t *testing.T) {
+	var attempts atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"success": false}`))
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		AccountID: "acc-123",
+		AppID:     "app-456",
+		APIToken:  "test-token",
+	}
+	client := NewClient(cfg)
+	client.baseURL = server.URL
+
+	meeting, err := client.CreateMeeting(context.Background(), CreateMeetingRequest{
+		Title: "Bad Request Meeting",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, meeting)
+	assert.Equal(t, int32(1), attempts.Load())
+
+	var reqErr *RequestError
+	require.ErrorAs(t, err, &reqErr)
+	assert.Equal(t, http.StatusBadRequest, reqErr.Status)
+	assert.Equal(t, 1, reqErr.Attempt)
+}
+
 func TestGetMeeting_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
@@ -420,6 +496,103 @@ func TestAddParticipant_MalformedResponse(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, participant)
+}
+
+func TestAddParticipant_RetryOnTransientStatus(t *testing.T) {
+	var attempts atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt := attempts.Add(1)
+		if attempt < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"success": false}`))
+			return
+		}
+
+		participantResp := Response[Participant]{
+			Success: true,
+			Data: Participant{
+				ID:               "participant-123",
+				Name:             "John Doe",
+				PresetName:       PresetParticipant,
+				ClientSpecificID: "user-456",
+				Token:            "auth-token-xyz",
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(participantResp)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		AccountID: "acc-123",
+		AppID:     "app-456",
+		APIToken:  "test-token",
+	}
+	client := NewClient(cfg)
+	client.baseURL = server.URL
+
+	participant, err := client.AddParticipant(context.Background(), "meeting-123", AddParticipantRequest{
+		Name:             "John Doe",
+		PresetName:       PresetParticipant,
+		ClientSpecificID: "user-456",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, participant)
+	assert.Equal(t, int32(3), attempts.Load())
+}
+
+func TestAddParticipant_NoRetryOnClientErrorStatus(t *testing.T) {
+	var attempts atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"success": false}`))
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		AccountID: "acc-123",
+		AppID:     "app-456",
+		APIToken:  "test-token",
+	}
+	client := NewClient(cfg)
+	client.baseURL = server.URL
+
+	participant, err := client.AddParticipant(context.Background(), "meeting-123", AddParticipantRequest{
+		Name: "John Doe",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, participant)
+	assert.Equal(t, int32(1), attempts.Load())
+
+	var reqErr *RequestError
+	require.ErrorAs(t, err, &reqErr)
+	assert.Equal(t, http.StatusBadRequest, reqErr.Status)
+	assert.Equal(t, 1, reqErr.Attempt)
+}
+
+type timeoutNetError struct{}
+
+func (timeoutNetError) Error() string   { return "timeout" }
+func (timeoutNetError) Timeout() bool   { return true }
+func (timeoutNetError) Temporary() bool { return true }
+
+func TestShouldRetryAddParticipant(t *testing.T) {
+	ctx := context.Background()
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	assert.True(t, shouldRetryAddParticipant(ctx, http.StatusServiceUnavailable, nil))
+	assert.True(t, shouldRetryAddParticipant(ctx, http.StatusTooManyRequests, nil))
+	assert.False(t, shouldRetryAddParticipant(ctx, http.StatusBadRequest, nil))
+	assert.True(t, shouldRetryAddParticipant(ctx, 0, timeoutNetError{}))
+	assert.False(t, shouldRetryAddParticipant(ctx, 0, context.Canceled))
+	assert.False(t, shouldRetryAddParticipant(cancelled, http.StatusServiceUnavailable, nil))
 }
 
 func TestRemoveParticipant_Success(t *testing.T) {

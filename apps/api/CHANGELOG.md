@@ -11,6 +11,7 @@
 - **Post-meeting webhook payloads**: Include participant metadata and external IDs in tenant webhook payloads for easier identification.
 - **Wide event logging for recording & webhook flow**: Replaced ~60 scattered `slog.Info/Debug/Error` calls with 5 canonical wide events (`recording.webhook_received`, `recording.process`, `recording.post_meeting`, `recording.webhook_delivered`, `recording.stalled_check`). Each event is emitted once per operation via `defer`, accumulating all context (IDs, durations, outcomes, errors) into a single structured log line queryable in Axiom. Removed `[chalk]` prefix convention — event names are self-describing.
 - **OpenTelemetry tracing**: Added OTEL tracing middleware + outbound HTTP instrumentation and propagation into Whisper jobs via `traceparent`. Logs now include `trace_id`/`span_id`, and the API returns `X-Chalk-Trace-Id` for support/debug.
+- **Cloudflare participant/meeting observability**: Added structured Cloudflare request logs (`operation`, `attempt`, `status_code`, `tenant_id`, `room_id`, `request_id`, elapsed timing) for `CreateMeeting` and `AddParticipant`, plus propagated request context from participant handler.
 
 ### Fixed
 
@@ -19,3 +20,6 @@
 - **Gin release mode**: Force Gin into release mode when `ENV=production` so ECS doesn't run with verbose debug logging.
 - **API key auth latency**: `POST /api/v1/auth/token` and `X-API-Key` middleware now avoid loading full tenant configs and parallelize API-key verification, preventing API Gateway 30s timeouts under large tenant counts.
 - **Join-room observability on Cloudflare failures**: `POST /api/v1/rooms/:id/participants` now enforces request-level context timeout and logs Cloudflare `create meeting`/`add participant` failures with operation, status, body, and stack-backed request correlation metadata so 5xx incidents are attributable in Axiom.
+- **Cloudflare transient failure handling**: Added bounded retries with backoff+jitter for `CreateMeeting` and `AddParticipant`, and map participant join Cloudflare failures to `503` (or `502` for upstream 4xx) with request correlation in API responses.
+- **Redis shutdown race**: Server shutdown now cancels worker context first and waits for goroutines to exit before closing router/Redis resources, preventing `redis: client is closed` errors during termination.
+- **WebSocket reader EOF noise**: Benign read EOF/network-close disconnects now classify as peer disconnects (not internal 1011), with dedicated metrics counters for `read_eofs` and `read_errors`.

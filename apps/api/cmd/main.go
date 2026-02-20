@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,7 +33,8 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// Load .env file (ignore error if not found - production uses real env vars)
 	err := godotenv.Load()
@@ -98,7 +100,6 @@ func main() {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
-	defer pool.Close()
 
 	slog.Info("connected to database")
 
@@ -113,7 +114,6 @@ func main() {
 		slog.Error("failed to connect to Redis", "error", err)
 		os.Exit(1)
 	}
-	defer redisClient.Close()
 
 	slog.Info("connected to Redis")
 
@@ -231,6 +231,15 @@ func main() {
 		PostMeetingService:              postMeetingService,
 	})
 
+	var workerWG sync.WaitGroup
+	startWorker := func(run func(context.Context)) {
+		workerWG.Add(1)
+		go func() {
+			defer workerWG.Done()
+			run(ctx)
+		}()
+	}
+
 	if transcriptionService != nil {
 		tenantGetter := jobs.NewDBTenantGetter(queries)
 		transcriptionWorker := jobs.NewTranscriptionWorker(
@@ -241,12 +250,12 @@ func main() {
 			tenantGetter,
 			slog.Default(),
 		)
-		go transcriptionWorker.Run(ctx)
+		startWorker(transcriptionWorker.Run)
 		slog.Info("started transcription worker")
 	}
 
 	webhookWorker := jobs.NewWebhookWorker(queries, slog.Default())
-	go webhookWorker.Run(ctx)
+	startWorker(webhookWorker.Run)
 	slog.Info("started webhook worker")
 
 	if storageR2 != nil && storageS3 != nil {
@@ -258,28 +267,33 @@ func main() {
 			storage.DefaultLifecycleConfig(),
 			slog.Default(),
 		)
-		go lifecycleMgr.Start(ctx)
+		startWorker(lifecycleMgr.Start)
 		slog.Info("started recording lifecycle manager")
 	}
 
 	recChecker := jobs.NewRecordingChecker(router.Queries(), cfClient, router.RecordingService(), slog.Default())
-	go recChecker.Run(ctx, 30*time.Minute)
+	startWorker(func(workerCtx context.Context) {
+		recChecker.Run(workerCtx, 30*time.Minute)
+	})
 	slog.Info("started recording checker", "interval", "30m")
 
 	roomCleanup := jobs.NewRoomCleanup(router.Queries(), router.RoomService(), slog.Default())
-	go roomCleanup.Run(ctx, 10*time.Minute, 30) // Check every 10min, cleanup rooms empty for 30min
+	startWorker(func(workerCtx context.Context) {
+		roomCleanup.Run(workerCtx, 10*time.Minute, 30)
+	}) // Check every 10min, cleanup rooms empty for 30min
 	slog.Info("started room cleanup", "interval", "10m", "timeout", "30m")
 
 	internalRetention := jobs.NewInternalRetentionJob(router.Queries(), router.RecordingService(), slog.Default())
-	go internalRetention.Run(ctx)
+	startWorker(internalRetention.Run)
 	slog.Info("started internal retention job")
 
 	go func() {
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
+		<-ctx.Done()
 		slog.Info("shutting down server")
-		router.Close()
+		workerWG.Wait()
+		if err := router.Close(); err != nil {
+			slog.Error("failed to close router", "error", err)
+		}
 		pool.Close()
 		os.Exit(0)
 	}()

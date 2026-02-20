@@ -111,6 +111,12 @@ variable "enable_websocket_alarms" {
   default     = true
 }
 
+variable "enable_cloudflare_alarms" {
+  description = "Enable Cloudflare add-participant failure alarms (log-based)"
+  type        = bool
+  default     = true
+}
+
 variable "enable_alb_alarms" {
   description = "Enable ALB CloudWatch alarms"
   type        = bool

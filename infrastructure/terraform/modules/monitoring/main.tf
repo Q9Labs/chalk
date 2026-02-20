@@ -163,6 +163,74 @@ resource "aws_cloudwatch_log_metric_filter" "websocket_rooms" {
   }
 }
 
+resource "aws_cloudwatch_log_metric_filter" "websocket_read_errors" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  name           = "${local.name}-ws-read-errors-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # JSON slog line emitted by ws hub metrics ticker
+  pattern = "{ $.event = \"ws.metrics\" }"
+
+  metric_transformation {
+    name      = "${local.name}-ws-read-errors"
+    namespace = "Chalk/WebSocket"
+    value     = "$.read_errors"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "websocket_read_eofs" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  name           = "${local.name}-ws-read-eofs-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # JSON slog line emitted by ws hub metrics ticker
+  pattern = "{ $.event = \"ws.metrics\" }"
+
+  metric_transformation {
+    name      = "${local.name}-ws-read-eofs"
+    namespace = "Chalk/WebSocket"
+    value     = "$.read_eofs"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "cloudflare_join_failures" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_cloudflare_alarms ? 1 : 0
+
+  name           = "${local.name}-cloudflare-join-failures-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # http.request logs with handler-attached error context
+  pattern = "{ $.event = \"http.request\" && $.step = \"join_room_cloudflare\" }"
+
+  metric_transformation {
+    name      = "${local.name}-cloudflare-join-failures"
+    namespace = "Chalk/API"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "cloudflare_join_upstream_5xx" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_cloudflare_alarms ? 1 : 0
+
+  name           = "${local.name}-cloudflare-join-upstream-5xx-filter"
+  log_group_name = var.ecs_log_group_name
+
+  # Narrow to upstream Cloudflare 5xx to quickly spot provider-side incidents
+  pattern = "{ $.event = \"http.request\" && $.step = \"join_room_cloudflare\" && $.cloudflare_status >= 500 }"
+
+  metric_transformation {
+    name      = "${local.name}-cloudflare-join-upstream-5xx"
+    namespace = "Chalk/API"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "websocket_send_drops" {
   count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
 
@@ -213,6 +281,82 @@ resource "aws_cloudwatch_metric_alarm" "websocket_ping_errors" {
   statistic           = "Sum"
   threshold           = 1
   alarm_description   = "WebSocket ping errors detected (stalled connections)"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "websocket_read_errors" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-ws-read-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "${local.name}-ws-read-errors"
+  namespace           = "Chalk/WebSocket"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "WebSocket read errors detected (non-benign read failures)"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "websocket_read_eofs" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_websocket_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-ws-read-eofs-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "${local.name}-ws-read-eofs"
+  namespace           = "Chalk/WebSocket"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 100
+  alarm_description   = "WebSocket read EOFs spiked (possible mass disconnect event)"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "cloudflare_join_failures" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_cloudflare_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-cloudflare-join-failures"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "${local.name}-cloudflare-join-failures"
+  namespace           = "Chalk/API"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 2
+  alarm_description   = "Cloudflare add-participant join failures detected"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "cloudflare_join_upstream_5xx" {
+  count = var.ecs_log_group_name != null && var.ecs_log_group_name != "" && var.enable_cloudflare_alarms ? 1 : 0
+
+  alarm_name          = "${local.name}-cloudflare-join-upstream-5xx"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "${local.name}-cloudflare-join-upstream-5xx"
+  namespace           = "Chalk/API"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Cloudflare upstream 5xx detected on add-participant path"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
@@ -805,10 +949,28 @@ resource "aws_cloudwatch_dashboard" "main" {
             ["Chalk/WebSocket", "${local.name}-ws-send-drops", { label = "Send drops", stat = "Sum", color = "#d62728" }],
             [".", "${local.name}-ws-write-errors", { label = "Write errors", stat = "Sum", color = "#9467bd" }],
             [".", "${local.name}-ws-ping-errors", { label = "Ping errors", stat = "Sum", color = "#ff7f0e" }],
+            [".", "${local.name}-ws-read-errors", { label = "Read errors", stat = "Sum", color = "#8c564b" }],
+            [".", "${local.name}-ws-read-eofs", { label = "Read EOFs", stat = "Sum", color = "#bcbd22" }],
             [".", "${local.name}-ws-clients", { label = "Clients", stat = "Average", yAxis = "right" }],
             [".", "${local.name}-ws-rooms", { label = "Rooms", stat = "Average", yAxis = "right" }]
           ] : []
           period = 60
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 25
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Cloudflare Join Failures"
+          region = data.aws_region.current.name
+          metrics = var.ecs_log_group_name != null && var.ecs_log_group_name != "" ? [
+            ["Chalk/API", "${local.name}-cloudflare-join-failures", { label = "Join failures", stat = "Sum", color = "#d62728" }],
+            [".", "${local.name}-cloudflare-join-upstream-5xx", { label = "Upstream 5xx", stat = "Sum", color = "#ff7f0e" }]
+          ] : []
+          period = 300
         }
       },
       {

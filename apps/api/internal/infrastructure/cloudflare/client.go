@@ -4,9 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"math/rand/v2"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,10 +20,14 @@ import (
 
 type RequestError struct {
 	Operation string
+	Attempt   int
 	Method    string
 	Path      string
 	Status    int
 	Body      string
+	TenantID  string
+	RoomID    string
+	RequestID string
 	Err       error
 }
 
@@ -26,10 +35,36 @@ func (e *RequestError) Error() string {
 	if e == nil {
 		return "cloudflare api error"
 	}
-	if e.Err != nil {
-		return fmt.Sprintf("cloudflare %s %s failed: status=%d body=%s: %v", e.Method, e.Path, e.Status, e.Body, e.Err)
+
+	attempt := ""
+	if e.Attempt > 0 {
+		attempt = fmt.Sprintf(" attempt=%d", e.Attempt)
 	}
-	return fmt.Sprintf("cloudflare %s %s failed: status=%d body=%s", e.Method, e.Path, e.Status, e.Body)
+
+	operation := ""
+	if e.Operation != "" {
+		operation = fmt.Sprintf(" operation=%s", e.Operation)
+	}
+
+	tenantID := ""
+	if e.TenantID != "" {
+		tenantID = fmt.Sprintf(" tenant_id=%s", e.TenantID)
+	}
+
+	roomID := ""
+	if e.RoomID != "" {
+		roomID = fmt.Sprintf(" room_id=%s", e.RoomID)
+	}
+
+	requestID := ""
+	if e.RequestID != "" {
+		requestID = fmt.Sprintf(" request_id=%s", e.RequestID)
+	}
+
+	if e.Err != nil {
+		return fmt.Sprintf("cloudflare %s %s failed:%s%s status=%d%s%s%s body=%s: %v", e.Method, e.Path, operation, attempt, e.Status, tenantID, roomID, requestID, e.Body, e.Err)
+	}
+	return fmt.Sprintf("cloudflare %s %s failed:%s%s status=%d%s%s%s body=%s", e.Method, e.Path, operation, attempt, e.Status, tenantID, roomID, requestID, e.Body)
 }
 
 func (e *RequestError) Unwrap() error {
@@ -37,13 +72,209 @@ func (e *RequestError) Unwrap() error {
 }
 
 func newAPIError(operation, method, path string, status int, body []byte, err error) *RequestError {
-    return &RequestError{
+	return &RequestError{
 		Operation: operation,
 		Method:    method,
 		Path:      path,
 		Status:    status,
 		Body:      string(body),
 		Err:       err,
+	}
+}
+
+const (
+	createMeetingOperation  = "create meeting"
+	createMeetingMaxRetries = 3
+
+	addParticipantOperation  = "add participant"
+	addParticipantMaxRetries = 3
+
+	addParticipantBaseWait  = 120 * time.Millisecond
+	addParticipantMaxWait   = 500 * time.Millisecond
+	addParticipantMaxJitter = 40 * time.Millisecond
+)
+
+type observabilityContext struct {
+	tenantID  string
+	roomID    string
+	requestID string
+}
+
+type observabilityContextKey string
+
+const (
+	tenantIDContextKey  observabilityContextKey = "chalk.cloudflare.tenant_id"
+	roomIDContextKey    observabilityContextKey = "chalk.cloudflare.room_id"
+	requestIDContextKey observabilityContextKey = "chalk.cloudflare.request_id"
+)
+
+// WithObservabilityContext adds optional request correlation fields for Cloudflare operations.
+func WithObservabilityContext(ctx context.Context, tenantID, roomID, requestID string) context.Context {
+	if tenantID != "" {
+		ctx = context.WithValue(ctx, tenantIDContextKey, tenantID)
+	}
+	if roomID != "" {
+		ctx = context.WithValue(ctx, roomIDContextKey, roomID)
+	}
+	if requestID != "" {
+		ctx = context.WithValue(ctx, requestIDContextKey, requestID)
+	}
+	return ctx
+}
+
+func contextValueString(ctx context.Context, key any) string {
+	value := ctx.Value(key)
+	if value == nil {
+		return ""
+	}
+	if str, ok := value.(string); ok {
+		return str
+	}
+	if str, ok := value.(fmt.Stringer); ok {
+		return str.String()
+	}
+	return fmt.Sprint(value)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func getObservabilityContext(ctx context.Context) observabilityContext {
+	return observabilityContext{
+		tenantID: firstNonEmpty(
+			contextValueString(ctx, tenantIDContextKey),
+			contextValueString(ctx, "tenant_id"),
+			contextValueString(ctx, "chalk.tenant_id"),
+		),
+		roomID: firstNonEmpty(
+			contextValueString(ctx, roomIDContextKey),
+			contextValueString(ctx, "room_id"),
+			contextValueString(ctx, "chalk.room_id"),
+		),
+		requestID: firstNonEmpty(
+			contextValueString(ctx, requestIDContextKey),
+			contextValueString(ctx, "request_id"),
+			contextValueString(ctx, "chalk.request_id"),
+		),
+	}
+}
+
+func applyErrorContext(err *RequestError, attempt int, requestContext observabilityContext) *RequestError {
+	if err == nil {
+		return nil
+	}
+	err.Attempt = attempt
+	err.TenantID = requestContext.tenantID
+	err.RoomID = requestContext.roomID
+	err.RequestID = requestContext.requestID
+	return err
+}
+
+func appendRequestContextAttrs(attrs []any, requestContext observabilityContext) []any {
+	if requestContext.tenantID != "" {
+		attrs = append(attrs, "tenant_id", requestContext.tenantID)
+	}
+	if requestContext.roomID != "" {
+		attrs = append(attrs, "room_id", requestContext.roomID)
+	}
+	if requestContext.requestID != "" {
+		attrs = append(attrs, "request_id", requestContext.requestID)
+	}
+	return attrs
+}
+
+func shouldRetryCloudflareOperation(ctx context.Context, statusCode int, err error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+
+	switch statusCode {
+	case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	if statusCode >= http.StatusInternalServerError {
+		return true
+	}
+
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		if errors.Is(urlErr.Err, context.Canceled) {
+			return false
+		}
+		if urlErr.Timeout() {
+			return true
+		}
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout() || netErr.Temporary()
+	}
+
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+func shouldRetryAddParticipant(ctx context.Context, statusCode int, err error) bool {
+	return shouldRetryCloudflareOperation(ctx, statusCode, err)
+}
+
+func shouldRetryCreateMeeting(ctx context.Context, statusCode int, err error) bool {
+	return shouldRetryCloudflareOperation(ctx, statusCode, err)
+}
+
+func cloudflareRetryDelay(attempt int) time.Duration {
+	delay := addParticipantBaseWait
+	for range max(1, attempt) - 1 {
+		delay *= 2
+		if delay >= addParticipantMaxWait {
+			delay = addParticipantMaxWait
+			break
+		}
+	}
+
+	jitter := time.Duration(rand.Int64N(int64(addParticipantMaxJitter) + 1))
+	return delay + jitter
+}
+
+func addParticipantRetryDelay(attempt int) time.Duration {
+	return cloudflareRetryDelay(attempt)
+}
+
+func createMeetingRetryDelay(attempt int) time.Duration {
+	return cloudflareRetryDelay(attempt)
+}
+
+func waitWithContext(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
@@ -122,37 +353,122 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
-	resp, err := c.doRequest(ctx, "POST", "/meetings", req)
-	if err != nil {
-		return nil, newAPIError("create meeting", "POST", "/meetings", 0, nil, err)
-	}
-	defer resp.Body.Close()
+	const path = "/meetings"
+	requestContext := getObservabilityContext(ctx)
+	totalStart := time.Now()
 
-	// Read raw body first for debugging
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, nil, err)
+	for attempt := 1; attempt <= createMeetingMaxRetries; attempt++ {
+		attemptStart := time.Now()
+		logAttrs := appendRequestContextAttrs([]any{
+			"event", "cloudflare.create_meeting",
+			"operation", createMeetingOperation,
+			"attempt", attempt,
+			"method", http.MethodPost,
+			"path", path,
+			"status_code", 0,
+			"title", req.Title,
+			"record_on_start", req.RecordOnStart,
+			"persist_chat", req.PersistChat,
+		}, requestContext)
+		slog.DebugContext(ctx, "cloudflare create meeting request", logAttrs...)
+
+		resp, err := c.doRequest(ctx, http.MethodPost, path, req)
+		if err != nil {
+			attemptElapsed := time.Since(attemptStart)
+			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, 0, nil, err), attempt, requestContext)
+			logAttrs = append(logAttrs,
+				"error", err,
+				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
+				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+			)
+			if shouldRetryCreateMeeting(ctx, 0, err) && attempt < createMeetingMaxRetries {
+				delay := createMeetingRetryDelay(attempt)
+				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
+				slog.WarnContext(ctx, "cloudflare create meeting request failed, retrying", logAttrs...)
+				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, 0, nil, waitErr), attempt, requestContext)
+				}
+				continue
+			}
+			slog.WarnContext(ctx, "cloudflare create meeting request failed", logAttrs...)
+			return nil, apiErr
+		}
+
+		bodyBytes, bodyErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if bodyErr != nil {
+			attemptElapsed := time.Since(attemptStart)
+			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, nil, bodyErr), attempt, requestContext)
+			logAttrs = append(logAttrs,
+				"status_code", resp.StatusCode,
+				"error", bodyErr,
+				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
+				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+			)
+			if shouldRetryCreateMeeting(ctx, resp.StatusCode, bodyErr) && attempt < createMeetingMaxRetries {
+				delay := createMeetingRetryDelay(attempt)
+				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
+				slog.WarnContext(ctx, "cloudflare create meeting response read failed, retrying", logAttrs...)
+				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, nil, waitErr), attempt, requestContext)
+				}
+				continue
+			}
+			slog.WarnContext(ctx, "cloudflare create meeting response read failed", logAttrs...)
+			return nil, apiErr
+		}
+
+		attemptElapsed := time.Since(attemptStart)
+		logAttrs = append(logAttrs,
+			"status_code", resp.StatusCode,
+			"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
+			"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+		)
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, nil), attempt, requestContext)
+			if shouldRetryCreateMeeting(ctx, resp.StatusCode, nil) && attempt < createMeetingMaxRetries {
+				delay := createMeetingRetryDelay(attempt)
+				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
+				slog.WarnContext(ctx, "cloudflare create meeting returned retryable status, retrying", logAttrs...)
+				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, waitErr), attempt, requestContext)
+				}
+				continue
+			}
+			slog.WarnContext(ctx, "cloudflare create meeting failed with non-success status", logAttrs...)
+			return nil, apiErr
+		}
+
+		var result Response[Meeting]
+		if err := json.Unmarshal(bodyBytes, &result); err != nil {
+			slog.WarnContext(ctx, "cloudflare create meeting decode failed", append(logAttrs, "error", err)...)
+			return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, err), attempt, requestContext)
+		}
+
+		if result.Result != nil {
+			if attempt > 1 {
+				slog.InfoContext(ctx, "cloudflare create meeting recovered after retry", logAttrs...)
+			} else {
+				slog.DebugContext(ctx, "cloudflare create meeting success", logAttrs...)
+			}
+			return result.Result, nil
+		}
+
+		if !result.Success {
+			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors)), attempt, requestContext)
+			slog.WarnContext(ctx, "cloudflare create meeting reported unsuccessful response", append(logAttrs, "error", apiErr.Err)...)
+			return nil, apiErr
+		}
+
+		if attempt > 1 {
+			slog.InfoContext(ctx, "cloudflare create meeting recovered after retry", logAttrs...)
+		} else {
+			slog.DebugContext(ctx, "cloudflare create meeting success", logAttrs...)
+		}
+		return &result.Data, nil
 	}
 
-	// Log response for debugging
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, bodyBytes, nil)
-	}
-
-	var result Response[Meeting]
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, bodyBytes, err)
-	}
-
-	if result.Result != nil {
-		return result.Result, nil
-	}
-
-	if !result.Success {
-		return nil, newAPIError("create meeting", "POST", "/meetings", resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors))
-	}
-
-	return &result.Data, nil
+	return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, 0, nil, fmt.Errorf("cloudflare create meeting retries exhausted")), createMeetingMaxRetries, requestContext)
 }
 
 // GetMeeting retrieves meeting details from Cloudflare RealtimeKit
@@ -235,46 +551,123 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 		return nil, fmt.Errorf("cloudflare is not configured")
 	}
 
-	// DEBUG: Log request being sent to Cloudflare
-	reqJSON, _ := json.Marshal(req)
-	fmt.Printf("[CLOUDFLARE] AddParticipant request: %s\n", string(reqJSON))
-
 	path := fmt.Sprintf("/meetings/%s/participants", meetingID)
-	resp, err := c.doRequest(ctx, "POST", path, req)
-	if err != nil {
-		return nil, newAPIError("add participant", "POST", path, 0, nil, err)
+	requestContext := getObservabilityContext(ctx)
+	totalStart := time.Now()
+
+	for attempt := 1; attempt <= addParticipantMaxRetries; attempt++ {
+		attemptStart := time.Now()
+		logAttrs := appendRequestContextAttrs([]any{
+			"event", "cloudflare.add_participant",
+			"operation", addParticipantOperation,
+			"attempt", attempt,
+			"method", http.MethodPost,
+			"path", path,
+			"meeting_id", meetingID,
+			"status_code", 0,
+			"client_specific_id", req.ClientSpecificID,
+			"preset_name", req.PresetName,
+			"transcription_enabled", req.TranscriptionEnabled,
+		}, requestContext)
+		slog.DebugContext(ctx, "cloudflare add participant request", logAttrs...)
+
+		resp, err := c.doRequest(ctx, http.MethodPost, path, req)
+		if err != nil {
+			attemptElapsed := time.Since(attemptStart)
+			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, err), attempt, requestContext)
+			logAttrs = append(logAttrs,
+				"error", err,
+				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
+				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+			)
+			if shouldRetryAddParticipant(ctx, 0, err) && attempt < addParticipantMaxRetries {
+				delay := addParticipantRetryDelay(attempt)
+				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
+				slog.WarnContext(ctx, "cloudflare add participant request failed, retrying", logAttrs...)
+				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, waitErr), attempt, requestContext)
+				}
+				continue
+			}
+			slog.WarnContext(ctx, "cloudflare add participant request failed", logAttrs...)
+			return nil, apiErr
+		}
+
+		bodyBytes, bodyErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if bodyErr != nil {
+			attemptElapsed := time.Since(attemptStart)
+			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, nil, bodyErr), attempt, requestContext)
+			logAttrs = append(logAttrs,
+				"status_code", resp.StatusCode,
+				"error", bodyErr,
+				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
+				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+			)
+			if shouldRetryAddParticipant(ctx, resp.StatusCode, bodyErr) && attempt < addParticipantMaxRetries {
+				delay := addParticipantRetryDelay(attempt)
+				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
+				slog.WarnContext(ctx, "cloudflare add participant response read failed, retrying", logAttrs...)
+				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, nil, waitErr), attempt, requestContext)
+				}
+				continue
+			}
+			slog.WarnContext(ctx, "cloudflare add participant response read failed", logAttrs...)
+			return nil, apiErr
+		}
+
+		attemptElapsed := time.Since(attemptStart)
+		logAttrs = append(logAttrs,
+			"status_code", resp.StatusCode,
+			"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
+			"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+		)
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, nil), attempt, requestContext)
+			if shouldRetryAddParticipant(ctx, resp.StatusCode, nil) && attempt < addParticipantMaxRetries {
+				delay := addParticipantRetryDelay(attempt)
+				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
+				slog.WarnContext(ctx, "cloudflare add participant returned retryable status, retrying", logAttrs...)
+				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, waitErr), attempt, requestContext)
+				}
+				continue
+			}
+			slog.WarnContext(ctx, "cloudflare add participant failed with non-success status", logAttrs...)
+			return nil, apiErr
+		}
+
+		var result Response[Participant]
+		if err := json.Unmarshal(bodyBytes, &result); err != nil {
+			slog.WarnContext(ctx, "cloudflare add participant decode failed", append(logAttrs, "error", err)...)
+			return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, err), attempt, requestContext)
+		}
+
+		if result.Result != nil {
+			if attempt > 1 {
+				slog.InfoContext(ctx, "cloudflare add participant recovered after retry", logAttrs...)
+			} else {
+				slog.DebugContext(ctx, "cloudflare add participant success", logAttrs...)
+			}
+			return result.Result, nil
+		}
+
+		if !result.Success {
+			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors)), attempt, requestContext)
+			slog.WarnContext(ctx, "cloudflare add participant reported unsuccessful response", append(logAttrs, "error", apiErr.Err)...)
+			return nil, apiErr
+		}
+
+		if attempt > 1 {
+			slog.InfoContext(ctx, "cloudflare add participant recovered after retry", logAttrs...)
+		} else {
+			slog.DebugContext(ctx, "cloudflare add participant success", logAttrs...)
+		}
+		return &result.Data, nil
 	}
-	defer resp.Body.Close()
 
-	// Read raw body first for debugging
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, nil, err)
-	}
-
-	// DEBUG: Log response from Cloudflare
-	fmt.Printf("[CLOUDFLARE] AddParticipant response (status %d): %s\n", resp.StatusCode, string(bodyBytes))
-
-	// Log response for debugging
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, bodyBytes, nil)
-	}
-
-	var result Response[Participant]
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, bodyBytes, err)
-	}
-
-	// Check both Data and Result fields
-	if result.Result != nil {
-		return result.Result, nil
-	}
-
-	if !result.Success {
-		return nil, newAPIError("add participant", "POST", path, resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors))
-	}
-
-	return &result.Data, nil
+	return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, fmt.Errorf("cloudflare add participant retries exhausted")), addParticipantMaxRetries, requestContext)
 }
 
 func mockMeeting(title string) *Meeting {

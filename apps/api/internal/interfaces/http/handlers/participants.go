@@ -92,6 +92,8 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
+	ctx = cloudflare.WithObservabilityContext(ctx, claims.TenantID.String(), roomID.String(), middleware.GetRequestID(c))
+
 	output, err := h.participantService.JoinRoom(ctx, participant.JoinRoomInput{
 		RoomID:         roomID,
 		RoomName:       roomIDParam, // Use original param as room name for auto-creation
@@ -113,12 +115,16 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 			h.recordError(c, err, "join_room_cloudflare", map[string]any{
 				"cloudflare_operation": cfErr.Operation,
 				"cloudflare_status":    cfErr.Status,
+				"cloudflare_attempt":   cfErr.Attempt,
 			})
-			status := http.StatusBadGateway
+			status := http.StatusServiceUnavailable
 			if cfErr.Status >= 400 && cfErr.Status < 500 {
-				status = http.StatusBadRequest
+				status = http.StatusBadGateway
 			}
-			c.JSON(status, gin.H{"error": "cloudflare join failed"})
+			c.JSON(status, gin.H{
+				"error":      "cloudflare join failed",
+				"request_id": middleware.GetRequestID(c),
+			})
 			return
 		}
 

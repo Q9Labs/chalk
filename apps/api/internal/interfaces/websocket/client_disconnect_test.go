@@ -1,6 +1,10 @@
 package websocket
 
 import (
+	"context"
+	"errors"
+	"io"
+	"net"
 	"testing"
 
 	"github.com/google/uuid"
@@ -43,4 +47,12 @@ func TestClientSendReliable_Backpressure_UsesPolicyViolation(t *testing.T) {
 	require.Equal(t, "server", by)
 	require.Equal(t, websocket.StatusPolicyViolation, code)
 	require.Equal(t, "backpressure", reason)
+}
+
+func TestIsBenignReadDisconnect(t *testing.T) {
+	require.True(t, isBenignReadDisconnect(io.EOF))
+	require.True(t, isBenignReadDisconnect(net.ErrClosed))
+	require.True(t, isBenignReadDisconnect(errors.New("read tcp 127.0.0.1:443->127.0.0.1:55000: use of closed network connection")))
+	require.False(t, isBenignReadDisconnect(context.DeadlineExceeded))
+	require.False(t, isBenignReadDisconnect(errors.New("boom")))
 }

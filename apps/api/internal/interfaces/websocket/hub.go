@@ -152,6 +152,8 @@ func (h *Hub) Run(ctx context.Context) {
 			now := snapshotWSMetrics()
 			deltaDrops := now.sendDrops - last.sendDrops
 			deltaBackpressureCloses := now.backpressureCloses - last.backpressureCloses
+			deltaReadEOFs := now.readEOFs - last.readEOFs
+			deltaReadErrors := now.readErrors - last.readErrors
 			deltaWriteErrors := now.writeErrors - last.writeErrors
 			deltaPingErrors := now.pingErrors - last.pingErrors
 			deltaEnqueued := now.sendEnqueued - last.sendEnqueued
@@ -173,6 +175,10 @@ func (h *Hub) Run(ctx context.Context) {
 				"sends_dropped_total", now.sendDrops,
 				"backpressure_closes", deltaBackpressureCloses,
 				"backpressure_closes_total", now.backpressureCloses,
+				"read_eofs", deltaReadEOFs,
+				"read_eofs_total", now.readEOFs,
+				"read_errors", deltaReadErrors,
+				"read_errors_total", now.readErrors,
 				"write_errors", deltaWriteErrors,
 				"write_errors_total", now.writeErrors,
 				"ping_errors", deltaPingErrors,
