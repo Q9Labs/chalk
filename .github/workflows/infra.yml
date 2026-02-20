@@ -167,7 +167,7 @@ jobs:
             -var="r2_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}" \
             -var="axiom_token=${{ steps.ssm.outputs.axiom_token }}" \
             -var="cloudflare_webhook_secret=${{ steps.ssm.outputs.cf_webhook_secret }}" \
-            -out=tfplan \
+            -out="${GITHUB_WORKSPACE}/tfplan-prod" \
             -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
@@ -175,7 +175,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-prod
-          path: tfplan
+          path: ${{ github.workspace }}/tfplan-prod
           retention-days: 7
         if: always()
 
@@ -233,10 +233,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tfplan-prod
-          path: .
+          path: ${{ github.workspace }}
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve "${GITHUB_WORKSPACE}/tfplan-prod"
 
       - name: Output Infrastructure Details
         id: outputs
@@ -299,7 +299,7 @@ jobs:
           terraform plan \
             -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
-            -out=tfplan \
+            -out="${GITHUB_WORKSPACE}/tfplan-dev" \
             -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
@@ -307,7 +307,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-dev
-          path: tfplan
+          path: ${{ github.workspace }}/tfplan-dev
           retention-days: 7
 
   apply-dev:
@@ -352,7 +352,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tfplan-dev
-          path: .
+          path: ${{ github.workspace }}
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve "${GITHUB_WORKSPACE}/tfplan-dev"
