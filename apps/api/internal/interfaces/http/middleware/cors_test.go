@@ -24,11 +24,33 @@ func TestCORS_AllowedOrigins(t *testing.T) {
 		"https://chalk-5bc.pages.dev",
 		"https://dev.dwd4jsk5p7j52.amplifyapp.com",
 		"https://portal.tuitionhighway.com",
+		"https://app.emantime.com",
 		"https://dev-app.emantime.com",
 	}
 
 	for _, origin := range allowedOrigins {
 		t.Run("allowed_"+origin, func(t *testing.T) {
+			router := setupTestGin()
+			router.Use(CORS())
+			router.GET("/test", func(c *gin.Context) {
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			})
+
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("Origin", origin)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, origin, w.Header().Get("Access-Control-Allow-Origin"))
+		})
+	}
+}
+
+func TestCORS_AllPlatformOriginsAllowed(t *testing.T) {
+	for origin := range PlatformOrigins {
+		t.Run("platform_"+origin, func(t *testing.T) {
 			router := setupTestGin()
 			router.Use(CORS())
 			router.GET("/test", func(c *gin.Context) {
