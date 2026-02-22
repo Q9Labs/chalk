@@ -48,6 +48,13 @@ func buildAllowedWSOrigins() []string {
 		"backend.tuitionhighway.com",
 		"https://backend-dev.tuitionhighway.com",
 		"backend-dev.tuitionhighway.com",
+		// Eman Time origins
+		"https://app.emantime.com",
+		"app.emantime.com",
+		"https://dev-app.emantime.com",
+		"dev-app.emantime.com",
+		"https://portal.emantime.com",
+		"portal.emantime.com",
 		// Allow localhost for development/testing even in production
 		"http://localhost:*",
 		"localhost:*",

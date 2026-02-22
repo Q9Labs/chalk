@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **API: Eman Time CORS allowlist** — add `https://app.emantime.com` and `https://dev-app.emantime.com` to platform CORS origins so browser preflight requests can receive `Access-Control-Allow-Origin`.
+- **API: WebSocket origin allowlist** — add Eman Time origins (`app`, `dev-app`, `portal`) to the WebSocket origin patterns to avoid handshake rejections from strict origin checks.
 
 ### Removed
 
