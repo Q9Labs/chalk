@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API: WebSocket origin allowlist** — add Eman Time origins (`app`, `dev-app`, `portal`) to the WebSocket origin patterns to avoid handshake rejections from strict origin checks.
 - **API: WebSocket tenant-origin handshake** — when an origin is validated against tenant `allowed_origins`, lock WS upgrade checks to that origin (with host-only compatibility for API Gateway/ALB forwarded Origin headers) so newly added tenant domains work without static allowlist updates.
 - **Docs: WebSocket endpoint examples** — update native/android/iOS docs to use `wss://chalk-ws.q9labs.ai/ws` instead of `wss://chalk-api.q9labs.ai/ws`.
+- **API: Meeting preset transcription override** — force Cloudflare participant join requests to send `transcription_enabled=false` so in-meeting preset transcription stays disabled.
 
 ### Removed
 

@@ -361,7 +361,7 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		Name:                 input.DisplayName,
 		PresetName:           presetName,
 		ClientSpecificID:     clientSpecificID,
-		TranscriptionEnabled: tenantCfg.TranscriptionEnabled,
+		TranscriptionEnabled: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare add participant failed: %w", err)
