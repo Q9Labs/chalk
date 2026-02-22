@@ -29,3 +29,23 @@ func TestBuildAllowedWSOrigins_IncludesEnvConfiguredOrigins(t *testing.T) {
 	assert.Contains(t, origins, "https://foo.example.com")
 	assert.Contains(t, origins, "https://bar.example.com")
 }
+
+func TestResolveWSOriginPatterns_PrefersTenantVerifiedOrigin(t *testing.T) {
+	patterns := resolveWSOriginPatterns(
+		"https://tenant.example.com",
+		true,
+		[]string{"https://fallback.example.com"},
+	)
+
+	assert.Equal(t, []string{"https://tenant.example.com"}, patterns)
+}
+
+func TestResolveWSOriginPatterns_FallsBackToStaticPatterns(t *testing.T) {
+	patterns := resolveWSOriginPatterns(
+		"https://tenant.example.com",
+		false,
+		[]string{"https://fallback.example.com"},
+	)
+
+	assert.Equal(t, []string{"https://fallback.example.com"}, patterns)
+}

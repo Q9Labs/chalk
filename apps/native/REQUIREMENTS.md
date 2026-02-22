@@ -7,7 +7,7 @@ UI: custom. Not implemented in this doc. References in `apps/native/SPEC.md`.
 ## Environments / Config
 
 - `apiBaseUrl` (e.g. `https://chalk-api.q9labs.ai`)
-- `wsBaseUrl` (e.g. `wss://chalk-api.q9labs.ai/ws`)
+- `wsBaseUrl` (e.g. `wss://chalk-ws.q9labs.ai/ws`)
 - `tenant` / `apiKey` (only if using API-key-to-token flow)
 - `debug` flag (enables verbose logging)
 

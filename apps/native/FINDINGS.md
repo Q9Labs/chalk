@@ -230,5 +230,5 @@ RN demo apps were hard-deleted. Kept here as “do not forget” config that mat
   - Reanimated: v3 line (avoid breaking worklet compatibility)
 - Env contract shape:
   - `API_URL` (example `https://chalk-api.q9labs.ai`)
-  - `WS_URL` (example `wss://chalk-api.q9labs.ai`)
+  - `WS_URL` (example `wss://chalk-ws.q9labs.ai/ws`)
   - `CHALK_API_KEY` (if doing api-key-to-token flow)

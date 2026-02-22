@@ -64,3 +64,14 @@ func buildAllowedWSOrigins() []string {
 
 	return origins
 }
+
+func resolveWSOriginPatterns(requestOrigin string, tenantOriginAllowed bool, fallbackOrigins []string) []string {
+	if requestOrigin != "" && tenantOriginAllowed {
+		// Tighten origin checking to the exact verified request origin.
+		return []string{requestOrigin}
+	}
+	if len(fallbackOrigins) > 0 {
+		return fallbackOrigins
+	}
+	return nil
+}

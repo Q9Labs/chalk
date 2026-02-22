@@ -25,6 +25,7 @@ var PlatformOrigins = map[string]bool{
 	"https://backend-dev.tuitionhighway.com":    true,
 	"https://app.emantime.com":                  true,
 	"https://dev-app.emantime.com":              true,
+	"https://portal.emantime.com":               true,
 }
 
 // CORS returns a middleware that handles Cross-Origin Resource Sharing

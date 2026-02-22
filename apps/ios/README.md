@@ -41,7 +41,7 @@ Use:
 ## Join payload
 
 Join flow (for now): paste a join payload (from backend) containing:
-- `wsUrl` (e.g. `wss://chalk-api.q9labs.ai/ws`)
+- `wsUrl` (e.g. `wss://chalk-ws.q9labs.ai/ws`)
 - `accessToken` (Chalk WS token)
 - `rtcToken` (RealtimeKit auth token)
 - `roomId`, `participantId`, `displayName`

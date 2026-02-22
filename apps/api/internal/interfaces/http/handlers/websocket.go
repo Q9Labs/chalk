@@ -138,6 +138,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 
 	// Tenant-aware origin validation (defense in depth)
 	origin := c.Request.Header.Get("Origin")
+	tenantOriginAllowed := false
 	if origin != "" && h.queries != nil {
 		tenant, err := h.queries.GetTenant(c.Request.Context(), claims.TenantID)
 		if err == nil {
@@ -155,6 +156,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 				c.JSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
 				return
 			}
+			tenantOriginAllowed = true
 		}
 		// If tenant lookup fails, fall through to pattern-based check below
 	}
@@ -169,9 +171,9 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		Subprotocols: []string{"chalk"},
 	}
 
-	// API-HIGH-03: Enable origin checking in production
-	if len(h.allowedOrigins) > 0 {
-		acceptOpts.OriginPatterns = h.allowedOrigins
+	acceptOpts.OriginPatterns = resolveWSOriginPatterns(origin, tenantOriginAllowed, h.allowedOrigins)
+	if len(acceptOpts.OriginPatterns) > 0 {
+		// API-HIGH-03: Enable origin checking in production
 	} else {
 		// No origins configured - strict mode (will reject cross-origin)
 		wsWarn(

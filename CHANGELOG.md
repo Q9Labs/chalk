@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **API: Eman Time CORS allowlist** — add `https://app.emantime.com` and `https://dev-app.emantime.com` to platform CORS origins so browser preflight requests can receive `Access-Control-Allow-Origin`.
 - **API: WebSocket origin allowlist** — add Eman Time origins (`app`, `dev-app`, `portal`) to the WebSocket origin patterns to avoid handshake rejections from strict origin checks.
+- **API: WebSocket tenant-origin handshake** — when an origin is validated against tenant `allowed_origins`, lock the WS upgrade check to that exact origin so newly added tenant domains work without waiting for static allowlist updates.
+- **Docs: WebSocket endpoint examples** — update native/android/iOS docs to use `wss://chalk-ws.q9labs.ai/ws` instead of `wss://chalk-api.q9labs.ai/ws`.
 
 ### Removed
 

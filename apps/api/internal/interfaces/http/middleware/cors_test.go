@@ -26,6 +26,7 @@ func TestCORS_AllowedOrigins(t *testing.T) {
 		"https://portal.tuitionhighway.com",
 		"https://app.emantime.com",
 		"https://dev-app.emantime.com",
+		"https://portal.emantime.com",
 	}
 
 	for _, origin := range allowedOrigins {
@@ -269,6 +270,7 @@ func TestIsOriginAllowedForTenant_PlatformOrigins(t *testing.T) {
 		"https://backend-dev.tuitionhighway.com",
 		"https://app.emantime.com",
 		"https://dev-app.emantime.com",
+		"https://portal.emantime.com",
 	}
 
 	for _, origin := range platformOrigins {
