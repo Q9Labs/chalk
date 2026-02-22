@@ -1,0 +1,54 @@
+{
+    "GroupDefinitions": [
+        {
+            "Type": "DIMENSION",
+            "Key": "INSTANCE_TYPE"
+        }
+    ],
+    "ResultsByTime": [
+        {
+            "TimePeriod": {
+                "Start": "2026-01-01",
+                "End": "2026-02-01"
+            },
+            "Total": {
+                "UnblendedCost": {
+                    "Amount": "0",
+                    "Unit": "USD"
+                },
+                "UsageQuantity": {
+                    "Amount": "0",
+                    "Unit": "Hrs"
+                }
+            },
+            "Groups": [],
+            "Estimated": false
+        },
+        {
+            "TimePeriod": {
+                "Start": "2026-02-01",
+                "End": "2026-02-20"
+            },
+            "Total": {},
+            "Groups": [
+                {
+                    "Keys": [
+                        "g4dn.xlarge"
+                    ],
+                    "Metrics": {
+                        "UnblendedCost": {
+                            "Amount": "30.332623023",
+                            "Unit": "USD"
+                        },
+                        "UsageQuantity": {
+                            "Amount": "145.736112",
+                            "Unit": "Hrs"
+                        }
+                    }
+                }
+            ],
+            "Estimated": true
+        }
+    ],
+    "DimensionValueAttributes": []
+}

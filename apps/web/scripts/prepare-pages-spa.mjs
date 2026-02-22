@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
 const indexPath = resolve(clientDir, "index.html");
-const notFoundPath = resolve(clientDir, "404.html");
 
 if (!existsSync(shellPath)) {
 	throw new Error(
@@ -14,5 +13,3 @@ if (!existsSync(shellPath)) {
 
 // Cloudflare Pages: ensure deep-link loads SPA shell (even if rewrites are not applied).
 cpSync(shellPath, indexPath);
-cpSync(shellPath, notFoundPath);
-

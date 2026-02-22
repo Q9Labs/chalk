@@ -1,0 +1,8 @@
+/ /index.html 200
+/room/* /index.html 200
+/share/* /index.html 200
+/j/* /index.html 200
+/docs* /index.html 200
+/dashboard /index.html 200
+/auth/* /index.html 200
+/* /index.html 200

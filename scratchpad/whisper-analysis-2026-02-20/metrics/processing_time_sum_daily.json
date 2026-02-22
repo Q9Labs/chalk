@@ -1,0 +1,47 @@
+{
+    "Label": "ProcessingTimeSeconds",
+    "Datapoints": [
+        {
+            "Timestamp": "2026-02-15T05:00:00+05:00",
+            "Average": 1.68,
+            "Sum": 5.04,
+            "Unit": "Seconds"
+        },
+        {
+            "Timestamp": "2026-02-18T05:00:00+05:00",
+            "Average": 48.24041666666667,
+            "Sum": 1157.77,
+            "Unit": "Seconds"
+        },
+        {
+            "Timestamp": "2026-02-14T05:00:00+05:00",
+            "Average": 65.35719999999999,
+            "Sum": 1633.9299999999998,
+            "Unit": "Seconds"
+        },
+        {
+            "Timestamp": "2026-02-17T05:00:00+05:00",
+            "Average": 40.13971428571429,
+            "Sum": 1404.89,
+            "Unit": "Seconds"
+        },
+        {
+            "Timestamp": "2026-02-16T05:00:00+05:00",
+            "Average": 32.41589285714286,
+            "Sum": 1815.29,
+            "Unit": "Seconds"
+        },
+        {
+            "Timestamp": "2026-02-19T05:00:00+05:00",
+            "Average": 58.48500000000001,
+            "Sum": 1286.67,
+            "Unit": "Seconds"
+        },
+        {
+            "Timestamp": "2026-02-13T05:00:00+05:00",
+            "Average": 33.48206666666667,
+            "Sum": 5022.31,
+            "Unit": "Seconds"
+        }
+    ]
+}

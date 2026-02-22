@@ -9,51 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Native: File-based logs (iOS/Android)** — write app + MeetingKit events/errors to `chalk.log`, `chalk.debug.log`, `chalk.error.log`, and add in-app “Share logs” so errors are copyable without fighting Simulator/Logcat selection.
-- **Native: Dev build/run scripts** — add `bun run ios:*` and `bun run android:*` helpers for consistent local build/install/launch.
-- **API: Debug diagnostics endpoints** — add `GET /api/v1/debug/auth` (token/server/build introspection) and `HEAD /api/v1/debug/ping` (latency probe) for the client System Health dialog.
-- **API: Internal tenant auth groundwork** — add `tenants.tenant_kind` (`external|internal`), plus `users`, `user_sessions`, and `tenant_claims` schema to support email login + cross-device dashboard without client API keys.
-- **API: Internal auth + dashboard** — add magic-link login endpoints (`/api/v1/internal/auth/*`) and meetings dashboard listing (`GET /api/v1/internal/meetings`) for Chalk-hosted apps.
-- **API: Opaque join + share links** — add host-only join tokens (`POST /api/v1/rooms/:id/join-token`) and recording share links (`POST /api/v1/recordings/:id/share`), plus public exchange/view endpoints under `/api/v1/public/*`.
-- **API: Internal retention job** — hard-delete internal tenant recordings after 7 days (rooms remain as tombstones).
-- **Web: Host dashboard + share pages** — add `/dashboard`, `/share/:token`, `/auth/callback`, `/j/:token` routes and internal tokenProvider (cookies + join-token exchange).
-- **Stress Tests: Infra capacity snapshots** — add `tests/scripts/collect-infra-snapshot.sh` and wire `tests/scripts/run-sweep.sh` to auto-capture ECS/ALB/Aurora/Redis metrics per VU step into `tests/results/INFRA_CAPACITY_SNAPSHOTS.jsonl` for downsize analysis.
-
-### Fixed
-
-- **API: Transcription default provider** — default now prefers `whisper` (when provisioned) and falls back to `groq`.
-- **API: Join room latency** — reduce join DB roundtrips (room+count in one query, avoid post-join participant fetch), and add a perf regression test for `POST /api/v1/rooms/:id/participants`.
-- **API: Cloudflare meeting/participant resilience** — add bounded retry + jitter/backoff for `CreateMeeting` and `AddParticipant`, include request correlation fields (`tenant_id`, `room_id`, `request_id`), and map participant Cloudflare upstream failures to `502/503` instead of generic 500s.
-- **API: Redis shutdown races** — cancel and drain background workers before router/Redis close to prevent `redis: client is closed` during shutdown.
-- **API: WebSocket read EOF noise** — classify benign EOF/closed-network disconnects as peer disconnects, and emit dedicated `read_eofs`/`read_errors` counters to separate expected disconnects from true internal failures.
-- **SDK-React: Remote audio autoplay recovery** — when browsers (notably iOS Safari) block autoplay, retry remote participant audio on the next user interaction so audio doesn’t stay silent.
-- **SDK-React: Pre-join media hardening** — guard missing `mediaDevices/getUserMedia` and make audio-level metering resilient to `AudioContext` gesture restrictions.
-
 ### Changed
 
-- **Infra: Monitoring dashboard + alarms for whisper/capacity** — expand CloudWatch dashboards with ALB 5xx + ECS saturation widgets (stress env) and Whisper queue/throughput/duration widgets + alarms (prod module) to make capacity bottlenecks explicit during load tests.
-- **Infra: Cloudflare + WebSocket read observability alarms** — add log-derived metrics/alarms for `join_room_cloudflare` failures (including upstream 5xx) and websocket `read_errors`/`read_eofs`, and surface these metrics on the shared monitoring dashboard.
-- **CI: API pipeline lint gate disabled** — skip `golangci-lint` in `API CI/CD` while keeping test/build/deploy active.
-- **CI: Infra plan/apply artifact handoff** — fix `Infrastructure CI/CD` to upload/download `tfplan` from the environment working directory so `Apply (Prod/Dev)` can consume the generated plan.
-- **Whisper Worker: Audio/RTF/GPU observability** — export `AudioDurationSeconds`, `RtfRatio` (processing/audio), and periodic GPU runtime metrics (`GpuUtilizationPercent`, `GpuMemoryUtilizationPercent`, `GpuDeviceCount`) to CloudWatch.
-- **Infra: Whisper CPU canary profile** — add CPU/GPU runtime toggles in Terraform and set prod Whisper worker to a single Spot `c7i.xlarge` (`WHISPER_DEVICE=cpu`, `WHISPER_COMPUTE_TYPE=int8`, autoscaling off) with new RTF alarm/dashboard coverage.
-- **Web: Room UI** — remove “Copy invite link” host overlay.
+### Fixed
 
 ### Removed
 
-- **Web: Whiteboard agent (tool-calling)** — removed the OpenRouter-backed agent endpoint + in-room overlay.
+## [0.0.58] - 2026-02-22
+
+### Added
+
+- **Native: File-based logs (iOS/Android)** — write app + MeetingKit events/errors to `chalk.log`, `chalk.debug.log`, `chalk.error.log`, and add in-app “Share logs” so errors are copyable.
+- **Native: Dev build/run scripts** — add `bun run ios:*` and `bun run android:*` helpers for consistent local build/install/launch.
+- **API: Debug diagnostics endpoints** — add endpoints to inspect auth/server/build health for system health checks.
+- **API: Internal tenant auth groundwork** — add internal tenant identity structures and schema so hosted apps can support email login and cross-device usage.
+- **API: Internal auth + dashboard** — add internal sign-in paths and meetings dashboard listing for Chalk-hosted apps.
+- **API: Opaque join + share links** — add host-only room joins and shareable recording links with public exchange helpers.
+- **API: Internal retention job** — auto-remove old internal tenant recordings after 7 days.
+- **Web: Host dashboard + share pages** — add dashboard, share, and callback routes for invite/room flows.
+- **Stress Tests: Infra capacity snapshots** — capture ECS/ALB/Aurora/Redis metrics during VU sweeps for capacity planning.
+
+### Changed
+
+- **Infra: Monitoring dashboard + alarms for whisper/capacity** — expand dashboards and alarms to surface pressure points during stress and production.
+- **Infra: Cloudflare + WebSocket read observability alarms** — add logs and alarms for join and websocket read failures plus shared metric visibility.
+- **CI: API pipeline lint gate disabled** — skip lint in API CI while keeping test/build/deploy active.
+- **CI: Infra plan/apply artifact handoff** — fix infra artifact flow so apply steps use the generated plan.
+- **Whisper Worker: Observability** — export processing metrics for RTF, queue times, and GPU utilization.
+- **Infra: Whisper CPU canary profile** — run production worker on controlled `c7i.xlarge` CPU profile with focused RTF alarm coverage.
+- **Web: Room UI** — remove host overlay copy link button.
 
 ### Fixed
 
-- **iOS: Meeting grid tile distortion** — force square participant tiles in the prototype iOS app so the grid doesn’t render stretched rectangles.
-- **iOS: Lobby join button blocked** — fix preview card overlays expanding beyond their frame and intercepting taps on “Ask to join”.
-- **Web: SPA deep links** — generate Cloudflare Pages SPA fallback via `index.html` + `404.html` (from TanStack `_shell.html`) so routes like `/room/:id` don’t hard-404 on direct navigation/refresh.
-- **API: Recording endpoint access** — require `CanRecord` permission for `/api/v1/recordings/*` to prevent participant JWTs from listing/downloading recordings.
-- **API: WebSocket observability** — add WS auth/upgrade/connect/disconnect/error logs (close codes, backpressure, ping/write/read errors), plus presence diagnostics (`expected_active_participants` vs local) and `hostname`/`pid` to quickly confirm multi-instance split-brain.
-- **API: WebSocket error coverage** — always emit a structured `websocket.app_error` log when the server sends an `error` message, and add Redis pubsub error/start/stop logs for cross-instance WS investigation.
-- **API: WebSocket hijack log spam** — stop `http: response.WriteHeader on hijacked connection` warnings by removing Gin’s default logger middleware for upgraded `/ws` connections.
-- **API: Whisper transcription timeout** — replace hardcoded 10m wait with configurable `POST_MEETING_WHISPER_TIMEOUT` (default `30m`) so longer self-hosted Whisper jobs complete instead of being marked failed at exactly 10 minutes.
-- **Whisper Worker: Queue/throughput observability metrics** — publish per-job custom metrics (`TranscriptionsTotal`, `TranscriptionsCompleted/Failed`, `TranscriptionDurationMs`, `QueueWaitMs`, `ProcessingTimeSeconds`, `DownloadSizeBytes`) and include `queue_wait_ms` in wide event logs.
+- **API: Transcription default provider** — default now prefers whisper when provisioned and falls back to groq.
+- **API: Join room latency** — reduce query count and add a regression test for participant join.
+- **API: Cloudflare meeting/participant resilience** — add resilient retries and map upstream failures to friendlier 502/503 handling.
+- **API: Redis shutdown races** — drain background workers before shutdown to avoid close-order errors.
+- **API: WebSocket read EOF noise** — separate expected disconnects from internal failures in metrics.
+- **SDK-React: Remote audio autoplay recovery** — recover remote audio after interaction on browsers that block autoplay.
+- **SDK-React: Pre-join media hardening** — handle missing media APIs and stricter audio gesture restrictions.
+- **iOS: Meeting grid tile distortion** — force square participant tiles.
+- **iOS: Lobby join button blocked** — prevent overlays from blocking “Ask to join”.
+- **Web: SPA deep links** — add fallback pages so direct room/share routes don't hard 404.
+- **API: Recording endpoint access** — require `CanRecord` for recordings routes.
+- **API: WebSocket observability** — add richer lifecycle/error logs and split-brain diagnostics.
+- **API: WebSocket error coverage** — emit structured websocket errors and redis pub/sub lifecycle logs.
+- **API: WebSocket hijack log spam** — stop logger warnings on upgraded websocket responses.
+- **API: Whisper transcription timeout** — make transcription timeout configurable with higher default.
+- **Whisper Worker: Queue/throughput observability** — publish more detailed transcription and queue processing metrics.
+
+### Removed
+
+- **Web: Whiteboard agent (tool-calling)** — remove the OpenRouter-backed whiteboard agent and overlay.
 
 ## [0.0.57] - 2026-02-08
 
