@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Infra: Whisper aggressive cost mode** — downsize prod Whisper worker from `c7i.xlarge` to single Spot `c7i.large` and reduce `WHISPER_CPU_THREADS` to `2`.
+
 ### Fixed
 
 ### Removed
