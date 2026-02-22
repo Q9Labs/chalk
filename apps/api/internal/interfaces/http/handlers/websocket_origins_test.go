@@ -37,7 +37,7 @@ func TestResolveWSOriginPatterns_PrefersTenantVerifiedOrigin(t *testing.T) {
 		[]string{"https://fallback.example.com"},
 	)
 
-	assert.Equal(t, []string{"https://tenant.example.com"}, patterns)
+	assert.Equal(t, []string{"https://tenant.example.com", "tenant.example.com"}, patterns)
 }
 
 func TestResolveWSOriginPatterns_FallsBackToStaticPatterns(t *testing.T) {

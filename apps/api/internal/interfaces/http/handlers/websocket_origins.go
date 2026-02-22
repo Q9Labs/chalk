@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/url"
 	"os"
 	"strings"
 )
@@ -67,8 +68,13 @@ func buildAllowedWSOrigins() []string {
 
 func resolveWSOriginPatterns(requestOrigin string, tenantOriginAllowed bool, fallbackOrigins []string) []string {
 	if requestOrigin != "" && tenantOriginAllowed {
-		// Tighten origin checking to the exact verified request origin.
-		return []string{requestOrigin}
+		// Tighten origin checking to the verified request origin while
+		// keeping host-only compatibility for ALB/API Gateway forwarded headers.
+		patterns := []string{requestOrigin}
+		if parsed, err := url.Parse(requestOrigin); err == nil && parsed.Host != "" {
+			patterns = append(patterns, parsed.Host)
+		}
+		return patterns
 	}
 	if len(fallbackOrigins) > 0 {
 		return fallbackOrigins
