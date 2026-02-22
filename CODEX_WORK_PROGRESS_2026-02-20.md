@@ -158,3 +158,12 @@
   - `AudioDurationSeconds` latest: `220.0` at `2026-02-20T10:12:00+05:00`
   - `RtfRatio` latest: `0.487955` at `2026-02-20T10:12:00+05:00`
   - `ProcessingTimeSeconds` latest: `107.35` at `2026-02-20T10:12:00+05:00`
+
+## 13:13 PKT
+- User requested immediate further cost-down (no canary).
+- Terraform change applied for Whisper prod module:
+  - `instance_type: c7i.xlarge -> c7i.large`
+  - `whisper_cpu_threads: 8 -> 2`
+- Validation:
+  - `terraform -chdir=infrastructure/terraform/environments/prod validate` ✅
+- Next execution path: commit+push -> infra apply -> force instance refresh -> transcribe short+long audio probes on live worker.

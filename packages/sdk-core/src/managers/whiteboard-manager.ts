@@ -230,7 +230,10 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
 		this.room.on("whiteboard-opened", (data) => {
 			this.openParticipants.add(data.participantId);
-			this.setState({ openParticipants: Array.from(this.openParticipants) });
+			this.setState({
+				isOpen: true,
+				openParticipants: Array.from(this.openParticipants),
+			});
 			this.events.emit("opened", {
 				participantId: data.participantId,
 				displayName: data.displayName,
@@ -241,6 +244,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			this.openParticipants.delete(data.participantId);
 			this.cursors.delete(data.participantId);
 			this.setState({
+				isOpen: false,
 				openParticipants: Array.from(this.openParticipants),
 				cursors: Array.from(this.cursors.values()),
 			});

@@ -10,7 +10,6 @@ import type {
 } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
-import { useParticipants } from "../participants/useParticipants";
 
 export interface UseWhiteboardReturn {
 	/** Whether whiteboard is open */
@@ -76,7 +75,6 @@ export interface UseWhiteboardReturn {
 export function useWhiteboard(): UseWhiteboardReturn {
 	const session = useSession();
 	const { whiteboard } = session;
-	const { localParticipant } = useParticipants();
 
 	const [state, setState] = useState<WhiteboardState>(() =>
 		whiteboard.getState(),
@@ -104,32 +102,6 @@ export function useWhiteboard(): UseWhiteboardReturn {
 			setLatestSnapshot(snapshot);
 		});
 	}, [whiteboard]);
-
-	// Auto-open when another participant opens whiteboard
-	useEffect(() => {
-		return whiteboard.on("opened", (data) => {
-			// Ignore our own events
-			if (data.participantId === localParticipant?.id) return;
-
-			const currentState = whiteboard.getState();
-			if (!currentState.isOpen) {
-				whiteboard.open();
-			}
-		});
-	}, [whiteboard, localParticipant?.id]);
-
-	// Auto-close when another participant closes whiteboard
-	useEffect(() => {
-		return whiteboard.on("closed", (data) => {
-			// Ignore our own events
-			if (data.participantId === localParticipant?.id) return;
-
-			const currentState = whiteboard.getState();
-			if (currentState.isOpen) {
-				whiteboard.close();
-			}
-		});
-	}, [whiteboard, localParticipant?.id]);
 
 	const open = useCallback((): void => whiteboard.open(), [whiteboard]);
 

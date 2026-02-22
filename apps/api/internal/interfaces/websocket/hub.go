@@ -185,9 +185,12 @@ func (h *Hub) Run(ctx context.Context) {
 				"ping_errors_total", now.pingErrors,
 			}
 
-			// Dual-path: stdout for CloudWatch alarms; default logger for Axiom.
+			// Keep metrics in stdout/CloudWatch, but avoid pushing this high-cardinality
+			// payload to Axiom where schema column budget is limited.
 			logging.Stdout().Info("websocket metrics", attrs...)
-			h.logger.Info("websocket metrics", attrs...)
+			if !logging.AxiomEnabled() {
+				h.logger.Info("websocket metrics", attrs...)
+			}
 
 			last = now
 		}

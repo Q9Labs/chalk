@@ -11,9 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+### Removed
+
+## [0.0.59] - 2026-02-22
+
+### Added
+
+### Changed
+
 - **Infra: Whisper aggressive cost mode** — downsize prod Whisper worker from `c7i.xlarge` to single Spot `c7i.large` and reduce `WHISPER_CPU_THREADS` to `2`.
 
 ### Fixed
+
+- **SDK-Core/SDK-React: Whiteboard open/close sync** — remote whiteboard open/close events now update local state without re-broadcasting.
 
 ### Removed
 
