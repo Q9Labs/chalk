@@ -10,3 +10,6 @@
 - Updated API Dockerfile for `TARGETARCH` multi-arch build support.
 - Added DB pool env tunables (`DATABASE_MAX_CONNS`, `DATABASE_MIN_CONNS`) and validation.
 - Added docs: lean cutover runbook + control-plane cost baseline.
+- 08:59: Retried lean apply after PlanetScale token update; apply still fails at PlanetScale role create endpoint (404 on org/db/branch path).
+- 08:59: Added workflow support for optional PLANETSCALE_BRANCH secret (fallback main) in plan/destroy var injection.
+- 08:59: Updated prod-lean README example to include planetscale_branch input.

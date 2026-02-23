@@ -24,6 +24,7 @@ terraform plan \
   -var="planetscale_service_token=..." \
   -var="planetscale_organization=..." \
   -var="planetscale_database=..." \
+  -var="planetscale_branch=main" \
   -var="cloudflare_app_id=..." \
   -var="cloudflare_app_token=..." \
   -var="jwt_signing_key=..." \
