@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -16,10 +16,11 @@ COPY . .
 # Build args for version stamping
 ARG COMMIT_SHA=unknown
 ARG BUILD_TIME=unknown
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-arm64} go build \
     -ldflags="-w -s \
       -X github.com/Q9Labs/chalk/internal/version.CommitSHA=${COMMIT_SHA} \
       -X github.com/Q9Labs/chalk/internal/version.Version=${COMMIT_SHA} \
