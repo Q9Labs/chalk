@@ -13,3 +13,4 @@
 - 08:59: Retried lean apply after PlanetScale token update; apply still fails at PlanetScale role create endpoint (404 on org/db/branch path).
 - 08:59: Added workflow support for optional PLANETSCALE_BRANCH secret (fallback main) in plan/destroy var injection.
 - 08:59: Updated prod-lean README example to include planetscale_branch input.
+- 09:13: Added real legacy prod destroy path in `.github/workflows/infra.yml` (`destroy-prod`), and excluded destroy dispatch from normal prod plan branch.
