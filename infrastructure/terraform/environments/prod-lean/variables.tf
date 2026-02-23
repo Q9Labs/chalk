@@ -114,18 +114,6 @@ variable "planetscale_branch" {
   default     = "main"
 }
 
-variable "planetscale_region" {
-  description = "PlanetScale region (optional)"
-  type        = string
-  default     = ""
-}
-
-variable "planetscale_cluster_size" {
-  description = "PlanetScale cluster size (optional)"
-  type        = string
-  default     = ""
-}
-
 variable "cloudflare_app_id" {
   description = "RealtimeKit app ID"
   type        = string

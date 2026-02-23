@@ -62,9 +62,6 @@ locals {
   api_domain = "${var.api_subdomain}.${var.cloudflare_zone_name}"
   ws_domain  = "${var.ws_subdomain}.${var.cloudflare_zone_name}"
 
-  planetscale_region_or_null       = trimspace(var.planetscale_region) == "" ? null : var.planetscale_region
-  planetscale_cluster_size_or_null = trimspace(var.planetscale_cluster_size) == "" ? null : var.planetscale_cluster_size
-
   redis_scheme = var.upstash_tls ? "rediss" : "redis"
   redis_url = format(
     "%s://:%s@%s:%d",
@@ -152,19 +149,10 @@ locals {
   zone_id = data.cloudflare_zones.main.result[0].id
 }
 
-resource "planetscale_postgres_branch" "main" {
-  organization = var.planetscale_organization
-  database     = var.planetscale_database
-  name         = var.planetscale_branch
-
-  region       = local.planetscale_region_or_null
-  cluster_size = local.planetscale_cluster_size_or_null
-}
-
 resource "planetscale_postgres_branch_role" "api" {
   organization = var.planetscale_organization
   database     = var.planetscale_database
-  branch       = planetscale_postgres_branch.main.name
+  branch       = var.planetscale_branch
   name         = "api"
 }
 
