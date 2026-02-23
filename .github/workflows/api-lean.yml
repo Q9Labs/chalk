@@ -150,15 +150,19 @@ jobs:
       - name: Restart service with new image
         id: ssm
         run: |
-          CMD1="echo '${{ needs.docker.outputs.image_uri }}' | sudo tee /etc/chalk/image >/dev/null"
-          CMD2="sudo systemctl restart chalk-api"
-          CMD3="sudo systemctl is-active --quiet chalk-api"
+          PARAMS=$(jq -cn \
+            --arg image "${{ needs.docker.outputs.image_uri }}" \
+            '{commands: [
+              ("echo " + $image + " | sudo tee /etc/chalk/image >/dev/null"),
+              "sudo systemctl restart chalk-api",
+              "sudo systemctl is-active --quiet chalk-api"
+            ]}')
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.ec2.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy Chalk API lean image ${{ github.sha }}" \
-            --parameters commands="$CMD1","$CMD2","$CMD3" \
+            --parameters "$PARAMS" \
             --query 'Command.CommandId' \
             --output text)
 

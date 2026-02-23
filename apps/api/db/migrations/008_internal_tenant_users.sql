@@ -12,7 +12,7 @@
 -- USERS
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     email TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -31,7 +31,7 @@ CREATE TRIGGER update_users_updated_at
 -- USER SESSIONS (refresh token stored hashed)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS user_sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     refresh_token_hash TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
@@ -80,7 +80,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_internal_owner_user_id_unique
 -- TENANT CLAIMS (pre-signup workspace claim)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS tenant_claims (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     secret_hash TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
@@ -91,4 +91,3 @@ CREATE TABLE IF NOT EXISTS tenant_claims (
 CREATE INDEX IF NOT EXISTS idx_tenant_claims_tenant_id ON tenant_claims(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_claims_expires_at ON tenant_claims(expires_at);
 CREATE INDEX IF NOT EXISTS idx_tenant_claims_secret_hash ON tenant_claims(secret_hash);
-

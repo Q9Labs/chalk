@@ -6,7 +6,7 @@
 -- Stores full transcripts generated from recordings (via Groq/Whisper)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS post_meeting_transcripts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     recording_id UUID NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     transcript_text TEXT,
@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_status ON post_meeting_t
 -- Tracks webhook delivery attempts with retry support
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     recording_id UUID REFERENCES recordings(id) ON DELETE SET NULL,

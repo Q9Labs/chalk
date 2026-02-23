@@ -1,8 +1,12 @@
 -- 001_initial_schema.sql
 -- Chalk Video Conferencing Platform - Initial Database Schema
 
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- UUID helper that works on managed Postgres without extension privileges.
+-- We avoid pgcrypto/uuid-ossp extension requirements in lean deployments.
+CREATE OR REPLACE FUNCTION chalk_uuid_v4()
+RETURNS UUID AS $$
+    SELECT md5(random()::text || clock_timestamp()::text)::uuid;
+$$ LANGUAGE sql VOLATILE;
 
 -- Function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -18,7 +22,7 @@ $$ language 'plpgsql';
 -- Represents consuming applications (LMS, education platforms, etc.)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS tenants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     name VARCHAR(255) NOT NULL,
     api_key_hash VARCHAR(255) NOT NULL UNIQUE,
     config JSONB NOT NULL DEFAULT '{}',
@@ -42,7 +46,7 @@ CREATE TRIGGER update_tenants_updated_at
 -- Video conferencing rooms linked to Cloudflare RealtimeKit
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS rooms (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     cloudflare_meeting_id VARCHAR(255) NOT NULL,
     name VARCHAR(255),
@@ -72,7 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_rooms_created_at ON rooms(created_at DESC);
 -- Users participating in video rooms
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS participants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     cloudflare_participant_id VARCHAR(255) NOT NULL,
     external_user_id VARCHAR(255),
@@ -93,7 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_participants_room_active ON participants(room_id)
 -- Session recordings stored in R2/S3
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS recordings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     cloudflare_recording_id VARCHAR(255),
     storage_provider VARCHAR(50) CHECK (storage_provider IN ('r2', 's3_glacier')),
@@ -118,7 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_recordings_archived_at ON recordings(archived_at)
 -- Compliance and debugging audit trail
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
     room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
     actor_id VARCHAR(255),

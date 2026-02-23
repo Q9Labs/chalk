@@ -114,6 +114,12 @@ variable "planetscale_database" {
   type        = string
 }
 
+variable "planetscale_database_name" {
+  description = "Actual Postgres database name within PlanetScale cluster"
+  type        = string
+  default     = "postgres"
+}
+
 variable "planetscale_branch" {
   description = "PlanetScale branch"
   type        = string

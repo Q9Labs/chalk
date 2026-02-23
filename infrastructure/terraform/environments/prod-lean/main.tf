@@ -76,7 +76,7 @@ locals {
     PORT                             = "8080"
     DATABASE_HOST                    = planetscale_postgres_branch_role.api.access_host_url
     DATABASE_PORT                    = "5432"
-    DATABASE_NAME                    = var.planetscale_database
+    DATABASE_NAME                    = var.planetscale_database_name
     DATABASE_USER                    = planetscale_postgres_branch_role.api.username
     DATABASE_SSLMODE                 = "require"
     DATABASE_MAX_CONNS               = tostring(var.db_max_conns)

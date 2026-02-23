@@ -3,7 +3,7 @@
 
 -- Transcripts table for storing meeting transcriptions
 CREATE TABLE IF NOT EXISTS transcripts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     participant_id UUID REFERENCES participants(id) ON DELETE SET NULL,
     cloudflare_participant_id VARCHAR(255),

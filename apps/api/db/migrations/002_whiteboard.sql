@@ -38,7 +38,7 @@ COMMENT ON COLUMN tenants.whiteboard_config IS 'Whiteboard permission config: de
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS whiteboard_permissions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
     can_draw BOOLEAN NOT NULL DEFAULT true,
