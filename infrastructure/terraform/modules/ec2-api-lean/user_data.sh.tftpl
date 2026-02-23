@@ -18,14 +18,6 @@ if ! command -v jq >/dev/null 2>&1; then
   dnf install -y jq
 fi
 
-if ! command -v caddy >/dev/null 2>&1; then
-  if ! dnf install -y caddy; then
-    dnf install -y 'dnf-command(config-manager)' || true
-    dnf config-manager --add-repo https://dl.cloudsmith.io/public/caddy/stable/rpm.repo
-    dnf install -y caddy
-  fi
-fi
-
 mkdir -p /etc/chalk
 cat >/etc/chalk/image <<IMAGETAG
 ${container_image}
@@ -99,12 +91,37 @@ TimeoutStopSec=20
 WantedBy=multi-user.target
 SERVICEEOF
 
-cat >/etc/caddy/Caddyfile <<CADDYEOF
+cat >/etc/chalk/Caddyfile <<CADDYEOF
 ${api_domain}, ${ws_domain} {
   reverse_proxy 127.0.0.1:${api_port}
 }
 CADDYEOF
 
+cat >/etc/systemd/system/chalk-caddy.service <<'SERVICEEOF'
+[Unit]
+Description=Chalk Caddy Reverse Proxy (Docker)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker rm -f chalk-caddy
+ExecStart=/usr/bin/docker run --name chalk-caddy \
+  -p 80:80 \
+  -p 443:443 \
+  -v /etc/chalk/Caddyfile:/etc/caddy/Caddyfile:ro \
+  -v /var/lib/chalk-caddy/data:/data \
+  -v /var/lib/chalk-caddy/config:/config \
+  caddy:2-alpine
+ExecStop=/usr/bin/docker stop chalk-caddy
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
 systemctl daemon-reload
 systemctl enable --now chalk-api
-systemctl enable --now caddy
+systemctl enable --now chalk-caddy
