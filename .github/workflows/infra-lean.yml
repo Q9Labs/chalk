@@ -145,7 +145,7 @@ jobs:
             -var="planetscale_organization=${{ secrets.PLANETSCALE_ORGANIZATION }}" \
             -var="planetscale_database=${{ secrets.PLANETSCALE_DATABASE }}" \
             -var="cloudflare_app_id=${{ secrets.CLOUDFLARE_APP_ID }}" \
-            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_APP_TOKEN }}" \
+            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -var="jwt_signing_key=${{ secrets.JWT_SIGNING_KEY }}" \
             -var="admin_secret=${{ secrets.ADMIN_SECRET }}" \
             -var="auth_link_signing_key=${{ secrets.AUTH_LINK_SIGNING_KEY }}" \
@@ -255,6 +255,6 @@ jobs:
             -var="planetscale_organization=${{ secrets.PLANETSCALE_ORGANIZATION }}" \
             -var="planetscale_database=${{ secrets.PLANETSCALE_DATABASE }}" \
             -var="cloudflare_app_id=${{ secrets.CLOUDFLARE_APP_ID }}" \
-            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_APP_TOKEN }}" \
+            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -var="jwt_signing_key=${{ secrets.JWT_SIGNING_KEY }}" \
             -var="admin_secret=${{ secrets.ADMIN_SECRET }}"
