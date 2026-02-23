@@ -297,11 +297,12 @@ jobs:
           fi
 
       - name: Remove protected R2 lifecycle from state
+        continue-on-error: true
         run: terraform state rm 'module.cloudflare.cloudflare_r2_bucket_lifecycle.recordings[0]' || true
 
       - name: Terraform Destroy
         run: |
-          terraform destroy -auto-approve \
+          terraform destroy -refresh=false -auto-approve \
             -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
             -var="r2_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}" \
