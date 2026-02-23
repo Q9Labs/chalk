@@ -54,6 +54,7 @@ jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.action != 'destroy'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -247,7 +248,6 @@ jobs:
   destroy-prod:
     name: Destroy (Prod)
     runs-on: ubuntu-latest
-    needs: validate
     if: github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.action == 'destroy'
     environment: prod-approval
     defaults:

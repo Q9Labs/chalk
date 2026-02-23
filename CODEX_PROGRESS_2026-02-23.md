@@ -14,3 +14,4 @@
 - 08:59: Added workflow support for optional PLANETSCALE_BRANCH secret (fallback main) in plan/destroy var injection.
 - 08:59: Updated prod-lean README example to include planetscale_branch input.
 - 09:13: Added real legacy prod destroy path in `.github/workflows/infra.yml` (`destroy-prod`), and excluded destroy dispatch from normal prod plan branch.
+- 09:18: Updated infra workflow to skip validate for explicit destroy dispatch and allow destroy-prod to run immediately.
