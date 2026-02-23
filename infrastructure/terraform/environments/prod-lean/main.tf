@@ -115,10 +115,7 @@ locals {
     JWT_SIGNING_KEY      = var.jwt_signing_key
   }
 
-  plain_env_parameters = {
-    for key, value in local.plain_env : key => value
-    if value != null && trimspace(value) != ""
-  }
+  plain_env_parameters = local.plain_env
 
 }
 
