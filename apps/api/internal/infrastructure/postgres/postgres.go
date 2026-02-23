@@ -111,8 +111,11 @@ func (p *Pool) Close() {
 func (p *Pool) RunMigrations(ctx context.Context) error {
 	// Initial schema migration - idempotent (uses IF NOT EXISTS)
 	schema := `
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- UUID helper that works on managed Postgres without extension privileges.
+CREATE OR REPLACE FUNCTION chalk_uuid_v4()
+RETURNS UUID AS $$
+    SELECT md5(random()::text || clock_timestamp()::text)::uuid;
+$$ LANGUAGE sql VOLATILE;
 
 -- Function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -125,7 +128,7 @@ $$ language 'plpgsql';
 
 -- TENANTS TABLE
 CREATE TABLE IF NOT EXISTS tenants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     name VARCHAR(255) NOT NULL,
     api_key_hash VARCHAR(255) NOT NULL UNIQUE,
     config JSONB NOT NULL DEFAULT '{}',
@@ -150,7 +153,7 @@ CREATE TRIGGER update_tenants_updated_at
 
 -- ROOMS TABLE
 CREATE TABLE IF NOT EXISTS rooms (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     cloudflare_meeting_id VARCHAR(255) NOT NULL,
     name VARCHAR(255),
@@ -178,7 +181,7 @@ CREATE INDEX IF NOT EXISTS idx_rooms_created_at ON rooms(created_at DESC);
 
 -- PARTICIPANTS TABLE
 CREATE TABLE IF NOT EXISTS participants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     cloudflare_participant_id VARCHAR(255) NOT NULL,
     external_user_id VARCHAR(255),
@@ -196,7 +199,7 @@ CREATE INDEX IF NOT EXISTS idx_participants_room_active ON participants(room_id)
 
 -- RECORDINGS TABLE
 CREATE TABLE IF NOT EXISTS recordings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     cloudflare_recording_id VARCHAR(255),
     storage_provider VARCHAR(50) CHECK (storage_provider IN ('r2', 's3_glacier')),
@@ -218,7 +221,7 @@ CREATE INDEX IF NOT EXISTS idx_recordings_archived_at ON recordings(archived_at)
 
 -- AUDIT LOGS TABLE
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
     room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
     actor_id VARCHAR(255),
@@ -239,7 +242,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_created ON audit_logs(tenant_id
 
 -- WHITEBOARD PERMISSIONS TABLE
 CREATE TABLE IF NOT EXISTS whiteboard_permissions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
     can_draw BOOLEAN NOT NULL DEFAULT true,
@@ -280,7 +283,7 @@ ALTER TABLE recordings ADD CONSTRAINT recordings_status_check
 -- MIGRATION 006: Transcripts table for real-time transcriptions
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS transcripts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     participant_id UUID REFERENCES participants(id) ON DELETE SET NULL,
     cloudflare_participant_id VARCHAR(255),
@@ -301,7 +304,7 @@ CREATE INDEX IF NOT EXISTS idx_transcripts_external_id ON transcripts(external_i
 -- MIGRATION 007: Post-meeting transcripts (from recordings via Groq/Whisper)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS post_meeting_transcripts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     recording_id UUID NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     transcript_text TEXT,
@@ -326,7 +329,7 @@ CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_status ON post_meeting_t
 -- MIGRATION 007: Webhook deliveries table for retry support
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     recording_id UUID REFERENCES recordings(id) ON DELETE SET NULL,
@@ -352,7 +355,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 	-- MIGRATION 008: Internal tenants + end-user auth primitives
 	-- ============================================================================
 	CREATE TABLE IF NOT EXISTS users (
-	    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
 	    email TEXT NOT NULL,
 	    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -367,7 +370,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 	    EXECUTE FUNCTION update_updated_at_column();
 
 	CREATE TABLE IF NOT EXISTS user_sessions (
-	    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
 	    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	    refresh_token_hash TEXT NOT NULL,
 	    expires_at TIMESTAMPTZ NOT NULL,
@@ -409,7 +412,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 	    WHERE tenant_kind = 'internal' AND owner_user_id IS NOT NULL;
 
 	CREATE TABLE IF NOT EXISTS tenant_claims (
-	    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
 	    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 	    secret_hash TEXT NOT NULL,
 	    expires_at TIMESTAMPTZ NOT NULL,
