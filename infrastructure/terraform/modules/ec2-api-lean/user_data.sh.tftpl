@@ -109,8 +109,7 @@ Restart=always
 RestartSec=5
 ExecStartPre=-/usr/bin/docker rm -f chalk-caddy
 ExecStart=/usr/bin/docker run --name chalk-caddy \
-  -p 80:80 \
-  -p 443:443 \
+  --network host \
   -v /etc/chalk/Caddyfile:/etc/caddy/Caddyfile:ro \
   -v /var/lib/chalk-caddy/data:/data \
   -v /var/lib/chalk-caddy/config:/config \
