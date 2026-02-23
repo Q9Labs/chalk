@@ -151,6 +151,9 @@ resource "planetscale_postgres_branch_role" "api" {
   database     = var.planetscale_database
   branch       = var.planetscale_branch
   name         = "api"
+  inherited_roles = [
+    "pscale_admin",
+  ]
 }
 
 resource "upstash_redis_database" "control_plane" {
