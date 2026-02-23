@@ -9,7 +9,6 @@ IMAGE="${container_image}"
 SSM_PATH="${ssm_parameter_path}"
 
 dnf update -y
-amazon-linux-extras install docker -y || true
 if ! command -v docker >/dev/null 2>&1; then
   dnf install -y docker
 fi
@@ -20,9 +19,11 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 if ! command -v caddy >/dev/null 2>&1; then
-  dnf install -y 'dnf-command(copr)'
-  dnf copr enable @caddy/caddy -y
-  dnf install -y caddy
+  if ! dnf install -y caddy; then
+    dnf install -y 'dnf-command(config-manager)' || true
+    dnf config-manager --add-repo https://dl.cloudsmith.io/public/caddy/stable/rpm.repo
+    dnf install -y caddy
+  fi
 fi
 
 mkdir -p /etc/chalk
