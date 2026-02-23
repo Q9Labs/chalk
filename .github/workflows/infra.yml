@@ -296,6 +296,9 @@ jobs:
             echo "cf_webhook_secret=${{ secrets.CLOUDFLARE_WEBHOOK_SECRET }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Remove protected R2 lifecycle from state
+        run: terraform state rm 'module.cloudflare.cloudflare_r2_bucket_lifecycle.recordings[0]' || true
+
       - name: Terraform Destroy
         run: |
           terraform destroy -auto-approve \

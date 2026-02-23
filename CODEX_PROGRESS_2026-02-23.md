@@ -15,3 +15,4 @@
 - 08:59: Updated prod-lean README example to include planetscale_branch input.
 - 09:13: Added real legacy prod destroy path in `.github/workflows/infra.yml` (`destroy-prod`), and excluded destroy dispatch from normal prod plan branch.
 - 09:18: Updated infra workflow to skip validate for explicit destroy dispatch and allow destroy-prod to run immediately.
+- 09:22: Added pre-destroy terraform state rm for protected Cloudflare R2 lifecycle resource to unblock legacy prod teardown.
