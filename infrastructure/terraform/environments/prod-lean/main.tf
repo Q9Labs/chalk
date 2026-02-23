@@ -136,7 +136,6 @@ module "cloudflare" {
   environment              = local.environment
   r2_location              = "enam"
   recording_retention_days = 30
-  enable_lifecycle_rules   = false
 }
 
 data "cloudflare_zones" "main" {
