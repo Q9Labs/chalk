@@ -13,6 +13,14 @@ bun run generate               # Re-generate openapi.yml when suitable after mak
 cd apps/api && go run ./cmd/main.go # Run API server
 ```
 
+## Cost Formulas (Quick Reference)
+
+- RealtimeKit participant-minutes: `participant_minutes = sessions * avg_minutes * avg_participants`
+- RealtimeKit A/V cost: `participant_minutes * 0.002`
+- RealtimeKit audio-only cost: `participant_minutes * 0.0005`
+- SFU egress estimate (GB): `participant_minutes * avg_downlink_mbps * 0.0075`
+- SFU cost: `max(0, sfu_gb - 1000) * 0.05` (1000 GB free pool, then $0.05/GB)
+
 ## Where to Write Code
 
 **Packages first, then demo in apps:**
@@ -43,3 +51,7 @@ Never add client-side business logic to demo apps.
 
 - `chalk-stress-testing` — project skill for stress test planning/execution.
 - `release` — release skill (project only).
+
+## Whisper Rollback Note
+
+- If Whisper load/latency regresses on `c7i.large`, upgrade back to `c7i.xlarge` (spot).

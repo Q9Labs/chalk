@@ -16,9 +16,10 @@ COPY . .
 # Build args for version stamping
 ARG COMMIT_SHA=unknown
 ARG BUILD_TIME=unknown
+ARG TARGETARCH=amd64
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s \
       -X github.com/Q9Labs/chalk/internal/version.CommitSHA=${COMMIT_SHA} \
       -X github.com/Q9Labs/chalk/internal/version.Version=${COMMIT_SHA} \

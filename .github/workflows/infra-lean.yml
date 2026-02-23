@@ -1,0 +1,260 @@
+name: Infrastructure Lean CI/CD
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'infrastructure/terraform/environments/prod-lean/**'
+      - 'infrastructure/terraform/modules/ec2-api-lean/**'
+      - '.github/workflows/infra-lean.yml'
+  pull_request:
+    paths:
+      - 'infrastructure/terraform/environments/prod-lean/**'
+      - 'infrastructure/terraform/modules/ec2-api-lean/**'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+
+concurrency:
+  group: terraform-lean-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: '1.9'
+  AWS_REGION: us-east-1
+  TF_INPUT: 'false'
+  TF_IN_AUTOMATION: 'true'
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate:
+    name: Validate (Lean)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create plugin cache dir
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.terraform.d/plugin-cache
+          key: terraform-lean-${{ runner.os }}-${{ hashFiles('infrastructure/terraform/**/*.tf') }}
+          restore-keys: terraform-lean-${{ runner.os }}-
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: infrastructure/terraform
+
+      - name: Validate ec2-api-lean module
+        run: |
+          cd infrastructure/terraform/modules/ec2-api-lean
+          terraform init -backend=false
+          terraform validate
+
+  plan:
+    name: Plan (Prod Lean)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'plan') ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'apply') ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'destroy')
+    environment: prod
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/prod-lean
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+      action: ${{ steps.mode.outputs.action }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create plugin cache dir
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.terraform.d/plugin-cache
+          key: terraform-lean-${{ runner.os }}-${{ hashFiles('infrastructure/terraform/**/*.tf') }}
+          restore-keys: terraform-lean-${{ runner.os }}-
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Determine mode
+        id: mode
+        run: |
+          ACTION="plan"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ACTION="${{ inputs.action }}"
+          fi
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          EXTRA_ARGS=""
+          if [ "${{ steps.mode.outputs.action }}" = "destroy" ]; then
+            EXTRA_ARGS="-destroy"
+          fi
+
+          terraform plan $EXTRA_ARGS \
+            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -var="r2_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}" \
+            -var="r2_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}" \
+            -var="upstash_email=${{ secrets.UPSTASH_EMAIL }}" \
+            -var="upstash_api_key=${{ secrets.UPSTASH_API_KEY }}" \
+            -var="planetscale_service_token_id=${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}" \
+            -var="planetscale_service_token=${{ secrets.PLANETSCALE_SERVICE_TOKEN }}" \
+            -var="planetscale_organization=${{ secrets.PLANETSCALE_ORGANIZATION }}" \
+            -var="planetscale_database=${{ secrets.PLANETSCALE_DATABASE }}" \
+            -var="cloudflare_app_id=${{ secrets.CLOUDFLARE_APP_ID }}" \
+            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_APP_TOKEN }}" \
+            -var="jwt_signing_key=${{ secrets.JWT_SIGNING_KEY }}" \
+            -var="admin_secret=${{ secrets.ADMIN_SECRET }}" \
+            -var="auth_link_signing_key=${{ secrets.AUTH_LINK_SIGNING_KEY }}" \
+            -var="resend_api_key=${{ secrets.RESEND_API_KEY }}" \
+            -var="axiom_token=${{ secrets.AXIOM_TOKEN }}" \
+            -var="github_token=${{ secrets.GITHUB_TOKEN }}" \
+            -var="openrouter_api_key=${{ secrets.OPENROUTER_API_KEY }}" \
+            -var="groq_api_key=${{ secrets.GROQ_API_KEY }}" \
+            -var="cloudflare_webhook_secret=${{ secrets.CLOUDFLARE_WEBHOOK_SECRET }}" \
+            -out="${GITHUB_WORKSPACE}/tfplan-prod-lean" \
+            -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-prod-lean
+          path: ${{ github.workspace }}/tfplan-prod-lean
+          retention-days: 7
+        if: always()
+
+      - name: Plan Status
+        run: |
+          if [ "${{ steps.plan.outputs.exitcode }}" = "2" ]; then
+            echo "::notice::Terraform plan has changes"
+          elif [ "${{ steps.plan.outputs.exitcode }}" = "1" ]; then
+            echo "::error::Terraform plan failed"
+            exit 1
+          else
+            echo "::notice::No changes"
+          fi
+
+  apply:
+    name: Apply (Prod Lean)
+    runs-on: ubuntu-latest
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
+    environment: prod-approval
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/prod-lean
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Download Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-prod-lean
+          path: ${{ github.workspace }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve "${GITHUB_WORKSPACE}/tfplan-prod-lean"
+
+  destroy:
+    name: Destroy (Prod Lean)
+    runs-on: ubuntu-latest
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+    environment: prod-approval
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/prod-lean
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        run: |
+          terraform destroy -auto-approve \
+            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -var="r2_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}" \
+            -var="r2_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}" \
+            -var="upstash_email=${{ secrets.UPSTASH_EMAIL }}" \
+            -var="upstash_api_key=${{ secrets.UPSTASH_API_KEY }}" \
+            -var="planetscale_service_token_id=${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}" \
+            -var="planetscale_service_token=${{ secrets.PLANETSCALE_SERVICE_TOKEN }}" \
+            -var="planetscale_organization=${{ secrets.PLANETSCALE_ORGANIZATION }}" \
+            -var="planetscale_database=${{ secrets.PLANETSCALE_DATABASE }}" \
+            -var="cloudflare_app_id=${{ secrets.CLOUDFLARE_APP_ID }}" \
+            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_APP_TOKEN }}" \
+            -var="jwt_signing_key=${{ secrets.JWT_SIGNING_KEY }}" \
+            -var="admin_secret=${{ secrets.ADMIN_SECRET }}"

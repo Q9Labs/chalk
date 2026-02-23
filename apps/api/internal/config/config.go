@@ -42,6 +42,8 @@ type DatabaseConfig struct {
 	User     string
 	Password string
 	SSLMode  string
+	MaxConns int
+	MinConns int
 }
 
 type RedisConfig struct {
@@ -182,6 +184,8 @@ func Load() (*Config, error) {
 			User:     dbUser,
 			Password: dbPassword,
 			SSLMode:  dbSSLMode,
+			MaxConns: getEnvInt("DATABASE_MAX_CONNS", 25),
+			MinConns: getEnvInt("DATABASE_MIN_CONNS", 5),
 		},
 		Redis: RedisConfig{
 			URL:      redisURL,
@@ -287,6 +291,15 @@ func (c *Config) validate() error {
 	}
 	if !c.Cloudflare.Mock && c.Cloudflare.APIToken == "" {
 		return fmt.Errorf("CLOUDFLARE_API_TOKEN is required")
+	}
+	if c.Database.MaxConns < 1 {
+		return fmt.Errorf("DATABASE_MAX_CONNS must be >= 1")
+	}
+	if c.Database.MinConns < 0 {
+		return fmt.Errorf("DATABASE_MIN_CONNS must be >= 0")
+	}
+	if c.Database.MinConns > c.Database.MaxConns {
+		return fmt.Errorf("DATABASE_MIN_CONNS must be <= DATABASE_MAX_CONNS")
 	}
 
 	return nil

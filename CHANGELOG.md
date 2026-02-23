@@ -9,7 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Infra: Lean control-plane stack** — add `prod-lean` Terraform environment for EC2 `t4g.micro` + PlanetScale Postgres + Upstash Redis + Cloudflare R2, with SSM-backed runtime env management.
+- **Infra: Lean EC2 runtime module** — add `ec2-api-lean` module (arm64 host bootstrap, Docker runtime, Caddy reverse proxy/TLS, minimal CloudWatch alarms, SSM/ECR IAM wiring).
+- **CI: Lean infrastructure workflow** — add `.github/workflows/infra-lean.yml` with plan/apply/destroy for `prod-lean`.
+- **CI: Lean API deploy workflow** — add `.github/workflows/api-lean.yml` with arm64 image build/push and EC2 restart through SSM.
+- **Docs: Lean migration operations** — add cost baseline and cutover runbook docs for migration, rollback, and decommission sequencing.
+
 ### Changed
+
+- **API: DB pool tunables via env** — support `DATABASE_MAX_CONNS` and `DATABASE_MIN_CONNS` with validation so lean `t4g.micro` can run lower connection pressure safely.
+- **API Docker: Multi-arch build support** — Dockerfile now honors `TARGETARCH` for arm64-compatible builds used by lean EC2 deploys.
+- **CI: Terraform validate scope** — include `ec2-api-lean` module in legacy infra validation loop.
 
 ### Fixed
 
