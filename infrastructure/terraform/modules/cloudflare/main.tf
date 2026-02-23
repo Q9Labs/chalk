@@ -30,7 +30,7 @@ resource "cloudflare_r2_bucket" "recordings" {
 
 # R2 Lifecycle - Auto-transition to InfrequentAccess after 7 days
 resource "cloudflare_r2_bucket_lifecycle" "recordings" {
-  count       = var.enabled ? 1 : 0
+  count       = var.enabled && var.enable_lifecycle_rules ? 1 : 0
   account_id  = var.cloudflare_account_id
   bucket_name = cloudflare_r2_bucket.recordings[0].name
 

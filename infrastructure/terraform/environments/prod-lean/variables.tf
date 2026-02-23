@@ -28,6 +28,12 @@ variable "cloudflare_proxy_enabled" {
   default     = false
 }
 
+variable "manage_dns_records" {
+  description = "Manage chalk-api/chalk-ws DNS records from this stack"
+  type        = bool
+  default     = false
+}
+
 variable "cloudflare_account_id" {
   description = "Cloudflare account ID"
   type        = string

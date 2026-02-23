@@ -31,3 +31,9 @@ variable "recording_retention_days" {
   type        = number
   default     = 90
 }
+
+variable "enable_lifecycle_rules" {
+  description = "Enable R2 lifecycle rule management"
+  type        = bool
+  default     = true
+}

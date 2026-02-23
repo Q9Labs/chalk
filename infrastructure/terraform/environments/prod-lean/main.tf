@@ -136,6 +136,7 @@ module "cloudflare" {
   environment              = local.environment
   r2_location              = "enam"
   recording_retention_days = 30
+  enable_lifecycle_rules   = false
 }
 
 data "cloudflare_zones" "main" {
@@ -154,10 +155,11 @@ resource "planetscale_postgres_branch_role" "api" {
 }
 
 resource "upstash_redis_database" "control_plane" {
-  database_name = var.upstash_database_name
-  region        = var.upstash_region
-  tls           = var.upstash_tls
-  eviction      = var.upstash_eviction
+  database_name  = var.upstash_database_name
+  region         = "global"
+  primary_region = var.upstash_region
+  tls            = var.upstash_tls
+  eviction       = var.upstash_eviction
 }
 
 resource "aws_ssm_parameter" "plain_env" {
@@ -261,6 +263,8 @@ module "ec2_api" {
 }
 
 resource "cloudflare_dns_record" "api" {
+  count = var.manage_dns_records ? 1 : 0
+
   zone_id = local.zone_id
   name    = var.api_subdomain
   content = module.ec2_api.public_ip
@@ -270,6 +274,8 @@ resource "cloudflare_dns_record" "api" {
 }
 
 resource "cloudflare_dns_record" "websocket" {
+  count = var.manage_dns_records ? 1 : 0
+
   zone_id = local.zone_id
   name    = var.ws_subdomain
   content = module.ec2_api.public_ip
