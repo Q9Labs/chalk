@@ -281,3 +281,57 @@ variable "ssh_ingress_cidrs" {
   type        = list(string)
   default     = []
 }
+
+variable "whisper_enabled" {
+  description = "Enable dedicated whisper worker in lean stack"
+  type        = bool
+  default     = true
+}
+
+variable "whisper_instance_type" {
+  description = "Lean whisper worker EC2 instance type"
+  type        = string
+  default     = "c7i.large"
+}
+
+variable "whisper_use_spot" {
+  description = "Use spot market for lean whisper worker"
+  type        = bool
+  default     = true
+}
+
+variable "whisper_ssm_parameter_path" {
+  description = "SSM path where whisper worker reads secrets/env"
+  type        = string
+  default     = "/chalk/prod/api"
+}
+
+variable "whisper_log_level" {
+  description = "Whisper worker log level"
+  type        = string
+  default     = "INFO"
+}
+
+variable "whisper_device" {
+  description = "Whisper worker inference device"
+  type        = string
+  default     = "cpu"
+}
+
+variable "whisper_compute_type" {
+  description = "Whisper worker compute type"
+  type        = string
+  default     = "int8"
+}
+
+variable "whisper_cpu_threads" {
+  description = "Whisper worker CPU threads"
+  type        = number
+  default     = 2
+}
+
+variable "whisper_gpu_metrics_enabled" {
+  description = "Enable whisper worker GPU metrics"
+  type        = bool
+  default     = false
+}

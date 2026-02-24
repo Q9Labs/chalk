@@ -1,0 +1,92 @@
+#!/bin/bash
+set -euxo pipefail
+
+AWS_REGION="${aws_region}"
+IMAGE="${container_image}"
+SSM_PATH="${ssm_parameter_path}"
+
+dnf update -y
+if ! command -v docker >/dev/null 2>&1; then
+  dnf install -y docker
+fi
+systemctl enable --now docker
+
+if ! command -v jq >/dev/null 2>&1; then
+  dnf install -y jq
+fi
+
+mkdir -p /etc/chalk
+cat >/etc/chalk/whisper-image <<IMAGETAG
+${container_image}
+IMAGETAG
+
+cat >/usr/local/bin/chalk-render-whisper-env <<'SCRIPTEOF'
+#!/bin/bash
+set -euo pipefail
+
+SSM_PATH="$1"
+AWS_REGION="$2"
+OUT_FILE="/etc/chalk/whisper.env"
+TMP_FILE="$(mktemp)"
+NEXT_TOKEN=""
+
+cat >"$TMP_FILE" <<'ENVEOF'
+%{ for k, v in app_env_static ~}
+${k}=${v}
+%{ endfor ~}
+ENVEOF
+
+while true; do
+  if [ -n "$NEXT_TOKEN" ]; then
+    RESP=$(aws ssm get-parameters-by-path --path "$SSM_PATH" --with-decryption --recursive --region "$AWS_REGION" --output json --next-token "$NEXT_TOKEN")
+  else
+    RESP=$(aws ssm get-parameters-by-path --path "$SSM_PATH" --with-decryption --recursive --region "$AWS_REGION" --output json)
+  fi
+
+  echo "$RESP" | jq -r '.Parameters[]? | "\(.Name | split("/")[-1])=\(.Value)"' >>"$TMP_FILE"
+
+  NEXT_TOKEN=$(echo "$RESP" | jq -r '.NextToken // empty')
+  if [ -z "$NEXT_TOKEN" ]; then
+    break
+  fi
+done
+
+sort -u "$TMP_FILE" >"$OUT_FILE"
+chmod 600 "$OUT_FILE"
+rm -f "$TMP_FILE"
+SCRIPTEOF
+chmod +x /usr/local/bin/chalk-render-whisper-env
+
+cat >/usr/local/bin/chalk-run-whisper <<'SCRIPTEOF'
+#!/bin/bash
+set -euo pipefail
+
+IMAGE="$(cat /etc/chalk/whisper-image)"
+/usr/local/bin/chalk-render-whisper-env "${ssm_parameter_path}" "${aws_region}"
+aws ecr get-login-password --region "${aws_region}" | docker login --username AWS --password-stdin "$(echo "$IMAGE" | cut -d'/' -f1)"
+docker pull "$IMAGE"
+docker rm -f chalk-whisper-worker >/dev/null 2>&1 || true
+exec docker run --name chalk-whisper-worker --env-file /etc/chalk/whisper.env --restart no "$IMAGE"
+SCRIPTEOF
+chmod +x /usr/local/bin/chalk-run-whisper
+
+cat >/etc/systemd/system/chalk-whisper.service <<'SERVICEEOF'
+[Unit]
+Description=Chalk Whisper Worker Container
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStart=/usr/local/bin/chalk-run-whisper
+ExecStop=/usr/bin/docker stop chalk-whisper-worker
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+systemctl daemon-reload
+systemctl enable --now chalk-whisper

@@ -18,9 +18,19 @@ output "api_instance_id" {
   value       = module.ec2_api.instance_id
 }
 
+output "whisper_instance_id" {
+  description = "Lean whisper worker EC2 instance ID"
+  value       = try(module.ec2_whisper[0].instance_id, null)
+}
+
 output "ecr_repository_url" {
   description = "Lean API ECR repository"
   value       = module.ecr.repository_url
+}
+
+output "whisper_ecr_repository_url" {
+  description = "Lean whisper worker ECR repository"
+  value       = module.ecr.whisper_repository_url
 }
 
 output "r2_bucket_name" {
