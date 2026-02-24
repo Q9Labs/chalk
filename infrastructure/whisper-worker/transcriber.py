@@ -27,6 +27,21 @@ def _default_batch_size_max(model_name: str) -> int:
     return 8
 
 
+def _looks_like_oom(error: Exception) -> bool:
+    msg = str(error).lower()
+    if "cuda" in msg and "memory" in msg:
+        return True
+
+    markers = (
+        "out of memory",
+        "mkl_malloc",
+        "unable to allocate",
+        "cannot allocate memory",
+        "memoryerror",
+    )
+    return any(marker in msg for marker in markers)
+
+
 class WhisperTranscriber:
     def __init__(self):
         self.model_name = os.getenv("WHISPER_MODEL", "distil-large-v3.5")
@@ -73,6 +88,12 @@ class WhisperTranscriber:
             else _default_batch_size_max(self.model_name)
         )
         self.batch_size_min = int(os.getenv("WHISPER_BATCH_SIZE_MIN", "1"))
+        self.batched_enabled = env_bool(
+            "WHISPER_BATCHED_ENABLED", self.device.strip().lower() != "cpu"
+        )
+        self.batched_min_queue_depth = max(
+            1, env_int("WHISPER_BATCHED_MIN_QUEUE_DEPTH", 2)
+        )
 
         self.last_inference_mode: Optional[str] = None
         self.last_batch_size: Optional[int] = None
@@ -93,6 +114,8 @@ class WhisperTranscriber:
                 "condition_on_previous_text": self.condition_on_previous_text,
                 "language_detection_segments": self.language_detection_segments,
                 "language_detection_threshold": self.language_detection_threshold,
+                "batched_enabled": self.batched_enabled,
+                "batched_min_queue_depth": self.batched_min_queue_depth,
             },
         )
         load_start = time.time()
@@ -157,6 +180,11 @@ class WhisperTranscriber:
             return self._transcribe_batched(audio_path, language=language, start=start)
 
         return self._transcribe_single(audio_path, language=language, start=start)
+
+    def should_use_batched(self, queued_jobs: int) -> bool:
+        if not self.batched_enabled:
+            return False
+        return queued_jobs >= self.batched_min_queue_depth
 
     def _transcribe_single(
         self, audio_path: str, *, language: Optional[str], start: float
@@ -275,16 +303,20 @@ class WhisperTranscriber:
                     )
 
                 # OOM guard: step down batch size and retry.
-                msg = str(e).lower()
-                oom = "out of memory" in msg or "cuda" in msg and "memory" in msg
-                if not oom:
+                if not _looks_like_oom(e):
                     raise
 
                 oom_retries += 1
                 next_batch_size = batch_size // 2
-                if next_batch_size < self.batch_size_min:
-                    self.last_batch_size = batch_size
-                    self.last_oom_retries = oom_retries
-                    raise
+                if self.batch_size_min <= next_batch_size < batch_size:
+                    batch_size = next_batch_size
+                    continue
 
-                batch_size = next_batch_size
+                # If we can't step down further, fall back to single inference to avoid failing the job.
+                fallback = self._transcribe_single(
+                    audio_path, language=language, start=start
+                )
+                self.last_inference_mode = "single_fallback"
+                self.last_batch_size = batch_size
+                self.last_oom_retries = oom_retries
+                return fallback

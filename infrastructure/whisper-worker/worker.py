@@ -585,7 +585,7 @@ class WhisperWorker:
                     continue
 
                 remaining = self.redis.llen(JOB_QUEUE)
-                use_batched = remaining >= 1
+                use_batched = self.transcriber.should_use_batched(remaining)
 
                 try:
                     transcription_result = self.process_job(
