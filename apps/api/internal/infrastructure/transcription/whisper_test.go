@@ -26,11 +26,11 @@ func TestNewWhisperProvider_TimeoutFallsBackToDefault(t *testing.T) {
 func TestLoadWhisperTimeout_DefaultWhenUnset(t *testing.T) {
 	t.Setenv(whisperTimeoutEnvVar, "")
 
-	require.Equal(t, whisperDefaultTimeout, loadWhisperTimeout())
+	require.Equal(t, 2*time.Hour, loadWhisperTimeout())
 }
 
 func TestLoadWhisperTimeout_DefaultWhenNonPositive(t *testing.T) {
 	t.Setenv(whisperTimeoutEnvVar, "0s")
 
-	require.Equal(t, whisperDefaultTimeout, loadWhisperTimeout())
+	require.Equal(t, 2*time.Hour, loadWhisperTimeout())
 }

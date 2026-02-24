@@ -141,7 +141,7 @@ module "ecs" {
     { name = "CORS_ORIGINS_KEY", value = module.cors_origins.origins_key },
     { name = "POST_MEETING_WHISPER_ENABLED", value = "true" },
     { name = "POST_MEETING_WHISPER_REDIS_QUEUE", value = "transcription:jobs" },
-    { name = "POST_MEETING_WHISPER_TIMEOUT", value = "30m" },
+    { name = "POST_MEETING_WHISPER_TIMEOUT", value = "2h" },
     # Internal auth (Chalk-hosted apps: web + mobile)
     { name = "RESEND_FROM_EMAIL", value = "notifications@notifications.q9labs.ai" },
     { name = "INTERNAL_APP_URL", value = "https://chalk.q9labs.ai" },

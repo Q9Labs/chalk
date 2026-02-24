@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	whisperDefaultTimeout  = 30 * time.Minute
+	whisperDefaultTimeout  = 2 * time.Hour
 	whisperPollInterval    = 5 * time.Second
 	whisperResultKeyPrefix = "transcription:result:"
 	whisperTimeoutEnvVar   = "POST_MEETING_WHISPER_TIMEOUT"
@@ -127,7 +127,14 @@ func (p *WhisperProvider) Transcribe(ctx context.Context, audioURL string) (*dom
 		}, nil
 	}
 
-	return nil, fmt.Errorf("transcription timeout after %v", p.timeout)
+	jobQueueDepth, processingQueueDepth := p.getQueueDepths(ctx)
+	return nil, fmt.Errorf(
+		"transcription timeout after %v (job_id=%s queue_depth=%d processing_queue_depth=%d)",
+		p.timeout,
+		jobID,
+		jobQueueDepth,
+		processingQueueDepth,
+	)
 }
 
 func (p *WhisperProvider) Name() string {
@@ -136,6 +143,24 @@ func (p *WhisperProvider) Name() string {
 
 func (p *WhisperProvider) MaxFileSize() int64 {
 	return 0 // No limit for self-hosted
+}
+
+func (p *WhisperProvider) getQueueDepths(ctx context.Context) (int64, int64) {
+	if p.redis == nil {
+		return -1, -1
+	}
+
+	jobQueueDepth, err := p.redis.LLen(ctx, p.queueKey).Result()
+	if err != nil {
+		jobQueueDepth = -1
+	}
+
+	processingQueueDepth, err := p.redis.LLen(ctx, p.queueKey+":processing").Result()
+	if err != nil {
+		processingQueueDepth = -1
+	}
+
+	return jobQueueDepth, processingQueueDepth
 }
 
 type whisperJob struct {
