@@ -34,7 +34,7 @@ variable "spot_instance_type" {
 variable "spot_instance_interruption_behavior" {
   description = "Behavior when spot capacity is interrupted"
   type        = string
-  default     = "terminate"
+  default     = "stop"
 
   validation {
     condition     = contains(["hibernate", "stop", "terminate"], var.spot_instance_interruption_behavior)
