@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API: WebSocket tenant-origin handshake** — when an origin is validated against tenant `allowed_origins`, lock WS upgrade checks to that origin (with host-only compatibility for API Gateway/ALB forwarded Origin headers) so newly added tenant domains work without static allowlist updates.
 - **Docs: WebSocket endpoint examples** — update native/android/iOS docs to use `wss://chalk-ws.q9labs.ai/ws` instead of `wss://chalk-api.q9labs.ai/ws`.
 - **API: Meeting preset transcription override** — force Cloudflare participant join requests to send `transcription_enabled=false` so in-meeting preset transcription stays disabled.
+- **SDK-React: PreJoinLobby device selection** — camera/microphone/speaker picks now persist during lobby and are applied after room join, fixing `NOT_IN_ROOM` failures from pre-join device changes.
 
 ### Removed
 

@@ -267,6 +267,15 @@ function VideoConferenceBase({
 		microphones,
 		speakers: audioOutputs,
 	} = useDevices();
+	const [lobbySelectedCamera, setLobbySelectedCamera] = useState<
+		string | undefined
+	>(undefined);
+	const [lobbySelectedMicrophone, setLobbySelectedMicrophone] = useState<
+		string | undefined
+	>(undefined);
+	const [lobbySelectedSpeaker, setLobbySelectedSpeaker] = useState<
+		string | undefined
+	>(undefined);
 
 	const { session } = useChalkSession();
 
@@ -305,6 +314,42 @@ function VideoConferenceBase({
 	useEffect(() => {
 		refreshDevices();
 	}, [refreshDevices]);
+
+	useEffect(() => {
+		if (!lobbySelectedCamera && media.selectedCamera) {
+			setLobbySelectedCamera(media.selectedCamera);
+		}
+	}, [lobbySelectedCamera, media.selectedCamera]);
+
+	useEffect(() => {
+		if (!lobbySelectedMicrophone && media.selectedMicrophone) {
+			setLobbySelectedMicrophone(media.selectedMicrophone);
+		}
+	}, [lobbySelectedMicrophone, media.selectedMicrophone]);
+
+	useEffect(() => {
+		if (!lobbySelectedSpeaker && media.selectedSpeaker) {
+			setLobbySelectedSpeaker(media.selectedSpeaker);
+		}
+	}, [lobbySelectedSpeaker, media.selectedSpeaker]);
+
+	useEffect(() => {
+		if (!lobbySelectedCamera && cameras[0]?.deviceId) {
+			setLobbySelectedCamera(cameras[0].deviceId);
+		}
+	}, [cameras, lobbySelectedCamera]);
+
+	useEffect(() => {
+		if (!lobbySelectedMicrophone && microphones[0]?.deviceId) {
+			setLobbySelectedMicrophone(microphones[0].deviceId);
+		}
+	}, [microphones, lobbySelectedMicrophone]);
+
+	useEffect(() => {
+		if (!lobbySelectedSpeaker && audioOutputs[0]?.deviceId) {
+			setLobbySelectedSpeaker(audioOutputs[0].deviceId);
+		}
+	}, [audioOutputs, lobbySelectedSpeaker]);
 
 	useEffect(() => {
 		roomIdRef.current = roomId;
@@ -546,6 +591,21 @@ function VideoConferenceBase({
 					audioEnabled: settings.audioEnabled,
 					metadata,
 				});
+
+				const deviceSelectionTasks: Promise<void>[] = [];
+				if (settings.selectedVideoDevice) {
+					deviceSelectionTasks.push(media.selectCamera(settings.selectedVideoDevice));
+				}
+				if (settings.selectedAudioInput) {
+					deviceSelectionTasks.push(media.selectMicrophone(settings.selectedAudioInput));
+				}
+				if (settings.selectedAudioOutput) {
+					deviceSelectionTasks.push(media.selectSpeaker(settings.selectedAudioOutput));
+				}
+				if (deviceSelectionTasks.length > 0) {
+					await Promise.allSettled(deviceSelectionTasks);
+				}
+
 				setPhase("meeting");
 				play("join");
 				onJoin?.({
@@ -568,7 +628,20 @@ function VideoConferenceBase({
 				setPhase("lobby");
 			}
 		},
-		[join, roomId, role, metadata, localParticipant, recording.isRecording, play, onJoin, onError, isJoining, isConnected],
+		[
+			join,
+			roomId,
+			role,
+			metadata,
+			localParticipant,
+			recording.isRecording,
+			play,
+			onJoin,
+			onError,
+			isJoining,
+			isConnected,
+			media,
+		],
 	);
 
 	const handleLeave = useCallback(() => {
@@ -918,12 +991,12 @@ function VideoConferenceBase({
 				videoDevices={cameras as MediaDeviceInfo[]}
 				audioInputDevices={microphones as MediaDeviceInfo[]}
 				audioOutputDevices={audioOutputs as MediaDeviceInfo[]}
-				selectedVideoDevice={media.selectedCamera ?? undefined}
-				selectedAudioInput={media.selectedMicrophone ?? undefined}
-				selectedAudioOutput={media.selectedSpeaker ?? undefined}
-				onVideoDeviceChange={media.selectCamera}
-				onAudioInputChange={media.selectMicrophone}
-				onAudioOutputChange={media.selectSpeaker}
+				selectedVideoDevice={lobbySelectedCamera}
+				selectedAudioInput={lobbySelectedMicrophone}
+				selectedAudioOutput={lobbySelectedSpeaker}
+				onVideoDeviceChange={setLobbySelectedCamera}
+				onAudioInputChange={setLobbySelectedMicrophone}
+				onAudioOutputChange={setLobbySelectedSpeaker}
 				initialVideoEnabled={defaults.videoEnabled ?? true}
 				initialAudioEnabled={defaults.audioEnabled ?? true}
 				isLoading={phase === "joining" || isJoining}
