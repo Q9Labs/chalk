@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI: Legacy prod destroy resilience** — make infra destroy tolerant of stale state/manual deletes by using `terraform destroy -refresh=false` and non-blocking R2 lifecycle state cleanup.
 - **Post-meeting transcription timeout tuning** — raise Whisper timeout from `30m` to `2h` and include queue-depth diagnostics in timeout errors to avoid false failures under backlog.
 - **Whisper stability under backlog** — disable aggressive batched inference by default on CPU workers and add OOM fallback from batched to single-mode transcription while retaining `c7i.large` spot sizing.
+- **Infra: Lean whisper spot self-healing** — switch lean whisper worker spot mode to persistent requests so interruptions relaunch capacity automatically on `c7i.large` spot.
+- **CI: API ECS deploy skip behavior** — handle missing ECS task definition gracefully in `api.yml` instead of failing deploy stage when legacy ECS stack is absent.
 - **API: Eman Time CORS allowlist** — add `https://app.emantime.com` and `https://dev-app.emantime.com` to platform CORS origins so browser preflight requests can receive `Access-Control-Allow-Origin`.
 - **API: WebSocket origin allowlist** — add Eman Time origins (`app`, `dev-app`, `portal`) to the WebSocket origin patterns to avoid handshake rejections from strict origin checks.
 - **API: WebSocket tenant-origin handshake** — when an origin is validated against tenant `allowed_origins`, lock WS upgrade checks to that origin (with host-only compatibility for API Gateway/ALB forwarded Origin headers) so newly added tenant domains work without static allowlist updates.

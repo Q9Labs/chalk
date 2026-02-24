@@ -220,9 +220,23 @@ jobs:
       - name: Download task definition
         id: download-task-def
         run: |
+          set +e
           aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_SERVICE }} \
-            --query taskDefinition > task-definition.json
+            --query taskDefinition > task-definition.json 2> task-definition.err
+          DESCRIBE_EXIT=$?
+          set -e
+
+          if [ "$DESCRIBE_EXIT" -ne 0 ]; then
+            if grep -q "Unable to describe task definition" task-definition.err; then
+              echo "::warning::Task definition not found. Infrastructure may not be deployed yet."
+              echo "skip_deploy=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            cat task-definition.err
+            exit "$DESCRIBE_EXIT"
+          fi
 
           # Check if task definition exists
           if [ ! -s task-definition.json ] || [ "$(cat task-definition.json)" == "null" ]; then

@@ -20,6 +20,28 @@ variable "use_spot" {
   default     = true
 }
 
+variable "spot_instance_type" {
+  description = "Spot request type (one-time or persistent)"
+  type        = string
+  default     = "persistent"
+
+  validation {
+    condition     = contains(["one-time", "persistent"], var.spot_instance_type)
+    error_message = "spot_instance_type must be one-time or persistent."
+  }
+}
+
+variable "spot_instance_interruption_behavior" {
+  description = "Behavior when spot capacity is interrupted"
+  type        = string
+  default     = "terminate"
+
+  validation {
+    condition     = contains(["hibernate", "stop", "terminate"], var.spot_instance_interruption_behavior)
+    error_message = "spot_instance_interruption_behavior must be hibernate, stop, or terminate."
+  }
+}
+
 variable "ecr_repository_arn" {
   description = "ECR repository ARN for pull access"
   type        = string
