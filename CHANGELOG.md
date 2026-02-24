@@ -36,8 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Ops: Tenant bootstrap skill** — add `.codex/skills/chalk-tenant-bootstrap` with a minimal script to recreate the standard 7 tenants and apply full webhook/transcription/origin config in one command.
-
 ### Changed
 
 - **Infra: Whisper aggressive cost mode** — downsize prod Whisper worker from `c7i.xlarge` to single Spot `c7i.large` and reduce `WHISPER_CPU_THREADS` to `2`.
