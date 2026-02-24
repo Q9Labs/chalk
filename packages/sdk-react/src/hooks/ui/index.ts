@@ -8,6 +8,7 @@ export { useNotifications, type UseNotificationsReturn } from "./useNotification
 export { useWhatsNew, type UseWhatsNewReturn, type UseWhatsNewOptions, type WhatsNewData } from "./useWhatsNew";
 export { useParticipantVolume, type UseParticipantVolumeReturn } from "./useParticipantVolume";
 export { useDraggable, type UseDraggableOptions } from "./useDraggable";
+export { usePictureInPicture, type UsePictureInPictureReturn, type UsePictureInPictureOptions } from "./usePictureInPicture";
 
 // Re-export useTour from utilities (it's both UI and utility)
 export { useTour, type UseTourReturn, type TourStep } from "../useTour";

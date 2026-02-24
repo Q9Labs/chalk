@@ -31,6 +31,7 @@ import {
 	MobilePanel,
 	NotificationStack,
 	ParticipantList,
+	PictureInPicture,
 	ReactionPicker,
 	ScreenShareView,
 	TranscriptionPanel,
@@ -144,6 +145,12 @@ export interface MeetingRoomProps {
 	/** Get normalized volume (0-1) for a participant. Used by AudioRenderer. */
 	getParticipantVolume?: (participantId: string) => number;
 	theme?: "light" | "dark" | "system";
+	/** Picture-in-Picture window (from usePictureInPicture hook). Renders PiP UI when set. */
+	pipWindow?: Window | null;
+	/** Active speaker participant (used for PiP featured view) */
+	activeSpeaker?: Participant | null;
+	/** Called when user clicks "back to tab" in PiP */
+	onClosePip?: () => void;
 	/** Exposes Excalidraw imperative API when whiteboard mounts. */
 	onWhiteboardExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
 	className?: string;
@@ -202,6 +209,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	onParticipantVolumeChange,
 	getParticipantVolume,
 	theme = "system",
+	pipWindow = null,
+	activeSpeaker = null,
+	onClosePip,
 	onWhiteboardExcalidrawApiReady,
 	className,
 }) => {
@@ -892,6 +902,22 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				participants={allParticipants}
 				getParticipantVolume={getParticipantVolume}
 			/>
+
+			{/* Picture-in-Picture portal */}
+			{pipWindow && (
+				<PictureInPicture
+					pipWindow={pipWindow}
+					participants={allParticipants}
+					activeSpeaker={activeSpeaker}
+					localParticipant={localParticipant}
+					isMuted={isMuted}
+					isVideoEnabled={isVideoEnabled}
+					onToggleMute={onToggleMute}
+					onToggleVideo={onToggleVideo}
+					onLeave={onLeave}
+					onClose={onClosePip}
+				/>
+			)}
 		</div>
 	);
 };

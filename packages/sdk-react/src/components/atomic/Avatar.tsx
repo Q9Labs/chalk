@@ -7,6 +7,7 @@ export interface AvatarProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   status?: 'online' | 'away' | 'busy' | 'offline';
   className?: string;
+  style?: React.CSSProperties;
 }
 
 const sizeMap = {
@@ -54,7 +55,7 @@ const statusColorMap = {
   offline: 'var(--muted-foreground)',
 };
 
-export const Avatar = React.memo(({ name, src, size = 'md', status, className }: AvatarProps) => {
+export const Avatar = React.memo(({ name, src, size = 'md', status, className, style }: AvatarProps) => {
   const initials = useMemo(() => {
     if (!name || name.trim() === '') return '?';
     const cleanName = name.trim();
@@ -73,7 +74,7 @@ export const Avatar = React.memo(({ name, src, size = 'md', status, className }:
   return (
     <div
       className={cn('relative inline-flex shrink-0', className)}
-      style={{ width: pxSize, height: pxSize }}
+      style={{ width: pxSize, height: pxSize, ...style }}
       role="img"
       aria-label={`Avatar for ${name || 'Unknown'}`}
     >

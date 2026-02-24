@@ -167,3 +167,40 @@
 - Validation:
   - `terraform -chdir=infrastructure/terraform/environments/prod validate` ✅
 - Next execution path: commit+push -> infra apply -> force instance refresh -> transcribe short+long audio probes on live worker.
+
+## 13:30 PKT
+- Commit/push for aggressive downsize:
+  - Commit: `4f8f9f3283dc53aeb4deaacf82460153c2980128`
+  - Message: `perf(infra): downsize whisper worker to c7i.large spot`
+- Workflow status:
+  - Infrastructure CI/CD run `22273415603` ✅ success
+    - Validate ✅
+    - Plan (Prod) ✅
+    - Apply (Prod) ✅
+- ASG rollout:
+  - LT updated to v12 (`instance_type=c7i.large`)
+  - Instance refresh `44d2e70f-b54e-4ecf-b0ba-b4088f35f344` ✅ Successful
+  - New in-service instance: `i-01d06405df787874d` (`c7i.large`, spot)
+- Worker health:
+  - Container `whisper-worker` up + healthy
+  - Observed active processing of a real production queued long audio item (~1h11m) from `transcription:jobs:processing`.
+
+## 13:31 PKT
+- Audio transcription tests on downscaled `c7i.large` instance:
+  - Direct file test 1 (short speech `/tmp/jfk.flac`):
+    - `status=completed`
+    - `wall_seconds=20.004`
+    - `processing_seconds=20.0`
+    - `audio_seconds=11`
+    - `rtf=1.818182`
+    - `words=22`
+  - Direct file test 2 (long speech `/tmp/jfk_long_220s.flac`, 220s):
+    - `status=completed`
+    - `wall_seconds=278.45`
+    - `processing_seconds=278.45`
+    - `audio_seconds=220`
+    - `rtf=1.265682`
+    - `words=445`
+- Queue-path note:
+  - A queue replay probe (`replay-old-1771748371`) timed out waiting for result because the worker was already busy on a large production backlog item.
+  - This indicates queue serialization pressure at `c7i.large` under long-running jobs.

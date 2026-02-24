@@ -1,8 +1,12 @@
 /**
- * usePictureInPicture - Document Picture-in-Picture API hook
+ * usePictureInPicture - Dual-mode Picture-in-Picture hook
  *
- * Opens an always-on-top OS window via the Document PiP API (Chrome 116+).
- * Use with `createPortal` to render React components into the PiP window.
+ * Two modes:
+ * 1. **Auto (tab switch)**: Uses legacy Video PiP API (`video.requestPictureInPicture()`)
+ *    which works without user gesture after initial media playback. Shows active speaker only.
+ * 2. **Manual (button click)**: Uses Document PiP API for rich UI with controls + self-view.
+ *
+ * Auto-opens on tab switch, auto-closes on return.
  *
  * @see https://developer.chrome.com/docs/web-platform/document-picture-in-picture
  */
@@ -23,15 +27,17 @@ declare global {
 	}
 }
 
-const isSupported =
+const hasDocumentPip =
 	typeof window !== "undefined" && "documentPictureInPicture" in window;
+
+const hasLegacyPip =
+	typeof document !== "undefined" && "pictureInPictureEnabled" in document;
 
 /**
  * Copies all stylesheets from the main document into the PiP window
  * and watches for dynamically injected styles (Tailwind JIT, CSS-in-JS).
  */
 function syncStyles(pipWindow: Window): () => void {
-	// One-time snapshot of existing stylesheets
 	for (const sheet of document.styleSheets) {
 		try {
 			const css = Array.from(sheet.cssRules)
@@ -41,7 +47,6 @@ function syncStyles(pipWindow: Window): () => void {
 			style.textContent = css;
 			pipWindow.document.head.appendChild(style);
 		} catch {
-			// Cross-origin sheet — re-link by href
 			if (sheet.href) {
 				const link = pipWindow.document.createElement("link");
 				link.rel = "stylesheet";
@@ -51,7 +56,6 @@ function syncStyles(pipWindow: Window): () => void {
 		}
 	}
 
-	// Watch for dynamically injected styles (Tailwind JIT, etc.)
 	const observer = new MutationObserver((mutations) => {
 		for (const mutation of mutations) {
 			for (const node of mutation.addedNodes) {
@@ -70,42 +74,91 @@ function syncStyles(pipWindow: Window): () => void {
 }
 
 export interface UsePictureInPictureOptions {
-	/** PiP window width in px. Default: 480 */
+	/** PiP window width in px (Document PiP only). Default: 480 */
 	width?: number;
-	/** PiP window height in px. Default: 270 */
+	/** PiP window height in px (Document PiP only). Default: 270 */
 	height?: number;
-	/** Auto-open PiP when user switches tabs. Default: true */
+	/** Auto-open legacy Video PiP when user switches tabs. Default: true */
 	autoOpen?: boolean;
+	/** The video track to show in legacy PiP (active speaker). Updated reactively. */
+	videoTrack?: MediaStreamTrack | null;
 }
 
 export interface UsePictureInPictureReturn {
-	/** The PiP Window object, or null when closed */
+	/** The Document PiP Window object, or null when not in Document PiP mode */
 	pipWindow: Window | null;
-	/** Whether the browser supports Document PiP */
+	/** Whether any PiP mode is supported */
 	isSupported: boolean;
-	/** Whether PiP is currently active */
+	/** Whether PiP is currently active (either mode) */
 	isActive: boolean;
-	/** Open the PiP window (requires user gesture) */
+	/** Open Document PiP (requires user gesture) */
 	open: () => Promise<void>;
-	/** Close the PiP window */
+	/** Close any active PiP */
 	close: () => void;
-	/** Toggle PiP on/off */
+	/** Toggle Document PiP on/off (requires user gesture) */
 	toggle: () => Promise<void>;
 }
 
 export function usePictureInPicture(
 	options: UsePictureInPictureOptions = {},
 ): UsePictureInPictureReturn {
-	const { width = 480, height = 270, autoOpen = true } = options;
+	const { width = 480, height = 270, autoOpen = true, videoTrack = null } = options;
 
 	const [pipWindow, setPipWindow] = useState<Window | null>(null);
+	const [isLegacyActive, setIsLegacyActive] = useState(false);
 	const cleanupRef = useRef<(() => void) | null>(null);
 	const isOpeningRef = useRef(false);
+	const videoElRef = useRef<HTMLVideoElement | null>(null);
+
+	// Maintain a hidden video element for legacy PiP
+	useEffect(() => {
+		if (!hasLegacyPip) return;
+
+		const video = document.createElement("video");
+		video.muted = true;
+		video.autoplay = true;
+		video.playsInline = true;
+		// Hidden but must be in DOM for PiP to work
+		video.style.position = "fixed";
+		video.style.width = "1px";
+		video.style.height = "1px";
+		video.style.opacity = "0";
+		video.style.pointerEvents = "none";
+		video.style.zIndex = "-1";
+		document.body.appendChild(video);
+		videoElRef.current = video;
+
+		return () => {
+			video.srcObject = null;
+			video.remove();
+			videoElRef.current = null;
+		};
+	}, []);
+
+	// Keep hidden video element in sync with the active speaker track
+	useEffect(() => {
+		const video = videoElRef.current;
+		if (!video) return;
+
+		if (videoTrack && videoTrack.readyState === "live") {
+			video.srcObject = new MediaStream([videoTrack]);
+			video.play().catch(() => {});
+		} else {
+			video.srcObject = null;
+		}
+	}, [videoTrack]);
+
+	// ---------- Document PiP (manual) ----------
 
 	const open = useCallback(async () => {
-		if (!isSupported || isOpeningRef.current) return;
-		// Already have a PiP window
+		if (!hasDocumentPip || isOpeningRef.current) return;
 		if (window.documentPictureInPicture?.window) return;
+
+		// Close legacy PiP first if active
+		if (document.pictureInPictureElement) {
+			await document.exitPictureInPicture().catch(() => {});
+			setIsLegacyActive(false);
+		}
 
 		isOpeningRef.current = true;
 		try {
@@ -115,7 +168,6 @@ export function usePictureInPicture(
 				disallowReturnToOpener: true,
 			});
 
-			// Reset PiP document body styles
 			pip.document.body.style.margin = "0";
 			pip.document.body.style.padding = "0";
 			pip.document.body.style.overflow = "hidden";
@@ -136,53 +188,95 @@ export function usePictureInPicture(
 
 			setPipWindow(pip);
 		} catch {
-			// NotAllowedError if no user gesture, or user closed prompt
+			// NotAllowedError if no user gesture
 		} finally {
 			isOpeningRef.current = false;
 		}
 	}, [width, height]);
 
+	// ---------- Legacy Video PiP (auto on tab switch) ----------
+
+	const openLegacy = useCallback(async () => {
+		const video = videoElRef.current;
+		if (!video || !hasLegacyPip || !video.srcObject) return;
+		if (document.pictureInPictureElement) return;
+
+		try {
+			await video.requestPictureInPicture();
+			setIsLegacyActive(true);
+		} catch {
+			// May fail if no eligible video or policy blocks it
+		}
+	}, []);
+
+	const closeLegacy = useCallback(async () => {
+		if (document.pictureInPictureElement) {
+			await document.exitPictureInPicture().catch(() => {});
+		}
+		setIsLegacyActive(false);
+	}, []);
+
 	const close = useCallback(() => {
+		// Close Document PiP
 		pipWindow?.close();
-	}, [pipWindow]);
+		// Close Legacy PiP
+		closeLegacy();
+	}, [pipWindow, closeLegacy]);
 
 	const toggle = useCallback(async () => {
-		if (pipWindow) {
+		if (pipWindow || isLegacyActive) {
 			close();
 		} else {
 			await open();
 		}
-	}, [pipWindow, open, close]);
+	}, [pipWindow, isLegacyActive, open, close]);
 
-	// Auto-open on tab visibility change
+	// Listen for legacy PiP exit (user closed via browser chrome)
 	useEffect(() => {
-		if (!autoOpen || !isSupported) return;
+		if (!hasLegacyPip) return;
+
+		const handleExit = () => setIsLegacyActive(false);
+		document.addEventListener("leavepictureinpicture", handleExit);
+		return () => document.removeEventListener("leavepictureinpicture", handleExit);
+	}, []);
+
+	// Auto-open/close on tab visibility change
+	useEffect(() => {
+		if (!autoOpen || !hasLegacyPip) return;
 
 		const handleVisibilityChange = () => {
-			if (document.visibilityState === "hidden" && !pipWindow) {
-				// Can't open without user gesture — no-op in background
-				// PiP requires transient activation, so auto-open on tab switch
-				// only works if user recently interacted. Best-effort.
+			if (document.visibilityState === "hidden") {
+				// Don't auto-open legacy if Document PiP is already active
+				if (pipWindow) return;
+				openLegacy();
+			} else {
+				// User returned to tab — close legacy PiP (not Document PiP)
+				if (isLegacyActive) {
+					closeLegacy();
+				}
 			}
 		};
 
 		document.addEventListener("visibilitychange", handleVisibilityChange);
 		return () =>
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
-	}, [autoOpen, pipWindow]);
+	}, [autoOpen, pipWindow, isLegacyActive, openLegacy, closeLegacy]);
 
 	// Cleanup on unmount
 	useEffect(() => {
 		return () => {
 			cleanupRef.current?.();
 			window.documentPictureInPicture?.window?.close();
+			if (document.pictureInPictureElement) {
+				document.exitPictureInPicture().catch(() => {});
+			}
 		};
 	}, []);
 
 	return {
 		pipWindow,
-		isSupported,
-		isActive: pipWindow !== null,
+		isSupported: hasDocumentPip || hasLegacyPip,
+		isActive: pipWindow !== null || isLegacyActive,
 		open,
 		close,
 		toggle,

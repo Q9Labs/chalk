@@ -16,8 +16,8 @@ import {
 	resolveThemeFromDocument,
 	subscribeToThemeChanges,
 } from "../../utils/theme";
-import { Avatar, Toast } from "../atomic";
-import { DeviceSelector } from "../composite";
+import { Avatar } from "../atomic";
+import { DeviceSelector, DiagnosticErrorSheet } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
 import { getParticipantGradient } from "../../utils/colorGenerator";
 
@@ -67,6 +67,7 @@ function PreJoinLobbyBase({
 	roomName,
 	userName = "Guest",
 	onJoin,
+	onCancel,
 	videoTrack,
 	audioTrack,
 	audioLevel,
@@ -92,6 +93,7 @@ function PreJoinLobbyBase({
 	const [isVideoEnabled, setIsVideoEnabled] = useState(initialVideoEnabled);
 	const [isAudioEnabled, setIsAudioEnabled] = useState(initialAudioEnabled);
 	const [showSettings, setShowSettings] = useState(initialShowSettings);
+	const [localError, setLocalError] = useState<string | undefined>(error);
 	const [isDarkMode, setIsDarkMode] = useState(
 		() =>
 			resolveThemeFromDocument({
@@ -99,6 +101,11 @@ function PreJoinLobbyBase({
 				allowSystem: true,
 			}) === "dark",
 	);
+
+	// Sync local error with prop error
+	useEffect(() => {
+		setLocalError(error);
+	}, [error]);
 	const [openDropdown, setOpenDropdown] = useState<"audio" | "video" | null>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -609,13 +616,13 @@ function PreJoinLobbyBase({
 											border: "1px solid var(--chalk-lobby-glass-border)",
 										}}
 									>
-										{/* Audio status dot */}
+										{/* Audio status dot - Brand Teal instead of Red to avoid recording confusion */}
 										<div
 											className={cn(
-												"w-2 h-2 rounded-full flex-shrink-0 transition-colors",
+												"w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors",
 												isAudioEnabled
 													? "bg-[#1bb6a6] shadow-[0_0_8px_rgba(27,182,166,0.6)]"
-													: "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]",
+													: "bg-muted-foreground/40",
 											)}
 										/>
 										<span className="text-sm font-medium text-(--foreground)">
@@ -637,23 +644,62 @@ function PreJoinLobbyBase({
 									</div>
 								</div>
 
-								{/* Camera Off State - Center (matches VideoTile) */}
+								{/* Camera Off State - Avatar with Audio Visualizer Rings */}
 								{!isVideoEnabled && (
 									<div className="absolute inset-0 flex items-center justify-center">
+										{/* Pulsing Audio Rings */}
+										{isAudioEnabled && activeAudioLevel > 0.05 && (
+											<div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+												<div 
+													className="absolute rounded-full bg-primary/20 animate-ping" 
+													style={{ 
+														width: 120 + activeAudioLevel * 100, 
+														height: 120 + activeAudioLevel * 100,
+														animationDuration: '1.5s'
+													}} 
+												/>
+												<div 
+													className="absolute rounded-full bg-primary/10 animate-ping" 
+													style={{ 
+														width: 160 + activeAudioLevel * 150, 
+														height: 160 + activeAudioLevel * 150,
+														animationDuration: '2s',
+														animationDelay: '0.2s'
+													}} 
+												/>
+											</div>
+										)}
 										<Avatar
 											name={displayName}
 											size="2xl"
-											className="opacity-90"
+											className="opacity-90 relative z-10 transition-transform duration-75"
+											style={{
+												transform: `scale(${1 + activeAudioLevel * 0.1})`
+											}}
 										/>
 									</div>
 								)}
 
 								{/* Floating Control Bar - Bottom Center */}
-								<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20" ref={dropdownRef}>
-									{/* Device Dropdowns - now anchored to the control bar */}
+								<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3" ref={dropdownRef}>
+									{/* Active Device Labels - Direction 2 (Confidence) */}
+									<div className="flex gap-4 px-4 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+										{isAudioEnabled && effectiveAudioInputDevices.find(d => d.deviceId === selectedAudioInput) && (
+											<span className="text-[10px] text-white/70 font-medium tracking-wide uppercase truncate max-w-[120px]">
+												Mic: {effectiveAudioInputDevices.find(d => d.deviceId === selectedAudioInput)?.label || "Default"}
+											</span>
+										)}
+										{isVideoEnabled && effectiveVideoDevices.find(d => d.deviceId === selectedVideoDevice) && (
+											<span className="text-[10px] text-white/70 font-medium tracking-wide uppercase truncate max-w-[120px]">
+												Cam: {effectiveVideoDevices.find(d => d.deviceId === selectedVideoDevice)?.label || "Default"}
+											</span>
+										)}
+									</div>
+
+									{/* Device Dropdowns */}
 									{openDropdown && (
 										<div
-											className="absolute bottom-full mb-2 w-64 rounded-xl border border-white/10 shadow-2xl overflow-hidden"
+											className="absolute bottom-full mb-14 w-64 rounded-xl border border-white/10 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 duration-200"
 											style={{
 												left: openDropdown === "audio" ? "0" : "auto",
 												right: openDropdown === "video" ? "0" : "auto",
@@ -702,7 +748,7 @@ function PreJoinLobbyBase({
 									)}
 
 									<div
-										className="flex items-center gap-4 px-3 py-2 rounded-full relative"
+										className="flex items-center gap-4 px-3 py-2 rounded-full relative group"
 										style={{
 											background: "var(--chalk-lobby-glass-bg)",
 											backdropFilter: "blur(20px)",
@@ -711,13 +757,13 @@ function PreJoinLobbyBase({
 										}}
 									>
 										{/* Mic toggle with dropdown */}
-										<div className="flex items-center gap-1.5">
+										<div className="flex items-center gap-1">
 											<button
 												type="button"
 												onClick={toggleAudio}
 												title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
 												className={cn(
-													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
+													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90",
 													!isAudioEnabled
 														? "bg-red-500 text-white hover:bg-red-600"
 														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -737,29 +783,26 @@ function PreJoinLobbyBase({
 														setOpenDropdown(openDropdown === "audio" ? null : "audio");
 													}}
 													title="Select microphone"
-													aria-label="Select microphone"
-													aria-haspopup="true"
-													aria-expanded={openDropdown === "audio"}
 													className={cn(
-														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
+														"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
 														openDropdown === "audio"
-															? "bg-[#1bb6a6] text-white"
-															: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+															? "text-[#1bb6a6]"
+															: "text-(--muted-foreground) hover:text-(--foreground) hover:bg-black/5 dark:hover:bg-white/5",
 													)}
 												>
-													<ArrowDown01Icon size={14} />
+													<ArrowDown01Icon size={14} className={cn("transition-transform", openDropdown === "audio" && "rotate-180")} />
 												</button>
 											)}
 										</div>
 
 										{/* Video toggle with dropdown */}
-										<div className="flex items-center gap-1.5">
+										<div className="flex items-center gap-1">
 											<button
 												type="button"
 												onClick={toggleVideo}
 												title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
 												className={cn(
-													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
+													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90",
 													!isVideoEnabled
 														? "bg-red-500 text-white hover:bg-red-600"
 														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -779,17 +822,14 @@ function PreJoinLobbyBase({
 														setOpenDropdown(openDropdown === "video" ? null : "video");
 													}}
 													title="Select camera"
-													aria-label="Select camera"
-													aria-haspopup="true"
-													aria-expanded={openDropdown === "video"}
 													className={cn(
-														"w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]",
+														"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
 														openDropdown === "video"
-															? "bg-[#1bb6a6] text-white"
-															: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+															? "text-[#1bb6a6]"
+															: "text-(--muted-foreground) hover:text-(--foreground) hover:bg-black/5 dark:hover:bg-white/5",
 													)}
 												>
-													<ArrowDown01Icon size={14} />
+													<ArrowDown01Icon size={14} className={cn("transition-transform", openDropdown === "video" && "rotate-180")} />
 												</button>
 											)}
 										</div>
@@ -802,7 +842,7 @@ function PreJoinLobbyBase({
 											type="button"
 											onClick={toggleSettings}
 											title="Settings"
-											className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]"
+											className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90"
 										>
 											<MoreVerticalIcon size={18} />
 										</button>
@@ -823,7 +863,7 @@ function PreJoinLobbyBase({
 							</div>
 
 							<div className="w-full space-y-4">
-								{/* Name input with glass effect */}
+								{/* Name input with refined focus state */}
 								<div className="w-full">
 									<label htmlFor="display-name" className="sr-only">
 										Display Name
@@ -840,9 +880,9 @@ function PreJoinLobbyBase({
 										disabled={isLoading}
 										className={cn(
 											"w-full h-12 px-4 rounded-xl text-base transition-all outline-none text-(--foreground) placeholder:text-(--muted-foreground) disabled:opacity-50",
-											"border bg-[var(--chalk-lobby-glass-bg)] backdrop-blur-md",
+											"border bg-[var(--chalk-lobby-glass-bg)] backdrop-blur-md shadow-sm",
 											"border-[var(--chalk-lobby-glass-border)]",
-											"focus-visible:border-[#1bb6a6] focus-visible:ring-4 focus-visible:ring-[#1bb6a6]/15"
+											"focus-visible:border-[#1bb6a6] focus-visible:ring-4 focus-visible:ring-[#1bb6a6]/20 focus-visible:shadow-[0_0_15px_rgba(27,182,166,0.1)]"
 										)}
 									/>
 								</div>
@@ -881,19 +921,22 @@ function PreJoinLobbyBase({
 						</div>
 					</div>
 				</div>
-
-				{/* Error Toast */}
-				{error && (
-					<div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md z-50">
-						<Toast
-							type="error"
-							message={error}
-							onDismiss={() => {}}
-							duration={0}
-						/>
-					</div>
-				)}
 			</div>
+
+			{/* Diagnostic Error Sheet */}
+			{localError && (
+				<DiagnosticErrorSheet
+					error={localError}
+					onRetry={() => {
+						setLocalError(undefined);
+						handleJoin();
+					}}
+					onBack={() => {
+						setLocalError(undefined);
+						onCancel?.();
+					}}
+				/>
+			)}
 		</div>
 	);
 }

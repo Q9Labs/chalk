@@ -34,6 +34,7 @@ import { useScreenShare } from "../../hooks/stream/useScreenShare";
 import { useLayout } from "../../hooks/ui/useLayout";
 import { useParticipantVolume } from "../../hooks/ui/useParticipantVolume";
 import { usePanels } from "../../hooks/ui/usePanels";
+import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 import { useSoundEffects } from "../../hooks/useSoundEffects";
 import { cn } from "../../utils/cn";
 
@@ -278,6 +279,11 @@ function VideoConferenceBase({
 	>(undefined);
 
 	const { session } = useChalkSession();
+	const pip = usePictureInPicture({
+		width: 480,
+		height: 270,
+		videoTrack: activeSpeaker?.videoTrack ?? localParticipant?.videoTrack ?? null,
+	});
 
 	const { play } = useSoundEffects({ enabled: sounds, autoSubscribe: true });
 	const { transcripts: rawTranscripts } = useTranscripts();
@@ -1112,6 +1118,9 @@ function VideoConferenceBase({
 				onSendReaction={handleSendReaction}
 				onLeave={handleLeave}
 					onAddPeople={onAddPeople}
+				pipWindow={pip.pipWindow}
+				activeSpeaker={activeSpeaker ? allParticipants.find((p) => p.id === activeSpeaker.id) ?? null : null}
+				onClosePip={pip.close}
 					onWhiteboardExcalidrawApiReady={whiteboardOpts?.onExcalidrawApiReady}
 					participantVolumes={participantVolumes}
 				onParticipantVolumeChange={setParticipantVolume}

@@ -154,6 +154,10 @@ export {
 	// Per-participant volume
 	useParticipantVolume,
 	type UseParticipantVolumeReturn,
+	// Picture-in-Picture
+	usePictureInPicture,
+	type UsePictureInPictureReturn,
+	type UsePictureInPictureOptions,
 } from "./hooks";
 
 // ============================================================================

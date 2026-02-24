@@ -53,18 +53,6 @@ function RoomPage() {
   const joinCtx = typeof window === "undefined" ? null : getJoinContext();
   const role = joinCtx ? "participant" : "host";
 
-  const handleError = useCallback(
-    (error: unknown) => {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      navigate({
-        to: "/room/error",
-        search: { message: errorMessage, roomId },
-      });
-    },
-    [navigate, roomId],
-  );
-
   return (
     <div className="h-screen w-screen relative">
       {/*@ts-ignore*/}
@@ -72,7 +60,6 @@ function RoomPage() {
         roomId={roomId}
         roomName={roomName || "Meeting On Chalk"}
         userName={storedUserName || (role === "host" ? "Host" : "Guest")}
-        onError={handleError}
         onJoin={(data) => {
           console.log("Joined: ", data);
         }}

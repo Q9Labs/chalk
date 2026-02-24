@@ -1,6 +1,7 @@
 // Overlays & Feedback
 export * from './NotificationStack';
 export * from './ConnectionLostOverlay';
+export * from './DiagnosticErrorSheet';
 
 // Headers & Info
 export * from './MeetingHeader';
@@ -42,4 +43,5 @@ export * from './MobileControlSheet';
 export * from './MobilePanel';
 export * from './ReactionPicker';
 export * from './RecordingControls';
+export * from './PictureInPicture';
 export * from './WhatsNewDialog';
