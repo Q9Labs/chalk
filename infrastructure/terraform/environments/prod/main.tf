@@ -397,7 +397,7 @@ module "whisper" {
   redis_port            = module.elasticache.port
   ecr_repository_url    = module.ecr.whisper_repository_url
   worker_image_tag      = "latest"
-  instance_type         = "c7i.xlarge"
+  instance_type         = "c7i.large"
   use_gpu               = false
   # Prevent scale-to-zero: the queue depth metric is emitted by the worker itself,
   # so if desired/min hit 0 it cannot auto-scale back up and transcripts will time out.
@@ -412,7 +412,7 @@ module "whisper" {
   use_spot                    = true
   whisper_device              = "cpu"
   whisper_compute_type        = "int8"
-  whisper_cpu_threads         = 4
+  whisper_cpu_threads         = 2
   whisper_gpu_metrics_enabled = false
 }
 
