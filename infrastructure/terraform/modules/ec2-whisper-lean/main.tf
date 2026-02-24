@@ -142,7 +142,7 @@ resource "aws_instance" "whisper" {
       spot_options {
         # Keep a standing request so interrupted workers are relaunched automatically.
         spot_instance_type             = var.spot_instance_type
-        instance_interruption_behavior = var.spot_instance_interruption_behavior
+        instance_interruption_behavior = var.spot_instance_type == "one-time" ? var.spot_instance_interruption_behavior : null
       }
     }
   }
