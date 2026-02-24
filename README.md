@@ -24,7 +24,7 @@ chalk/
 │   ├── terraform/             # AWS IaC (ECS, Aurora, ElastiCache, WAF, etc.)
 │   └── whisper-worker/        # Whisper transcription service (Python)
 ├── tests/                     # Load testing (Artillery, k6, WebRTC)
-└── .github/workflows/         # CI/CD (api.yml, sdk.yml, infra.yml)
+└── .github/workflows/         # CI/CD (api-lean.yml, infra-lean.yml, sdk.yml, web.yml, whisper-worker.yml)
 ```
 
 ## Quick Start

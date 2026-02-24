@@ -268,7 +268,7 @@ jobs:
         if: steps.download-task-def.outputs.skip_deploy == 'true'
         run: |
           echo "⚠️ ECS deployment skipped - task definition does not exist yet."
-          echo "Run infrastructure deployment first via infra.yml workflow."
+          echo "Run infrastructure deployment for the legacy ECS stack first."
 
   health-check:
     name: Health Check
