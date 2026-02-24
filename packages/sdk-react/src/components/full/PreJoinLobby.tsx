@@ -68,7 +68,8 @@ function PreJoinLobbyBase({
 	userName = "Guest",
 	onJoin,
 	videoTrack,
-	audioLevel = 0,
+	audioTrack,
+	audioLevel,
 	videoDevices = [],
 	audioInputDevices = [],
 	audioOutputDevices = [],
@@ -116,7 +117,8 @@ function PreJoinLobbyBase({
 
 	// Use provided track or local track
 	const activeVideoTrack = videoTrack ?? localVideoTrack;
-	const activeAudioLevel = audioLevel || localAudioLevel;
+	const activeAudioTrack = audioTrack ?? localAudioTrack;
+	const activeAudioLevel = audioLevel ?? localAudioLevel;
 
 	// Use provided devices or locally enumerated devices
 	const effectiveVideoDevices = useMemo(() => videoDevices.length > 0 ? videoDevices : localVideoDevices, [videoDevices, localVideoDevices]);
@@ -149,7 +151,7 @@ function PreJoinLobbyBase({
 	useEffect(() => {
 		if (!isVideoEnabled || videoTrack) {
 			// Stop local track if we're disabling or have external track
-			if (localVideoTrack && !videoTrack) {
+			if (localVideoTrack) {
 				localVideoTrack.stop();
 				setLocalVideoTrack(null);
 			}
@@ -168,31 +170,37 @@ function PreJoinLobbyBase({
 					? { deviceId: { exact: selectedVideoDevice } }
 					: true,
 			})
-			.then((stream) => {
-				if (cancelled) {
-					stream.getTracks().forEach((t) => { t.stop(); });
-					return;
-				}
-				const track = stream.getVideoTracks()[0];
-				if (track) {
-					setLocalVideoTrack(track);
-					// Enumerate devices after getting permission
-					enumerateDevices();
-				}
-			})
+				.then((stream) => {
+					if (cancelled) {
+						stream.getTracks().forEach((t) => { t.stop(); });
+						return;
+					}
+					const track = stream.getVideoTracks()[0];
+					if (track) {
+						setLocalVideoTrack((previousTrack) => {
+							if (previousTrack && previousTrack !== track) previousTrack.stop();
+							return track;
+						});
+						for (const streamTrack of stream.getTracks()) {
+							if (streamTrack !== track) streamTrack.stop();
+						}
+						// Enumerate devices after getting permission
+						enumerateDevices();
+					}
+				})
 			.catch(() => {
 				// Permission denied or error - just disable video
 				if (!cancelled) setIsVideoEnabled(false);
 			});
 
-		return () => {
-			cancelled = true;
-		};
-	}, [isVideoEnabled, videoTrack, selectedVideoDevice, enumerateDevices, localVideoTrack]);
+			return () => {
+				cancelled = true;
+			};
+		}, [isVideoEnabled, videoTrack, selectedVideoDevice, enumerateDevices]);
 
 	// Request local audio when enabled (only if no external track provided)
 	useEffect(() => {
-		if (!isAudioEnabled) {
+		if (!isAudioEnabled || audioTrack) {
 			if (localAudioTrack) {
 				localAudioTrack.stop();
 				setLocalAudioTrack(null);
@@ -212,30 +220,37 @@ function PreJoinLobbyBase({
 					? { deviceId: { exact: selectedAudioInput } }
 					: true,
 			})
-			.then((stream) => {
-				if (cancelled) {
-					stream.getTracks().forEach((t) => { t.stop(); });
-					return;
-				}
-				const track = stream.getAudioTracks()[0];
-				if (track) {
-					setLocalAudioTrack(track);
-					// Enumerate devices after getting permission
-					enumerateDevices();
-				}
-			})
+				.then((stream) => {
+					if (cancelled) {
+						stream.getTracks().forEach((t) => { t.stop(); });
+						return;
+					}
+					const track = stream.getAudioTracks()[0];
+					if (track) {
+						setLocalAudioTrack((previousTrack) => {
+							if (previousTrack && previousTrack !== track) previousTrack.stop();
+							return track;
+						});
+						for (const streamTrack of stream.getTracks()) {
+							if (streamTrack !== track) streamTrack.stop();
+						}
+						// Enumerate devices after getting permission
+						enumerateDevices();
+					}
+				})
 			.catch(() => {
 				if (!cancelled) setIsAudioEnabled(false);
 			});
 
-		return () => {
-			cancelled = true;
-		};
-	}, [isAudioEnabled, selectedAudioInput, enumerateDevices, localAudioTrack]);
+			return () => {
+				cancelled = true;
+			};
+		}, [isAudioEnabled, audioTrack, selectedAudioInput, enumerateDevices]);
 
 	// Audio level monitoring
 	useEffect(() => {
-		const track = localAudioTrack;
+		const track = activeAudioTrack;
+		if (audioLevel !== undefined) return;
 		if (!track || !isAudioEnabled) {
 			setLocalAudioLevel(0);
 			return;
@@ -296,7 +311,7 @@ function PreJoinLobbyBase({
 				// ignore
 			}
 		};
-	}, [localAudioTrack, isAudioEnabled]);
+		}, [activeAudioTrack, audioLevel, isAudioEnabled]);
 
 	// Store refs for cleanup
 	const localVideoTrackRef = useRef(localVideoTrack);
@@ -369,10 +384,11 @@ function PreJoinLobbyBase({
 	}, [openDropdown]);
 
 	const handleJoin = () => {
-		if (!displayName.trim()) return;
+		const trimmedDisplayName = displayName.trim();
+		if (!trimmedDisplayName) return;
 
 		onJoin({
-			displayName,
+			displayName: trimmedDisplayName,
 			videoEnabled: isVideoEnabled,
 			audioEnabled: isAudioEnabled,
 			selectedVideoDevice,

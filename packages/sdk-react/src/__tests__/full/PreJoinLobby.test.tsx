@@ -5,9 +5,12 @@ import { PreJoinLobby } from '../../components/full/PreJoinLobby';
 // @ts-ignore
 window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
 global.MediaStream = vi.fn().mockImplementation(() => ({})) as any;
+const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
 
 describe('PreJoinLobby', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    navigator.mediaDevices.getUserMedia = originalGetUserMedia;
     document.documentElement.className = '';
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-chalk-theme');
@@ -52,6 +55,26 @@ describe('PreJoinLobby', () => {
     expect(onJoin.mock.calls[0][0].displayName).toBe('John Doe');
   });
 
+  it('trims display name before calling onJoin', async () => {
+    const onJoin = vi.fn();
+    const { getByText } = render(
+      <PreJoinLobby
+        onJoin={onJoin}
+        userName="  Hasan  "
+        initialVideoEnabled={false}
+        initialAudioEnabled={false}
+      />
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(getByText('Ask to join'));
+    });
+
+    expect(onJoin).toHaveBeenCalledTimes(1);
+    expect(onJoin.mock.calls[0][0].displayName).toBe('Hasan');
+  });
+
   it('allows clearing the default Guest name', async () => {
     const { getByPlaceholderText } = render(
       <PreJoinLobby
@@ -78,7 +101,7 @@ describe('PreJoinLobby', () => {
     expect(input.value).toBe('Hasan');
   });
 
-  it('shows error toast when error prop is provided', async () => {
+  it('shows diagnostic error sheet when error prop is provided', async () => {
     const { getByText } = render(
       <PreJoinLobby
         onJoin={() => {}}
@@ -88,7 +111,84 @@ describe('PreJoinLobby', () => {
       />
     );
     await act(async () => {});
+    expect(getByText('Something went wrong')).toBeDefined();
+
+    await act(async () => {
+      fireEvent.click(getByText('Technical Details'));
+    });
     expect(getByText('Failed to get camera')).toBeDefined();
+  });
+
+  it('does not reacquire local video stream after local track state updates', async () => {
+    const firstTrack = { stop: vi.fn() };
+    const getUserMedia = vi.fn().mockResolvedValue({
+      getTracks: () => [firstTrack],
+      getVideoTracks: () => [firstTrack],
+      getAudioTracks: () => [],
+    });
+    navigator.mediaDevices.getUserMedia = getUserMedia as any;
+
+    render(
+      <PreJoinLobby
+        onJoin={() => {}}
+        initialVideoEnabled
+        initialAudioEnabled={false}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops previous local video track when camera selection changes', async () => {
+    const firstTrack = { stop: vi.fn() };
+    const secondTrack = { stop: vi.fn() };
+    const getUserMedia = vi
+      .fn()
+      .mockResolvedValueOnce({
+        getTracks: () => [firstTrack],
+        getVideoTracks: () => [firstTrack],
+        getAudioTracks: () => [],
+      })
+      .mockResolvedValueOnce({
+        getTracks: () => [secondTrack],
+        getVideoTracks: () => [secondTrack],
+        getAudioTracks: () => [],
+      });
+    navigator.mediaDevices.getUserMedia = getUserMedia as any;
+
+    const { rerender } = render(
+      <PreJoinLobby
+        onJoin={() => {}}
+        initialVideoEnabled
+        initialAudioEnabled={false}
+        selectedVideoDevice="camera-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <PreJoinLobby
+        onJoin={() => {}}
+        initialVideoEnabled
+        initialAudioEnabled={false}
+        selectedVideoDevice="camera-2"
+      />
+    );
+
+    await waitFor(() => {
+      expect(getUserMedia).toHaveBeenCalledTimes(2);
+    });
+    expect(firstTrack.stop).toHaveBeenCalledTimes(1);
   });
 
   it('resolves theme from data-chalk-theme before data-theme and class', async () => {
