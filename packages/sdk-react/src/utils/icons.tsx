@@ -65,8 +65,6 @@ import {
 	VolumeHighIcon as VolumeHighIconSvg,
 	VolumeMute01Icon as VolumeMute01IconSvg,
 	WifiOffIcon as WifiOffIconSvg,
-	PictureInPictureOnIcon as PictureInPictureOnIconSvg,
-	PictureInPictureExitIcon as PictureInPictureExitIconSvg,
 	ZoomInAreaIcon as ZoomInIconSvg,
 	ZoomOutAreaIcon as ZoomOutIconSvg,
 } from "@hugeicons/core-free-icons";
@@ -148,7 +146,5 @@ export const VideoOffIcon = createIcon(VideoOffIconSvg);
 export const VolumeHighIcon = createIcon(VolumeHighIconSvg);
 export const VolumeMute01Icon = createIcon(VolumeMute01IconSvg);
 export const WifiOffIcon = createIcon(WifiOffIconSvg);
-export const PictureInPictureOnIcon = createIcon(PictureInPictureOnIconSvg);
-export const PictureInPictureExitIcon = createIcon(PictureInPictureExitIconSvg);
 export const ZoomInIcon = createIcon(ZoomInIconSvg);
 export const ZoomOutIcon = createIcon(ZoomOutIconSvg);

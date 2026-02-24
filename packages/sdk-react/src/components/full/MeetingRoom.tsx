@@ -31,7 +31,6 @@ import {
 	MobilePanel,
 	NotificationStack,
 	ParticipantList,
-	PictureInPicture,
 	ReactionPicker,
 	ScreenShareView,
 	TranscriptionPanel,
@@ -144,13 +143,9 @@ export interface MeetingRoomProps {
 	onParticipantVolumeChange?: (id: string, volume: number) => void;
 	/** Get normalized volume (0-1) for a participant. Used by AudioRenderer. */
 	getParticipantVolume?: (participantId: string) => number;
+	/** Selected audio output device id for routing remote audio. */
+	selectedAudioOutput?: string;
 	theme?: "light" | "dark" | "system";
-	/** Picture-in-Picture window (from usePictureInPicture hook). Renders PiP UI when set. */
-	pipWindow?: Window | null;
-	/** Active speaker participant (used for PiP featured view) */
-	activeSpeaker?: Participant | null;
-	/** Called when user clicks "back to tab" in PiP */
-	onClosePip?: () => void;
 	/** Exposes Excalidraw imperative API when whiteboard mounts. */
 	onWhiteboardExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
 	className?: string;
@@ -208,10 +203,8 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	participantVolumes,
 	onParticipantVolumeChange,
 	getParticipantVolume,
+	selectedAudioOutput,
 	theme = "system",
-	pipWindow = null,
-	activeSpeaker = null,
-	onClosePip,
 	onWhiteboardExcalidrawApiReady,
 	className,
 }) => {
@@ -847,7 +840,9 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 						}
 						onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
 						className={cn(
-							isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2" : "",
+							isMobile
+								? "absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] touch-manipulation"
+								: "",
 							isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up",
 						)}
 					/>
@@ -891,33 +886,23 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				onCopyLink={handleCopyLink}
 			/>
 
-			<InviteToast
-				isVisible={showInviteToast && !showTour}
-				onDismiss={() => setShowInviteToast(false)}
-				meetingLink={typeof window !== "undefined" ? window.location.href : ""}
-			/>
+				<InviteToast
+					isVisible={showInviteToast && !showTour}
+					onDismiss={() => setShowInviteToast(false)}
+					meetingLink={typeof window !== "undefined" ? window.location.href : ""}
+					className={cn(
+						isMobile &&
+							"top-4 bottom-auto left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm",
+					)}
+				/>
 
 			{/* Hidden audio renderer for remote participant audio */}
 			<AudioRenderer
 				participants={allParticipants}
 				getParticipantVolume={getParticipantVolume}
+				audioOutputDeviceId={selectedAudioOutput}
 			/>
 
-			{/* Picture-in-Picture portal */}
-			{pipWindow && (
-				<PictureInPicture
-					pipWindow={pipWindow}
-					participants={allParticipants}
-					activeSpeaker={activeSpeaker}
-					localParticipant={localParticipant}
-					isMuted={isMuted}
-					isVideoEnabled={isVideoEnabled}
-					onToggleMute={onToggleMute}
-					onToggleVideo={onToggleVideo}
-					onLeave={onLeave}
-					onClose={onClosePip}
-				/>
-			)}
 		</div>
 	);
 };

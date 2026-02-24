@@ -7,7 +7,7 @@
  * Usage: Place once in your room component, passing all remote participants.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface AudioParticipant {
   id: string;
@@ -21,6 +21,8 @@ export interface AudioRendererProps {
   participants: AudioParticipant[];
   /** Volume level 0-1 (default: 1) */
   volume?: number;
+  /** Selected audio output device id for routing playback via setSinkId (when supported). */
+  audioOutputDeviceId?: string;
   /** Per-participant volume override (0-1). Takes precedence over volume prop. */
   getParticipantVolume?: (participantId: string) => number;
 }
@@ -29,7 +31,17 @@ export interface AudioRendererProps {
  * Renders audio for all remote participants.
  * Must be included once in your room to hear other participants.
  */
-export function AudioRenderer({ participants, volume = 1, getParticipantVolume }: AudioRendererProps) {
+type SinkAwareAudioElement = HTMLAudioElement & {
+  setSinkId?: (sinkId: string) => Promise<void>;
+  sinkId?: string;
+};
+
+export function AudioRenderer({
+  participants,
+  volume = 1,
+  audioOutputDeviceId,
+  getParticipantVolume,
+}: AudioRendererProps) {
   // Map of participant ID -> audio element (mic audio)
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   // Map of participant ID -> audio element (screen share audio)
@@ -50,6 +62,16 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
     pendingAutoplayRetryRef.current.delete(el);
     if (pendingAutoplayRetryRef.current.size === 0) setNeedsAutoplayUnlock(false);
   };
+
+  const applyAudioOutputDevice = useCallback((audioEl: HTMLAudioElement) => {
+    if (!audioOutputDeviceId) return;
+    const sinkAware = audioEl as SinkAwareAudioElement;
+    if (typeof sinkAware.setSinkId !== 'function') return;
+    if (sinkAware.sinkId === audioOutputDeviceId) return;
+    void sinkAware.setSinkId(audioOutputDeviceId).catch(() => {
+      // Ignore unsupported/failed sink routing and continue with default output.
+    });
+  }, [audioOutputDeviceId]);
 
   // Filter to remote participants with valid audio tracks
   const remoteWithAudio = participants.filter((p) => {
@@ -156,6 +178,8 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
         audioElements.set(id, audioEl);
       }
 
+      applyAudioOutputDevice(audioEl);
+
       // Update volume (per-participant override takes precedence)
       audioEl.volume = getParticipantVolume ? getParticipantVolume(id) : volume;
 
@@ -188,7 +212,7 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
       }
     }
     // No cleanup return here - we only clean departed participants above
-  }, [remoteWithAudio, volume, getParticipantVolume]);
+  }, [remoteWithAudio, volume, audioOutputDeviceId, getParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for mic audio
   useEffect(() => {
@@ -258,6 +282,8 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
         audioElements.set(ssKey, audioEl);
       }
 
+      applyAudioOutputDevice(audioEl);
+
       // Per-participant override uses participant id (not ss- key)
       audioEl.volume = getParticipantVolume ? getParticipantVolume(id) : volume;
 
@@ -284,7 +310,7 @@ export function AudioRenderer({ participants, volume = 1, getParticipantVolume }
         audioElements.delete(key);
       }
     }
-  }, [remoteWithScreenShareAudio, volume, getParticipantVolume]);
+  }, [remoteWithScreenShareAudio, volume, audioOutputDeviceId, getParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for screen share audio
   useEffect(() => {

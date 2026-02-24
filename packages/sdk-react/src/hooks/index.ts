@@ -84,11 +84,6 @@ export {
 	useParticipantVolume,
 } from "./ui/useParticipantVolume";
 export {
-	type UsePictureInPictureReturn,
-	type UsePictureInPictureOptions,
-	usePictureInPicture,
-} from "./ui/usePictureInPicture";
-export {
 	type AnnouncementPoliteness,
 	type UseAnnouncerOptions,
 	type UseAnnouncerReturn,

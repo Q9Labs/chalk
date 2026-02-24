@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs: WebSocket endpoint examples** — update native/android/iOS docs to use `wss://chalk-ws.q9labs.ai/ws` instead of `wss://chalk-api.q9labs.ai/ws`.
 - **API: Meeting preset transcription override** — force Cloudflare participant join requests to send `transcription_enabled=false` so in-meeting preset transcription stays disabled.
 - **SDK-React: PreJoinLobby device selection** — camera/microphone/speaker picks now persist during lobby and are applied after room join, fixing `NOT_IN_ROOM` failures from pre-join device changes.
+- **SDK-React: Speaker output routing in meeting audio** — thread selected speaker device through `VideoConference` → `MeetingRoom` → `AudioRenderer` and apply `setSinkId` for remote mic/screen-share playback when supported.
+- **SDK-React: Mobile mic-control tap reliability** — raise meeting control bar layer priority, keep pre-join controls touch-friendly, and keep invite toast away from mobile bottom controls to prevent blocked taps.
 
 ### Removed
 

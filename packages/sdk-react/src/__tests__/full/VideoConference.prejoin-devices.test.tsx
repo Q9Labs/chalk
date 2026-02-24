@@ -2,6 +2,30 @@ import { beforeEach, describe, expect, it, vi } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { VideoConference } from "../../components/full/VideoConference";
 
+const mockParticipantsState: {
+	participants: any[];
+	localParticipant: any;
+	participantCount: number;
+} = {
+	participants: [],
+	localParticipant: null,
+	participantCount: 0,
+};
+
+const mockMediaState: {
+	selectedCamera: string | null;
+	selectedMicrophone: string | null;
+	selectedSpeaker: string | null;
+	isAudioEnabled: boolean;
+	isVideoEnabled: boolean;
+} = {
+	selectedCamera: null,
+	selectedMicrophone: null,
+	selectedSpeaker: null,
+	isAudioEnabled: false,
+	isVideoEnabled: false,
+};
+
 vi.mock("../../hooks/room/useConnection", () => {
 	const join = vi.fn(async () => {});
 	const leave = vi.fn(async () => {});
@@ -17,9 +41,9 @@ vi.mock("../../hooks/room/useRoom", () => ({
 
 vi.mock("../../hooks/participants/useParticipants", () => ({
 	useParticipants: () => ({
-		participants: [],
-		localParticipant: null,
-		participantCount: 0,
+		participants: mockParticipantsState.participants,
+		localParticipant: mockParticipantsState.localParticipant,
+		participantCount: mockParticipantsState.participantCount,
 	}),
 }));
 
@@ -30,22 +54,24 @@ vi.mock("../../hooks/participants/useActiveSpeaker", () => ({
 vi.mock("../../hooks/stream/useMedia", () => {
 	const selectCamera = vi.fn(async () => {});
 	const selectMicrophone = vi.fn(async () => {});
-	const selectSpeaker = vi.fn(async () => {});
+	const selectSpeaker = vi.fn(async (deviceId: string) => {
+		mockMediaState.selectedSpeaker = deviceId;
+	});
 	(globalThis as any).__vcSelectCameraMock = selectCamera;
 	(globalThis as any).__vcSelectMicrophoneMock = selectMicrophone;
 	(globalThis as any).__vcSelectSpeakerMock = selectSpeaker;
 	return {
 		useMedia: () => ({
-			selectedCamera: null,
-			selectedMicrophone: null,
-			selectedSpeaker: null,
+			selectedCamera: mockMediaState.selectedCamera,
+			selectedMicrophone: mockMediaState.selectedMicrophone,
+			selectedSpeaker: mockMediaState.selectedSpeaker,
 			selectCamera,
 			selectMicrophone,
 			selectSpeaker,
 			toggleAudio: vi.fn(),
 			toggleVideo: vi.fn(),
-			isAudioEnabled: false,
-			isVideoEnabled: false,
+			isAudioEnabled: mockMediaState.isAudioEnabled,
+			isVideoEnabled: mockMediaState.isVideoEnabled,
 		}),
 	};
 });
@@ -101,14 +127,6 @@ vi.mock("../../hooks/ui/usePanels", () => ({
 	usePanels: () => ({ activePanel: null }),
 }));
 
-vi.mock("../../hooks/ui/useParticipantVolume", () => ({
-	useParticipantVolume: () => ({
-		participantVolumes: new Map(),
-		setParticipantVolume: vi.fn(),
-		getAudioVolume: () => 1,
-	}),
-}));
-
 vi.mock("../../hooks/stream/useDevices", () => ({
 	useDevices: () => ({
 		refreshDevices: vi.fn(async () => []),
@@ -139,10 +157,20 @@ vi.mock("../../hooks/useSoundEffects", () => ({
 
 // @ts-ignore
 window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
-global.MediaStream = vi.fn().mockImplementation(() => ({})) as any;
+global.MediaStream = vi
+	.fn()
+	.mockImplementation((tracks: any[] = []) => ({ getAudioTracks: () => tracks })) as any;
 
 describe("VideoConference pre-join devices", () => {
 	beforeEach(() => {
+		mockParticipantsState.participants = [];
+		mockParticipantsState.localParticipant = null;
+		mockParticipantsState.participantCount = 0;
+		mockMediaState.selectedCamera = null;
+		mockMediaState.selectedMicrophone = null;
+		mockMediaState.selectedSpeaker = null;
+		mockMediaState.isAudioEnabled = false;
+		mockMediaState.isVideoEnabled = false;
 		(globalThis as any).__vcJoinMock?.mockClear?.();
 		(globalThis as any).__vcSelectCameraMock?.mockClear?.();
 		(globalThis as any).__vcSelectMicrophoneMock?.mockClear?.();
@@ -189,11 +217,19 @@ describe("VideoConference pre-join devices", () => {
 				"mic-2",
 			);
 		});
+		await waitFor(() => {
+			expect((globalThis as any).__vcSelectSpeakerMock).toHaveBeenCalledWith(
+				"spk-1",
+			);
+		});
 		expect(
 			(globalThis as any).__vcSelectCameraMock.mock.invocationCallOrder[0],
 		).toBeGreaterThan((globalThis as any).__vcJoinMock.mock.invocationCallOrder[0]);
 		expect(
 			(globalThis as any).__vcSelectMicrophoneMock.mock.invocationCallOrder[0],
+		).toBeGreaterThan((globalThis as any).__vcJoinMock.mock.invocationCallOrder[0]);
+		expect(
+			(globalThis as any).__vcSelectSpeakerMock.mock.invocationCallOrder[0],
 		).toBeGreaterThan((globalThis as any).__vcJoinMock.mock.invocationCallOrder[0]);
 	});
 });

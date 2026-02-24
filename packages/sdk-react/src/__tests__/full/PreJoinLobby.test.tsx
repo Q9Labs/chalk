@@ -34,6 +34,27 @@ describe('PreJoinLobby', () => {
     expect(getByText('Ask to join')).toBeDefined();
   });
 
+  it('labels camera and microphone selector controls', async () => {
+    const devices = [
+      { deviceId: 'device-1', kind: 'videoinput', label: 'Camera 1', groupId: 'group-1', toJSON: () => ({}) },
+      { deviceId: 'device-2', kind: 'audioinput', label: 'Mic 1', groupId: 'group-2', toJSON: () => ({}) },
+    ] as MediaDeviceInfo[];
+
+    const { getByLabelText } = render(
+      <PreJoinLobby
+        onJoin={() => {}}
+        initialVideoEnabled={false}
+        initialAudioEnabled={false}
+        videoDevices={[devices[0] as MediaDeviceInfo]}
+        audioInputDevices={[devices[1] as MediaDeviceInfo]}
+      />
+    );
+    await act(async () => {});
+
+    expect(getByLabelText('Select camera')).toBeDefined();
+    expect(getByLabelText('Select microphone')).toBeDefined();
+  });
+
   it('calls onJoin with settings when join button is clicked', async () => {
     const onJoin = vi.fn();
     const { getByPlaceholderText, getByText } = render(
@@ -53,6 +74,29 @@ describe('PreJoinLobby', () => {
     });
     expect(onJoin).toHaveBeenCalled();
     expect(onJoin.mock.calls[0][0].displayName).toBe('John Doe');
+  });
+
+  it('applies mic toggle state when joining from pre-join controls', async () => {
+    const onJoin = vi.fn();
+    const { getByLabelText, getByText } = render(
+      <PreJoinLobby
+        onJoin={onJoin}
+        userName="John Doe"
+        initialVideoEnabled={false}
+        initialAudioEnabled={true}
+      />
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(getByLabelText('Mute microphone'));
+    });
+    await act(async () => {
+      fireEvent.click(getByText('Ask to join'));
+    });
+
+    expect(onJoin).toHaveBeenCalledTimes(1);
+    expect(onJoin.mock.calls[0][0].audioEnabled).toBe(false);
   });
 
   it('trims display name before calling onJoin', async () => {

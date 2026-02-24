@@ -57,6 +57,8 @@ export interface PreJoinLobbyProps {
 	isLoading?: boolean;
 	error?: string;
 
+	participantGradient?: string;
+
 	/** Initial theme - defaults to 'dark' */
 	initialTheme?: "light" | "dark";
 
@@ -85,6 +87,7 @@ function PreJoinLobbyBase({
 	initialShowSettings = false,
 	isLoading = false,
 	error,
+	participantGradient: propParticipantGradient,
 	initialTheme = "dark",
 	className,
 }: PreJoinLobbyProps) {
@@ -407,6 +410,8 @@ function PreJoinLobbyBase({
 	const hasVideoDevices = effectiveVideoDevices.length > 0;
 	const hasAudioInput = effectiveAudioInputDevices.length > 0;
 	const hasAudioOutput = audioOutputDevices.length > 0;
+	const audioDeviceMenuId = "prejoin-audio-device-menu";
+	const videoDeviceMenuId = "prejoin-video-device-menu";
 
 	const toggleVideo = () => setIsVideoEnabled(!isVideoEnabled);
 	const toggleAudio = () => setIsAudioEnabled(!isAudioEnabled);
@@ -416,7 +421,7 @@ function PreJoinLobbyBase({
 	const normalizedAudioLevel = Math.min(100, Math.max(0, activeAudioLevel * 100));
 
 	// Generate consistent gradient based on display name (same as VideoTile)
-	const participantGradient = useMemo(() => getParticipantGradient(displayName), [displayName]);
+	const participantGradient = useMemo(() => propParticipantGradient || getParticipantGradient(displayName), [propParticipantGradient, displayName]);
 
 	return (
 		<div
@@ -599,7 +604,7 @@ function PreJoinLobbyBase({
 									playsInline
 									muted
 									className={cn(
-										"absolute inset-0 w-full h-full object-cover",
+										"absolute inset-0 w-full h-full object-cover pointer-events-none",
 										isVideoEnabled ? "opacity-100" : "opacity-0",
 									)}
 									style={{ transform: "scaleX(-1)" }}
@@ -681,7 +686,7 @@ function PreJoinLobbyBase({
 								)}
 
 								{/* Floating Control Bar - Bottom Center */}
-								<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3" ref={dropdownRef}>
+								<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-3 touch-manipulation" ref={dropdownRef}>
 									{/* Active Device Labels - Direction 2 (Confidence) */}
 									<div className="flex gap-4 px-4 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
 										{isAudioEnabled && effectiveAudioInputDevices.find(d => d.deviceId === selectedAudioInput) && (
@@ -699,6 +704,9 @@ function PreJoinLobbyBase({
 									{/* Device Dropdowns */}
 									{openDropdown && (
 										<div
+											id={openDropdown === "audio" ? audioDeviceMenuId : videoDeviceMenuId}
+											role="menu"
+											aria-label={openDropdown === "audio" ? "Microphone devices" : "Camera devices"}
 											className="absolute bottom-full mb-14 w-64 rounded-xl border border-white/10 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 duration-200"
 											style={{
 												left: openDropdown === "audio" ? "0" : "auto",
@@ -716,12 +724,14 @@ function PreJoinLobbyBase({
 														? selectedAudioInput === device.deviceId
 														: selectedVideoDevice === device.deviceId;
 													return (
-														<button
-															type="button"
-															key={device.deviceId}
-															onClick={() => {
-																if (openDropdown === "audio") {
-																	onAudioInputChange(device.deviceId);
+															<button
+																type="button"
+																key={device.deviceId}
+																role="menuitemradio"
+																aria-checked={isSelected}
+																onClick={() => {
+																	if (openDropdown === "audio") {
+																		onAudioInputChange(device.deviceId);
 																} else {
 																	onVideoDeviceChange(device.deviceId);
 																}
@@ -757,14 +767,15 @@ function PreJoinLobbyBase({
 										}}
 									>
 										{/* Mic toggle with dropdown */}
-										<div className="flex items-center gap-1">
-											<button
-												type="button"
-												onClick={toggleAudio}
-												title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
-												className={cn(
-													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90",
-													!isAudioEnabled
+											<div className="flex items-center gap-1">
+												<button
+													type="button"
+													onClick={toggleAudio}
+													title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
+													aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
+													className={cn(
+														"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90 touch-manipulation",
+														!isAudioEnabled
 														? "bg-red-500 text-white hover:bg-red-600"
 														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
 												)}
@@ -776,16 +787,20 @@ function PreJoinLobbyBase({
 												)}
 											</button>
 											{hasAudioInput && (
-												<button
-													type="button"
-													onClick={(e) => {
-														e.stopPropagation();
-														setOpenDropdown(openDropdown === "audio" ? null : "audio");
-													}}
-													title="Select microphone"
-													className={cn(
-														"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
-														openDropdown === "audio"
+													<button
+														type="button"
+														onClick={(e) => {
+															e.stopPropagation();
+															setOpenDropdown(openDropdown === "audio" ? null : "audio");
+														}}
+														title="Select microphone"
+														aria-label="Select microphone"
+														aria-haspopup="menu"
+														aria-controls={audioDeviceMenuId}
+														aria-expanded={openDropdown === "audio"}
+														className={cn(
+															"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
+															openDropdown === "audio"
 															? "text-[#1bb6a6]"
 															: "text-(--muted-foreground) hover:text-(--foreground) hover:bg-black/5 dark:hover:bg-white/5",
 													)}
@@ -796,16 +811,17 @@ function PreJoinLobbyBase({
 										</div>
 
 										{/* Video toggle with dropdown */}
-										<div className="flex items-center gap-1">
-											<button
-												type="button"
-												onClick={toggleVideo}
-												title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
-												className={cn(
-													"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90",
-													!isVideoEnabled
-														? "bg-red-500 text-white hover:bg-red-600"
-														: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+											<div className="flex items-center gap-1">
+												<button
+													type="button"
+													onClick={toggleVideo}
+													title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
+													aria-label={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
+													className={cn(
+														"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90 touch-manipulation",
+														!isVideoEnabled
+															? "bg-red-500 text-white hover:bg-red-600"
+															: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
 												)}
 											>
 												{isVideoEnabled ? (
@@ -815,16 +831,20 @@ function PreJoinLobbyBase({
 												)}
 											</button>
 											{hasVideoDevices && (
-												<button
-													type="button"
-													onClick={(e) => {
-														e.stopPropagation();
-														setOpenDropdown(openDropdown === "video" ? null : "video");
-													}}
-													title="Select camera"
-													className={cn(
-														"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
-														openDropdown === "video"
+													<button
+														type="button"
+														onClick={(e) => {
+															e.stopPropagation();
+															setOpenDropdown(openDropdown === "video" ? null : "video");
+														}}
+														title="Select camera"
+														aria-label="Select camera"
+														aria-haspopup="menu"
+														aria-controls={videoDeviceMenuId}
+														aria-expanded={openDropdown === "video"}
+														className={cn(
+															"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
+															openDropdown === "video"
 															? "text-[#1bb6a6]"
 															: "text-(--muted-foreground) hover:text-(--foreground) hover:bg-black/5 dark:hover:bg-white/5",
 													)}
@@ -842,6 +862,7 @@ function PreJoinLobbyBase({
 											type="button"
 											onClick={toggleSettings}
 											title="Settings"
+											aria-label="Settings"
 											className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90"
 										>
 											<MoreVerticalIcon size={18} />

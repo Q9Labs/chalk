@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeAll } from 'bun:test';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'bun:test';
+import { fireEvent, render } from '@testing-library/react';
 import { MeetingRoom } from '../../components/full/MeetingRoom';
 
 // Mock everything
@@ -47,5 +47,41 @@ describe('MeetingRoom', () => {
       />
     );
     expect(getByLabelText('Chat panel')).toBeDefined();
+  });
+
+  it('keeps mobile mute control clickable when invite toast is visible', () => {
+    const onToggleMute = vi.fn();
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 639px)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => true,
+    })) as any;
+
+    try {
+      const { getByLabelText, getByRole } = render(
+        <MeetingRoom
+          roomName="Test Room"
+          localParticipant={localParticipant}
+          participants={participants}
+          enableTour={false}
+          onToggleMute={onToggleMute}
+        />
+      );
+
+      fireEvent.click(getByLabelText('Mute'));
+      expect(onToggleMute).toHaveBeenCalledTimes(1);
+
+      const inviteToast = getByRole('status');
+      expect(inviteToast.className).toContain('top-4');
+      expect(inviteToast.className).toContain('bottom-auto');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 });

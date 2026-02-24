@@ -20,6 +20,7 @@ describe("AudioRenderer autoplay recovery", () => {
 			.spyOn(globalThis.HTMLMediaElement.prototype, "play")
 			.mockRejectedValueOnce(new Error("NotAllowedError"))
 			.mockResolvedValue(undefined);
+		playSpy.mockClear();
 
 		const audioTrack = {
 			id: "track-1",
@@ -60,4 +61,3 @@ describe("AudioRenderer autoplay recovery", () => {
 		expect(playSpy.mock.calls.length).toBe(callsAfterUnlock);
 	});
 });
-
