@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **CI: Legacy prod destroy resilience** — make infra destroy tolerant of stale state/manual deletes by using `terraform destroy -refresh=false` and non-blocking R2 lifecycle state cleanup.
+- **Web CI: SPA fallback artifact check** — ensure `apps/web/scripts/prepare-pages-spa.mjs` emits both `index.html` and `404.html` from `_shell.html` for Cloudflare Pages fallback validation.
 - **Post-meeting transcription timeout tuning** — raise Whisper timeout from `30m` to `2h` and include queue-depth diagnostics in timeout errors to avoid false failures under backlog.
 - **Whisper stability under backlog** — disable aggressive batched inference by default on CPU workers and add OOM fallback from batched to single-mode transcription while retaining `c7i.large` spot sizing.
 - **Infra: Lean whisper spot self-healing** — switch lean whisper worker spot mode to persistent requests so interruptions relaunch capacity automatically on `c7i.large` spot.
