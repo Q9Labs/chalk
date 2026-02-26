@@ -135,12 +135,17 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       if (parts.length !== 3 || !parts[1]) {
         return true; // Invalid JWT format
       }
-      // Decode base64 - works in both browser and Node.js
+      // Decode base64url payload - works in both browser and Node.js.
+      // Cloudflare-style JWT payloads may use URL-safe chars and omit padding.
+      const payloadB64 = parts[1]
+        .replace(/-/g, "+")
+        .replace(/_/g, "/")
+        .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
       let decoded: string;
       if (typeof atob === 'function') {
-        decoded = atob(parts[1]);
+        decoded = atob(payloadB64);
       } else if (typeof Buffer !== 'undefined') {
-        decoded = Buffer.from(parts[1], 'base64').toString('utf-8');
+        decoded = Buffer.from(payloadB64, 'base64').toString('utf-8');
       } else {
         // Fallback: assume not expired if we can't decode
         return false;
@@ -275,20 +280,10 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
           throw new Error("RealtimeKit token missing - API did not return rtcToken");
         }
 
-        // Check token expiration
+        // Never substitute RTC token with tokenProvider output.
+        // tokenProvider returns API JWT; RealtimeKit requires rtcToken from join response.
         if (this.isTokenExpired(tokens.rtcToken)) {
-          // Attempt token refresh if provider is available
-          if (this.tokenProvider) {
-            try {
-              const newToken = await this.tokenProvider();
-              tokens.rtcToken = newToken;
-            } catch (refreshError) {
-              throw new Error("Token expired and refresh failed: " +
-                (refreshError instanceof Error ? refreshError.message : String(refreshError)));
-            }
-          } else {
-            throw new Error("Invalid or expired RealtimeKit token. Provide a tokenProvider for automatic refresh.");
-          }
+          ctx.set("api", { rtcTokenExpiredAtJoin: true });
         }
 
         this.apiClient.setToken(tokens.accessToken);
