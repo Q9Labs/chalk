@@ -2,20 +2,50 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/auth"
+	applogging "github.com/Q9Labs/chalk/internal/infrastructure/logging"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/Q9Labs/chalk/internal/version"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
+	"log/slog"
 )
 
 type DebugHandler struct{}
 
 func NewDebugHandler() *DebugHandler {
 	return &DebugHandler{}
+}
+
+type ClientIncidentRequest struct {
+	IncidentID    string         `json:"incident_id" binding:"required,max=128"`
+	Source        string         `json:"source" binding:"required,max=64"`
+	Stage         string         `json:"stage" binding:"omitempty,max=64"`
+	Severity      string         `json:"severity" binding:"omitempty,max=16"`
+	Message       string         `json:"message" binding:"required,max=512"`
+	ErrorName     string         `json:"error_name" binding:"omitempty,max=128"`
+	ErrorCode     string         `json:"error_code" binding:"omitempty,max=128"`
+	RequestURL    string         `json:"request_url" binding:"omitempty,max=1024"`
+	RequestMethod string         `json:"request_method" binding:"omitempty,max=16"`
+	SessionID     string         `json:"session_id" binding:"omitempty,max=128"`
+	RoomID        string         `json:"room_id" binding:"omitempty,max=128"`
+	MeetingURL    string         `json:"meeting_url" binding:"omitempty,max=256"`
+	ExternalID    string         `json:"external_id" binding:"omitempty,max=128"`
+	UserAgent     string         `json:"user_agent" binding:"omitempty,max=512"`
+	PageURL       string         `json:"page_url" binding:"omitempty,max=1024"`
+	Online        *bool          `json:"online,omitempty"`
+	Visibility    string         `json:"visibility" binding:"omitempty,max=32"`
+	Details       map[string]any `json:"details,omitempty"`
+}
+
+type ClientIncidentResponse struct {
+	Accepted   bool   `json:"accepted"`
+	IncidentID string `json:"incident_id"`
+	RequestID  string `json:"request_id"`
 }
 
 type DebugAuthResponse struct {
@@ -115,6 +145,73 @@ func (h *DebugHandler) Auth(c *gin.Context) {
 		RequestID: middleware.GetRequestID(c),
 		TraceID:   traceID,
 	})
+}
+
+// ClientIncident handles POST /api/v1/debug/client-incident.
+// Authenticated by API key middleware; intended for browser-side telemetry from integrators.
+func (h *DebugHandler) ClientIncident(c *gin.Context) {
+	var req ClientIncidentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tenantID := ""
+	if tenant, ok := middleware.GetTenant(c); ok && tenant != nil {
+		tenantID = tenant.ID.String()
+	}
+
+	if req.Severity == "" {
+		req.Severity = "error"
+	}
+	req.Severity = strings.ToLower(strings.TrimSpace(req.Severity))
+
+	eventAttrs := []any{
+		"event", "client.incident",
+		"incident_id", req.IncidentID,
+		"source", req.Source,
+		"stage", req.Stage,
+		"severity", req.Severity,
+		"message", req.Message,
+		"error_name", req.ErrorName,
+		"error_code", req.ErrorCode,
+		"request_url", req.RequestURL,
+		"request_method", strings.ToUpper(req.RequestMethod),
+		"session_id", req.SessionID,
+		"room_id", req.RoomID,
+		"meeting_url", req.MeetingURL,
+		"external_id", req.ExternalID,
+		"online", req.Online,
+		"visibility", req.Visibility,
+		"page_url", req.PageURL,
+		"reported_user_agent", req.UserAgent,
+		"tenant_id", tenantID,
+		"request_id", middleware.GetRequestID(c),
+		"client_ip", c.ClientIP(),
+		"origin", c.Request.Header.Get("Origin"),
+		"path", c.Request.URL.Path,
+	}
+	if len(req.Details) > 0 {
+		eventAttrs = append(eventAttrs, "details", req.Details)
+	}
+
+	debugWarn(
+		"chalk client incident",
+		eventAttrs...,
+	)
+
+	c.JSON(http.StatusAccepted, ClientIncidentResponse{
+		Accepted:   true,
+		IncidentID: req.IncidentID,
+		RequestID:  middleware.GetRequestID(c),
+	})
+}
+
+func debugWarn(msg string, attrs ...any) {
+	slog.Warn(msg, attrs...)
+	if applogging.AxiomEnabled() {
+		applogging.Stdout().Warn(msg, attrs...)
+	}
 }
 
 func deriveScopes(p auth.Permissions) []string {

@@ -61,6 +61,7 @@ func getWsReadLimitBytes() int64 {
 func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Prefer token from Sec-WebSocket-Protocol header (more secure - not logged)
 	var token string
+	tokenSource := "subprotocol"
 	protocolHeader := c.GetHeader("Sec-WebSocket-Protocol")
 	if protocolHeader != "" {
 		for _, entry := range strings.Split(protocolHeader, ",") {
@@ -76,17 +77,33 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	if token == "" {
 		token = c.Query("token")
 		if token != "" {
+			tokenSource = "query_param"
 			wsWarn(
 				"websocket token passed via query param (deprecated, use subprotocol)",
-				append([]any{"event", "websocket.auth.deprecated_query_token"}, wsBaseAttrs(c)...)...,
+				append([]any{
+					"event", "websocket.auth.deprecated_query_token",
+					"token_source", tokenSource,
+				}, wsBaseAttrs(c)...)...,
 			)
 		}
 	}
 
+	roomQueryRaw := strings.TrimSpace(c.Query("room"))
+	roomQueryPresent := roomQueryRaw != ""
+	roomQueryID, roomQueryParseErr := uuid.Parse(roomQueryRaw)
+	roomQueryIsUUID := roomQueryParseErr == nil
+
 	if token == "" {
 		wsWarn(
 			"websocket auth failed: missing token",
-			append([]any{"event", "websocket.auth_failed", "reason", "missing_token"}, wsBaseAttrs(c)...)...,
+			append([]any{
+				"event", "websocket.auth_failed",
+				"reason", "missing_token",
+				"token_source", tokenSource,
+				"query_room_present", roomQueryPresent,
+				"query_room_is_uuid", roomQueryIsUUID,
+				"query_room", roomQueryRaw,
+			}, wsBaseAttrs(c)...)...,
 		)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 		return
@@ -106,7 +123,15 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		}
 		wsWarn(
 			"websocket auth failed: invalid token",
-			append([]any{"event", "websocket.auth_failed", "reason", reason, "error", err.Error()}, wsBaseAttrs(c)...)...,
+			append([]any{
+				"event", "websocket.auth_failed",
+				"reason", reason,
+				"error", err.Error(),
+				"token_source", tokenSource,
+				"query_room_present", roomQueryPresent,
+				"query_room_is_uuid", roomQueryIsUUID,
+				"query_room", roomQueryRaw,
+			}, wsBaseAttrs(c)...)...,
 		)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
@@ -121,7 +146,17 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	if claims.RoomID.String() == "00000000-0000-0000-0000-000000000000" {
 		wsWarn(
 			"websocket auth failed: missing room_id in token",
-			append([]any{"event", "websocket.auth_failed", "reason", "missing_room_id", "tenant_id", claims.TenantID}, wsBaseAttrs(c)...)...,
+			append([]any{
+				"event", "websocket.auth_failed",
+				"reason", "missing_room_id",
+				"tenant_id", claims.TenantID,
+				"participant_id", claims.Subject,
+				"token_source", tokenSource,
+				"query_room_present", roomQueryPresent,
+				"query_room_is_uuid", roomQueryIsUUID,
+				"query_room", roomQueryRaw,
+				"token_secs_to_expiry", secsToExpiry,
+			}, wsBaseAttrs(c)...)...,
 		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing room_id in token"})
 		return
@@ -130,10 +165,48 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	if claims.Subject == "" {
 		wsWarn(
 			"websocket auth failed: missing participant_id in token",
-			append([]any{"event", "websocket.auth_failed", "reason", "missing_participant_id", "tenant_id", claims.TenantID, "room_id", claims.RoomID}, wsBaseAttrs(c)...)...,
+			append([]any{
+				"event", "websocket.auth_failed",
+				"reason", "missing_participant_id",
+				"tenant_id", claims.TenantID,
+				"room_id", claims.RoomID,
+				"token_source", tokenSource,
+				"query_room_present", roomQueryPresent,
+				"query_room_is_uuid", roomQueryIsUUID,
+				"query_room", roomQueryRaw,
+				"token_secs_to_expiry", secsToExpiry,
+			}, wsBaseAttrs(c)...)...,
 		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing participant_id in token"})
 		return
+	}
+
+	if roomQueryPresent {
+		if !roomQueryIsUUID {
+			wsWarn(
+				"websocket room query is not a uuid",
+				append([]any{
+					"event", "websocket.auth.room_query_invalid",
+					"tenant_id", claims.TenantID,
+					"room_id", claims.RoomID,
+					"participant_id", claims.Subject,
+					"token_source", tokenSource,
+					"query_room", roomQueryRaw,
+				}, wsBaseAttrs(c)...)...,
+			)
+		} else if roomQueryID != claims.RoomID {
+			wsWarn(
+				"websocket room query does not match token room_id",
+				append([]any{
+					"event", "websocket.auth.room_query_mismatch",
+					"tenant_id", claims.TenantID,
+					"room_id", claims.RoomID,
+					"participant_id", claims.Subject,
+					"token_source", tokenSource,
+					"query_room", roomQueryRaw,
+				}, wsBaseAttrs(c)...)...,
+			)
+		}
 	}
 
 	// Tenant-aware origin validation (defense in depth)
@@ -240,6 +313,10 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 			"tenant_id", claims.TenantID,
 			"room_id", claims.RoomID,
 			"participant_id", participantID,
+			"token_source", tokenSource,
+			"query_room_present", roomQueryPresent,
+			"query_room_is_uuid", roomQueryIsUUID,
+			"query_room_matches_claim_room", roomQueryIsUUID && roomQueryID == claims.RoomID,
 			"local_room_clients", localRoomClients,
 			"expected_active_participants", expectedActive,
 		}, wsBaseAttrs(c)...)...,
@@ -252,6 +329,10 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 			"tenant_id", claims.TenantID,
 			"room_id", claims.RoomID,
 			"participant_id", participantID,
+			"token_source", tokenSource,
+			"query_room_present", roomQueryPresent,
+			"query_room_is_uuid", roomQueryIsUUID,
+			"query_room_matches_claim_room", roomQueryIsUUID && roomQueryID == claims.RoomID,
 			"token_expires_at", claims.ExpiresAt.UTC().Format(time.RFC3339Nano),
 			"token_secs_to_expiry", secsToExpiry,
 			"trace_id", traceID,

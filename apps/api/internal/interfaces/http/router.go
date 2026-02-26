@@ -212,6 +212,7 @@ func (r *Router) setupRoutes() {
 
 		debug := handlers.NewDebugHandler()
 		v1.HEAD("/debug/ping", debug.Ping)
+		v1.POST("/debug/client-incident", apiKeyMw.RequireAPIKey(), debug.ClientIncident)
 		debugGroup := v1.Group("/debug")
 		debugGroup.Use(authMw.RequireJWT())
 		debugGroup.GET("/auth", debug.Auth)

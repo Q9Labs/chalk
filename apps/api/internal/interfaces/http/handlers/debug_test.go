@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/domain/auth"
 	infraAuth "github.com/Q9Labs/chalk/internal/infrastructure/auth"
+	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -114,4 +116,59 @@ func TestDebugAuth_OK_ValidToken_200(t *testing.T) {
 	require.NotEmpty(t, resp.APIBuildTime)
 
 	require.Len(t, resp.Scopes, 4)
+}
+
+func TestDebugClientIncident_BadPayload_400(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(middleware.RequestID())
+
+	h := NewDebugHandler()
+	r.POST("/api/v1/debug/client-incident", h.ClientIncident)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/debug/client-incident", bytes.NewBufferString(`{"source":"th-lms"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestDebugClientIncident_OK_202(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tenantID := uuid.New()
+	r := gin.New()
+	r.Use(middleware.RequestID())
+	r.Use(func(c *gin.Context) {
+		c.Set(middleware.TenantKey, &db.Tenant{ID: tenantID})
+		c.Next()
+	})
+
+	h := NewDebugHandler()
+	r.POST("/api/v1/debug/client-incident", h.ClientIncident)
+
+	body := `{
+		"incident_id":"inc_123",
+		"source":"th-lms",
+		"stage":"chalk_join",
+		"message":"Failed to fetch",
+		"request_url":"https://chalk-api.q9labs.ai/api/v1/rooms/abc/participants",
+		"request_method":"post",
+		"room_id":"abc"
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/debug/client-incident", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-ID", "req-debug-1")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusAccepted, rec.Code)
+
+	var resp ClientIncidentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.True(t, resp.Accepted)
+	require.Equal(t, "inc_123", resp.IncidentID)
+	require.Equal(t, "req-debug-1", resp.RequestID)
 }
