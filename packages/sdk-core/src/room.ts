@@ -702,6 +702,40 @@ export class Room extends EventEmitter<RoomEvents> {
       },
     );
 
+    const ensureRemoteParticipant = (rtkParticipant: unknown): Participant | null => {
+      const participant = this.mapRTKParticipant(rtkParticipant);
+
+      // Ignore remote collection events that resolve to local participant identity.
+      if (this._localParticipant && participant.id === this._localParticipant.id) {
+        return null;
+      }
+
+      const { peerId } = this.getRtkIds(rtkParticipant);
+      let existing = this._participants.get(participant.id);
+
+      // If this participant was temporarily keyed by peerId, migrate it.
+      if (!existing && peerId !== participant.id) {
+        const existingByPeerId = this._participants.get(peerId);
+        if (existingByPeerId) {
+          this._participants.delete(peerId);
+          existing = {
+            ...existingByPeerId,
+            ...participant,
+            id: participant.id,
+            isLocal: false,
+          };
+          this._participants.set(participant.id, existing);
+        }
+      }
+
+      if (!existing) {
+        this._participants.set(participant.id, participant);
+        this.emit("participant-joined", participant);
+      }
+
+      return participant;
+    };
+
     // Participant joined
     this.rtkClient.participants.joined.on(
       "participantJoined",
@@ -750,28 +784,31 @@ export class Room extends EventEmitter<RoomEvents> {
     this.rtkClient.participants.joined.on(
       "videoUpdate",
       (rtkParticipant: unknown) => {
-        const participant = this.mapRTKParticipant(rtkParticipant);
+        const participant = ensureRemoteParticipant(rtkParticipant);
+        if (!participant) {
+          return;
+        }
 
         const existing = this._participants.get(participant.id);
-        if (existing) {
-          // CRITICAL: Create new object for React to detect changes
-          const updated: Participant = {
-            ...existing,
-            videoEnabled: participant.videoEnabled,
-            videoTrack: participant.videoTrack,
-          };
-          this._participants.set(participant.id, updated);
+        if (!existing) return;
 
-          // Validate remote video track
-          if (participant.videoEnabled) {
-            this.validateTrack(participant.videoTrack, "REMOTE_VIDEO", participant.id);
-          }
+        // CRITICAL: Create new object for React to detect changes
+        const updated: Participant = {
+          ...existing,
+          videoEnabled: participant.videoEnabled,
+          videoTrack: participant.videoTrack,
+        };
+        this._participants.set(participant.id, updated);
 
-          this.emit("participant-updated", {
-            participantId: participant.id,
-            participant: updated,
-          });
+        // Validate remote video track
+        if (participant.videoEnabled) {
+          this.validateTrack(participant.videoTrack, "REMOTE_VIDEO", participant.id);
         }
+
+        this.emit("participant-updated", {
+          participantId: participant.id,
+          participant: updated,
+        });
       },
     );
 
@@ -779,28 +816,31 @@ export class Room extends EventEmitter<RoomEvents> {
     this.rtkClient.participants.joined.on(
       "audioUpdate",
       (rtkParticipant: unknown) => {
-        const participant = this.mapRTKParticipant(rtkParticipant);
+        const participant = ensureRemoteParticipant(rtkParticipant);
+        if (!participant) {
+          return;
+        }
 
         const existing = this._participants.get(participant.id);
-        if (existing) {
-          // CRITICAL: Create new object for React to detect changes
-          const updated: Participant = {
-            ...existing,
-            audioEnabled: participant.audioEnabled,
-            audioTrack: participant.audioTrack,
-          };
-          this._participants.set(participant.id, updated);
+        if (!existing) return;
 
-          // Validate remote audio track
-          if (participant.audioEnabled) {
-            this.validateTrack(participant.audioTrack, "REMOTE_AUDIO", participant.id);
-          }
+        // CRITICAL: Create new object for React to detect changes
+        const updated: Participant = {
+          ...existing,
+          audioEnabled: participant.audioEnabled,
+          audioTrack: participant.audioTrack,
+        };
+        this._participants.set(participant.id, updated);
 
-          this.emit("participant-updated", {
-            participantId: participant.id,
-            participant: updated,
-          });
+        // Validate remote audio track
+        if (participant.audioEnabled) {
+          this.validateTrack(participant.audioTrack, "REMOTE_AUDIO", participant.id);
         }
+
+        this.emit("participant-updated", {
+          participantId: participant.id,
+          participant: updated,
+        });
       },
     );
 
@@ -808,36 +848,39 @@ export class Room extends EventEmitter<RoomEvents> {
     this.rtkClient.participants.joined.on(
       "screenShareUpdate",
       (rtkParticipant: unknown) => {
-        const participant = this.mapRTKParticipant(rtkParticipant);
+        const participant = ensureRemoteParticipant(rtkParticipant);
+        if (!participant) {
+          return;
+        }
 
         const existing = this._participants.get(participant.id);
-        if (existing) {
-          // CRITICAL: Create new object for React to detect changes
-          const updated: Participant = {
-            ...existing,
-            isScreenSharing: participant.isScreenSharing,
-            screenShareTrack: participant.screenShareTrack,
-            screenShareAudioTrack: participant.screenShareAudioTrack,
-          };
-          this._participants.set(participant.id, updated);
+        if (!existing) return;
 
-          // Validate screen share track
-          if (participant.isScreenSharing) {
-            const isValid = this.validateTrack(participant.screenShareTrack, "REMOTE_SCREENSHARE", participant.id);
-            if (!isValid) {
-              this.emit("error", {
-                code: "SCREEN_SHARE_ERROR",
-                message: `Screen share track unavailable for participant ${participant.displayName}`,
-                details: { participantId: participant.id },
-              });
-            }
+        // CRITICAL: Create new object for React to detect changes
+        const updated: Participant = {
+          ...existing,
+          isScreenSharing: participant.isScreenSharing,
+          screenShareTrack: participant.screenShareTrack,
+          screenShareAudioTrack: participant.screenShareAudioTrack,
+        };
+        this._participants.set(participant.id, updated);
+
+        // Validate screen share track
+        if (participant.isScreenSharing) {
+          const isValid = this.validateTrack(participant.screenShareTrack, "REMOTE_SCREENSHARE", participant.id);
+          if (!isValid) {
+            this.emit("error", {
+              code: "SCREEN_SHARE_ERROR",
+              message: `Screen share track unavailable for participant ${participant.displayName}`,
+              details: { participantId: participant.id },
+            });
           }
-
-          this.emit("participant-updated", {
-            participantId: participant.id,
-            participant: updated,
-          });
         }
+
+        this.emit("participant-updated", {
+          participantId: participant.id,
+          participant: updated,
+        });
       },
     );
 

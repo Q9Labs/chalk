@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-Core: Participant roster self-healing on missed RTK join deltas** — remote `videoUpdate`/`audioUpdate`/`screenShareUpdate` now upsert participants when `participantJoined` is missed, and session participant state now upserts unknown `participant-updated` events to prevent one-way room visibility mismatches.
 - **SDK-Core: RTK join token safety + retries regression coverage** — stop substituting `rtcToken` with `tokenProvider()` output during room join, harden JWT base64url expiry parsing, and add join-path regression tests for token mismatch, missing RTC token, and retry behavior.
 - **CI: Legacy prod destroy resilience** — make infra destroy tolerant of stale state/manual deletes by using `terraform destroy -refresh=false` and non-blocking R2 lifecycle state cleanup.
 - **Web CI: SPA fallback artifact check** — ensure `apps/web/scripts/prepare-pages-spa.mjs` emits both `index.html` and `404.html` from `_shell.html` for Cloudflare Pages fallback validation.

@@ -576,13 +576,14 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		const localParticipant = room.localParticipant
 			? normalizeParticipant(room.localParticipant)
 			: null;
+		const initialParticipants = localParticipant
+			? [...participants.filter((p: any) => p.id !== localParticipant.id), localParticipant]
+			: participants;
 		updateParticipantState({
-			participants: localParticipant
-				? [...participants.filter((p: any) => p.id !== localParticipant.id), localParticipant]
-				: participants,
+			participants: initialParticipants,
 			localParticipant,
 			activeSpeaker: null,
-			count: participants.length + (localParticipant ? 1 : 0),
+			count: initialParticipants.length,
 		});
 
 		// Sync initial media state from local participant
@@ -638,9 +639,15 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		room.on("participant-updated", ({ participantId, participant }) => {
 			const normalized = normalizeParticipant(participant);
 			const currentState = this.participants._state;
-			const updatedParticipants = currentState.participants.map((p) =>
-				p.id === participantId ? normalized : p
+			const existingIndex = currentState.participants.findIndex(
+				(p) => p.id === participantId || p.id === normalized.id
 			);
+			const updatedParticipants =
+				existingIndex === -1
+					? [...currentState.participants, normalized]
+					: currentState.participants.map((p) =>
+							p.id === participantId || p.id === normalized.id ? normalized : p
+						);
 
 			// Also update localParticipant if it's the local user
 			const localParticipant = normalized.isLocal ? normalized : currentState.localParticipant;
@@ -648,6 +655,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			updateParticipantState({
 				...currentState,
 				participants: updatedParticipants,
+				count: updatedParticipants.length,
 				localParticipant,
 			});
 			this.participants._emitter.emit("participant:updated", { participantId, participant: normalized });

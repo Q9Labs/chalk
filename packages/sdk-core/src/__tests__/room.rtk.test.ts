@@ -180,6 +180,40 @@ describe("Room (RTK identity mapping)", () => {
 		expect(room.participants.get("uuid_a")?.videoEnabled).toBe(true);
 	});
 
+	it("recovers remote participant from update events when participantJoined is missed", () => {
+		room._setLocalParticipant({
+			id: "uuid_local",
+			userId: "uuid_local",
+			displayName: "Me",
+			role: "participant",
+			isLocal: true,
+			videoEnabled: false,
+			audioEnabled: false,
+			isSpeaking: false,
+			isScreenSharing: false,
+			handRaised: false,
+			connectionQuality: 100,
+		});
+
+		let joinedId: string | null = null;
+		room.on("participant-joined", (participant) => {
+			joinedId = participant.id;
+		});
+
+		// Simulate dropped "participantJoined" event; only media update arrives.
+		rtk.participants.joined.emit("videoUpdate", {
+			id: "peer_b",
+			userId: "uuid_b",
+			name: "Bob",
+			videoEnabled: true,
+			videoTrack: {} as any,
+		});
+
+		expect(joinedId).toBe("uuid_b");
+		expect(room.participants.has("uuid_b")).toBe(true);
+		expect(room.participants.get("uuid_b")?.videoEnabled).toBe(true);
+	});
+
 	it("applies host mute/unmute commands to local audio when addressed to local participant", async () => {
 		const ws = createMockWsClient();
 		room.attachWsClient(ws as any);
