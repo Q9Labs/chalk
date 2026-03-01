@@ -39,11 +39,122 @@ import { cn } from "../../utils/cn";
 
 import { EndScreen } from "./EndScreen";
 import { MeetingRoom } from "./MeetingRoom";
-import { PreJoinLobby } from "./PreJoinLobby";
+import { PreJoinLobby, type JoinSettings } from "./PreJoinLobby";
 import { LeaveConfirmationDialog } from "../composite/LeaveConfirmationDialog";
 
 type Phase = "lobby" | "joining" | "meeting" | "end";
 const DISCONNECT_GRACE_MS = 8000;
+const JOIN_RETRY_DELAYS_MS = [500, 1200];
+const NON_RETRYABLE_JOIN_CODES = new Set([
+	"ALREADY_IN_ROOM",
+	"PERMISSION_DENIED",
+	"ROOM_NOT_FOUND",
+	"ROOM_FULL",
+	"ROOM_ENDED",
+	"INVALID_API_KEY",
+	"INVALID_REQUEST",
+]);
+type JoinFailureStage =
+	| "join_api"
+	| "auth_refresh"
+	| "rtc_join"
+	| "ws_connect"
+	| "join_unknown";
+
+const inferJoinFailureStage = (error: ChalkError): JoinFailureStage => {
+	const code = String(error.code ?? "").toUpperCase();
+	const message = (error.message ?? "").toLowerCase();
+
+	if (
+		code === "TOKEN_EXPIRED" ||
+		code === "AUTH_FAILED" ||
+		message.includes("token refresh")
+	) {
+		return "auth_refresh";
+	}
+
+	if (
+		code.startsWith("WS_") ||
+		code === "MAX_RECONNECT_ATTEMPTS" ||
+		code === "WEBSOCKET_ERROR" ||
+		message.includes("websocket")
+	) {
+		return "ws_connect";
+	}
+
+	if (
+		message.includes("realtimekit") ||
+		message.includes("roomsockethandlejoinroom failed") ||
+		message.includes("failed to join room after")
+	) {
+		return "rtc_join";
+	}
+
+	if (
+		message.includes("failed to fetch") ||
+		message.includes("network") ||
+		message.includes("status code") ||
+		message.includes("/participants") ||
+		code === "RATE_LIMITED"
+	) {
+		return "join_api";
+	}
+
+	return "join_unknown";
+};
+
+const isTransientJoinFailure = (
+	error: ChalkError,
+	stage: JoinFailureStage,
+): boolean => {
+	const code = String(error.code ?? "").toUpperCase();
+	if (NON_RETRYABLE_JOIN_CODES.has(code)) return false;
+	if (stage === "auth_refresh" || stage === "rtc_join" || stage === "ws_connect") {
+		return true;
+	}
+	const message = (error.message ?? "").toLowerCase();
+	return (
+		message.includes("failed to fetch") ||
+		message.includes("network") ||
+		message.includes("timeout") ||
+		message.includes("temporarily") ||
+		code === "CONNECTION_FAILED" ||
+		code === "RECONNECT_FAILED" ||
+		code === "TOKEN_EXPIRED" ||
+		code === "AUTH_FAILED" ||
+		code === "RATE_LIMITED"
+	);
+};
+
+const toChalkError = (error: unknown): ChalkError => {
+	if (typeof error === "object" && error !== null) {
+		const candidate = error as {
+			code?: unknown;
+			message?: unknown;
+			details?: Record<string, unknown>;
+		};
+		return {
+			code:
+				typeof candidate.code === "string"
+					? candidate.code
+					: ChalkErrorCode.UNKNOWN_ERROR,
+			message:
+				typeof candidate.message === "string"
+					? candidate.message
+					: "Unexpected error",
+			details: candidate.details,
+		};
+	}
+
+	return {
+		code: ChalkErrorCode.UNKNOWN_ERROR,
+		message:
+			error instanceof Error ? error.message : typeof error === "string" ? error : "Unexpected error",
+	};
+};
+
+const waitMs = (ms: number): Promise<void> =>
+	new Promise((resolve) => window.setTimeout(resolve, ms));
 
 interface FeatureContext {
 	participants: readonly Participant[];
@@ -245,6 +356,7 @@ function VideoConferenceBase({
 	const roomIdRef = useRef(roomId);
 	const phaseRef = useRef<Phase>("lobby");
 	const disconnectGraceTimeoutRef = useRef<number | null>(null);
+	const lastJoinSettingsRef = useRef<JoinSettings | null>(null);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
@@ -310,6 +422,22 @@ function VideoConferenceBase({
 			disconnectGraceTimeoutRef.current = null;
 		}
 	}, []);
+
+	const emitError = useCallback(
+		(error: ChalkError, details?: Record<string, unknown>) => {
+			const merged: ChalkError = {
+				...error,
+				details: {
+					...(error.details ?? {}),
+					roomId: roomIdRef.current,
+					phase: phaseRef.current,
+					...(details ?? {}),
+				},
+			};
+			onError?.(merged);
+		},
+		[onError],
+	);
 
 	useEffect(() => {
 		refreshDevices();
@@ -564,14 +692,7 @@ function VideoConferenceBase({
 	);
 
 	const handleJoin = useCallback(
-		async (settings: {
-			displayName: string;
-			videoEnabled: boolean;
-			audioEnabled: boolean;
-			selectedVideoDevice?: string;
-			selectedAudioInput?: string;
-			selectedAudioOutput?: string;
-		}) => {
+		async (settings: JoinSettings) => {
 			// Guard: prevent duplicate join attempts
 			if (isJoining || isConnected) {
 				if (isConnected) {
@@ -580,53 +701,92 @@ function VideoConferenceBase({
 				return;
 			}
 
+			lastJoinSettingsRef.current = settings;
 			setPhase("joining");
 			setError(null);
 
-			try {
-				await join(roomId, {
-					userName: settings.displayName,
-					role,
-					videoEnabled: settings.videoEnabled,
-					audioEnabled: settings.audioEnabled,
-					metadata,
-				});
+			const maxAttempts = JOIN_RETRY_DELAYS_MS.length + 1;
+			let finalError: ChalkError | null = null;
 
-				const deviceSelectionTasks: Promise<void>[] = [];
-				if (settings.selectedVideoDevice) {
-					deviceSelectionTasks.push(media.selectCamera(settings.selectedVideoDevice));
-				}
-				if (settings.selectedAudioInput) {
-					deviceSelectionTasks.push(media.selectMicrophone(settings.selectedAudioInput));
-				}
-				if (settings.selectedAudioOutput) {
-					deviceSelectionTasks.push(media.selectSpeaker(settings.selectedAudioOutput));
-				}
-				if (deviceSelectionTasks.length > 0) {
-					await Promise.allSettled(deviceSelectionTasks);
-				}
+			for (let attempt = 0; attempt < maxAttempts; attempt++) {
+				try {
+					await join(roomId, {
+						userName: settings.displayName,
+						role,
+						videoEnabled: settings.videoEnabled,
+						audioEnabled: settings.audioEnabled,
+						metadata,
+					});
 
-				setPhase("meeting");
-				play("join");
-				onJoin?.({
-					roomId,
-					participantId: localParticipant?.id ?? "",
-					role: localParticipant?.role ?? role ?? "participant",
-					displayName: settings.displayName,
-					isRecording: recording.isRecording,
-					joinedAt: new Date(),
-				});
-			} catch (err) {
-				const chalkError = err as ChalkError;
-				// If already connected, transition to meeting instead of lobby
-				if (chalkError.message?.includes("Already connected")) {
-						setPhase("meeting");
+					const deviceSelectionTasks: Promise<void>[] = [];
+					if (settings.selectedVideoDevice) {
+						deviceSelectionTasks.push(media.selectCamera(settings.selectedVideoDevice));
+					}
+					if (settings.selectedAudioInput) {
+						deviceSelectionTasks.push(media.selectMicrophone(settings.selectedAudioInput));
+					}
+					if (settings.selectedAudioOutput) {
+						deviceSelectionTasks.push(media.selectSpeaker(settings.selectedAudioOutput));
+					}
+					if (deviceSelectionTasks.length > 0) {
+						await Promise.allSettled(deviceSelectionTasks);
+					}
+
+					setPhase("meeting");
+					play("join");
+					onJoin?.({
+						roomId,
+						participantId: localParticipant?.id ?? "",
+						role: localParticipant?.role ?? role ?? "participant",
+						displayName: settings.displayName,
+						isRecording: recording.isRecording,
+						joinedAt: new Date(),
+					});
 					return;
+				} catch (rawError) {
+					const chalkError = toChalkError(rawError);
+					// If already connected, transition to meeting instead of lobby
+					if (chalkError.message?.includes("Already connected")) {
+						setPhase("meeting");
+						return;
+					}
+
+					const joinStage = inferJoinFailureStage(chalkError);
+					const retryable = isTransientJoinFailure(chalkError, joinStage);
+					const enrichedError: ChalkError = {
+						...chalkError,
+						details: {
+							...(chalkError.details ?? {}),
+							stage: joinStage,
+							attempt: attempt + 1,
+							maxAttempts,
+							retryable,
+						},
+					};
+					finalError = enrichedError;
+
+					if (!retryable || attempt >= maxAttempts - 1) {
+						break;
+					}
+
+					await waitMs(JOIN_RETRY_DELAYS_MS[attempt] ?? 0);
 				}
-				setError(chalkError.message || "Failed to join room");
-				onError?.(chalkError);
-				setPhase("lobby");
 			}
+
+			const terminalError = finalError ?? {
+				code: ChalkErrorCode.UNKNOWN_ERROR,
+				message: "Failed to join room",
+			};
+			setError(terminalError.message || "Failed to join room");
+			emitError(terminalError, {
+				event: "join_failed",
+				joinRetryExhausted: true,
+				joinStage:
+					typeof terminalError.details?.stage === "string"
+						? terminalError.details.stage
+						: undefined,
+			});
+			setPhase("lobby");
 		},
 		[
 			join,
@@ -637,12 +797,22 @@ function VideoConferenceBase({
 			recording.isRecording,
 			play,
 			onJoin,
-			onError,
 			isJoining,
 			isConnected,
 			media,
+			emitError,
 		],
 	);
+
+	const handleRetryConnection = useCallback(() => {
+		const previousJoinSettings = lastJoinSettingsRef.current;
+		if (!previousJoinSettings) {
+			setError("Connection lost. Please retry from the lobby.");
+			setPhase("lobby");
+			return;
+		}
+		void handleJoin(previousJoinSettings);
+	}, [handleJoin]);
 
 	const handleLeave = useCallback(() => {
 		setShowLeaveConfirm(true);
@@ -945,14 +1115,20 @@ function VideoConferenceBase({
 				}
 			}
 			setError(err.message);
-			onError?.(err);
+			emitError(err, {
+				stage: isScreenShareError
+					? "screen_share"
+					: isWsError
+						? "ws_connect"
+						: "session_error",
+			});
 		});
 
 		return () => {
 			handleDisconnect();
 			handleError();
 		};
-	}, [session, onEnd, buildEndData, onLeave, onError, clearDisconnectGraceTimeout]);
+	}, [session, onEnd, buildEndData, onLeave, clearDisconnectGraceTimeout, emitError, phase]);
 
 	const canManageParticipants = localParticipant?.role === "host";
 
@@ -1119,6 +1295,7 @@ function VideoConferenceBase({
 				getParticipantVolume={getAudioVolume}
 				selectedAudioOutput={selectedAudioOutput}
 				connectionStatus={connectionStatus}
+				onRetryConnection={handleRetryConnection}
 				className={cn(className, isExiting && "chalk-animate-exit")}
 			/>
 

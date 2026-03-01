@@ -26,6 +26,14 @@ const mockMediaState: {
 	isVideoEnabled: false,
 };
 
+const mockRoomState: {
+	isConnected: boolean;
+	status: "connected" | "connecting" | "reconnecting" | "disconnected" | "failed";
+} = {
+	isConnected: false,
+	status: "disconnected",
+};
+
 vi.mock("../../hooks/room/useConnection", () => {
 	const join = vi.fn(async () => {});
 	const leave = vi.fn(async () => {});
@@ -36,7 +44,10 @@ vi.mock("../../hooks/room/useConnection", () => {
 });
 
 vi.mock("../../hooks/room/useRoom", () => ({
-	useRoom: () => ({ isConnected: false, status: "disconnected" as const }),
+	useRoom: () => ({
+		isConnected: mockRoomState.isConnected,
+		status: mockRoomState.status,
+	}),
 }));
 
 vi.mock("../../hooks/participants/useParticipants", () => ({
@@ -171,6 +182,8 @@ describe("VideoConference pre-join devices", () => {
 		mockMediaState.selectedSpeaker = null;
 		mockMediaState.isAudioEnabled = false;
 		mockMediaState.isVideoEnabled = false;
+		mockRoomState.isConnected = false;
+		mockRoomState.status = "disconnected";
 		(globalThis as any).__vcJoinMock?.mockClear?.();
 		(globalThis as any).__vcSelectCameraMock?.mockClear?.();
 		(globalThis as any).__vcSelectMicrophoneMock?.mockClear?.();
@@ -231,5 +244,117 @@ describe("VideoConference pre-join devices", () => {
 		expect(
 			(globalThis as any).__vcSelectSpeakerMock.mock.invocationCallOrder[0],
 		).toBeGreaterThan((globalThis as any).__vcJoinMock.mock.invocationCallOrder[0]);
+	});
+
+	it("retries transient join failures before surfacing an error", async () => {
+		const joinMock = (globalThis as any).__vcJoinMock;
+		const onError = vi.fn();
+		joinMock
+			.mockRejectedValueOnce({
+				code: "CONNECTION_FAILED",
+				message: "Failed to fetch",
+			})
+			.mockResolvedValueOnce(undefined);
+
+		const { getByText } = render(
+			<VideoConference
+				roomId="room-123"
+				userName="Hasan"
+				onError={onError}
+			/>,
+		);
+
+		await act(async () => {
+			fireEvent.click(getByText("Ask to join"));
+		});
+
+		await waitFor(
+			() => {
+				expect(joinMock).toHaveBeenCalledTimes(2);
+			},
+			{ timeout: 3000 },
+		);
+		expect(onError).not.toHaveBeenCalled();
+	});
+
+	it("uses connection retry CTA to re-attempt join with previous settings", async () => {
+		const joinMock = (globalThis as any).__vcJoinMock;
+		mockRoomState.status = "disconnected";
+
+		const { getByText } = render(
+			<VideoConference
+				roomId="room-123"
+				userName="Hasan"
+			/>,
+		);
+
+		await act(async () => {
+			fireEvent.click(getByText("Ask to join"));
+		});
+
+		await waitFor(() => {
+			expect(joinMock).toHaveBeenCalledTimes(1);
+		});
+
+		await waitFor(() => {
+			expect(getByText("Try Again")).toBeTruthy();
+		});
+
+		await act(async () => {
+			fireEvent.click(getByText("Try Again"));
+		});
+
+		await waitFor(() => {
+			expect(joinMock).toHaveBeenCalledTimes(2);
+		});
+
+		expect(joinMock).toHaveBeenNthCalledWith(
+			1,
+			"room-123",
+			expect.objectContaining({ userName: "Hasan" }),
+		);
+		expect(joinMock).toHaveBeenNthCalledWith(
+			2,
+			"room-123",
+			expect.objectContaining({ userName: "Hasan" }),
+		);
+	});
+
+	it("emits enriched join telemetry after retries are exhausted", async () => {
+		const joinMock = (globalThis as any).__vcJoinMock;
+		const onError = vi.fn();
+		joinMock.mockRejectedValue({
+			code: "CONNECTION_FAILED",
+			message: "Failed to fetch",
+		});
+
+		const { getByText } = render(
+			<VideoConference
+				roomId="room-123"
+				userName="Hasan"
+				onError={onError}
+			/>,
+		);
+
+		await act(async () => {
+			fireEvent.click(getByText("Ask to join"));
+		});
+
+		await waitFor(
+			() => {
+				expect(joinMock).toHaveBeenCalledTimes(3);
+			},
+			{ timeout: 5000 },
+		);
+
+		await waitFor(() => {
+			expect(onError).toHaveBeenCalledTimes(1);
+		});
+
+		const emitted = onError.mock.calls[0][0];
+		expect(emitted.details?.joinRetryExhausted).toBe(true);
+		expect(emitted.details?.joinStage).toBe("join_api");
+		expect(emitted.details?.phase).toBe("joining");
+		expect(emitted.details?.roomId).toBe("room-123");
 	});
 });
