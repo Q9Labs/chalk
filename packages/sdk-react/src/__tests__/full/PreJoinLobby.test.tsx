@@ -150,12 +150,15 @@ describe('PreJoinLobby', () => {
       <PreJoinLobby
         onJoin={() => {}}
         error="Failed to get camera"
+        supportCode="CHK-20260302-101010-001"
         initialVideoEnabled={false}
         initialAudioEnabled={false}
       />
     );
     await act(async () => {});
     expect(getByText('Something went wrong')).toBeDefined();
+    expect(getByText('Support Code')).toBeDefined();
+    expect(getByText('CHK-20260302-101010-001')).toBeDefined();
 
     await act(async () => {
       fireEvent.click(getByText('Technical Details'));

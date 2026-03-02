@@ -333,6 +333,7 @@ function VideoConferenceBase({
 }: VideoConferenceProps): React.JSX.Element {
 	const [phase, setPhase] = useState<Phase>("lobby");
 	const [error, setError] = useState<string | null>(null);
+	const [supportCode, setSupportCode] = useState<string | null>(null);
 	const [meetingDuration, setMeetingDuration] = useState(0);
 	const [joinStartTime, setJoinStartTime] = useState<number | null>(null);
 	const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -357,6 +358,7 @@ function VideoConferenceBase({
 	const phaseRef = useRef<Phase>("lobby");
 	const disconnectGraceTimeoutRef = useRef<number | null>(null);
 	const lastJoinSettingsRef = useRef<JoinSettings | null>(null);
+	const supportCodeSequenceRef = useRef(0);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
@@ -425,6 +427,35 @@ function VideoConferenceBase({
 
 	const emitError = useCallback(
 		(error: ChalkError, details?: Record<string, unknown>) => {
+			const detailSupportCode =
+				typeof details?.supportCode === "string" ? details.supportCode : undefined;
+			const errorSupportCode =
+				typeof error.details?.supportCode === "string"
+					? error.details.supportCode
+					: undefined;
+			const resolvedSupportCode =
+				detailSupportCode ??
+				errorSupportCode ??
+				(() => {
+					supportCodeSequenceRef.current += 1;
+					const now = new Date();
+					const datePart = [
+						now.getUTCFullYear(),
+						String(now.getUTCMonth() + 1).padStart(2, "0"),
+						String(now.getUTCDate()).padStart(2, "0"),
+					].join("");
+					const timePart = [
+						String(now.getUTCHours()).padStart(2, "0"),
+						String(now.getUTCMinutes()).padStart(2, "0"),
+						String(now.getUTCSeconds()).padStart(2, "0"),
+					].join("");
+					const seqPart = supportCodeSequenceRef.current
+						.toString(36)
+						.toUpperCase()
+						.padStart(3, "0");
+					return `CHK-${datePart}-${timePart}-${seqPart}`;
+				})();
+
 			const merged: ChalkError = {
 				...error,
 				details: {
@@ -432,8 +463,10 @@ function VideoConferenceBase({
 					roomId: roomIdRef.current,
 					phase: phaseRef.current,
 					...(details ?? {}),
+					supportCode: resolvedSupportCode,
 				},
 			};
+			setSupportCode(resolvedSupportCode);
 			onError?.(merged);
 		},
 		[onError],
@@ -704,6 +737,7 @@ function VideoConferenceBase({
 			lastJoinSettingsRef.current = settings;
 			setPhase("joining");
 			setError(null);
+			setSupportCode(null);
 
 			const maxAttempts = JOIN_RETRY_DELAYS_MS.length + 1;
 			let finalError: ChalkError | null = null;
@@ -808,6 +842,7 @@ function VideoConferenceBase({
 		const previousJoinSettings = lastJoinSettingsRef.current;
 		if (!previousJoinSettings) {
 			setError("Connection lost. Please retry from the lobby.");
+			setSupportCode(null);
 			setPhase("lobby");
 			return;
 		}
@@ -849,6 +884,7 @@ function VideoConferenceBase({
 		setPhase("lobby");
 		setMeetingDuration(0);
 		setJoinStartTime(null);
+		setSupportCode(null);
 		// Reset tracking refs for new meeting
 		participantHistoryRef.current.clear();
 		peakParticipantCountRef.current = 0;
@@ -1177,6 +1213,7 @@ function VideoConferenceBase({
 				initialAudioEnabled={defaults.audioEnabled ?? true}
 				isLoading={phase === "joining" || isJoining}
 				error={error ?? undefined}
+				supportCode={supportCode ?? undefined}
 				className={className}
 			/>
 		);
@@ -1296,6 +1333,7 @@ function VideoConferenceBase({
 				selectedAudioOutput={selectedAudioOutput}
 				connectionStatus={connectionStatus}
 				onRetryConnection={handleRetryConnection}
+				connectionSupportCode={supportCode ?? undefined}
 				className={cn(className, isExiting && "chalk-animate-exit")}
 			/>
 

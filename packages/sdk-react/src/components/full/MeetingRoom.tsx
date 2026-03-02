@@ -137,6 +137,7 @@ export interface MeetingRoomProps {
 	onAddPeople?: () => void;
 	connectionStatus?: "connected" | "connecting" | "reconnecting" | "failed";
 	onRetryConnection?: () => void;
+	connectionSupportCode?: string;
 	/** Per-participant volume overrides (0-100). Only contains adjusted participants. */
 	participantVolumes?: ReadonlyMap<string, number>;
 	/** Called when a participant's volume is changed via the slider. */
@@ -200,6 +201,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 	onAddPeople,
 	connectionStatus = "connected",
 	onRetryConnection,
+	connectionSupportCode,
 	participantVolumes,
 	onParticipantVolumeChange,
 	getParticipantVolume,
@@ -867,6 +869,7 @@ const MeetingRoomBase: React.FC<MeetingRoomProps> = ({
 				}
 				status={connectionStatus === "reconnecting" ? "reconnecting" : "failed"}
 				onRetry={onRetryConnection}
+				supportCode={connectionSupportCode}
 			/>
 
 			{enableTour && (

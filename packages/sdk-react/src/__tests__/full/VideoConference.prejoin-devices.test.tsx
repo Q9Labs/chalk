@@ -356,5 +356,11 @@ describe("VideoConference pre-join devices", () => {
 		expect(emitted.details?.joinStage).toBe("join_api");
 		expect(emitted.details?.phase).toBe("joining");
 		expect(emitted.details?.roomId).toBe("room-123");
+		expect(typeof emitted.details?.supportCode).toBe("string");
+		expect(String(emitted.details?.supportCode)).toMatch(
+			/^CHK-\d{8}-\d{6}-[A-Z0-9]{3}$/,
+		);
+		expect(getByText("Support Code")).toBeTruthy();
+		expect(getByText(String(emitted.details?.supportCode))).toBeTruthy();
 	});
 });

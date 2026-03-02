@@ -56,6 +56,7 @@ export interface PreJoinLobbyProps {
 
 	isLoading?: boolean;
 	error?: string;
+	supportCode?: string;
 
 	participantGradient?: string;
 
@@ -87,6 +88,7 @@ function PreJoinLobbyBase({
 	initialShowSettings = false,
 	isLoading = false,
 	error,
+	supportCode,
 	participantGradient: propParticipantGradient,
 	initialTheme = "dark",
 	className,
@@ -948,6 +950,7 @@ function PreJoinLobbyBase({
 			{localError && (
 				<DiagnosticErrorSheet
 					error={localError}
+					supportCode={supportCode}
 					onRetry={() => {
 						setLocalError(undefined);
 						handleJoin();

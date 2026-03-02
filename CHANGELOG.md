@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **SDK-React: Join-flow resilience + retry observability** — `VideoConference` now retries transient join failures before surfacing lobby errors, preserves last join settings for in-call reconnect retries (`ConnectionLostOverlay` CTA), and emits enriched `onError` details (`stage`, attempt metadata, join retry exhaustion context) for downstream incident telemetry.
+- **SDK-React: Error support code surfacing** — join and connection-failure modals now show a user-visible `Support Code`, and emitted errors include `details.supportCode` for backend correlation.
 - **SDK-Core: Participant roster self-healing on missed RTK join deltas** — remote `videoUpdate`/`audioUpdate`/`screenShareUpdate` now upsert participants when `participantJoined` is missed, and session participant state now upserts unknown `participant-updated` events to prevent one-way room visibility mismatches.
 - **SDK-Core: RTK join token safety + retries regression coverage** — stop substituting `rtcToken` with `tokenProvider()` output during room join, harden JWT base64url expiry parsing, and add join-path regression tests for token mismatch, missing RTC token, and retry behavior.
 - **CI: Legacy prod destroy resilience** — make infra destroy tolerant of stale state/manual deletes by using `terraform destroy -refresh=false` and non-blocking R2 lifecycle state cleanup.

@@ -4,6 +4,7 @@ import { Cancel01Icon, ArrowDown01Icon, ArrowUp01Icon, RefreshIcon, ArrowLeft01I
 
 export interface DiagnosticErrorSheetProps {
   error: string;
+  supportCode?: string;
   onRetry?: () => void;
   onBack?: () => void;
   className?: string;
@@ -15,6 +16,7 @@ export interface DiagnosticErrorSheetProps {
  */
 export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({
   error,
+  supportCode,
   onRetry,
   onBack,
   className,
@@ -159,6 +161,17 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({
               </div>
             )}
           </div>
+
+          {supportCode && (
+            <div className="w-full mb-8 rounded-xl border border-border/50 bg-black/5 dark:bg-white/5 p-4 text-left">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/70">
+                Support Code
+              </p>
+              <p className="mt-2 text-xs font-mono text-foreground break-all">
+                {supportCode}
+              </p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full">

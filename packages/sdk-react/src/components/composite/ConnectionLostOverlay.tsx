@@ -9,6 +9,7 @@ export interface ConnectionLostOverlayProps {
   onRetry?: () => void;
   onLeave?: () => void;
   message?: string;
+  supportCode?: string;
   className?: string;
 }
 
@@ -18,6 +19,7 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
   onRetry,
   onLeave,
   message,
+  supportCode,
   className,
 }) => {
   if (!isVisible) return null;
@@ -64,6 +66,15 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({
         >
           {message || defaultMessages[status]}
         </p>
+
+        {supportCode && (
+          <div className="w-full mb-6 rounded-[var(--chalk-border-radius-md)] border border-border bg-card p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Support Code
+            </p>
+            <p className="mt-1 break-all font-mono text-xs text-foreground">{supportCode}</p>
+          </div>
+        )}
 
         {status === 'failed' && (
           <div className="flex flex-col gap-3 w-full">

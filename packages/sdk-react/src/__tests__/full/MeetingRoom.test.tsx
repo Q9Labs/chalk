@@ -84,4 +84,19 @@ describe('MeetingRoom', () => {
       window.matchMedia = originalMatchMedia;
     }
   });
+
+  it('shows support code in connection overlay', () => {
+    const { getByText } = render(
+      <MeetingRoom
+        roomName="Test Room"
+        localParticipant={localParticipant}
+        participants={participants}
+        connectionStatus="failed"
+        connectionSupportCode="CHK-20260302-121212-001"
+      />
+    );
+
+    expect(getByText('Support Code')).toBeDefined();
+    expect(getByText('CHK-20260302-121212-001')).toBeDefined();
+  });
 });

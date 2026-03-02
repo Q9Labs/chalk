@@ -13,9 +13,16 @@ describe('ConnectionLostOverlay', () => {
   it('renders failed state with actions', () => {
     const onRetry = vi.fn();
     const { getByText } = render(
-      <ConnectionLostOverlay isVisible={true} status="failed" onRetry={onRetry} />
+      <ConnectionLostOverlay
+        isVisible={true}
+        status="failed"
+        onRetry={onRetry}
+        supportCode="CHK-20260302-111111-001"
+      />
     );
     expect(getByText('Connection Failed')).toBeDefined();
+    expect(getByText('Support Code')).toBeDefined();
+    expect(getByText('CHK-20260302-111111-001')).toBeDefined();
     fireEvent.click(getByText('Try Again'));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
