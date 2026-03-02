@@ -182,6 +182,14 @@ export interface ChalkClientConfig {
 		maxBatchSize?: number;
 		debug?: boolean;
 	};
+
+	/**
+	 * Incident reporting configuration.
+	 *
+	 * Use this to capture and ship SDK incidents (all surfaced SDK errors),
+	 * including support code + trace correlation, without app-specific wiring.
+	 */
+	incident?: import("./incident").ChalkIncidentConfig;
 }
 
 // ============================================================================

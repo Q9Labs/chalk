@@ -14,6 +14,13 @@ export type {
 	ActiveReaction,
 	// Entities
 	ChalkError,
+	ChalkIncident,
+	ChalkIncidentBreadcrumb,
+	ChalkIncidentConfig,
+	ChalkIncidentContext,
+	ChalkIncidentInput,
+	ChalkIncidentSeverity,
+	ChalkIncidentSource,
 	// Session
 	ChalkSessionConfig,
 	ChalkSessionEvents,
@@ -44,6 +51,8 @@ export type {
 	ScreenShareState,
 	UIState,
 	WhiteboardState,
+	HttpIncidentReporterConfig,
+	IncidentReporter,
 } from "@q9labs/chalk-core";
 // Re-export error codes
 export { ChalkErrorCode } from "@q9labs/chalk-core";
@@ -52,6 +61,9 @@ export { ChalkErrorCode } from "@q9labs/chalk-core";
 export {
 	wideEvents,
 	configureWideEvents,
+	createBrowserIncidentContext,
+	createHttpIncidentReporter,
+	createSupportCode,
 	type WideEvent,
 	type WideEventConfig,
 } from "@q9labs/chalk-core";

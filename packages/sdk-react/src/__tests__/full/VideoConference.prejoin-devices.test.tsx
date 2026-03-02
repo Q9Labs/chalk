@@ -34,6 +34,9 @@ const mockRoomState: {
 	status: "disconnected",
 };
 
+const mockReportIncident = vi.fn(async () => null);
+const mockRecordIncidentBreadcrumb = vi.fn();
+
 vi.mock("../../hooks/room/useConnection", () => {
 	const join = vi.fn(async () => {});
 	const leave = vi.fn(async () => {});
@@ -157,6 +160,8 @@ vi.mock("../../context/chalk-provider", () => ({
 	useChalkSession: () => ({
 		session: {
 			on: vi.fn(() => () => {}),
+			reportIncident: mockReportIncident,
+			recordIncidentBreadcrumb: mockRecordIncidentBreadcrumb,
 			room: { getState: () => ({ status: "connected" }) },
 		},
 	}),
@@ -188,6 +193,8 @@ describe("VideoConference pre-join devices", () => {
 		(globalThis as any).__vcSelectCameraMock?.mockClear?.();
 		(globalThis as any).__vcSelectMicrophoneMock?.mockClear?.();
 		(globalThis as any).__vcSelectSpeakerMock?.mockClear?.();
+		mockReportIncident.mockClear();
+		mockRecordIncidentBreadcrumb.mockClear();
 	});
 
 	it("applies selected lobby camera/mic after join instead of before join", async () => {
@@ -362,5 +369,15 @@ describe("VideoConference pre-join devices", () => {
 		);
 		expect(getByText("Support Code")).toBeTruthy();
 		expect(getByText(String(emitted.details?.supportCode))).toBeTruthy();
+		expect(mockReportIncident).toHaveBeenCalledTimes(1);
+		expect(mockReportIncident).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: String(emitted.details?.supportCode),
+				source: "video_conference",
+				code: "CONNECTION_FAILED",
+				phase: "joining",
+				stage: "join_api",
+			}),
+		);
 	});
 });

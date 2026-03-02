@@ -111,6 +111,20 @@ export {
 	type AxiomWideEventsConfig,
 	type AxiomWideEventsHandler,
 } from "./wide-events/axiom.ts";
+export {
+	createBrowserIncidentContext,
+	createHttpIncidentReporter,
+	createSupportCode,
+	type ChalkIncident,
+	type ChalkIncidentBreadcrumb,
+	type ChalkIncidentConfig,
+	type ChalkIncidentContext,
+	type ChalkIncidentInput,
+	type ChalkIncidentSeverity,
+	type ChalkIncidentSource,
+	type HttpIncidentReporterConfig,
+	type IncidentReporter,
+} from "./incident.ts";
 
 // ============================================================================
 // Phase 2: Managers and Session (new SDK architecture)

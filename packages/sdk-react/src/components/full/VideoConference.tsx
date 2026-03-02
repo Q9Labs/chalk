@@ -11,7 +11,7 @@ import type {
 	ReactionEmoji,
 	Transcript,
 } from "@q9labs/chalk-core";
-import { ChalkErrorCode, wideEvents } from "@q9labs/chalk-core";
+import { ChalkErrorCode, createSupportCode, wideEvents } from "@q9labs/chalk-core";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type React from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -418,6 +418,17 @@ function VideoConferenceBase({
 		phaseRef.current = phase;
 	}, [phase]);
 
+	const pushIncidentBreadcrumb = useCallback(
+		(category: string, message: string, data?: Record<string, unknown>) => {
+			session.recordIncidentBreadcrumb({
+				category,
+				message,
+				data,
+			});
+		},
+		[session],
+	);
+
 	const clearDisconnectGraceTimeout = useCallback(() => {
 		if (disconnectGraceTimeoutRef.current !== null) {
 			window.clearTimeout(disconnectGraceTimeoutRef.current);
@@ -438,22 +449,7 @@ function VideoConferenceBase({
 				errorSupportCode ??
 				(() => {
 					supportCodeSequenceRef.current += 1;
-					const now = new Date();
-					const datePart = [
-						now.getUTCFullYear(),
-						String(now.getUTCMonth() + 1).padStart(2, "0"),
-						String(now.getUTCDate()).padStart(2, "0"),
-					].join("");
-					const timePart = [
-						String(now.getUTCHours()).padStart(2, "0"),
-						String(now.getUTCMinutes()).padStart(2, "0"),
-						String(now.getUTCSeconds()).padStart(2, "0"),
-					].join("");
-					const seqPart = supportCodeSequenceRef.current
-						.toString(36)
-						.toUpperCase()
-						.padStart(3, "0");
-					return `CHK-${datePart}-${timePart}-${seqPart}`;
+					return createSupportCode(supportCodeSequenceRef.current);
 				})();
 
 			const merged: ChalkError = {
@@ -467,9 +463,36 @@ function VideoConferenceBase({
 				},
 			};
 			setSupportCode(resolvedSupportCode);
+			pushIncidentBreadcrumb("error", "VideoConference error surfaced", {
+				supportCode: resolvedSupportCode,
+				code: merged.code,
+				message: merged.message,
+				phase: phaseRef.current,
+			});
 			onError?.(merged);
+			void session.reportIncident({
+				id: resolvedSupportCode,
+				source: "video_conference",
+				severity: "error",
+				code: typeof merged.code === "string" ? merged.code : String(merged.code),
+				message: merged.message ?? "Unexpected error",
+				phase: phaseRef.current,
+				stage:
+					typeof merged.details?.stage === "string"
+						? merged.details.stage
+						: typeof details?.stage === "string"
+							? details.stage
+							: undefined,
+				retryable:
+					typeof merged.details?.retryable === "boolean"
+						? merged.details.retryable
+						: typeof details?.retryable === "boolean"
+							? details.retryable
+							: undefined,
+				details: merged.details,
+			});
 		},
-		[onError],
+		[onError, pushIncidentBreadcrumb, session],
 	);
 
 	useEffect(() => {
@@ -743,6 +766,11 @@ function VideoConferenceBase({
 			let finalError: ChalkError | null = null;
 
 			for (let attempt = 0; attempt < maxAttempts; attempt++) {
+				pushIncidentBreadcrumb("join", "Join attempt started", {
+					attempt: attempt + 1,
+					maxAttempts,
+					roomId,
+				});
 				try {
 					await join(roomId, {
 						userName: settings.displayName,
@@ -767,6 +795,11 @@ function VideoConferenceBase({
 					}
 
 					setPhase("meeting");
+					pushIncidentBreadcrumb("join", "Join attempt succeeded", {
+						attempt: attempt + 1,
+						maxAttempts,
+						roomId,
+					});
 					play("join");
 					onJoin?.({
 						roomId,
@@ -798,6 +831,15 @@ function VideoConferenceBase({
 						},
 					};
 					finalError = enrichedError;
+					pushIncidentBreadcrumb("join", "Join attempt failed", {
+						attempt: attempt + 1,
+						maxAttempts,
+						roomId,
+						stage: joinStage,
+						retryable,
+						code: enrichedError.code,
+						message: enrichedError.message,
+					});
 
 					if (!retryable || attempt >= maxAttempts - 1) {
 						break;
@@ -835,6 +877,7 @@ function VideoConferenceBase({
 			isConnected,
 			media,
 			emitError,
+			pushIncidentBreadcrumb,
 		],
 	);
 
@@ -846,8 +889,11 @@ function VideoConferenceBase({
 			setPhase("lobby");
 			return;
 		}
+		pushIncidentBreadcrumb("join", "User retried connection from lobby CTA", {
+			roomId: roomIdRef.current,
+		});
 		void handleJoin(previousJoinSettings);
-	}, [handleJoin]);
+	}, [handleJoin, pushIncidentBreadcrumb]);
 
 	const handleLeave = useCallback(() => {
 		setShowLeaveConfirm(true);
@@ -965,6 +1011,9 @@ function VideoConferenceBase({
 	useEffect(() => {
 		const handleDisconnect = session.on("disconnected", () => {
 			if (phaseRef.current !== "meeting") return;
+			pushIncidentBreadcrumb("connection", "Session disconnected event received", {
+				roomId: roomIdRef.current,
+			});
 
 			setIsDisconnectGraceActive(true);
 			clearDisconnectGraceTimeout();
@@ -990,6 +1039,10 @@ function VideoConferenceBase({
 			if (err.message?.includes("Already connected")) {
 				return;
 			}
+			pushIncidentBreadcrumb("session_error", "Session error event received", {
+				code: err.code,
+				message: err.message,
+			});
 
 			const isScreenShareError =
 				err.code === ChalkErrorCode.SCREEN_SHARE_FAILED ||
@@ -1164,7 +1217,16 @@ function VideoConferenceBase({
 			handleDisconnect();
 			handleError();
 		};
-	}, [session, onEnd, buildEndData, onLeave, clearDisconnectGraceTimeout, emitError, phase]);
+	}, [
+		session,
+		onEnd,
+		buildEndData,
+		onLeave,
+		clearDisconnectGraceTimeout,
+		emitError,
+		phase,
+		pushIncidentBreadcrumb,
+	]);
 
 	const canManageParticipants = localParticipant?.role === "host";
 

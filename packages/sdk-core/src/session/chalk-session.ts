@@ -32,6 +32,15 @@ import type {
 import { RoomError } from "../effect/errors";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 import { wideEvents } from "../wide-events/index";
+import {
+	createBrowserIncidentContext,
+	createSupportCode,
+	type ChalkIncident,
+	type ChalkIncidentBreadcrumb,
+	type ChalkIncidentConfig,
+	type ChalkIncidentInput,
+	type ChalkIncidentSource,
+} from "../incident.ts";
 
 /** ChalkSession configuration */
 export interface ChalkSessionConfig {
@@ -51,6 +60,8 @@ export interface ChalkSessionConfig {
 	demoMode?: boolean;
 	/** Enable Excalidraw-native whiteboard sync (v2) */
 	whiteboardSyncV2?: boolean;
+	/** Incident reporting callback + transport options. */
+	incident?: ChalkIncidentConfig;
 }
 
 /** ChalkSession events */
@@ -200,11 +211,15 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		never
 	>;
 	private _currentRoom: Room | null = null;
+	private incidentConfig?: ChalkIncidentConfig;
+	private incidentBreadcrumbs: ChalkIncidentBreadcrumb[] = [];
+	private incidentSequence = 0;
 
 	constructor(config: ChalkSessionConfig) {
 		super();
 		const debug = config.debug ?? false;
 		this.whiteboardSyncV2 = config.whiteboardSyncV2 ?? true;
+		this.incidentConfig = config.incident;
 
 		// Initialize ChalkClient for API/WebRTC
 		this.client = new ChalkClient({
@@ -460,35 +475,198 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this._initEventBridges();
 	}
 
+	configureIncident(config?: ChalkIncidentConfig): void {
+		this.incidentConfig = config;
+		const maxBreadcrumbs = config?.maxBreadcrumbs ?? 40;
+		if (this.incidentBreadcrumbs.length > maxBreadcrumbs) {
+			this.incidentBreadcrumbs = this.incidentBreadcrumbs.slice(-maxBreadcrumbs);
+		}
+	}
+
+	recordIncidentBreadcrumb(
+		breadcrumb: Omit<ChalkIncidentBreadcrumb, "timestamp"> & {
+			timestamp?: string;
+		},
+	): void {
+		const maxBreadcrumbs = this.incidentConfig?.maxBreadcrumbs ?? 40;
+		const next: ChalkIncidentBreadcrumb = {
+			timestamp: breadcrumb.timestamp ?? new Date().toISOString(),
+			category: breadcrumb.category,
+			message: breadcrumb.message,
+			data: breadcrumb.data,
+		};
+		this.incidentBreadcrumbs.push(next);
+		if (this.incidentBreadcrumbs.length > maxBreadcrumbs) {
+			this.incidentBreadcrumbs = this.incidentBreadcrumbs.slice(-maxBreadcrumbs);
+		}
+	}
+
+	private isIncidentEnabled(): boolean {
+		const config = this.incidentConfig;
+		if (!config) return false;
+		if (typeof config.enabled === "boolean") return config.enabled;
+		return Boolean(config.onIncident || config.reporter);
+	}
+
+	private emitErrorWithIncident(
+		error: ChalkError,
+		source: ChalkIncidentSource,
+		details?: Record<string, unknown>,
+	): void {
+		this.emit("error", error);
+		void this.reportIncident({
+			source,
+			severity: "error",
+			message: error.message ?? "Unexpected error",
+			code: typeof error.code === "string" ? error.code : String(error.code),
+			stage:
+				typeof error.details?.stage === "string"
+					? error.details.stage
+					: typeof details?.stage === "string"
+						? details.stage
+						: undefined,
+			retryable:
+				typeof error.details?.retryable === "boolean"
+					? error.details.retryable
+					: typeof details?.retryable === "boolean"
+						? details.retryable
+						: undefined,
+			details: {
+				...(error.details ?? {}),
+				...(details ?? {}),
+			},
+		});
+	}
+
+	async reportIncident(
+		incidentInput: ChalkIncidentInput,
+	): Promise<ChalkIncident | null> {
+		if (!this.isIncidentEnabled()) return null;
+
+		this.incidentSequence += 1;
+		const state = this.room.getState();
+		const localParticipantId =
+			this.participants.getState().localParticipant?.id ?? null;
+		const maxBreadcrumbs = this.incidentConfig?.maxBreadcrumbs ?? 40;
+
+		const incident: ChalkIncident = {
+			id: incidentInput.id ?? createSupportCode(this.incidentSequence),
+			timestamp: new Date().toISOString(),
+			severity: incidentInput.severity ?? "error",
+			source: incidentInput.source ?? "unknown",
+			message: incidentInput.message,
+			code: incidentInput.code,
+			roomId: state.roomId,
+			participantId: localParticipantId,
+			traceId: wideEvents.sessionId,
+			phase: incidentInput.phase,
+			stage: incidentInput.stage,
+			retryable: incidentInput.retryable,
+			details: incidentInput.details,
+			breadcrumbs:
+				incidentInput.breadcrumbs ??
+				[...this.incidentBreadcrumbs].slice(-maxBreadcrumbs),
+			context: {
+				...createBrowserIncidentContext(),
+				...(incidentInput.context ?? {}),
+			},
+		};
+
+		const onIncident = this.incidentConfig?.onIncident;
+		if (onIncident) {
+			try {
+				onIncident(incident);
+			} catch {
+				// Keep incident pipeline non-blocking.
+			}
+		}
+
+		const reporter = this.incidentConfig?.reporter;
+		if (reporter) {
+			try {
+				await reporter(incident);
+			} catch (error) {
+				this.recordIncidentBreadcrumb({
+					category: "incident_reporter",
+					message: "Incident reporter failed",
+					data: {
+						error:
+							error instanceof Error
+								? error.message
+								: typeof error === "string"
+									? error
+									: "Unknown reporter error",
+					},
+				});
+			}
+		}
+
+		return incident;
+	}
+
 	private setupEventForwarding(): void {
 		// Forward room events
 		this.room._emitter.on("connected", (data) => {
+			this.recordIncidentBreadcrumb({
+				category: "room",
+				message: "Room connected",
+				data,
+			});
 			this.emit("connected", data);
 		});
 
 		this.room._emitter.on("disconnected", (data) => {
+			this.recordIncidentBreadcrumb({
+				category: "room",
+				message: "Room disconnected",
+				data,
+			});
 			this.emit("disconnected", data);
 		});
 
 		this.room._emitter.on("status:changed", (data) => {
+			this.recordIncidentBreadcrumb({
+				category: "room",
+				message: "Room status changed",
+				data,
+			});
 			this.emit("status:changed", data);
 		});
 
 		this.room._emitter.on("error", (error) => {
-			this.emit("error", error);
+			this.emitErrorWithIncident(error, "room");
 		});
 
 		// Forward errors from all managers
-		this.media._emitter.on("error", (error) => this.emit("error", error));
-		this.screenShare.on("error", (error) => this.emit("error", error));
-		this.chat.on("error", (error) => this.emit("error", error));
-		this.recording.on("error", (error) => this.emit("error", error));
-		this.interactions.on("error", (error) => this.emit("error", error));
-		this.whiteboard.on("error", (error) => this.emit("error", error));
+		this.media._emitter.on("error", (error) =>
+			this.emitErrorWithIncident(error, "media"),
+		);
+		this.screenShare.on("error", (error) =>
+			this.emitErrorWithIncident(error, "screen_share"),
+		);
+		this.chat.on("error", (error) =>
+			this.emitErrorWithIncident(error, "chat"),
+		);
+		this.recording.on("error", (error) =>
+			this.emitErrorWithIncident(error, "recording"),
+		);
+		this.interactions.on("error", (error) =>
+			this.emitErrorWithIncident(error, "interactions"),
+		);
+		this.whiteboard.on("error", (error) =>
+			this.emitErrorWithIncident(error, "whiteboard"),
+		);
 
 		// Forward token expired from client
 		this.client.on("token-expired", () => {
 			this.emit("token:expired", undefined);
+			void this.reportIncident({
+				severity: "warning",
+				source: "api",
+				code: "TOKEN_EXPIRED",
+				message: "Token expired",
+				stage: "auth_refresh",
+			});
 		});
 	}
 
@@ -735,6 +913,10 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 				.catch(() => {
 					// Ignore if join failed operation fails
 				});
+			this.emitErrorWithIncident(error, "session", {
+				operation: "join",
+				roomId,
+			});
 			throw error;
 		}
 	}
@@ -785,7 +967,9 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			});
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.emit("error", error);
+			this.emitErrorWithIncident(error, "session", {
+				operation: "leave",
+			});
 			throw error;
 		}
 	}
@@ -805,7 +989,9 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			return await this.client.createRoom(name, config);
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.emit("error", error);
+			this.emitErrorWithIncident(error, "session", {
+				operation: "create_room",
+			});
 			throw error;
 		}
 	}
@@ -820,7 +1006,10 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			await this.client.endRoom(roomId);
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.emit("error", error);
+			this.emitErrorWithIncident(error, "session", {
+				operation: "end_room",
+				roomId,
+			});
 			throw error;
 		}
 	}
@@ -835,7 +1024,10 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			await this.client.removeParticipant(participantId);
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.emit("error", error);
+			this.emitErrorWithIncident(error, "session", {
+				operation: "remove_participant",
+				participantId,
+			});
 			throw error;
 		}
 	}
@@ -876,7 +1068,10 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			return await this.client.presignWhiteboardUpload(roomId, fileId, mimeType);
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.emit("error", error);
+			this.emitErrorWithIncident(error, "whiteboard", {
+				operation: "presign_upload",
+				fileId,
+			});
 			throw error;
 		}
 	}
@@ -896,7 +1091,10 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			return await this.client.presignWhiteboardDownload(roomId, fileId);
 		} catch (err) {
 			const error = ChalkError.wrap(err);
-			this.emit("error", error);
+			this.emitErrorWithIncident(error, "whiteboard", {
+				operation: "presign_download",
+				fileId,
+			});
 			throw error;
 		}
 	}

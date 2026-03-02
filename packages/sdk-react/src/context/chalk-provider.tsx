@@ -8,6 +8,8 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import {
 	ChalkSession,
+	type ChalkIncident,
+	type IncidentReporter,
 	type ChalkSessionConfig,
 	type JoinOptions,
 } from "@q9labs/chalk-core";
@@ -55,6 +57,14 @@ export interface ChalkProviderProps {
 	demoMode?: boolean;
 	/** Enable Excalidraw-native whiteboard sync (v2) */
 	whiteboardSyncV2?: boolean;
+	/** Full incident pipeline config (SDK-native reporting). */
+	incident?: ChalkSessionConfig["incident"];
+	/** Shortcut callback for local incident handling. */
+	onIncident?: (incident: ChalkIncident) => void;
+	/** Shortcut reporter callback for backend transport. */
+	incidentReporter?: IncidentReporter;
+	/** Shortcut to control breadcrumb retention size. */
+	incidentMaxBreadcrumbs?: number;
 }
 
 /** Context value providing access to ChalkSession */
@@ -107,10 +117,24 @@ export function ChalkProvider({
 	debug,
 	demoMode,
 	whiteboardSyncV2,
+	incident,
+	onIncident,
+	incidentReporter,
+	incidentMaxBreadcrumbs,
 }: ChalkProviderProps): JSX.Element {
 	const [isConnected, setIsConnected] = useState(false);
 	const [rtkMeeting, setRtkMeeting] = useState<RealtimeKitClient | null>(null);
 	const [, forceUpdate] = useState({});
+
+	const resolvedIncidentConfig = useMemo(
+		(): ChalkSessionConfig["incident"] => ({
+			...(incident ?? {}),
+			onIncident: onIncident ?? incident?.onIncident,
+			reporter: incidentReporter ?? incident?.reporter,
+			maxBreadcrumbs: incidentMaxBreadcrumbs ?? incident?.maxBreadcrumbs,
+		}),
+		[incident, onIncident, incidentReporter, incidentMaxBreadcrumbs],
+	);
 
 	// Use cached session for HMR persistence, or create new one
 	const session = useMemo(() => {
@@ -135,6 +159,10 @@ export function ChalkProvider({
 		sessionCache.set(cacheKey, newSession);
 		return newSession;
 	}, [apiUrl]); // Only recreate if apiUrl changes
+
+	useEffect(() => {
+		session.configureIncident(resolvedIncidentConfig);
+	}, [session, resolvedIncidentConfig]);
 
 	// Set up session event listeners
 	useEffect(() => {

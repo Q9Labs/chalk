@@ -47,6 +47,14 @@ Sometimes (rarely) the user might want to directly work on the app and later cre
 
 Never add client-side business logic to demo apps.
 
+## SDK-First Guardrail
+
+- For any product behavior, bug fix, feature, UX, observability, auth, networking, retries, or error handling: implement first in the Chalk package that owns it.
+- Owner package examples: `sdk-core`, `sdk-react`, `sdk-react-native`, `chalk-whiteboard`, `ui` (not app-level first).
+- Consumer apps should only do thin wiring/config, branding, and app-specific integration unless explicitly requested otherwise.
+- Do not ship app-only logic as the primary fix when it should live in a Chalk package.
+- If an app-only workaround is unavoidable, label it temporary and open/complete the SDK/package follow-up before closing the task.
+
 ## Skills
 
 - `chalk-stress-testing` — project skill for stress test planning/execution.
