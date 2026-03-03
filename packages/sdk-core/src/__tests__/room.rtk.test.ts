@@ -36,7 +36,35 @@ const createMockRtkClient = () => {
 		self.audioTrack = null;
 	});
 
-	const joined = makeEmitter();
+	const joinedParticipants = new Map<string, any>();
+	const rawJoined = makeEmitter();
+	const joined = {
+		on: rawJoined.on,
+		emit: (event: string, payload?: any) => {
+			if (event === "participantJoined" && payload?.id) {
+				joinedParticipants.set(payload.id, payload);
+			} else if (event === "participantLeft" && payload?.id) {
+				joinedParticipants.delete(payload.id);
+			} else if (
+				(event === "videoUpdate" || event === "audioUpdate" || event === "screenShareUpdate") &&
+				payload?.id
+			) {
+				const prev = joinedParticipants.get(payload.id) ?? { id: payload.id };
+				joinedParticipants.set(payload.id, { ...prev, ...payload });
+			}
+			rawJoined.emit(event, payload);
+		},
+		values: () => joinedParticipants.values(),
+		forEach: (cb: (participant: any) => void) => joinedParticipants.forEach(cb),
+		setSnapshot: (participants: any[]) => {
+			joinedParticipants.clear();
+			for (const participant of participants) {
+				if (participant?.id) {
+					joinedParticipants.set(participant.id, participant);
+				}
+			}
+		},
+	};
 	const participantsEmitter = makeEmitter();
 	const participants = {
 		joined,
@@ -212,6 +240,70 @@ describe("Room (RTK identity mapping)", () => {
 		expect(joinedId).toBe("uuid_b");
 		expect(room.participants.has("uuid_b")).toBe(true);
 		expect(room.participants.get("uuid_b")?.videoEnabled).toBe(true);
+	});
+
+	it("recovers remote participant from participantsUpdate snapshot when join event is missed", () => {
+		room._setLocalParticipant({
+			id: "uuid_local",
+			userId: "uuid_local",
+			displayName: "Me",
+			role: "participant",
+			isLocal: true,
+			videoEnabled: false,
+			audioEnabled: false,
+			isSpeaking: false,
+			isScreenSharing: false,
+			handRaised: false,
+			connectionQuality: 100,
+		});
+
+		rtk.participants.joined.setSnapshot([
+			{
+				id: "peer_c",
+				userId: "uuid_c",
+				name: "Carol",
+				videoEnabled: false,
+				audioEnabled: false,
+			},
+		]);
+
+		let joinedId: string | null = null;
+		room.on("participant-joined", (participant) => {
+			joinedId = participant.id;
+		});
+
+		rtk.participants.joined.emit("participantsUpdate");
+
+		expect(joinedId).toBe("uuid_c");
+		expect(room.participants.has("uuid_c")).toBe(true);
+	});
+
+	it("heals screen share state from participantsUpdate when screenShareUpdate is missed", () => {
+		rtk.participants.joined.emit("participantJoined", {
+			id: "peer_s",
+			userId: "uuid_s",
+			name: "Sharer",
+			screenShareEnabled: false,
+		});
+
+		expect(room.participants.get("uuid_s")?.isScreenSharing).toBe(false);
+
+		rtk.participants.joined.setSnapshot([
+			{
+				id: "peer_s",
+				userId: "uuid_s",
+				name: "Sharer",
+				screenShareEnabled: true,
+				screenShareTracks: {
+					video: {} as any,
+				},
+			},
+		]);
+
+		rtk.participants.joined.emit("participantsUpdate");
+
+		expect(room.participants.get("uuid_s")?.isScreenSharing).toBe(true);
+		expect(room.participants.get("uuid_s")?.screenShareTrack).toBeTruthy();
 	});
 
 	it("applies host mute/unmute commands to local audio when addressed to local participant", async () => {

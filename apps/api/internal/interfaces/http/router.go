@@ -102,6 +102,7 @@ func NewRouter(cfg RouterConfig) *Router {
 	go wsHub.Run(context.Background())
 
 	roomState := redis.NewRoomState(cfg.RedisClient)
+	wsHub.SetRoomStateSource(roomState)
 
 	recordingService := recording.NewService(queries, cfg.CFClient, cfg.StorageR2, cfg.StorageS3, roomState, wsHub)
 	roomService := room.NewService(queries, cfg.CFClient, roomState, wsHub, &recordingStopperAdapter{svc: recordingService})

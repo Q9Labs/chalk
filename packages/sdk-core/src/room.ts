@@ -573,7 +573,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
     // DEBUG: Log ALL RTK participant events to diagnose remote track issues
     if (this.debug && this.rtkClient.participants?.joined) {
-      const debugEvents = ['participantJoined', 'participantLeft', 'videoUpdate', 'audioUpdate', 'screenShareUpdate'];
+      const debugEvents = ['participantJoined', 'participantLeft', 'videoUpdate', 'audioUpdate', 'screenShareUpdate', 'participantsUpdate', 'participantsCleared'];
       for (const evt of debugEvents) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -585,6 +585,114 @@ export class Room extends EventEmitter<RoomEvents> {
         }
       }
     }
+
+    const hasMediaStateChanged = (before: Participant, after: Participant): boolean =>
+      before.displayName !== after.displayName ||
+      before.videoEnabled !== after.videoEnabled ||
+      before.audioEnabled !== after.audioEnabled ||
+      before.isScreenSharing !== after.isScreenSharing ||
+      before.videoTrack?.id !== after.videoTrack?.id ||
+      before.audioTrack?.id !== after.audioTrack?.id ||
+      before.screenShareTrack?.id !== after.screenShareTrack?.id ||
+      before.screenShareAudioTrack?.id !== after.screenShareAudioTrack?.id;
+
+    const mergeParticipantMediaState = (existing: Participant, incoming: Participant): Participant => ({
+      ...existing,
+      userId: incoming.userId ?? existing.userId,
+      displayName: incoming.displayName || existing.displayName,
+      videoEnabled: incoming.videoEnabled,
+      audioEnabled: incoming.audioEnabled,
+      videoTrack: incoming.videoTrack,
+      audioTrack: incoming.audioTrack,
+      isScreenSharing: incoming.isScreenSharing,
+      screenShareTrack: incoming.screenShareTrack,
+      screenShareAudioTrack: incoming.screenShareAudioTrack,
+      isLocal: false,
+    });
+
+    const collectJoinedParticipants = (): unknown[] => {
+      const joined = this.rtkClient?.participants?.joined as unknown as {
+        values?: () => Iterable<unknown>;
+        forEach?: (cb: (participant: unknown) => void) => void;
+      } | undefined;
+      if (!joined) return [];
+
+      const participants: unknown[] = [];
+      if (typeof joined.values === "function") {
+        try {
+          for (const participant of joined.values()) {
+            participants.push(participant);
+          }
+          return participants;
+        } catch {
+          // Fall through to forEach path.
+        }
+      }
+      if (typeof joined.forEach === "function") {
+        try {
+          joined.forEach((participant) => participants.push(participant));
+        } catch {
+          // Ignore iteration failures; event deltas still drive state updates.
+        }
+      }
+      return participants;
+    };
+
+    const ensureRemoteParticipant = (rtkParticipant: unknown): Participant | null => {
+      const participant = this.mapRTKParticipant(rtkParticipant);
+
+      // Ignore remote collection events that resolve to local participant identity.
+      if (this._localParticipant && participant.id === this._localParticipant.id) {
+        return null;
+      }
+
+      const { peerId } = this.getRtkIds(rtkParticipant);
+      let existing = this._participants.get(participant.id);
+
+      // If this participant was temporarily keyed by peerId, migrate it.
+      if (!existing && peerId !== participant.id) {
+        const existingByPeerId = this._participants.get(peerId);
+        if (existingByPeerId) {
+          this._participants.delete(peerId);
+          existing = {
+            ...existingByPeerId,
+            ...participant,
+            id: participant.id,
+            isLocal: false,
+          };
+          this._participants.set(participant.id, existing);
+        }
+      }
+
+      if (!existing) {
+        this._participants.set(participant.id, participant);
+        this.emit("participant-joined", participant);
+      }
+
+      return participant;
+    };
+
+    const reconcileJoinedParticipants = (): void => {
+      const joinedParticipants = collectJoinedParticipants();
+      for (const joinedParticipant of joinedParticipants) {
+        const participant = ensureRemoteParticipant(joinedParticipant);
+        if (!participant) continue;
+
+        const existing = this._participants.get(participant.id);
+        if (!existing) continue;
+
+        const merged = mergeParticipantMediaState(existing, participant);
+        if (!hasMediaStateChanged(existing, merged)) {
+          continue;
+        }
+
+        this._participants.set(participant.id, merged);
+        this.emit("participant-updated", {
+          participantId: participant.id,
+          participant: merged,
+        });
+      }
+    };
 
     // Room joined event
     this.rtkClient.self.on("roomJoined", () => {
@@ -609,6 +717,7 @@ export class Room extends EventEmitter<RoomEvents> {
       }
 
       this.logConnectionState();
+      reconcileJoinedParticipants();
     });
 
     // Room left event
@@ -702,65 +811,11 @@ export class Room extends EventEmitter<RoomEvents> {
       },
     );
 
-    const ensureRemoteParticipant = (rtkParticipant: unknown): Participant | null => {
-      const participant = this.mapRTKParticipant(rtkParticipant);
-
-      // Ignore remote collection events that resolve to local participant identity.
-      if (this._localParticipant && participant.id === this._localParticipant.id) {
-        return null;
-      }
-
-      const { peerId } = this.getRtkIds(rtkParticipant);
-      let existing = this._participants.get(participant.id);
-
-      // If this participant was temporarily keyed by peerId, migrate it.
-      if (!existing && peerId !== participant.id) {
-        const existingByPeerId = this._participants.get(peerId);
-        if (existingByPeerId) {
-          this._participants.delete(peerId);
-          existing = {
-            ...existingByPeerId,
-            ...participant,
-            id: participant.id,
-            isLocal: false,
-          };
-          this._participants.set(participant.id, existing);
-        }
-      }
-
-      if (!existing) {
-        this._participants.set(participant.id, participant);
-        this.emit("participant-joined", participant);
-      }
-
-      return participant;
-    };
-
     // Participant joined
     this.rtkClient.participants.joined.on(
       "participantJoined",
       (rtkParticipant: unknown) => {
-        const { stableId, peerId } = this.getRtkIds(rtkParticipant);
-
-        // Skip if this is the local participant (RTK may include self in joined list)
-        if (this._localParticipant && stableId === this._localParticipant.id) {
-          return;
-        }
-
-        const participant = this.mapRTKParticipant(rtkParticipant);
-
-        // CRITICAL: Skip if participant already exists (prevents duplicates from WS + RTK)
-        if (this._participants.has(participant.id)) {
-          return;
-        }
-
-        // Transition cleanup: if we previously keyed by peerId, migrate to stableId.
-        if (peerId !== participant.id && this._participants.has(peerId)) {
-          this._participants.delete(peerId);
-        }
-
-        this._participants.set(participant.id, participant);
-        this.emit("participant-joined", participant);
+        ensureRemoteParticipant(rtkParticipant);
       },
     );
 
@@ -883,6 +938,23 @@ export class Room extends EventEmitter<RoomEvents> {
         });
       },
     );
+
+    // Reconcile from RTK joined map in case edge events are dropped or reordered.
+    this.rtkClient.participants.joined.on("participantsUpdate", () => {
+      reconcileJoinedParticipants();
+    });
+
+    this.rtkClient.participants.joined.on("participantsCleared", () => {
+      const remoteParticipantIDs = Array.from(this._participants.values())
+        .filter((participant) => !participant.isLocal)
+        .map((participant) => participant.id);
+
+      for (const participantID of remoteParticipantIDs) {
+        this._participants.delete(participantID);
+        this.emit("participant-left", participantID);
+      }
+      this._rtkPeerIdToStableId.clear();
+    });
 
     // RTK Chat message handling
     if (this.rtkClient.chat) {

@@ -33,6 +33,11 @@ type ParticipantService interface {
 	LeaveRoom(ctx context.Context, roomID, participantID uuid.UUID) error
 }
 
+// RoomStateSource provides authoritative cross-instance participant metadata.
+type RoomStateSource interface {
+	GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error)
+}
+
 // TranscriptInput matches the domain service input
 type TranscriptInput struct {
 	RoomID                  uuid.UUID
@@ -60,6 +65,7 @@ type Hub struct {
 	redisClient        RedisInterface
 	transcriptService  TranscriptService
 	participantService ParticipantService
+	roomStateSource    RoomStateSource
 
 	whiteboardPersistTimers map[uuid.UUID]*time.Timer
 
@@ -117,6 +123,11 @@ func (h *Hub) SetTranscriptService(ts TranscriptService) {
 // SetParticipantService sets the participant service for marking participants as left
 func (h *Hub) SetParticipantService(ps ParticipantService) {
 	h.participantService = ps
+}
+
+// SetRoomStateSource sets the room-state source used for authoritative room snapshots.
+func (h *Hub) SetRoomStateSource(source RoomStateSource) {
+	h.roomStateSource = source
 }
 
 // SetWhiteboardStateStore sets the persistence layer for whiteboard state.
@@ -251,8 +262,9 @@ func (h *Hub) registerClient(client *Client) {
 	connData, _ := json.Marshal(connMsg)
 	client.SendReliable(connData)
 
-	snapshot := h.getRoomSnapshotLocked(client.roomID)
 	h.mu.Unlock()
+
+	snapshot := h.GetRoomSnapshot(client.roomID)
 
 	snapshotMsg, _ := NewMessage(MessageTypeRoomSnapshot, snapshot)
 	snapshotData, _ := json.Marshal(snapshotMsg)
@@ -270,6 +282,7 @@ func (h *Hub) registerClient(client *Client) {
 	})
 	joinedData, _ := json.Marshal(joinedMsg)
 	h.FanoutToRoomReliable(client.roomID, joinedData, client.participantID.String())
+	h.fanoutRoomSnapshotReliable(client.roomID)
 }
 
 func (h *Hub) unregisterClient(client *Client) {
@@ -344,6 +357,7 @@ func (h *Hub) unregisterClient(client *Client) {
 		})
 		data, _ := json.Marshal(leftMsg)
 		h.FanoutToRoomReliable(client.roomID, data, "")
+		h.fanoutRoomSnapshotReliable(client.roomID)
 	}
 
 	// Now clean up empty room
@@ -394,6 +408,33 @@ func (h *Hub) FanoutToRoomVolatile(roomID uuid.UUID, message []byte, excludePart
 // BroadcastToRoom broadcasts a message to all clients in a room
 func (h *Hub) BroadcastToRoom(roomID uuid.UUID, message []byte, excludeParticipantID string) {
 	h.BroadcastToRoomReliable(roomID, message, excludeParticipantID)
+}
+
+func (h *Hub) fanoutRoomSnapshotReliable(roomID uuid.UUID) {
+	snapshot := h.GetRoomSnapshot(roomID)
+	snapshotMsg, err := NewMessage(MessageTypeRoomSnapshot, snapshot)
+	if err != nil {
+		h.logger.Error("failed to encode room snapshot",
+			"event", "ws.snapshot.encode_error",
+			"instance_id", h.instanceID,
+			"room_id", roomID,
+			"error", err.Error(),
+		)
+		return
+	}
+
+	snapshotData, err := json.Marshal(snapshotMsg)
+	if err != nil {
+		h.logger.Error("failed to marshal room snapshot message",
+			"event", "ws.snapshot.marshal_error",
+			"instance_id", h.instanceID,
+			"room_id", roomID,
+			"error", err.Error(),
+		)
+		return
+	}
+
+	h.FanoutToRoomReliable(roomID, snapshotData, "")
 }
 
 // BroadcastToRoomReliable broadcasts a message to all clients in a room and
@@ -496,8 +537,46 @@ func (h *Hub) SetRoomRecordingState(roomID uuid.UUID, isRecording bool, recordin
 // GetRoomSnapshot returns the current state of a room
 func (h *Hub) GetRoomSnapshot(roomID uuid.UUID) RoomSnapshotPayload {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.getRoomSnapshotLocked(roomID)
+	snapshot := h.getRoomSnapshotLocked(roomID)
+	h.mu.RUnlock()
+
+	if h.roomStateSource == nil {
+		return snapshot
+	}
+
+	ctx := h.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	participants, err := h.roomStateSource.GetParticipants(ctx, roomID)
+	if err != nil {
+		h.logger.Warn("failed to load room participants from room-state source",
+			"event", "ws.snapshot.room_state_error",
+			"instance_id", h.instanceID,
+			"room_id", roomID,
+			"error", err.Error(),
+		)
+		return snapshot
+	}
+	if len(participants) == 0 {
+		return snapshot
+	}
+
+	resolvedParticipants := make([]ParticipantPayload, 0, len(participants))
+	for participantID, meta := range participants {
+		resolvedParticipants = append(resolvedParticipants, ParticipantPayload{
+			ID:          participantID,
+			RoomID:      roomID,
+			DisplayName: meta.DisplayName,
+			IsActive:    true,
+			JoinedAt:    meta.JoinedAt,
+		})
+	}
+
+	snapshot.Participants = resolvedParticipants
+	snapshot.LastSeq = time.Now().UnixMilli()
+	return snapshot
 }
 
 func (h *Hub) getRoomSnapshotLocked(roomID uuid.UUID) RoomSnapshotPayload {

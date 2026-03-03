@@ -16,6 +16,22 @@ type MockRedisClient struct {
 	published map[string][]byte
 }
 
+type MockRoomStateSource struct {
+	participants map[uuid.UUID]domain.ParticipantMetadata
+	err          error
+}
+
+func (m *MockRoomStateSource) GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	out := make(map[uuid.UUID]domain.ParticipantMetadata, len(m.participants))
+	for id, meta := range m.participants {
+		out[id] = meta
+	}
+	return out, nil
+}
+
 func (m *MockRedisClient) Close() error {
 	return nil
 }
@@ -352,4 +368,31 @@ func TestHubGetRoomSnapshotEmptyRoom(t *testing.T) {
 	assert.Len(t, snapshot.Participants, 0)
 	assert.False(t, snapshot.IsRecording)
 	assert.Nil(t, snapshot.RecordingID)
+}
+
+func TestHubGetRoomSnapshotUsesRoomStateSource(t *testing.T) {
+	mockRedis := &MockRedisClient{}
+	hub := NewHub(mockRedis, nil)
+	defer hub.Close()
+
+	roomID := uuid.New()
+	participantID := uuid.New()
+	joinedAt := time.Now().Add(-5 * time.Second).UTC().Round(time.Millisecond)
+
+	hub.SetRoomStateSource(&MockRoomStateSource{
+		participants: map[uuid.UUID]domain.ParticipantMetadata{
+			participantID: {
+				DisplayName: "Remote User",
+				Role:        "participant",
+				JoinedAt:    joinedAt,
+			},
+		},
+	})
+
+	snapshot := hub.GetRoomSnapshot(roomID)
+	assert.Equal(t, roomID, snapshot.RoomID)
+	assert.Len(t, snapshot.Participants, 1)
+	assert.Equal(t, participantID, snapshot.Participants[0].ID)
+	assert.Equal(t, "Remote User", snapshot.Participants[0].DisplayName)
+	assert.Equal(t, joinedAt, snapshot.Participants[0].JoinedAt)
 }
