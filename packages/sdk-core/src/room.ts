@@ -548,6 +548,10 @@ export class Room extends EventEmitter<RoomEvents> {
   private mapRTKParticipant(rtkParticipant: unknown): Participant {
     const p = rtkParticipant as any;
     const { stableId, userId } = this.getRtkIds(rtkParticipant);
+    const screenShareVideoTrack =
+      p.screenShareTracks?.video ?? p.screenShareVideoTrack ?? undefined;
+    const screenShareAudioTrack =
+      p.screenShareTracks?.audio ?? p.screenShareAudioTrack ?? undefined;
 
     return {
       id: stableId,
@@ -559,8 +563,8 @@ export class Room extends EventEmitter<RoomEvents> {
       audioEnabled: p.audioEnabled ?? false,
       videoTrack: p.videoTrack,
       audioTrack: p.audioTrack,
-      screenShareTrack: p.screenShareTracks?.video,
-      screenShareAudioTrack: p.screenShareTracks?.audio,
+      screenShareTrack: screenShareVideoTrack,
+      screenShareAudioTrack: screenShareAudioTrack,
       isSpeaking: false,
       isScreenSharing: p.screenShareEnabled ?? false,
       handRaised: false,
@@ -611,31 +615,104 @@ export class Room extends EventEmitter<RoomEvents> {
     });
 
     const collectJoinedParticipants = (): unknown[] => {
+      const participantsApi = this.rtkClient?.participants as unknown as {
+        toArray?: () => unknown[] | Iterable<unknown>;
+      } | undefined;
       const joined = this.rtkClient?.participants?.joined as unknown as {
+        toArray?: () => unknown[] | Iterable<unknown>;
         values?: () => Iterable<unknown>;
         forEach?: (cb: (participant: unknown) => void) => void;
+        [Symbol.iterator]?: () => Iterator<unknown>;
       } | undefined;
-      if (!joined) return [];
+      const toParticipantArray = (source: unknown): unknown[] => {
+        if (!source) return [];
+        if (Array.isArray(source)) return source;
+        if (typeof (source as Iterable<unknown>)[Symbol.iterator] === "function") {
+          try {
+            return Array.from(source as Iterable<unknown>);
+          } catch {
+            return [];
+          }
+        }
+        return [];
+      };
 
-      const participants: unknown[] = [];
+      if (typeof participantsApi?.toArray === "function") {
+        try {
+          const snapshot = toParticipantArray(participantsApi.toArray());
+          if (snapshot.length > 0) {
+            return snapshot;
+          }
+        } catch {
+          // Fall through to joined collection APIs.
+        }
+      }
+      if (!joined) return [];
+      if (typeof joined.toArray === "function") {
+        try {
+          const snapshot = toParticipantArray(joined.toArray());
+          if (snapshot.length > 0) {
+            return snapshot;
+          }
+        } catch {
+          // Fall through to iterable APIs.
+        }
+      }
+      if (typeof joined[Symbol.iterator] === "function") {
+        try {
+          const snapshot = Array.from(joined as Iterable<unknown>);
+          if (snapshot.length > 0) {
+            return snapshot;
+          }
+        } catch {
+          // Fall through to values/forEach APIs.
+        }
+      }
+
+      const participantList: unknown[] = [];
       if (typeof joined.values === "function") {
         try {
           for (const participant of joined.values()) {
-            participants.push(participant);
+            participantList.push(participant);
           }
-          return participants;
+          if (participantList.length > 0) {
+            return participantList;
+          }
         } catch {
           // Fall through to forEach path.
         }
       }
       if (typeof joined.forEach === "function") {
         try {
-          joined.forEach((participant) => participants.push(participant));
+          joined.forEach((participant) => participantList.push(participant));
         } catch {
           // Ignore iteration failures; event deltas still drive state updates.
         }
       }
-      return participants;
+      return participantList;
+    };
+
+    const onParticipantsEvent = (
+      event: string,
+      handler: (payload?: unknown) => void,
+    ): void => {
+      const emitters = [
+        this.rtkClient?.participants?.joined as { on?: (eventName: string, fn: (payload?: unknown) => void) => void } | undefined,
+        this.rtkClient?.participants as { on?: (eventName: string, fn: (payload?: unknown) => void) => void } | undefined,
+      ];
+      const attached = new Set<unknown>();
+
+      for (const emitter of emitters) {
+        if (!emitter || typeof emitter.on !== "function" || attached.has(emitter)) {
+          continue;
+        }
+        attached.add(emitter);
+        try {
+          emitter.on(event, handler);
+        } catch {
+          // Ignore unsupported events on older RTK builds.
+        }
+      }
     };
 
     const ensureRemoteParticipant = (rtkParticipant: unknown): Participant | null => {
@@ -812,7 +889,7 @@ export class Room extends EventEmitter<RoomEvents> {
     );
 
     // Participant joined
-    this.rtkClient.participants.joined.on(
+    onParticipantsEvent(
       "participantJoined",
       (rtkParticipant: unknown) => {
         ensureRemoteParticipant(rtkParticipant);
@@ -820,7 +897,7 @@ export class Room extends EventEmitter<RoomEvents> {
     );
 
     // Participant left
-    this.rtkClient.participants.joined.on(
+    onParticipantsEvent(
       "participantLeft",
       (rtkParticipant: unknown) => {
         const { stableId, peerId } = this.getRtkIds(rtkParticipant);
@@ -836,7 +913,7 @@ export class Room extends EventEmitter<RoomEvents> {
     );
 
     // Participant video update
-    this.rtkClient.participants.joined.on(
+    onParticipantsEvent(
       "videoUpdate",
       (rtkParticipant: unknown) => {
         const participant = ensureRemoteParticipant(rtkParticipant);
@@ -868,7 +945,7 @@ export class Room extends EventEmitter<RoomEvents> {
     );
 
     // Participant audio update
-    this.rtkClient.participants.joined.on(
+    onParticipantsEvent(
       "audioUpdate",
       (rtkParticipant: unknown) => {
         const participant = ensureRemoteParticipant(rtkParticipant);
@@ -900,7 +977,7 @@ export class Room extends EventEmitter<RoomEvents> {
     );
 
     // Participant screen share update
-    this.rtkClient.participants.joined.on(
+    onParticipantsEvent(
       "screenShareUpdate",
       (rtkParticipant: unknown) => {
         const participant = ensureRemoteParticipant(rtkParticipant);
@@ -940,11 +1017,11 @@ export class Room extends EventEmitter<RoomEvents> {
     );
 
     // Reconcile from RTK joined map in case edge events are dropped or reordered.
-    this.rtkClient.participants.joined.on("participantsUpdate", () => {
+    onParticipantsEvent("participantsUpdate", () => {
       reconcileJoinedParticipants();
     });
 
-    this.rtkClient.participants.joined.on("participantsCleared", () => {
+    onParticipantsEvent("participantsCleared", () => {
       const remoteParticipantIDs = Array.from(this._participants.values())
         .filter((participant) => !participant.isLocal)
         .map((participant) => participant.id);
@@ -954,6 +1031,12 @@ export class Room extends EventEmitter<RoomEvents> {
         this.emit("participant-left", participantID);
       }
       this._rtkPeerIdToStableId.clear();
+
+      // Some RTK builds emit participantsCleared before repopulating snapshots.
+      // Retry reconciliation shortly to heal transient state gaps.
+      queueMicrotask(() => reconcileJoinedParticipants());
+      setTimeout(() => reconcileJoinedParticipants(), 50);
+      setTimeout(() => reconcileJoinedParticipants(), 250);
     });
 
     // RTK Chat message handling
