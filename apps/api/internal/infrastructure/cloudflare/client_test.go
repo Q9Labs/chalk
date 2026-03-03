@@ -576,6 +576,41 @@ func TestAddParticipant_NoRetryOnClientErrorStatus(t *testing.T) {
 	assert.Equal(t, 1, reqErr.Attempt)
 }
 
+func TestAddParticipant_StopsRetryingWhenCallerDeadlineExpires(t *testing.T) {
+	var attempts atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"success": false}`))
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		AccountID: "acc-123",
+		AppID:     "app-456",
+		APIToken:  "test-token",
+	}
+	client := NewClient(cfg)
+	client.baseURL = server.URL
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	participant, err := client.AddParticipant(ctx, "meeting-123", AddParticipantRequest{
+		Name: "John Doe",
+	})
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.Nil(t, participant)
+	assert.Equal(t, int32(1), attempts.Load(), "caller timeout should end retries immediately")
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, elapsed, 350*time.Millisecond)
+}
+
 type timeoutNetError struct{}
 
 func (timeoutNetError) Error() string   { return "timeout" }

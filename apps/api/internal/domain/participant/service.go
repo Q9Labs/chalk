@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain"
@@ -113,7 +114,13 @@ type JoinRoomOutput struct {
 	ShouldStartRecording bool               // True if tenant has force_recording and this is first host
 }
 
-func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomOutput, error) {
+func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *JoinRoomOutput, err error) {
+	telemetry := newJoinRoomTelemetry()
+	failedStep := ""
+	defer func() {
+		telemetry.log(ctx, input, failedStep, err)
+	}()
+
 	type tenantJoinConfig struct {
 		AllowEarlyJoin               bool     `json:"allow_early_join"`
 		TranscriptionEnabled         bool     `json:"transcription_enabled"`
@@ -181,9 +188,12 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		tenantCfg    tenantJoinConfig
 	)
 
+	roomLookupStart := time.Now()
 	roomRow, err := s.db.GetRoomWithParticipantCount(ctx, input.RoomID)
+	telemetry.observeDB("db_get_room_with_participant_count", time.Since(roomLookupStart))
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
+			failedStep = "db_get_room_with_participant_count"
 			return nil, fmt.Errorf("failed to fetch room: %w", err)
 		}
 
@@ -192,8 +202,11 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			return nil, ErrRoomNotAvailable
 		}
 
+		tenantLookupStart := time.Now()
 		t, err := s.db.GetTenant(ctx, input.TenantID)
+		telemetry.observeDB("db_get_tenant_for_missing_room", time.Since(tenantLookupStart))
 		if err != nil {
+			failedStep = "db_get_tenant_for_missing_room"
 			return nil, ErrTenantNotFound
 		}
 		tenant = t
@@ -207,11 +220,15 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		}
 
 		roomName := input.RoomName
+		createMeetingStart := time.Now()
 		cfMeeting, err := s.cfClient.CreateMeeting(ctx, buildCreateMeetingReq(roomName, tenantCfg))
+		telemetry.observeCloudflare("cf_create_meeting_for_missing_room", time.Since(createMeetingStart))
 		if err != nil {
+			failedStep = "cf_create_meeting_for_missing_room"
 			return nil, fmt.Errorf("failed to create room: %w", err)
 		}
 
+		createRoomStart := time.Now()
 		newRoom, err := s.db.CreateRoomWithID(ctx, db.CreateRoomWithIDParams{
 			ID:                  input.RoomID,
 			TenantID:            input.TenantID,
@@ -219,7 +236,9 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			Name:                strPtr(roomName),
 			Config:              []byte("{}"),
 		})
+		telemetry.observeDB("db_create_room_with_id", time.Since(createRoomStart))
 		if err != nil {
+			failedStep = "db_create_room_with_id"
 			return nil, fmt.Errorf("failed to create room in database: %w", err)
 		}
 		room = newRoom
@@ -236,8 +255,11 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 
 		// Room exists but is ended - reactivate it.
 		if room.Status != "active" {
+			tenantLookupStart := time.Now()
 			t, err := s.db.GetTenant(ctx, room.TenantID)
+			telemetry.observeDB("db_get_tenant_for_ended_room", time.Since(tenantLookupStart))
 			if err != nil {
+				failedStep = "db_get_tenant_for_ended_room"
 				return nil, ErrTenantNotFound
 			}
 			tenant = t
@@ -254,16 +276,22 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 			if room.Name != nil {
 				roomName = *room.Name
 			}
+			createMeetingStart := time.Now()
 			cfMeeting, err := s.cfClient.CreateMeeting(ctx, buildCreateMeetingReq(roomName, tenantCfg))
+			telemetry.observeCloudflare("cf_create_meeting_for_reactivation", time.Since(createMeetingStart))
 			if err != nil {
+				failedStep = "cf_create_meeting_for_reactivation"
 				return nil, fmt.Errorf("failed to reactivate room: %w", err)
 			}
 
+			reactivateRoomStart := time.Now()
 			room, err = s.db.ReactivateRoom(ctx, db.ReactivateRoomParams{
 				ID:                  input.RoomID,
 				CloudflareMeetingID: cfMeeting.ID,
 			})
+			telemetry.observeDB("db_reactivate_room", time.Since(reactivateRoomStart))
 			if err != nil {
+				failedStep = "db_reactivate_room"
 				return nil, fmt.Errorf("failed to reactivate room in database: %w", err)
 			}
 			roomCreated = true // Room was reactivated (new CF meeting).
@@ -271,8 +299,11 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	}
 
 	if !tenantLoaded {
+		tenantLookupStart := time.Now()
 		t, err := s.db.GetTenant(ctx, room.TenantID)
+		telemetry.observeDB("db_get_tenant_for_existing_room", time.Since(tenantLookupStart))
 		if err != nil {
+			failedStep = "db_get_tenant_for_existing_room"
 			return nil, ErrTenantNotFound
 		}
 		tenant = t
@@ -317,13 +348,18 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	// Check for existing active participant (multi-device support).
 	// If found and still active (hasn't left), return existing with refreshed token.
 	if input.ExternalUserID != "" {
+		getExistingStart := time.Now()
 		existing, err := s.db.GetParticipantByExternalUserAndRoom(ctx, db.GetParticipantByExternalUserAndRoomParams{
 			RoomID:         input.RoomID,
 			ExternalUserID: strPtr(input.ExternalUserID),
 		})
+		telemetry.observeDB("db_get_participant_by_external_user_and_room", time.Since(getExistingStart))
 		if err == nil && !existing.LeftAt.Valid {
+			refreshTokenStart := time.Now()
 			cfParticipant, err := s.cfClient.RefreshParticipantToken(ctx, room.CloudflareMeetingID, existing.CloudflareParticipantID)
+			telemetry.observeCloudflare("cf_refresh_participant_token", time.Since(refreshTokenStart))
 			if err != nil {
+				failedStep = "cf_refresh_participant_token"
 				return nil, fmt.Errorf("cloudflare token refresh failed: %w", err)
 			}
 
@@ -357,17 +393,21 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		}
 	}
 
+	addParticipantStart := time.Now()
 	cfParticipant, err := s.cfClient.AddParticipant(ctx, room.CloudflareMeetingID, cloudflare.AddParticipantRequest{
 		Name:                 input.DisplayName,
 		PresetName:           presetName,
 		ClientSpecificID:     clientSpecificID,
 		TranscriptionEnabled: false,
 	})
+	telemetry.observeCloudflare("cf_add_participant", time.Since(addParticipantStart))
 	if err != nil {
+		failedStep = "cf_add_participant"
 		return nil, fmt.Errorf("cloudflare add participant failed: %w", err)
 	}
 
 	metadata := normalizeMetadata(input.Metadata)
+	createParticipantStart := time.Now()
 	participant, err := s.db.CreateParticipant(ctx, db.CreateParticipantParams{
 		ID:                      participantID,
 		RoomID:                  input.RoomID,
@@ -377,7 +417,9 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		Role:                    role,
 		Metadata:                metadata,
 	})
+	telemetry.observeDB("db_create_participant", time.Since(createParticipantStart))
 	if err != nil {
+		failedStep = "db_create_participant"
 		return nil, fmt.Errorf("database insert failed: %w", err)
 	}
 
@@ -425,7 +467,9 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 	shouldStartRecording := false
 	if role == "host" && tenantCfg.ForceRecording {
 		// Check if no active recording
+		getActiveRecordingStart := time.Now()
 		_, recErr := s.db.GetActiveRecordingByRoom(ctx, input.RoomID)
+		telemetry.observeDB("db_get_active_recording_by_room", time.Since(getActiveRecordingStart))
 		if recErr != nil { // No active recording
 			shouldStartRecording = true
 		}
@@ -441,6 +485,91 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (*JoinRoomO
 		TenantConfig:         tenantConfigOutput,
 		ShouldStartRecording: shouldStartRecording,
 	}, nil
+}
+
+type joinRoomTelemetry struct {
+	startedAt       time.Time
+	dbTotal         time.Duration
+	cloudflareTotal time.Duration
+	stepDurations   map[string]time.Duration
+}
+
+func newJoinRoomTelemetry() *joinRoomTelemetry {
+	return &joinRoomTelemetry{
+		startedAt:     time.Now(),
+		stepDurations: make(map[string]time.Duration),
+	}
+}
+
+func (t *joinRoomTelemetry) observeDB(step string, elapsed time.Duration) {
+	t.dbTotal += elapsed
+	t.stepDurations[step] += elapsed
+}
+
+func (t *joinRoomTelemetry) observeCloudflare(step string, elapsed time.Duration) {
+	t.cloudflareTotal += elapsed
+	t.stepDurations[step] += elapsed
+}
+
+func (t *joinRoomTelemetry) log(ctx context.Context, input JoinRoomInput, failedStep string, err error) {
+	attrs := []any{
+		"event", "participant.join_room",
+		"room_id", input.RoomID.String(),
+		"join_total_ms", time.Since(t.startedAt).Milliseconds(),
+		"join_db_total_ms", t.dbTotal.Milliseconds(),
+		"join_cloudflare_total_ms", t.cloudflareTotal.Milliseconds(),
+	}
+
+	if input.TenantID != uuid.Nil {
+		attrs = append(attrs, "tenant_id", input.TenantID.String())
+	}
+
+	requestID := firstNonEmpty(
+		contextValueString(ctx, "request_id"),
+		contextValueString(ctx, "chalk.request_id"),
+	)
+	if requestID != "" {
+		attrs = append(attrs, "request_id", requestID)
+	}
+
+	for step, duration := range t.stepDurations {
+		attrs = append(attrs, step+"_ms", duration.Milliseconds())
+	}
+
+	if failedStep != "" {
+		attrs = append(attrs, "failed_step", failedStep)
+	}
+
+	if err != nil {
+		attrs = append(attrs, "error", err)
+		slog.WarnContext(ctx, "participant join room failed", attrs...)
+		return
+	}
+
+	slog.InfoContext(ctx, "participant join room succeeded", attrs...)
+}
+
+func contextValueString(ctx context.Context, key any) string {
+	value := ctx.Value(key)
+	if value == nil {
+		return ""
+	}
+	if str, ok := value.(string); ok {
+		return str
+	}
+	if str, ok := value.(fmt.Stringer); ok {
+		return str.String()
+	}
+	return fmt.Sprint(value)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Service) LeaveRoom(ctx context.Context, roomID, participantID uuid.UUID) error {

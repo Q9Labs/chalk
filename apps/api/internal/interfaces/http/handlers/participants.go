@@ -94,6 +94,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 
 	ctx = cloudflare.WithObservabilityContext(ctx, claims.TenantID.String(), roomID.String(), middleware.GetRequestID(c))
 
+	joinStartedAt := time.Now()
 	output, err := h.participantService.JoinRoom(ctx, participant.JoinRoomInput{
 		RoomID:         roomID,
 		RoomName:       roomIDParam, // Use original param as room name for auto-creation
@@ -103,9 +104,12 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		Role:           req.Role,
 		Metadata:       req.Metadata,
 	})
+	joinElapsedMs := time.Since(joinStartedAt).Milliseconds()
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			h.recordError(c, err, "join_room_context_timeout", nil)
+			h.recordError(c, err, "join_room_context_timeout", map[string]any{
+				"join_duration_ms": joinElapsedMs,
+			})
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "request timeout while joining room"})
 			return
 		}
@@ -116,6 +120,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 				"cloudflare_operation": cfErr.Operation,
 				"cloudflare_status":    cfErr.Status,
 				"cloudflare_attempt":   cfErr.Attempt,
+				"join_duration_ms":     joinElapsedMs,
 			})
 			status := http.StatusServiceUnavailable
 			if cfErr.Status >= 400 && cfErr.Status < 500 {
@@ -140,12 +145,17 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "room is full"})
 			return
 		}
-		h.recordError(c, err, "join_room_unexpected", nil)
+		h.recordError(c, err, "join_room_unexpected", map[string]any{
+			"join_duration_ms": joinElapsedMs,
+		})
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add participant: " + err.Error()})
 		return
 	}
 
 	if output.Participant == nil {
+		h.recordError(c, errors.New("join room output missing participant"), "join_room_missing_participant", map[string]any{
+			"join_duration_ms": joinElapsedMs,
+		})
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve participant"})
 		return
 	}

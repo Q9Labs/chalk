@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI: Lean API deploy workflow** — add `.github/workflows/api-lean.yml` with arm64 image build/push and EC2 restart through SSM.
 - **Docs: Lean migration operations** — add cost baseline and cutover runbook docs for migration, rollback, and decommission sequencing.
 - **API: Client incident telemetry endpoint** — add `POST /api/v1/debug/client-incident` (API-key protected) for browser-side incident ingestion.
+- **SDK-Core/SDK-React: PostHog session replay integration** — add optional `posthog` config to auto start/stop replay on Chalk room lifecycle and emit replay-friendly lifecycle events (`session_joined`, `session_join_failed`, `session_left`).
+- **Testing: Agent-browser room join stress runner** — add `tests/load/agent-browser` runner + wrapper script for multi-room join latency/error analysis (`--count` default `100`, configurable concurrency), with per-attempt artifacts and summary report outputs.
 
 ### Changed
 
@@ -23,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI: Terraform validate scope** — include `ec2-api-lean` module in legacy infra validation loop.
 - **API: WebSocket auth observability** — enrich websocket auth logs with token source + room query diagnostics (invalid/mismatch visibility) and expiry context.
 - **API: Incident log schema** — emit structured `client.incident` events with tenant/request/client metadata for Axiom correlation.
+- **API: Join-path observability + timeout budgeting** — participant join now emits step-level timing telemetry (`participant.join_room`), includes `join_duration_ms` in join errors, and uses tighter add-participant timeout/retry budgets for interactive joins.
 
 ### Fixed
 
