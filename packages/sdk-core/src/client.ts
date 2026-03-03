@@ -27,7 +27,7 @@ import { ConnectionError, TimeoutError } from "./effect/errors.ts";
 
 // RTK join configuration
 const RTK_JOIN_TIMEOUT_MS = 30000; // 30 seconds per attempt
-const RTK_JOIN_RETRY_DELAYS = [500, 1000, 2000]; // 3 retries with faster backoff
+const RTK_JOIN_RETRY_DELAYS = [500, 1000, 2000, 4000]; // 4 retries with progressive backoff
 
 const DEFAULT_API_URL = "https://api.chalk.dev";
 

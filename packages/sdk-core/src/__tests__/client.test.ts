@@ -469,12 +469,12 @@ describe("ChalkClient", () => {
 			try {
 				await expect(
 					(client as any)._joinRealtimeKitWithRetry({} as any),
-				).rejects.toThrow("Failed to join room after 4 attempts: socket closed");
+				).rejects.toThrow("Failed to join room after 5 attempts: socket closed");
 			} finally {
 				globalThis.setTimeout = originalSetTimeout;
 			}
 
-			expect(joinEffect).toHaveBeenCalledTimes(4);
+			expect(joinEffect).toHaveBeenCalledTimes(5);
 		});
 	});
 
