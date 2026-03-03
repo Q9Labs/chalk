@@ -10,6 +10,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/Q9Labs/chalk/internal/version"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 	"log/slog"
@@ -46,6 +47,36 @@ type ClientIncidentResponse struct {
 	Accepted   bool   `json:"accepted"`
 	IncidentID string `json:"incident_id"`
 	RequestID  string `json:"request_id"`
+}
+
+type SDKIncidentContext struct {
+	URL             string `json:"url" binding:"omitempty,max=1024"`
+	UserAgent       string `json:"userAgent" binding:"omitempty,max=512"`
+	Online          *bool  `json:"online,omitempty"`
+	VisibilityState string `json:"visibilityState" binding:"omitempty,max=32"`
+}
+
+type SDKIncidentPayload struct {
+	ID            string             `json:"id" binding:"required,max=128"`
+	Timestamp     string             `json:"timestamp" binding:"omitempty,max=64"`
+	Severity      string             `json:"severity" binding:"omitempty,max=16"`
+	Source        string             `json:"source" binding:"required,max=64"`
+	Message       string             `json:"message" binding:"required,max=512"`
+	Code          string             `json:"code" binding:"omitempty,max=128"`
+	RoomID        string             `json:"roomId" binding:"omitempty,max=128"`
+	ParticipantID string             `json:"participantId" binding:"omitempty,max=128"`
+	TraceID       string             `json:"traceId" binding:"omitempty,max=128"`
+	Phase         string             `json:"phase" binding:"omitempty,max=64"`
+	Stage         string             `json:"stage" binding:"omitempty,max=64"`
+	Retryable     *bool              `json:"retryable,omitempty"`
+	Details       map[string]any     `json:"details,omitempty"`
+	Breadcrumbs   []any              `json:"breadcrumbs,omitempty"`
+	Context       SDKIncidentContext `json:"context,omitempty"`
+}
+
+type ClientIncidentEnvelope struct {
+	Incident   SDKIncidentPayload `json:"incident" binding:"required"`
+	ReportedAt string             `json:"reportedAt" binding:"omitempty,max=64"`
 }
 
 type DebugAuthResponse struct {
@@ -151,9 +182,56 @@ func (h *DebugHandler) Auth(c *gin.Context) {
 // Authenticated by API key middleware; intended for browser-side telemetry from integrators.
 func (h *DebugHandler) ClientIncident(c *gin.Context) {
 	var req ClientIncidentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if err := c.ShouldBindBodyWith(&req, binding.JSON); err != nil {
+		var envelope ClientIncidentEnvelope
+		if envErr := c.ShouldBindBodyWith(&envelope, binding.JSON); envErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		req = ClientIncidentRequest{
+			IncidentID: envelope.Incident.ID,
+			Source:     envelope.Incident.Source,
+			Stage:      envelope.Incident.Stage,
+			Severity:   envelope.Incident.Severity,
+			Message:    envelope.Incident.Message,
+			ErrorCode:  envelope.Incident.Code,
+			RoomID:     envelope.Incident.RoomID,
+			UserAgent:  envelope.Incident.Context.UserAgent,
+			PageURL:    envelope.Incident.Context.URL,
+			Online:     envelope.Incident.Context.Online,
+			Visibility: envelope.Incident.Context.VisibilityState,
+			Details:    envelope.Incident.Details,
+		}
+		if req.Stage == "" {
+			req.Stage = envelope.Incident.Phase
+		}
+		if req.Details == nil {
+			req.Details = map[string]any{}
+		}
+		if envelope.ReportedAt != "" {
+			req.Details["reportedAt"] = envelope.ReportedAt
+		}
+		if envelope.Incident.Timestamp != "" {
+			req.Details["timestamp"] = envelope.Incident.Timestamp
+		}
+		if envelope.Incident.TraceID != "" {
+			req.Details["traceId"] = envelope.Incident.TraceID
+		}
+		if envelope.Incident.ParticipantID != "" {
+			req.Details["participantId"] = envelope.Incident.ParticipantID
+		}
+		if envelope.Incident.Retryable != nil {
+			req.Details["retryable"] = *envelope.Incident.Retryable
+		}
+		if len(envelope.Incident.Breadcrumbs) > 0 {
+			req.Details["breadcrumbs"] = envelope.Incident.Breadcrumbs
+		}
+		if envelope.Incident.Context.URL != "" ||
+			envelope.Incident.Context.UserAgent != "" ||
+			envelope.Incident.Context.Online != nil ||
+			envelope.Incident.Context.VisibilityState != "" {
+			req.Details["context"] = envelope.Incident.Context
+		}
 	}
 
 	tenantID := ""

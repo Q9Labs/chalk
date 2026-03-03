@@ -172,3 +172,47 @@ func TestDebugClientIncident_OK_202(t *testing.T) {
 	require.Equal(t, "inc_123", resp.IncidentID)
 	require.Equal(t, "req-debug-1", resp.RequestID)
 }
+
+func TestDebugClientIncident_Envelope_OK_202(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(middleware.RequestID())
+
+	h := NewDebugHandler()
+	r.POST("/api/v1/debug/client-incident", h.ClientIncident)
+
+	body := `{
+		"incident": {
+			"id": "CHK-20260303-173958-001",
+			"source": "video_conference",
+			"message": "Failed to join room after 4 attempts",
+			"code": "CONNECTION_FAILED",
+			"roomId": "69949e183ef506489ede4a08",
+			"traceId": "trace_123",
+			"phase": "joining",
+			"stage": "rtc_join",
+			"retryable": true,
+			"context": {
+				"url": "https://portal.tuitionhighway.com/dashboard/class-room/69949e183ef506489ede4a08",
+				"userAgent": "Mozilla/5.0",
+				"online": true,
+				"visibilityState": "visible"
+			}
+		},
+		"reportedAt": "2026-03-03T17:39:58Z"
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/debug/client-incident", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-ID", "req-debug-env-1")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusAccepted, rec.Code)
+
+	var resp ClientIncidentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.True(t, resp.Accepted)
+	require.Equal(t, "CHK-20260303-173958-001", resp.IncidentID)
+	require.Equal(t, "req-debug-env-1", resp.RequestID)
+}

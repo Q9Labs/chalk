@@ -380,4 +380,36 @@ describe("VideoConference pre-join devices", () => {
 			}),
 		);
 	});
+
+	it("dedupes rapid join clicks to avoid already-joining race errors", async () => {
+		const joinMock = (globalThis as any).__vcJoinMock;
+		const onError = vi.fn();
+		let resolveJoin: (() => void) | null = null;
+		joinMock.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveJoin = resolve;
+				}),
+		);
+
+		const { getByText } = render(
+			<VideoConference
+				roomId="room-123"
+				userName="Hasan"
+				onError={onError}
+			/>,
+		);
+
+		await act(async () => {
+			fireEvent.click(getByText("Ask to join"));
+			fireEvent.click(getByText("Ask to join"));
+		});
+
+		expect(joinMock).toHaveBeenCalledTimes(1);
+		expect(onError).not.toHaveBeenCalled();
+
+		await act(async () => {
+			resolveJoin?.();
+		});
+	});
 });

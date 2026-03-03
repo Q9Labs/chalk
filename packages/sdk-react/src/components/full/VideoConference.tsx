@@ -359,6 +359,7 @@ function VideoConferenceBase({
 	const disconnectGraceTimeoutRef = useRef<number | null>(null);
 	const lastJoinSettingsRef = useRef<JoinSettings | null>(null);
 	const supportCodeSequenceRef = useRef(0);
+	const joinInFlightRef = useRef(false);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
@@ -750,119 +751,138 @@ function VideoConferenceBase({
 	const handleJoin = useCallback(
 		async (settings: JoinSettings) => {
 			// Guard: prevent duplicate join attempts
-			if (isJoining || isConnected) {
+			if (joinInFlightRef.current || isJoining || isConnected) {
 				if (isConnected) {
 					setPhase("meeting");
 				}
+				pushIncidentBreadcrumb("join", "Join skipped (already in-flight or connected)", {
+					isConnected,
+					isJoining,
+				});
 				return;
 			}
+			joinInFlightRef.current = true;
 
-			lastJoinSettingsRef.current = settings;
-			setPhase("joining");
-			setError(null);
-			setSupportCode(null);
+			try {
+				lastJoinSettingsRef.current = settings;
+				setPhase("joining");
+				setError(null);
+				setSupportCode(null);
 
-			const maxAttempts = JOIN_RETRY_DELAYS_MS.length + 1;
-			let finalError: ChalkError | null = null;
+				const maxAttempts = JOIN_RETRY_DELAYS_MS.length + 1;
+				let finalError: ChalkError | null = null;
 
-			for (let attempt = 0; attempt < maxAttempts; attempt++) {
-				pushIncidentBreadcrumb("join", "Join attempt started", {
-					attempt: attempt + 1,
-					maxAttempts,
-					roomId,
-				});
-				try {
-					await join(roomId, {
-						userName: settings.displayName,
-						role,
-						videoEnabled: settings.videoEnabled,
-						audioEnabled: settings.audioEnabled,
-						metadata,
-					});
-
-					const deviceSelectionTasks: Promise<void>[] = [];
-					if (settings.selectedVideoDevice) {
-						deviceSelectionTasks.push(media.selectCamera(settings.selectedVideoDevice));
-					}
-					if (settings.selectedAudioInput) {
-						deviceSelectionTasks.push(media.selectMicrophone(settings.selectedAudioInput));
-					}
-					if (settings.selectedAudioOutput) {
-						deviceSelectionTasks.push(media.selectSpeaker(settings.selectedAudioOutput));
-					}
-					if (deviceSelectionTasks.length > 0) {
-						await Promise.allSettled(deviceSelectionTasks);
-					}
-
-					setPhase("meeting");
-					pushIncidentBreadcrumb("join", "Join attempt succeeded", {
+				for (let attempt = 0; attempt < maxAttempts; attempt++) {
+					pushIncidentBreadcrumb("join", "Join attempt started", {
 						attempt: attempt + 1,
 						maxAttempts,
 						roomId,
 					});
-					play("join");
-					onJoin?.({
-						roomId,
-						participantId: localParticipant?.id ?? "",
-						role: localParticipant?.role ?? role ?? "participant",
-						displayName: settings.displayName,
-						isRecording: recording.isRecording,
-						joinedAt: new Date(),
-					});
-					return;
-				} catch (rawError) {
-					const chalkError = toChalkError(rawError);
-					// If already connected, transition to meeting instead of lobby
-					if (chalkError.message?.includes("Already connected")) {
-						setPhase("meeting");
-						return;
-					}
+					try {
+						await join(roomId, {
+							userName: settings.displayName,
+							role,
+							videoEnabled: settings.videoEnabled,
+							audioEnabled: settings.audioEnabled,
+							metadata,
+						});
 
-					const joinStage = inferJoinFailureStage(chalkError);
-					const retryable = isTransientJoinFailure(chalkError, joinStage);
-					const enrichedError: ChalkError = {
-						...chalkError,
-						details: {
-							...(chalkError.details ?? {}),
-							stage: joinStage,
+						const deviceSelectionTasks: Promise<void>[] = [];
+						if (settings.selectedVideoDevice) {
+							deviceSelectionTasks.push(media.selectCamera(settings.selectedVideoDevice));
+						}
+						if (settings.selectedAudioInput) {
+							deviceSelectionTasks.push(media.selectMicrophone(settings.selectedAudioInput));
+						}
+						if (settings.selectedAudioOutput) {
+							deviceSelectionTasks.push(media.selectSpeaker(settings.selectedAudioOutput));
+						}
+						if (deviceSelectionTasks.length > 0) {
+							await Promise.allSettled(deviceSelectionTasks);
+						}
+
+						setPhase("meeting");
+						pushIncidentBreadcrumb("join", "Join attempt succeeded", {
 							attempt: attempt + 1,
 							maxAttempts,
+							roomId,
+						});
+						play("join");
+						onJoin?.({
+							roomId,
+							participantId: localParticipant?.id ?? "",
+							role: localParticipant?.role ?? role ?? "participant",
+							displayName: settings.displayName,
+							isRecording: recording.isRecording,
+							joinedAt: new Date(),
+						});
+						return;
+					} catch (rawError) {
+						const chalkError = toChalkError(rawError);
+						// If already connected, transition to meeting instead of lobby
+						if (chalkError.message?.includes("Already connected")) {
+							setPhase("meeting");
+							return;
+						}
+						if (chalkError.message?.includes("Already joining a room")) {
+							// Join is already in-flight (typically double-click/race). Let
+							// the active join resolve instead of surfacing a false fatal error.
+							pushIncidentBreadcrumb("join", "Join request deduped (already joining)", {
+								attempt: attempt + 1,
+								maxAttempts,
+								roomId,
+							});
+							return;
+						}
+
+						const joinStage = inferJoinFailureStage(chalkError);
+						const retryable = isTransientJoinFailure(chalkError, joinStage);
+						const enrichedError: ChalkError = {
+							...chalkError,
+							details: {
+								...(chalkError.details ?? {}),
+								stage: joinStage,
+								attempt: attempt + 1,
+								maxAttempts,
+								retryable,
+							},
+						};
+						finalError = enrichedError;
+						pushIncidentBreadcrumb("join", "Join attempt failed", {
+							attempt: attempt + 1,
+							maxAttempts,
+							roomId,
+							stage: joinStage,
 							retryable,
-						},
-					};
-					finalError = enrichedError;
-					pushIncidentBreadcrumb("join", "Join attempt failed", {
-						attempt: attempt + 1,
-						maxAttempts,
-						roomId,
-						stage: joinStage,
-						retryable,
-						code: enrichedError.code,
-						message: enrichedError.message,
-					});
+							code: enrichedError.code,
+							message: enrichedError.message,
+						});
 
-					if (!retryable || attempt >= maxAttempts - 1) {
-						break;
+						if (!retryable || attempt >= maxAttempts - 1) {
+							break;
+						}
+
+						await waitMs(JOIN_RETRY_DELAYS_MS[attempt] ?? 0);
 					}
-
-					await waitMs(JOIN_RETRY_DELAYS_MS[attempt] ?? 0);
 				}
-			}
 
-			const terminalError = finalError ?? {
-				code: ChalkErrorCode.UNKNOWN_ERROR,
-				message: "Failed to join room",
-			};
-			setError(terminalError.message || "Failed to join room");
-			emitError(terminalError, {
-				event: "join_failed",
-				joinRetryExhausted: true,
-				joinStage:
-					typeof terminalError.details?.stage === "string"
-						? terminalError.details.stage
-						: undefined,
-			});
-			setPhase("lobby");
+				const terminalError = finalError ?? {
+					code: ChalkErrorCode.UNKNOWN_ERROR,
+					message: "Failed to join room",
+				};
+				setError(terminalError.message || "Failed to join room");
+				emitError(terminalError, {
+					event: "join_failed",
+					joinRetryExhausted: true,
+					joinStage:
+						typeof terminalError.details?.stage === "string"
+							? terminalError.details.stage
+							: undefined,
+				});
+				setPhase("lobby");
+			} finally {
+				joinInFlightRef.current = false;
+			}
 		},
 		[
 			join,
@@ -878,6 +898,8 @@ function VideoConferenceBase({
 			media,
 			emitError,
 			pushIncidentBreadcrumb,
+			isConnected,
+			isJoining,
 		],
 	);
 
@@ -1037,6 +1059,13 @@ function VideoConferenceBase({
 		const handleError = session.on("error", (err) => {
 			// Ignore "Already connected" errors - these are handled in handleJoin
 			if (err.message?.includes("Already connected")) {
+				return;
+			}
+			if (err.message?.includes("Already joining a room")) {
+				pushIncidentBreadcrumb("session_error", "Ignored duplicate join race", {
+					code: err.code,
+					message: err.message,
+				});
 				return;
 			}
 			pushIncidentBreadcrumb("session_error", "Session error event received", {
