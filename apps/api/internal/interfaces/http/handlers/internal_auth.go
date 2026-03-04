@@ -16,7 +16,6 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/email"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
-	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,18 +24,45 @@ import (
 const (
 	internalSessionCookieName = "chalk_session"
 	internalClaimCookieName   = "chalk_claim"
+	internalTenantCacheTTL    = 5 * time.Minute
 )
+
+type internalAuthQueries interface {
+	CreateInternalTenant(ctx context.Context, arg db.CreateInternalTenantParams) (db.Tenant, error)
+	CreateTenantClaim(ctx context.Context, arg db.CreateTenantClaimParams) (db.TenantClaim, error)
+	CreateUser(ctx context.Context, email string) (db.User, error)
+	CreateUserSession(ctx context.Context, arg db.CreateUserSessionParams) (db.UserSession, error)
+	GetInternalTenantByOwnerUserID(ctx context.Context, ownerUserID pgtype.UUID) (db.Tenant, error)
+	GetTenantClaimBySecretHash(ctx context.Context, secretHash string) (db.TenantClaim, error)
+	GetUserByEmail(ctx context.Context, lower string) (db.User, error)
+	GetUserSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (db.UserSession, error)
+	BindInternalTenantToOwner(ctx context.Context, arg db.BindInternalTenantToOwnerParams) (db.Tenant, error)
+	MarkTenantClaimUsed(ctx context.Context, id uuid.UUID) (db.TenantClaim, error)
+	TouchUserSession(ctx context.Context, id uuid.UUID) error
+}
+
+type internalAuthCache interface {
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+	Get(ctx context.Context, key string) (string, error)
+	Del(ctx context.Context, keys ...string) error
+}
 
 type InternalAuthHandler struct {
 	cfg          *config.Config
-	queries      *db.Queries
+	queries      internalAuthQueries
 	jwtService   *auth.JWTService
 	apiKeySvc    *auth.APIKeyService
-	redis        *redis.Client
+	redis        internalAuthCache
 	resendClient *email.ResendClient
 }
 
-func NewInternalAuthHandler(cfg *config.Config, queries *db.Queries, jwtService *auth.JWTService, apiKeySvc *auth.APIKeyService, redisClient *redis.Client) *InternalAuthHandler {
+func NewInternalAuthHandler(
+	cfg *config.Config,
+	queries internalAuthQueries,
+	jwtService *auth.JWTService,
+	apiKeySvc *auth.APIKeyService,
+	redisClient internalAuthCache,
+) *InternalAuthHandler {
 	var resendClient *email.ResendClient
 	if cfg != nil && cfg.Auth.ResendAPIKey != "" && cfg.Auth.ResendFromEmail != "" {
 		resendClient = email.NewResendClient(cfg.Auth.ResendAPIKey, cfg.Auth.ResendFromEmail)
@@ -204,16 +230,21 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 			_ = h.queries.TouchUserSession(ctx, sess.ID)
 			subject = sess.UserID.String()
 
-			t, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(sess.UserID))
-			if err != nil {
-				created, err := h.createInternalTenant(ctx, &sess.UserID)
-				if err != nil || created == nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create tenant"})
-					return
-				}
-				tenantID = created.ID
+			if cachedTenantID, ok := h.getCachedInternalTenantByOwner(ctx, sess.UserID); ok {
+				tenantID = cachedTenantID
 			} else {
-				tenantID = t.ID
+				t, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(sess.UserID))
+				if err != nil {
+					created, err := h.createInternalTenant(ctx, &sess.UserID)
+					if err != nil || created == nil {
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create tenant"})
+						return
+					}
+					tenantID = created.ID
+				} else {
+					tenantID = t.ID
+					h.setCachedInternalTenantByOwner(ctx, sess.UserID, t.ID)
+				}
 			}
 		}
 	}
@@ -316,6 +347,9 @@ func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUse
 	if err != nil {
 		return nil, err
 	}
+	if ownerUserID != nil {
+		h.setCachedInternalTenantByOwner(ctx, *ownerUserID, tenant.ID)
+	}
 	return &tenant, nil
 }
 
@@ -357,6 +391,7 @@ func (h *InternalAuthHandler) tryClaimTenant(ctx context.Context, claimSecret st
 		return false
 	}
 
+	h.setCachedInternalTenantByOwner(ctx, userID, claim.TenantID)
 	_, _ = h.queries.MarkTenantClaimUsed(ctx, claim.ID)
 	return true
 }
@@ -384,6 +419,36 @@ func (h *InternalAuthHandler) cookieDomain() string {
 		return ""
 	}
 	return h.cfg.Auth.CookieDomain
+}
+
+func internalTenantByOwnerRedisKey(ownerUserID uuid.UUID) string {
+	return "internal_auth:tenant_by_owner:v1:" + ownerUserID.String()
+}
+
+func (h *InternalAuthHandler) getCachedInternalTenantByOwner(ctx context.Context, ownerUserID uuid.UUID) (uuid.UUID, bool) {
+	if h.redis == nil {
+		return uuid.Nil, false
+	}
+
+	value, err := h.redis.Get(ctx, internalTenantByOwnerRedisKey(ownerUserID))
+	if err != nil || value == "" {
+		return uuid.Nil, false
+	}
+
+	tenantID, parseErr := uuid.Parse(value)
+	if parseErr != nil {
+		_ = h.redis.Del(ctx, internalTenantByOwnerRedisKey(ownerUserID))
+		return uuid.Nil, false
+	}
+
+	return tenantID, true
+}
+
+func (h *InternalAuthHandler) setCachedInternalTenantByOwner(ctx context.Context, ownerUserID, tenantID uuid.UUID) {
+	if h.redis == nil {
+		return
+	}
+	_ = h.redis.Set(ctx, internalTenantByOwnerRedisKey(ownerUserID), tenantID.String(), internalTenantCacheTTL)
 }
 
 func magicLinkRedisKey(token string) string {

@@ -48,6 +48,11 @@ type TokenIssuer interface {
 	GenerateTokenPair(claims auth.Claims) (*auth.TokenPair, error)
 }
 
+type JoinCache interface {
+	Get(ctx context.Context, key string) (string, error)
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+}
+
 type participantDB interface {
 	CountActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	CreateParticipant(ctx context.Context, arg db.CreateParticipantParams) (db.Participant, error)
@@ -73,15 +78,24 @@ type Service struct {
 	roomState   RoomStateManager
 	tokenIssuer TokenIssuer
 	hub         WebSocketHub
+	cache       JoinCache
 }
 
-func NewService(queries participantDB, cf CloudflareClient, roomState RoomStateManager, tokenIssuer TokenIssuer, hub WebSocketHub) *Service {
+func NewService(
+	queries participantDB,
+	cf CloudflareClient,
+	roomState RoomStateManager,
+	tokenIssuer TokenIssuer,
+	hub WebSocketHub,
+	cache JoinCache,
+) *Service {
 	return &Service{
 		db:          queries,
 		cfClient:    cf,
 		roomState:   roomState,
 		tokenIssuer: tokenIssuer,
 		hub:         hub,
+		cache:       cache,
 	}
 }
 
@@ -112,6 +126,61 @@ type JoinRoomOutput struct {
 	RoomCreated          bool               // True if room was just created (not pre-existing)
 	TenantConfig         TenantConfigOutput // Tenant configuration for this room
 	ShouldStartRecording bool               // True if tenant has force_recording and this is first host
+}
+
+const joinTenantCacheTTL = time.Minute
+
+type cachedJoinTenant struct {
+	TenantID               string          `json:"tenant_id"`
+	MaxParticipantsPerRoom int32           `json:"max_participants_per_room"`
+	TenantConfig           json.RawMessage `json:"tenant_config"`
+}
+
+func joinTenantCacheKey(tenantID uuid.UUID) string {
+	return "join:tenant:v1:" + tenantID.String()
+}
+
+func (s *Service) getTenantForJoin(ctx context.Context, tenantID uuid.UUID) (db.Tenant, bool, error) {
+	if s.cache != nil {
+		cachedValue, err := s.cache.Get(ctx, joinTenantCacheKey(tenantID))
+		if err == nil && cachedValue != "" {
+			var cached cachedJoinTenant
+			if unmarshalErr := json.Unmarshal([]byte(cachedValue), &cached); unmarshalErr == nil {
+				cachedTenantID, parseErr := uuid.Parse(cached.TenantID)
+				if parseErr == nil && cachedTenantID == tenantID {
+					return db.Tenant{
+						ID:                     cachedTenantID,
+						MaxParticipantsPerRoom: cached.MaxParticipantsPerRoom,
+						TenantConfig:           append([]byte(nil), cached.TenantConfig...),
+					}, true, nil
+				}
+			}
+		}
+	}
+
+	tenant, err := s.db.GetTenant(ctx, tenantID)
+	if err != nil {
+		return db.Tenant{}, false, err
+	}
+	s.setTenantForJoinCache(ctx, tenant)
+	return tenant, false, nil
+}
+
+func (s *Service) setTenantForJoinCache(ctx context.Context, tenant db.Tenant) {
+	if s.cache == nil {
+		return
+	}
+
+	payload, err := json.Marshal(cachedJoinTenant{
+		TenantID:               tenant.ID.String(),
+		MaxParticipantsPerRoom: tenant.MaxParticipantsPerRoom,
+		TenantConfig:           append([]byte(nil), tenant.TenantConfig...),
+	})
+	if err != nil {
+		return
+	}
+
+	_ = s.cache.Set(ctx, joinTenantCacheKey(tenant.ID), string(payload), joinTenantCacheTTL)
 }
 
 func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *JoinRoomOutput, err error) {
@@ -203,8 +272,10 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 		}
 
 		tenantLookupStart := time.Now()
-		t, err := s.db.GetTenant(ctx, input.TenantID)
-		telemetry.observeDB("db_get_tenant_for_missing_room", time.Since(tenantLookupStart))
+		t, fromCache, err := s.getTenantForJoin(ctx, input.TenantID)
+		if !fromCache {
+			telemetry.observeDB("db_get_tenant_for_missing_room", time.Since(tenantLookupStart))
+		}
 		if err != nil {
 			failedStep = "db_get_tenant_for_missing_room"
 			return nil, ErrTenantNotFound
@@ -256,8 +327,10 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 		// Room exists but is ended - reactivate it.
 		if room.Status != "active" {
 			tenantLookupStart := time.Now()
-			t, err := s.db.GetTenant(ctx, room.TenantID)
-			telemetry.observeDB("db_get_tenant_for_ended_room", time.Since(tenantLookupStart))
+			t, fromCache, err := s.getTenantForJoin(ctx, room.TenantID)
+			if !fromCache {
+				telemetry.observeDB("db_get_tenant_for_ended_room", time.Since(tenantLookupStart))
+			}
 			if err != nil {
 				failedStep = "db_get_tenant_for_ended_room"
 				return nil, ErrTenantNotFound
@@ -300,8 +373,10 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 
 	if !tenantLoaded {
 		tenantLookupStart := time.Now()
-		t, err := s.db.GetTenant(ctx, room.TenantID)
-		telemetry.observeDB("db_get_tenant_for_existing_room", time.Since(tenantLookupStart))
+		t, fromCache, err := s.getTenantForJoin(ctx, room.TenantID)
+		if !fromCache {
+			telemetry.observeDB("db_get_tenant_for_existing_room", time.Since(tenantLookupStart))
+		}
 		if err != nil {
 			failedStep = "db_get_tenant_for_existing_room"
 			return nil, ErrTenantNotFound

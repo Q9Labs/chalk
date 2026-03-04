@@ -169,9 +169,9 @@ func TestParticipantHandler_Add_Perf_JoinRoomBudget(t *testing.T) {
 		delay:    dbDelay,
 		tenantID: claims.TenantID,
 	}
-	svc := participant.NewService(fdb, &fakeCF{delay: cfDelay}, nil, &fakeIssuer{}, nil)
+	svc := participant.NewService(fdb, &fakeCF{delay: cfDelay}, nil, &fakeIssuer{}, nil, nil)
 
-	handler := NewParticipantHandler(svc, nil)
+	handler := NewParticipantHandler(svc, nil, nil)
 	router.POST("/rooms/:id/participants", handler.Add)
 
 	body, err := json.Marshal(AddParticipantRequest{DisplayName: "Perf User", Role: "participant"})

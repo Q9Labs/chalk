@@ -106,7 +106,7 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	recordingService := recording.NewService(queries, cfg.CFClient, cfg.StorageR2, cfg.StorageS3, roomState, wsHub)
 	roomService := room.NewService(queries, cfg.CFClient, roomState, wsHub, &recordingStopperAdapter{svc: recordingService})
-	participantService := participant.NewService(queries, cfg.CFClient, roomState, jwtService, wsHub)
+	participantService := participant.NewService(queries, cfg.CFClient, roomState, jwtService, wsHub, cfg.RedisClient)
 	transcriptService := transcript.NewService(queries)
 
 	// GitHub client for What's New feature
@@ -248,7 +248,7 @@ func (r *Router) setupRoutes() {
 			roomsGroup.DELETE("/:id", authMw.RequireHost(), rooms.Delete)
 			roomsGroup.POST("/:id/end", authMw.RequireHost(), rooms.End)
 
-			participants := handlers.NewParticipantHandler(r.participantService, r.roomService)
+			participants := handlers.NewParticipantHandler(r.participantService, r.roomService, r.redisClient)
 			roomsGroup.POST("/:id/participants", participants.Add)
 			roomsGroup.POST("/:id/participants/bulk", authMw.RequireHost(), participants.BulkAdd)
 			roomsGroup.GET("/:id/participants", participants.List)

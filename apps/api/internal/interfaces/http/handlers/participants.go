@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/participant"
@@ -19,12 +22,21 @@ import (
 type ParticipantHandler struct {
 	participantService *participant.Service
 	roomService        *room.Service
+	cache              roomJoinCache
 }
 
-func NewParticipantHandler(participantService *participant.Service, roomService *room.Service) *ParticipantHandler {
+type roomJoinCache interface {
+	Get(ctx context.Context, key string) (string, error)
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+}
+
+const roomNameCacheTTL = time.Minute
+
+func NewParticipantHandler(participantService *participant.Service, roomService *room.Service, cache roomJoinCache) *ParticipantHandler {
 	return &ParticipantHandler{
 		participantService: participantService,
 		roomService:        roomService,
+		cache:              cache,
 	}
 }
 
@@ -74,15 +86,21 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 	// Try to parse as UUID first, fall back to room name lookup
 	roomIDParam := c.Param("id")
 	roomID, err := uuid.Parse(roomIDParam)
+	roomNameLookup := err != nil
 
-	if err != nil {
-		// Not a UUID - look up by room name
-		existingRoom, lookupErr := h.roomService.GetRoomByName(ctx, roomIDParam, claims.TenantID)
-		if lookupErr != nil {
-			// Room doesn't exist yet - generate UUID for auto-creation (allow_early_join will handle it)
-			roomID = uuid.New()
+	if roomNameLookup {
+		if cachedRoomID, ok := h.getCachedRoomID(ctx, claims.TenantID, roomIDParam); ok {
+			roomID = cachedRoomID
 		} else {
-			roomID = existingRoom.ID
+			// Not a UUID - look up by room name
+			existingRoom, lookupErr := h.roomService.GetRoomByName(ctx, roomIDParam, claims.TenantID)
+			if lookupErr != nil {
+				// Room doesn't exist yet - generate UUID for auto-creation (allow_early_join will handle it)
+				roomID = uuid.New()
+			} else {
+				roomID = existingRoom.ID
+				h.setCachedRoomID(ctx, claims.TenantID, roomIDParam, roomID)
+			}
 		}
 	}
 
@@ -160,6 +178,10 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
+	if roomNameLookup {
+		h.setCachedRoomID(ctx, claims.TenantID, roomIDParam, output.Room.ID)
+	}
+
 	roomName := ""
 	if output.Room.Name != nil {
 		roomName = *output.Room.Name
@@ -186,6 +208,39 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		AuthToken:            output.CFAuthToken,
 		ShouldStartRecording: output.ShouldStartRecording,
 	})
+}
+
+func joinRoomNameCacheKey(tenantID uuid.UUID, roomName string) string {
+	normalized := strings.ToLower(strings.TrimSpace(roomName))
+	sum := sha256.Sum256([]byte(normalized))
+	return "join:room_name:v1:" + tenantID.String() + ":" + hex.EncodeToString(sum[:])
+}
+
+func (h *ParticipantHandler) getCachedRoomID(ctx context.Context, tenantID uuid.UUID, roomName string) (uuid.UUID, bool) {
+	if h.cache == nil {
+		return uuid.Nil, false
+	}
+
+	key := joinRoomNameCacheKey(tenantID, roomName)
+	value, err := h.cache.Get(ctx, key)
+	if err != nil || value == "" {
+		return uuid.Nil, false
+	}
+
+	roomID, parseErr := uuid.Parse(value)
+	if parseErr != nil {
+		return uuid.Nil, false
+	}
+
+	return roomID, true
+}
+
+func (h *ParticipantHandler) setCachedRoomID(ctx context.Context, tenantID uuid.UUID, roomName string, roomID uuid.UUID) {
+	if h.cache == nil {
+		return
+	}
+
+	_ = h.cache.Set(ctx, joinRoomNameCacheKey(tenantID, roomName), roomID.String(), roomNameCacheTTL)
 }
 
 func (h *ParticipantHandler) recordError(c *gin.Context, err error, step string, fields map[string]any) {
