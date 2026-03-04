@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { Effect } from "effect";
 import { ChalkClient } from "../client.ts";
+import { TimeoutError } from "../effect/errors.ts";
 import type { ChalkClientConfig, RoomConfig } from "../types.ts";
 
 describe("ChalkClient", () => {
@@ -426,11 +427,76 @@ describe("ChalkClient", () => {
 			).rejects.toThrow("RealtimeKit token missing - API did not return rtcToken");
 		});
 
+		it("tracks API latency in room.join phase timings", async () => {
+			const wideEventsReceived: Array<{
+				eventType: string;
+				outcome: string;
+				phases?: Record<string, number>;
+			}> = [];
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+				wideEvents: {
+					handler: (event) => {
+						wideEventsReceived.push({
+							eventType: event.eventType,
+							outcome: event.outcome,
+							phases: event.phases,
+						});
+					},
+				},
+			});
+			(client as any).apiClient = {
+				addParticipant: mock(
+					() =>
+						new Promise((resolve) => {
+							setTimeout(() => {
+								resolve({
+									success: true,
+									data: {
+										participantId: "p_1",
+										role: "participant",
+										tokens: {
+											rtcToken: createJwt({
+												exp: Math.floor(Date.now() / 1000) + 60 * 5,
+												scope: "rtk",
+											}),
+											accessToken: "chalk_access_token",
+										},
+										room: {
+											id: "room_1",
+											name: "Room 1",
+											status: "active",
+											participantCount: 1,
+											config: {},
+											createdAt: new Date(),
+										},
+									},
+								});
+							}, 25);
+						}),
+				),
+				setToken: mock(() => {}),
+			};
+			(client as any)._initRealtimeKitEffect = () =>
+				Effect.succeed(createMockRtkClient() as any);
+			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+
+			await client.joinRoom("room_1", { displayName: "Alice" });
+
+			const joinEvent = wideEventsReceived.find((event) => event.eventType === "room.join");
+			expect(joinEvent).toBeDefined();
+			expect(joinEvent?.outcome).toBe("success");
+			expect(joinEvent?.phases?.api).toBeGreaterThanOrEqual(15);
+		});
+
 		it("retries RTK join and succeeds on a later attempt", async () => {
 			const client = new ChalkClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 			});
+			const join = mock(async () => {});
 			const joinEffect = mock(() => {
 				if (joinEffect.mock.calls.length < 3) {
 					return Effect.fail(new Error("join attempt failed"));
@@ -445,7 +511,7 @@ describe("ChalkClient", () => {
 			}) as any;
 
 			try {
-				await (client as any)._joinRealtimeKitWithRetry({} as any);
+				await (client as any)._joinRealtimeKitWithRetry({ join } as any);
 			} finally {
 				globalThis.setTimeout = originalSetTimeout;
 			}
@@ -458,6 +524,7 @@ describe("ChalkClient", () => {
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 			});
+			const join = mock(async () => {});
 			const joinEffect = mock(() => Effect.fail(new Error("socket closed")));
 			(client as any)._joinRealtimeKitEffect = joinEffect;
 			const originalSetTimeout = globalThis.setTimeout;
@@ -468,13 +535,213 @@ describe("ChalkClient", () => {
 
 			try {
 				await expect(
-					(client as any)._joinRealtimeKitWithRetry({} as any),
+					(client as any)._joinRealtimeKitWithRetry({ join } as any),
 				).rejects.toThrow("Failed to join room after 5 attempts: socket closed");
 			} finally {
 				globalThis.setTimeout = originalSetTimeout;
 			}
 
 			expect(joinEffect).toHaveBeenCalledTimes(5);
+		});
+
+		it("does not duplicate join calls while an in-flight RTK join is timing out", async () => {
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				token: "chalk_access_token",
+			});
+			const join = mock(
+				() => new Promise<void>(() => {
+					// Keep unresolved to simulate an in-flight join.
+				}),
+			);
+			const timeoutError = new TimeoutError({
+				message: "Room join timed out after 30000ms",
+				operation: "joinRTKRoom",
+				timeoutMs: 30000,
+			});
+			(client as any)._joinRealtimeKitEffect = mock(() =>
+				Effect.fail(timeoutError),
+			);
+
+			const originalSetTimeout = globalThis.setTimeout;
+			globalThis.setTimeout = ((handler: TimerHandler) => {
+				if (typeof handler === "function") handler();
+				return 0 as any;
+			}) as any;
+
+			try {
+				await expect(
+					(client as any)._joinRealtimeKitWithRetry({ join } as any),
+				).rejects.toThrow("Failed to join room after 5 attempts");
+			} finally {
+				globalThis.setTimeout = originalSetTimeout;
+			}
+
+			expect(join).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe("posthog session replay integration", () => {
+		const buildJoinSuccessResponse = () => ({
+			success: true,
+			data: {
+				participantId: "p_1",
+				role: "host",
+				tokens: {
+					rtcToken: createJwt({
+						exp: Math.floor(Date.now() / 1000) + 60 * 5,
+						scope: "rtk",
+					}),
+					accessToken: "chalk_access_token",
+				},
+				room: {
+					id: "room_1",
+					name: "Room 1",
+					status: "active",
+					participantCount: 1,
+					config: {},
+					createdAt: new Date(),
+				},
+				roomCreated: false,
+			},
+		});
+
+		it("starts replay and captures joined event on successful join", async () => {
+			const posthog = {
+				startSessionRecording: mock(() => {}),
+				stopSessionRecording: mock(() => {}),
+				capture: mock(() => {}),
+			};
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+				posthog: { client: posthog },
+			});
+			(client as any).apiClient = {
+				addParticipant: mock(async () => buildJoinSuccessResponse()),
+				setToken: mock(() => {}),
+			};
+			(client as any)._initRealtimeKitEffect = () =>
+				Effect.succeed(createMockRtkClient() as any);
+			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+
+			await client.joinRoom("room_1", { displayName: "Alice" });
+
+			expect(posthog.startSessionRecording).toHaveBeenCalledTimes(1);
+			expect(posthog.capture).toHaveBeenCalledWith(
+				"chalk_sdk_session_joined",
+				expect.objectContaining({
+					roomId: "room_1",
+					participantId: "p_1",
+					displayName: "Alice",
+					role: "host",
+					demoMode: false,
+				}),
+			);
+		});
+
+		it("stops replay and captures left event on disconnect", async () => {
+			const posthog = {
+				startSessionRecording: mock(() => {}),
+				stopSessionRecording: mock(() => {}),
+				capture: mock(() => {}),
+			};
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+				posthog: { client: posthog },
+			});
+			(client as any).apiClient = {
+				addParticipant: mock(async () => buildJoinSuccessResponse()),
+				setToken: mock(() => {}),
+			};
+			(client as any)._initRealtimeKitEffect = () =>
+				Effect.succeed(createMockRtkClient() as any);
+			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+
+			await client.joinRoom("room_1", { displayName: "Alice" });
+			client.disconnect();
+
+			expect(posthog.stopSessionRecording).toHaveBeenCalledTimes(1);
+			expect(posthog.capture).toHaveBeenCalledWith(
+				"chalk_sdk_session_left",
+				expect.objectContaining({
+					roomId: "room_1",
+					participantId: "p_1",
+					reason: "disconnect",
+					demoMode: false,
+				}),
+			);
+		});
+
+		it("captures join failures for replay triage", async () => {
+			const posthog = {
+				startSessionRecording: mock(() => {}),
+				stopSessionRecording: mock(() => {}),
+				capture: mock(() => {}),
+			};
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+				posthog: { client: posthog },
+			});
+			(client as any).apiClient = {
+				addParticipant: mock(async () => ({
+					success: false,
+					error: { message: "join api failed" },
+				})),
+				setToken: mock(() => {}),
+			};
+
+			await expect(
+				client.joinRoom("room_1", { displayName: "Alice" }),
+			).rejects.toThrow("join api failed");
+
+			expect(posthog.startSessionRecording).not.toHaveBeenCalled();
+			expect(posthog.capture).toHaveBeenCalledWith(
+				"chalk_sdk_session_join_failed",
+				expect.objectContaining({
+					roomId: "room_1",
+					displayName: "Alice",
+					error: "join api failed",
+					demoMode: false,
+				}),
+			);
+		});
+
+		it("does not fail join/leave when posthog methods throw", async () => {
+			const posthog = {
+				startSessionRecording: mock(() => {
+					throw new Error("posthog start failed");
+				}),
+				stopSessionRecording: mock(() => {
+					throw new Error("posthog stop failed");
+				}),
+				capture: mock(() => {
+					throw new Error("posthog capture failed");
+				}),
+			};
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+				posthog: { client: posthog },
+			});
+			(client as any).apiClient = {
+				addParticipant: mock(async () => buildJoinSuccessResponse()),
+				setToken: mock(() => {}),
+			};
+			(client as any)._initRealtimeKitEffect = () =>
+				Effect.succeed(createMockRtkClient() as any);
+			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+
+			await expect(
+				client.joinRoom("room_1", { displayName: "Alice" }),
+			).resolves.toBeDefined();
+			expect(() => client.disconnect()).not.toThrow();
 		});
 	});
 

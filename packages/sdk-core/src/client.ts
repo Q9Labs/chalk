@@ -198,13 +198,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   }
 
   /**
-   * Effect-based RTK join with timeout
+   * Effect-based RTK join wait with timeout
    * Uses Effect.timeoutOption for clean timeout handling
    */
-  private _joinRealtimeKitEffect(rtkClient: RealtimeKitClient, timeoutMs: number) {
+  private _joinRealtimeKitEffect(joinPromise: Promise<void>, timeoutMs: number) {
     return pipe(
       Effect.tryPromise({
-        try: () => rtkClient.join(),
+        try: () => joinPromise,
         catch: (error) =>
           new ConnectionError({
             code: "CONNECTION_FAILED",
@@ -228,37 +228,49 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     );
   }
 
+  private _isJoinTimeoutError(error: Error): boolean {
+    if (error instanceof TimeoutError) {
+      return true;
+    }
+    return error.message.toLowerCase().includes("timed out");
+  }
+
   /**
    * RTK join with retry logic and exponential backoff
    * Attempts join multiple times before giving up
    */
   private async _joinRealtimeKitWithRetry(rtkClient: RealtimeKitClient): Promise<void> {
     let lastError: Error | null = null;
+    let joinPromise: Promise<void> | null = null;
+    const totalAttempts = 1 + RTK_JOIN_RETRY_DELAYS.length;
 
-    // First attempt (no delay)
-    try {
-      await Effect.runPromise(this._joinRealtimeKitEffect(rtkClient, RTK_JOIN_TIMEOUT_MS));
-      return;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-    }
-
-    // Retry attempts with exponential backoff
-    for (let i = 0; i < RTK_JOIN_RETRY_DELAYS.length; i++) {
-      const delay = RTK_JOIN_RETRY_DELAYS[i]!;
-
-      await new Promise((resolve) => setTimeout(resolve, delay));
+    for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      if (!joinPromise) {
+        joinPromise = rtkClient.join();
+      }
 
       try {
-        await Effect.runPromise(this._joinRealtimeKitEffect(rtkClient, RTK_JOIN_TIMEOUT_MS));
+        await Effect.runPromise(this._joinRealtimeKitEffect(joinPromise, RTK_JOIN_TIMEOUT_MS));
         return;
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
+        const normalized = error instanceof Error ? error : new Error(String(error));
+        lastError = normalized;
+
+        // If we timed out, keep awaiting the same in-flight join promise on the
+        // next attempt instead of calling rtkClient.join() again (avoids
+        // "Already joining a room" duplicate-join races).
+        if (!this._isJoinTimeoutError(normalized)) {
+          joinPromise = null;
+        }
+
+        if (attempt < RTK_JOIN_RETRY_DELAYS.length) {
+          const delay = RTK_JOIN_RETRY_DELAYS[attempt]!;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       }
     }
 
     // All attempts failed
-    const totalAttempts = 1 + RTK_JOIN_RETRY_DELAYS.length;
     throw new Error(`Failed to join room after ${totalAttempts} attempts: ${lastError?.message}`);
   }
 
@@ -276,6 +288,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       ctx.set("input", { roomId, displayName: config.displayName, role: config.role, audio: config.audio, video: config.video });
 
       try {
+        ctx.markPhase("api");
+
         const response = this.demoMode
           ? await this.apiClient.demoJoin(roomId, config.displayName)
           : await this.apiClient.addParticipant(
@@ -284,8 +298,6 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
               config.role,
               config.metadata,
             );
-
-        ctx.markPhase("api");
 
         if (!response.success || !response.data) {
           throw new Error(response.error?.message ?? "Failed to join room");

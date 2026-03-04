@@ -115,6 +115,12 @@ function RootComponent() {
 		[apiKey, apiUrl],
 	);
 
+	useEffect(() => {
+		if (isServer) return;
+		// Prime token cache so first Join click avoids auth round-trip; fail-open by design.
+		void tokenProvider().catch(() => {});
+	}, [tokenProvider]);
+
 	const [isDebugOpen, setIsDebugOpen] = useState(false);
 	const [posthogClient, setPosthogClient] = useState<
 		ChalkPostHogClient | undefined

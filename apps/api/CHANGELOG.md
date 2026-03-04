@@ -9,6 +9,7 @@
 ### Changed
 
 - **Post-meeting webhook payloads**: Include participant metadata and external IDs in tenant webhook payloads for easier identification.
+- **DB join hot-path indexing**: Add composite indexes on `rooms(tenant_id, name, created_at DESC)` and `participants(room_id, external_user_id, created_at DESC)` to reduce join/read-path latency.
 - **Wide event logging for recording & webhook flow**: Replaced ~60 scattered `slog.Info/Debug/Error` calls with 5 canonical wide events (`recording.webhook_received`, `recording.process`, `recording.post_meeting`, `recording.webhook_delivered`, `recording.stalled_check`). Each event is emitted once per operation via `defer`, accumulating all context (IDs, durations, outcomes, errors) into a single structured log line queryable in Axiom. Removed `[chalk]` prefix convention — event names are self-describing.
 - **OpenTelemetry tracing**: Added OTEL tracing middleware + outbound HTTP instrumentation and propagation into Whisper jobs via `traceparent`. Logs now include `trace_id`/`span_id`, and the API returns `X-Chalk-Trace-Id` for support/debug.
 - **Cloudflare participant/meeting observability**: Added structured Cloudflare request logs (`operation`, `attempt`, `status_code`, `tenant_id`, `room_id`, `request_id`, elapsed timing) for `CreateMeeting` and `AddParticipant`, plus propagated request context from participant handler.

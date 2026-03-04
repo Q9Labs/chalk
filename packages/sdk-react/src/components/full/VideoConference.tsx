@@ -797,11 +797,11 @@ function VideoConferenceBase({
 						if (settings.selectedAudioOutput) {
 							deviceSelectionTasks.push(media.selectSpeaker(settings.selectedAudioOutput));
 						}
-						if (deviceSelectionTasks.length > 0) {
-							await Promise.allSettled(deviceSelectionTasks);
-						}
-
+						// Device selection is best-effort; meeting entry must not wait on it.
 						setPhase("meeting");
+						if (deviceSelectionTasks.length > 0) {
+							void Promise.allSettled(deviceSelectionTasks);
+						}
 						pushIncidentBreadcrumb("join", "Join attempt succeeded", {
 							attempt: attempt + 1,
 							maxAttempts,
