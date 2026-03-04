@@ -125,6 +125,10 @@ export {
 	type HttpIncidentReporterConfig,
 	type IncidentReporter,
 } from "./incident.ts";
+export type {
+	ChalkPostHogClient,
+	ChalkPostHogConfig,
+} from "./posthog.ts";
 
 // ============================================================================
 // Phase 2: Managers and Session (new SDK architecture)

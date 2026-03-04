@@ -7,6 +7,10 @@ import RealtimeKitClient from "@cloudflare/realtimekit";
 import { Effect, pipe } from "effect";
 import { APIClient } from "./api-client.ts";
 import { EventEmitter } from "./events.ts";
+import {
+  ChalkPostHogSessionReplay,
+  type ChalkPostHogConfig,
+} from "./posthog.ts";
 import { Room } from "./room.ts";
 import type {
   ChalkClientConfig,
@@ -43,6 +47,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private readonly demoMode: boolean;
   private currentRoom: Room | null = null;
   private currentWsClient: WSClient | null = null;
+  private readonly postHogSessionReplay = new ChalkPostHogSessionReplay();
   // Effect: OperationLock for serializing join operations
   private readonly joinLock: OperationLock = createOperationLock();
 
@@ -53,6 +58,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     this.demoMode = config.demoMode ?? false;
     this.wsUrl = config.wsUrl ?? this.deriveWsUrl(apiUrl);
     this.tokenProvider = config.tokenProvider;
+    this.postHogSessionReplay.configure(config.posthog);
 
     const hasAuth =
       config.token || config.tokenProvider || config.apiKey || this.debug;
@@ -100,6 +106,19 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       enabled: config.wideEvents?.enabled ?? config.debug ?? false,
       handler: combinedHandler,
       includeDebugInfo: config.wideEvents?.includeDebugInfo ?? config.debug ?? false,
+    });
+  }
+
+  configurePostHog(config?: ChalkPostHogConfig): void {
+    this.postHogSessionReplay.configure(config);
+  }
+
+  private trackPostHogLeave(reason: "disconnect" | "switch_room"): void {
+    this.postHogSessionReplay.trackLeave({
+      reason,
+      roomId: this.currentRoom?.id,
+      participantId: this.currentRoom?.localParticipant?.id,
+      demoMode: this.demoMode,
     });
   }
 
@@ -248,6 +267,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     return this.joinLock.withLock(async () => {
       // Clean up existing room before joining new one
       if (this.currentRoom) {
+        this.trackPostHogLeave("switch_room");
         await this.currentRoom.leave();
         this.currentRoom = null;
       }
@@ -362,6 +382,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         await rtkJoinPromise;
 
         this.currentRoom = room;
+        this.postHogSessionReplay.trackJoinSucceeded({
+          roomId: roomInfo.id,
+          participantId,
+          role: role ?? "participant",
+          displayName: config.displayName,
+          demoMode: this.demoMode,
+        });
 
         // Auto-start recording if server indicates (force_recording enabled)
         if (response.data.shouldStartRecording) {
@@ -376,6 +403,12 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
         return room;
       } catch (error) {
+        this.postHogSessionReplay.trackJoinFailed({
+          roomId,
+          displayName: config.displayName,
+          error: error instanceof Error ? error.message : String(error),
+          demoMode: this.demoMode,
+        });
         ctx.complete("error", error);
         throw error;
       }
@@ -607,6 +640,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     const ctx = wideEvents.start("room.leave");
 
     if (this.currentRoom) {
+      this.trackPostHogLeave("disconnect");
       this.currentRoom.leave();
       this.currentRoom = null;
     }

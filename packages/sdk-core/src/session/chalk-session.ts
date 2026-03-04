@@ -41,6 +41,7 @@ import {
 	type ChalkIncidentInput,
 	type ChalkIncidentSource,
 } from "../incident.ts";
+import type { ChalkPostHogConfig } from "../posthog.ts";
 
 /** ChalkSession configuration */
 export interface ChalkSessionConfig {
@@ -62,6 +63,8 @@ export interface ChalkSessionConfig {
 	whiteboardSyncV2?: boolean;
 	/** Incident reporting callback + transport options. */
 	incident?: ChalkIncidentConfig;
+	/** Optional PostHog session replay integration. */
+	posthog?: ChalkPostHogConfig;
 }
 
 /** ChalkSession events */
@@ -230,6 +233,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			apiKey: config.apiKey,
 			debug,
 			demoMode: config.demoMode,
+			posthog: config.posthog,
 		});
 
 		// Create managed runtime for Effect services
@@ -481,6 +485,10 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		if (this.incidentBreadcrumbs.length > maxBreadcrumbs) {
 			this.incidentBreadcrumbs = this.incidentBreadcrumbs.slice(-maxBreadcrumbs);
 		}
+	}
+
+	configurePostHog(config?: ChalkPostHogConfig): void {
+		this.client.configurePostHog(config);
 	}
 
 	recordIncidentBreadcrumb(

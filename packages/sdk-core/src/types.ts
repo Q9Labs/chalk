@@ -184,6 +184,13 @@ export interface ChalkClientConfig {
 	};
 
 	/**
+	 * PostHog session replay integration.
+	 *
+	 * Start/stop replay on room lifecycle without hard-coupling apps to SDK internals.
+	 */
+	posthog?: import("./posthog").ChalkPostHogConfig;
+
+	/**
 	 * Incident reporting configuration.
 	 *
 	 * Use this to capture and ship SDK incidents (all surfaced SDK errors),

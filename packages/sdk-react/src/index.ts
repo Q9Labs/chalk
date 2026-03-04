@@ -21,6 +21,8 @@ export type {
 	ChalkIncidentInput,
 	ChalkIncidentSeverity,
 	ChalkIncidentSource,
+	ChalkPostHogClient,
+	ChalkPostHogConfig,
 	// Session
 	ChalkSessionConfig,
 	ChalkSessionEvents,

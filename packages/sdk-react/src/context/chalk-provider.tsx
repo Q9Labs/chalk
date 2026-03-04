@@ -59,6 +59,8 @@ export interface ChalkProviderProps {
 	whiteboardSyncV2?: boolean;
 	/** Full incident pipeline config (SDK-native reporting). */
 	incident?: ChalkSessionConfig["incident"];
+	/** PostHog session replay integration. */
+	posthog?: ChalkSessionConfig["posthog"];
 	/** Shortcut callback for local incident handling. */
 	onIncident?: (incident: ChalkIncident) => void;
 	/** Shortcut reporter callback for backend transport. */
@@ -118,6 +120,7 @@ export function ChalkProvider({
 	demoMode,
 	whiteboardSyncV2,
 	incident,
+	posthog,
 	onIncident,
 	incidentReporter,
 	incidentMaxBreadcrumbs,
@@ -154,6 +157,7 @@ export function ChalkProvider({
 			debug,
 			demoMode,
 			whiteboardSyncV2,
+			posthog,
 		};
 		const newSession = new ChalkSession(config);
 		sessionCache.set(cacheKey, newSession);
@@ -163,6 +167,10 @@ export function ChalkProvider({
 	useEffect(() => {
 		session.configureIncident(resolvedIncidentConfig);
 	}, [session, resolvedIncidentConfig]);
+
+	useEffect(() => {
+		session.configurePostHog(posthog);
+	}, [session, posthog]);
 
 	// Set up session event listeners
 	useEffect(() => {
