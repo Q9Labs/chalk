@@ -11,6 +11,15 @@ bun run build   # Build for production
 bun run test    # Run tests
 ```
 
+## Environment
+
+```bash
+VITE_API_URL=https://chalk-api.q9labs.ai
+VITE_CHALK_API_KEY=ck_...
+VITE_POSTHOG_KEY=phc_... # Project API key (not personal phx_ key)
+VITE_POSTHOG_HOST=https://us.i.posthog.com
+```
+
 ## Stack
 
 - **Vite** - Build tool

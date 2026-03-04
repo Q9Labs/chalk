@@ -127,11 +127,19 @@ function RootComponent() {
 
 	useEffect(() => {
 		if (isServer || !posthogKey) return;
+		const normalizedKey = posthogKey.trim();
+		// PostHog JS requires the project API key (typically `phc_...`), not personal keys (`phx_...`).
+		if (normalizedKey.startsWith("phx_")) {
+			console.warn(
+				"[chalk:web] PostHog disabled: VITE_POSTHOG_KEY is a personal API key (phx_*). Use the project API key (phc_*).",
+			);
+			return;
+		}
 
 		let active = true;
 		void import("posthog-js")
 			.then(({ default: posthog }) => {
-				posthog.init(posthogKey, {
+				posthog.init(normalizedKey, {
 					api_host: posthogHost,
 					disable_session_recording: true,
 				});
