@@ -22,10 +22,10 @@ export async function requireAgentBrowser() {
   }
 }
 
-export async function runAttempt({ attempt, workerId, options, outDir, runLabel }) {
+export async function runAttempt({ attempt, workerId, options, outDir, runLabel, session: providedSession }) {
   const attemptId = String(attempt).padStart(4, "0");
   const attemptDir = resolve(outDir, `attempt-${attemptId}`);
-  const session = `chalk-join-stress-${runLabel}-w${workerId}-a${attemptId}`;
+  const session = providedSession ?? `chalk-join-stress-${runLabel}-w${workerId}-a${attemptId}`;
   await mkdir(attemptDir, { recursive: true });
 
   const record = {
@@ -49,7 +49,9 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel 
   };
 
   try {
-    await runAgent(session, ["close"], options, { tolerateFailure: true });
+    if (!options.reuseSessionPerWorker) {
+      await runAgent(session, ["close"], options, { tolerateFailure: true });
+    }
 
     record.stage = "open_home";
     await must(session, ["open", options.baseUrl], options, record);
@@ -120,48 +122,72 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel 
     record.failureReason = parsed.reason;
     record.failureDetail = parsed.detail;
   } finally {
-    const [urlRes, snapRes, consoleRes, errorsRes, resourcesRes] = await Promise.all([
-      runAgent(session, ["get", "url"], options, { tolerateFailure: true }),
-      runAgent(session, ["snapshot", "-i"], options, { tolerateFailure: true }),
-      runAgent(session, ["console", "--json"], options, { tolerateFailure: true }),
-      runAgent(session, ["errors", "--json"], options, { tolerateFailure: true }),
-      evalJson(
-        session,
-        `(() => {
-          const entries = performance.getEntriesByType("resource")
-            .filter((r) => /participants|access-token|iceservers|dyte|recordings\\/start|chalk-api|flags\\.dyte/i.test(r.name))
-            .slice(-120)
-            .map((r) => ({
-              name: r.name,
-              startTime: r.startTime,
-              duration: r.duration,
-              initiatorType: r.initiatorType,
-              nextHopProtocol: r.nextHopProtocol
-            }));
-          return entries;
-        })()`,
-        options,
-        { tolerateFailure: true },
-      ),
-    ]);
+    const shouldCaptureDetailed = shouldCaptureDetailedArtifacts(record, options);
+    const urlRes = await runAgent(session, ["get", "url"], options, { tolerateFailure: true });
+    record.roomUrl = (urlRes.stdout ?? "").trim() || record.pollState?.url || null;
 
-    record.roomUrl = (urlRes.stdout ?? "").trim() || null;
-    record.consoleSignals = parseConsoleSignals(consoleRes.stdout);
-    record.errorSignals = parseErrorsSignals(errorsRes.stdout);
-    record.resourceSignals = parseResourceSignals(resourcesRes.value ?? []);
+    if (shouldCaptureDetailed) {
+      const [snapRes, consoleRes, errorsRes, resourcesRes] = await Promise.all([
+        runAgent(session, ["snapshot", "-i"], options, { tolerateFailure: true }),
+        runAgent(session, ["console", "--json"], options, { tolerateFailure: true }),
+        runAgent(session, ["errors", "--json"], options, { tolerateFailure: true }),
+        evalJson(
+          session,
+          `(() => {
+            const entries = performance.getEntriesByType("resource")
+              .filter((r) => /participants|access-token|iceservers|dyte|recordings\\/start|chalk-api|flags\\.dyte/i.test(r.name))
+              .slice(-120)
+              .map((r) => ({
+                name: r.name,
+                startTime: r.startTime,
+                duration: r.duration,
+                initiatorType: r.initiatorType,
+                nextHopProtocol: r.nextHopProtocol
+              }));
+            return entries;
+          })()`,
+          options,
+          { tolerateFailure: true },
+        ),
+      ]);
+      record.consoleSignals = parseConsoleSignals(consoleRes.stdout);
+      record.errorSignals = parseErrorsSignals(errorsRes.stdout);
+      record.resourceSignals = parseResourceSignals(resourcesRes.value ?? []);
+
+      await Promise.all([
+        writeFile(resolve(attemptDir, "url.txt"), urlRes.stdout ?? "", "utf8"),
+        writeFile(resolve(attemptDir, "snapshot-final.txt"), snapRes.stdout ?? "", "utf8"),
+        writeFile(resolve(attemptDir, "console.json"), consoleRes.stdout ?? "", "utf8"),
+        writeFile(resolve(attemptDir, "errors.json"), errorsRes.stdout ?? "", "utf8"),
+        writeFile(resolve(attemptDir, "resources.json"), JSON.stringify(resourcesRes.value ?? [], null, 2) + "\n", "utf8"),
+      ]);
+    } else {
+      record.consoleSignals = null;
+      record.errorSignals = null;
+      record.resourceSignals = null;
+      await writeFile(
+        resolve(attemptDir, "lightweight.json"),
+        JSON.stringify(
+          {
+            attempt: record.attempt,
+            status: record.status,
+            roomUrl: record.roomUrl,
+            createToPrejoinMs: record.createToPrejoinMs,
+            askToJoinToJoinedMs: record.askToJoinToJoinedMs,
+            failureReason: record.failureReason,
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+    }
+
     if (record.status === "failed" && !record.failureReason) {
       record.failureReason = deriveFailureReason(record);
     }
 
-    await Promise.all([
-      writeFile(resolve(attemptDir, "url.txt"), urlRes.stdout ?? "", "utf8"),
-      writeFile(resolve(attemptDir, "snapshot-final.txt"), snapRes.stdout ?? "", "utf8"),
-      writeFile(resolve(attemptDir, "console.json"), consoleRes.stdout ?? "", "utf8"),
-      writeFile(resolve(attemptDir, "errors.json"), errorsRes.stdout ?? "", "utf8"),
-      writeFile(resolve(attemptDir, "resources.json"), JSON.stringify(resourcesRes.value ?? [], null, 2) + "\n", "utf8"),
-    ]);
-
-    if (!options.keepSessions) {
+    if (!options.keepSessions && !options.reuseSessionPerWorker) {
       await runAgent(session, ["close"], options, { tolerateFailure: true });
     }
     record.finishedAt = new Date().toISOString();
@@ -261,6 +287,14 @@ function deriveFailureReason(record) {
   return "unknown_failure";
 }
 
+function shouldCaptureDetailedArtifacts(record, options) {
+  if (options.artifactMode === "all") return true;
+  if (options.artifactMode === "none") return record.status === "failed";
+  if (record.status === "failed") return true;
+  if (!options.successSamplePercent) return false;
+  return Math.random() * 100 < options.successSamplePercent;
+}
+
 function stageError(stage, reason, detail) {
   return { __stageError: true, stage, reason, detail };
 }
@@ -276,4 +310,8 @@ function parseStageError(err) {
 
 function delay(ms) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+export async function closeSession(session, options) {
+  await runAgent(session, ["close"], options, { tolerateFailure: true });
 }
