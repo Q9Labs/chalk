@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API: WebSocket auth observability** — enrich websocket auth logs with token source + room query diagnostics (invalid/mismatch visibility) and expiry context.
 - **API: Incident log schema** — emit structured `client.incident` events with tenant/request/client metadata for Axiom correlation.
 - **API: Join-path observability + timeout budgeting** — participant join now emits step-level timing telemetry (`participant.join_room`), includes `join_duration_ms` in join errors, and uses tighter add-participant timeout/retry budgets for interactive joins.
+- **Web: PostHog wiring for Chalk replay lifecycle** — `apps/web` now initializes optional PostHog from `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` and passes it to `ChalkProvider.posthog` so replay starts/stops with Chalk room lifecycle events.
 
 ### Fixed
 

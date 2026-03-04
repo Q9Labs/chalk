@@ -1,6 +1,7 @@
 import { createTokenProvider } from "@q9labs/chalk-core";
 import {
 	ChalkProvider,
+	type ChalkPostHogClient,
 	useWhatsNew,
 	WhatsNewDialog,
 	WhatsNewTrigger,
@@ -115,6 +116,48 @@ function RootComponent() {
 	);
 
 	const [isDebugOpen, setIsDebugOpen] = useState(false);
+	const [posthogClient, setPosthogClient] = useState<
+		ChalkPostHogClient | undefined
+	>(undefined);
+
+	const posthogKey = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
+	const posthogHost =
+		(import.meta.env.VITE_POSTHOG_HOST as string | undefined) ||
+		"https://us.i.posthog.com";
+
+	useEffect(() => {
+		if (isServer || !posthogKey) return;
+
+		let active = true;
+		void import("posthog-js")
+			.then(({ default: posthog }) => {
+				posthog.init(posthogKey, {
+					api_host: posthogHost,
+					disable_session_recording: true,
+				});
+				if (active) setPosthogClient(posthog);
+			})
+			.catch(() => {
+				// PostHog is optional for local/dev environments.
+			});
+
+		return () => {
+			active = false;
+		};
+	}, [posthogHost, posthogKey]);
+
+	const posthogConfig = useMemo(
+		() =>
+			posthogClient
+				? {
+						client: posthogClient,
+						properties: {
+							app: "web",
+						},
+					}
+				: undefined,
+		[posthogClient],
+	);
 
 	const content = (
 		<ThemeProvider>
@@ -157,6 +200,7 @@ function RootComponent() {
 			apiUrl={apiUrl}
 			wsUrl={wsUrl}
 			tokenProvider={tokenProvider}
+			posthog={posthogConfig}
 		>
 			{content}
 		</ChalkProvider>
