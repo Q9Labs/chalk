@@ -6,27 +6,31 @@
  *
  * @example
  * ```ts
- * import { ChalkClient } from '@q9labs/chalk-core';
+ * import { ConferenceClient } from '@q9labs/chalk-core';
  *
- * const client = new ChalkClient({ token: 'jwt_xxx' });
- * const room = await client.joinRoom('room_123', {
+ * const client = new ConferenceClient({ token: 'jwt_xxx' });
+ * const room = await client.joinSession('room_123', {
  *   displayName: 'John Doe',
  *   audio: true,
  *   video: true,
  * });
  *
- * room.on('participant-joined', (p) => console.log(`${p.displayName} joined`));
+ * room.on('participant.joined', (p) => console.log(`${p.displayName} joined`));
  * ```
  */
 
 // API client (for React Native SDK which uses its own RTK integration)
 export { APIClient } from "./api-client.ts";
 // Main client
-export { ChalkClient } from "./client.ts";
+export { ConferenceClient } from "./client.ts";
 // Event emitter (for advanced use cases)
 export { EventEmitter } from "./events.ts";
-// Room
-export { Room, type Transcript } from "./room.ts";
+// ConferenceSession
+export {
+	ConferenceSession,
+	type ConferenceSessionEvents,
+	type Transcript,
+} from "./room.ts";
 export {
 	camelToSnake,
 	camelToSnakeString,
@@ -197,14 +201,14 @@ export type {
 // Types from original types.ts
 export type {
 	ApiResponse,
-	ChalkClientConfig,
+	ConferenceClientConfig,
 	ChalkError,
 	ChalkEventType,
 	ChatMessage,
 	CreateRoomResponse,
 	Err,
-	JoinRoomResponse,
-	JoinRoomResult,
+	JoinSessionResponse,
+	JoinSessionResult,
 	MediaConstraints,
 	MediaDevice,
 	MediaDeviceInfo,
@@ -217,9 +221,9 @@ export type {
 	Recording,
 	RecordingStatus,
 	Result,
-	RoomConfig,
-	RoomInfo,
-	RoomStatus,
+	JoinSessionConfig,
+	SessionInfo,
+	SessionConnectionState,
 	ScreenShareOptions,
 	TenantConfig,
 	TokenProvider,

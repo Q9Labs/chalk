@@ -153,7 +153,7 @@ export interface paths {
          * @description Create a new video conferencing room. A Cloudflare RealtimeKit meeting
          *     is automatically provisioned.
          */
-        post: operations["createRoom"];
+        post: operations["createSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -202,7 +202,7 @@ export interface paths {
          * @description End an active room session. All participants are disconnected and
          *     the room status is set to 'ended'. The room can be reactivated later.
          */
-        post: operations["endRoom"];
+        post: operations["endSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -623,10 +623,10 @@ export interface components {
              */
             api_key: string;
         };
-        Room: {
+        ConferenceSession: {
             /**
              * Format: uuid
-             * @description Room unique identifier
+             * @description ConferenceSession unique identifier
              * @example 550e8400-e29b-41d4-a716-446655440001
              */
             id: string;
@@ -642,11 +642,11 @@ export interface components {
              */
             cloudflare_meeting_id: string;
             /**
-             * @description Room name
+             * @description ConferenceSession name
              * @example Math 101 - Session 3
              */
             name?: string | null;
-            /** @description Room configuration */
+            /** @description ConferenceSession configuration */
             config: {
                 /**
                  * @description Maximum participants allowed
@@ -667,7 +667,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
-             * @description Room status
+             * @description ConferenceSession status
              * @example active
              * @enum {string}
              */
@@ -697,7 +697,7 @@ export interface components {
              */
             updated_at: string;
         };
-        RoomWithParticipantCount: components["schemas"]["Room"] & {
+        RoomWithParticipantCount: components["schemas"]["ConferenceSession"] & {
             /**
              * @description Number of active participants
              * @example 5
@@ -706,7 +706,7 @@ export interface components {
         };
         CreateRoomRequest: {
             /**
-             * @description Room name
+             * @description ConferenceSession name
              * @example Math 101 - Session 3
              */
             name?: string;
@@ -766,7 +766,7 @@ export interface components {
             id: string;
             /**
              * Format: uuid
-             * @description Room ID the participant belongs to
+             * @description ConferenceSession ID the participant belongs to
              * @example 550e8400-e29b-41d4-a716-446655440001
              */
             room_id: string;
@@ -904,7 +904,7 @@ export interface components {
             id: string;
             /**
              * Format: uuid
-             * @description Room ID the recording belongs to
+             * @description ConferenceSession ID the recording belongs to
              * @example 550e8400-e29b-41d4-a716-446655440001
              */
             room_id: string;
@@ -1119,12 +1119,12 @@ export interface components {
             meeting: {
                 /**
                  * Format: uuid
-                 * @description Room ID
+                 * @description ConferenceSession ID
                  * @example 550e8400-e29b-41d4-a716-446655440001
                  */
                 id: string;
                 /**
-                 * @description Room name
+                 * @description ConferenceSession name
                  * @example Algebra 101
                  */
                 name?: string;
@@ -1181,7 +1181,7 @@ export interface components {
             id: string;
             /**
              * Format: uuid
-             * @description Room ID the message belongs to
+             * @description ConferenceSession ID the message belongs to
              * @example 550e8400-e29b-41d4-a716-446655440001
              */
             room_id: string;
@@ -1249,7 +1249,7 @@ export interface components {
     parameters: {
         /** @description Tenant UUID */
         TenantId: string;
-        /** @description Room UUID */
+        /** @description ConferenceSession UUID */
         RoomId: string;
         /** @description Participant UUID */
         ParticipantId: string;
@@ -1688,7 +1688,7 @@ export interface operations {
             };
         };
     };
-    createRoom: {
+    createSession: {
         parameters: {
             query?: never;
             header?: never;
@@ -1701,13 +1701,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Room created successfully */
+            /** @description ConferenceSession created successfully */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Room"];
+                    "application/json": components["schemas"]["ConferenceSession"];
                 };
             };
             /** @description Invalid request body */
@@ -1744,14 +1744,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Room details with participant count */
+            /** @description ConferenceSession details with participant count */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1778,7 +1778,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Room not found */
+            /** @description ConferenceSession not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -1794,14 +1794,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Room deleted successfully */
+            /** @description ConferenceSession deleted successfully */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -1842,7 +1842,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
@@ -1853,13 +1853,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Room updated successfully */
+            /** @description ConferenceSession updated successfully */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Room"];
+                    "application/json": components["schemas"]["ConferenceSession"];
                 };
             };
             /** @description Invalid request */
@@ -1891,25 +1891,25 @@ export interface operations {
             };
         };
     };
-    endRoom: {
+    endSession: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Room ended successfully */
+            /** @description ConferenceSession ended successfully */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Room"];
+                    "application/json": components["schemas"]["ConferenceSession"];
                 };
             };
             /** @description Invalid room ID */
@@ -1949,7 +1949,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
@@ -1999,7 +1999,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
@@ -2053,7 +2053,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
                 /** @description Participant UUID */
                 pid: components["parameters"]["ParticipantId"];
@@ -2121,7 +2121,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
                 /** @description Participant UUID */
                 pid: components["parameters"]["ParticipantId"];
@@ -2182,7 +2182,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
@@ -2216,7 +2216,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Room not found */
+            /** @description ConferenceSession not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2250,7 +2250,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
             };
             cookie?: never;
@@ -2309,7 +2309,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Room UUID */
+                /** @description ConferenceSession UUID */
                 id: components["parameters"]["RoomId"];
                 /** @description Recording UUID (nested under room) */
                 rid: components["parameters"]["RecordingId"];
@@ -2735,7 +2735,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Room or tenant not found */
+            /** @description ConferenceSession or tenant not found */
             404: {
                 headers: {
                     [name: string]: unknown;

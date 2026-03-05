@@ -63,3 +63,11 @@
 - completed: `EndScreen` decomposed into `end-screen` section modules (`feedback`, `downloads`, `actions`, `formatDuration`, feedback hook)
 - verify: `lint` pass (no linter configured), `check-types` pass, `test` pass (`233 pass, 3 skip, 0 fail`)
 - tracker: items #1-#4 now done; #5-#6 remain pending approval
+
+## 2026-03-05 16:53:24 PKT
+- task: complete tracker items #5-#6 with breaking naming cleanup + event API redesign
+- completed: `sdk-core` naming migration to session-centric vocabulary (`ConferenceClient`, `ConferenceSession`, `SessionInfo`, `SessionConnectionState`, `JoinSessionConfig`, `joinSession/createSession/endSession`)
+- completed: `ConferenceSessionEvents` switched to dot notation (`participant.joined`, `connection.state.changed`, `chat.message`, `whiteboard.*`, etc.) with listeners updated across managers/effect services/ChalkSession bridges/tests
+- completed: `sdk-react` and `sdk-react-native` re-exports/providers/hooks aligned to renamed core API
+- verify: `@q9labs/chalk-core` lint/check-types/test pass; `@q9labs/chalk-react` lint/check-types/test pass; `@q9labs/chalk-react-native` lint/check-types/test pass
+- tracker: items #1-#6 now complete

@@ -1,15 +1,15 @@
 /**
- * Tests for ChalkClient
+ * Tests for ConferenceClient
  * @module @q9labs/chalk-core/__tests__/client
  */
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { Effect } from "effect";
-import { ChalkClient } from "../client.ts";
+import { ConferenceClient } from "../client.ts";
 import { TimeoutError } from "../effect/errors.ts";
-import type { ChalkClientConfig, RoomConfig } from "../types.ts";
+import type { ConferenceClientConfig, JoinSessionConfig } from "../types.ts";
 
-describe("ChalkClient", () => {
+describe("ConferenceClient", () => {
 	const DEFAULT_API_URL = "http://localhost:8080";
 	const createJwt = (payload: Record<string, unknown>): string => {
 		const header = { alg: "HS256", typ: "JWT" };
@@ -103,24 +103,24 @@ describe("ChalkClient", () => {
 
 	describe("initialization", () => {
 		it("should initialize with token (recommended)", () => {
-			const config: ChalkClientConfig = {
+			const config: ConferenceClientConfig = {
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			};
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).not.toThrow();
 		});
 
 		it("should initialize with tokenProvider (recommended for browser)", () => {
-			const config: ChalkClientConfig = {
+			const config: ConferenceClientConfig = {
 				apiUrl: DEFAULT_API_URL,
 				tokenProvider: async () => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			};
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).not.toThrow();
 		});
 
@@ -129,13 +129,13 @@ describe("ChalkClient", () => {
 			const warnings: string[] = [];
 			console.warn = (msg: string) => warnings.push(msg);
 
-			const config: ChalkClientConfig = {
+			const config: ConferenceClientConfig = {
 				apiUrl: DEFAULT_API_URL,
 				apiKey: "ck_live_test123",
 			};
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).not.toThrow();
 
 			expect(warnings.some((w) => w.includes("DEPRECATION"))).toBe(true);
@@ -143,51 +143,51 @@ describe("ChalkClient", () => {
 		});
 
 		it("should throw if no auth method provided", () => {
-			const config: ChalkClientConfig = { apiUrl: DEFAULT_API_URL };
+			const config: ConferenceClientConfig = { apiUrl: DEFAULT_API_URL };
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).toThrow(
-				"ChalkClient requires authentication: provide token, tokenProvider, or apiKey",
+				"ConferenceClient requires authentication: provide token, tokenProvider, or apiKey",
 			);
 		});
 
 		it("should accept custom apiUrl and wsUrl with token", () => {
-			const config: ChalkClientConfig = {
+			const config: ConferenceClientConfig = {
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 				apiUrl: "https://custom.api.com",
 				wsUrl: "wss://custom.ws.com",
 			};
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).not.toThrow();
 		});
 
 		it("should accept debug flag", () => {
-			const config: ChalkClientConfig = {
+			const config: ConferenceClientConfig = {
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 				debug: true,
 			};
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).not.toThrow();
 		});
 
 		it("should allow debug mode without credentials", () => {
 			expect(() => {
-				new ChalkClient({ apiUrl: DEFAULT_API_URL, debug: true });
+				new ConferenceClient({ apiUrl: DEFAULT_API_URL, debug: true });
 			}).not.toThrow();
 		});
 	});
 
 	describe("connection status", () => {
-		let client: ChalkClient;
+		let client: ConferenceClient;
 
 		beforeEach(() => {
-			client = new ChalkClient({
+			client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
@@ -195,7 +195,7 @@ describe("ChalkClient", () => {
 
 		it("should start disconnected", () => {
 			expect(client.isConnected).toBe(false);
-			expect(client.connectionStatus).toBe("disconnected");
+			expect(client.connectionState).toBe("disconnected");
 		});
 
 		it("should return null room initially", () => {
@@ -204,10 +204,10 @@ describe("ChalkClient", () => {
 	});
 
 	describe("disconnect()", () => {
-		let client: ChalkClient;
+		let client: ConferenceClient;
 
 		beforeEach(() => {
-			client = new ChalkClient({
+			client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
@@ -225,21 +225,21 @@ describe("ChalkClient", () => {
 			const originalWarn = console.warn;
 			console.warn = () => {};
 
-			const config: ChalkClientConfig = {
+			const config: ConferenceClientConfig = {
 				apiUrl: DEFAULT_API_URL,
 				apiKey: "ck_live_test123",
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			};
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).not.toThrow();
 
 			console.warn = originalWarn;
 		});
 
 		it("should work with custom API URLs and token", () => {
-			const config: ChalkClientConfig = {
+			const config: ConferenceClientConfig = {
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 				apiUrl: "http://localhost:3000",
 				wsUrl: "ws://localhost:3000/ws",
@@ -247,14 +247,14 @@ describe("ChalkClient", () => {
 			};
 
 			expect(() => {
-				new ChalkClient(config);
+				new ConferenceClient(config);
 			}).not.toThrow();
 		});
 	});
 
-	describe("RoomConfig type checking", () => {
+	describe("JoinSessionConfig type checking", () => {
 		it("should have valid room config structure", () => {
-			const config: RoomConfig = {
+			const config: JoinSessionConfig = {
 				displayName: "John Doe",
 				audio: true,
 				video: false,
@@ -271,7 +271,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("should support minimal room config", () => {
-			const config: RoomConfig = {
+			const config: JoinSessionConfig = {
 				displayName: "Jane Doe",
 			};
 
@@ -281,7 +281,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("should allow custom metadata", () => {
-			const config: RoomConfig = {
+			const config: JoinSessionConfig = {
 				displayName: "Alice",
 				metadata: {
 					customField: "customValue",
@@ -307,38 +307,38 @@ describe("ChalkClient", () => {
 
 			invalidConfigs.forEach((config) => {
 				expect(() => {
-					new ChalkClient(config as ChalkClientConfig);
+					new ConferenceClient(config as ConferenceClientConfig);
 				}).toThrow();
 			});
 
 			// Debug mode without credentials should NOT throw (intentional)
 			expect(() => {
-				new ChalkClient({ apiUrl: DEFAULT_API_URL, debug: true });
+				new ConferenceClient({ apiUrl: DEFAULT_API_URL, debug: true });
 			}).not.toThrow();
 		});
 	});
 
 	describe("type safety", () => {
 		it("should maintain type safety for connection status", () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
 
-			const status = client.connectionStatus;
+			const status = client.connectionState;
 
-			type RoomStatus =
+			type SessionConnectionState =
 				| "connecting"
 				| "connected"
 				| "reconnecting"
 				| "disconnected"
 				| "failed";
-			const _check: RoomStatus = status;
+			const _check: SessionConnectionState = status;
 			expect(_check).toBeDefined();
 		});
 
 		it("should maintain type safety for room reference", () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
@@ -349,7 +349,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("should maintain type safety for boolean flags", () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
@@ -360,8 +360,8 @@ describe("ChalkClient", () => {
 	});
 
 	describe("config validation for room joining", () => {
-		it("should require displayName in RoomConfig", () => {
-			const config: RoomConfig = {
+		it("should require displayName in JoinSessionConfig", () => {
+			const config: JoinSessionConfig = {
 				displayName: "Test User",
 			};
 
@@ -370,7 +370,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("should allow audio and video booleans", () => {
-			const config: RoomConfig = {
+			const config: JoinSessionConfig = {
 				displayName: "Test User",
 				audio: true,
 				video: true,
@@ -383,7 +383,7 @@ describe("ChalkClient", () => {
 
 	describe("rtc token expiry parsing", () => {
 		it("should parse base64url JWT payloads without false expiry", () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
@@ -398,7 +398,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("should mark past-expiry JWT as expired", () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
 			});
@@ -413,7 +413,7 @@ describe("ChalkClient", () => {
 
 	describe("realtimekit preload", () => {
 		it("reuses preloaded RTK module for join initialization", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -441,7 +441,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("keeps preload safe and retries RTK import during join init after failure", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -472,7 +472,7 @@ describe("ChalkClient", () => {
 	describe("room joining resilience", () => {
 		it("does not replace rtcToken with tokenProvider output when rtc token looks expired", async () => {
 			const tokenProvider = mock(async () => "api_access_jwt_from_provider");
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				tokenProvider,
@@ -493,7 +493,7 @@ describe("ChalkClient", () => {
 						},
 						room: {
 							id: "room_1",
-							name: "Room 1",
+							name: "ConferenceSession 1",
 							status: "active",
 							participantCount: 1,
 							config: {},
@@ -510,14 +510,14 @@ describe("ChalkClient", () => {
 			};
 			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
 
-			await client.joinRoom("room_1", { displayName: "Alice" });
+			await client.joinSession("room_1", { displayName: "Alice" });
 
 			expect(usedAuthToken).toBe(staleRtcToken);
 			expect(tokenProvider).not.toHaveBeenCalled();
 		});
 
 		it("fails early when API response does not include rtcToken", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -533,7 +533,7 @@ describe("ChalkClient", () => {
 						},
 						room: {
 							id: "room_1",
-							name: "Room 1",
+							name: "ConferenceSession 1",
 							status: "active",
 							participantCount: 1,
 							config: {},
@@ -545,7 +545,7 @@ describe("ChalkClient", () => {
 			};
 
 			await expect(
-				client.joinRoom("room_1", { displayName: "Alice" }),
+				client.joinSession("room_1", { displayName: "Alice" }),
 			).rejects.toThrow("RealtimeKit token missing - API did not return rtcToken");
 		});
 
@@ -555,7 +555,7 @@ describe("ChalkClient", () => {
 				outcome: string;
 				phases?: Record<string, number>;
 			}> = [];
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -588,7 +588,7 @@ describe("ChalkClient", () => {
 										},
 										room: {
 											id: "room_1",
-											name: "Room 1",
+											name: "ConferenceSession 1",
 											status: "active",
 											participantCount: 1,
 											config: {},
@@ -605,7 +605,7 @@ describe("ChalkClient", () => {
 				Effect.succeed(createMockRtkClient() as any);
 			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
 
-			await client.joinRoom("room_1", { displayName: "Alice" });
+			await client.joinSession("room_1", { displayName: "Alice" });
 
 			const joinEvent = wideEventsReceived.find((event) => event.eventType === "room.join");
 			expect(joinEvent).toBeDefined();
@@ -614,7 +614,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("uses default RTK join policy for non-browser cohort", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 			});
@@ -649,7 +649,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("uses degraded-network RTK join policy for constrained browser cohort", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 			});
@@ -692,7 +692,7 @@ describe("ChalkClient", () => {
 				outcome: string;
 				data?: Record<string, unknown>;
 			}> = [];
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -721,7 +721,7 @@ describe("ChalkClient", () => {
 						},
 						room: {
 							id: "room_1",
-							name: "Room 1",
+							name: "ConferenceSession 1",
 							status: "active",
 							participantCount: 1,
 							config: {},
@@ -738,7 +738,7 @@ describe("ChalkClient", () => {
 			await withBrowserNetworkEnv(
 				{ effectiveType: "2g", saveData: true },
 				async () => {
-					await client.joinRoom("room_1", { displayName: "Alice" });
+					await client.joinSession("room_1", { displayName: "Alice" });
 				},
 			);
 
@@ -758,7 +758,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("retries RTK join and succeeds on a later attempt", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 			});
@@ -792,7 +792,7 @@ describe("ChalkClient", () => {
 				durationMs: number;
 				data?: Record<string, unknown>;
 			}> = [];
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 				wideEvents: {
@@ -809,7 +809,7 @@ describe("ChalkClient", () => {
 
 			const join = mock(async () => {});
 			const timeoutError = new TimeoutError({
-				message: "Room join timed out after 1000ms",
+				message: "ConferenceSession join timed out after 1000ms",
 				operation: "joinRTKRoom",
 				timeoutMs: 1000,
 			});
@@ -875,7 +875,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("fails after max RTK join retry attempts", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 			});
@@ -900,7 +900,7 @@ describe("ChalkClient", () => {
 		});
 
 		it("does not duplicate join calls while an in-flight RTK join is timing out", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "chalk_access_token",
 			});
@@ -910,7 +910,7 @@ describe("ChalkClient", () => {
 				}),
 			);
 			const timeoutError = new TimeoutError({
-				message: "Room join timed out after 30000ms",
+				message: "ConferenceSession join timed out after 30000ms",
 				operation: "joinRTKRoom",
 				timeoutMs: 30000,
 			});
@@ -951,7 +951,7 @@ describe("ChalkClient", () => {
 				},
 				room: {
 					id: "room_1",
-					name: "Room 1",
+					name: "ConferenceSession 1",
 					status: "active",
 					participantCount: 1,
 					config: {},
@@ -967,7 +967,7 @@ describe("ChalkClient", () => {
 				stopSessionRecording: mock(() => {}),
 				capture: mock(() => {}),
 			};
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -981,7 +981,7 @@ describe("ChalkClient", () => {
 				Effect.succeed(createMockRtkClient() as any);
 			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
 
-			await client.joinRoom("room_1", { displayName: "Alice" });
+			await client.joinSession("room_1", { displayName: "Alice" });
 
 			expect(posthog.startSessionRecording).toHaveBeenCalledTimes(1);
 			expect(posthog.capture).toHaveBeenCalledWith(
@@ -1002,7 +1002,7 @@ describe("ChalkClient", () => {
 				stopSessionRecording: mock(() => {}),
 				capture: mock(() => {}),
 			};
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -1016,7 +1016,7 @@ describe("ChalkClient", () => {
 				Effect.succeed(createMockRtkClient() as any);
 			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
 
-			await client.joinRoom("room_1", { displayName: "Alice" });
+			await client.joinSession("room_1", { displayName: "Alice" });
 			client.disconnect();
 
 			expect(posthog.stopSessionRecording).toHaveBeenCalledTimes(1);
@@ -1037,7 +1037,7 @@ describe("ChalkClient", () => {
 				stopSessionRecording: mock(() => {}),
 				capture: mock(() => {}),
 			};
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -1052,7 +1052,7 @@ describe("ChalkClient", () => {
 			};
 
 			await expect(
-				client.joinRoom("room_1", { displayName: "Alice" }),
+				client.joinSession("room_1", { displayName: "Alice" }),
 			).rejects.toThrow("join api failed");
 
 			expect(posthog.startSessionRecording).not.toHaveBeenCalled();
@@ -1079,7 +1079,7 @@ describe("ChalkClient", () => {
 					throw new Error("posthog capture failed");
 				}),
 			};
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				wsUrl: "",
 				token: "chalk_access_token",
@@ -1094,7 +1094,7 @@ describe("ChalkClient", () => {
 			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
 
 			await expect(
-				client.joinRoom("room_1", { displayName: "Alice" }),
+				client.joinSession("room_1", { displayName: "Alice" }),
 			).resolves.toBeDefined();
 			expect(() => client.disconnect()).not.toThrow();
 		});
@@ -1102,7 +1102,7 @@ describe("ChalkClient", () => {
 
 	describe("token-expired event", () => {
 		it("should emit token-expired event when API returns 401", async () => {
-			const client = new ChalkClient({
+			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "expired_token",
 			});

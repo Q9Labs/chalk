@@ -10,10 +10,10 @@
 import { Schema } from "@effect/schema";
 
 // ============================================================================
-// Room Manager Schemas
+// ConferenceSession Manager Schemas
 // ============================================================================
 
-/** Room connection status */
+/** ConferenceSession connection status */
 export const RoomStatusSchema = Schema.Literal(
   "connecting",
   "connected",
@@ -22,7 +22,7 @@ export const RoomStatusSchema = Schema.Literal(
   "failed"
 );
 
-/** Room state schema */
+/** ConferenceSession state schema */
 export const RoomStateSchema = Schema.Struct({
   status: RoomStatusSchema,
   roomId: Schema.NullOr(Schema.String),
@@ -31,7 +31,7 @@ export const RoomStateSchema = Schema.Struct({
   hostId: Schema.NullOr(Schema.String),
 });
 
-/** Room event schemas */
+/** ConferenceSession event schemas */
 export const RoomConnectedEvent = Schema.Struct({
   _tag: Schema.Literal("Connected"),
   roomId: Schema.String,
@@ -192,7 +192,7 @@ export const MediaEventSchema = Schema.Union(
 // Inferred Types (single source of truth)
 // ============================================================================
 
-export type RoomStatus = Schema.Schema.Type<typeof RoomStatusSchema>;
+export type SessionConnectionState = Schema.Schema.Type<typeof RoomStatusSchema>;
 export type RoomState = Schema.Schema.Type<typeof RoomStateSchema>;
 export type RoomEvent = Schema.Schema.Type<typeof RoomEventSchema>;
 

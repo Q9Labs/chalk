@@ -1,5 +1,5 @@
 /**
- * Room class - main interface for interacting with a video room
+ * ConferenceSession class - main interface for interacting with a video room
  * Wraps Cloudflare RealtimeKit for WebRTC and WSClient for signaling
  */
 
@@ -15,8 +15,8 @@ import type {
   Reaction,
   ReactionEmoji,
   Recording,
-  RoomInfo,
-  RoomStatus,
+  SessionInfo,
+  SessionConnectionState,
   ScreenShareOptions,
   TenantConfig,
   TokenSet,
@@ -45,22 +45,22 @@ export interface Transcript {
   confidence?: number;
 }
 
-interface RoomEvents {
-  "status-changed": RoomStatus;
-  "participant-joined": Participant;
-  "participant-left": string;
-  "participant-updated": { participantId: string; participant: Participant };
-  "active-speaker-changed": Participant | null;
-  "chat-message": ChatMessage;
+export interface ConferenceSessionEvents {
+  "connection.state.changed": SessionConnectionState;
+  "participant.joined": Participant;
+  "participant.left": string;
+  "participant.updated": { participantId: string; participant: Participant };
+  "speaker.active.changed": Participant | null;
+  "chat.message": ChatMessage;
   reaction: Reaction;
-  "hand-raised": { participantId: string };
-  "hand-lowered": { participantId: string };
-  "recording-started": { recordingId: string };
-  "recording-stopped": Recording;
+  "hand.raised": { participantId: string };
+  "hand.lowered": { participantId: string };
+  "recording.started": { recordingId: string };
+  "recording.stopped": Recording;
   /** Real-time transcript from speech-to-text */
   transcript: Transcript;
   error: ChalkError;
-  "whiteboard-update": {
+  "whiteboard.update": {
     schemaVersion?: number;
     sceneId?: string;
     syncAll?: boolean;
@@ -70,7 +70,7 @@ interface RoomEvents {
     files?: Record<string, unknown>;
     seq: number;
   };
-  "whiteboard-snapshot": {
+  "whiteboard.snapshot": {
     schemaVersion?: number;
     roomId: string;
     sceneId?: string;
@@ -80,29 +80,29 @@ interface RoomEvents {
     updatedAtMs?: number;
     lastSeq: number;
   };
-  "whiteboard-cursor": {
+  "whiteboard.cursor": {
     participantId: string;
     displayName: string;
     x: number;
     y: number;
   };
-  "whiteboard-permission-changed": {
+  "whiteboard.permission.changed": {
     participantId: string;
     canDraw: boolean;
   };
-  "whiteboard-opened": {
+  "whiteboard.opened": {
     participantId: string;
     displayName: string;
   };
-  "whiteboard-closed": {
+  "whiteboard.closed": {
     participantId: string;
   };
 }
 
-export class Room extends EventEmitter<RoomEvents> {
+export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   readonly id: string;
-  private _status: RoomStatus = "disconnected";
-  private _info: RoomInfo | null = null;
+  private _connectionState: SessionConnectionState = "disconnected";
+  private _info: SessionInfo | null = null;
   private _participants: Map<string, Participant> = new Map();
   private _rtkPeerIdToStableId = new Map();
   private _localParticipant: Participant | null = null;
@@ -179,11 +179,15 @@ export class Room extends EventEmitter<RoomEvents> {
   }
 
   // Getters
-  get status(): RoomStatus {
-    return this._status;
+  get connectionState(): SessionConnectionState {
+    return this._connectionState;
   }
 
-  get info(): RoomInfo | null {
+  get status(): SessionConnectionState {
+    return this.connectionState;
+  }
+
+  get info(): SessionInfo | null {
     return this._info;
   }
 
@@ -223,14 +227,18 @@ export class Room extends EventEmitter<RoomEvents> {
   }
 
   // Internal methods
-  _setStatus(status: RoomStatus): void {
-    if (this._status !== status) {
-      this._status = status;
-      this.emit("status-changed", status);
+  _setConnectionState(state: SessionConnectionState): void {
+    if (this._connectionState !== state) {
+      this._connectionState = state;
+      this.emit("connection.state.changed", state);
     }
   }
 
-  _setInfo(info: RoomInfo): void {
+  _setStatus(status: SessionConnectionState): void {
+    this._setConnectionState(status);
+  }
+
+  _setInfo(info: SessionInfo): void {
     this._info = info;
   }
 
@@ -281,19 +289,19 @@ export class Room extends EventEmitter<RoomEvents> {
 
     this.wsClient.on("connected", () => {
       if (!this.rtkClient) {
-        this._setStatus("connected");
+        this._setConnectionState("connected");
       }
     });
 
     this.wsClient.on("disconnected", () => {
       if (!this.rtkClient) {
-        this._setStatus("disconnected");
+        this._setConnectionState("disconnected");
       }
     });
 
     this.wsClient.on("reconnecting", () => {
       if (!this.rtkClient) {
-        this._setStatus("reconnecting");
+        this._setConnectionState("reconnecting");
       }
     });
 
@@ -306,14 +314,14 @@ export class Room extends EventEmitter<RoomEvents> {
           return;
         }
         this._participants.set(data.id, data);
-        this.emit("participant-joined", data);
+        this.emit("participant.joined", data);
       });
 
       this.wsClient.on("participant.left", (data) => {
         const participant = this._participants.get(data.participantId);
         this._participants.delete(data.participantId);
         if (participant) {
-          this.emit("participant-left", data.participantId);
+          this.emit("participant.left", data.participantId);
         }
       });
 
@@ -322,7 +330,7 @@ export class Room extends EventEmitter<RoomEvents> {
         if (participant) {
           const updated = { ...participant, ...data.changes };
           this._participants.set(data.participantId, updated);
-          this.emit("participant-updated", {
+          this.emit("participant.updated", {
             participantId: data.participantId,
             participant: updated,
           });
@@ -341,7 +349,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
     this.wsClient.on("chat.message", (data) => {
       this._messages.push(data);
-      this.emit("chat-message", data);
+      this.emit("chat.message", data);
     });
 
     this.wsClient.on("reaction", (data) => {
@@ -352,29 +360,29 @@ export class Room extends EventEmitter<RoomEvents> {
       const participant = this._participants.get(data.participantId);
       if (participant) {
         participant.handRaised = true;
-        this.emit("participant-updated", {
+        this.emit("participant.updated", {
           participantId: data.participantId,
           participant,
         });
       }
-      this.emit("hand-raised", { participantId: data.participantId });
+      this.emit("hand.raised", { participantId: data.participantId });
     });
 
     this.wsClient.on("hand.lowered", (data) => {
       const participant = this._participants.get(data.participantId);
       if (participant) {
         participant.handRaised = false;
-        this.emit("participant-updated", {
+        this.emit("participant.updated", {
           participantId: data.participantId,
           participant,
         });
       }
-      this.emit("hand-lowered", { participantId: data.participantId });
+      this.emit("hand.lowered", { participantId: data.participantId });
     });
 
     this.wsClient.on("recording.started", (data) => {
       this._currentRecording = { id: data.recordingId };
-      this.emit("recording-started", { recordingId: data.recordingId });
+      this.emit("recording.started", { recordingId: data.recordingId });
     });
 
     this.wsClient.on("recording.stopped", (data) => {
@@ -385,7 +393,7 @@ export class Room extends EventEmitter<RoomEvents> {
         durationSeconds: data.duration,
       };
       this._currentRecording = null;
-      this.emit("recording-stopped", recording);
+      this.emit("recording.stopped", recording);
     });
 
     this.wsClient.on("error", (data) => {
@@ -419,7 +427,7 @@ export class Room extends EventEmitter<RoomEvents> {
         this._participants.set(p.id, p);
 
         if (!previousIds.has(p.id)) {
-          this.emit("participant-joined", p);
+          this.emit("participant.joined", p);
         }
       }
 
@@ -437,7 +445,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
     // Whiteboard events
     this.wsClient.on("whiteboard.data", (data) => {
-      this.emit("whiteboard-update", {
+      this.emit("whiteboard.update", {
         schemaVersion: data.schemaVersion,
         sceneId: data.sceneId,
         syncAll: data.syncAll,
@@ -450,11 +458,11 @@ export class Room extends EventEmitter<RoomEvents> {
     });
 
     this.wsClient.on("whiteboard.snapshot", (snapshot) => {
-      this.emit("whiteboard-snapshot", snapshot);
+      this.emit("whiteboard.snapshot", snapshot);
     });
 
     this.wsClient.on("whiteboard.cursor", (data) => {
-      this.emit("whiteboard-cursor", {
+      this.emit("whiteboard.cursor", {
         participantId: data.participantId,
         displayName: data.displayName,
         x: data.x,
@@ -465,7 +473,7 @@ export class Room extends EventEmitter<RoomEvents> {
     this.wsClient.on("permission.changed", (data) => {
       if (data.feature === "whiteboard") {
         this._whiteboardPermissions.set(data.participantId, data.canDraw);
-        this.emit("whiteboard-permission-changed", {
+        this.emit("whiteboard.permission.changed", {
           participantId: data.participantId,
           canDraw: data.canDraw,
         });
@@ -473,14 +481,14 @@ export class Room extends EventEmitter<RoomEvents> {
     });
 
     this.wsClient.on("whiteboard.opened", (data) => {
-      this.emit("whiteboard-opened", {
+      this.emit("whiteboard.opened", {
         participantId: data.participantId,
         displayName: data.displayName,
       });
     });
 
     this.wsClient.on("whiteboard.closed", (data) => {
-      this.emit("whiteboard-closed", {
+      this.emit("whiteboard.closed", {
         participantId: data.participantId,
       });
     });
@@ -509,7 +517,7 @@ export class Room extends EventEmitter<RoomEvents> {
         this._localParticipant.audioTrack = undefined;
       }
 
-      this.emit("participant-updated", {
+      this.emit("participant.updated", {
         participantId: this._localParticipant.id,
         participant: this._localParticipant,
       });
@@ -768,7 +776,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
       if (!existing) {
         this._participants.set(participant.id, participant);
-        this.emit("participant-joined", participant);
+        this.emit("participant.joined", participant);
       }
 
       return participant;
@@ -794,16 +802,16 @@ export class Room extends EventEmitter<RoomEvents> {
         }
 
         this._participants.set(participant.id, merged);
-        this.emit("participant-updated", {
+        this.emit("participant.updated", {
           participantId: participant.id,
           participant: merged,
         });
       }
     };
 
-    // Room joined event
+    // ConferenceSession joined event
     this.rtkClient.self.on("roomJoined", () => {
-      this._setStatus("connected");
+      this._setConnectionState("connected");
 
       // Sync local participant state with RTK
       if (this._localParticipant) {
@@ -827,9 +835,9 @@ export class Room extends EventEmitter<RoomEvents> {
       reconcileJoinedParticipants();
     });
 
-    // Room left event
+    // ConferenceSession left event
     this.rtkClient.self.on("roomLeft", () => {
-      this._setStatus("disconnected");
+      this._setConnectionState("disconnected");
     });
 
     // Video update for local user
@@ -855,7 +863,7 @@ export class Room extends EventEmitter<RoomEvents> {
             }
           }
 
-          this.emit("participant-updated", {
+          this.emit("participant.updated", {
             participantId: this._localParticipant.id,
             participant: this._localParticipant,
           });
@@ -886,7 +894,7 @@ export class Room extends EventEmitter<RoomEvents> {
             }
           }
 
-          this.emit("participant-updated", {
+          this.emit("participant.updated", {
             participantId: this._localParticipant.id,
             participant: this._localParticipant,
           });
@@ -910,7 +918,7 @@ export class Room extends EventEmitter<RoomEvents> {
             data.screenShareTracks?.video ?? undefined;
           this._localParticipant.screenShareAudioTrack =
             data.screenShareTracks?.audio ?? undefined;
-          this.emit("participant-updated", {
+          this.emit("participant.updated", {
             participantId: this._localParticipant.id,
             participant: this._localParticipant,
           });
@@ -937,7 +945,7 @@ export class Room extends EventEmitter<RoomEvents> {
           peerId !== stableId ? this._participants.delete(peerId) : false;
 
         if (deletedStable || deletedPeer) {
-          this.emit("participant-left", stableId);
+          this.emit("participant.left", stableId);
         }
       },
     );
@@ -967,7 +975,7 @@ export class Room extends EventEmitter<RoomEvents> {
           this.validateTrack(participant.videoTrack, "REMOTE_VIDEO", participant.id);
         }
 
-        this.emit("participant-updated", {
+        this.emit("participant.updated", {
           participantId: participant.id,
           participant: updated,
         });
@@ -999,7 +1007,7 @@ export class Room extends EventEmitter<RoomEvents> {
           this.validateTrack(participant.audioTrack, "REMOTE_AUDIO", participant.id);
         }
 
-        this.emit("participant-updated", {
+        this.emit("participant.updated", {
           participantId: participant.id,
           participant: updated,
         });
@@ -1039,7 +1047,7 @@ export class Room extends EventEmitter<RoomEvents> {
           }
         }
 
-        this.emit("participant-updated", {
+        this.emit("participant.updated", {
           participantId: participant.id,
           participant: updated,
         });
@@ -1058,7 +1066,7 @@ export class Room extends EventEmitter<RoomEvents> {
 
       for (const participantID of remoteParticipantIDs) {
         this._participants.delete(participantID);
-        this.emit("participant-left", participantID);
+        this.emit("participant.left", participantID);
       }
       this._rtkPeerIdToStableId.clear();
 
@@ -1126,7 +1134,7 @@ export class Room extends EventEmitter<RoomEvents> {
         }
 
         this._messages.push(chatMessage);
-        this.emit("chat-message", chatMessage);
+        this.emit("chat.message", chatMessage);
       };
 
       // Register handlers for various chat events (different RTK versions may use different names)
@@ -1269,12 +1277,12 @@ export class Room extends EventEmitter<RoomEvents> {
         const participant = this._participants.get(ids.stableId) ?? null;
         if (this._activeSpeaker?.id !== participant?.id) {
           this._activeSpeaker = participant;
-          this.emit("active-speaker-changed", participant);
+          this.emit("speaker.active.changed", participant);
         }
       } else {
         if (this._activeSpeaker !== null) {
           this._activeSpeaker = null;
-          this.emit("active-speaker-changed", null);
+          this.emit("speaker.active.changed", null);
         }
       }
     });
@@ -1612,7 +1620,7 @@ export class Room extends EventEmitter<RoomEvents> {
         timestamp: new Date(),
       };
       this._messages.push(localMessage);
-      this.emit("chat-message", localMessage);
+      this.emit("chat.message", localMessage);
     }
   }
 
@@ -1646,11 +1654,11 @@ export class Room extends EventEmitter<RoomEvents> {
       this.wsClient.raiseHand();
     }
 
-    this.emit("participant-updated", {
+    this.emit("participant.updated", {
       participantId: this._localParticipant.id,
       participant: this._localParticipant,
     });
-    this.emit("hand-raised", { participantId: this._localParticipant.id });
+    this.emit("hand.raised", { participantId: this._localParticipant.id });
   }
 
   lowerHand(): void {
@@ -1663,11 +1671,11 @@ export class Room extends EventEmitter<RoomEvents> {
       this.wsClient.lowerHand();
     }
 
-    this.emit("participant-updated", {
+    this.emit("participant.updated", {
       participantId: this._localParticipant.id,
       participant: this._localParticipant,
     });
-    this.emit("hand-lowered", { participantId: this._localParticipant.id });
+    this.emit("hand.lowered", { participantId: this._localParticipant.id });
   }
 
   // CRITICAL: Async leave with proper cleanup sequencing
@@ -1709,7 +1717,7 @@ export class Room extends EventEmitter<RoomEvents> {
         this._currentRecording = null;
         this._localParticipant = null;
 
-        this._setStatus("disconnected");
+        this._setConnectionState("disconnected");
         ctx.complete("success");
       } finally {
         this.isLeaving = false;

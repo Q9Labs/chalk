@@ -2,7 +2,7 @@ import type {
 	ChatMessage,
 	Participant,
 	Reaction,
-	RoomSnapshot,
+	SessionSnapshot,
 } from "../types.ts";
 import type {
 	ChatMessagePayload,
@@ -39,7 +39,7 @@ export const toParticipant = (p: ParticipantPayload): Participant => ({
 	metadata: p.metadata,
 });
 
-export const toSnapshot = (payload: RoomSnapshotPayload): RoomSnapshot => ({
+export const toSnapshot = (payload: RoomSnapshotPayload): SessionSnapshot => ({
 	roomId: payload.roomId,
 	participants: payload.participants.map(toParticipant),
 	isRecording: payload.isRecording,

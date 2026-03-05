@@ -34,9 +34,9 @@ export type {
 export type {
 	JoinOptions,
 	LeaveOptions,
-	Room,
-	RoomConfig,
-	RoomStatus,
+	ConferenceSession,
+	JoinSessionConfig,
+	SessionConnectionState,
 } from "./room";
 
 export type {

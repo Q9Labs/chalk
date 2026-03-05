@@ -187,7 +187,7 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
     sendChatMessage,
   });
 
-  const { connectionStatus } = useConferenceConnectionState({
+  const { connectionState } = useConferenceConnectionState({
     status,
     phase,
     isConnected,
@@ -261,7 +261,7 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       participantVolumes,
       onParticipantVolumeChange: setParticipantVolume,
       getParticipantVolume: getAudioVolume,
-      connectionStatus,
+      connectionState,
       handleRetryConnection,
       connectionSupportCode: supportCode ?? undefined,
       className: cn(className, isExiting && "chalk-animate-exit"),

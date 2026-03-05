@@ -16,10 +16,10 @@ const mockUseChalk = mock(() => ({
 	room: mockRoom,
 	client: null,
 	isConnected: false,
-	connectionStatus: "disconnected" as const,
-	joinRoom: mock(() => Promise.resolve(mockRoom)),
+	connectionState: "disconnected" as const,
+	joinSession: mock(() => Promise.resolve(mockRoom)),
 	leaveRoom: mock(() => Promise.resolve()),
-	createRoom: mock(() => Promise.resolve("room_123")),
+	createSession: mock(() => Promise.resolve("room_123")),
 }));
 
 mock.module("../ChalkProvider", () => ({

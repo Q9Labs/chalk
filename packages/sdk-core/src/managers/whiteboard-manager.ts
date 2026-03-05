@@ -6,7 +6,7 @@
  */
 
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
-import type { Room } from "../room";
+import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
 import type {
 	WhiteboardCursor,
@@ -61,7 +61,7 @@ const CURSOR_DEBOUNCE_MS = 50;
  */
 export class WhiteboardManager extends StateContainer<WhiteboardState> {
 	private readonly events = new TypedEventEmitter<WhiteboardManagerEvents>();
-	private room: Room | null = null;
+	private room: ConferenceSession | null = null;
 	private cursors = new Map<string, WhiteboardCursor>();
 	private updateDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
 	private cursorDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -90,8 +90,8 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 		return this.events.on(event, handler);
 	}
 
-	/** Attach Room instance */
-	attachRoom(room: Room): void {
+	/** Attach ConferenceSession instance */
+	attachRoom(room: ConferenceSession): void {
 		this.room = room;
 		this.setupRoomListeners();
 		this.syncFromRoom();
@@ -133,7 +133,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 	private setupRoomListeners(): void {
 		if (!this.room) return;
 
-		this.room.on("whiteboard-update", (data) => {
+		this.room.on("whiteboard.update", (data) => {
 			const update: WhiteboardUpdate = {
 				schemaVersion: data.schemaVersion,
 				sceneId: data.sceneId,
@@ -175,7 +175,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			this.events.emit("update", update);
 		});
 
-		this.room.on("whiteboard-snapshot", (data) => {
+		this.room.on("whiteboard.snapshot", (data) => {
 			const snapshot: WhiteboardSnapshot = {
 				schemaVersion: data.schemaVersion,
 				roomId: data.roomId,
@@ -196,7 +196,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			this.events.emit("snapshot", snapshot);
 		});
 
-		this.room.on("whiteboard-cursor", (data) => {
+		this.room.on("whiteboard.cursor", (data) => {
 			const cursor: WhiteboardCursor = {
 				participantId: data.participantId,
 				displayName: data.displayName,
@@ -210,7 +210,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			this.events.emit("cursor", cursor);
 		});
 
-		this.room.on("whiteboard-permission-changed", (data) => {
+		this.room.on("whiteboard.permission.changed", (data) => {
 			// Update local permission if it's for us
 			const localId = this.room?.localParticipant?.id;
 			if (data.participantId === localId) {
@@ -228,7 +228,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			this.events.emit("permission:changed", permission);
 		});
 
-		this.room.on("whiteboard-opened", (data) => {
+		this.room.on("whiteboard.opened", (data) => {
 			this.openParticipants.add(data.participantId);
 			this.setState({
 				isOpen: true,
@@ -240,7 +240,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			});
 		});
 
-		this.room.on("whiteboard-closed", (data) => {
+		this.room.on("whiteboard.closed", (data) => {
 			this.openParticipants.delete(data.participantId);
 			this.cursors.delete(data.participantId);
 			this.setState({
@@ -251,7 +251,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 			this.events.emit("closed", { participantId: data.participantId });
 		});
 
-		this.room.on("participant-left", (participantId) => {
+		this.room.on("participant.left", (participantId) => {
 			this.openParticipants.delete(participantId);
 			this.cursors.delete(participantId);
 			this.setState({

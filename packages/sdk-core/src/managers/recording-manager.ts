@@ -6,7 +6,7 @@
  */
 
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
-import type { Room } from "../room";
+import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { Recording, RecordingStatus } from "../types";
 import { TypedEventEmitter } from "../utils/typed-emitter";
@@ -43,7 +43,7 @@ export interface RecordingManagerEvents {
  */
 export class RecordingManager extends StateContainer<RecordingState> {
 	private readonly events = new TypedEventEmitter<RecordingManagerEvents>();
-	private room: Room | null = null;
+	private room: ConferenceSession | null = null;
 	private apiStartRecording?: () => Promise<string>;
 	private apiStopRecording?: () => Promise<void>;
 
@@ -65,8 +65,8 @@ export class RecordingManager extends StateContainer<RecordingState> {
 		return this.events.on(event, handler);
 	}
 
-	/** Attach Room instance */
-	attachRoom(room: Room): void {
+	/** Attach ConferenceSession instance */
+	attachRoom(room: ConferenceSession): void {
 		this.room = room;
 		this.setupRoomListeners();
 		this.syncFromRoom();
@@ -92,7 +92,7 @@ export class RecordingManager extends StateContainer<RecordingState> {
 	private setupRoomListeners(): void {
 		if (!this.room) return;
 
-		this.room.on("recording-started", ({ recordingId }) => {
+		this.room.on("recording.started", ({ recordingId }) => {
 			this.setState({
 				isRecording: true,
 				isStarting: false,
@@ -102,7 +102,7 @@ export class RecordingManager extends StateContainer<RecordingState> {
 			this.events.emit("started", { recordingId });
 		});
 
-		this.room.on("recording-stopped", (recording) => {
+		this.room.on("recording.stopped", (recording) => {
 			this.setState({
 				isRecording: false,
 				isStopping: false,

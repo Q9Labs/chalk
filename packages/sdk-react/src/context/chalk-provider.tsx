@@ -78,9 +78,9 @@ interface ChalkSessionContextValue {
 	/** Leave current room */
 	leave: () => Promise<void>;
 	/** Create a new room */
-	createRoom: (name?: string) => Promise<string>;
+	createSession: (name?: string) => Promise<string>;
 	/** End room for all (host only) */
-	endRoom: (roomId: string) => Promise<void>;
+	endSession: (roomId: string) => Promise<void>;
 	/** Remove a participant (host only) */
 	removeParticipant: (participantId: string) => Promise<void>;
 	/** Mute a participant (host only) */
@@ -242,16 +242,16 @@ export function ChalkProvider({
 		await session.leave();
 	}, [session]);
 
-	const createRoom = useCallback(
+	const createSession = useCallback(
 		async (name?: string): Promise<string> => {
-			return session.createRoom(name);
+			return session.createSession(name);
 		},
 		[session],
 	);
 
-	const endRoom = useCallback(
+	const endSession = useCallback(
 		async (endRoomId: string): Promise<void> => {
-			return session.endRoom(endRoomId);
+			return session.endSession(endRoomId);
 		},
 		[session],
 	);
@@ -282,8 +282,8 @@ export function ChalkProvider({
 			session,
 			join,
 			leave,
-			createRoom,
-			endRoom,
+			createSession,
+			endSession,
 			removeParticipant,
 			muteParticipant,
 			unmuteParticipant,
@@ -294,8 +294,8 @@ export function ChalkProvider({
 			session,
 			join,
 			leave,
-			createRoom,
-			endRoom,
+			createSession,
+			endSession,
 			removeParticipant,
 			muteParticipant,
 			unmuteParticipant,

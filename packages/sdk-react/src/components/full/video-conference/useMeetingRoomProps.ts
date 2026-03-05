@@ -42,7 +42,7 @@ export interface UseMeetingRoomPropsParams {
 	onParticipantVolumeChange: NonNullable<MeetingRoomProps["onParticipantVolumeChange"]>;
 	getParticipantVolume: NonNullable<MeetingRoomProps["getParticipantVolume"]>;
 	selectedAudioOutput: MeetingRoomProps["selectedAudioOutput"];
-	connectionStatus: NonNullable<MeetingRoomProps["connectionStatus"]>;
+	connectionState: NonNullable<MeetingRoomProps["connectionState"]>;
 	handleRetryConnection: NonNullable<MeetingRoomProps["onRetryConnection"]>;
 	connectionSupportCode: MeetingRoomProps["connectionSupportCode"];
 	className: MeetingRoomProps["className"];
@@ -87,7 +87,7 @@ export function useMeetingRoomProps({
 	onParticipantVolumeChange,
 	getParticipantVolume,
 	selectedAudioOutput,
-	connectionStatus,
+	connectionState,
 	handleRetryConnection,
 	connectionSupportCode,
 	className,
@@ -142,7 +142,7 @@ export function useMeetingRoomProps({
 			onParticipantVolumeChange,
 			getParticipantVolume,
 			selectedAudioOutput,
-			connectionStatus,
+			connectionState,
 			onRetryConnection: handleRetryConnection,
 			connectionSupportCode,
 			className,
@@ -192,7 +192,7 @@ export function useMeetingRoomProps({
 			onParticipantVolumeChange,
 			getParticipantVolume,
 			selectedAudioOutput,
-			connectionStatus,
+			connectionState,
 			handleRetryConnection,
 			connectionSupportCode,
 			className,

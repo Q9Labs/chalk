@@ -14,7 +14,7 @@ import type {
 	ChatMessage,
 	Participant,
 	Reaction,
-	RoomSnapshot,
+	SessionSnapshot,
 } from "../../types.ts";
 import type {
 	WhiteboardCursor,
@@ -48,7 +48,7 @@ const ReactionSchema = Schema.declare(
 );
 
 const RoomSnapshotSchema = Schema.declare(
-	(input): input is RoomSnapshot => isObject(input),
+	(input): input is SessionSnapshot => isObject(input),
 );
 
 const WhiteboardUpdateSchema = Schema.declare(

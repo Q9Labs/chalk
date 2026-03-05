@@ -6,7 +6,7 @@
  */
 
 import { Effect, ManagedRuntime } from "effect";
-import { ChalkClient } from "../client";
+import { ConferenceClient } from "../client";
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import { ChatManager } from "../managers/chat-manager";
 import { InteractionManager } from "../managers/interaction-manager";
@@ -14,7 +14,7 @@ import { RecordingManager } from "../managers/recording-manager";
 import { ScreenShareManager } from "../managers/screen-share-manager";
 import { UIManager } from "../managers/ui-manager";
 import { WhiteboardManager } from "../managers/whiteboard-manager";
-import type { Room } from "../room";
+import type { ConferenceSession } from "../room";
 import { makeManagerServicesLayer } from "../effect/services/manager-layers";
 import { RoomService } from "../effect/services/room-service";
 import { ParticipantService } from "../effect/services/participant-service";
@@ -99,7 +99,7 @@ export interface ChalkSessionEvents {
  * session.chat.sendMessage('Hello!');
  * ```
  */
-/** Room events type */
+/** ConferenceSession events type */
 type RoomManagerEvents = {
 	connected: { roomId: string };
 	disconnected: { reason: string };
@@ -130,10 +130,10 @@ type MediaManagerEvents = {
 export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	/** Whiteboard sync v2 toggle */
 	readonly whiteboardSyncV2: boolean;
-	/** Room API object with state and events */
+	/** ConferenceSession API object with state and events */
 	readonly room: {
 		readonly getState: () => RoomState;
-		readonly getRoom: () => Room | null;
+		readonly getRoom: () => ConferenceSession | null;
 		readonly on: <K extends keyof RoomManagerEvents>(
 			event: K,
 			handler: (data: RoomManagerEvents[K]) => void,
@@ -208,12 +208,12 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	/** Whiteboard collaboration manager */
 	readonly whiteboard: WhiteboardManager;
 
-	private readonly client: ChalkClient;
+	private readonly client: ConferenceClient;
 	private _runtime: ManagedRuntime.ManagedRuntime<
 		RoomService | ParticipantService | MediaService,
 		never
 	>;
-	private _currentRoom: Room | null = null;
+	private _currentRoom: ConferenceSession | null = null;
 	private incidentConfig?: ChalkIncidentConfig;
 	private incidentBreadcrumbs: ChalkIncidentBreadcrumb[] = [];
 	private incidentSequence = 0;
@@ -224,8 +224,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this.whiteboardSyncV2 = config.whiteboardSyncV2 ?? true;
 		this.incidentConfig = config.incident;
 
-		// Initialize ChalkClient for API/WebRTC
-		this.client = new ChalkClient({
+		// Initialize ConferenceClient for API/WebRTC
+		this.client = new ConferenceClient({
 			apiUrl: config.apiUrl,
 			wsUrl: config.wsUrl,
 			token: config.token,
@@ -617,7 +617,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this.room._emitter.on("connected", (data) => {
 			this.recordIncidentBreadcrumb({
 				category: "room",
-				message: "Room connected",
+				message: "ConferenceSession connected",
 				data,
 			});
 			this.emit("connected", data);
@@ -626,7 +626,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this.room._emitter.on("disconnected", (data) => {
 			this.recordIncidentBreadcrumb({
 				category: "room",
-				message: "Room disconnected",
+				message: "ConferenceSession disconnected",
 				data,
 			});
 			this.emit("disconnected", data);
@@ -635,7 +635,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		this.room._emitter.on("status:changed", (data) => {
 			this.recordIncidentBreadcrumb({
 				category: "room",
-				message: "Room status changed",
+				message: "ConferenceSession status changed",
 				data,
 			});
 			this.emit("status:changed", data);
@@ -683,7 +683,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		// This method is kept for initialization order consistency
 	}
 
-	private attachRoomToManagers(room: Room): void {
+	private attachRoomToManagers(room: ConferenceSession): void {
 		// Store current room reference
 		this._currentRoom = room;
 
@@ -708,7 +708,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 				}),
 			)
 			.catch(() => {
-				// Room attachment failed - error already emitted via wide events in client
+				// ConferenceSession attachment failed - error already emitted via wide events in client
 			});
 
 		// Set up recording API callbacks
@@ -717,15 +717,15 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			() => this.client.stopRecording(),
 		);
 
-		// Bridge Room events to session state for React hooks
+		// Bridge ConferenceSession events to session state for React hooks
 		this.setupRoomStateBridges(room);
 	}
 
 	/**
-	 * Set up direct event bridges from Room to session state
+	 * Set up direct event bridges from ConferenceSession to session state
 	 * This ensures React hooks receive state updates
 	 */
-	private setupRoomStateBridges(room: Room): void {
+	private setupRoomStateBridges(room: ConferenceSession): void {
 		const updateRoomState = (this as any)._updateRoomState;
 		const updateParticipantState = (this as any)._updateParticipantState;
 		const updateMediaState = (this as any)._updateMediaState;
@@ -786,8 +786,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			});
 		}
 
-		// Room status changes
-		room.on("status-changed", (status) => {
+		// ConferenceSession status changes
+		room.on("connection.state.changed", (status) => {
 			updateRoomState({
 				status,
 				roomId: room.id,
@@ -799,7 +799,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		});
 
 		// Participant events
-		room.on("participant-joined", (participant) => {
+		room.on("participant.joined", (participant) => {
 			const normalized = normalizeParticipant(participant);
 			const currentState = this.participants._state;
 			const updatedParticipants = [...currentState.participants.filter((p) => p.id !== normalized.id), normalized];
@@ -811,7 +811,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			this.participants._emitter.emit("participant:joined", { participant: normalized });
 		});
 
-		room.on("participant-left", (participantId) => {
+		room.on("participant.left", (participantId) => {
 			const currentState = this.participants._state;
 			const updatedParticipants = currentState.participants.filter((p) => p.id !== participantId);
 			updateParticipantState({
@@ -822,7 +822,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			this.participants._emitter.emit("participant:left", { participantId });
 		});
 
-		room.on("participant-updated", ({ participantId, participant }) => {
+		room.on("participant.updated", ({ participantId, participant }) => {
 			const normalized = normalizeParticipant(participant);
 			const currentState = this.participants._state;
 			const existingIndex = currentState.participants.findIndex(
@@ -857,7 +857,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			}
 		});
 
-		room.on("active-speaker-changed", (speaker) => {
+		room.on("speaker.active.changed", (speaker) => {
 			const normalized = speaker ? normalizeParticipant(speaker) : null;
 			const currentState = this.participants._state;
 			updateParticipantState({
@@ -867,8 +867,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			this.participants._emitter.emit("active-speaker:changed", { participant: normalized });
 		});
 
-		// Room connected/disconnected
-		room.on("status-changed", (status) => {
+		// ConferenceSession connected/disconnected
+		room.on("connection.state.changed", (status) => {
 			if (status === "connected") {
 				this.room._emitter.emit("connected", { roomId: room.id });
 			} else if (status === "disconnected") {
@@ -880,7 +880,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	/**
 	 * Join a room
 	 *
-	 * @param roomId - Room ID to join
+	 * @param roomId - ConferenceSession ID to join
 	 * @param options - Join options including userName
 	 */
 	async join(roomId: string, options: JoinOptions): Promise<void> {
@@ -893,8 +893,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 				}),
 			);
 
-			// Actually join via ChalkClient
-			const room = await this.client.joinRoom(roomId, {
+			// Actually join via ConferenceClient
+			const room = await this.client.joinSession(roomId, {
 				displayName: options.userName,
 				role: options.role,
 				audio: options.audioEnabled,
@@ -945,7 +945,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 			this.client.disconnect();
 			this._currentRoom = null;
 
-			// Ensure hooks see a clean slate after leaving (Room.leave clears maps without per-participant events).
+			// Ensure hooks see a clean slate after leaving (ConferenceSession.leave clears maps without per-participant events).
 			const updateRoomState = (this as any)._updateRoomState;
 			const updateParticipantState = (this as any)._updateParticipantState;
 			const updateMediaState = (this as any)._updateMediaState;
@@ -987,14 +987,14 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	 *
 	 * @param name - Optional room name
 	 * @param config - Optional room configuration
-	 * @returns Room ID
+	 * @returns ConferenceSession ID
 	 */
-	async createRoom(
+	async createSession(
 		name?: string,
 		config?: Record<string, unknown>,
 	): Promise<string> {
 		try {
-			return await this.client.createRoom(name, config);
+			return await this.client.createSession(name, config);
 		} catch (err) {
 			const error = ChalkError.wrap(err);
 			this.emitErrorWithIncident(error, "session", {
@@ -1007,11 +1007,11 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	/**
 	 * End a room for all participants (host only)
 	 *
-	 * @param roomId - Room ID to end
+	 * @param roomId - ConferenceSession ID to end
 	 */
-	async endRoom(roomId: string): Promise<void> {
+	async endSession(roomId: string): Promise<void> {
 		try {
-			await this.client.endRoom(roomId);
+			await this.client.endSession(roomId);
 		} catch (err) {
 			const error = ChalkError.wrap(err);
 			this.emitErrorWithIncident(error, "session", {
@@ -1122,8 +1122,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		return this.room.getState().roomId;
 	}
 
-	/** Get underlying ChalkClient (for advanced use) */
-	get chalkClient(): ChalkClient {
+	/** Get underlying ConferenceClient (for advanced use) */
+	get chalkClient(): ConferenceClient {
 		return this.client;
 	}
 

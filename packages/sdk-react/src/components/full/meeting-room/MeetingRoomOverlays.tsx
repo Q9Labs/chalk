@@ -5,7 +5,7 @@ import { GuidedTour } from "../GuidedTour";
 import type { Participant } from "./types";
 
 interface MeetingRoomOverlaysProps {
-  connectionStatus: "connected" | "connecting" | "reconnecting" | "failed";
+  connectionState: "connected" | "connecting" | "reconnecting" | "failed";
   onRetryConnection?: () => void;
   connectionSupportCode?: string;
   enableTour: boolean;
@@ -24,7 +24,7 @@ interface MeetingRoomOverlaysProps {
 }
 
 export function MeetingRoomOverlays({
-  connectionStatus,
+  connectionState,
   onRetryConnection,
   connectionSupportCode,
   enableTour,
@@ -45,7 +45,7 @@ export function MeetingRoomOverlays({
 
   return (
     <>
-      <ConnectionLostOverlay isVisible={connectionStatus === "reconnecting" || connectionStatus === "failed"} status={connectionStatus === "reconnecting" ? "reconnecting" : "failed"} onRetry={onRetryConnection} supportCode={connectionSupportCode} />
+      <ConnectionLostOverlay isVisible={connectionState === "reconnecting" || connectionState === "failed"} status={connectionState === "reconnecting" ? "reconnecting" : "failed"} onRetry={onRetryConnection} supportCode={connectionSupportCode} />
 
       {enableTour && <GuidedTour isOpen={showTour} onComplete={onTourComplete} onSkip={onTourComplete} showSkip={true} />}
 

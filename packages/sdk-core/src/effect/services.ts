@@ -9,7 +9,7 @@
  */
 
 import { Context, Effect, Layer } from "effect";
-import type { TokenProvider, ChalkClientConfig } from "../types";
+import type { TokenProvider, ConferenceClientConfig } from "../types";
 import type { AuthError } from "./errors";
 import { wideEventsCollector } from "../wide-events/collector";
 
@@ -45,7 +45,7 @@ export class TokenProviderService extends Context.Tag("@chalk/TokenProviderServi
  */
 export class ConfigService extends Context.Tag("@chalk/ConfigService")<
   ConfigService,
-  ChalkClientConfig
+  ConferenceClientConfig
 >() {}
 
 /**
@@ -117,9 +117,9 @@ export const makeLoggerLayer = (debug: boolean) =>
   debug ? ConsoleLoggerLive : NoopLoggerLive;
 
 /**
- * Create config layer from ChalkClientConfig
+ * Create config layer from ConferenceClientConfig
  */
-export const makeConfigLayer = (config: ChalkClientConfig) =>
+export const makeConfigLayer = (config: ConferenceClientConfig) =>
   Layer.succeed(ConfigService, config);
 
 /**

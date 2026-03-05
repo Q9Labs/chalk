@@ -48,7 +48,7 @@ export class MediaError extends Data.TaggedError("MediaError")<SDKErrorBase & {
 }> {}
 
 /**
- * Room errors - lifecycle and state issues
+ * ConferenceSession errors - lifecycle and state issues
  */
 export class RoomError extends Data.TaggedError("RoomError")<SDKErrorBase & {
   readonly code: "ROOM_NOT_FOUND" | "ROOM_FULL" | "ALREADY_IN_ROOM" | "NOT_IN_ROOM" | "ROOM_ENDED";

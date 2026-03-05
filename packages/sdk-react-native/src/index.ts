@@ -21,7 +21,7 @@
  * }
  *
  * function CallScreen() {
- *   const { joinRoom } = useChalk();
+ *   const { joinSession } = useChalk();
  *   const { participants } = useParticipants();
  *   const { isVideoEnabled, toggleVideo } = useMedia();
  *
@@ -40,7 +40,7 @@
 
 // Re-export core types for convenience
 export type {
-	ChalkClientConfig,
+	ConferenceClientConfig,
 	ChalkError,
 	ChatMessage,
 	Err,
@@ -53,10 +53,10 @@ export type {
 	Recording,
 	RecordingStatus,
 	Result,
-	Room,
-	RoomConfig,
-	RoomInfo,
-	RoomStatus,
+	ConferenceSession,
+	JoinSessionConfig,
+	SessionInfo,
+	SessionConnectionState,
 	ScreenShareOptions,
 	TrackKind,
 } from "@q9labs/chalk-core";

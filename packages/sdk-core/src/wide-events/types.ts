@@ -56,7 +56,7 @@ export interface WideEvent {
 
 	/** Session identifier (stable across reconnects) */
 	sessionId: string;
-	/** Room identifier (if in a room) */
+	/** ConferenceSession identifier (if in a room) */
 	roomId?: string;
 	/** Participant identifier (if joined) */
 	participantId?: string;

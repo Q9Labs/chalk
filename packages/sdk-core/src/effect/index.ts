@@ -104,13 +104,13 @@ export * from "./schemas";
 
 // Manager Services
 export {
-  // Room Instance
+  // ConferenceSession Instance
   RoomInstanceService,
   RoomInstanceServiceLive,
   getRoom,
   requireRoom,
   setRoom,
-  // Room Service
+  // ConferenceSession Service
   RoomService,
   RoomServiceLive,
   type RoomServiceInterface,

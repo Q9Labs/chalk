@@ -7,10 +7,10 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import {
 	APIClient,
 	WSClient,
-	type ChalkClientConfig,
-	type JoinRoomResponse,
-	type RoomConfig,
-	type RoomStatus,
+	type ConferenceClientConfig,
+	type JoinSessionResponse,
+	type JoinSessionConfig,
+	type SessionConnectionState,
 } from "@q9labs/chalk-core";
 import {
 	createContext,
@@ -69,11 +69,11 @@ interface ChalkContextValue {
 	rtkClient: RealtimeKitClient | undefined;
 	rtcManager: RTCManager | null;
 	isConnected: boolean;
-	connectionStatus: RoomStatus;
-	roomInfo: JoinRoomResponse | null;
-	joinRoom: (roomId: string, config: RoomConfig) => Promise<JoinRoomResponse>;
+	connectionState: SessionConnectionState;
+	roomInfo: JoinSessionResponse | null;
+	joinSession: (roomId: string, config: JoinSessionConfig) => Promise<JoinSessionResponse>;
 	leaveRoom: () => Promise<void>;
-	createRoom: (name?: string) => Promise<string>;
+	createSession: (name?: string) => Promise<string>;
 }
 
 const ChalkContext = createContext<ChalkContextValue | null>(null);
@@ -120,9 +120,9 @@ export function ChalkProvider({
 	const [wsRoomId, setWsRoomId] = useState<string | null>(null);
 	const [wsParticipantId, setWsParticipantId] = useState<string | null>(null);
 	const [rtcManager, setRtcManager] = useState<RTCManager | null>(null);
-	const [connectionStatus, setConnectionStatus] =
-		useState<RoomStatus>("disconnected");
-	const [roomInfo, setRoomInfo] = useState<JoinRoomResponse | null>(null);
+	const [connectionState, setConnectionStatus] =
+		useState<SessionConnectionState>("disconnected");
+	const [roomInfo, setRoomInfo] = useState<JoinSessionResponse | null>(null);
 	const resolvedApiUrl = apiUrl ?? DEFAULT_API_URL;
 	const resolvedWsUrl = wsUrl ?? deriveWsUrl(resolvedApiUrl);
 
@@ -134,7 +134,7 @@ export function ChalkProvider({
 
 	// Initialize API client and RTC manager
 	useEffect(() => {
-		const config: ChalkClientConfig = {
+		const config: ConferenceClientConfig = {
 			apiKey,
 			token,
 			tokenProvider,
@@ -317,9 +317,9 @@ export function ChalkProvider({
 	useEffect(() => {
 		logger.info({
 			event: "connection.status",
-			status: connectionStatus,
+			status: connectionState,
 		});
-	}, [connectionStatus]);
+	}, [connectionState]);
 
 	useEffect(() => {
 		if (!wsClient) {
@@ -338,8 +338,8 @@ export function ChalkProvider({
 		});
 	}, [wsClient, wsRoomId, wsConnectionState, resolvedWsUrl]);
 
-	const joinRoom = useCallback(
-		async (roomId: string, config: RoomConfig): Promise<JoinRoomResponse> => {
+	const joinSession = useCallback(
+		async (roomId: string, config: JoinSessionConfig): Promise<JoinSessionResponse> => {
 			const startTime = Date.now();
 
 			logger.info({
@@ -479,7 +479,7 @@ export function ChalkProvider({
 							audio: config.audio ?? true,
 							video: config.video ?? true,
 						});
-						await rtcManager.joinRoom();
+						await rtcManager.joinSession();
 						setConnectionStatus("connected");
 					} catch {
 						setConnectionStatus("disconnected");
@@ -567,7 +567,7 @@ export function ChalkProvider({
 		});
 	}, [rtkClient, rtcManager, roomInfo, wsClient]);
 
-	const createRoom = useCallback(
+	const createSession = useCallback(
 		async (name?: string): Promise<string> => {
 			const startTime = Date.now();
 
@@ -587,7 +587,7 @@ export function ChalkProvider({
 			}
 
 			try {
-				const response = await apiClient.createRoom(name);
+				const response = await apiClient.createSession(name);
 				if (!response.success || !response.data) {
 					const errorMsg = response.error?.message ?? "Failed to create room";
 					logger.error({
@@ -631,12 +631,12 @@ export function ChalkProvider({
 			wsParticipantId,
 			rtkClient,
 			rtcManager,
-			isConnected: connectionStatus === "connected",
-			connectionStatus,
+			isConnected: connectionState === "connected",
+			connectionState,
 			roomInfo,
-			joinRoom,
+			joinSession,
 			leaveRoom,
-			createRoom,
+			createSession,
 		}),
 		[
 			apiClient,
@@ -646,11 +646,11 @@ export function ChalkProvider({
 			wsParticipantId,
 			rtkClient,
 			rtcManager,
-			connectionStatus,
+			connectionState,
 			roomInfo,
-			joinRoom,
+			joinSession,
 			leaveRoom,
-			createRoom,
+			createSession,
 		],
 	);
 

@@ -1,7 +1,7 @@
 /**
- * RoomInstanceService - Shared reference to the underlying Room
+ * RoomInstanceService - Shared reference to the underlying ConferenceSession
  *
- * Holds the Room instance that managers depend on.
+ * Holds the ConferenceSession instance that managers depend on.
  * Set by ChalkSession after join, consumed by all manager services.
  *
  * @packageDocumentation
@@ -9,14 +9,14 @@
  */
 
 import { Context, Effect, Layer, Ref } from "effect";
-import type { Room } from "../../room";
+import type { ConferenceSession } from "../../room";
 
 /**
- * Service holding the shared Room reference
+ * Service holding the shared ConferenceSession reference
  */
 export class RoomInstanceService extends Context.Tag("@chalk/RoomInstanceService")<
   RoomInstanceService,
-  Ref.Ref<Room | null>
+  Ref.Ref<ConferenceSession | null>
 >() {}
 
 /**
@@ -24,11 +24,11 @@ export class RoomInstanceService extends Context.Tag("@chalk/RoomInstanceService
  */
 export const RoomInstanceServiceLive = Layer.effect(
   RoomInstanceService,
-  Ref.make<Room | null>(null)
+  Ref.make<ConferenceSession | null>(null)
 );
 
 /**
- * Helper: Get current Room or fail
+ * Helper: Get current ConferenceSession or fail
  */
 export const getRoom = Effect.gen(function* () {
   const roomRef = yield* RoomInstanceService;
@@ -37,7 +37,7 @@ export const getRoom = Effect.gen(function* () {
 });
 
 /**
- * Helper: Get current Room, fail if null
+ * Helper: Get current ConferenceSession, fail if null
  */
 export const requireRoom = Effect.gen(function* () {
   const room = yield* getRoom;
@@ -48,9 +48,9 @@ export const requireRoom = Effect.gen(function* () {
 });
 
 /**
- * Helper: Set Room instance
+ * Helper: Set ConferenceSession instance
  */
-export const setRoom = (room: Room | null) =>
+export const setRoom = (room: ConferenceSession | null) =>
   Effect.gen(function* () {
     const roomRef = yield* RoomInstanceService;
     yield* Ref.set(roomRef, room);

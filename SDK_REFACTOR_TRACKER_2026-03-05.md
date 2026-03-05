@@ -11,13 +11,13 @@ Status model:
 2. `done` — [packages/sdk-react/src/components/full/video-conference/useJoinFlow.ts](/Users/macmini/Desktop/Code/chalk/packages/sdk-react/src/components/full/video-conference/useJoinFlow.ts)
 3. `done` — [packages/sdk-react/src/components/full/video-conference/useSessionEvents.ts](/Users/macmini/Desktop/Code/chalk/packages/sdk-react/src/components/full/video-conference/useSessionEvents.ts)
 4. `done` — [packages/sdk-react/src/components/full/EndScreen.tsx](/Users/macmini/Desktop/Code/chalk/packages/sdk-react/src/components/full/EndScreen.tsx)
-5. `pending-approval` — [packages/sdk-core/src/client.ts](/Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/client.ts)
-6. `pending-approval` — [packages/sdk-core/src/room.ts](/Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/room.ts)
+5. `done` — [packages/sdk-core/src/client.ts](/Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/client.ts)
+6. `done` — [packages/sdk-core/src/room.ts](/Users/macmini/Desktop/Code/chalk/packages/sdk-core/src/room.ts)
 
 ## Execution rule (requested by Hasan)
 
-- Work now: `1-4`
-- Hold: `5-6` until explicit approval
+- Work now: `1-6`
+- Hold: none
 
 ## Progress
 
@@ -25,3 +25,5 @@ Status model:
 - `2026-03-05`: `#2 useJoinFlow` refactor completed (preload/telemetry/device-selection helpers extracted; hook reduced to orchestration).
 - `2026-03-05`: `#3 useSessionEvents` refactor completed (error classification + diagnostic payload logic extracted; event wiring simplified).
 - `2026-03-05`: `#4 EndScreen` refactor completed (feedback/download/actions split into focused modules; shell slimmed).
+- `2026-03-05`: `#5 client.ts` completed with naming overhaul (`ChalkClient` -> `ConferenceClient`, `joinRoom/createRoom/endRoom` -> `joinSession/createSession/endSession`, session-first getters/state naming) and downstream package alignment.
+- `2026-03-05`: `#6 room.ts` completed with event contract redesign (`ConferenceSessionEvents` + dot notation), class rename (`Room` -> `ConferenceSession`), and cross-manager/service/test listener migration.

@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React: PreJoinLobby composition refactor** — split lobby responsibilities into focused hooks/components (`usePreJoinUiState`, `usePreJoinTheme`, `usePreJoinMedia`, `usePreJoinAudioMeter`, modal/header/preview/panel sections), reducing the root component to a small orchestration shell while preserving props compatibility.
 - **SDK-React: MeetingRoom composition refactor** — extract meeting-room state/effects/render sections into a `meeting-room/` module set (`types`, lifecycle/theme/ui/derived hooks, stage/panels/controls/overlays/top-bar sections), shrinking the root file to a concise conductor component without behavior changes.
 - **SDK-React: EndScreen composition split** — decompose `EndScreen` into focused feedback/download/actions modules and shared duration utility for cleaner structure without changing user-facing flow.
+- **SDK-Core: Session-first naming overhaul (breaking)** — rename core SDK vocabulary to `ConferenceClient`/`ConferenceSession` with `JoinSessionConfig`, `SessionInfo`, and `SessionConnectionState`; rename lifecycle APIs to `joinSession`, `createSession`, and `endSession`, and align `sdk-react` / `sdk-react-native` imports/re-exports/providers with the new naming.
+- **SDK-Core: ConferenceSession event contract redesign (breaking)** — migrate room event names to dot notation (`connection.state.changed`, `participant.joined|left|updated`, `speaker.active.changed`, `chat.message`, `hand.*`, `recording.*`, `whiteboard.*`) and update all manager/effect/session listeners plus tests to the new event grammar.
 
 ### Fixed
 

@@ -174,7 +174,7 @@ export class RTCManager {
 	/**
 	 * Join room via RealtimeKit
 	 */
-	async joinRoom(): Promise<void> {
+	async joinSession(): Promise<void> {
 		if (!this.rtkClient) {
 			throw new Error("RTCManager not initialized with RealtimeKit");
 		}

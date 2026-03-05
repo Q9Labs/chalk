@@ -26,7 +26,7 @@ export interface UseRoomReturn {
  *
  * @example
  * ```tsx
- * function RoomStatus() {
+ * function SessionConnectionState() {
  *   const { isConnected, status, roomId } = useRoom();
  *
  *   if (!isConnected) {

@@ -62,7 +62,7 @@ function MeetingRoomBase({
   onLeave,
   onTourComplete,
   onAddPeople,
-  connectionStatus = "connected",
+  connectionState = "connected",
   onRetryConnection,
   connectionSupportCode,
   participantVolumes,
@@ -195,7 +195,7 @@ function MeetingRoomBase({
       />
 
       <MeetingRoomOverlays
-        connectionStatus={connectionStatus}
+        connectionState={connectionState}
         onRetryConnection={onRetryConnection}
         connectionSupportCode={connectionSupportCode}
         enableTour={enableTour}

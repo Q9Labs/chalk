@@ -11,7 +11,7 @@ export interface UseConferenceConnectionStateParams {
 }
 
 export interface UseConferenceConnectionStateReturn {
-	connectionStatus: "connected" | "reconnecting" | "connecting" | "failed";
+	connectionState: "connected" | "reconnecting" | "connecting" | "failed";
 }
 
 export function useConferenceConnectionState({
@@ -21,7 +21,7 @@ export function useConferenceConnectionState({
 	isDisconnectGraceActive,
 	setPhase,
 }: UseConferenceConnectionStateParams): UseConferenceConnectionStateReturn {
-	const connectionStatus = useMemo(() => {
+	const connectionState = useMemo(() => {
 		if (status === "connected") return "connected" as const;
 		if (status === "reconnecting") return "reconnecting" as const;
 		if (status === "connecting") {
@@ -42,5 +42,5 @@ export function useConferenceConnectionState({
 		}
 	}, [isConnected, phase, setPhase]);
 
-	return { connectionStatus };
+	return { connectionState };
 }

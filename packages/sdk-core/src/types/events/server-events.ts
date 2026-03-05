@@ -77,7 +77,7 @@ export interface HandLoweredPayload {
 	timestamp: string;
 }
 
-/** Room state from server */
+/** ConferenceSession state from server */
 export interface ServerRoom {
 	id: string;
 	tenantId: string;
@@ -87,7 +87,7 @@ export interface ServerRoom {
 	endedAt?: string;
 }
 
-/** Room updated notification */
+/** ConferenceSession updated notification */
 export interface RoomUpdatedPayload {
 	room: ServerRoom;
 }
@@ -224,7 +224,7 @@ export interface ServerEventMap {
 	"hand:raised": HandRaisedPayload;
 	"hand:lowered": HandLoweredPayload;
 
-	// Room events
+	// ConferenceSession events
 	"room:updated": RoomUpdatedPayload;
 	"room:snapshot": RoomSnapshotPayload;
 	"room:ended": { reason: string };

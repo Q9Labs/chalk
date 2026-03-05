@@ -33,7 +33,7 @@ export interface Err<E> {
  *
  * @example
  * ```ts
- * const result = await client.joinRoom(roomId, config);
+ * const result = await client.joinSession(roomId, config);
  * if (result.ok) {
  *   console.log('Joined room:', result.value.id);
  * } else {
@@ -69,7 +69,7 @@ export const err = <E>(error: E): Err<E> => ({ ok: false, error });
 export type TokenProvider = () => Promise<string>;
 
 /**
- * Configuration options for ChalkClient
+ * Configuration options for ConferenceClient
  *
  * Authentication is required - provide either:
  * - `token`: Static JWT token (simplest option)
@@ -79,10 +79,10 @@ export type TokenProvider = () => Promise<string>;
  * @example
  * ```ts
  * // Option 1: Static token (simplest)
- * const client = new ChalkClient({ token: 'jwt_xxx' });
+ * const client = new ConferenceClient({ token: 'jwt_xxx' });
  *
  * // Option 2: Dynamic token provider (recommended for browser apps)
- * const client = new ChalkClient({
+ * const client = new ConferenceClient({
  *   tokenProvider: async () => {
  *     const res = await fetch('/api/chalk-token');
  *     const { token } = await res.json();
@@ -91,10 +91,10 @@ export type TokenProvider = () => Promise<string>;
  * });
  *
  * // Option 3: API key (DEPRECATED - security risk in browser)
- * const client = new ChalkClient({ apiKey: 'ck_live_xxx' });
+ * const client = new ConferenceClient({ apiKey: 'ck_live_xxx' });
  * ```
  */
-export interface ChalkClientConfig {
+export interface ConferenceClientConfig {
 	/**
 	 * Static JWT token for authentication
 	 * Use this when you have a pre-fetched token from your server
@@ -149,7 +149,7 @@ export interface ChalkClientConfig {
 	 *
 	 * @example
 	 * ```ts
-	 * const client = new ChalkClient({
+	 * const client = new ConferenceClient({
 	 *   apiUrl: "https://api.chalk.io",
 	 *   token: "...",
 	 *   wideEvents: {
@@ -200,7 +200,7 @@ export interface ChalkClientConfig {
 }
 
 // ============================================================================
-// Room Types
+// ConferenceSession Types
 // ============================================================================
 
 /**
@@ -211,7 +211,7 @@ export interface ChalkClientConfig {
  * - `disconnected`: Cleanly disconnected
  * - `failed`: Connection failed permanently
  */
-export type RoomStatus =
+export type SessionConnectionState =
 	| "connecting"
 	| "connected"
 	| "reconnecting"
@@ -223,7 +223,7 @@ export type RoomStatus =
  *
  * @example
  * ```ts
- * await client.joinRoom('room_123', {
+ * await client.joinSession('room_123', {
  *   displayName: 'John Doe',
  *   audio: true,
  *   video: true,
@@ -231,7 +231,7 @@ export type RoomStatus =
  * });
  * ```
  */
-export interface RoomConfig {
+export interface JoinSessionConfig {
 	/**
 	 * Display name shown to other participants
 	 * @example 'John Doe'
@@ -266,16 +266,16 @@ export interface RoomConfig {
 /**
  * Information about a room
  */
-export interface RoomInfo {
+export interface SessionInfo {
 	/** Unique room identifier */
 	id: string;
 	/** Human-readable room name */
 	name?: string;
 	/** Current connection status */
-	status: RoomStatus;
+	status: SessionConnectionState;
 	/** Number of participants currently in the room */
 	participantCount: number;
-	/** Room configuration */
+	/** ConferenceSession configuration */
 	config: Record<string, unknown>;
 	/** When the room was created */
 	createdAt: Date;
@@ -297,7 +297,7 @@ export type ParticipantRole = "host" | "participant";
  *
  * @example
  * ```ts
- * room.on('participant-joined', (participant) => {
+ * room.on('participant.joined', (participant) => {
  *   console.log(`${participant.displayName} joined`);
  *   if (participant.videoTrack) {
  *     attachVideoToElement(participant.videoTrack, videoElement);
@@ -463,7 +463,7 @@ export type RecordingStatus =
 export interface Recording {
 	/** Unique recording identifier */
 	id: string;
-	/** Room that was recorded */
+	/** ConferenceSession that was recorded */
 	roomId: string;
 	/** Current status */
 	status: RecordingStatus;
@@ -500,7 +500,7 @@ export const ChalkErrorCode = {
 	TOKEN_EXPIRED: "TOKEN_EXPIRED",
 	INVALID_API_KEY: "INVALID_API_KEY",
 
-	// Room errors
+	// ConferenceSession errors
 	ROOM_NOT_FOUND: "ROOM_NOT_FOUND",
 	ROOM_FULL: "ROOM_FULL",
 	ROOM_ENDED: "ROOM_ENDED",
@@ -567,7 +567,7 @@ export type ChalkEventType =
 	| "participant.updated"
 	| "track.subscribed"
 	| "track.unsubscribed"
-	| "active-speaker-changed"
+	| "speaker.active.changed"
 	| "chat.message"
 	| "reaction"
 	| "hand.raised"
@@ -639,7 +639,7 @@ export interface Reaction {
  *
  * @example
  * ```ts
- * const result = await client.joinRoom('room_123', { displayName: 'John' });
+ * const result = await client.joinSession('room_123', { displayName: 'John' });
  * // result.tokens.accessToken - Use for API calls
  * // result.tokens.rtcToken - Used internally for WebRTC
  * ```
@@ -676,9 +676,9 @@ export interface TokenSet {
  *
  * Contains room information, participant details, and authentication tokens
  */
-export interface JoinRoomResult {
+export interface JoinSessionResult {
 	/** Information about the joined room */
-	room: RoomInfo;
+	room: SessionInfo;
 
 	/** The local participant (you) in the room */
 	participant: Participant;
@@ -722,7 +722,7 @@ export interface TenantConfig {
  * Response from joining a room (internal API response format)
  * @internal
  */
-export interface JoinRoomResponse {
+export interface JoinSessionResponse {
 	participantId: string;
 	/**
 	 * Role assigned to the participant
@@ -732,7 +732,7 @@ export interface JoinRoomResponse {
 	 * Authentication tokens for the session
 	 */
 	tokens: TokenSet;
-	room: RoomInfo;
+	room: SessionInfo;
 	/**
 	 * Whether the room was just created (not pre-existing)
 	 */
@@ -751,7 +751,7 @@ export interface JoinRoomResponse {
  * Raw API response from join room endpoint (snake_case from Go API)
  * @internal
  */
-export interface RawJoinRoomApiResponse {
+export interface RawJoinSessionApiResponse {
 	success: boolean;
 	room_id: string;
 	participant_id: string;
@@ -770,7 +770,7 @@ export interface RawJoinRoomApiResponse {
  * Transformed API response from join room endpoint (camelCase after transform)
  * @internal
  */
-export interface TransformedJoinRoomApiResponse {
+export interface TransformedJoinSessionApiResponse {
 	success: boolean;
 	roomId: string;
 	participantId: string;
@@ -803,11 +803,11 @@ export type MediaDeviceInfo = MediaDevice;
 // ============================================================================
 
 /**
- * Room snapshot received on connect/reconnect
+ * ConferenceSession snapshot received on connect/reconnect
  * Contains full room state for synchronization
  */
-export interface RoomSnapshot {
-	/** Room identifier */
+export interface SessionSnapshot {
+	/** ConferenceSession identifier */
 	roomId: string;
 	/** All participants currently in the room */
 	participants: Participant[];

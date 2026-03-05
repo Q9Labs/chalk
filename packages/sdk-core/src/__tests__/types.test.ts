@@ -24,7 +24,7 @@ describe("Result Types", () => {
 		});
 
 		it("should work with objects", () => {
-			const data = { id: "123", name: "Test Room" };
+			const data = { id: "123", name: "Test ConferenceSession" };
 			const result = ok(data);
 
 			expect(result.ok).toBe(true);
@@ -159,12 +159,12 @@ describe("ChalkErrorCode", () => {
 		it("should work with error objects", () => {
 			const error: ChalkError = {
 				code: ChalkErrorCode.ROOM_NOT_FOUND,
-				message: "Room does not exist",
+				message: "ConferenceSession does not exist",
 				details: { roomId: "room_123" },
 			};
 
 			expect(error.code).toBe(ChalkErrorCode.ROOM_NOT_FOUND);
-			expect(error.message).toBe("Room does not exist");
+			expect(error.message).toBe("ConferenceSession does not exist");
 			expect(error.details?.roomId).toBe("room_123");
 		});
 	});

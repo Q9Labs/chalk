@@ -4,14 +4,14 @@
  * Replaces ParticipantManager with Effect patterns:
  * - SubscriptionRef for observable state
  * - PubSub for typed events
- * - Automatic sync from Room events
+ * - Automatic sync from ConferenceSession events
  *
  * @packageDocumentation
  * @module @q9labs/chalk-core/effect/services
  */
 
 import { Context, Effect, Layer, PubSub, Ref, Stream, SubscriptionRef } from "effect";
-import type { Room } from "../../room";
+import type { ConferenceSession } from "../../room";
 import type { Participant } from "../../types";
 import { LoggerService } from "../services";
 import type { ParticipantEvent, ParticipantState, ParticipantData } from "../schemas/manager-state";
@@ -38,7 +38,7 @@ export interface ParticipantServiceInterface {
   /** Get remote participants */
   readonly remoteParticipants: Effect.Effect<readonly ParticipantData[]>;
   /** Attach to room and setup listeners */
-  readonly attachRoom: (room: Room) => Effect.Effect<void>;
+  readonly attachRoom: (room: ConferenceSession) => Effect.Effect<void>;
   /** Detach from room */
   readonly detach: Effect.Effect<void>;
   /** Stream of participant events */
@@ -110,7 +110,7 @@ export const ParticipantServiceLive = Layer.effect(
       });
     });
 
-    const syncFromRoom = (room: Room) =>
+    const syncFromRoom = (room: ConferenceSession) =>
       Effect.gen(function* () {
         const participantMap = new Map<string, ParticipantData>();
 
@@ -129,9 +129,9 @@ export const ParticipantServiceLive = Layer.effect(
         yield* updateState;
       });
 
-    const setupRoomListeners = (room: Room) =>
+    const setupRoomListeners = (room: ConferenceSession) =>
       Effect.sync(() => {
-        const unsubJoined = room.on("participant-joined", (participant) => {
+        const unsubJoined = room.on("participant.joined", (participant) => {
           const normalized = normalizeParticipant(participant);
           Effect.runSync(
             Effect.gen(function* () {
@@ -148,7 +148,7 @@ export const ParticipantServiceLive = Layer.effect(
           );
         });
 
-        const unsubLeft = room.on("participant-left", (participantId) => {
+        const unsubLeft = room.on("participant.left", (participantId) => {
           Effect.runSync(
             Effect.gen(function* () {
               const map = yield* Ref.get(participantMapRef);
@@ -165,7 +165,7 @@ export const ParticipantServiceLive = Layer.effect(
           );
         });
 
-        const unsubUpdated = room.on("participant-updated", ({ participantId, participant }) => {
+        const unsubUpdated = room.on("participant.updated", ({ participantId, participant }) => {
           const normalized = normalizeParticipant(participant);
           Effect.runSync(
             Effect.gen(function* () {
@@ -183,7 +183,7 @@ export const ParticipantServiceLive = Layer.effect(
           );
         });
 
-        const unsubActiveSpeaker = room.on("active-speaker-changed", (speaker) => {
+        const unsubActiveSpeaker = room.on("speaker.active.changed", (speaker) => {
           const normalized = speaker ? normalizeParticipant(speaker) : null;
           Effect.runSync(
             Effect.gen(function* () {

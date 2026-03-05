@@ -128,7 +128,7 @@ export const joinRTKRoom = (
     if (Option.isNone(result)) {
       return yield* Effect.fail(
         new TimeoutError({
-          message: `Room join timed out after ${timeoutMs}ms`,
+          message: `ConferenceSession join timed out after ${timeoutMs}ms`,
           operation: "joinRTKRoom",
           timeoutMs,
         })

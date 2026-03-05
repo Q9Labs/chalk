@@ -6,7 +6,7 @@
 
 import {
 	createTokenProvider,
-	type RoomConfig,
+	type JoinSessionConfig,
 	type TokenStorage,
 } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -78,7 +78,7 @@ export interface VideoConferenceProps {
 	/** Optional token storage (defaults to AsyncStorage if available) */
 	tokenStorage?: "sessionStorage" | "localStorage" | TokenStorage;
 	/** Join options merged with defaults */
-	joinOptions?: Omit<RoomConfig, "displayName">;
+	joinOptions?: Omit<JoinSessionConfig, "displayName">;
 	/** Callback when user successfully joins */
 	onJoin?: (data: MeetingJoinedData) => void;
 	/** Callback when meeting ends */
@@ -218,7 +218,7 @@ function VideoConferenceScreen({
 	foregroundService,
 	style,
 }: VideoConferenceScreenProps) {
-	const { joinRoom, leaveRoom, createRoom, apiClient, rtcManager } = useChalk();
+	const { joinSession, leaveRoom, createSession, apiClient, rtcManager } = useChalk();
 	const { status, isConnected } = useRoom();
 	const { participantCount } = useParticipants();
 
@@ -277,13 +277,13 @@ function VideoConferenceScreen({
 		if (!createIfMissing) return;
 		if (resolvedRoomId) return;
 		if (createAttemptedRef.current) return;
-		if (!createRoom || !apiClient) return;
+		if (!createSession || !apiClient) return;
 
 		createAttemptedRef.current = true;
 		setIsCreatingRoom(true);
 		setCreateError(null);
 
-		createRoom(roomName)
+		createSession(roomName)
 			.then((newRoomId) => {
 				setResolvedRoomId(newRoomId);
 				setIsCreatingRoom(false);
@@ -293,7 +293,7 @@ function VideoConferenceScreen({
 				setCreateError(err.message || "Failed to create room");
 				setIsCreatingRoom(false);
 			});
-	}, [roomId, createIfMissing, resolvedRoomId, createRoom, roomName]);
+	}, [roomId, createIfMissing, resolvedRoomId, createSession, roomName]);
 
 	useEffect(() => {
 		if (isConnected && (phase === "joining" || phase === "lobby")) {
@@ -369,7 +369,7 @@ function VideoConferenceScreen({
 			setError(null);
 
 			try {
-				const response = await joinRoom(resolvedRoomId, {
+				const response = await joinSession(resolvedRoomId, {
 					...joinOptions,
 					displayName: name,
 					audio: joinOptions?.audio ?? true,
@@ -404,7 +404,7 @@ function VideoConferenceScreen({
 		[
 			isJoining,
 			isConnected,
-			joinRoom,
+			joinSession,
 			resolvedRoomId,
 			joinOptions,
 			onJoin,

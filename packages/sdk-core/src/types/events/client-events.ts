@@ -91,7 +91,7 @@ export interface ClientEventMap {
 	"hand:raise": Record<string, never>; // Empty payload
 	"hand:lower": Record<string, never>;
 
-	// Room events
+	// ConferenceSession events
 	"room:sync": RoomSyncPayload;
 
 	// Whiteboard events

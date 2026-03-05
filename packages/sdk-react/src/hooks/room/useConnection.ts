@@ -18,9 +18,9 @@ export interface UseConnectionReturn {
 	/** Leave the current room */
 	leave: (options?: LeaveOptions) => Promise<void>;
 	/** Create a new room */
-	createRoom: (name?: string) => Promise<string>;
+	createSession: (name?: string) => Promise<string>;
 	/** End room for all participants (host only) */
-	endRoom: (roomId: string) => Promise<void>;
+	endSession: (roomId: string) => Promise<void>;
 }
 
 /**
@@ -69,16 +69,16 @@ export function useConnection(): UseConnectionReturn {
 		[session],
 	);
 
-	const createRoom = useCallback(
+	const createSession = useCallback(
 		async (name?: string): Promise<string> => {
-			return session.createRoom(name);
+			return session.createSession(name);
 		},
 		[session],
 	);
 
-	const endRoom = useCallback(
+	const endSession = useCallback(
 		async (roomId: string): Promise<void> => {
-			return session.endRoom(roomId);
+			return session.endSession(roomId);
 		},
 		[session],
 	);
@@ -90,9 +90,9 @@ export function useConnection(): UseConnectionReturn {
 			isJoining: state.isJoining,
 			join,
 			leave,
-			createRoom,
-			endRoom,
+			createSession,
+			endSession,
 		}),
-		[state.status, state.isJoining, join, leave, createRoom, endRoom],
+		[state.status, state.isJoining, join, leave, createSession, endSession],
 	);
 }

@@ -27,7 +27,7 @@ export {
 	// Recording schemas
 	RecordingStartedPayload,
 	RecordingStoppedPayload,
-	// Room schemas
+	// ConferenceSession schemas
 	RoomUpdatedPayload,
 	RoomSnapshotPayload,
 	RegisteredPayload,
@@ -66,15 +66,15 @@ export {
   type ApiError,
   // Response wrapper
   ApiResponse,
-  // Room schemas
+  // ConferenceSession schemas
   RoomInfoSchema,
-  type RoomInfo,
+  type SessionInfo,
   TokenSetSchema,
   type TokenSet,
   CreateRoomResponseSchema,
   type CreateRoomResponse,
   JoinRoomResponseSchema,
-  type JoinRoomResponse,
+  type JoinSessionResponse,
   RawJoinRoomResponseSchema,
   type RawJoinRoomResponse,
   // Recording schemas
@@ -88,7 +88,7 @@ export {
   ParticipantRoleSchema,
   type ParticipantRole,
   RoomStatusSchema,
-  type RoomStatus,
+  type SessionConnectionState,
   // Decode helpers
   decode,
   decodeEffect,
@@ -97,11 +97,11 @@ export {
 
 // Manager state schemas
 export {
-  // Room state
+  // ConferenceSession state
   RoomStatusSchema as RoomManagerStatusSchema,
   RoomStateSchema,
   RoomEventSchema,
-  type RoomStatus as RoomManagerStatus,
+  type SessionConnectionState as RoomManagerStatus,
   type RoomState,
   type RoomEvent,
   // Participant state

@@ -33,14 +33,14 @@ describe("WhiteboardManager", () => {
 
 		expect(manager.getState().isOpen).toBe(false);
 
-		room.emit("whiteboard-opened", {
+		room.emit("whiteboard.opened", {
 			participantId: "remote",
 			displayName: "Remote",
 		});
 		expect(manager.getState().isOpen).toBe(true);
 		expect(room.openCalls).toBe(0);
 
-		room.emit("whiteboard-closed", {
+		room.emit("whiteboard.closed", {
 			participantId: "remote",
 		});
 		expect(manager.getState().isOpen).toBe(false);

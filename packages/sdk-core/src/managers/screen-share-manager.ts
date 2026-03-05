@@ -6,7 +6,7 @@
  */
 
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
-import type { Room } from "../room";
+import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { ScreenShareOptions } from "../types/entities/media";
 import { TypedEventEmitter } from "../utils/typed-emitter";
@@ -42,7 +42,7 @@ export interface ScreenShareManagerEvents {
  */
 export class ScreenShareManager extends StateContainer<ScreenShareState> {
 	private readonly events = new TypedEventEmitter<ScreenShareManagerEvents>();
-	private room: Room | null = null;
+	private room: ConferenceSession | null = null;
 
 	constructor(_debug = false) {
 		super({
@@ -63,8 +63,8 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 		return this.events.on(event, handler);
 	}
 
-	/** Attach Room instance */
-	attachRoom(room: Room): void {
+	/** Attach ConferenceSession instance */
+	attachRoom(room: ConferenceSession): void {
 		this.room = room;
 		this.setupRoomListeners();
 		this.syncFromRoom();
@@ -104,7 +104,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 	private setupRoomListeners(): void {
 		if (!this.room) return;
 
-		this.room.on("participant-updated", ({ participantId, participant }) => {
+		this.room.on("participant.updated", ({ participantId, participant }) => {
 			const wasSharing = this.getState().sharerParticipantId === participantId;
 			const isNowSharing = participant.isScreenSharing;
 
@@ -138,7 +138,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 			}
 		});
 
-		this.room.on("participant-left", (participantId) => {
+		this.room.on("participant.left", (participantId) => {
 			if (this.getState().sharerParticipantId === participantId) {
 				this.setState({
 					isActive: false,
@@ -185,7 +185,7 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
 				});
 			} else {
 				this.setState({ isStarting: false });
-				// Room.startScreenShare returns false on failure (it emits a room error event).
+				// ConferenceSession.startScreenShare returns false on failure (it emits a room error event).
 				// Surface a manager-level error so UI hooks can react consistently.
 				if (!this.getState().isActive) {
 					this.events.emit(

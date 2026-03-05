@@ -6,7 +6,7 @@
  */
 
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
-import type { Room } from "../room";
+import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { ChatMessage, ReactionEmoji } from "../types";
 import { TypedEventEmitter } from "../utils/typed-emitter";
@@ -40,7 +40,7 @@ export interface ChatManagerEvents {
  */
 export class ChatManager extends StateContainer<ChatState> {
 	private readonly events = new TypedEventEmitter<ChatManagerEvents>();
-	private room: Room | null = null;
+	private room: ConferenceSession | null = null;
 	private messages: ChatMessage[] = [];
 	private unreadCount = 0;
 	private isChatVisible = false;
@@ -62,8 +62,8 @@ export class ChatManager extends StateContainer<ChatState> {
 		return this.events.on(event, handler);
 	}
 
-	/** Attach Room instance */
-	attachRoom(room: Room): void {
+	/** Attach ConferenceSession instance */
+	attachRoom(room: ConferenceSession): void {
 		this.room = room;
 		this.setupRoomListeners();
 		this.syncFromRoom();
@@ -90,7 +90,7 @@ export class ChatManager extends StateContainer<ChatState> {
 	private setupRoomListeners(): void {
 		if (!this.room) return;
 
-		this.room.on("chat-message", (message) => {
+		this.room.on("chat.message", (message) => {
 			const normalized = this.normalizeMessage(message);
 			this.messages.push(normalized);
 

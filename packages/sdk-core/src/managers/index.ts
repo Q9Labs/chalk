@@ -54,7 +54,7 @@ export { WhiteboardManager } from "./whiteboard-manager";
 // Re-export types for backwards compatibility
 // ============================================================================
 
-// Room types (from Effect schemas)
+// ConferenceSession types (from Effect schemas)
 export type {
 	RoomState,
 	RoomEvent as RoomManagerEvents,

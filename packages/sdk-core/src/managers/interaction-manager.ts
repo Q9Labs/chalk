@@ -6,7 +6,7 @@
  */
 
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
-import type { Room } from "../room";
+import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { Reaction, ReactionEmoji } from "../types";
 import { TypedEventEmitter } from "../utils/typed-emitter";
@@ -49,7 +49,7 @@ const REACTION_DISMISS_MS = 3000;
  */
 export class InteractionManager extends StateContainer<InteractionState> {
 	private readonly events = new TypedEventEmitter<InteractionManagerEvents>();
-	private room: Room | null = null;
+	private room: ConferenceSession | null = null;
 	private reactionTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 	private activeReactions: ActiveReaction[] = [];
 	private raisedHandsSet = new Set<string>();
@@ -70,8 +70,8 @@ export class InteractionManager extends StateContainer<InteractionState> {
 		return this.events.on(event, handler);
 	}
 
-	/** Attach Room instance */
-	attachRoom(room: Room): void {
+	/** Attach ConferenceSession instance */
+	attachRoom(room: ConferenceSession): void {
 		this.room = room;
 		this.setupRoomListeners();
 		this.syncFromRoom();
@@ -102,7 +102,7 @@ export class InteractionManager extends StateContainer<InteractionState> {
 			this.events.emit("reaction", reaction);
 		});
 
-		this.room.on("hand-raised", ({ participantId }) => {
+		this.room.on("hand.raised", ({ participantId }) => {
 			this.raisedHandsSet.add(participantId);
 			this.updateRaisedHandsState();
 
@@ -114,7 +114,7 @@ export class InteractionManager extends StateContainer<InteractionState> {
 			this.events.emit("hand:raised", { participantId });
 		});
 
-		this.room.on("hand-lowered", ({ participantId }) => {
+		this.room.on("hand.lowered", ({ participantId }) => {
 			this.raisedHandsSet.delete(participantId);
 			this.updateRaisedHandsState();
 
@@ -126,7 +126,7 @@ export class InteractionManager extends StateContainer<InteractionState> {
 			this.events.emit("hand:lowered", { participantId });
 		});
 
-		this.room.on("participant-left", (participantId) => {
+		this.room.on("participant.left", (participantId) => {
 			this.raisedHandsSet.delete(participantId);
 			this.updateRaisedHandsState();
 		});

@@ -1,5 +1,5 @@
 /**
- * Room entity types for Chalk SDK
+ * ConferenceSession entity types for Chalk SDK
  *
  * @packageDocumentation
  * @module @q9labs/chalk-core/types
@@ -8,7 +8,7 @@
 /**
  * Connection status of a room
  */
-export type RoomStatus =
+export type SessionConnectionState =
 	| "connecting"
 	| "connected"
 	| "reconnecting"
@@ -27,7 +27,7 @@ export type RoomStatus =
  * });
  * ```
  */
-export interface Room {
+export interface ConferenceSession {
 	/** Unique room identifier (UUID) */
 	readonly id: string;
 
@@ -35,7 +35,7 @@ export interface Room {
 	name?: string;
 
 	/** Current connection status */
-	status: RoomStatus;
+	status: SessionConnectionState;
 
 	/** When the room was created */
 	createdAt: Date;
@@ -49,14 +49,14 @@ export interface Room {
 	/** Current recording ID if recording */
 	recordingId?: string;
 
-	/** Room configuration */
-	config?: RoomConfig;
+	/** ConferenceSession configuration */
+	config?: JoinSessionConfig;
 }
 
 /**
- * Room configuration options
+ * ConferenceSession configuration options
  */
-export interface RoomConfig {
+export interface JoinSessionConfig {
 	/** Maximum number of participants allowed */
 	maxParticipants?: number;
 

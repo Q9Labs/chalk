@@ -8,14 +8,14 @@ import { wideEvents } from "./wide-events/index.ts";
 import { ChalkError, ChalkErrorCode } from "./errors/chalk-error.ts";
 import type {
 	ApiResponse,
-	ChalkClientConfig,
+	ConferenceClientConfig,
 	ChalkError as ChalkErrorType,
 	CreateRoomResponse,
-	JoinRoomResponse,
+	JoinSessionResponse,
 	Recording,
-	RoomInfo,
+	SessionInfo,
 	TokenProvider,
-	TransformedJoinRoomApiResponse,
+	TransformedJoinSessionApiResponse,
 } from "./types.ts";
 
 interface APIClientEvents {
@@ -31,10 +31,10 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	// SDKCORE-MED-02: Queue for serializing concurrent refresh requests
 	private refreshPromise: Promise<string | null> | null = null;
 
-	constructor(config: ChalkClientConfig) {
+	constructor(config: ConferenceClientConfig) {
 		super();
 		if (!config.apiUrl) {
-			throw new Error("apiUrl is required in ChalkClientConfig");
+			throw new Error("apiUrl is required in ConferenceClientConfig");
 		}
 		this.apiUrl = config.apiUrl;
 		this.apiKey = config.apiKey;
@@ -244,8 +244,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		return this.request<T>(method, path, body, true);
 	}
 
-	// Room endpoints
-	async createRoom(
+	// ConferenceSession endpoints
+	async createSession(
 		name?: string,
 		config?: Record<string, unknown>,
 	): Promise<ApiResponse<CreateRoomResponse>> {
@@ -255,11 +255,11 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		});
 	}
 
-	async getRoom(roomId: string): Promise<ApiResponse<RoomInfo>> {
-		return this.request<RoomInfo>("GET", `/api/v1/rooms/${roomId}`);
+	async getRoom(roomId: string): Promise<ApiResponse<SessionInfo>> {
+		return this.request<SessionInfo>("GET", `/api/v1/rooms/${roomId}`);
 	}
 
-	async endRoom(roomId: string): Promise<ApiResponse<void>> {
+	async endSession(roomId: string): Promise<ApiResponse<void>> {
 		return this.request<void>("POST", `/api/v1/rooms/${roomId}/end`);
 	}
 
@@ -268,8 +268,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		displayName: string,
 		role?: "host" | "participant",
 		metadata?: Record<string, unknown>,
-	): Promise<ApiResponse<JoinRoomResponse>> {
-		const response = await this.request<TransformedJoinRoomApiResponse>(
+	): Promise<ApiResponse<JoinSessionResponse>> {
+		const response = await this.request<TransformedJoinSessionApiResponse>(
 			"POST",
 			`/api/v1/rooms/${roomId}/participants`,
 			{
@@ -280,7 +280,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		);
 
 		if (!response.success || !response.data) {
-			return response as unknown as ApiResponse<JoinRoomResponse>;
+			return response as unknown as ApiResponse<JoinSessionResponse>;
 		}
 
 		return {
@@ -292,8 +292,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	async demoJoin(
 		roomId: string,
 		displayName: string,
-	): Promise<ApiResponse<JoinRoomResponse>> {
-		const response = await this.request<TransformedJoinRoomApiResponse>(
+	): Promise<ApiResponse<JoinSessionResponse>> {
+		const response = await this.request<TransformedJoinSessionApiResponse>(
 			"POST",
 			"/api/v1/demo/join",
 			{
@@ -303,7 +303,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		);
 
 		if (!response.success || !response.data) {
-			return response as unknown as ApiResponse<JoinRoomResponse>;
+			return response as unknown as ApiResponse<JoinSessionResponse>;
 		}
 
 		return {
@@ -313,8 +313,8 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	}
 
 	private transformJoinResponse(
-		data: TransformedJoinRoomApiResponse,
-	): JoinRoomResponse {
+		data: TransformedJoinSessionApiResponse,
+	): JoinSessionResponse {
 		// SDKCORE-HIGH-01: Remove authToken fallback - authToken is RTC-only
 		// Demo mode returns 'token', standard mode returns 'accessToken'
 		const accessToken = data.token ?? data.accessToken;

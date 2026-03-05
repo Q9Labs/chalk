@@ -1,5 +1,5 @@
 /**
- * ChalkClient - Main entry point for the Chalk SDK
+ * ConferenceClient - Main entry point for the Chalk SDK
  * Integrates with Cloudflare RealtimeKit for WebRTC
  */
 
@@ -11,13 +11,13 @@ import {
   ChalkPostHogSessionReplay,
   type ChalkPostHogConfig,
 } from "./posthog.ts";
-import { Room } from "./room.ts";
+import { ConferenceSession } from "./room.ts";
 import type {
-  ChalkClientConfig,
+  ConferenceClientConfig,
   ChalkError,
   Participant,
-  RoomConfig,
-  RoomStatus,
+  JoinSessionConfig,
+  SessionConnectionState,
   TokenProvider,
 } from "./types.ts";
 import { wideEvents } from "./wide-events/index.ts";
@@ -47,17 +47,17 @@ const importRealtimeKitModule = async () => {
   return realtimeKitModulePromise;
 };
 
-interface ChalkClientEvents {
+interface ConferenceClientEvents {
   "token-expired": ChalkError;
 }
 
-export class ChalkClient extends EventEmitter<ChalkClientEvents> {
+export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
   private readonly apiClient: APIClient;
   private readonly wsUrl: string;
   private readonly tokenProvider?: TokenProvider;
   private readonly debug: boolean;
   private readonly demoMode: boolean;
-  private currentRoom: Room | null = null;
+  private currentSession: ConferenceSession | null = null;
   private currentWsClient: WSClient | null = null;
   private readonly postHogSessionReplay = new ChalkPostHogSessionReplay();
   // Effect: OperationLock for serializing join operations
@@ -66,7 +66,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     (typeof import("@cloudflare/realtimekit"))["default"]
   > | null = null;
 
-  constructor(config: ChalkClientConfig) {
+  constructor(config: ConferenceClientConfig) {
     super();
     const apiUrl = config.apiUrl ?? DEFAULT_API_URL;
     this.debug = config.debug ?? false;
@@ -79,7 +79,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       config.token || config.tokenProvider || config.apiKey || this.debug;
     if (!hasAuth) {
       throw new Error(
-        "ChalkClient requires authentication: provide token, tokenProvider, or apiKey",
+        "ConferenceClient requires authentication: provide token, tokenProvider, or apiKey",
       );
     }
 
@@ -115,12 +115,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
             userHandler(event);
             axiomHandler(event);
           }
-        : userHandler ?? axiomHandler;
+        : (userHandler ?? axiomHandler);
 
     wideEvents.configure({
       enabled: config.wideEvents?.enabled ?? config.debug ?? false,
       handler: combinedHandler,
-      includeDebugInfo: config.wideEvents?.includeDebugInfo ?? config.debug ?? false,
+      includeDebugInfo:
+        config.wideEvents?.includeDebugInfo ?? config.debug ?? false,
     });
   }
 
@@ -165,8 +166,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private trackPostHogLeave(reason: "disconnect" | "switch_room"): void {
     this.postHogSessionReplay.trackLeave({
       reason,
-      roomId: this.currentRoom?.id,
-      participantId: this.currentRoom?.localParticipant?.id,
+      roomId: this.currentSession?.id,
+      participantId: this.currentSession?.localParticipant?.id,
       demoMode: this.demoMode,
     });
   }
@@ -199,7 +200,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    */
   private isTokenExpired(token: string): boolean {
     try {
-      const parts = token.split('.');
+      const parts = token.split(".");
       if (parts.length !== 3 || !parts[1]) {
         return true; // Invalid JWT format
       }
@@ -210,10 +211,10 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         .replace(/_/g, "/")
         .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
       let decoded: string;
-      if (typeof atob === 'function') {
+      if (typeof atob === "function") {
         decoded = atob(payloadB64);
-      } else if (typeof Buffer !== 'undefined') {
-        decoded = Buffer.from(payloadB64, 'base64').toString('utf-8');
+      } else if (typeof Buffer !== "undefined") {
+        decoded = Buffer.from(payloadB64, "base64").toString("utf-8");
       } else {
         // Fallback: assume not expired if we can't decode
         return false;
@@ -257,7 +258,10 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * Effect-based RTK join wait with timeout
    * Uses Effect.timeoutOption for clean timeout handling
    */
-  private _joinRealtimeKitEffect(joinPromise: Promise<void>, timeoutMs: number) {
+  private _joinRealtimeKitEffect(
+    joinPromise: Promise<void>,
+    timeoutMs: number,
+  ) {
     return pipe(
       Effect.tryPromise({
         try: () => joinPromise,
@@ -275,12 +279,12 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
           ? Effect.succeed(option)
           : Effect.fail(
               new TimeoutError({
-                message: `Room join timed out after ${timeoutMs}ms`,
+                message: `ConferenceSession join timed out after ${timeoutMs}ms`,
                 operation: "joinRTKRoom",
                 timeoutMs,
-              })
-            )
-      )
+              }),
+            ),
+      ),
     );
   }
 
@@ -312,7 +316,10 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     errorMessage?: string;
     joinPolicySelection: ReturnType<typeof getRtkJoinPolicyForCurrentCohort>;
   }): void {
-    const attemptCtx = new WideEventContext("room.join.rtk.attempt", wideEvents.collector);
+    const attemptCtx = new WideEventContext(
+      "room.join.rtk.attempt",
+      wideEvents.collector,
+    );
     attemptCtx.merge({
       attempt,
       totalAttempts,
@@ -330,7 +337,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     }
 
     attemptCtx.complete(outcome, {
-      code: timeoutVsError === "timeout" ? "RTK_JOIN_TIMEOUT" : "RTK_JOIN_ERROR",
+      code:
+        timeoutVsError === "timeout" ? "RTK_JOIN_TIMEOUT" : "RTK_JOIN_ERROR",
       message: errorMessage ?? "RTK join attempt failed",
     });
   }
@@ -358,7 +366,9 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       }
 
       try {
-        await Effect.runPromise(this._joinRealtimeKitEffect(joinPromise, timeoutMs));
+        await Effect.runPromise(
+          this._joinRealtimeKitEffect(joinPromise, timeoutMs),
+        );
         this._emitRtkJoinAttemptTelemetry({
           attempt: attemptNumber,
           totalAttempts,
@@ -371,10 +381,12 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
         });
         return;
       } catch (error) {
-        const normalized = error instanceof Error ? error : new Error(String(error));
+        const normalized =
+          error instanceof Error ? error : new Error(String(error));
         lastError = normalized;
         const isTimeout = this._isJoinTimeoutError(normalized);
-        const delayMs = attempt < retryDelays.length ? retryDelays[attempt]! : 0;
+        const delayMs =
+          attempt < retryDelays.length ? retryDelays[attempt]! : 0;
 
         this._emitRtkJoinAttemptTelemetry({
           attempt: attemptNumber,
@@ -402,29 +414,37 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     }
 
     // All attempts failed
-    throw new Error(`Failed to join room after ${totalAttempts} attempts: ${lastError?.message}`);
+    throw new Error(
+      `Failed to join room after ${totalAttempts} attempts: ${lastError?.message}`,
+    );
   }
 
-  async joinRoom(roomId: string, config: RoomConfig): Promise<Room> {
+  async joinSession(sessionId: string, config: JoinSessionConfig): Promise<ConferenceSession> {
     // Effect: Use OperationLock for serialized join (prevents concurrent joins)
     return this.joinLock.withLock(async () => {
       // Clean up existing room before joining new one
-      if (this.currentRoom) {
+      if (this.currentSession) {
         this.trackPostHogLeave("switch_room");
-        await this.currentRoom.leave();
-        this.currentRoom = null;
+        await this.currentSession.leave();
+        this.currentSession = null;
       }
 
       const ctx = wideEvents.start("room.join");
-      ctx.set("input", { roomId, displayName: config.displayName, role: config.role, audio: config.audio, video: config.video });
+      ctx.set("input", {
+        roomId: sessionId,
+        displayName: config.displayName,
+        role: config.role,
+        audio: config.audio,
+        video: config.video,
+      });
 
       try {
         ctx.markPhase("api");
 
         const response = this.demoMode
-          ? await this.apiClient.demoJoin(roomId, config.displayName)
+          ? await this.apiClient.demoJoin(sessionId, config.displayName)
           : await this.apiClient.addParticipant(
-              roomId,
+              sessionId,
               config.displayName,
               config.role,
               config.metadata,
@@ -440,7 +460,9 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
         // CRITICAL: Validate token BEFORE using it
         if (!tokens.rtcToken) {
-          throw new Error("RealtimeKit token missing - API did not return rtcToken");
+          throw new Error(
+            "RealtimeKit token missing - API did not return rtcToken",
+          );
         }
 
         // Never substitute RTC token with tokenProvider output.
@@ -485,11 +507,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
           this._initRealtimeKitEffect(
             tokens.rtcToken,
             config.audio ?? false,
-            config.video ?? false
-          )
+            config.video ?? false,
+          ),
         ).catch((error) => {
           if (error instanceof ConnectionError) {
-            throw new Error(`RealtimeKit initialization failed: ${error.message}`);
+            throw new Error(
+              `RealtimeKit initialization failed: ${error.message}`,
+            );
           }
           throw error;
         });
@@ -498,7 +522,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
           throw new Error("RealtimeKit init returned null/undefined client");
         }
 
-        const room = new Room(roomInfo.id, rtkClient, this.debug);
+        const room = new ConferenceSession(roomInfo.id, rtkClient, this.debug);
         room._setLocalParticipant(localParticipant);
         room._setInfo(roomInfo);
         room._setTokens(tokens);
@@ -524,13 +548,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
         // Start WebSocket connection in parallel (non-blocking)
         if (wsClient && tokens.accessToken) {
-          wsClient.connect(tokens.accessToken, roomId);
+          wsClient.connect(tokens.accessToken, sessionId);
         }
 
         // Wait for RTK join to complete (WS connects independently)
         await rtkJoinPromise;
 
-        this.currentRoom = room;
+        this.currentSession = room;
         this.postHogSessionReplay.trackJoinSucceeded({
           roomId: roomInfo.id,
           participantId,
@@ -548,12 +572,15 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
         wideEvents.setRoomId(roomInfo.id);
         wideEvents.setParticipantId(participantId);
-        ctx.complete("success", { participantCount: room.participants.size, roomCreated: response.data.roomCreated });
+        ctx.complete("success", {
+          participantCount: room.participants.size,
+          roomCreated: response.data.roomCreated,
+        });
 
         return room;
       } catch (error) {
         this.postHogSessionReplay.trackJoinFailed({
-          roomId,
+          roomId: sessionId,
           displayName: config.displayName,
           error: error instanceof Error ? error.message : String(error),
           demoMode: this.demoMode,
@@ -570,7 +597,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * @param config - Optional room configuration
    * @returns The room ID
    */
-  async createRoom(
+  async createSession(
     name?: string,
     config?: Record<string, unknown>,
   ): Promise<string> {
@@ -578,7 +605,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     ctx.set("input", { name, config });
 
     try {
-      const response = await this.apiClient.createRoom(name, config);
+      const response = await this.apiClient.createSession(name, config);
 
       if (!response.success || !response.data) {
         throw new Error(response.error?.message ?? "Failed to create room");
@@ -596,12 +623,12 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * End a room (host only)
    * @param roomId - The room ID to end
    */
-  async endRoom(roomId: string): Promise<void> {
+  async endSession(sessionId: string): Promise<void> {
     const ctx = wideEvents.start("room.end");
-    ctx.set("input", { roomId });
+    ctx.set("input", { roomId: sessionId });
 
     try {
-      const response = await this.apiClient.endRoom(roomId);
+      const response = await this.apiClient.endSession(sessionId);
 
       if (!response.success) {
         throw new Error(response.error?.message ?? "Failed to end room");
@@ -622,13 +649,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     const ctx = wideEvents.start("recording.start");
 
     try {
-      if (!this.currentRoom) {
+      if (!this.currentSession) {
         throw new Error("Not connected to a room");
       }
 
-      ctx.set("input", { roomId: this.currentRoom.id });
+      ctx.set("input", { roomId: this.currentSession.id });
 
-      const response = await this.apiClient.startRecording(this.currentRoom.id);
+      const response = await this.apiClient.startRecording(this.currentSession.id);
 
       if (!response.success || !response.data) {
         throw new Error(response.error?.message ?? "Failed to start recording");
@@ -649,13 +676,13 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     const ctx = wideEvents.start("recording.stop");
 
     try {
-      if (!this.currentRoom) {
+      if (!this.currentSession) {
         throw new Error("Not connected to a room");
       }
 
-      ctx.set("input", { roomId: this.currentRoom.id });
+      ctx.set("input", { roomId: this.currentSession.id });
 
-      const response = await this.apiClient.stopRecording(this.currentRoom.id);
+      const response = await this.apiClient.stopRecording(this.currentSession.id);
 
       if (!response.success) {
         throw new Error(response.error?.message ?? "Failed to stop recording");
@@ -703,10 +730,15 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     ctx.set("input", { roomId, fileId });
 
     try {
-      const response = await this.apiClient.presignWhiteboardDownload(roomId, fileId);
+      const response = await this.apiClient.presignWhiteboardDownload(
+        roomId,
+        fileId,
+      );
 
       if (!response.success || !response.data) {
-        throw new Error(response.error?.message ?? "Failed to presign download");
+        throw new Error(
+          response.error?.message ?? "Failed to presign download",
+        );
       }
 
       ctx.complete("success");
@@ -720,22 +752,26 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   /**
    * Get the current room
    */
-  get room(): Room | null {
-    return this.currentRoom;
+  get session(): ConferenceSession | null {
+    return this.currentSession;
+  }
+
+  get room(): ConferenceSession | null {
+    return this.session;
   }
 
   /**
    * Check if connected to a room
    */
   get isConnected(): boolean {
-    return this.currentRoom?.status === "connected";
+    return this.currentSession?.connectionState === "connected";
   }
 
   /**
    * Get connection status
    */
-  get connectionStatus(): RoomStatus {
-    return this.currentRoom?.status ?? "disconnected";
+  get connectionState(): SessionConnectionState {
+    return this.currentSession?.connectionState ?? "disconnected";
   }
 
   /**
@@ -746,33 +782,39 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     const ctx = wideEvents.start("participant.remove");
 
     try {
-      if (!this.currentRoom) {
+      if (!this.currentSession) {
         throw new Error("Not connected to a room");
       }
 
-      ctx.set("input", { roomId: this.currentRoom.id, participantId: apiParticipantId });
+      ctx.set("input", {
+        roomId: this.currentSession.id,
+        participantId: apiParticipantId,
+      });
 
       // Validate ID format (basic UUID check)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(apiParticipantId)) {
         throw new Error(
           `Invalid participant ID format: "${apiParticipantId}". ` +
-          `Use customParticipantId from the participant object.`
+            `Use customParticipantId from the participant object.`,
         );
       }
 
       // Prevent self-removal
-      if (apiParticipantId === this.currentRoom.localParticipant?.id) {
+      if (apiParticipantId === this.currentSession.localParticipant?.id) {
         throw new Error("Cannot remove yourself from the room");
       }
 
       const response = await this.apiClient.removeParticipant(
-        this.currentRoom.id,
+        this.currentSession.id,
         apiParticipantId,
       );
 
       if (!response.success) {
-        throw new Error(response.error?.message ?? "Failed to remove participant");
+        throw new Error(
+          response.error?.message ?? "Failed to remove participant",
+        );
       }
 
       ctx.complete("success");
@@ -788,10 +830,10 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   disconnect(): void {
     const ctx = wideEvents.start("room.leave");
 
-    if (this.currentRoom) {
+    if (this.currentSession) {
       this.trackPostHogLeave("disconnect");
-      this.currentRoom.leave();
-      this.currentRoom = null;
+      this.currentSession.leave();
+      this.currentSession = null;
     }
     if (this.currentWsClient) {
       this.currentWsClient.disconnect();

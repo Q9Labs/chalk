@@ -96,7 +96,7 @@ export interface MeetingRoomProps {
   onLeave?: () => void;
   onTourComplete?: () => void;
   onAddPeople?: () => void;
-  connectionStatus?: "connected" | "connecting" | "reconnecting" | "failed";
+  connectionState?: "connected" | "connecting" | "reconnecting" | "failed";
   onRetryConnection?: () => void;
   connectionSupportCode?: string;
   participantVolumes?: ReadonlyMap<string, number>;

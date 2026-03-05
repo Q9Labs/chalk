@@ -41,7 +41,7 @@ export interface Recording {
 	/** Unique recording identifier (UUID) */
 	readonly id: string;
 
-	/** Room that was recorded */
+	/** ConferenceSession that was recorded */
 	roomId: string;
 
 	/** Current status */

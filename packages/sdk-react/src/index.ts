@@ -9,7 +9,7 @@
 // Re-export useful types from core
 // ============================================================================
 
-// Re-export Room type for backward compatibility
+// Re-export ConferenceSession type for backward compatibility
 export type {
 	ActiveReaction,
 	// Entities
@@ -43,12 +43,12 @@ export type {
 	ReactionEmoji,
 	Recording,
 	RecordingState,
-	Room,
-	RoomConfig,
-	RoomInfo,
+	ConferenceSession,
+	JoinSessionConfig,
+	SessionInfo,
 	// Manager types
 	RoomState,
-	RoomStatus,
+	SessionConnectionState,
 	ScreenShareOptions,
 	ScreenShareState,
 	UIState,
@@ -127,7 +127,7 @@ export {
 	type UseWhiteboardReturn,
 	useActiveSpeaker,
 	useAnnouncer,
-	// Room
+	// ConferenceSession
 	useChalk,
 	// Features
 	useChat,

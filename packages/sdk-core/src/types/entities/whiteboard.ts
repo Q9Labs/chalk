@@ -41,7 +41,7 @@ export interface WhiteboardSnapshot {
 	/** Wire schema version (v2 = 2) */
 	schemaVersion?: number;
 
-	/** Room ID */
+	/** ConferenceSession ID */
 	roomId: string;
 
 	/** Scene epoch; changes on clear */

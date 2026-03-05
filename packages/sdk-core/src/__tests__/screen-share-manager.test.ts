@@ -69,14 +69,14 @@ describe("ScreenShareManager", () => {
 		const manager = new ScreenShareManager();
 		manager.attachRoom(room as any);
 
-		// Remote starts sharing (via participant-updated event).
+		// Remote starts sharing (via participant.updated event).
 		const remote: ParticipantLike = {
 			id: "remote",
 			isLocal: false,
 			isScreenSharing: true,
 		};
 		room.participants.set(remote.id, remote);
-		room.emit("participant-updated", { participantId: remote.id, participant: remote });
+		room.emit("participant.updated", { participantId: remote.id, participant: remote });
 
 		expect(manager.isLocalSharing).toBe(false);
 		await manager.stop();

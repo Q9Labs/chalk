@@ -36,13 +36,13 @@ export const ApiResponse = <A, I, R>(dataSchema: Schema.Schema<A, I, R>) =>
   );
 
 /**
- * Room info schema
+ * ConferenceSession info schema
  */
 export const RoomInfoSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.optional(Schema.String),
 });
-export type RoomInfo = Schema.Schema.Type<typeof RoomInfoSchema>;
+export type SessionInfo = Schema.Schema.Type<typeof RoomInfoSchema>;
 
 /**
  * Token set schema
@@ -79,7 +79,7 @@ export const JoinRoomResponseSchema = Schema.Struct({
   expiresAt: Schema.optional(Schema.Number),
   room: RoomInfoSchema,
 });
-export type JoinRoomResponse = Schema.Schema.Type<typeof JoinRoomResponseSchema>;
+export type JoinSessionResponse = Schema.Schema.Type<typeof JoinRoomResponseSchema>;
 
 /**
  * Raw join room response (snake_case from Go API)
@@ -149,7 +149,7 @@ export const ParticipantRoleSchema = Schema.Union(
 export type ParticipantRole = Schema.Schema.Type<typeof ParticipantRoleSchema>;
 
 /**
- * Room status schema
+ * ConferenceSession status schema
  */
 export const RoomStatusSchema = Schema.Union(
   Schema.Literal("connecting"),
@@ -158,7 +158,7 @@ export const RoomStatusSchema = Schema.Union(
   Schema.Literal("disconnected"),
   Schema.Literal("failed")
 );
-export type RoomStatus = Schema.Schema.Type<typeof RoomStatusSchema>;
+export type SessionConnectionState = Schema.Schema.Type<typeof RoomStatusSchema>;
 
 /**
  * Decode helper - validates unknown input against schema

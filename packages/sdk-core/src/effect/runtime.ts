@@ -9,7 +9,7 @@
  */
 
 import { Effect, Layer, ManagedRuntime, pipe, Option } from "effect";
-import type { ChalkClientConfig, ChalkError as ChalkErrorInterface } from "../types";
+import type { ConferenceClientConfig, ChalkError as ChalkErrorInterface } from "../types";
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import { type SDKError, toChalkError, TimeoutError } from "./errors";
 import {
@@ -46,7 +46,7 @@ export interface RunSDKEffectOptions {
 /**
  * Create the base SDK layer from config
  */
-export const makeSDKLayer = (config: ChalkClientConfig) =>
+export const makeSDKLayer = (config: ConferenceClientConfig) =>
   Layer.mergeAll(
     makeConfigLayer(config),
     makeLoggerLayer(config.debug ?? false),
@@ -56,7 +56,7 @@ export const makeSDKLayer = (config: ChalkClientConfig) =>
 /**
  * Create a managed runtime for the SDK
  */
-export const makeSDKRuntime = (config: ChalkClientConfig) =>
+export const makeSDKRuntime = (config: ConferenceClientConfig) =>
   ManagedRuntime.make(makeSDKLayer(config));
 
 /**

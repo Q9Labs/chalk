@@ -1,5 +1,5 @@
 /**
- * StatusBadge - Circular badge for muted/speaking/hand-raised states
+ * StatusBadge - Circular badge for muted/speaking/hand.raised states
  */
 
 import { useMemo } from "react";
@@ -13,7 +13,7 @@ import {
 
 interface StatusBadgeProps {
 	/** Badge type */
-	type: "muted" | "speaking" | "hand-raised";
+	type: "muted" | "speaking" | "hand.raised";
 	/** Badge size in pixels (default: 24) */
 	size?: number;
 	/** Additional container styles */
@@ -23,7 +23,7 @@ interface StatusBadgeProps {
 const BADGE_COLORS = {
 	muted: CHALK_THEME.colors.destructive,
 	speaking: CHALK_THEME.colors.status.speaking,
-	"hand-raised": CHALK_THEME.colors.status.warning,
+	"hand.raised": CHALK_THEME.colors.status.warning,
 } as const;
 
 export function StatusBadge({ type, size = 24, style }: StatusBadgeProps) {
@@ -48,7 +48,7 @@ export function StatusBadge({ type, size = 24, style }: StatusBadgeProps) {
 			{type === "speaking" && (
 				<VolumeIcon size={iconSize} color={CHALK_THEME.colors.text.primary} />
 			)}
-			{type === "hand-raised" && (
+			{type === "hand.raised" && (
 				<HandIcon size={iconSize} color={CHALK_THEME.colors.text.primary} />
 			)}
 		</View>

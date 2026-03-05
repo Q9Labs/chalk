@@ -11,7 +11,7 @@
  */
 
 import { Context, Effect, Layer, PubSub, Ref, Stream, SubscriptionRef } from "effect";
-import type { Room } from "../../room";
+import type { ConferenceSession } from "../../room";
 import { MediaError, RoomError } from "../errors";
 import { LoggerService } from "../services";
 import type { MediaEvent, MediaState, MediaDeviceData } from "../schemas/manager-state";
@@ -64,7 +64,7 @@ export interface MediaServiceInterface {
   /** Get speakers */
   readonly speakers: Effect.Effect<readonly MediaDeviceData[]>;
   /** Attach to room */
-  readonly attachRoom: (room: Room) => Effect.Effect<void>;
+  readonly attachRoom: (room: ConferenceSession) => Effect.Effect<void>;
   /** Stream of media events */
   readonly events: Stream.Stream<MediaEvent>;
   /** Dispose resources */

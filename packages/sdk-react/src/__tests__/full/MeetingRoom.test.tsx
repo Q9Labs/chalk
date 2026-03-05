@@ -91,7 +91,7 @@ describe('MeetingRoom', () => {
         roomName="Test Room"
         localParticipant={localParticipant}
         participants={participants}
-        connectionStatus="failed"
+        connectionState="failed"
         connectionSupportCode="CHK-20260302-121212-001"
       />
     );

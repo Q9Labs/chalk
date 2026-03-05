@@ -5,7 +5,7 @@
  * @module @q9labs/chalk-core/effect/services
  */
 
-// Room Instance (shared Room reference)
+// ConferenceSession Instance (shared ConferenceSession reference)
 export {
   RoomInstanceService,
   RoomInstanceServiceLive,
@@ -14,7 +14,7 @@ export {
   setRoom,
 } from "./room-instance";
 
-// Room Service
+// ConferenceSession Service
 export {
   RoomService,
   RoomServiceLive,

@@ -4,7 +4,7 @@
  */
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { Room } from "../room.ts";
+import { ConferenceSession } from "../room.ts";
 
 const createMockRtkClient = () => {
 	const makeEmitter = () => {
@@ -99,13 +99,13 @@ const createMockWsClient = () => {
 	};
 };
 
-describe("Room (RTK identity mapping)", () => {
+describe("ConferenceSession (RTK identity mapping)", () => {
 	let rtk: any;
-	let room: Room;
+	let room: ConferenceSession;
 
 	beforeEach(() => {
 		rtk = createMockRtkClient();
-		room = new Room("room_123", rtk as any, false);
+		room = new ConferenceSession("room_123", rtk as any, false);
 	});
 
 	it("does not duplicate local participant when RTK includes self in participantJoined", () => {
@@ -157,7 +157,7 @@ describe("Room (RTK identity mapping)", () => {
 		expect(room.participants.has("uuid_a")).toBe(true);
 
 		let leftId: string | null = null;
-		room.on("participant-left", (id) => {
+		room.on("participant.left", (id) => {
 			leftId = id;
 		});
 
@@ -178,7 +178,7 @@ describe("Room (RTK identity mapping)", () => {
 		});
 
 		let emitted: any = null;
-		room.on("active-speaker-changed", (p) => {
+		room.on("speaker.active.changed", (p) => {
 			emitted = p;
 		});
 
@@ -225,7 +225,7 @@ describe("Room (RTK identity mapping)", () => {
 		});
 
 		let joinedId: string | null = null;
-		room.on("participant-joined", (participant) => {
+		room.on("participant.joined", (participant) => {
 			joinedId = participant.id;
 		});
 
@@ -269,7 +269,7 @@ describe("Room (RTK identity mapping)", () => {
 		]);
 
 		let joinedId: string | null = null;
-		room.on("participant-joined", (participant) => {
+		room.on("participant.joined", (participant) => {
 			joinedId = participant.id;
 		});
 
@@ -308,7 +308,7 @@ describe("Room (RTK identity mapping)", () => {
 		]);
 
 		let joinedId: string | null = null;
-		room.on("participant-joined", (participant) => {
+		room.on("participant.joined", (participant) => {
 			joinedId = participant.id;
 		});
 

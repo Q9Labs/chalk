@@ -12,7 +12,7 @@
  * - CONNECTION_* - Network and WebSocket errors
  * - AUTH_* - Authentication errors
  * - MEDIA_* - Camera, microphone, screen share errors
- * - ROOM_* - Room lifecycle errors
+ * - ROOM_* - ConferenceSession lifecycle errors
  * - RECORDING_* - Recording errors
  */
 export enum ChalkErrorCode {
@@ -64,11 +64,11 @@ export enum ChalkErrorCode {
   /** Media constraints not satisfiable */
   OVERCONSTRAINED = 'OVERCONSTRAINED',
 
-  // Room errors
-  /** Room does not exist */
+  // ConferenceSession errors
+  /** ConferenceSession does not exist */
   ROOM_NOT_FOUND = 'ROOM_NOT_FOUND',
 
-  /** Room has reached maximum participants */
+  /** ConferenceSession has reached maximum participants */
   ROOM_FULL = 'ROOM_FULL',
 
   /** Already connected to a room */
@@ -77,7 +77,7 @@ export enum ChalkErrorCode {
   /** Not currently in a room */
   NOT_IN_ROOM = 'NOT_IN_ROOM',
 
-  /** Room has ended */
+  /** ConferenceSession has ended */
   ROOM_ENDED = 'ROOM_ENDED',
 
   // Recording errors

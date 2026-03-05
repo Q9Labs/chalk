@@ -1,11 +1,11 @@
 /**
- * Tests for Room class
+ * Tests for ConferenceSession class
  * @module @q9labs/chalk-core/__tests__/room
  */
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { Room } from "../room.ts";
-import type { Participant, RoomInfo } from "../types.ts";
+import { ConferenceSession } from "../room.ts";
+import type { Participant, SessionInfo } from "../types.ts";
 import type { WSClient } from "../ws-client.ts";
 
 // Mock WSClient
@@ -44,13 +44,13 @@ const createMockWSClient = (): Partial<WSClient> => {
 	};
 };
 
-describe("Room", () => {
-	let room: Room;
+describe("ConferenceSession", () => {
+	let room: ConferenceSession;
 	let mockWSClient: any;
 
 	beforeEach(() => {
 		mockWSClient = createMockWSClient();
-		room = new Room("room_123", mockWSClient as WSClient, false);
+		room = new ConferenceSession("room_123", mockWSClient as WSClient, false);
 	});
 
 	describe("initialization", () => {
@@ -96,10 +96,10 @@ describe("Room", () => {
 			expect(room.status).toBe("connected");
 		});
 
-		it("should emit status-changed event", () => {
+		it("should emit connection.state.changed event", () => {
 			let emittedStatus: any = null;
 
-			room.on("status-changed", (status) => {
+			room.on("connection.state.changed", (status) => {
 				emittedStatus = status;
 			});
 
@@ -110,7 +110,7 @@ describe("Room", () => {
 		it("should not emit if status unchanged", () => {
 			let emitCount = 0;
 
-			room.on("status-changed", () => {
+			room.on("connection.state.changed", () => {
 				emitCount += 1;
 			});
 
@@ -123,9 +123,9 @@ describe("Room", () => {
 
 	describe("_setInfo()", () => {
 		it("should set room info", () => {
-			const info: RoomInfo = {
+			const info: SessionInfo = {
 				id: "room_123",
-				name: "Test Room",
+				name: "Test ConferenceSession",
 				status: "connected",
 				participantCount: 2,
 				config: {},
@@ -159,7 +159,7 @@ describe("Room", () => {
 	});
 
 	describe("event handling - participant events", () => {
-		it("should handle participant-joined event", () => {
+		it("should handle participant.joined event", () => {
 			const participant: Participant = {
 				id: "participant_2",
 				displayName: "Bob",
@@ -174,7 +174,7 @@ describe("Room", () => {
 			};
 
 			let emittedParticipant: Participant | null = null;
-			room.on("participant-joined", (p) => {
+			room.on("participant.joined", (p) => {
 				emittedParticipant = p;
 			});
 
@@ -184,7 +184,7 @@ describe("Room", () => {
 			expect(room.participants.get("participant_2")).toEqual(participant);
 		});
 
-		it("should handle participant-left event", () => {
+		it("should handle participant.left event", () => {
 			const participant: Participant = {
 				id: "participant_2",
 				displayName: "Bob",
@@ -201,7 +201,7 @@ describe("Room", () => {
 			room._participants.set("participant_2", participant);
 
 			let emittedId: string | null = null;
-			room.on("participant-left", (id) => {
+			room.on("participant.left", (id) => {
 				emittedId = id;
 			});
 
@@ -211,7 +211,7 @@ describe("Room", () => {
 			expect(room.participants.has("participant_2")).toBe(false);
 		});
 
-		it("should handle participant-updated event", () => {
+		it("should handle participant.updated event", () => {
 			const participant: Participant = {
 				id: "participant_2",
 				displayName: "Bob",
@@ -228,7 +228,7 @@ describe("Room", () => {
 			room._participants.set("participant_2", participant);
 
 			let emittedParticipant: Participant | null = null;
-			room.on("participant-updated", (event) => {
+			room.on("participant.updated", (event) => {
 				emittedParticipant = event.participant;
 			});
 
@@ -242,7 +242,7 @@ describe("Room", () => {
 	});
 
 	describe("event handling - chat and reactions", () => {
-		it("should handle chat-message event", () => {
+		it("should handle chat.message event", () => {
 			const message = {
 				id: "msg_1",
 				senderId: "participant_1",
@@ -252,7 +252,7 @@ describe("Room", () => {
 			};
 
 			let emittedMessage: any = null;
-			room.on("chat-message", (msg) => {
+			room.on("chat.message", (msg) => {
 				emittedMessage = msg;
 			});
 
@@ -282,7 +282,7 @@ describe("Room", () => {
 	});
 
 	describe("event handling - hand raise", () => {
-		it("should handle hand-raised event", () => {
+		it("should handle hand.raised event", () => {
 			const participant: Participant = {
 				id: "participant_2",
 				displayName: "Bob",
@@ -299,7 +299,7 @@ describe("Room", () => {
 			room._participants.set("participant_2", participant);
 
 			let emittedId: string | null = null;
-			room.on("hand-raised", (event) => {
+			room.on("hand.raised", (event) => {
 				emittedId = event.participantId;
 			});
 
@@ -309,7 +309,7 @@ describe("Room", () => {
 			expect(room.participants.get("participant_2")?.handRaised).toBe(true);
 		});
 
-		it("should handle hand-lowered event", () => {
+		it("should handle hand.lowered event", () => {
 			const participant: Participant = {
 				id: "participant_2",
 				displayName: "Bob",
@@ -326,7 +326,7 @@ describe("Room", () => {
 			room._participants.set("participant_2", participant);
 
 			let emittedId: string | null = null;
-			room.on("hand-lowered", (event) => {
+			room.on("hand.lowered", (event) => {
 				emittedId = event.participantId;
 			});
 
@@ -338,9 +338,9 @@ describe("Room", () => {
 	});
 
 	describe("event handling - recording", () => {
-		it("should handle recording-started event", () => {
+		it("should handle recording.started event", () => {
 			let emittedEvent: any = null;
-			room.on("recording-started", (event) => {
+			room.on("recording.started", (event) => {
 				emittedEvent = event;
 			});
 
@@ -350,11 +350,11 @@ describe("Room", () => {
 			expect(room.isRecording).toBe(true);
 		});
 
-		it("should handle recording-stopped event", () => {
+		it("should handle recording.stopped event", () => {
 			room._currentRecording = { id: "rec_123" };
 
 			let emittedRecording: any = null;
-			room.on("recording-stopped", (recording) => {
+			room.on("recording.stopped", (recording) => {
 				emittedRecording = recording;
 			});
 
@@ -533,7 +533,7 @@ describe("Room", () => {
 		});
 	});
 
-	describe("Room snapshot handling", () => {
+	describe("ConferenceSession snapshot handling", () => {
 		it("should apply snapshot on connect", () => {
 			const snapshotParticipants: Participant[] = [
 				{
@@ -563,7 +563,7 @@ describe("Room", () => {
 			];
 
 			const joinedParticipants: Participant[] = [];
-			room.on("participant-joined", (p) => {
+			room.on("participant.joined", (p) => {
 				joinedParticipants.push(p);
 			});
 
@@ -626,7 +626,7 @@ describe("Room", () => {
 			];
 
 			const joinedParticipants: Participant[] = [];
-			room.on("participant-joined", (p) => {
+			room.on("participant.joined", (p) => {
 				joinedParticipants.push(p);
 			});
 
