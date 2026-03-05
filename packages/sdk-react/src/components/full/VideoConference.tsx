@@ -6,7 +6,7 @@
  */
 
 import type React from "react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
 import { LeaveConfirmationDialog } from "../composite/LeaveConfirmationDialog";
 import { useChalkSession } from "../../context/chalk-provider";
@@ -31,23 +31,27 @@ import { EndScreen } from "./EndScreen";
 import { MeetingRoom } from "./MeetingRoom";
 import { PreJoinLobby } from "./PreJoinLobby";
 import type {
-	FeatureContext,
-	FeatureValue,
+	Features,
 	Phase,
 	VideoConferenceProps,
 } from "./video-conference/types";
 import { useChatNotifications } from "./video-conference/useChatNotifications";
 import { useConferenceConnectionState } from "./video-conference/useConferenceConnectionState";
 import { useConferenceErrorReporter } from "./video-conference/useConferenceErrorReporter";
+import { useConferenceFeatureFlags } from "./video-conference/useConferenceFeatureFlags";
+import { useConferenceLifecycleState } from "./video-conference/useConferenceLifecycleState";
 import { useConferenceMeetingActions } from "./video-conference/useConferenceMeetingActions";
 import { useJoinFlow } from "./video-conference/useJoinFlow";
 import { useLobbyDevices } from "./video-conference/useLobbyDevices";
+import { useMeetingRoomProps } from "./video-conference/useMeetingRoomProps";
 import { useMeetingRoomViewModel } from "./video-conference/useMeetingRoomViewModel";
 import { useMeetingStats } from "./video-conference/useMeetingStats";
 import { useParticipantModeration } from "./video-conference/useParticipantModeration";
 import { useSessionEvents } from "./video-conference/useSessionEvents";
 
 const DISCONNECT_GRACE_MS = 8000;
+const EMPTY_FEATURES: Features = {};
+const EMPTY_DEFAULTS: NonNullable<VideoConferenceProps["defaults"]> = {};
 
 function VideoConferenceBase({
 	roomId,
@@ -55,8 +59,8 @@ function VideoConferenceBase({
 	userName,
 	role,
 	metadata,
-	features = {},
-	defaults = {},
+	features,
+	defaults,
 	theme: _theme,
 	shortcuts: _shortcuts,
 	sounds = true,
@@ -70,23 +74,19 @@ function VideoConferenceBase({
 	whiteboard: whiteboardOpts,
 	className,
 }: VideoConferenceProps): React.JSX.Element {
+	const resolvedFeatures = features ?? EMPTY_FEATURES;
+	const resolvedDefaults = defaults ?? EMPTY_DEFAULTS;
+
 	const [phase, setPhase] = useState<Phase>("lobby");
 	const [error, setError] = useState<string | null>(null);
 	const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 	const [isExiting, setIsExiting] = useState(false);
-	const [isDisconnectGraceActive, setIsDisconnectGraceActive] = useState(false);
 
 	const effectiveRoomName = roomName ?? roomId;
-
-	const lastWsToastAtRef = useRef(0);
-	const roomIdRef = useRef(roomId);
-	const phaseRef = useRef<Phase>("lobby");
-	const disconnectGraceTimeoutRef = useRef<number | null>(null);
 
 	const { join, leave, isJoining } = useConnection();
 	const { isConnected, status } = useRoom();
 	const { participants, localParticipant, participantCount } = useParticipants();
-	const localParticipantIdRef = useRef(localParticipant?.id ?? null);
 	const { activeSpeaker } = useActiveSpeaker();
 	const media = useMedia();
 	const screenShare = useScreenShare();
@@ -98,6 +98,22 @@ function VideoConferenceBase({
 	const { activePanel } = usePanels();
 	const { participantVolumes, setParticipantVolume, getAudioVolume } = useParticipantVolume();
 	const { refreshDevices, cameras, microphones, speakers: audioOutputs } = useDevices();
+
+	const {
+		lastWsToastAtRef,
+		roomIdRef,
+		phaseRef,
+		localParticipantIdRef,
+		disconnectGraceTimeoutRef,
+		isDisconnectGraceActive,
+		setIsDisconnectGraceActive,
+		clearDisconnectGraceTimeout,
+	} = useConferenceLifecycleState({
+		phase,
+		status,
+		roomId,
+		localParticipantId: localParticipant?.id,
+	});
 
 	const {
 		lobbySelectedCamera,
@@ -137,45 +153,6 @@ function VideoConferenceBase({
 			})),
 		[rawTranscripts],
 	);
-
-	const clearDisconnectGraceTimeout = useCallback(() => {
-		if (disconnectGraceTimeoutRef.current !== null) {
-			window.clearTimeout(disconnectGraceTimeoutRef.current);
-			disconnectGraceTimeoutRef.current = null;
-		}
-	}, []);
-
-	useEffect(() => {
-		phaseRef.current = phase;
-	}, [phase]);
-
-	useEffect(() => {
-		roomIdRef.current = roomId;
-	}, [roomId]);
-
-	useEffect(() => {
-		localParticipantIdRef.current = localParticipant?.id ?? null;
-	}, [localParticipant?.id]);
-
-	useEffect(() => {
-		if (phase !== "meeting") {
-			clearDisconnectGraceTimeout();
-			setIsDisconnectGraceActive(false);
-		}
-	}, [phase, clearDisconnectGraceTimeout]);
-
-	useEffect(() => {
-		if (status !== "disconnected") {
-			clearDisconnectGraceTimeout();
-			setIsDisconnectGraceActive(false);
-		}
-	}, [status, clearDisconnectGraceTimeout]);
-
-	useEffect(() => {
-		return () => {
-			clearDisconnectGraceTimeout();
-		};
-	}, [clearDisconnectGraceTimeout]);
 
 	const pushIncidentBreadcrumb = useCallback(
 		(category: string, message: string, data?: Record<string, unknown>) => {
@@ -220,24 +197,13 @@ function VideoConferenceBase({
 		play,
 	});
 
-	const featureContext = useMemo(
-		(): FeatureContext => ({
-			participants,
-			localParticipant,
-			participantCount,
-			isRecording: recording.isRecording,
-		}),
-		[participants, localParticipant, participantCount, recording.isRecording],
-	);
-
-	const isFeatureEnabled = useCallback(
-		(feature: FeatureValue | undefined): boolean => {
-			if (feature === undefined) return true;
-			if (typeof feature === "function") return feature(featureContext);
-			return feature;
-		},
-		[featureContext],
-	);
+	const featureFlags = useConferenceFeatureFlags({
+		features: resolvedFeatures,
+		participants,
+		localParticipant,
+		participantCount,
+		isRecording: recording.isRecording,
+	});
 
 	const { handleJoin, handleRetryConnection } = useJoinFlow({
 		roomId,
@@ -338,7 +304,7 @@ function VideoConferenceBase({
 		interactions,
 		messages,
 		localParticipantId: localParticipant?.id,
-		defaultsLayout: defaults.layout,
+		defaultsLayout: resolvedDefaults.layout,
 		layout,
 		lobbySelectedSpeaker,
 		localRole: localParticipant?.role,
@@ -350,6 +316,52 @@ function VideoConferenceBase({
 			participants,
 			session,
 		});
+
+	const meetingRoomProps = useMeetingRoomProps({
+		roomName: effectiveRoomName,
+		localParticipant: localMeetingParticipant,
+		participants: allParticipants,
+		canManageParticipants,
+		handleToggleParticipantMute,
+		handleRemoveParticipant,
+		activeReactions: interactions.activeReactions,
+		transcripts,
+		isMuted: !media.isAudioEnabled,
+		isVideoEnabled: media.isVideoEnabled,
+		isScreenSharing: screenShare.isLocalSharing,
+		isHandRaised: interactions.isHandRaised,
+		isWhiteboardOpen: whiteboard.isOpen,
+		isRecording: recording.isRecording,
+		recordingDuration: recording.durationSeconds,
+		meetingDuration,
+		featureFlags,
+		chatMessages,
+		unreadChatCount: unreadCount,
+		handleSendMessage,
+		handleChatOpen,
+		meetingLayout,
+		defaultChatOpen: resolvedDefaults.chatOpen ?? activePanel === "chat",
+		defaultParticipantsOpen:
+			resolvedDefaults.participantsOpen ?? activePanel === "participants",
+		handleToggleMute,
+		handleToggleVideo,
+		handleToggleScreenShare,
+		handleToggleRecording,
+		handleToggleHandRaise,
+		handleToggleWhiteboard: whiteboard.toggle,
+		handleSendReaction,
+		handleLeave,
+		onAddPeople,
+		onWhiteboardExcalidrawApiReady: whiteboardOpts?.onExcalidrawApiReady,
+		participantVolumes,
+		onParticipantVolumeChange: setParticipantVolume,
+		getParticipantVolume: getAudioVolume,
+		selectedAudioOutput,
+		connectionStatus,
+		handleRetryConnection,
+		connectionSupportCode: supportCode ?? undefined,
+		className: cn(className, isExiting && "chalk-animate-exit"),
+	});
 
 	if (phase === "lobby" || phase === "joining") {
 		return (
@@ -367,8 +379,8 @@ function VideoConferenceBase({
 				onVideoDeviceChange={setLobbySelectedCamera}
 				onAudioInputChange={setLobbySelectedMicrophone}
 				onAudioOutputChange={setLobbySelectedSpeaker}
-				initialVideoEnabled={defaults.videoEnabled ?? true}
-				initialAudioEnabled={defaults.audioEnabled ?? true}
+				initialVideoEnabled={resolvedDefaults.videoEnabled ?? true}
+				initialAudioEnabled={resolvedDefaults.audioEnabled ?? true}
 				isLoading={phase === "joining" || isJoining}
 				error={error ?? undefined}
 				supportCode={supportCode ?? undefined}
@@ -393,59 +405,7 @@ function VideoConferenceBase({
 
 	return (
 		<>
-			<MeetingRoom
-				roomName={effectiveRoomName}
-				localParticipant={localMeetingParticipant}
-				participants={allParticipants}
-				canManageParticipants={canManageParticipants}
-				onToggleParticipantMute={handleToggleParticipantMute}
-				onRemoveParticipant={handleRemoveParticipant}
-				activeReactions={interactions.activeReactions}
-				transcripts={transcripts}
-				isMuted={!media.isAudioEnabled}
-				isVideoEnabled={media.isVideoEnabled}
-				isScreenSharing={screenShare.isLocalSharing}
-				isHandRaised={interactions.isHandRaised}
-				isWhiteboardOpen={whiteboard.isOpen}
-				isRecording={recording.isRecording}
-				recordingDuration={recording.durationSeconds}
-				meetingDuration={meetingDuration}
-				canRecord={isFeatureEnabled(features.recording)}
-				chatMessages={chatMessages}
-				unreadChatCount={unreadCount}
-				onSendMessage={handleSendMessage}
-				onChatOpen={handleChatOpen}
-				enableChat={isFeatureEnabled(features.chat)}
-				enableRecording={isFeatureEnabled(features.recording)}
-				enableScreenShare={isFeatureEnabled(features.screenShare)}
-				enableHandRaise={isFeatureEnabled(features.handRaise)}
-				enableReactions={isFeatureEnabled(features.reactions)}
-				enableWhiteboard={isFeatureEnabled(features.whiteboard)}
-				enableTour={isFeatureEnabled(features.tour)}
-				defaultLayout={meetingLayout}
-				defaultChatOpen={defaults.chatOpen ?? activePanel === "chat"}
-				defaultParticipantsOpen={
-					defaults.participantsOpen ?? activePanel === "participants"
-				}
-				onToggleMute={handleToggleMute}
-				onToggleVideo={handleToggleVideo}
-				onToggleScreenShare={handleToggleScreenShare}
-				onToggleRecording={handleToggleRecording}
-				onToggleHandRaise={handleToggleHandRaise}
-				onToggleWhiteboard={whiteboard.toggle}
-				onSendReaction={handleSendReaction}
-				onLeave={handleLeave}
-				onAddPeople={onAddPeople}
-				onWhiteboardExcalidrawApiReady={whiteboardOpts?.onExcalidrawApiReady}
-				participantVolumes={participantVolumes}
-				onParticipantVolumeChange={setParticipantVolume}
-				getParticipantVolume={getAudioVolume}
-				selectedAudioOutput={selectedAudioOutput}
-				connectionStatus={connectionStatus}
-				onRetryConnection={handleRetryConnection}
-				connectionSupportCode={supportCode ?? undefined}
-				className={cn(className, isExiting && "chalk-animate-exit")}
-			/>
+			<MeetingRoom {...meetingRoomProps} />
 
 			<LeaveConfirmationDialog
 				isOpen={showLeaveConfirm}

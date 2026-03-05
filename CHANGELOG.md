@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Web: PostHog wiring for Chalk replay lifecycle** — `apps/web` now initializes optional PostHog from `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` and passes it to `ChalkProvider.posthog` so replay starts/stops with Chalk room lifecycle events.
 - **SDK-React: VideoConference composition refactor** — split `VideoConference` internals into focused modules (`join-errors`, `useJoinFlow`, `useLobbyDevices`, `useMeetingStats`, `useSessionEvents`, `useChatNotifications`, `useConferenceErrorReporter`, shared `types`) to reduce component size and isolate orchestration concerns without changing public behavior.
 - **SDK-React: VideoConference shell slimming + effect isolation** — further decompose meeting controls, connection state derivation, participant moderation, and meeting-room view-model mapping into dedicated hooks; remove phase-based session event re-subscriptions by using `phaseRef` for in-callback gating.
+- **SDK-React: VideoConference feature/props orchestration cleanup** — extract feature-flag resolution (`useConferenceFeatureFlags`) and meeting-room prop composition (`useMeetingRoomProps`), replacing in-component ad-hoc wiring with typed, memoized composition boundaries.
 
 ### Fixed
 
