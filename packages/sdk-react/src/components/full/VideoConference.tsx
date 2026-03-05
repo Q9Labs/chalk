@@ -5,7 +5,6 @@
  * Handles the full flow: lobby -> joining -> meeting -> end.
  */
 
-import type { ReactionEmoji } from "@q9labs/chalk-core";
 import type React from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -38,10 +37,14 @@ import type {
 	VideoConferenceProps,
 } from "./video-conference/types";
 import { useChatNotifications } from "./video-conference/useChatNotifications";
+import { useConferenceConnectionState } from "./video-conference/useConferenceConnectionState";
 import { useConferenceErrorReporter } from "./video-conference/useConferenceErrorReporter";
+import { useConferenceMeetingActions } from "./video-conference/useConferenceMeetingActions";
 import { useJoinFlow } from "./video-conference/useJoinFlow";
 import { useLobbyDevices } from "./video-conference/useLobbyDevices";
+import { useMeetingRoomViewModel } from "./video-conference/useMeetingRoomViewModel";
 import { useMeetingStats } from "./video-conference/useMeetingStats";
+import { useParticipantModeration } from "./video-conference/useParticipantModeration";
 import { useSessionEvents } from "./video-conference/useSessionEvents";
 
 const DISCONNECT_GRACE_MS = 8000;
@@ -259,104 +262,46 @@ function VideoConferenceBase({
 		roomIdRef,
 	});
 
-	const handleLeave = useCallback(() => {
-		setShowLeaveConfirm(true);
-	}, []);
+	const {
+		handleLeave,
+		initiateLeave,
+		handleRejoin,
+		handleGoHome,
+		handleToggleMute,
+		handleToggleVideo,
+		handleToggleScreenShare,
+		handleToggleRecording,
+		handleToggleHandRaise,
+		handleSendReaction,
+		handleSendMessage,
+	} = useConferenceMeetingActions({
+		clearDisconnectGraceTimeout,
+		setShowLeaveConfirm,
+		setIsExiting,
+		setIsDisconnectGraceActive,
+		leave,
+		play,
+		onEnd,
+		buildEndData,
+		setPhase,
+		onLeave,
+		setSupportCode,
+		resetForRejoin,
+		media,
+		screenShare,
+		recording,
+		interactions,
+		incrementHandRaiseCount,
+		sendChatMessage,
+	});
 
-	const initiateLeave = useCallback(async () => {
-		setShowLeaveConfirm(false);
-		setIsExiting(true);
-		clearDisconnectGraceTimeout();
-		setIsDisconnectGraceActive(false);
-
-		await new Promise((resolve) => setTimeout(resolve, 600));
-
-		try {
-			await leave();
-			play("leave");
-			onEnd?.(buildEndData());
-			setPhase("end");
-			onLeave?.();
-		} catch {
-			onEnd?.(buildEndData());
-			setPhase("end");
-			onLeave?.();
-		} finally {
-			setIsExiting(false);
-		}
-	}, [leave, play, onEnd, buildEndData, onLeave, clearDisconnectGraceTimeout]);
-
-	const handleRejoin = useCallback(() => {
-		clearDisconnectGraceTimeout();
-		setIsDisconnectGraceActive(false);
-		setPhase("lobby");
-		setSupportCode(null);
-		resetForRejoin();
-	}, [clearDisconnectGraceTimeout, resetForRejoin]);
-
-	const handleGoHome = useCallback(() => {
-		onLeave?.();
-	}, [onLeave]);
-
-	const handleToggleMute = useCallback(() => {
-		media.toggleAudio();
-	}, [media]);
-
-	const handleToggleVideo = useCallback(() => {
-		media.toggleVideo();
-	}, [media]);
-
-	const handleToggleScreenShare = useCallback(() => {
-		void screenShare.toggle();
-	}, [screenShare]);
-
-	const handleToggleRecording = useCallback(() => {
-		recording.toggle();
-	}, [recording]);
-
-	const handleToggleHandRaise = useCallback(() => {
-		if (!interactions.isHandRaised) {
-			incrementHandRaiseCount();
-		}
-		interactions.toggleHand();
-		play("handRaise");
-	}, [interactions, incrementHandRaiseCount, play]);
-
-	const handleSendReaction = useCallback(
-		(emoji: string) => {
-			interactions.sendReaction(emoji as ReactionEmoji);
-			play("reaction");
-		},
-		[interactions, play],
-	);
-
-	const handleSendMessage = useCallback(
-		(content: string) => {
-			sendChatMessage(content);
-		},
-		[sendChatMessage],
-	);
-
-	const connectionStatus = useMemo(() => {
-		if (status === "connected") return "connected" as const;
-		if (status === "reconnecting") return "reconnecting" as const;
-		if (status === "connecting") {
-			return phase === "meeting" ? "reconnecting" : "connecting";
-		}
-		if (status === "disconnected") {
-			if (phase === "meeting") {
-				return isDisconnectGraceActive ? "reconnecting" : "failed";
-			}
-			return "connecting";
-		}
-		return "failed" as const;
-	}, [status, phase, isDisconnectGraceActive]);
-
-	useEffect(() => {
-		if (isConnected && (phase === "joining" || phase === "lobby")) {
-			setPhase("meeting");
-		}
-	}, [isConnected, phase]);
+	const { connectionStatus } = useConferenceConnectionState({
+		status,
+		phase,
+		isConnected,
+		isDisconnectGraceActive,
+		setPhase,
+	});
 
 	useSessionEvents({
 		session,
@@ -377,32 +322,34 @@ function VideoConferenceBase({
 		disconnectGraceTimeoutRef,
 	});
 
-	const canManageParticipants = localParticipant?.role === "host";
+	const {
+		allParticipants,
+		localMeetingParticipant,
+		chatMessages,
+		meetingLayout,
+		selectedAudioOutput,
+		canManageParticipants,
+	} = useMeetingRoomViewModel({
+		participants,
+		activeSpeakerId: activeSpeaker?.id,
+		userName,
+		media,
+		screenShare,
+		interactions,
+		messages,
+		localParticipantId: localParticipant?.id,
+		defaultsLayout: defaults.layout,
+		layout,
+		lobbySelectedSpeaker,
+		localRole: localParticipant?.role,
+	});
 
-	const handleToggleParticipantMute = useCallback(
-		(participantId: string) => {
-			if (!canManageParticipants) return;
-			const target = participants.find((participant) => participant.id === participantId);
-			if (!target || target.isLocal) return;
-
-			if (target.audioEnabled) {
-				session.muteParticipant(participantId);
-			} else {
-				session.unmuteParticipant(participantId);
-			}
-		},
-		[canManageParticipants, participants, session],
-	);
-
-	const handleRemoveParticipant = useCallback(
-		(participantId: string) => {
-			if (!canManageParticipants) return;
-			const target = participants.find((participant) => participant.id === participantId);
-			if (!target || target.isLocal) return;
-			void session.removeParticipant(participantId);
-		},
-		[canManageParticipants, participants, session],
-	);
+	const { handleToggleParticipantMute, handleRemoveParticipant } =
+		useParticipantModeration({
+			canManageParticipants,
+			participants,
+			session,
+		});
 
 	if (phase === "lobby" || phase === "joining") {
 		return (
@@ -443,52 +390,6 @@ function VideoConferenceBase({
 			/>
 		);
 	}
-
-	const allParticipants = participants.map((participant) => ({
-		id: participant.id,
-		displayName: participant.displayName,
-		isLocal: participant.isLocal,
-		isSpeaking: activeSpeaker?.id === participant.id,
-		isMuted: !participant.audioEnabled,
-		isVideoEnabled: participant.videoEnabled,
-		isScreenSharing: participant.isScreenSharing,
-		isHandRaised: participant.handRaised,
-		connectionQuality: participant.connectionQuality as 1 | 2 | 3 | 4 | undefined,
-		videoTrack: participant.videoTrack,
-		audioTrack: participant.audioTrack,
-		screenShareTrack: participant.screenShareTrack,
-		screenShareAudioTrack: participant.screenShareAudioTrack,
-		role: participant.role as "host" | "co-host" | "participant" | undefined,
-	}));
-
-	const localMeetingParticipant = allParticipants.find((participant) => participant.isLocal) ?? {
-		id: "local",
-		displayName: userName,
-		isLocal: true,
-		isSpeaking: false,
-		isMuted: !media.isAudioEnabled,
-		isVideoEnabled: media.isVideoEnabled,
-		isScreenSharing: screenShare.isLocalSharing,
-		isHandRaised: interactions.isHandRaised,
-		screenShareTrack: screenShare.videoTrack ?? undefined,
-	};
-
-	const chatMessages = messages.map((message) => ({
-		id: message.id,
-		senderId: message.senderId,
-		senderName: message.senderName,
-		content: message.content,
-		timestamp: message.timestamp,
-		isLocal: message.senderId === localParticipant?.id,
-	}));
-
-	const meetingLayout = ((): "grid" | "spotlight" | "sidebar" => {
-		if (defaults.layout) return defaults.layout;
-		if (layout === "speaker" || layout === "auto") return "spotlight";
-		if (layout === "spotlight") return "spotlight";
-		return "grid";
-	})();
-	const selectedAudioOutput = media.selectedSpeaker ?? lobbySelectedSpeaker;
 
 	return (
 		<>

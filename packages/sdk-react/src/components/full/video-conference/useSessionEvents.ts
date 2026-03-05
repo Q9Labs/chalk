@@ -160,10 +160,10 @@ export function useSessionEvents({
 				code === "MAX_RECONNECT_ATTEMPTS" ||
 				code === "TOKEN_EXPIRED";
 
-			if (phase === "meeting" && isScreenShareError) {
+			if (phaseRef.current === "meeting" && isScreenShareError) {
 				const payload = buildErrorPayload({
 					operation: "screenshare",
-					phase,
+					phase: phaseRef.current,
 					roomId: roomIdRef.current,
 					participantId: localParticipantIdRef.current,
 					error: sessionError,
@@ -174,13 +174,13 @@ export function useSessionEvents({
 				);
 			}
 
-			if (phase === "meeting" && isWsError) {
+			if (phaseRef.current === "meeting" && isWsError) {
 				const now = Date.now();
 				if (now - lastWsToastAtRef.current > 15000) {
 					lastWsToastAtRef.current = now;
 					const payload = buildErrorPayload({
 						operation: "websocket",
-						phase,
+						phase: phaseRef.current,
 						roomId: roomIdRef.current,
 						participantId: localParticipantIdRef.current,
 						error: sessionError,
@@ -213,7 +213,6 @@ export function useSessionEvents({
 		onLeave,
 		clearDisconnectGraceTimeout,
 		emitError,
-		phase,
 		pushIncidentBreadcrumb,
 		roomIdRef,
 		localParticipantIdRef,

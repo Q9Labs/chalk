@@ -1,0 +1,173 @@
+import type { Participant } from "@q9labs/chalk-core";
+import { useMemo } from "react";
+
+interface ChatMessageLike {
+	id: string;
+	senderId: string;
+	senderName: string;
+	content: string;
+	timestamp: Date;
+}
+
+interface MediaLike {
+	isAudioEnabled: boolean;
+	isVideoEnabled: boolean;
+	selectedSpeaker: string | null;
+}
+
+interface ScreenShareLike {
+	isLocalSharing: boolean;
+	videoTrack?: MediaStreamTrack | null;
+}
+
+interface InteractionsLike {
+	isHandRaised: boolean;
+}
+
+export interface UseMeetingRoomViewModelParams {
+	participants: readonly Participant[];
+	activeSpeakerId?: string;
+	userName: string;
+	media: MediaLike;
+	screenShare: ScreenShareLike;
+	interactions: InteractionsLike;
+	messages: readonly ChatMessageLike[];
+	localParticipantId?: string;
+	defaultsLayout?: "grid" | "spotlight" | "sidebar";
+	layout: string;
+	lobbySelectedSpeaker?: string;
+	localRole?: string;
+}
+
+export interface UseMeetingRoomViewModelReturn {
+	allParticipants: Array<{
+		id: string;
+		displayName: string;
+		isLocal: boolean;
+		isSpeaking: boolean;
+		isMuted: boolean;
+		isVideoEnabled: boolean;
+		isScreenSharing: boolean;
+		isHandRaised: boolean;
+		connectionQuality: 1 | 2 | 3 | 4 | undefined;
+		videoTrack?: MediaStreamTrack;
+		audioTrack?: MediaStreamTrack;
+		screenShareTrack?: MediaStreamTrack;
+		screenShareAudioTrack?: MediaStreamTrack;
+		role?: "host" | "co-host" | "participant";
+	}>;
+	localMeetingParticipant: {
+		id: string;
+		displayName: string;
+		isLocal: boolean;
+		isSpeaking: boolean;
+		isMuted: boolean;
+		isVideoEnabled: boolean;
+		isScreenSharing: boolean;
+		isHandRaised: boolean;
+		screenShareTrack?: MediaStreamTrack;
+	};
+	chatMessages: Array<{
+		id: string;
+		senderId: string;
+		senderName: string;
+		content: string;
+		timestamp: Date;
+		isLocal: boolean;
+	}>;
+	meetingLayout: "grid" | "spotlight" | "sidebar";
+	selectedAudioOutput?: string;
+	canManageParticipants: boolean;
+}
+
+export function useMeetingRoomViewModel({
+	participants,
+	activeSpeakerId,
+	userName,
+	media,
+	screenShare,
+	interactions,
+	messages,
+	localParticipantId,
+	defaultsLayout,
+	layout,
+	lobbySelectedSpeaker,
+	localRole,
+}: UseMeetingRoomViewModelParams): UseMeetingRoomViewModelReturn {
+	const allParticipants = useMemo(
+		() =>
+			participants.map((participant) => ({
+				id: participant.id,
+				displayName: participant.displayName,
+				isLocal: participant.isLocal,
+				isSpeaking: activeSpeakerId === participant.id,
+				isMuted: !participant.audioEnabled,
+				isVideoEnabled: participant.videoEnabled,
+				isScreenSharing: participant.isScreenSharing,
+				isHandRaised: participant.handRaised,
+				connectionQuality: participant.connectionQuality as 1 | 2 | 3 | 4 | undefined,
+				videoTrack: participant.videoTrack,
+				audioTrack: participant.audioTrack,
+				screenShareTrack: participant.screenShareTrack,
+				screenShareAudioTrack: participant.screenShareAudioTrack,
+				role: participant.role as "host" | "co-host" | "participant" | undefined,
+			})),
+		[participants, activeSpeakerId],
+	);
+
+	const localMeetingParticipant = useMemo(
+		() =>
+			allParticipants.find((participant) => participant.isLocal) ?? {
+				id: "local",
+				displayName: userName,
+				isLocal: true,
+				isSpeaking: false,
+				isMuted: !media.isAudioEnabled,
+				isVideoEnabled: media.isVideoEnabled,
+				isScreenSharing: screenShare.isLocalSharing,
+				isHandRaised: interactions.isHandRaised,
+				screenShareTrack: screenShare.videoTrack ?? undefined,
+			},
+		[
+			allParticipants,
+			userName,
+			media.isAudioEnabled,
+			media.isVideoEnabled,
+			screenShare.isLocalSharing,
+			screenShare.videoTrack,
+			interactions.isHandRaised,
+		],
+	);
+
+	const chatMessages = useMemo(
+		() =>
+			messages.map((message) => ({
+				id: message.id,
+				senderId: message.senderId,
+				senderName: message.senderName,
+				content: message.content,
+				timestamp: message.timestamp,
+				isLocal: message.senderId === localParticipantId,
+			})),
+		[messages, localParticipantId],
+	);
+
+	const meetingLayout = useMemo((): "grid" | "spotlight" | "sidebar" => {
+		if (defaultsLayout) return defaultsLayout;
+		if (layout === "speaker" || layout === "auto") return "spotlight";
+		if (layout === "spotlight") return "spotlight";
+		return "grid";
+	}, [defaultsLayout, layout]);
+
+	const selectedAudioOutput = media.selectedSpeaker ?? lobbySelectedSpeaker;
+	const canManageParticipants = localRole === "host";
+
+	return {
+		allParticipants,
+		localMeetingParticipant,
+		chatMessages,
+		meetingLayout,
+		selectedAudioOutput,
+		canManageParticipants,
+	};
+}
