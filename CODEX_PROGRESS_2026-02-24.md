@@ -55,3 +55,11 @@
 - changes: extracted whiteboard runtime into `whiteboard-panel` modules (`constants`, `icons`, `types`, `useWhiteboardExcalidrawMount`, `useWhiteboardSync`); reduced panel file complexity by separating orchestration from UI shell
 - verify: `bun run --filter @q9labs/chalk-react lint` pass (no linter configured), `check-types` pass, `test` pass (233 pass, 3 skip, 0 fail)
 - queue: #2 `useJoinFlow`, #3 `useSessionEvents`, #4 `EndScreen` still active
+
+## 2026-03-05 09:52:29Z
+- task: complete queue items #2-#4 in sdk-react refactor tracker
+- completed: `useJoinFlow` split into orchestration + helper modules (`useJoinFlowTelemetry`, `useRealtimeKitPreload`, `join-flow-device-tasks`)
+- completed: `useSessionEvents` simplified with extracted error utils (`session-events-error-utils`)
+- completed: `EndScreen` decomposed into `end-screen` section modules (`feedback`, `downloads`, `actions`, `formatDuration`, feedback hook)
+- verify: `lint` pass (no linter configured), `check-types` pass, `test` pass (`233 pass, 3 skip, 0 fail`)
+- tracker: items #1-#4 now done; #5-#6 remain pending approval

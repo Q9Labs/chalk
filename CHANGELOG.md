@@ -32,8 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React: VideoConference shell slimming + effect isolation** — further decompose meeting controls, connection state derivation, participant moderation, and meeting-room view-model mapping into dedicated hooks; remove phase-based session event re-subscriptions by using `phaseRef` for in-callback gating.
 - **SDK-React: VideoConference feature/props orchestration cleanup** — extract feature-flag resolution (`useConferenceFeatureFlags`) and meeting-room prop composition (`useMeetingRoomProps`), replacing in-component ad-hoc wiring with typed, memoized composition boundaries.
 - **SDK-React: VideoConference controller-view split** — reduce `VideoConference.tsx` to a facade component and move orchestration/view-prop assembly into `useVideoConferenceController`, `useVideoConferenceMeetingRoomProps`, and `view-state` helpers for clearer composition boundaries and safer incremental edits.
+- **SDK-React: Join-flow hook decomposition** — split `useJoinFlow` support concerns into focused helpers (`useRealtimeKitPreload`, `useJoinFlowTelemetry`, `join-flow-device-tasks`) so the hook stays orchestration-focused while preserving join/retry behavior.
+- **SDK-React: Session-events error handling cleanup** — extract error classification and diagnostic payload shaping into `session-events-error-utils`, simplifying `useSessionEvents` event wiring and maintaining existing toast/error semantics.
 - **SDK-React: PreJoinLobby composition refactor** — split lobby responsibilities into focused hooks/components (`usePreJoinUiState`, `usePreJoinTheme`, `usePreJoinMedia`, `usePreJoinAudioMeter`, modal/header/preview/panel sections), reducing the root component to a small orchestration shell while preserving props compatibility.
 - **SDK-React: MeetingRoom composition refactor** — extract meeting-room state/effects/render sections into a `meeting-room/` module set (`types`, lifecycle/theme/ui/derived hooks, stage/panels/controls/overlays/top-bar sections), shrinking the root file to a concise conductor component without behavior changes.
+- **SDK-React: EndScreen composition split** — decompose `EndScreen` into focused feedback/download/actions modules and shared duration utility for cleaner structure without changing user-facing flow.
 
 ### Fixed
 
