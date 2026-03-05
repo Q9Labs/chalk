@@ -48,3 +48,10 @@
 - completed: reduced `VideoConference.tsx` to facade (43 LOC) and moved orchestration to `useVideoConferenceController`
 - completed: extracted meeting-room prop composition into `useVideoConferenceMeetingRoomProps` and view prop shaping into `view-state`
 - verify: `bun run --filter @q9labs/chalk-react check-types` pass; `bun run --filter @q9labs/chalk-react test` pass (233 pass, 3 skip, 0 fail)
+
+## 2026-03-05 09:40:56Z
+- task: start prioritized refactor queue items 1-4 (phase A)
+- completed: item #1 WhiteboardPanel first pass
+- changes: extracted whiteboard runtime into `whiteboard-panel` modules (`constants`, `icons`, `types`, `useWhiteboardExcalidrawMount`, `useWhiteboardSync`); reduced panel file complexity by separating orchestration from UI shell
+- verify: `bun run --filter @q9labs/chalk-react lint` pass (no linter configured), `check-types` pass, `test` pass (233 pass, 3 skip, 0 fail)
+- queue: #2 `useJoinFlow`, #3 `useSessionEvents`, #4 `EndScreen` still active
