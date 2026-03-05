@@ -1,0 +1,109 @@
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
+export type MeetingPanel = "chat" | "participants" | "transcription";
+export type MeetingLayout = "grid" | "spotlight" | "sidebar";
+
+export interface Participant {
+  id: string;
+  displayName: string;
+  isLocal?: boolean;
+  isSpeaking?: boolean;
+  isMuted?: boolean;
+  isVideoEnabled?: boolean;
+  isScreenSharing?: boolean;
+  isHandRaised?: boolean;
+  connectionQuality?: 1 | 2 | 3 | 4;
+  avatarUrl?: string;
+  videoTrack?: MediaStreamTrack | null;
+  audioTrack?: MediaStreamTrack | null;
+  screenShareTrack?: MediaStreamTrack | null;
+  screenShareAudioTrack?: MediaStreamTrack | null;
+  role?: "host" | "co-host" | "participant";
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  timestamp: Date;
+  isLocal?: boolean;
+}
+
+export interface TranscriptEntry {
+  id: string;
+  speaker: string;
+  speakerId: string;
+  text: string;
+  timestamp: Date;
+  isInterim?: boolean;
+  confidence?: number;
+}
+
+export interface ActiveReaction {
+  id: string;
+  participantId: string;
+  participantName: string;
+  emoji: string;
+  timestamp: Date;
+}
+
+export interface MeetingRoomProps {
+  roomName: string;
+  localParticipant: Participant;
+  participants: Participant[];
+  canManageParticipants?: boolean;
+  onToggleParticipantMute?: (participantId: string) => void;
+  onRemoveParticipant?: (participantId: string) => void;
+  activeReactions?: readonly ActiveReaction[];
+  isMuted?: boolean;
+  isVideoEnabled?: boolean;
+  isScreenSharing?: boolean;
+  isHandRaised?: boolean;
+  isWhiteboardOpen?: boolean;
+  isRecording?: boolean;
+  recordingDuration?: number;
+  meetingDuration?: number;
+  canRecord?: boolean;
+  isTranscribing?: boolean;
+  transcripts?: TranscriptEntry[];
+  chatMessages?: ChatMessage[];
+  unreadChatCount?: number;
+  onSendMessage?: (content: string) => void;
+  onChatOpen?: () => void;
+  enableChat?: boolean;
+  enableRecording?: boolean;
+  enableScreenShare?: boolean;
+  enableHandRaise?: boolean;
+  enableReactions?: boolean;
+  enableWhiteboard?: boolean;
+  enableTranscription?: boolean;
+  enableTour?: boolean;
+  defaultLayout?: MeetingLayout;
+  defaultChatOpen?: boolean;
+  defaultParticipantsOpen?: boolean;
+  defaultTranscriptionOpen?: boolean;
+  showTourOnFirstVisit?: boolean;
+  showInviteToastOnJoin?: boolean;
+  onToggleMute?: () => void;
+  onToggleVideo?: () => void;
+  onToggleScreenShare?: () => void;
+  onToggleRecording?: () => void;
+  onToggleHandRaise?: () => void;
+  onToggleWhiteboard?: () => void;
+  onSendReaction?: (emoji: string) => void;
+  onToggleTranscription?: () => void;
+  onLeave?: () => void;
+  onTourComplete?: () => void;
+  onAddPeople?: () => void;
+  connectionStatus?: "connected" | "connecting" | "reconnecting" | "failed";
+  onRetryConnection?: () => void;
+  connectionSupportCode?: string;
+  participantVolumes?: ReadonlyMap<string, number>;
+  onParticipantVolumeChange?: (id: string, volume: number) => void;
+  getParticipantVolume?: (participantId: string) => number;
+  selectedAudioOutput?: string;
+  theme?: "light" | "dark" | "system";
+  onWhiteboardExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
+  className?: string;
+}

@@ -29,3 +29,22 @@
 - api fix: POST_MEETING_WHISPER_ENABLED SSM value already true, but live api container had stale false env; restarted chalk-api service to reload env
 - api health: POST_MEETING_WHISPER_ENABLED=true in running container; /health returns healthy with database connected
 - status: lean prod green and post-meeting whisper path restored
+
+## 2026-02-24 19:33:00Z
+- task: investigate intermittent TH LMS "Failed to fetch" near 20:53 PKT and harden observability
+- findings: chalk API join and ws upgrade succeeded around incident; later ws auth failure reason=missing_room_id for same client/origin
+- implemented: websocket handler now logs token_source + room query diagnostics + claim/query mismatch warnings + richer auth_failed context in existing `chalk-api-prod` stream
+- verify: go test ./internal/interfaces/http/handlers -run WebSocket (pass); go test ./... (pass); monorepo lint/typecheck pass; monorepo tests fail in sdk-react unrelated pre-existing failures
+
+## 2026-03-05 08:31:27Z
+- task: sdk-react quality pass for full components
+- completed: split PreJoinLobby into prejoin-lobby module set; reduced main file to orchestration shell
+- completed: split MeetingRoom into meeting-room module set (types/hooks/render sections); reduced main file from 916 LOC to 224 LOC
+- formatting: fixed oxfmt config (`printWidth` 360 -> 300) and formatted touched files
+- verify: `bun run --filter @q9labs/chalk-react check-types` pass; `bun run --filter @q9labs/chalk-react test` pass (233 pass, 3 skip, 0 fail)
+
+## 2026-03-05 08:44:25Z
+- task: continue same quality pass on sdk-react VideoConference
+- completed: reduced `VideoConference.tsx` to facade (43 LOC) and moved orchestration to `useVideoConferenceController`
+- completed: extracted meeting-room prop composition into `useVideoConferenceMeetingRoomProps` and view prop shaping into `view-state`
+- verify: `bun run --filter @q9labs/chalk-react check-types` pass; `bun run --filter @q9labs/chalk-react test` pass (233 pass, 3 skip, 0 fail)
