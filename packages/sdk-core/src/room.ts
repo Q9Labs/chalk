@@ -23,6 +23,7 @@ import type {
 } from "./types.ts";
 import { ChalkErrorCode } from "./types.ts";
 import { wideEvents } from "./wide-events/index.ts";
+import { WideEventContext } from "./wide-events/context.ts";
 import type { WSClient } from "./ws-client.ts";
 import { withPatchedGetDisplayMedia } from "./utils/get-display-media-fallback.ts";
 
@@ -114,6 +115,7 @@ export class Room extends EventEmitter<RoomEvents> {
   private _whiteboardDefaultAccess = true; // tenant config, default: everyone can draw
   private _roomCreated = false;
   private _tenantConfig: TenantConfig | null = null;
+  private _roomSyncReadyEmitted = false;
 
   private rtkClient?: RealtimeKitClient;
   private wsClient?: WSClient;
@@ -253,6 +255,27 @@ export class Room extends EventEmitter<RoomEvents> {
     return this._tokens;
   }
 
+  private emitRoomSyncReady(source: "rtk.snapshot" | "ws.snapshot", participantCount: number): void {
+    if (this._roomSyncReadyEmitted) {
+      return;
+    }
+    this._roomSyncReadyEmitted = true;
+
+    const ctx = new WideEventContext("room.sync.ready", wideEvents.collector);
+    ctx.merge({
+      source,
+      roomId: this.id,
+      participantCount,
+      transport:
+        this.rtkClient && this.wsClient
+          ? "rtk+ws"
+          : this.rtkClient
+            ? "rtk"
+            : "ws",
+    });
+    ctx.complete("success");
+  }
+
   private setupWSListeners(): void {
     if (!this.wsClient) return;
 
@@ -374,6 +397,8 @@ export class Room extends EventEmitter<RoomEvents> {
     });
 
     this.wsClient.on("room.snapshot", (snapshot) => {
+      this.emitRoomSyncReady("ws.snapshot", snapshot.participants.length);
+
       // CRITICAL: When RTK is active, it manages participants (different IDs than WS)
       // Only use snapshot for non-participant data like recording state
       if (this.rtkClient) {
@@ -751,6 +776,11 @@ export class Room extends EventEmitter<RoomEvents> {
 
     const reconcileJoinedParticipants = (): void => {
       const joinedParticipants = collectJoinedParticipants();
+      this.emitRoomSyncReady(
+        "rtk.snapshot",
+        joinedParticipants.length + (this._localParticipant ? 1 : 0),
+      );
+
       for (const joinedParticipant of joinedParticipants) {
         const participant = ensureRemoteParticipant(joinedParticipant);
         if (!participant) continue;

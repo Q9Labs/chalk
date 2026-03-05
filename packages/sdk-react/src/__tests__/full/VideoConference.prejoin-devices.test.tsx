@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { wideEvents } from "@q9labs/chalk-core";
 import { VideoConference } from "../../components/full/VideoConference";
 
 const mockParticipantsState: {
@@ -36,6 +37,11 @@ const mockRoomState: {
 
 const mockReportIncident = vi.fn(async () => null);
 const mockRecordIncidentBreadcrumb = vi.fn();
+const capturedWideEvents: Array<{
+	eventType: string;
+	outcome: "success" | "error" | "timeout";
+	data: Record<string, unknown>;
+}> = [];
 
 vi.mock("../../hooks/room/useConnection", () => {
 	const join = vi.fn(async () => {});
@@ -179,6 +185,18 @@ global.MediaStream = vi
 
 describe("VideoConference pre-join devices", () => {
 	beforeEach(() => {
+		capturedWideEvents.length = 0;
+		wideEvents.reset();
+		wideEvents.configure({
+			enabled: true,
+			handler: (event) => {
+				capturedWideEvents.push({
+					eventType: event.eventType,
+					outcome: event.outcome,
+					data: event.data,
+				});
+			},
+		});
 		mockParticipantsState.participants = [];
 		mockParticipantsState.localParticipant = null;
 		mockParticipantsState.participantCount = 0;
@@ -195,6 +213,11 @@ describe("VideoConference pre-join devices", () => {
 		(globalThis as any).__vcSelectSpeakerMock?.mockClear?.();
 		mockReportIncident.mockClear();
 		mockRecordIncidentBreadcrumb.mockClear();
+	});
+
+	afterEach(() => {
+		wideEvents.configure({ enabled: false, handler: undefined });
+		wideEvents.reset();
 	});
 
 	it("applies selected lobby camera/mic after join instead of before join", async () => {
@@ -251,6 +274,33 @@ describe("VideoConference pre-join devices", () => {
 		expect(
 			(globalThis as any).__vcSelectSpeakerMock.mock.invocationCallOrder[0],
 		).toBeGreaterThan((globalThis as any).__vcJoinMock.mock.invocationCallOrder[0]);
+
+		const joiningTransition = capturedWideEvents.find(
+			(event) =>
+				event.eventType === "ui.join.phase_transition" &&
+				event.data.fromPhase === "lobby" &&
+				event.data.toPhase === "joining",
+		);
+		expect(joiningTransition).toBeDefined();
+		expect(joiningTransition?.outcome).toBe("success");
+
+		const cameraSelectionTelemetry = capturedWideEvents.find(
+			(event) =>
+				event.eventType === "ui.media.device_selection" &&
+				event.data.deviceKind === "camera" &&
+				event.data.deviceId === "cam-2",
+		);
+		expect(cameraSelectionTelemetry).toBeDefined();
+		expect(cameraSelectionTelemetry?.outcome).toBe("success");
+		expect(cameraSelectionTelemetry?.data).toEqual(
+			expect.objectContaining({
+				trigger: "post_join_click",
+				deviceKind: "camera",
+				deviceId: "cam-2",
+				outcome: "selected",
+			}),
+		);
+		expect(typeof cameraSelectionTelemetry?.data.durationMs).toBe("number");
 	});
 
 	it("retries transient join failures before surfacing an error", async () => {

@@ -727,6 +727,95 @@ describe("ChalkClient", () => {
 			expect(joinEffect).toHaveBeenCalledTimes(3);
 		});
 
+		it("emits per-attempt RTK join telemetry with timeout/error classification", async () => {
+			const wideEventsReceived: Array<{
+				eventType: string;
+				outcome: string;
+				durationMs: number;
+				data?: Record<string, unknown>;
+			}> = [];
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				token: "chalk_access_token",
+				wideEvents: {
+					handler: (event) => {
+						wideEventsReceived.push({
+							eventType: event.eventType,
+							outcome: event.outcome,
+							durationMs: event.durationMs,
+							data: event.data,
+						});
+					},
+				},
+			});
+
+			const join = mock(async () => {});
+			const timeoutError = new TimeoutError({
+				message: "Room join timed out after 1000ms",
+				operation: "joinRTKRoom",
+				timeoutMs: 1000,
+			});
+
+			let attemptCount = 0;
+			(client as any)._joinRealtimeKitEffect = mock(() => {
+				attemptCount += 1;
+				if (attemptCount === 1) {
+					return Effect.fail(timeoutError);
+				}
+				if (attemptCount === 2) {
+					return Effect.fail(new Error("socket closed"));
+				}
+				return Effect.succeed(undefined);
+			});
+
+			const originalSetTimeout = globalThis.setTimeout;
+			globalThis.setTimeout = ((handler: TimerHandler) => {
+				if (typeof handler === "function") handler();
+				return 0 as any;
+			}) as any;
+
+			try {
+				await (client as any)._joinRealtimeKitWithRetry(
+					{ join } as any,
+					{
+						cohort: "test",
+						policy: {
+							name: "test-policy",
+							timeoutMs: 1000,
+							retryDelaysMs: [10, 20],
+						},
+					},
+				);
+			} finally {
+				globalThis.setTimeout = originalSetTimeout;
+			}
+
+			const attemptEvents = wideEventsReceived.filter(
+				(event) => event.eventType === "room.join.rtk.attempt",
+			);
+			expect(attemptEvents).toHaveLength(3);
+			expect(attemptEvents.map((event) => event.outcome)).toEqual([
+				"timeout",
+				"error",
+				"success",
+			]);
+			expect(attemptEvents.map((event) => event.data?.attempt)).toEqual([1, 2, 3]);
+			expect(attemptEvents.map((event) => event.data?.delayMs)).toEqual([10, 20, 0]);
+			expect(attemptEvents.map((event) => event.data?.timeoutVsError)).toEqual([
+				"timeout",
+				"error",
+				"none",
+			]);
+			expect(
+				attemptEvents.every(
+					(event) =>
+						typeof event.data?.attemptDurationMs === "number" &&
+						(event.data?.attemptDurationMs as number) >= 0 &&
+						event.durationMs >= 0,
+				),
+			).toBe(true);
+		});
+
 		it("fails after max RTK join retry attempts", async () => {
 			const client = new ChalkClient({
 				apiUrl: DEFAULT_API_URL,

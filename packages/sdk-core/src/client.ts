@@ -22,6 +22,7 @@ import type {
 } from "./types.ts";
 import { wideEvents } from "./wide-events/index.ts";
 import { createAxiomWideEventsHandler } from "./wide-events/axiom.ts";
+import { WideEventContext } from "./wide-events/context.ts";
 import { WSClient } from "./ws-client.ts";
 import {
   createOperationLock,
@@ -232,6 +233,50 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     return error.message.toLowerCase().includes("timed out");
   }
 
+  private _emitRtkJoinAttemptTelemetry({
+    attempt,
+    totalAttempts,
+    timeoutMs,
+    delayMs,
+    attemptDurationMs,
+    timeoutVsError,
+    outcome,
+    errorMessage,
+    joinPolicySelection,
+  }: {
+    attempt: number;
+    totalAttempts: number;
+    timeoutMs: number;
+    delayMs: number;
+    attemptDurationMs: number;
+    timeoutVsError: "timeout" | "error" | "none";
+    outcome: "success" | "timeout" | "error";
+    errorMessage?: string;
+    joinPolicySelection: ReturnType<typeof getRtkJoinPolicyForCurrentCohort>;
+  }): void {
+    const attemptCtx = new WideEventContext("room.join.rtk.attempt", wideEvents.collector);
+    attemptCtx.merge({
+      attempt,
+      totalAttempts,
+      timeoutMs,
+      delayMs,
+      attemptDurationMs,
+      timeoutVsError,
+      outcome,
+      rtkJoinPolicy: joinPolicySelection,
+    });
+
+    if (outcome === "success") {
+      attemptCtx.complete("success");
+      return;
+    }
+
+    attemptCtx.complete(outcome, {
+      code: timeoutVsError === "timeout" ? "RTK_JOIN_TIMEOUT" : "RTK_JOIN_ERROR",
+      message: errorMessage ?? "RTK join attempt failed",
+    });
+  }
+
   /**
    * RTK join with retry logic and exponential backoff
    * Attempts join multiple times before giving up
@@ -247,27 +292,53 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
     const totalAttempts = 1 + retryDelays.length;
 
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      const attemptNumber = attempt + 1;
+      const attemptStart = performance.now();
+
       if (!joinPromise) {
         joinPromise = rtkClient.join();
       }
 
       try {
         await Effect.runPromise(this._joinRealtimeKitEffect(joinPromise, timeoutMs));
+        this._emitRtkJoinAttemptTelemetry({
+          attempt: attemptNumber,
+          totalAttempts,
+          timeoutMs,
+          delayMs: 0,
+          attemptDurationMs: Math.round(performance.now() - attemptStart),
+          timeoutVsError: "none",
+          outcome: "success",
+          joinPolicySelection,
+        });
         return;
       } catch (error) {
         const normalized = error instanceof Error ? error : new Error(String(error));
         lastError = normalized;
+        const isTimeout = this._isJoinTimeoutError(normalized);
+        const delayMs = attempt < retryDelays.length ? retryDelays[attempt]! : 0;
+
+        this._emitRtkJoinAttemptTelemetry({
+          attempt: attemptNumber,
+          totalAttempts,
+          timeoutMs,
+          delayMs,
+          attemptDurationMs: Math.round(performance.now() - attemptStart),
+          timeoutVsError: isTimeout ? "timeout" : "error",
+          outcome: isTimeout ? "timeout" : "error",
+          errorMessage: normalized.message,
+          joinPolicySelection,
+        });
 
         // If we timed out, keep awaiting the same in-flight join promise on the
         // next attempt instead of calling rtkClient.join() again (avoids
         // "Already joining a room" duplicate-join races).
-        if (!this._isJoinTimeoutError(normalized)) {
+        if (!isTimeout) {
           joinPromise = null;
         }
 
         if (attempt < retryDelays.length) {
-          const delay = retryDelays[attempt]!;
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
     }

@@ -60,6 +60,8 @@ type JoinFailureStage =
 	| "rtc_join"
 	| "ws_connect"
 	| "join_unknown";
+type JoinPhaseTransitionTarget = Phase | "failure";
+type PostJoinDeviceSelectionKind = "camera" | "microphone" | "speaker";
 
 const inferJoinFailureStage = (error: ChalkError): JoinFailureStage => {
 	const code = String(error.code ?? "").toUpperCase();
@@ -430,6 +432,93 @@ function VideoConferenceBase({
 		[session],
 	);
 
+	const emitJoinClickTelemetry = useCallback(
+		(settings: JoinSettings, data?: Record<string, unknown>) => {
+			const ctx = wideEvents.start("ui.join.click");
+			ctx.merge({
+				roomId,
+				phase: phaseRef.current,
+				displayName: settings.displayName,
+				audioEnabled: settings.audioEnabled,
+				videoEnabled: settings.videoEnabled,
+				selectedVideoDevice: settings.selectedVideoDevice,
+				selectedAudioInput: settings.selectedAudioInput,
+				selectedAudioOutput: settings.selectedAudioOutput,
+				...(data ?? {}),
+			});
+			ctx.complete("success");
+		},
+		[roomId],
+	);
+
+	const emitJoinPhaseTransitionTelemetry = useCallback(
+		(
+			fromPhase: Phase,
+			toPhase: JoinPhaseTransitionTarget,
+			data?: Record<string, unknown>,
+			error?: ChalkError,
+		) => {
+			const ctx = wideEvents.start("ui.join.phase_transition");
+			ctx.merge({
+				roomId,
+				fromPhase,
+				toPhase,
+				transition: `${fromPhase}->${toPhase}`,
+				...(data ?? {}),
+			});
+			if (toPhase === "failure") {
+				ctx.complete(
+					"error",
+					error ?? {
+						code: ChalkErrorCode.UNKNOWN_ERROR,
+						message: "Join failed",
+					},
+				);
+				return;
+			}
+			ctx.complete("success");
+		},
+		[roomId],
+	);
+
+	const selectMediaDevicePostJoin = useCallback(
+		async (
+			deviceKind: PostJoinDeviceSelectionKind,
+			deviceId: string,
+			select: (id: string) => Promise<void>,
+		): Promise<void> => {
+			const ctx = wideEvents.start("ui.media.device_selection");
+			ctx.merge({
+				roomId,
+				deviceKind,
+				deviceId,
+				trigger: "post_join_click",
+			});
+			ctx.markPhase("select_device");
+			const startedAt = performance.now();
+
+			try {
+				await select(deviceId);
+				ctx.complete("success", {
+					outcome: "selected",
+					durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+				});
+			} catch (error) {
+				const chalkError = toChalkError(error);
+				ctx.set("outcome", "failed");
+				ctx.set("durationMs", Math.max(0, Math.round(performance.now() - startedAt)));
+				ctx.complete("error", chalkError);
+				pushIncidentBreadcrumb("media", "Post-click media device selection failed", {
+					deviceKind,
+					deviceId,
+					code: chalkError.code,
+					message: chalkError.message,
+				});
+			}
+		},
+		[pushIncidentBreadcrumb, roomId],
+	);
+
 	const clearDisconnectGraceTimeout = useCallback(() => {
 		if (disconnectGraceTimeoutRef.current !== null) {
 			window.clearTimeout(disconnectGraceTimeoutRef.current);
@@ -750,10 +839,15 @@ function VideoConferenceBase({
 
 	const handleJoin = useCallback(
 		async (settings: JoinSettings) => {
+			emitJoinClickTelemetry(settings);
 			// Guard: prevent duplicate join attempts
 			if (joinInFlightRef.current || isJoining || isConnected) {
 				if (isConnected) {
+					const fromPhase = phaseRef.current;
 					setPhase("meeting");
+					emitJoinPhaseTransitionTelemetry(fromPhase, "meeting", {
+						reason: "already_connected_guard",
+					});
 				}
 				pushIncidentBreadcrumb("join", "Join skipped (already in-flight or connected)", {
 					isConnected,
@@ -765,7 +859,11 @@ function VideoConferenceBase({
 
 			try {
 				lastJoinSettingsRef.current = settings;
+				const fromPhase = phaseRef.current;
 				setPhase("joining");
+				emitJoinPhaseTransitionTelemetry(fromPhase, "joining", {
+					reason: "join_clicked",
+				});
 				setError(null);
 				setSupportCode(null);
 
@@ -789,16 +887,39 @@ function VideoConferenceBase({
 
 						const deviceSelectionTasks: Promise<void>[] = [];
 						if (settings.selectedVideoDevice) {
-							deviceSelectionTasks.push(media.selectCamera(settings.selectedVideoDevice));
+							deviceSelectionTasks.push(
+								selectMediaDevicePostJoin(
+									"camera",
+									settings.selectedVideoDevice,
+									media.selectCamera,
+								),
+							);
 						}
 						if (settings.selectedAudioInput) {
-							deviceSelectionTasks.push(media.selectMicrophone(settings.selectedAudioInput));
+							deviceSelectionTasks.push(
+								selectMediaDevicePostJoin(
+									"microphone",
+									settings.selectedAudioInput,
+									media.selectMicrophone,
+								),
+							);
 						}
 						if (settings.selectedAudioOutput) {
-							deviceSelectionTasks.push(media.selectSpeaker(settings.selectedAudioOutput));
+							deviceSelectionTasks.push(
+								selectMediaDevicePostJoin(
+									"speaker",
+									settings.selectedAudioOutput,
+									media.selectSpeaker,
+								),
+							);
 						}
 						// Device selection is best-effort; meeting entry must not wait on it.
 						setPhase("meeting");
+						emitJoinPhaseTransitionTelemetry("joining", "meeting", {
+							reason: "join_succeeded",
+							attempt: attempt + 1,
+							maxAttempts,
+						});
 						if (deviceSelectionTasks.length > 0) {
 							void Promise.allSettled(deviceSelectionTasks);
 						}
@@ -822,6 +943,11 @@ function VideoConferenceBase({
 						// If already connected, transition to meeting instead of lobby
 						if (chalkError.message?.includes("Already connected")) {
 							setPhase("meeting");
+							emitJoinPhaseTransitionTelemetry("joining", "meeting", {
+								reason: "already_connected_error",
+								attempt: attempt + 1,
+								maxAttempts,
+							});
 							return;
 						}
 						if (chalkError.message?.includes("Already joining a room")) {
@@ -879,12 +1005,23 @@ function VideoConferenceBase({
 							? terminalError.details.stage
 							: undefined,
 				});
+				emitJoinPhaseTransitionTelemetry(
+					"joining",
+					"failure",
+					{
+						reason: "join_failed",
+						maxAttempts,
+					},
+					terminalError,
+				);
 				setPhase("lobby");
 			} finally {
 				joinInFlightRef.current = false;
 			}
 		},
 		[
+			emitJoinClickTelemetry,
+			emitJoinPhaseTransitionTelemetry,
 			join,
 			roomId,
 			role,
@@ -896,10 +1033,9 @@ function VideoConferenceBase({
 			isJoining,
 			isConnected,
 			media,
+			selectMediaDevicePostJoin,
 			emitError,
 			pushIncidentBreadcrumb,
-			isConnected,
-			isJoining,
 		],
 	);
 
