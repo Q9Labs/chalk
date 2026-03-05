@@ -1100,19 +1100,21 @@ describe("ConferenceClient", () => {
 		});
 	});
 
-	describe("token-expired event", () => {
-		it("should emit token-expired event when API returns 401", async () => {
+	describe("token.expired event", () => {
+		it("forwards token.expired from APIClient", () => {
 			const client = new ConferenceClient({
 				apiUrl: DEFAULT_API_URL,
 				token: "expired_token",
 			});
 
-			let eventReceived = false;
-			client.on("token-expired", () => {
-				eventReceived = true;
+			const error = { code: "TOKEN_EXPIRED", message: "token expired" };
+			let received: typeof error | null = null;
+			client.on("token.expired", (payload) => {
+				received = payload;
 			});
+			(client as any).apiClient.emit("token.expired", error);
 
-			expect(eventReceived).toBe(false);
+			expect(received).toEqual(error);
 		});
 	});
 });

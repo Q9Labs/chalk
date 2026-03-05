@@ -19,7 +19,7 @@ import type {
 } from "./types.ts";
 
 interface APIClientEvents {
-	"token-expired": ChalkErrorType;
+	"token.expired": ChalkErrorType;
 }
 
 export class APIClient extends EventEmitter<APIClientEvents> {
@@ -190,7 +190,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				code: "TOKEN_EXPIRED",
 				message: "Authentication token expired. No tokenProvider configured.",
 			};
-			this.emit("token-expired", error);
+			this.emit("token.expired", error);
 			return { success: false, error };
 		}
 
@@ -237,7 +237,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				code: "TOKEN_EXPIRED",
 				message: "Token refresh failed: no token returned",
 			};
-			this.emit("token-expired", error);
+			this.emit("token.expired", error);
 			return { success: false, error };
 		}
 

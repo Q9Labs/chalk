@@ -78,7 +78,7 @@ export interface ChalkSessionEvents {
 	/** Error occurred */
 	error: ChalkError;
 	/** Token expired (need to provide new token) */
-	"token:expired": void;
+	"token.expired": void;
 }
 
 /**
@@ -666,8 +666,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 		);
 
 		// Forward token expired from client
-		this.client.on("token-expired", () => {
-			this.emit("token:expired", undefined);
+		this.client.on("token.expired", () => {
+			this.emit("token.expired", undefined);
 			void this.reportIncident({
 				severity: "warning",
 				source: "api",

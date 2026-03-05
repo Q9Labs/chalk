@@ -294,7 +294,7 @@ export function ChalkProvider({
 			});
 		});
 
-		const unsubscribeTokenExpired = wsClient.on("token-expired", (error) => {
+		const unsubscribeTokenExpired = wsClient.on("token.expired", (error) => {
 			setWsConnectionState("failed");
 			logger.error({
 				event: "websocket.token_expired",

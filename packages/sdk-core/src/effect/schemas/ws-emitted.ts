@@ -72,7 +72,7 @@ export const WSEventSchemas = {
 	disconnected: Schema.Struct({ reason: Schema.optional(Schema.String) }),
 	reconnecting: Schema.Struct({ attempt: Schema.Number }),
 	error: ChalkErrorSchema,
-	"token-expired": ChalkErrorSchema,
+	"token.expired": ChalkErrorSchema,
 	registered: RegisteredPayload,
 	"participant.joined": ParticipantSchema,
 	"participant.left": Schema.Struct({ participantId: Schema.String }),

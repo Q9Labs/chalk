@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React: EndScreen composition split** — decompose `EndScreen` into focused feedback/download/actions modules and shared duration utility for cleaner structure without changing user-facing flow.
 - **SDK-Core: Session-first naming overhaul (breaking)** — rename core SDK vocabulary to `ConferenceClient`/`ConferenceSession` with `JoinSessionConfig`, `SessionInfo`, and `SessionConnectionState`; rename lifecycle APIs to `joinSession`, `createSession`, and `endSession`, and align `sdk-react` / `sdk-react-native` imports/re-exports/providers with the new naming.
 - **SDK-Core: ConferenceSession event contract redesign (breaking)** — migrate room event names to dot notation (`connection.state.changed`, `participant.joined|left|updated`, `speaker.active.changed`, `chat.message`, `hand.*`, `recording.*`, `whiteboard.*`) and update all manager/effect/session listeners plus tests to the new event grammar.
+- **SDK-Core: structural composition pass for session/client internals** — split legacy `room.ts` and `client.ts` monoliths into focused composition modules (`conference-session/*`, `conference-client/*`) while preserving public API behavior and resilience/test seams.
+- **SDK-Core/SDK-React-Native: auth expiry event dot-notation (breaking)** — replace legacy auth event names (`token-expired`, `token:expired`) with canonical `token.expired` across emitters/listeners, schemas, and tests.
 
 ### Fixed
 

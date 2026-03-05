@@ -1,77 +1,67 @@
 /**
  * ConferenceClient - Main entry point for the Chalk SDK
- * Integrates with Cloudflare RealtimeKit for WebRTC
+ * Composed from focused modules for config and join orchestration.
  */
 
-import type RealtimeKitClient from "@cloudflare/realtimekit";
-import { Effect, pipe } from "effect";
+import { Effect } from "effect";
 import { APIClient } from "./api-client.ts";
+import {
+  configureConferenceWideEvents,
+  DEFAULT_API_URL,
+  deriveWsUrl,
+  isTokenExpired as parseTokenExpiry,
+} from "./conference-client/config.ts";
+import { joinConferenceSession } from "./conference-client/join-session.ts";
+import {
+  createJoinLock,
+  isJoinTimeoutError,
+  waitForJoinWithTimeout,
+} from "./conference-client/rtk-runtime.ts";
+import { ConnectionError, TimeoutError } from "./effect/errors.ts";
 import { EventEmitter } from "./events.ts";
 import {
   ChalkPostHogSessionReplay,
   type ChalkPostHogConfig,
 } from "./posthog.ts";
+import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
 import { ConferenceSession } from "./room.ts";
 import type {
-  ConferenceClientConfig,
   ChalkError,
-  Participant,
+  ConferenceClientConfig,
   JoinSessionConfig,
   SessionConnectionState,
-  TokenProvider,
 } from "./types.ts";
 import { wideEvents } from "./wide-events/index.ts";
-import { createAxiomWideEventsHandler } from "./wide-events/axiom.ts";
 import { WideEventContext } from "./wide-events/context.ts";
 import { WSClient } from "./ws-client.ts";
-import {
-  createOperationLock,
-  type OperationLock,
-} from "./effect/connection.ts";
-import { ConnectionError, TimeoutError } from "./effect/errors.ts";
-import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
-
-const DEFAULT_API_URL = "https://api.chalk.dev";
-let realtimeKitModulePromise: Promise<typeof import("@cloudflare/realtimekit")> | null = null;
-
-const importRealtimeKitModule = async () => {
-  if (realtimeKitModulePromise === null) {
-    realtimeKitModulePromise = import("@cloudflare/realtimekit").catch(
-      (error) => {
-        realtimeKitModulePromise = null;
-        throw error;
-      },
-    );
-  }
-
-  return realtimeKitModulePromise;
-};
 
 interface ConferenceClientEvents {
-  "token-expired": ChalkError;
+  "token.expired": ChalkError;
 }
+
+type JoinLock = ReturnType<typeof createJoinLock>;
 
 export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
   private readonly apiClient: APIClient;
   private readonly wsUrl: string;
-  private readonly tokenProvider?: TokenProvider;
+  private readonly tokenProvider?: ConferenceClientConfig["tokenProvider"];
   private readonly debug: boolean;
   private readonly demoMode: boolean;
   private currentSession: ConferenceSession | null = null;
   private currentWsClient: WSClient | null = null;
   private readonly postHogSessionReplay = new ChalkPostHogSessionReplay();
-  // Effect: OperationLock for serializing join operations
-  private readonly joinLock: OperationLock = createOperationLock();
+  private readonly joinLock: JoinLock = createJoinLock();
   private realtimeKitClientPromise: Promise<
-    (typeof import("@cloudflare/realtimekit"))["default"]
+    typeof import("@cloudflare/realtimekit")["default"]
   > | null = null;
 
   constructor(config: ConferenceClientConfig) {
     super();
+
     const apiUrl = config.apiUrl ?? DEFAULT_API_URL;
     this.debug = config.debug ?? false;
     this.demoMode = config.demoMode ?? false;
-    this.wsUrl = config.wsUrl ?? this.deriveWsUrl(apiUrl);
+    this.wsUrl = config.wsUrl ?? deriveWsUrl(apiUrl);
     this.tokenProvider = config.tokenProvider;
     this.postHogSessionReplay.configure(config.posthog);
 
@@ -90,66 +80,17 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     }
 
     this.apiClient = new APIClient({ ...config, apiUrl });
-
-    this.apiClient.on("token-expired", (error) => {
-      this.emit("token-expired", error);
+    this.apiClient.on("token.expired", (error) => {
+      this.emit("token.expired", error);
     });
 
-    // Configure wide events (optional Axiom helper).
-    const userHandler = config.wideEvents?.handler;
-    const axiomEnabled = config.axiom?.enabled ?? false;
-    const axiomHandler = axiomEnabled
-      ? createAxiomWideEventsHandler({
-          token: config.axiom!.token,
-          dataset: config.axiom!.dataset,
-          endpoint: config.axiom!.endpoint,
-          flushIntervalMs: config.axiom!.flushIntervalMs,
-          maxBatchSize: config.axiom!.maxBatchSize,
-          debug: config.axiom!.debug ?? config.debug ?? false,
-        }).handler
-      : undefined;
-
-    const combinedHandler =
-      userHandler && axiomHandler
-        ? (event: any) => {
-            userHandler(event);
-            axiomHandler(event);
-          }
-        : (userHandler ?? axiomHandler);
-
-    wideEvents.configure({
-      enabled: config.wideEvents?.enabled ?? config.debug ?? false,
-      handler: combinedHandler,
-      includeDebugInfo:
-        config.wideEvents?.includeDebugInfo ?? config.debug ?? false,
-    });
+    configureConferenceWideEvents(config);
   }
 
   configurePostHog(config?: ChalkPostHogConfig): void {
     this.postHogSessionReplay.configure(config);
   }
 
-  private _importRealtimeKitClient() {
-    return importRealtimeKitModule().then((module) => module.default);
-  }
-
-  private _getRealtimeKitClient() {
-    if (this.realtimeKitClientPromise === null) {
-      this.realtimeKitClientPromise = this._importRealtimeKitClient().catch(
-        (error) => {
-          this.realtimeKitClientPromise = null;
-          throw error;
-        },
-      );
-    }
-
-    return this.realtimeKitClientPromise;
-  }
-
-  /**
-   * Preload RealtimeKit bundle ahead of join clicks.
-   * Safe API: resolves to false on preload failure and leaves join path intact.
-   */
   async preloadRealtimeKit(): Promise<boolean> {
     const ctx = wideEvents.start("room.join.rtk.preload");
 
@@ -172,64 +113,28 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     });
   }
 
-  /**
-   * Derive WebSocket URL from API URL
-   * https://api.example.com -> wss://api.example.com/ws
-   * http://localhost:8080 -> ws://localhost:8080/ws
-   */
-  private deriveWsUrl(apiUrl?: string): string {
-    if (!apiUrl) {
-      throw new Error("apiUrl is required");
-    }
-    try {
-      const url = new URL(apiUrl);
-      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-      url.pathname = "/ws";
-      return url.toString();
-    } catch {
-      // Fallback for malformed URLs
-      const wsProtocol = apiUrl.startsWith("https") ? "wss" : "ws";
-      const baseUrl = apiUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
-      return `${wsProtocol}://${baseUrl}/ws`;
-    }
+  private _importRealtimeKitClient() {
+    return import("@cloudflare/realtimekit").then((module) => module.default);
   }
 
-  /**
-   * Validate JWT token expiration
-   * SDKCORE-MED-03: Use Buffer.from for Node.js/SSR compatibility
-   */
+  private _getRealtimeKitClient() {
+    if (this.realtimeKitClientPromise === null) {
+      this.realtimeKitClientPromise = this._importRealtimeKitClient().catch(
+        (error) => {
+          this.realtimeKitClientPromise = null;
+          throw error;
+        },
+      );
+    }
+
+    return this.realtimeKitClientPromise;
+  }
+
+  // Kept as a private instance method for test seam compatibility.
   private isTokenExpired(token: string): boolean {
-    try {
-      const parts = token.split(".");
-      if (parts.length !== 3 || !parts[1]) {
-        return true; // Invalid JWT format
-      }
-      // Decode base64url payload - works in both browser and Node.js.
-      // Cloudflare-style JWT payloads may use URL-safe chars and omit padding.
-      const payloadB64 = parts[1]
-        .replace(/-/g, "+")
-        .replace(/_/g, "/")
-        .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
-      let decoded: string;
-      if (typeof atob === "function") {
-        decoded = atob(payloadB64);
-      } else if (typeof Buffer !== "undefined") {
-        decoded = Buffer.from(payloadB64, "base64").toString("utf-8");
-      } else {
-        // Fallback: assume not expired if we can't decode
-        return false;
-      }
-      const payload = JSON.parse(decoded);
-      return Date.now() >= payload.exp * 1000;
-    } catch {
-      return true; // Invalid token format = treat as expired
-    }
+    return parseTokenExpiry(token);
   }
 
-  /**
-   * Effect-based RTK initialization
-   * Uses Effect.tryPromise with proper error typing
-   */
   private _initRealtimeKitEffect(
     authToken: string,
     audio: boolean,
@@ -254,45 +159,15 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     });
   }
 
-  /**
-   * Effect-based RTK join wait with timeout
-   * Uses Effect.timeoutOption for clean timeout handling
-   */
   private _joinRealtimeKitEffect(
     joinPromise: Promise<void>,
     timeoutMs: number,
   ) {
-    return pipe(
-      Effect.tryPromise({
-        try: () => joinPromise,
-        catch: (error) =>
-          new ConnectionError({
-            code: "CONNECTION_FAILED",
-            message: error instanceof Error ? error.message : "RTK join failed",
-            recoverable: true,
-            cause: error,
-          }),
-      }),
-      Effect.timeout(`${timeoutMs} millis`),
-      Effect.flatMap((option) =>
-        option !== null
-          ? Effect.succeed(option)
-          : Effect.fail(
-              new TimeoutError({
-                message: `ConferenceSession join timed out after ${timeoutMs}ms`,
-                operation: "joinRTKRoom",
-                timeoutMs,
-              }),
-            ),
-      ),
-    );
+    return waitForJoinWithTimeout(joinPromise, timeoutMs);
   }
 
   private _isJoinTimeoutError(error: Error): boolean {
-    if (error instanceof TimeoutError) {
-      return true;
-    }
-    return error.message.toLowerCase().includes("timed out");
+    return isJoinTimeoutError(error);
   }
 
   private _emitRtkJoinAttemptTelemetry({
@@ -343,12 +218,8 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     });
   }
 
-  /**
-   * RTK join with retry logic and exponential backoff
-   * Attempts join multiple times before giving up
-   */
   private async _joinRealtimeKitWithRetry(
-    rtkClient: RealtimeKitClient,
+    rtkClient: { join: () => Promise<void> },
     joinPolicySelection = getRtkJoinPolicyForCurrentCohort(),
   ): Promise<void> {
     let lastError: Error | null = null;
@@ -384,7 +255,9 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
         const normalized =
           error instanceof Error ? error : new Error(String(error));
         lastError = normalized;
-        const isTimeout = this._isJoinTimeoutError(normalized);
+        const timeout =
+          normalized instanceof TimeoutError ||
+          this._isJoinTimeoutError(normalized);
         const delayMs =
           attempt < retryDelays.length ? retryDelays[attempt]! : 0;
 
@@ -394,16 +267,13 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
           timeoutMs,
           delayMs,
           attemptDurationMs: Math.round(performance.now() - attemptStart),
-          timeoutVsError: isTimeout ? "timeout" : "error",
-          outcome: isTimeout ? "timeout" : "error",
+          timeoutVsError: timeout ? "timeout" : "error",
+          outcome: timeout ? "timeout" : "error",
           errorMessage: normalized.message,
           joinPolicySelection,
         });
 
-        // If we timed out, keep awaiting the same in-flight join promise on the
-        // next attempt instead of calling rtkClient.join() again (avoids
-        // "Already joining a room" duplicate-join races).
-        if (!isTimeout) {
+        if (!timeout) {
           joinPromise = null;
         }
 
@@ -413,171 +283,70 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
       }
     }
 
-    // All attempts failed
     throw new Error(
       `Failed to join room after ${totalAttempts} attempts: ${lastError?.message}`,
     );
   }
 
-  async joinSession(sessionId: string, config: JoinSessionConfig): Promise<ConferenceSession> {
-    // Effect: Use OperationLock for serialized join (prevents concurrent joins)
+  private async initRealtimeKitClient(
+    authToken: string,
+    audio: boolean,
+    video: boolean,
+  ) {
+    return Effect.runPromise(
+      this._initRealtimeKitEffect(authToken, audio, video),
+    ).catch((error) => {
+      if (error instanceof ConnectionError) {
+        throw new Error(`RealtimeKit initialization failed: ${error.message}`);
+      }
+      throw error;
+    });
+  }
+
+  async joinSession(
+    sessionId: string,
+    config: JoinSessionConfig,
+  ): Promise<ConferenceSession> {
     return this.joinLock.withLock(async () => {
-      // Clean up existing room before joining new one
       if (this.currentSession) {
         this.trackPostHogLeave("switch_room");
         await this.currentSession.leave();
         this.currentSession = null;
       }
 
-      const ctx = wideEvents.start("room.join");
-      ctx.set("input", {
-        roomId: sessionId,
-        displayName: config.displayName,
-        role: config.role,
-        audio: config.audio,
-        video: config.video,
-      });
-
       try {
-        ctx.markPhase("api");
-
-        const response = this.demoMode
-          ? await this.apiClient.demoJoin(sessionId, config.displayName)
-          : await this.apiClient.addParticipant(
-              sessionId,
-              config.displayName,
-              config.role,
-              config.metadata,
-            );
-
-        if (!response.success || !response.data) {
-          throw new Error(response.error?.message ?? "Failed to join room");
-        }
-
-        const { participantId, role, tokens, room: roomInfo } = response.data;
-
-        ctx.set("api", { success: true, participantId, role });
-
-        // CRITICAL: Validate token BEFORE using it
-        if (!tokens.rtcToken) {
-          throw new Error(
-            "RealtimeKit token missing - API did not return rtcToken",
-          );
-        }
-
-        // Never substitute RTC token with tokenProvider output.
-        // tokenProvider returns API JWT; RealtimeKit requires rtcToken from join response.
-        if (this.isTokenExpired(tokens.rtcToken)) {
-          ctx.set("api", { rtcTokenExpiredAtJoin: true });
-        }
-
-        this.apiClient.setToken(tokens.accessToken);
-
-        const localParticipant: Participant = {
-          id: participantId,
-          userId: participantId,
-          displayName: config.displayName,
-          role: role ?? "participant",
-          isLocal: true,
-          videoEnabled: config.video ?? false,
-          audioEnabled: config.audio ?? false,
-          isSpeaking: false,
-          isScreenSharing: false,
-          handRaised: false,
-          connectionQuality: 100,
-          metadata: config.metadata,
-        };
-
-        // Optional WebSocket signaling (chat, reactions, whiteboard, etc.)
-        let wsClient: WSClient | null = null;
-        if (this.wsUrl) {
-          wsClient = new WSClient(this.wsUrl, {
-            debug: this.debug,
-            tokenProvider: this.tokenProvider,
-          });
-          wsClient.on("token-expired", (error) => {
-            this.emit("token-expired", error);
-          });
-        }
-
-        ctx.markPhase("rtk.init");
-
-        // Effect: RTK initialization with typed errors
-        const rtkClient = await Effect.runPromise(
-          this._initRealtimeKitEffect(
-            tokens.rtcToken,
-            config.audio ?? false,
-            config.video ?? false,
-          ),
-        ).catch((error) => {
-          if (error instanceof ConnectionError) {
-            throw new Error(
-              `RealtimeKit initialization failed: ${error.message}`,
-            );
-          }
-          throw error;
+        const joined = await joinConferenceSession(sessionId, config, {
+          apiClient: this.apiClient,
+          demoMode: this.demoMode,
+          wsUrl: this.wsUrl,
+          debug: this.debug,
+          tokenProvider: this.tokenProvider,
+          isTokenExpired: (token) => this.isTokenExpired(token),
+          emitTokenExpired: (error) => this.emit("token.expired", error),
+          initRealtimeKitClient: (authToken, audio, video) =>
+            this.initRealtimeKitClient(authToken, audio, video),
+          joinRealtimeKitWithRetry: (rtkClient, policySelection) =>
+            this._joinRealtimeKitWithRetry(rtkClient, policySelection),
         });
 
-        if (!rtkClient) {
-          throw new Error("RealtimeKit init returned null/undefined client");
-        }
+        this.currentSession = joined.session;
+        this.currentWsClient = joined.wsClient;
 
-        const room = new ConferenceSession(roomInfo.id, rtkClient, this.debug);
-        room._setLocalParticipant(localParticipant);
-        room._setInfo(roomInfo);
-        room._setTokens(tokens);
-        room._setRoomCreated(response.data.roomCreated ?? false);
-        room._setTenantConfig(response.data.tenantConfig ?? null);
-
-        // Attach WebSocket client to room (sets up event handlers)
-        if (wsClient) {
-          room.attachWsClient(wsClient);
-          this.currentWsClient = wsClient;
-        }
-
-        ctx.markPhase("rtk.join");
-
-        const rtkJoinPolicy = getRtkJoinPolicyForCurrentCohort();
-        ctx.set("rtkJoinPolicy", rtkJoinPolicy);
-
-        // Run RTK join and WebSocket connect in parallel
-        const rtkJoinPromise = this._joinRealtimeKitWithRetry(
-          rtkClient,
-          rtkJoinPolicy,
-        );
-
-        // Start WebSocket connection in parallel (non-blocking)
-        if (wsClient && tokens.accessToken) {
-          wsClient.connect(tokens.accessToken, sessionId);
-        }
-
-        // Wait for RTK join to complete (WS connects independently)
-        await rtkJoinPromise;
-
-        this.currentSession = room;
         this.postHogSessionReplay.trackJoinSucceeded({
-          roomId: roomInfo.id,
-          participantId,
-          role: role ?? "participant",
+          roomId: joined.roomId,
+          participantId: joined.participantId,
+          role: joined.role,
           displayName: config.displayName,
           demoMode: this.demoMode,
         });
 
-        // Auto-start recording if server indicates (force_recording enabled)
-        if (response.data.shouldStartRecording) {
+        if (joined.shouldStartRecording) {
           this.startRecording().catch(() => {
-            // Recording auto-start failed, non-blocking
+            // non-blocking
           });
         }
 
-        wideEvents.setRoomId(roomInfo.id);
-        wideEvents.setParticipantId(participantId);
-        ctx.complete("success", {
-          participantCount: room.participants.size,
-          roomCreated: response.data.roomCreated,
-        });
-
-        return room;
+        return joined.session;
       } catch (error) {
         this.postHogSessionReplay.trackJoinFailed({
           roomId: sessionId,
@@ -585,18 +354,11 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
           error: error instanceof Error ? error.message : String(error),
           demoMode: this.demoMode,
         });
-        ctx.complete("error", error);
         throw error;
       }
     });
   }
 
-  /**
-   * Create a new room (requires API key authentication)
-   * @param name - Optional room name
-   * @param config - Optional room configuration
-   * @returns The room ID
-   */
   async createSession(
     name?: string,
     config?: Record<string, unknown>,
@@ -606,7 +368,6 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
 
     try {
       const response = await this.apiClient.createSession(name, config);
-
       if (!response.success || !response.data) {
         throw new Error(response.error?.message ?? "Failed to create room");
       }
@@ -619,21 +380,15 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     }
   }
 
-  /**
-   * End a room (host only)
-   * @param roomId - The room ID to end
-   */
   async endSession(sessionId: string): Promise<void> {
     const ctx = wideEvents.start("room.end");
     ctx.set("input", { roomId: sessionId });
 
     try {
       const response = await this.apiClient.endSession(sessionId);
-
       if (!response.success) {
         throw new Error(response.error?.message ?? "Failed to end room");
       }
-
       ctx.complete("success");
     } catch (error) {
       ctx.complete("error", error);
@@ -641,10 +396,6 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     }
   }
 
-  /**
-   * Start recording for the current room
-   * @returns The recording ID
-   */
   async startRecording(): Promise<string> {
     const ctx = wideEvents.start("recording.start");
 
@@ -654,9 +405,9 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
       }
 
       ctx.set("input", { roomId: this.currentSession.id });
-
-      const response = await this.apiClient.startRecording(this.currentSession.id);
-
+      const response = await this.apiClient.startRecording(
+        this.currentSession.id,
+      );
       if (!response.success || !response.data) {
         throw new Error(response.error?.message ?? "Failed to start recording");
       }
@@ -669,9 +420,6 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     }
   }
 
-  /**
-   * Stop recording for the current room
-   */
   async stopRecording(): Promise<void> {
     const ctx = wideEvents.start("recording.stop");
 
@@ -681,9 +429,9 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
       }
 
       ctx.set("input", { roomId: this.currentSession.id });
-
-      const response = await this.apiClient.stopRecording(this.currentSession.id);
-
+      const response = await this.apiClient.stopRecording(
+        this.currentSession.id,
+      );
       if (!response.success) {
         throw new Error(response.error?.message ?? "Failed to stop recording");
       }
@@ -709,7 +457,6 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
         fileId,
         mimeType,
       );
-
       if (!response.success || !response.data) {
         throw new Error(response.error?.message ?? "Failed to presign upload");
       }
@@ -734,7 +481,6 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
         roomId,
         fileId,
       );
-
       if (!response.success || !response.data) {
         throw new Error(
           response.error?.message ?? "Failed to presign download",
@@ -749,9 +495,6 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     }
   }
 
-  /**
-   * Get the current room
-   */
   get session(): ConferenceSession | null {
     return this.currentSession;
   }
@@ -760,24 +503,14 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     return this.session;
   }
 
-  /**
-   * Check if connected to a room
-   */
   get isConnected(): boolean {
     return this.currentSession?.connectionState === "connected";
   }
 
-  /**
-   * Get connection status
-   */
   get connectionState(): SessionConnectionState {
     return this.currentSession?.connectionState ?? "disconnected";
   }
 
-  /**
-   * Remove (kick) a participant from the current room
-   * @param apiParticipantId - The API participant ID (customParticipantId) to remove
-   */
   async removeParticipant(apiParticipantId: string): Promise<void> {
     const ctx = wideEvents.start("participant.remove");
 
@@ -791,17 +524,14 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
         participantId: apiParticipantId,
       });
 
-      // Validate ID format (basic UUID check)
       const uuidRegex =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(apiParticipantId)) {
         throw new Error(
-          `Invalid participant ID format: "${apiParticipantId}". ` +
-            `Use customParticipantId from the participant object.`,
+          `Invalid participant ID format: "${apiParticipantId}". Use customParticipantId from the participant object.`,
         );
       }
 
-      // Prevent self-removal
       if (apiParticipantId === this.currentSession.localParticipant?.id) {
         throw new Error("Cannot remove yourself from the room");
       }
@@ -810,7 +540,6 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
         this.currentSession.id,
         apiParticipantId,
       );
-
       if (!response.success) {
         throw new Error(
           response.error?.message ?? "Failed to remove participant",
@@ -824,22 +553,19 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     }
   }
 
-  /**
-   * Disconnect from the current room and clean up resources
-   */
   disconnect(): void {
     const ctx = wideEvents.start("room.leave");
 
     if (this.currentSession) {
       this.trackPostHogLeave("disconnect");
-      this.currentSession.leave();
+      void this.currentSession.leave();
       this.currentSession = null;
     }
+
     if (this.currentWsClient) {
       this.currentWsClient.disconnect();
       this.currentWsClient = null;
     }
-    // Note: OperationLock handles serialization automatically, no reset needed
 
     ctx.complete("success");
   }

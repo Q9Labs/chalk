@@ -258,7 +258,7 @@ export class WSClientBase extends EventEmitter<WSEvents> {
 			try {
 				this.token = await this.tokenProvider();
 			} catch (err) {
-				this.emit("token-expired", {
+				this.emit("token.expired", {
 					code: "TOKEN_EXPIRED",
 					message:
 						err instanceof Error
