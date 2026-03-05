@@ -1,0 +1,9 @@
+{
+  "printWidth": 300,
+  "endOfLine": "lf",
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "insertFinalNewline": true,
+  "ignorePatterns": ["**/dist/**", "**/coverage/**", "**/.next/**", "**/.turbo/**", "**/tests/results/**", "**/*.snap"]
+}

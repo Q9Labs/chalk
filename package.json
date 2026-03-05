@@ -1,52 +1,55 @@
 {
-	"name": "chalk",
-	"private": true,
-	"type": "module",
-	"workspaces": [
-		"packages/*",
-		"packages/sdk-react-native/example",
-		"apps/e2e",
-		"apps/web",
-		"apps/docs",
-		"apps/admin"
-	],
-	"scripts": {
-		"build": "turbo build",
-		"dev": "turbo dev",
-		"dev:web:pages": "bun run --cwd apps/web dev:pages",
-		"ios:build": "bash scripts/mobile/ios-build-sim.sh",
-		"ios:run": "bash scripts/mobile/ios-run-sim.sh",
-		"android:assemble": "bash scripts/mobile/android-assemble-debug.sh",
-		"android:install": "bash scripts/mobile/android-install-debug.sh",
-		"android:run": "bash scripts/mobile/android-run-debug.sh",
-		"test": "turbo test",
-		"test:join-stress:browser": "bash tests/scripts/run-agent-browser-join-stress.sh",
-		"test:e2e": "CHALK_E2E_RUN=1 bun run --cwd apps/e2e src/index.ts --run",
-		"test:e2e:require": "CHALK_E2E_RUN=1 CHALK_E2E_REQUIRE=1 bun run --cwd apps/e2e src/index.ts --run --require",
-		"lint": "turbo lint",
-		"check-types": "turbo check-types",
-		"clean": "turbo clean && rm -rf node_modules",
-		"generate": "turbo run generate:types"
-	},
-	"devDependencies": {
-		"@cloudflare/vite-plugin": "^1.17.1",
-		"@types/bun": "latest",
-		"turbo": "^2.7.2",
-		"typescript": "^5.7.2",
-		"wrangler": "^4.54.0",
-		"yaml": "^2.8.2"
-	},
-	"engines": {
-		"node": ">=20"
-	},
-	"overrides": {
-		"react-native-reanimated": "~3.19.5"
-	},
-	"packageManager": "bun@1.1.42",
-	"dependencies": {
-		"@excalidraw/excalidraw": "^0.18.0",
-		"clsx": "^2.1.1",
-		"framer-motion": "^12.23.26",
-		"tailwind-merge": "^3.4.0"
-	}
+  "name": "chalk",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "packages/sdk-react-native/example",
+    "apps/e2e",
+    "apps/web",
+    "apps/docs",
+    "apps/admin"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "dev:web:pages": "bun run --cwd apps/web dev:pages",
+    "ios:build": "bash scripts/mobile/ios-build-sim.sh",
+    "ios:run": "bash scripts/mobile/ios-run-sim.sh",
+    "android:assemble": "bash scripts/mobile/android-assemble-debug.sh",
+    "android:install": "bash scripts/mobile/android-install-debug.sh",
+    "android:run": "bash scripts/mobile/android-run-debug.sh",
+    "test": "turbo test",
+    "test:join-stress:browser": "bash tests/scripts/run-agent-browser-join-stress.sh",
+    "test:e2e": "CHALK_E2E_RUN=1 bun run --cwd apps/e2e src/index.ts --run",
+    "test:e2e:require": "CHALK_E2E_RUN=1 CHALK_E2E_REQUIRE=1 bun run --cwd apps/e2e src/index.ts --run --require",
+    "lint": "turbo lint",
+    "check-types": "turbo check-types",
+    "clean": "turbo clean && rm -rf node_modules",
+    "generate": "turbo run generate:types"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.26",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.17.1",
+    "@types/bun": "latest",
+    "oxfmt": "^0.36.0",
+    "turbo": "^2.7.2",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.54.0",
+    "yaml": "^2.8.2"
+  },
+  "overrides": {
+    "react-native-reanimated": "~3.19.5"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "bun@1.1.42"
 }
