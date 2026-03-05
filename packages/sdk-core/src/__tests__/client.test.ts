@@ -36,6 +36,70 @@ describe("ChalkClient", () => {
 			},
 		};
 	};
+	const captureGlobal = (key: "window" | "document" | "navigator") => ({
+		exists: key in globalThis,
+		value: (globalThis as any)[key],
+	});
+	const restoreGlobal = (
+		key: "window" | "document" | "navigator",
+		snapshot: { exists: boolean; value: unknown },
+	) => {
+		if (snapshot.exists) {
+			Object.defineProperty(globalThis, key, {
+				value: snapshot.value,
+				configurable: true,
+				writable: true,
+			});
+			return;
+		}
+		delete (globalThis as any)[key];
+	};
+	const withBrowserNetworkEnv = async (
+		connection: { effectiveType?: string; saveData?: boolean },
+		run: () => Promise<void>,
+	) => {
+		const windowSnapshot = captureGlobal("window");
+		const documentSnapshot = captureGlobal("document");
+		const navigatorSnapshot = captureGlobal("navigator");
+
+		Object.defineProperty(globalThis, "window", {
+			value: {},
+			configurable: true,
+			writable: true,
+		});
+		Object.defineProperty(globalThis, "document", {
+			value: {},
+			configurable: true,
+			writable: true,
+		});
+		Object.defineProperty(globalThis, "navigator", {
+			value: { ...(navigatorSnapshot.value as object), connection },
+			configurable: true,
+			writable: true,
+		});
+
+		try {
+			await run();
+		} finally {
+			restoreGlobal("window", windowSnapshot);
+			restoreGlobal("document", documentSnapshot);
+			restoreGlobal("navigator", navigatorSnapshot);
+		}
+	};
+	const withNodeLikeEnv = async (run: () => Promise<void>) => {
+		const windowSnapshot = captureGlobal("window");
+		const documentSnapshot = captureGlobal("document");
+
+		delete (globalThis as any).window;
+		delete (globalThis as any).document;
+
+		try {
+			await run();
+		} finally {
+			restoreGlobal("window", windowSnapshot);
+			restoreGlobal("document", documentSnapshot);
+		}
+	};
 
 	describe("initialization", () => {
 		it("should initialize with token (recommended)", () => {
@@ -489,6 +553,150 @@ describe("ChalkClient", () => {
 			expect(joinEvent).toBeDefined();
 			expect(joinEvent?.outcome).toBe("success");
 			expect(joinEvent?.phases?.api).toBeGreaterThanOrEqual(15);
+		});
+
+		it("uses default RTK join policy for non-browser cohort", async () => {
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				token: "chalk_access_token",
+			});
+			const join = mock(async () => {});
+			const timeoutSamples: number[] = [];
+			(client as any)._joinRealtimeKitEffect = mock(
+				(_joinPromise: Promise<void>, timeoutMs: number) => {
+					timeoutSamples.push(timeoutMs);
+					return Effect.fail(new Error("join attempt failed"));
+				},
+			);
+			const scheduledDelays: number[] = [];
+			const originalSetTimeout = globalThis.setTimeout;
+			globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
+				scheduledDelays.push(typeof delay === "number" ? delay : 0);
+				if (typeof handler === "function") handler();
+				return 0 as any;
+			}) as any;
+
+			try {
+				await withNodeLikeEnv(async () => {
+					await expect(
+						(client as any)._joinRealtimeKitWithRetry({ join } as any),
+					).rejects.toThrow("Failed to join room after 5 attempts: join attempt failed");
+				});
+			} finally {
+				globalThis.setTimeout = originalSetTimeout;
+			}
+
+			expect(timeoutSamples).toEqual([30000, 30000, 30000, 30000, 30000]);
+			expect(scheduledDelays).toEqual([500, 1000, 2000, 4000]);
+		});
+
+		it("uses degraded-network RTK join policy for constrained browser cohort", async () => {
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				token: "chalk_access_token",
+			});
+			const join = mock(async () => {});
+			const timeoutSamples: number[] = [];
+			(client as any)._joinRealtimeKitEffect = mock(
+				(_joinPromise: Promise<void>, timeoutMs: number) => {
+					timeoutSamples.push(timeoutMs);
+					return Effect.fail(new Error("join attempt failed"));
+				},
+			);
+			const scheduledDelays: number[] = [];
+			const originalSetTimeout = globalThis.setTimeout;
+			globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
+				scheduledDelays.push(typeof delay === "number" ? delay : 0);
+				if (typeof handler === "function") handler();
+				return 0 as any;
+			}) as any;
+
+			try {
+				await withBrowserNetworkEnv(
+					{ effectiveType: "2g", saveData: true },
+					async () => {
+						await expect(
+							(client as any)._joinRealtimeKitWithRetry({ join } as any),
+						).rejects.toThrow("Failed to join room after 5 attempts: join attempt failed");
+					},
+				);
+			} finally {
+				globalThis.setTimeout = originalSetTimeout;
+			}
+
+			expect(timeoutSamples).toEqual([45000, 45000, 45000, 45000, 45000]);
+			expect(scheduledDelays).toEqual([1000, 2000, 4000, 8000]);
+		});
+
+		it("emits RTK join cohort/policy in room.join wide-event data", async () => {
+			const wideEventsReceived: Array<{
+				eventType: string;
+				outcome: string;
+				data?: Record<string, unknown>;
+			}> = [];
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+				wideEvents: {
+					handler: (event) => {
+						wideEventsReceived.push({
+							eventType: event.eventType,
+							outcome: event.outcome,
+							data: event.data,
+						});
+					},
+				},
+			});
+			(client as any).apiClient = {
+				addParticipant: mock(async () => ({
+					success: true,
+					data: {
+						participantId: "p_1",
+						role: "participant",
+						tokens: {
+							rtcToken: createJwt({
+								exp: Math.floor(Date.now() / 1000) + 60 * 5,
+								scope: "rtk",
+							}),
+							accessToken: "chalk_access_token",
+						},
+						room: {
+							id: "room_1",
+							name: "Room 1",
+							status: "active",
+							participantCount: 1,
+							config: {},
+							createdAt: new Date(),
+						},
+					},
+				})),
+				setToken: mock(() => {}),
+			};
+			(client as any)._initRealtimeKitEffect = () =>
+				Effect.succeed(createMockRtkClient() as any);
+			(client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+
+			await withBrowserNetworkEnv(
+				{ effectiveType: "2g", saveData: true },
+				async () => {
+					await client.joinRoom("room_1", { displayName: "Alice" });
+				},
+			);
+
+			const joinEvent = wideEventsReceived.find((event) => event.eventType === "room.join");
+			const rtkJoinPolicy = joinEvent?.data?.rtkJoinPolicy as
+				| {
+						cohort?: string;
+						policy?: { name?: string; timeoutMs?: number; retryDelaysMs?: number[] };
+				  }
+				| undefined;
+
+			expect(joinEvent?.outcome).toBe("success");
+			expect(rtkJoinPolicy?.cohort).toBe("browser-2g-save-data");
+			expect(rtkJoinPolicy?.policy?.name).toBe("degraded-network");
+			expect(rtkJoinPolicy?.policy?.timeoutMs).toBe(45000);
+			expect(rtkJoinPolicy?.policy?.retryDelaysMs).toEqual([1000, 2000, 4000, 8000]);
 		});
 
 		it("retries RTK join and succeeds on a later attempt", async () => {

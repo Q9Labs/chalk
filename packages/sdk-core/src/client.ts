@@ -28,10 +28,7 @@ import {
   type OperationLock,
 } from "./effect/connection.ts";
 import { ConnectionError, TimeoutError } from "./effect/errors.ts";
-
-// RTK join configuration
-const RTK_JOIN_TIMEOUT_MS = 30000; // 30 seconds per attempt
-const RTK_JOIN_RETRY_DELAYS = [500, 1000, 2000, 4000]; // 4 retries with progressive backoff
+import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
 
 const DEFAULT_API_URL = "https://api.chalk.dev";
 
@@ -239,10 +236,15 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * RTK join with retry logic and exponential backoff
    * Attempts join multiple times before giving up
    */
-  private async _joinRealtimeKitWithRetry(rtkClient: RealtimeKitClient): Promise<void> {
+  private async _joinRealtimeKitWithRetry(
+    rtkClient: RealtimeKitClient,
+    joinPolicySelection = getRtkJoinPolicyForCurrentCohort(),
+  ): Promise<void> {
     let lastError: Error | null = null;
     let joinPromise: Promise<void> | null = null;
-    const totalAttempts = 1 + RTK_JOIN_RETRY_DELAYS.length;
+    const retryDelays = joinPolicySelection.policy.retryDelaysMs;
+    const timeoutMs = joinPolicySelection.policy.timeoutMs;
+    const totalAttempts = 1 + retryDelays.length;
 
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       if (!joinPromise) {
@@ -250,7 +252,7 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
       }
 
       try {
-        await Effect.runPromise(this._joinRealtimeKitEffect(joinPromise, RTK_JOIN_TIMEOUT_MS));
+        await Effect.runPromise(this._joinRealtimeKitEffect(joinPromise, timeoutMs));
         return;
       } catch (error) {
         const normalized = error instanceof Error ? error : new Error(String(error));
@@ -263,8 +265,8 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
           joinPromise = null;
         }
 
-        if (attempt < RTK_JOIN_RETRY_DELAYS.length) {
-          const delay = RTK_JOIN_RETRY_DELAYS[attempt]!;
+        if (attempt < retryDelays.length) {
+          const delay = retryDelays[attempt]!;
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
@@ -382,8 +384,14 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
         ctx.markPhase("rtk.join");
 
+        const rtkJoinPolicy = getRtkJoinPolicyForCurrentCohort();
+        ctx.set("rtkJoinPolicy", rtkJoinPolicy);
+
         // Run RTK join and WebSocket connect in parallel
-        const rtkJoinPromise = this._joinRealtimeKitWithRetry(rtkClient);
+        const rtkJoinPromise = this._joinRealtimeKitWithRetry(
+          rtkClient,
+          rtkJoinPolicy,
+        );
 
         // Start WebSocket connection in parallel (non-blocking)
         if (wsClient && tokens.accessToken) {

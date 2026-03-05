@@ -6,9 +6,10 @@
  */
 
 import type { WideEventPlatform, WideEventSdk } from "./types";
+import packageJson from "../../package.json";
 
-/** SDK version - read from package.json at build time */
-const SDK_VERSION = "0.0.49";
+/** SDK version - sourced from package.json at build time */
+const SDK_VERSION = packageJson.version;
 
 /**
  * Detect the current platform
