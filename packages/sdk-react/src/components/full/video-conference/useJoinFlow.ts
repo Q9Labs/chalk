@@ -5,8 +5,9 @@ import {
 	type JoinOptions,
 	type Participant,
 } from "@q9labs/chalk-core";
-import { useCallback, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 
+import { useChalkSession } from "../../../context/chalk-provider";
 import type { SoundEffect } from "../../../hooks/useSoundEffects";
 import type { JoinSettings } from "../PreJoinLobby";
 import {
@@ -76,8 +77,39 @@ export function useJoinFlow({
 	phaseRef,
 	roomIdRef,
 }: UseJoinFlowParams): UseJoinFlowReturn {
+	const { session } = useChalkSession();
 	const lastJoinSettingsRef = useRef<JoinSettings | null>(null);
 	const joinInFlightRef = useRef(false);
+	const preloadStartedRef = useRef(false);
+
+	useEffect(() => {
+		if (preloadStartedRef.current) {
+			return;
+		}
+		preloadStartedRef.current = true;
+
+		const chalkClient = (
+			session as {
+				chalkClient?: {
+					preloadRealtimeKit?: () => Promise<boolean>;
+				};
+			}
+		).chalkClient;
+		const preloadRealtimeKit = chalkClient?.preloadRealtimeKit;
+		if (typeof preloadRealtimeKit !== "function") {
+			return;
+		}
+
+		void preloadRealtimeKit.call(chalkClient).then((succeeded: boolean) => {
+			if (!succeeded) {
+				pushIncidentBreadcrumb(
+					"join",
+					"RealtimeKit preload failed (will retry on join)",
+					{ roomId },
+				);
+			}
+		});
+	}, [pushIncidentBreadcrumb, roomId, session]);
 
 	const emitJoinClickTelemetry = useCallback(
 		(settings: JoinSettings, data?: Record<string, unknown>) => {

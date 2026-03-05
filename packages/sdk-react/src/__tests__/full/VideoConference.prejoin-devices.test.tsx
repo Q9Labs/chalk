@@ -37,6 +37,7 @@ const mockRoomState: {
 
 const mockReportIncident = vi.fn(async () => null);
 const mockRecordIncidentBreadcrumb = vi.fn();
+const mockPreloadRealtimeKit = vi.fn(async () => true);
 const capturedWideEvents: Array<{
 	eventType: string;
 	outcome: "success" | "error" | "timeout";
@@ -168,6 +169,9 @@ vi.mock("../../context/chalk-provider", () => ({
 			on: vi.fn(() => () => {}),
 			reportIncident: mockReportIncident,
 			recordIncidentBreadcrumb: mockRecordIncidentBreadcrumb,
+			chalkClient: {
+				preloadRealtimeKit: mockPreloadRealtimeKit,
+			},
 			room: { getState: () => ({ status: "connected" }) },
 		},
 	}),
@@ -213,6 +217,8 @@ describe("VideoConference pre-join devices", () => {
 		(globalThis as any).__vcSelectSpeakerMock?.mockClear?.();
 		mockReportIncident.mockClear();
 		mockRecordIncidentBreadcrumb.mockClear();
+		mockPreloadRealtimeKit.mockClear();
+		mockPreloadRealtimeKit.mockResolvedValue(true);
 	});
 
 	afterEach(() => {
@@ -301,6 +307,53 @@ describe("VideoConference pre-join devices", () => {
 			}),
 		);
 		expect(typeof cameraSelectionTelemetry?.data.durationMs).toBe("number");
+	});
+
+	it("preloads RTK in lobby before user join click", async () => {
+		const joinMock = (globalThis as any).__vcJoinMock;
+		const { getByText } = render(
+			<VideoConference
+				roomId="room-123"
+				userName="Hasan"
+			/>,
+		);
+
+		await waitFor(() => {
+			expect(mockPreloadRealtimeKit.mock.calls.length).toBeGreaterThanOrEqual(1);
+		});
+
+		await act(async () => {
+			fireEvent.click(getByText("Ask to join"));
+		});
+
+		await waitFor(() => {
+			expect(joinMock).toHaveBeenCalledTimes(1);
+		});
+		expect(mockPreloadRealtimeKit.mock.invocationCallOrder[0]).toBeLessThan(
+			joinMock.mock.invocationCallOrder[0],
+		);
+	});
+
+	it("does not block join when RTK preload fails", async () => {
+		const joinMock = (globalThis as any).__vcJoinMock;
+		mockPreloadRealtimeKit.mockResolvedValueOnce(false);
+
+		const { getByText } = render(
+			<VideoConference
+				roomId="room-123"
+				userName="Hasan"
+			/>,
+		);
+
+		await waitFor(() => {
+			expect(mockPreloadRealtimeKit.mock.calls.length).toBeGreaterThanOrEqual(1);
+		});
+		await act(async () => {
+			fireEvent.click(getByText("Ask to join"));
+		});
+		await waitFor(() => {
+			expect(joinMock).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	it("retries transient join failures before surfacing an error", async () => {

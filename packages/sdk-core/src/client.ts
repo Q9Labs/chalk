@@ -3,7 +3,7 @@
  * Integrates with Cloudflare RealtimeKit for WebRTC
  */
 
-import RealtimeKitClient from "@cloudflare/realtimekit";
+import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { Effect, pipe } from "effect";
 import { APIClient } from "./api-client.ts";
 import { EventEmitter } from "./events.ts";
@@ -32,6 +32,20 @@ import { ConnectionError, TimeoutError } from "./effect/errors.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
 
 const DEFAULT_API_URL = "https://api.chalk.dev";
+let realtimeKitModulePromise: Promise<typeof import("@cloudflare/realtimekit")> | null = null;
+
+const importRealtimeKitModule = async () => {
+  if (realtimeKitModulePromise === null) {
+    realtimeKitModulePromise = import("@cloudflare/realtimekit").catch(
+      (error) => {
+        realtimeKitModulePromise = null;
+        throw error;
+      },
+    );
+  }
+
+  return realtimeKitModulePromise;
+};
 
 interface ChalkClientEvents {
   "token-expired": ChalkError;
@@ -48,6 +62,9 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
   private readonly postHogSessionReplay = new ChalkPostHogSessionReplay();
   // Effect: OperationLock for serializing join operations
   private readonly joinLock: OperationLock = createOperationLock();
+  private realtimeKitClientPromise: Promise<
+    (typeof import("@cloudflare/realtimekit"))["default"]
+  > | null = null;
 
   constructor(config: ChalkClientConfig) {
     super();
@@ -109,6 +126,40 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
 
   configurePostHog(config?: ChalkPostHogConfig): void {
     this.postHogSessionReplay.configure(config);
+  }
+
+  private _importRealtimeKitClient() {
+    return importRealtimeKitModule().then((module) => module.default);
+  }
+
+  private _getRealtimeKitClient() {
+    if (this.realtimeKitClientPromise === null) {
+      this.realtimeKitClientPromise = this._importRealtimeKitClient().catch(
+        (error) => {
+          this.realtimeKitClientPromise = null;
+          throw error;
+        },
+      );
+    }
+
+    return this.realtimeKitClientPromise;
+  }
+
+  /**
+   * Preload RealtimeKit bundle ahead of join clicks.
+   * Safe API: resolves to false on preload failure and leaves join path intact.
+   */
+  async preloadRealtimeKit(): Promise<boolean> {
+    const ctx = wideEvents.start("room.join.rtk.preload");
+
+    try {
+      await this._getRealtimeKitClient();
+      ctx.complete("success");
+      return true;
+    } catch (error) {
+      ctx.complete("error", error);
+      return false;
+    }
   }
 
   private trackPostHogLeave(reason: "disconnect" | "switch_room"): void {
@@ -178,17 +229,24 @@ export class ChalkClient extends EventEmitter<ChalkClientEvents> {
    * Effect-based RTK initialization
    * Uses Effect.tryPromise with proper error typing
    */
-  private _initRealtimeKitEffect(authToken: string, audio: boolean, video: boolean) {
+  private _initRealtimeKitEffect(
+    authToken: string,
+    audio: boolean,
+    video: boolean,
+  ) {
     return Effect.tryPromise({
-      try: () =>
-        RealtimeKitClient.init({
+      try: async () => {
+        const realtimeKitClient = await this._getRealtimeKitClient();
+        return realtimeKitClient.init({
           authToken,
           defaults: { audio, video },
-        }),
+        });
+      },
       catch: (error) =>
         new ConnectionError({
           code: "CONNECTION_FAILED",
-          message: error instanceof Error ? error.message : "RealtimeKit init failed",
+          message:
+            error instanceof Error ? error.message : "RealtimeKit init failed",
           recoverable: true,
           cause: error,
         }),

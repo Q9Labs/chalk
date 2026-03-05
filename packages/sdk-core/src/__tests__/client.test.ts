@@ -411,6 +411,64 @@ describe("ChalkClient", () => {
 		});
 	});
 
+	describe("realtimekit preload", () => {
+		it("reuses preloaded RTK module for join initialization", async () => {
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+			});
+			const init = mock(async () => createMockRtkClient() as any);
+			const importRealtimeKitClient = mock(async () => ({ init }));
+			(client as any)._importRealtimeKitClient = importRealtimeKitClient;
+
+			const preloaded = await client.preloadRealtimeKit();
+			expect(preloaded).toBe(true);
+
+			await Effect.runPromise(
+				(client as any)._initRealtimeKitEffect("rtk_token", true, false),
+			);
+
+			expect(importRealtimeKitClient).toHaveBeenCalledTimes(1);
+			expect(init).toHaveBeenCalledTimes(1);
+			expect(init).toHaveBeenCalledWith({
+				authToken: "rtk_token",
+				defaults: {
+					audio: true,
+					video: false,
+				},
+			});
+		});
+
+		it("keeps preload safe and retries RTK import during join init after failure", async () => {
+			const client = new ChalkClient({
+				apiUrl: DEFAULT_API_URL,
+				wsUrl: "",
+				token: "chalk_access_token",
+			});
+			const init = mock(async () => createMockRtkClient() as any);
+			let shouldFailFirstImport = true;
+			const importRealtimeKitClient = mock(async () => {
+				if (shouldFailFirstImport) {
+					shouldFailFirstImport = false;
+					throw new Error("chunk load failed");
+				}
+				return { init };
+			});
+			(client as any)._importRealtimeKitClient = importRealtimeKitClient;
+
+			const preloaded = await client.preloadRealtimeKit();
+			expect(preloaded).toBe(false);
+
+			await Effect.runPromise(
+				(client as any)._initRealtimeKitEffect("rtk_token", false, false),
+			);
+
+			expect(importRealtimeKitClient).toHaveBeenCalledTimes(2);
+			expect(init).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	describe("room joining resilience", () => {
 		it("does not replace rtcToken with tokenProvider output when rtc token looks expired", async () => {
 			const tokenProvider = mock(async () => "api_access_jwt_from_provider");
