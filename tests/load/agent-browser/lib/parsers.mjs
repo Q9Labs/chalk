@@ -30,6 +30,7 @@ export function parseConsoleSignals(raw) {
   const parsed = safeJsonParse(raw);
   const messages = parsed?.data?.messages ?? [];
   const chalk = {};
+  const chalkEvents = {};
   let corsCount = 0;
   let netErrCount = 0;
   let firstError = null;
@@ -43,15 +44,27 @@ export function parseConsoleSignals(raw) {
     if (i < 0) continue;
     const event = safeJsonParse(text.slice(i));
     if (!event?.eventType) continue;
-    chalk[event.eventType] = {
+    const summary = {
+      eventId: event.eventId ?? null,
+      timestamp: event.timestamp ?? null,
+      sessionId: event.sessionId ?? null,
+      roomId: event.roomId ?? null,
       durationMs: event.durationMs ?? null,
       phases: event.phases ?? null,
       outcome: event.outcome ?? null,
       requestPath: event?.data?.request?.path ?? null,
       statusCode: event?.data?.response?.statusCode ?? null,
+      requestId: event?.data?.response?.requestId ?? null,
+      traceId: event?.data?.response?.traceId ?? null,
+      cfRay: event?.data?.response?.cfRay ?? null,
+      inputRoomSlug: event?.data?.input?.roomId ?? null,
+      participantId: event?.data?.api?.participantId ?? null,
     };
+    chalk[event.eventType] = summary;
+    if (!chalkEvents[event.eventType]) chalkEvents[event.eventType] = [];
+    chalkEvents[event.eventType].push(summary);
   }
-  return { messageCount: messages.length, corsCount, netErrCount, firstError, chalk };
+  return { messageCount: messages.length, corsCount, netErrCount, firstError, chalk, chalkEvents };
 }
 
 export function parseErrorsSignals(raw) {

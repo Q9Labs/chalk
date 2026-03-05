@@ -40,6 +40,9 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel,
     pollCount: 0,
     pollState: null,
     roomUrl: null,
+    roomSlug: null,
+    browserSessionId: null,
+    correlation: null,
     consoleSignals: null,
     errorSignals: null,
     resourceSignals: null,
@@ -124,12 +127,21 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel,
   } finally {
     const shouldCaptureDetailed = shouldCaptureDetailedArtifacts(record, options);
     const urlRes = await runAgent(session, ["get", "url"], options, { tolerateFailure: true });
+    const consoleRes = await runAgent(session, ["console", "--json"], options, { tolerateFailure: true });
+    const parsedConsoleSignals = parseConsoleSignals(consoleRes.stdout);
     record.roomUrl = (urlRes.stdout ?? "").trim() || record.pollState?.url || null;
+    record.roomSlug = extractRoomSlug(record.roomUrl) ?? extractRoomSlug(record.pollState?.url ?? null);
+    record.browserSessionId = firstNonEmpty(
+      parsedConsoleSignals?.chalk?.["room.join"]?.sessionId,
+      parsedConsoleSignals?.chalk?.["api.request"]?.sessionId,
+      parsedConsoleSignals?.chalk?.["websocket.connect"]?.sessionId,
+      null,
+    );
+    record.correlation = buildCorrelation(record, parsedConsoleSignals);
 
     if (shouldCaptureDetailed) {
-      const [snapRes, consoleRes, errorsRes, resourcesRes] = await Promise.all([
+      const [snapRes, errorsRes, resourcesRes] = await Promise.all([
         runAgent(session, ["snapshot", "-i"], options, { tolerateFailure: true }),
-        runAgent(session, ["console", "--json"], options, { tolerateFailure: true }),
         runAgent(session, ["errors", "--json"], options, { tolerateFailure: true }),
         evalJson(
           session,
@@ -150,7 +162,7 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel,
           { tolerateFailure: true },
         ),
       ]);
-      record.consoleSignals = parseConsoleSignals(consoleRes.stdout);
+      record.consoleSignals = parsedConsoleSignals;
       record.errorSignals = parseErrorsSignals(errorsRes.stdout);
       record.resourceSignals = parseResourceSignals(resourcesRes.value ?? []);
 
@@ -172,9 +184,11 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel,
             attempt: record.attempt,
             status: record.status,
             roomUrl: record.roomUrl,
+            roomSlug: record.roomSlug,
             createToPrejoinMs: record.createToPrejoinMs,
             askToJoinToJoinedMs: record.askToJoinToJoinedMs,
             failureReason: record.failureReason,
+            correlation: record.correlation,
           },
           null,
           2,
@@ -191,6 +205,9 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel,
       await runAgent(session, ["close"], options, { tolerateFailure: true });
     }
     record.finishedAt = new Date().toISOString();
+    if (record.correlation) {
+      record.correlation.finishedAt = record.finishedAt;
+    }
   }
 
   return record;
@@ -306,6 +323,62 @@ function parseStageError(err) {
     reason: "unexpected_exception",
     detail: String(err?.stack ?? err?.message ?? err),
   };
+}
+
+function buildCorrelation(record, consoleSignals) {
+  const api = consoleSignals?.chalk?.["api.request"] ?? null;
+  const roomJoin = consoleSignals?.chalk?.["room.join"] ?? null;
+  const ws = consoleSignals?.chalk?.["websocket.connect"] ?? null;
+
+  const traceId = firstNonEmpty(api?.traceId, null);
+  const requestId = firstNonEmpty(api?.requestId, null);
+  const cfRay = firstNonEmpty(api?.cfRay, null);
+  const inputRoomSlug = firstNonEmpty(roomJoin?.inputRoomSlug, null);
+  const apiPath = firstNonEmpty(api?.requestPath, null);
+  const apiRoomSlug = extractRoomSlugFromRequestPath(apiPath);
+
+  return {
+    attempt: record.attempt,
+    workerId: record.workerId,
+    status: record.status,
+    startedAt: record.startedAt,
+    finishedAt: record.finishedAt ?? null,
+    agentBrowserSessionId: record.session,
+    browserSessionId: firstNonEmpty(roomJoin?.sessionId, api?.sessionId, ws?.sessionId, null),
+    roomUrl: record.roomUrl,
+    roomSlug: firstNonEmpty(record.roomSlug, inputRoomSlug, apiRoomSlug, null),
+    roomId: firstNonEmpty(roomJoin?.roomId, null),
+    participantId: firstNonEmpty(roomJoin?.participantId, null),
+    apiRequestPath: apiPath,
+    apiStatusCode: api?.statusCode ?? null,
+    requestId,
+    traceId,
+    cfRay,
+  };
+}
+
+function extractRoomSlug(urlText) {
+  if (!urlText) return null;
+  try {
+    const parsed = new URL(urlText);
+    const match = parsed.pathname.match(/\/room\/([^/?#]+)/);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function extractRoomSlugFromRequestPath(path) {
+  if (!path) return null;
+  const match = String(path).match(/\/rooms\/([^/]+)\/participants$/);
+  return match?.[1] ?? null;
+}
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return null;
 }
 
 function delay(ms) {

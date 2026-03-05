@@ -30,6 +30,12 @@ Extra safe mode for 16GB laptops:
 bash tests/scripts/run-agent-browser-join-stress.sh --count 100 --safe
 ```
 
+Full-trace safe mode (captures detailed artifacts for every attempt + correlation map):
+
+```bash
+bash tests/scripts/run-agent-browser-join-stress.sh --count 100 --safe --full-trace
+```
+
 ## Outputs
 
 Each run writes to:
@@ -40,11 +46,27 @@ Main artifacts:
 - `summary.json`
 - `report.md`
 - `results.ndjson`
+- `correlation-map.ndjson`
+- `correlation-map.json`
 - `attempt-XXXX/console.json`
 - `attempt-XXXX/errors.json`
 - `attempt-XXXX/resources.json`
 - `attempt-XXXX/snapshot-prejoin.txt`
 - `attempt-XXXX/snapshot-final.txt`
+
+Per-attempt correlation fields in `results.ndjson`:
+- `attempt`, `session` (agent-browser daemon session), `startedAt`, `finishedAt`
+- `roomUrl`, `roomSlug`, `browserSessionId`
+- `correlation.requestId` (`x-request-id`), `correlation.traceId` (`x-chalk-trace-id`), `correlation.cfRay`
+- `correlation.apiRequestPath`, `correlation.apiStatusCode`, `correlation.roomId`
+
+Correlate attempt -> backend trace:
+1. From `correlation-map.ndjson`, copy `apiRequestId` and/or `apiTraceId` for the slow attempt.
+2. Query API logs for `event=participant.join_room` and the same `request_id`/`trace_id`.
+3. Use backend fields:
+   - `join_total_ms`, `join_db_total_ms`, `join_cloudflare_total_ms`
+   - `join_cloudflare_step_durations_ms`
+   - `join_cloudflare_operations` (attempts/retries/timeouts/outcome)
 
 ## Notes
 

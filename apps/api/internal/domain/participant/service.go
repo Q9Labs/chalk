@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain"
@@ -14,6 +15,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -185,6 +187,7 @@ func (s *Service) setTenantForJoinCache(ctx context.Context, tenant db.Tenant) {
 
 func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *JoinRoomOutput, err error) {
 	telemetry := newJoinRoomTelemetry()
+	ctx = cloudflare.WithAttemptRecorder(ctx, telemetry)
 	failedStep := ""
 	defer func() {
 		telemetry.log(ctx, input, failedStep, err)
@@ -567,12 +570,22 @@ type joinRoomTelemetry struct {
 	dbTotal         time.Duration
 	cloudflareTotal time.Duration
 	stepDurations   map[string]time.Duration
+	cloudflareOps   map[string]*joinCloudflareOperationTelemetry
+}
+
+type joinCloudflareOperationTelemetry struct {
+	Attempts       int64  `json:"attempts"`
+	Retries        int64  `json:"retries"`
+	Timeouts       int64  `json:"timeouts"`
+	LastStatusCode int    `json:"last_status_code"`
+	Outcome        string `json:"outcome"`
 }
 
 func newJoinRoomTelemetry() *joinRoomTelemetry {
 	return &joinRoomTelemetry{
 		startedAt:     time.Now(),
 		stepDurations: make(map[string]time.Duration),
+		cloudflareOps: make(map[string]*joinCloudflareOperationTelemetry),
 	}
 }
 
@@ -586,13 +599,54 @@ func (t *joinRoomTelemetry) observeCloudflare(step string, elapsed time.Duration
 	t.stepDurations[step] += elapsed
 }
 
+func (t *joinRoomTelemetry) RecordCloudflareAttempt(event cloudflare.AttemptEvent) {
+	if event.Operation == "" {
+		return
+	}
+	stats, ok := t.cloudflareOps[event.Operation]
+	if !ok {
+		stats = &joinCloudflareOperationTelemetry{}
+		t.cloudflareOps[event.Operation] = stats
+	}
+	stats.Attempts += 1
+	if event.Retrying {
+		stats.Retries += 1
+	}
+	if event.TimedOut {
+		stats.Timeouts += 1
+	}
+	if event.StatusCode > 0 {
+		stats.LastStatusCode = event.StatusCode
+	}
+	if event.Outcome != "" {
+		stats.Outcome = event.Outcome
+	}
+}
+
 func (t *joinRoomTelemetry) log(ctx context.Context, input JoinRoomInput, failedStep string, err error) {
+	totalMs := time.Since(t.startedAt).Milliseconds()
+	outcome := "success"
+	if err != nil {
+		outcome = "error"
+	}
+
+	traceID := ""
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.IsValid() {
+		traceID = spanCtx.TraceID().String()
+	}
+
 	attrs := []any{
 		"event", "participant.join_room",
+		"join_outcome", outcome,
 		"room_id", input.RoomID.String(),
-		"join_total_ms", time.Since(t.startedAt).Milliseconds(),
+		"room_slug", normalizeRoomSlug(input.RoomName),
+		"join_total_ms", totalMs,
 		"join_db_total_ms", t.dbTotal.Milliseconds(),
 		"join_cloudflare_total_ms", t.cloudflareTotal.Milliseconds(),
+		"join_step_durations_ms", t.stepDurationsMs(),
+		"join_cloudflare_step_durations_ms", t.prefixedStepDurationsMs("cf_"),
+		"join_cloudflare_operations", t.cloudflareOperationStats(),
 	}
 
 	if input.TenantID != uuid.Nil {
@@ -606,6 +660,9 @@ func (t *joinRoomTelemetry) log(ctx context.Context, input JoinRoomInput, failed
 	if requestID != "" {
 		attrs = append(attrs, "request_id", requestID)
 	}
+	if traceID != "" {
+		attrs = append(attrs, "trace_id", traceID)
+	}
 
 	for step, duration := range t.stepDurations {
 		attrs = append(attrs, step+"_ms", duration.Milliseconds())
@@ -616,12 +673,71 @@ func (t *joinRoomTelemetry) log(ctx context.Context, input JoinRoomInput, failed
 	}
 
 	if err != nil {
+		var cfErr *cloudflare.RequestError
+		if errors.As(err, &cfErr) {
+			retryCount := cfErr.Attempt - 1
+			if retryCount < 0 {
+				retryCount = 0
+			}
+			attrs = append(attrs,
+				"cloudflare_operation", cfErr.Operation,
+				"cloudflare_status", cfErr.Status,
+				"cloudflare_attempt", cfErr.Attempt,
+				"cloudflare_retry_count", retryCount,
+				"cloudflare_timeout", isTimeoutError(cfErr.Err),
+			)
+		}
+		attrs = append(attrs, "join_timeout", isTimeoutError(err))
 		attrs = append(attrs, "error", err)
 		slog.WarnContext(ctx, "participant join room failed", attrs...)
 		return
 	}
 
 	slog.InfoContext(ctx, "participant join room succeeded", attrs...)
+}
+
+func (t *joinRoomTelemetry) stepDurationsMs() map[string]int64 {
+	out := make(map[string]int64, len(t.stepDurations))
+	for step, duration := range t.stepDurations {
+		out[step] = duration.Milliseconds()
+	}
+	return out
+}
+
+func (t *joinRoomTelemetry) prefixedStepDurationsMs(prefix string) map[string]int64 {
+	out := map[string]int64{}
+	for step, duration := range t.stepDurations {
+		if strings.HasPrefix(step, prefix) {
+			out[step] = duration.Milliseconds()
+		}
+	}
+	return out
+}
+
+func (t *joinRoomTelemetry) cloudflareOperationStats() map[string]joinCloudflareOperationTelemetry {
+	out := make(map[string]joinCloudflareOperationTelemetry, len(t.cloudflareOps))
+	for operation, stats := range t.cloudflareOps {
+		if stats == nil {
+			continue
+		}
+		out[operation] = *stats
+	}
+	return out
+}
+
+func normalizeRoomSlug(roomName string) string {
+	normalized := strings.TrimSpace(roomName)
+	if normalized == "" {
+		return ""
+	}
+	return strings.ToLower(normalized)
+}
+
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, context.DeadlineExceeded)
 }
 
 func contextValueString(ctx context.Context, key any) string {

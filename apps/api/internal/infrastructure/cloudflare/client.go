@@ -107,12 +107,28 @@ type observabilityContext struct {
 	requestID string
 }
 
+type AttemptEvent struct {
+	Operation      string
+	Attempt        int
+	StatusCode     int
+	Outcome        string
+	Retrying       bool
+	TimedOut       bool
+	AttemptElapsed time.Duration
+	TotalElapsed   time.Duration
+}
+
+type AttemptRecorder interface {
+	RecordCloudflareAttempt(event AttemptEvent)
+}
+
 type observabilityContextKey string
 
 const (
 	tenantIDContextKey  observabilityContextKey = "chalk.cloudflare.tenant_id"
 	roomIDContextKey    observabilityContextKey = "chalk.cloudflare.room_id"
 	requestIDContextKey observabilityContextKey = "chalk.cloudflare.request_id"
+	attemptRecorderKey  observabilityContextKey = "chalk.cloudflare.attempt_recorder"
 )
 
 // WithObservabilityContext adds optional request correlation fields for Cloudflare operations.
@@ -127,6 +143,13 @@ func WithObservabilityContext(ctx context.Context, tenantID, roomID, requestID s
 		ctx = context.WithValue(ctx, requestIDContextKey, requestID)
 	}
 	return ctx
+}
+
+func WithAttemptRecorder(ctx context.Context, recorder AttemptRecorder) context.Context {
+	if recorder == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, attemptRecorderKey, recorder)
 }
 
 func contextValueString(ctx context.Context, key any) string {
@@ -194,6 +217,49 @@ func appendRequestContextAttrs(attrs []any, requestContext observabilityContext)
 		attrs = append(attrs, "request_id", requestContext.requestID)
 	}
 	return attrs
+}
+
+func recordAttemptEvent(ctx context.Context, event AttemptEvent) {
+	recorder, ok := ctx.Value(attemptRecorderKey).(AttemptRecorder)
+	if !ok || recorder == nil {
+		return
+	}
+	recorder.RecordCloudflareAttempt(event)
+}
+
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		if errors.Is(urlErr.Err, context.DeadlineExceeded) {
+			return true
+		}
+		if urlErr.Timeout() {
+			return true
+		}
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+
+	return false
+}
+
+func isTimeoutStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldRetryCloudflareOperation(ctx context.Context, statusCode int, err error) bool {
@@ -383,16 +449,38 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 		if err != nil {
 			attemptElapsed := time.Since(attemptStart)
 			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, 0, nil, err), attempt, requestContext)
+			totalElapsed := time.Since(totalStart)
+			shouldRetry := shouldRetryCreateMeeting(ctx, 0, err) && attempt < createMeetingMaxRetries
+			recordAttemptEvent(ctx, AttemptEvent{
+				Operation:      createMeetingOperation,
+				Attempt:        attempt,
+				StatusCode:     0,
+				Outcome:        "error",
+				Retrying:       shouldRetry,
+				TimedOut:       isTimeoutError(err),
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   totalElapsed,
+			})
 			logAttrs = append(logAttrs,
 				"error", err,
 				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
-				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+				"total_elapsed_ms", totalElapsed.Milliseconds(),
 			)
-			if shouldRetryCreateMeeting(ctx, 0, err) && attempt < createMeetingMaxRetries {
+			if shouldRetry {
 				delay := createMeetingRetryDelay(attempt)
 				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
 				slog.WarnContext(ctx, "cloudflare create meeting request failed, retrying", logAttrs...)
 				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					recordAttemptEvent(ctx, AttemptEvent{
+						Operation:      createMeetingOperation,
+						Attempt:        attempt,
+						StatusCode:     0,
+						Outcome:        "error",
+						Retrying:       false,
+						TimedOut:       isTimeoutError(waitErr),
+						AttemptElapsed: time.Since(attemptStart),
+						TotalElapsed:   time.Since(totalStart),
+					})
 					return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, 0, nil, waitErr), attempt, requestContext)
 				}
 				continue
@@ -406,17 +494,39 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 		if bodyErr != nil {
 			attemptElapsed := time.Since(attemptStart)
 			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, nil, bodyErr), attempt, requestContext)
+			totalElapsed := time.Since(totalStart)
+			shouldRetry := shouldRetryCreateMeeting(ctx, resp.StatusCode, bodyErr) && attempt < createMeetingMaxRetries
+			recordAttemptEvent(ctx, AttemptEvent{
+				Operation:      createMeetingOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       shouldRetry,
+				TimedOut:       isTimeoutError(bodyErr) || isTimeoutStatus(resp.StatusCode),
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   totalElapsed,
+			})
 			logAttrs = append(logAttrs,
 				"status_code", resp.StatusCode,
 				"error", bodyErr,
 				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
-				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+				"total_elapsed_ms", totalElapsed.Milliseconds(),
 			)
-			if shouldRetryCreateMeeting(ctx, resp.StatusCode, bodyErr) && attempt < createMeetingMaxRetries {
+			if shouldRetry {
 				delay := createMeetingRetryDelay(attempt)
 				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
 				slog.WarnContext(ctx, "cloudflare create meeting response read failed, retrying", logAttrs...)
 				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					recordAttemptEvent(ctx, AttemptEvent{
+						Operation:      createMeetingOperation,
+						Attempt:        attempt,
+						StatusCode:     resp.StatusCode,
+						Outcome:        "error",
+						Retrying:       false,
+						TimedOut:       isTimeoutError(waitErr) || isTimeoutStatus(resp.StatusCode),
+						AttemptElapsed: time.Since(attemptStart),
+						TotalElapsed:   time.Since(totalStart),
+					})
 					return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, nil, waitErr), attempt, requestContext)
 				}
 				continue
@@ -433,11 +543,32 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 		)
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, nil), attempt, requestContext)
-			if shouldRetryCreateMeeting(ctx, resp.StatusCode, nil) && attempt < createMeetingMaxRetries {
+			shouldRetry := shouldRetryCreateMeeting(ctx, resp.StatusCode, nil) && attempt < createMeetingMaxRetries
+			recordAttemptEvent(ctx, AttemptEvent{
+				Operation:      createMeetingOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       shouldRetry,
+				TimedOut:       isTimeoutStatus(resp.StatusCode),
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
+			if shouldRetry {
 				delay := createMeetingRetryDelay(attempt)
 				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
 				slog.WarnContext(ctx, "cloudflare create meeting returned retryable status, retrying", logAttrs...)
 				if waitErr := waitWithContext(ctx, delay); waitErr != nil {
+					recordAttemptEvent(ctx, AttemptEvent{
+						Operation:      createMeetingOperation,
+						Attempt:        attempt,
+						StatusCode:     resp.StatusCode,
+						Outcome:        "error",
+						Retrying:       false,
+						TimedOut:       isTimeoutError(waitErr) || isTimeoutStatus(resp.StatusCode),
+						AttemptElapsed: time.Since(attemptStart),
+						TotalElapsed:   time.Since(totalStart),
+					})
 					return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, waitErr), attempt, requestContext)
 				}
 				continue
@@ -448,11 +579,31 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 
 		var result Response[Meeting]
 		if err := json.Unmarshal(bodyBytes, &result); err != nil {
+			recordAttemptEvent(ctx, AttemptEvent{
+				Operation:      createMeetingOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       false,
+				TimedOut:       false,
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
 			slog.WarnContext(ctx, "cloudflare create meeting decode failed", append(logAttrs, "error", err)...)
 			return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, err), attempt, requestContext)
 		}
 
 		if result.Result != nil {
+			recordAttemptEvent(ctx, AttemptEvent{
+				Operation:      createMeetingOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "success",
+				Retrying:       false,
+				TimedOut:       false,
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
 			if attempt > 1 {
 				slog.InfoContext(ctx, "cloudflare create meeting recovered after retry", logAttrs...)
 			} else {
@@ -463,10 +614,30 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 
 		if !result.Success {
 			apiErr := applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors)), attempt, requestContext)
+			recordAttemptEvent(ctx, AttemptEvent{
+				Operation:      createMeetingOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       false,
+				TimedOut:       false,
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
 			slog.WarnContext(ctx, "cloudflare create meeting reported unsuccessful response", append(logAttrs, "error", apiErr.Err)...)
 			return nil, apiErr
 		}
 
+		recordAttemptEvent(ctx, AttemptEvent{
+			Operation:      createMeetingOperation,
+			Attempt:        attempt,
+			StatusCode:     resp.StatusCode,
+			Outcome:        "success",
+			Retrying:       false,
+			TimedOut:       false,
+			AttemptElapsed: attemptElapsed,
+			TotalElapsed:   time.Since(totalStart),
+		})
 		if attempt > 1 {
 			slog.InfoContext(ctx, "cloudflare create meeting recovered after retry", logAttrs...)
 		} else {
@@ -475,6 +646,16 @@ func (c *Client) CreateMeeting(ctx context.Context, req CreateMeetingRequest) (*
 		return &result.Data, nil
 	}
 
+	recordAttemptEvent(ctx, AttemptEvent{
+		Operation:      createMeetingOperation,
+		Attempt:        createMeetingMaxRetries,
+		StatusCode:     0,
+		Outcome:        "error",
+		Retrying:       false,
+		TimedOut:       false,
+		AttemptElapsed: 0,
+		TotalElapsed:   time.Since(totalStart),
+	})
 	return nil, applyErrorContext(newAPIError(createMeetingOperation, http.MethodPost, path, 0, nil, fmt.Errorf("cloudflare create meeting retries exhausted")), createMeetingMaxRetries, requestContext)
 }
 
@@ -589,16 +770,38 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 		if err != nil {
 			attemptElapsed := time.Since(attemptStart)
 			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, err), attempt, requestContext)
+			totalElapsed := time.Since(totalStart)
+			shouldRetry := shouldRetryAddParticipant(operationCtx, 0, err) && attempt < addParticipantMaxRetries
+			recordAttemptEvent(operationCtx, AttemptEvent{
+				Operation:      addParticipantOperation,
+				Attempt:        attempt,
+				StatusCode:     0,
+				Outcome:        "error",
+				Retrying:       shouldRetry,
+				TimedOut:       isTimeoutError(err),
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   totalElapsed,
+			})
 			logAttrs = append(logAttrs,
 				"error", err,
 				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
-				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+				"total_elapsed_ms", totalElapsed.Milliseconds(),
 			)
-			if shouldRetryAddParticipant(operationCtx, 0, err) && attempt < addParticipantMaxRetries {
+			if shouldRetry {
 				delay := addParticipantRetryDelay(attempt)
 				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
 				slog.WarnContext(operationCtx, "cloudflare add participant request failed, retrying", logAttrs...)
 				if waitErr := waitWithContext(operationCtx, delay); waitErr != nil {
+					recordAttemptEvent(operationCtx, AttemptEvent{
+						Operation:      addParticipantOperation,
+						Attempt:        attempt,
+						StatusCode:     0,
+						Outcome:        "error",
+						Retrying:       false,
+						TimedOut:       isTimeoutError(waitErr),
+						AttemptElapsed: time.Since(attemptStart),
+						TotalElapsed:   time.Since(totalStart),
+					})
 					return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, waitErr), attempt, requestContext)
 				}
 				continue
@@ -612,17 +815,39 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 		if bodyErr != nil {
 			attemptElapsed := time.Since(attemptStart)
 			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, nil, bodyErr), attempt, requestContext)
+			totalElapsed := time.Since(totalStart)
+			shouldRetry := shouldRetryAddParticipant(operationCtx, resp.StatusCode, bodyErr) && attempt < addParticipantMaxRetries
+			recordAttemptEvent(operationCtx, AttemptEvent{
+				Operation:      addParticipantOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       shouldRetry,
+				TimedOut:       isTimeoutError(bodyErr) || isTimeoutStatus(resp.StatusCode),
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   totalElapsed,
+			})
 			logAttrs = append(logAttrs,
 				"status_code", resp.StatusCode,
 				"error", bodyErr,
 				"attempt_elapsed_ms", attemptElapsed.Milliseconds(),
-				"total_elapsed_ms", time.Since(totalStart).Milliseconds(),
+				"total_elapsed_ms", totalElapsed.Milliseconds(),
 			)
-			if shouldRetryAddParticipant(operationCtx, resp.StatusCode, bodyErr) && attempt < addParticipantMaxRetries {
+			if shouldRetry {
 				delay := addParticipantRetryDelay(attempt)
 				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
 				slog.WarnContext(operationCtx, "cloudflare add participant response read failed, retrying", logAttrs...)
 				if waitErr := waitWithContext(operationCtx, delay); waitErr != nil {
+					recordAttemptEvent(operationCtx, AttemptEvent{
+						Operation:      addParticipantOperation,
+						Attempt:        attempt,
+						StatusCode:     resp.StatusCode,
+						Outcome:        "error",
+						Retrying:       false,
+						TimedOut:       isTimeoutError(waitErr) || isTimeoutStatus(resp.StatusCode),
+						AttemptElapsed: time.Since(attemptStart),
+						TotalElapsed:   time.Since(totalStart),
+					})
 					return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, nil, waitErr), attempt, requestContext)
 				}
 				continue
@@ -639,11 +864,32 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 		)
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, nil), attempt, requestContext)
-			if shouldRetryAddParticipant(operationCtx, resp.StatusCode, nil) && attempt < addParticipantMaxRetries {
+			shouldRetry := shouldRetryAddParticipant(operationCtx, resp.StatusCode, nil) && attempt < addParticipantMaxRetries
+			recordAttemptEvent(operationCtx, AttemptEvent{
+				Operation:      addParticipantOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       shouldRetry,
+				TimedOut:       isTimeoutStatus(resp.StatusCode),
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
+			if shouldRetry {
 				delay := addParticipantRetryDelay(attempt)
 				logAttrs = append(logAttrs, "retry_in_ms", delay.Milliseconds())
 				slog.WarnContext(operationCtx, "cloudflare add participant returned retryable status, retrying", logAttrs...)
 				if waitErr := waitWithContext(operationCtx, delay); waitErr != nil {
+					recordAttemptEvent(operationCtx, AttemptEvent{
+						Operation:      addParticipantOperation,
+						Attempt:        attempt,
+						StatusCode:     resp.StatusCode,
+						Outcome:        "error",
+						Retrying:       false,
+						TimedOut:       isTimeoutError(waitErr) || isTimeoutStatus(resp.StatusCode),
+						AttemptElapsed: time.Since(attemptStart),
+						TotalElapsed:   time.Since(totalStart),
+					})
 					return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, waitErr), attempt, requestContext)
 				}
 				continue
@@ -654,11 +900,31 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 
 		var result Response[Participant]
 		if err := json.Unmarshal(bodyBytes, &result); err != nil {
+			recordAttemptEvent(operationCtx, AttemptEvent{
+				Operation:      addParticipantOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       false,
+				TimedOut:       false,
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
 			slog.WarnContext(operationCtx, "cloudflare add participant decode failed", append(logAttrs, "error", err)...)
 			return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, err), attempt, requestContext)
 		}
 
 		if result.Result != nil {
+			recordAttemptEvent(operationCtx, AttemptEvent{
+				Operation:      addParticipantOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "success",
+				Retrying:       false,
+				TimedOut:       false,
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
 			if attempt > 1 {
 				slog.InfoContext(operationCtx, "cloudflare add participant recovered after retry", logAttrs...)
 			} else {
@@ -669,10 +935,30 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 
 		if !result.Success {
 			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, bodyBytes, fmt.Errorf("cloudflare error: %v", result.Errors)), attempt, requestContext)
+			recordAttemptEvent(operationCtx, AttemptEvent{
+				Operation:      addParticipantOperation,
+				Attempt:        attempt,
+				StatusCode:     resp.StatusCode,
+				Outcome:        "error",
+				Retrying:       false,
+				TimedOut:       false,
+				AttemptElapsed: attemptElapsed,
+				TotalElapsed:   time.Since(totalStart),
+			})
 			slog.WarnContext(operationCtx, "cloudflare add participant reported unsuccessful response", append(logAttrs, "error", apiErr.Err)...)
 			return nil, apiErr
 		}
 
+		recordAttemptEvent(operationCtx, AttemptEvent{
+			Operation:      addParticipantOperation,
+			Attempt:        attempt,
+			StatusCode:     resp.StatusCode,
+			Outcome:        "success",
+			Retrying:       false,
+			TimedOut:       false,
+			AttemptElapsed: attemptElapsed,
+			TotalElapsed:   time.Since(totalStart),
+		})
 		if attempt > 1 {
 			slog.InfoContext(operationCtx, "cloudflare add participant recovered after retry", logAttrs...)
 		} else {
@@ -682,9 +968,29 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 	}
 
 	if operationCtx.Err() != nil {
+		recordAttemptEvent(operationCtx, AttemptEvent{
+			Operation:      addParticipantOperation,
+			Attempt:        addParticipantMaxRetries,
+			StatusCode:     0,
+			Outcome:        "error",
+			Retrying:       false,
+			TimedOut:       isTimeoutError(operationCtx.Err()),
+			AttemptElapsed: 0,
+			TotalElapsed:   time.Since(totalStart),
+		})
 		return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, operationCtx.Err()), addParticipantMaxRetries, requestContext)
 	}
 
+	recordAttemptEvent(operationCtx, AttemptEvent{
+		Operation:      addParticipantOperation,
+		Attempt:        addParticipantMaxRetries,
+		StatusCode:     0,
+		Outcome:        "error",
+		Retrying:       false,
+		TimedOut:       false,
+		AttemptElapsed: 0,
+		TotalElapsed:   time.Since(totalStart),
+	})
 	return nil, applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, fmt.Errorf("cloudflare add participant retries exhausted")), addParticipantMaxRetries, requestContext)
 }
 

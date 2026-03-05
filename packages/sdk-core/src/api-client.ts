@@ -111,15 +111,22 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				headers,
 				body: transformedBody ? JSON.stringify(transformedBody) : undefined,
 			});
+			const responseMeta = {
+				statusCode: response.status,
+				requestId: response.headers.get("x-request-id"),
+				traceId: response.headers.get("x-chalk-trace-id"),
+				cfRay: response.headers.get("cf-ray"),
+			};
 
 			if (response.status === 401 && !isRetry) {
+				ctx.set("response", responseMeta);
 				ctx.complete("error", { code: "HTTP_401", message: "Unauthorized - attempting refresh" });
 				return this.handle401<T>(method, path, body);
 			}
 
 			// SDKCORE-MED-01: Handle empty/204 responses before parsing JSON
 			if (response.status === 204 || response.headers.get("content-length") === "0") {
-				ctx.set("response", { statusCode: response.status });
+				ctx.set("response", responseMeta);
 				ctx.complete("success");
 				return {
 					success: true,
@@ -140,7 +147,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				const errorMessage =
 					errorData.message ?? errorData.error ?? "An unknown error occurred";
 				const errorCode = errorData.code ?? `HTTP_${response.status}`;
-				ctx.set("response", { statusCode: response.status });
+				ctx.set("response", responseMeta);
 				ctx.complete("error", { code: errorCode, message: errorMessage });
 				return {
 					success: false,
@@ -152,7 +159,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				};
 			}
 
-			ctx.set("response", { statusCode: response.status });
+			ctx.set("response", responseMeta);
 			ctx.complete("success");
 			return {
 				success: true,

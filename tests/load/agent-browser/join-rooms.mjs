@@ -21,6 +21,7 @@ const defaults = {
   unsafeConcurrency: false,
   keepSessions: false,
   headed: false,
+  fullTrace: false,
 };
 
 const options = parseArgs(process.argv.slice(2));
@@ -37,14 +38,44 @@ let cursor = 0;
 
 console.log(`[join-stress] start count=${options.count} concurrency=${options.concurrency} baseUrl=${options.baseUrl}`);
 console.log(`[join-stress] outDir=${outDir}`);
+if (options.fullTrace) {
+  console.log("[join-stress] mode=full-trace artifactMode=all successSamplePercent=100");
+}
 
 const workers = Array.from({ length: options.concurrency }, (_, i) => i + 1).map((workerId) => runWorker(workerId));
 await Promise.all(workers);
 
-const summary = buildSummary(records, options, outDir, runLabel);
-await writeFile(resolve(outDir, "results.ndjson"), records.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+const orderedRecords = [...records].sort((a, b) => a.attempt - b.attempt);
+const summary = buildSummary(orderedRecords, options, outDir, runLabel);
+await writeFile(resolve(outDir, "results.ndjson"), orderedRecords.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
 await writeFile(resolve(outDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
-await writeFile(resolve(outDir, "report.md"), buildMarkdown(summary, records), "utf8");
+await writeFile(resolve(outDir, "report.md"), buildMarkdown(summary, orderedRecords), "utf8");
+const correlationRows = orderedRecords.map((record) => ({
+  attempt: record.attempt,
+  workerId: record.workerId,
+  status: record.status,
+  startedAt: record.startedAt,
+  finishedAt: record.finishedAt ?? null,
+  agentBrowserSessionId: record.session,
+  browserSessionId: record.browserSessionId ?? null,
+  roomUrl: record.roomUrl ?? null,
+  roomSlug: record.roomSlug ?? null,
+  apiRequestId: record?.correlation?.requestId ?? null,
+  apiTraceId: record?.correlation?.traceId ?? null,
+  apiCfRay: record?.correlation?.cfRay ?? null,
+  apiStatusCode: record?.correlation?.apiStatusCode ?? null,
+  apiRequestPath: record?.correlation?.apiRequestPath ?? null,
+  backendRoomId: record?.correlation?.roomId ?? null,
+  backendParticipantId: record?.correlation?.participantId ?? null,
+  attemptDir: record.artifactsDir ?? null,
+  failureReason: record.failureReason ?? null,
+}));
+await writeFile(
+  resolve(outDir, "correlation-map.ndjson"),
+  correlationRows.map((row) => JSON.stringify(row)).join("\n") + "\n",
+  "utf8",
+);
+await writeFile(resolve(outDir, "correlation-map.json"), JSON.stringify(correlationRows, null, 2) + "\n", "utf8");
 printSummary(summary);
 
 async function runWorker(workerId) {
@@ -96,6 +127,7 @@ function parseArgs(argv) {
       out.successSamplePercent = 5;
       out.reuseSessionPerWorker = true;
     }
+    else if (arg === "--full-trace") out.fullTrace = true;
     else if (arg === "--headed") out.headed = true;
     else if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -110,6 +142,10 @@ function parseArgs(argv) {
   if (!["all", "failures-only", "none"].includes(out.artifactMode)) throw new Error("--artifact-mode must be one of: all, failures-only, none");
   if (!Number.isFinite(out.successSamplePercent) || out.successSamplePercent < 0 || out.successSamplePercent > 100) {
     throw new Error("--success-sample-percent must be between 0 and 100");
+  }
+  if (out.fullTrace) {
+    out.artifactMode = "all";
+    out.successSamplePercent = 100;
   }
   out.concurrency = Math.min(out.concurrency, out.count);
   if (!out.unsafeConcurrency) {
@@ -146,6 +182,7 @@ Options:
   --unsafe-concurrency      Disable RAM-based concurrency safety cap
   --out-dir <path>         Output directory
   --safe                   Extra safe mode for low-memory laptops (concurrency=1, slower pace)
+  --full-trace             Force full-trace capture (artifact-mode=all, success-sample-percent=100)
   --keep-sessions          Keep sessions open after each attempt
   --headed                 Run headed browser
   --help                   Show help
