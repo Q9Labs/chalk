@@ -96,18 +96,18 @@ export class ExcalidrawCollabEngine {
     this.presence.handleRemoteCursor(payload);
   }
 
-  handleRemoteData(payload: { sceneId?: string; syncAll?: boolean; elements: unknown[] }): void {
+  handleRemoteData(payload: { sceneId: string; syncAll: boolean; elements: unknown[] }): void {
     this.applyRemoteElements({
-      sceneId: payload.sceneId ?? null,
-      syncAll: !!payload.syncAll,
+      sceneId: payload.sceneId,
+      syncAll: payload.syncAll,
       remoteElements: payload.elements,
       isSnapshot: false,
     });
   }
 
-  handleRemoteSnapshot(payload: { sceneId?: string; elements: unknown[]; appState?: AppState }): void {
+  handleRemoteSnapshot(payload: { sceneId: string; elements: unknown[]; appState?: AppState }): void {
     this.applyRemoteElements({
-      sceneId: payload.sceneId ?? null,
+      sceneId: payload.sceneId,
       syncAll: true,
       remoteElements: payload.elements,
       appState: payload.appState,
@@ -206,12 +206,8 @@ export class ExcalidrawCollabEngine {
     this.lastBroadcastedOrReceivedSceneVersion = getSceneVersion(elementsAll as any);
   }
 
-  private applyRemoteElements(args: { sceneId: string | null; syncAll: boolean; remoteElements: unknown[]; appState?: AppState; isSnapshot: boolean }) {
+  private applyRemoteElements(args: { sceneId: string; syncAll: boolean; remoteElements: unknown[]; appState?: AppState; isSnapshot: boolean }) {
     const remoteSceneId = args.sceneId;
-    if (!remoteSceneId) {
-      this.opts.requestSync();
-      return;
-    }
 
     if (!this.sceneId) {
       this.sceneId = remoteSceneId;

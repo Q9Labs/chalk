@@ -18,7 +18,7 @@ func TestWhiteboardState_Merge_VersionAndNonce(t *testing.T) {
 
 	// Base element
 	elV1 := `{"id":"a","version":1,"versionNonce":100,"updated":1000,"isDeleted":false,"index":"a0"}`
-	payload := WhiteboardUpdateV2Payload{
+	payload := WhiteboardUpdatePayload{
 		SchemaVersion: 2,
 		SceneID:       sceneID,
 		SyncAll:       false,
@@ -76,7 +76,7 @@ func TestWhiteboardState_TombstonePrune(t *testing.T) {
 	oldUpdated := time.Now().Add(-(whiteboardTombstoneRetention + time.Hour)).UnixMilli()
 	tombstone := `{"id":"t","version":1,"versionNonce":1,"updated":` + itoa(oldUpdated) + `,"isDeleted":true,"index":"t0"}`
 
-	_, _ = hub.UpdateWhiteboardState(roomID, WhiteboardUpdateV2Payload{
+	_, _ = hub.UpdateWhiteboardState(roomID, WhiteboardUpdatePayload{
 		SchemaVersion: 2,
 		SceneID:       sceneID,
 		SyncAll:       false,
@@ -97,7 +97,7 @@ func TestWhiteboardState_ClearEpochPreventsResurrection(t *testing.T) {
 	sceneID := "scene-1"
 	el := `{"id":"a","version":1,"versionNonce":1,"updated":1000,"isDeleted":false,"index":"a0"}`
 
-	_, _ = hub.UpdateWhiteboardState(roomID, WhiteboardUpdateV2Payload{
+	_, _ = hub.UpdateWhiteboardState(roomID, WhiteboardUpdatePayload{
 		SchemaVersion: 2,
 		SceneID:       sceneID,
 		SyncAll:       false,
@@ -109,7 +109,7 @@ func TestWhiteboardState_ClearEpochPreventsResurrection(t *testing.T) {
 	assert.NotEqual(t, sceneID, newSceneID)
 
 	// Stale update should be rejected
-	_, applied := hub.UpdateWhiteboardState(roomID, WhiteboardUpdateV2Payload{
+	_, applied := hub.UpdateWhiteboardState(roomID, WhiteboardUpdatePayload{
 		SchemaVersion: 2,
 		SceneID:       sceneID,
 		SyncAll:       false,

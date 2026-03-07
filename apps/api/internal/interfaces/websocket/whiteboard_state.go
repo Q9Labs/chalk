@@ -61,7 +61,7 @@ func newWhiteboardState(sceneID string) *WhiteboardState {
 // UpdateWhiteboardState merges an update into the in-memory room state.
 //
 // Returns (sceneID, applied). `applied=false` when the update is for a stale epoch.
-func (h *Hub) UpdateWhiteboardState(roomID uuid.UUID, payload WhiteboardUpdateV2Payload) (string, bool) {
+func (h *Hub) UpdateWhiteboardState(roomID uuid.UUID, payload WhiteboardUpdatePayload) (string, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

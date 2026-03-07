@@ -1,1 +1,1 @@
-export { type AppState, type BinaryFiles, DEFAULT_CONFIG, type ExcalidrawElement, type WhiteboardConfig, type WhiteboardCursor, type WhiteboardPermissions, type WhiteboardState, type WhiteboardUpdate } from "./types";
+export type { AppState, BinaryFileData, BinaryFiles, Collaborator, CollaboratorPointer, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./collab";

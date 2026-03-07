@@ -524,23 +524,23 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 
-	var v2 WhiteboardUpdateV2Payload
-	if err := msg.UnmarshalPayload(&v2); err != nil {
+	var update WhiteboardUpdatePayload
+	if err := msg.UnmarshalPayload(&update); err != nil {
 		c.sendErrorMessage("invalid_payload", "Failed to parse whiteboard update")
 		return
 	}
 
-	if v2.SchemaVersion != 2 {
+	if update.SchemaVersion != 2 {
 		c.sendErrorMessage("unsupported_version", "whiteboard.update requires schema_version=2")
 		return
 	}
 
-	if v2.SceneID == "" {
+	if update.SceneID == "" {
 		c.sendErrorMessage("invalid_payload", "scene_id is required for schema_version=2")
 		return
 	}
 
-	sceneID, applied := c.hub.UpdateWhiteboardState(c.roomID, v2)
+	sceneID, applied := c.hub.UpdateWhiteboardState(c.roomID, update)
 	if !applied {
 		// Stale epoch; heal sender with a fresh snapshot.
 		payload := c.hub.GetWhiteboardSnapshot(c.roomID)
@@ -553,11 +553,11 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 	dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
 		SchemaVersion: 2,
 		SceneID:       sceneID,
-		SyncAll:       v2.SyncAll,
+		SyncAll:       update.SyncAll,
 		ParticipantID: c.participantID,
 		DisplayName:   meta.DisplayName,
-		Elements:      v2.Elements,
-		Seq:           v2.Seq,
+		Elements:      update.Elements,
+		Seq:           update.Seq,
 		Timestamp:     time.Now(),
 	})
 

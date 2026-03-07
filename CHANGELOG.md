@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-Core/SDK-React-Native: auth expiry event dot-notation (breaking)** — replace legacy auth event names (`token-expired`, `token:expired`) with canonical `token.expired` across emitters/listeners, schemas, and tests.
 - **SDK/Core+React+API: whiteboard wire contract locked to v2 (breaking)** — removed v1 `whiteboard.update` send APIs and dual-path UI wiring, made outbound/inbound schemas require v2 fields (`schemaVersion=2`, `sceneId`, `syncAll`), and simplified whiteboard sync/render flows to a single collab-v2 pipeline.
 - **API: whiteboard snapshot/data payloads normalized to required v2 fields** — websocket payload structs now emit non-optional v2 metadata and persistence restore now accepts only v2 state blobs.
+- **SDK-Core/SDK-React/API: whiteboard contract naming + strictness cleanup** — tightened collab engine remote payloads to require v2 epoch fields (`sceneId`, `syncAll`) and renamed API websocket internal update struct from `WhiteboardUpdateV2Payload` to protocol-neutral `WhiteboardUpdatePayload` while still enforcing `schema_version=2`.
 
 ### Fixed
 
@@ -82,7 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **SDK-Core: whiteboard v1 outbound API surface** — removed `sendWhiteboardUpdate(elements, files, seq)` from websocket client/session action chain.
 - **SDK-React + chalk-whiteboard: legacy SyncEngine branch** — removed `useV2` toggles and root `SyncEngine` export path in favor of collab-v2-only runtime.
-- **API: whiteboard v1 protocol artifacts** — removed legacy `WhiteboardUpdatePayload` struct and v1 persisted-state restore fallback.
+- **chalk-whiteboard: legacy root type surface** — removed unused v1-oriented root types module and now re-export root whiteboard types directly from collab-v2.
+- **API: whiteboard v1 protocol artifacts** — removed v1 compatibility handling and persisted-state v1 restore fallback; websocket updates now only accept/emit the v2 shape (`schema_version=2`).
 
 ## [0.0.59] - 2026-02-22
 

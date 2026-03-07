@@ -1,4 +1,4 @@
-import type { AppState } from "@q9labs/chalk-whiteboard";
+import type { AppState } from "@q9labs/chalk-whiteboard/collab";
 import type { ChalkError, ChatMessage, Participant, Reaction, Recording, SessionConnectionState } from "../types.ts";
 
 /** Real-time transcript entry from speech-to-text */

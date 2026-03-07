@@ -7,7 +7,7 @@
  * @packageDocumentation
  * @module @q9labs/chalk-core/types
  */
-import type { AppState } from "@q9labs/chalk-whiteboard";
+import type { AppState } from "@q9labs/chalk-whiteboard/collab";
 
 // Server payloads use their own participant shape (ServerParticipant)
 // rather than the full Participant entity from entities/

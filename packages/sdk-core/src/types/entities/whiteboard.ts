@@ -4,7 +4,7 @@
  * @packageDocumentation
  * @module @q9labs/chalk-core/types
  */
-import type { AppState } from "@q9labs/chalk-whiteboard";
+import type { AppState } from "@q9labs/chalk-whiteboard/collab";
 
 /**
  * Whiteboard permission feature

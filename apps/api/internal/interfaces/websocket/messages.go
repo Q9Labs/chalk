@@ -201,10 +201,10 @@ type PongPayload struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// WhiteboardUpdateV2Payload - client sends drawing changes (v2)
+// WhiteboardUpdatePayload - client sends drawing changes
 //
 // NOTE: Elements are Excalidraw-native JSON objects; do not transform nested keys.
-type WhiteboardUpdateV2Payload struct {
+type WhiteboardUpdatePayload struct {
 	SchemaVersion int64           `json:"schema_version"` // must be 2
 	SceneID       string          `json:"scene_id"`
 	SyncAll       bool            `json:"sync_all"`
