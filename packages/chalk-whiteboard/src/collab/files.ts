@@ -7,6 +7,23 @@ import type {
 	OrderedExcalidrawElement,
 } from "./types";
 
+export type WhiteboardFileSyncPhase =
+	| "idle"
+	| "uploading"
+	| "awaiting_remote_upload"
+	| "downloading"
+	| "error";
+
+export interface WhiteboardFileSyncState {
+	phase: WhiteboardFileSyncPhase;
+	uploading: number;
+	uploadQueued: number;
+	remotePendingUploads: number;
+	downloading: number;
+	downloadQueued: number;
+	lastErrorAtMs: number | null;
+}
+
 const dataURLToBlob = (dataURL: string) => {
 	const [header, base64] = dataURL.split(",", 2);
 	if (!header || !base64) throw new Error("invalid dataURL");
@@ -70,8 +87,12 @@ export class WhiteboardFilesSync {
 			presignDownload: (fileId: string) => Promise<{ downloadUrl: string }>;
 			uploadThrottleMs?: number;
 			downloadThrottleMs?: number;
+			onStateChange?: (state: WhiteboardFileSyncState) => void;
 		},
 	) {}
+
+	private remotePendingUploads = 0;
+	private lastErrorAtMs: number | null = null;
 
 	handleLocalScene(
 		elementsAll: readonly OrderedExcalidrawElement[],
@@ -92,24 +113,34 @@ export class WhiteboardFilesSync {
 			this.uploadQueue.push(fileId);
 		}
 
+		this.emitState();
+
 		if (this.uploadQueue.length > 0) this.scheduleUpload();
 	}
 
 	handleRemoteScene(elementsAll: readonly OrderedExcalidrawElement[]): void {
 		const haveFiles = this.opts.excalidrawAPI.getFiles();
+		let pendingRemoteUploads = 0;
 
 		for (const el of elementsAll as any[]) {
 			if (!isImageElement(el) || el.isDeleted) continue;
-			if (el.status !== "saved") continue;
 			if (!el.fileId) continue;
 
 			const fileId = String(el.fileId);
+			if (el.status === "pending" && !(haveFiles as any)[fileId]) {
+				pendingRemoteUploads += 1;
+				continue;
+			}
+			if (el.status !== "saved") continue;
 			if ((haveFiles as any)[fileId]) continue;
 			if (this.downloading.has(fileId)) continue;
 			if (this.downloadQueue.includes(fileId)) continue;
 
 			this.downloadQueue.push(fileId);
 		}
+
+		this.remotePendingUploads = pendingRemoteUploads;
+		this.emitState();
 
 		if (this.downloadQueue.length > 0) this.scheduleDownload();
 	}
@@ -123,6 +154,9 @@ export class WhiteboardFilesSync {
 		this.downloadQueue = [];
 		this.uploading.clear();
 		this.downloading.clear();
+		this.remotePendingUploads = 0;
+		this.lastErrorAtMs = null;
+		this.emitState();
 	}
 
 	private scheduleUpload() {
@@ -154,6 +188,7 @@ export class WhiteboardFilesSync {
 		}
 
 		this.uploading.add(fileId);
+		this.emitState();
 		try {
 			const { uploadUrl } = await this.opts.presignUpload(fileId, file.mimeType);
 			const blob = dataURLToBlob(file.dataURL);
@@ -167,9 +202,11 @@ export class WhiteboardFilesSync {
 
 			updateImageStatus(this.opts.excalidrawAPI, fileId, "saved");
 		} catch {
+			this.lastErrorAtMs = Date.now();
 			updateImageStatus(this.opts.excalidrawAPI, fileId, "error");
 		} finally {
 			this.uploading.delete(fileId);
+			this.emitState();
 			if (this.uploadQueue.length > 0) this.scheduleUpload();
 		}
 	}
@@ -180,11 +217,13 @@ export class WhiteboardFilesSync {
 		if (this.downloading.has(fileId)) return;
 
 		this.downloading.add(fileId);
+		this.emitState();
 		try {
 			const { downloadUrl } = await this.opts.presignDownload(fileId);
 			const res = await fetch(downloadUrl);
 
 			if (res.status === 404) {
+				this.lastErrorAtMs = Date.now();
 				updateImageStatus(this.opts.excalidrawAPI, fileId, "error");
 				return;
 			}
@@ -205,9 +244,39 @@ export class WhiteboardFilesSync {
 			]);
 		} catch {
 			// best-effort; we'll retry on next scene update
+			this.lastErrorAtMs = Date.now();
 		} finally {
 			this.downloading.delete(fileId);
+			this.emitState();
 			if (this.downloadQueue.length > 0) this.scheduleDownload();
 		}
+	}
+
+	private emitState() {
+		const uploadQueued = this.uploadQueue.length;
+		const uploading = this.uploading.size;
+		const downloadQueued = this.downloadQueue.length;
+		const downloading = this.downloading.size;
+
+		const phase: WhiteboardFileSyncPhase =
+			uploading > 0 || uploadQueued > 0
+				? "uploading"
+				: this.remotePendingUploads > 0
+					? "awaiting_remote_upload"
+					: downloading > 0 || downloadQueued > 0
+						? "downloading"
+						: this.lastErrorAtMs && Date.now() - this.lastErrorAtMs < 4_000
+							? "error"
+							: "idle";
+
+		this.opts.onStateChange?.({
+			phase,
+			uploading,
+			uploadQueued,
+			remotePendingUploads: this.remotePendingUploads,
+			downloading,
+			downloadQueued,
+			lastErrorAtMs: this.lastErrorAtMs,
+		});
 	}
 }

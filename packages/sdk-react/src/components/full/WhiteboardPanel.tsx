@@ -5,8 +5,9 @@
  * Handles sync, permissions, and participant thumbnails.
  */
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { WhiteboardFileSyncState } from "@q9labs/chalk-whiteboard/collab";
 
 import { useSession } from "../../context/chalk-provider";
 import { useWhiteboard } from "../../hooks/features/useWhiteboard";
@@ -58,9 +59,37 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
   const { canGrant, grantAll, revokeAll } = useWhiteboardPermissions();
 
   const [isThumbnailsOpen, setIsThumbnailsOpen] = useState(true);
+  const [fileSyncState, setFileSyncState] = useState<WhiteboardFileSyncState>({
+    phase: "idle",
+    uploading: 0,
+    uploadQueued: 0,
+    remotePendingUploads: 0,
+    downloading: 0,
+    downloadQueued: 0,
+    lastErrorAtMs: null,
+  });
   const toggleThumbnails = useCallback(() => {
     setIsThumbnailsOpen((prev) => !prev);
   }, []);
+
+  const fileSyncMessage = useMemo(() => {
+    if (fileSyncState.phase === "uploading") {
+      const count = fileSyncState.uploading + fileSyncState.uploadQueued;
+      return count > 1 ? `Uploading ${count} images… peers will see them shortly` : "Uploading image… peers will see it shortly";
+    }
+    if (fileSyncState.phase === "awaiting_remote_upload") {
+      const count = fileSyncState.remotePendingUploads;
+      return count > 1 ? `Someone is sharing ${count} images…` : "Someone is sharing an image…";
+    }
+    if (fileSyncState.phase === "downloading") {
+      const count = fileSyncState.downloading + fileSyncState.downloadQueued;
+      return count > 1 ? `Loading ${count} shared images…` : "Loading shared image…";
+    }
+    if (fileSyncState.phase === "error") {
+      return "Image sync failed. Try upload again.";
+    }
+    return null;
+  }, [fileSyncState]);
 
   const resolvedTheme = theme === "auto" ? (typeof document !== "undefined" && document.documentElement.classList.contains("dark") ? "dark" : "light") : theme;
 
@@ -70,6 +99,7 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
     excalidrawCssPath,
     session,
     onExcalidrawApiReady,
+    onFileSyncStateChange: setFileSyncState,
   });
 
   useWhiteboardSync({
@@ -107,6 +137,15 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               <span>Loading whiteboard...</span>
+            </div>
+          </div>
+        )}
+
+        {fileSyncMessage && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 rounded-lg border border-white/20 bg-black/65 px-3 py-2 text-xs text-white backdrop-blur-md shadow-lg">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-white/80 animate-pulse" />
+              <span>{fileSyncMessage}</span>
             </div>
           </div>
         )}

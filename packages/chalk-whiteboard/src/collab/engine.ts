@@ -1,6 +1,7 @@
 import { CaptureUpdateAction, getSceneVersion, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
 import { WhiteboardFilesSync } from "./files";
+import type { WhiteboardFileSyncState } from "./files";
 import { WhiteboardPresence } from "./presence";
 import { filterSyncableElements } from "./syncable";
 import type { AppState, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
@@ -39,6 +40,7 @@ export class ExcalidrawCollabEngine {
       sendClear?: () => void;
       presignUpload: (fileId: string, mimeType: string) => Promise<{ uploadUrl: string }>;
       presignDownload: (fileId: string) => Promise<{ downloadUrl: string }>;
+      onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
     },
   ) {
     this.canDraw = opts.canDraw;
@@ -49,6 +51,7 @@ export class ExcalidrawCollabEngine {
       presignDownload: opts.presignDownload,
       uploadThrottleMs: 300,
       downloadThrottleMs: 500,
+      onStateChange: opts.onFileSyncStateChange,
     });
 
     this.presence = new WhiteboardPresence({

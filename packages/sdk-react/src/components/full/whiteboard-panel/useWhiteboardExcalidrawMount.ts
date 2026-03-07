@@ -1,6 +1,7 @@
 import { createElement, useEffect, useRef, useState } from "react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { AppState, OrderedExcalidrawElement } from "@q9labs/chalk-whiteboard/collab";
+import type { WhiteboardFileSyncState } from "@q9labs/chalk-whiteboard/collab";
 
 import type { BinaryFiles, CollabEngine, WhiteboardEngineRefs, WhiteboardSessionLike } from "./types";
 
@@ -10,9 +11,10 @@ interface UseWhiteboardExcalidrawMountParams {
   excalidrawCssPath: string;
   session: WhiteboardSessionLike;
   onExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
+  onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
 }
 
-export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidrawCssPath, session, onExcalidrawApiReady }: UseWhiteboardExcalidrawMountParams) {
+export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidrawCssPath, session, onExcalidrawApiReady, onFileSyncStateChange }: UseWhiteboardExcalidrawMountParams) {
   const collabEngineRef = useRef<CollabEngine | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const didReportApiRef = useRef(false);
@@ -106,6 +108,7 @@ export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidra
                     const response = await session.whiteboardPresignDownload(fileId);
                     return { downloadUrl: response.downloadUrl };
                   },
+                  onFileSyncStateChange,
                 });
               }
             },
@@ -152,7 +155,7 @@ export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidra
         root?.unmount();
       }, 0);
     };
-  }, [canDraw, excalidrawCssPath, onExcalidrawApiReady, resolvedTheme, session]);
+  }, [canDraw, excalidrawCssPath, onExcalidrawApiReady, onFileSyncStateChange, resolvedTheme, session]);
 
   const refs: WhiteboardEngineRefs = {
     collabEngineRef,

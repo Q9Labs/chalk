@@ -1,4 +1,5 @@
 export { ExcalidrawCollabEngine } from "./engine";
+export type { WhiteboardFileSyncPhase, WhiteboardFileSyncState } from "./files";
 export type {
 	AppState,
 	BinaryFileData,
@@ -9,4 +10,3 @@ export type {
 	ExcalidrawImperativeAPI,
 	OrderedExcalidrawElement,
 } from "./types";
-
