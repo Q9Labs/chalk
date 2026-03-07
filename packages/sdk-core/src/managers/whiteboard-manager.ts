@@ -10,6 +10,8 @@ import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
 import type { WhiteboardCursor, WhiteboardPermission, WhiteboardSnapshot, WhiteboardUpdate } from "../types/entities/whiteboard";
 import { TypedEventEmitter } from "../utils/typed-emitter";
+import { reduceLocalWhiteboardUpdate, reduceRemoteWhiteboardUpdate, reduceWhiteboardClear, reduceWhiteboardClosed, reduceWhiteboardCursorState, reduceWhiteboardOpened, reduceWhiteboardParticipantLeft, reduceWhiteboardPermissionSync, reduceWhiteboardSnapshot } from "./whiteboard/whiteboard-reducer";
+import { WhiteboardDebouncedScheduler } from "./whiteboard/whiteboard-scheduler";
 
 /** Whiteboard manager state */
 export interface WhiteboardState {
@@ -50,6 +52,7 @@ export interface WhiteboardManagerEvents {
 }
 
 const CURSOR_DEBOUNCE_MS = 50;
+const UPDATE_DEBOUNCE_MS = 100;
 
 /**
  * Manages whiteboard collaboration via WebSocket
@@ -58,10 +61,10 @@ const CURSOR_DEBOUNCE_MS = 50;
  */
 export class WhiteboardManager extends StateContainer<WhiteboardState> {
   private readonly events = new TypedEventEmitter<WhiteboardManagerEvents>();
+  private readonly updateScheduler = new WhiteboardDebouncedScheduler(UPDATE_DEBOUNCE_MS);
+  private readonly cursorScheduler = new WhiteboardDebouncedScheduler(CURSOR_DEBOUNCE_MS);
   private room: ConferenceSession | null = null;
   private cursors = new Map<string, WhiteboardCursor>();
-  private updateDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
-  private cursorDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
   private pendingElements: unknown[] | null = null;
   private pendingFiles: Record<string, unknown> | null = null;
   private lastSeqByParticipant = new Map<string, number>();
@@ -97,29 +100,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
     // Check local participant's permission
     const canDraw = this.room.canDrawWhiteboard();
-    this.setState({ canDraw });
-  }
-
-  /**
-   * Merge incoming elements with existing elements
-   * Handles delta updates by updating/adding elements by ID and version
-   */
-  private mergeElements(existing: Array<{ id: string; version?: number; isDeleted?: boolean }>, incoming: Array<{ id: string; version?: number; isDeleted?: boolean }>): unknown[] {
-    const elementMap = new Map(existing.map((e) => [e.id, e]));
-
-    for (const element of incoming) {
-      if (element.isDeleted) {
-        elementMap.delete(element.id);
-      } else {
-        const current = elementMap.get(element.id);
-        // Accept if new element or newer version
-        if (!current || (element.version ?? 0) >= (current.version ?? 0)) {
-          elementMap.set(element.id, element);
-        }
-      }
-    }
-
-    return Array.from(elementMap.values());
+    this.setState(reduceWhiteboardPermissionSync(canDraw));
   }
 
   private setupRoomListeners(): void {
@@ -141,16 +122,17 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
       const lastSeq = this.lastSeqByParticipant.get(data.participantId) ?? 0;
       if (data.seq > lastSeq) {
         const currentState = this.getState();
-        const mergedElements = data.syncAll ? data.elements : this.mergeElements(currentState.elements as Array<{ id: string; version?: number; isDeleted?: boolean }>, data.elements as Array<{ id: string; version?: number; isDeleted?: boolean }>);
-        const mergedFiles = { ...currentState.files, ...(data.files ?? {}) };
-
         this.lastSeqByParticipant.set(data.participantId, data.seq);
-        this.setState({
-          sceneId: data.sceneId,
-          elements: mergedElements,
-          files: mergedFiles,
-          lastSeq: Math.max(currentState.lastSeq, data.seq),
-        });
+        this.setState(
+          reduceRemoteWhiteboardUpdate({
+            state: currentState,
+            sceneId: data.sceneId,
+            syncAll: data.syncAll,
+            elements: data.elements,
+            files: data.files,
+            seq: data.seq,
+          }),
+        );
       }
 
       this.events.emit("update", update);
@@ -169,12 +151,14 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
       };
 
       this.lastSeqByParticipant.clear();
-      this.setState({
-        sceneId: data.sceneId,
-        elements: data.elements,
-        files: data.files,
-        lastSeq: data.lastSeq,
-      });
+      this.setState(
+        reduceWhiteboardSnapshot({
+          sceneId: data.sceneId,
+          elements: data.elements,
+          files: data.files,
+          lastSeq: data.lastSeq,
+        }),
+      );
       this.events.emit("snapshot", snapshot);
     });
 
@@ -188,7 +172,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
       };
 
       this.cursors.set(data.participantId, cursor);
-      this.setState({ cursors: Array.from(this.cursors.values()) });
+      this.setState(reduceWhiteboardCursorState(this.cursors));
       this.events.emit("cursor", cursor);
     });
 
@@ -196,7 +180,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
       // Update local permission if it's for us
       const localId = this.room?.localParticipant?.id;
       if (data.participantId === localId) {
-        this.setState({ canDraw: data.canDraw });
+        this.setState(reduceWhiteboardPermissionSync(data.canDraw));
       }
 
       const permission: WhiteboardPermission = {
@@ -212,10 +196,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
     this.room.on("whiteboard.opened", (data) => {
       this.openParticipants.add(data.participantId);
-      this.setState({
-        isOpen: true,
-        openParticipants: Array.from(this.openParticipants),
-      });
+      this.setState(reduceWhiteboardOpened(this.openParticipants));
       this.events.emit("opened", {
         participantId: data.participantId,
         displayName: data.displayName,
@@ -225,21 +206,24 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
     this.room.on("whiteboard.closed", (data) => {
       this.openParticipants.delete(data.participantId);
       this.cursors.delete(data.participantId);
-      this.setState({
-        isOpen: false,
-        openParticipants: Array.from(this.openParticipants),
-        cursors: Array.from(this.cursors.values()),
-      });
+      this.setState(
+        reduceWhiteboardClosed({
+          openParticipants: this.openParticipants,
+          cursors: this.cursors,
+        }),
+      );
       this.events.emit("closed", { participantId: data.participantId });
     });
 
     this.room.on("participant.left", (participantId) => {
       this.openParticipants.delete(participantId);
       this.cursors.delete(participantId);
-      this.setState({
-        openParticipants: Array.from(this.openParticipants),
-        cursors: Array.from(this.cursors.values()),
-      });
+      this.setState(
+        reduceWhiteboardParticipantLeft({
+          openParticipants: this.openParticipants,
+          cursors: this.cursors,
+        }),
+      );
     });
   }
 
@@ -302,39 +286,36 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
     this.pendingElements = elements;
     this.pendingFiles = files ?? null;
 
-    // Debounce
-    if (this.updateDebounceTimeout) {
-      clearTimeout(this.updateDebounceTimeout);
-    }
-
-    this.updateDebounceTimeout = setTimeout(() => {
-      if (this.pendingElements && this.room) {
-        const currentState = this.getState();
-        if (!currentState.sceneId) {
-          this.room.requestWhiteboardSync();
-          return;
-        }
-        const seq = typeof seqOverride === "number" ? seqOverride : Date.now();
-        this.room.sendWhiteboardUpdateV2({
-          sceneId: currentState.sceneId,
-          syncAll: false,
-          elements: this.pendingElements,
-          seq,
-        });
-
-        // Merge sent elements with existing state (pendingElements are deltas)
-        const mergedElements = this.mergeElements(currentState.elements as Array<{ id: string; version?: number; isDeleted?: boolean }>, this.pendingElements as Array<{ id: string; version?: number; isDeleted?: boolean }>);
-        const mergedFiles = { ...currentState.files, ...(this.pendingFiles ?? {}) };
-
-        this.setState({
-          elements: mergedElements,
-          files: mergedFiles,
-          lastSeq: Math.max(currentState.lastSeq, seq),
-        });
-        this.pendingElements = null;
-        this.pendingFiles = null;
+    this.updateScheduler.schedule(() => {
+      if (!this.pendingElements || !this.room) {
+        return;
       }
-    }, 100);
+
+      const currentState = this.getState();
+      if (!currentState.sceneId) {
+        this.room.requestWhiteboardSync();
+        return;
+      }
+
+      const seq = typeof seqOverride === "number" ? seqOverride : Date.now();
+      this.room.sendWhiteboardUpdateV2({
+        sceneId: currentState.sceneId,
+        syncAll: false,
+        elements: this.pendingElements,
+        seq,
+      });
+
+      this.setState(
+        reduceLocalWhiteboardUpdate({
+          state: currentState,
+          elements: this.pendingElements,
+          files: this.pendingFiles,
+          seq,
+        }),
+      );
+      this.pendingElements = null;
+      this.pendingFiles = null;
+    });
   }
 
   /**
@@ -343,14 +324,9 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
   sendCursor(x: number, y: number): void {
     if (!this.room) return;
 
-    // Debounce cursor updates
-    if (this.cursorDebounceTimeout) {
-      clearTimeout(this.cursorDebounceTimeout);
-    }
-
-    this.cursorDebounceTimeout = setTimeout(() => {
+    this.cursorScheduler.schedule(() => {
       this.room?.sendWhiteboardCursor(x, y);
-    }, CURSOR_DEBOUNCE_MS);
+    });
   }
 
   /** Clear the whiteboard (host only) */
@@ -361,7 +337,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
     this.room.clearWhiteboard();
     this.lastSeqByParticipant.clear();
-    this.setState({ sceneId: undefined, elements: [], files: {}, lastSeq: 0 });
+    this.setState(reduceWhiteboardClear());
   }
 
   /** Grant drawing permission to a participant (host only) */
@@ -384,12 +360,8 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
   /** Cleanup resources */
   dispose(): void {
-    if (this.updateDebounceTimeout) {
-      clearTimeout(this.updateDebounceTimeout);
-    }
-    if (this.cursorDebounceTimeout) {
-      clearTimeout(this.cursorDebounceTimeout);
-    }
+    this.updateScheduler.cancel();
+    this.cursorScheduler.cancel();
     this.lastSeqByParticipant.clear();
     this.cursors.clear();
     this.openParticipants.clear();
