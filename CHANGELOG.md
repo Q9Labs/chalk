@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **SDK-Core: dead branch cleanup + type barrel consolidation** — remove unreachable Effect/helper barrels, trim unused manager-layer exports, route `types/api` through the current generated OpenAPI file, and fix sdk-core bridge/websocket compile blockers uncovered during verification.
 - **SDK-Core: RTK signaling modularization** — split `conference-session/rtk-signaling.ts` into focused identity, participant-sync, chat, transcript, and shared-deps helpers while keeping `setupConferenceSessionRtkSignaling` behavior and API stable.
 - **SDK-Core: ChalkSession state composition cleanup** — extract room/participant/media state API construction into `session/chalk-session-state.ts`, remove `as any` updater plumbing, and centralize leave/reset state cleanup through typed session updaters.
 - **API: DB pool tunables via env** — support `DATABASE_MAX_CONNS` and `DATABASE_MIN_CONNS` with validation so lean `t4g.micro` can run lower connection pressure safely.

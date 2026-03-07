@@ -7,7 +7,7 @@
  * @module @q9labs/chalk-core/effect/services
  */
 
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Layer } from "effect";
 import { RoomInstanceService, RoomInstanceServiceLive } from "./room-instance";
 import { RoomService, RoomServiceLive } from "./room-service";
 import { ParticipantService, ParticipantServiceLive } from "./participant-service";
@@ -39,37 +39,3 @@ export const makeManagerServicesLayer = (debug: boolean) => {
     Layer.provideMerge(loggerLayer)
   );
 };
-
-/**
- * Default manager services layer (no logging)
- */
-export const ManagerServicesLive = makeManagerServicesLayer(false);
-
-/**
- * Debug manager services layer (console logging)
- */
-export const ManagerServicesDebug = makeManagerServicesLayer(true);
-
-/**
- * Create a managed runtime for manager services
- */
-export const makeManagerRuntime = (debug: boolean) =>
-  ManagedRuntime.make(makeManagerServicesLayer(debug));
-
-/**
- * Run an Effect with manager services
- */
-export const runManagerEffect = <A, E>(
-  effect: Effect.Effect<A, E, ManagerServices>,
-  runtime: ManagedRuntime.ManagedRuntime<ManagerServices, never>
-) => runtime.runPromise(effect);
-
-/**
- * Helper to get all services from runtime
- */
-export const getManagerServices = Effect.all({
-  room: RoomService,
-  participants: ParticipantService,
-  media: MediaService,
-  roomInstance: RoomInstanceService,
-});

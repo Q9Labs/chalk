@@ -7,4 +7,4 @@
  * @module @q9labs/chalk-core/types/api
  */
 
-export type * from './generated';
+export type * from "../../generated/api-types";
