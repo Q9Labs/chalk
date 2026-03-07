@@ -86,3 +86,22 @@
 - Checked Axiom for support-code correlation:
   - datasets found: `chalk-api-prod`, `chalk-prod-traces`.
   - no `client.incident`/`CHK-*` records in last 24h from current query window, indicating incident reporter likely not wired into API dataset for this environment.
+
+## 19:22 PKT — #2 + #4 session lifecycle quality pass
+
+- Implemented centralized external subscription teardown bag in `packages/sdk-core/src/session/chalk-session.ts`:
+  - added `externalSubscriptions` registry
+  - added `addExternalSubscription(...)` + `teardownExternalSubscriptions()`
+  - `setupEventForwarding()` now idempotent (tears down previous graph before re-subscribing)
+  - `dispose()` now explicitly tears down forwarded external subscriptions.
+- Added contract test: `packages/sdk-core/src/__tests__/chalk-session-lifecycle.test.ts`
+  - verifies single active forwarding graph even if setup runs multiple times
+  - verifies forwarding subscriptions are removed on dispose.
+- Added dead-path sweep contract test: `packages/sdk-core/src/__tests__/event-contract-dead-path.test.ts`
+  - asserts no legacy pre-dot-notation event identifiers exist in sdk-core source tree.
+
+### Verification
+
+- `bunx --bun oxfmt --write ...` ✅
+- `bun run --cwd packages/sdk-core check-types` ✅
+- `bun run --cwd packages/sdk-core test` ✅ (197 pass)

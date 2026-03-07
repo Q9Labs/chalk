@@ -120,6 +120,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   private _currentRoom: ConferenceSession | null = null;
   private readonly incidentPipeline: ChalkSessionIncidentPipeline;
   private readonly stateUpdaters: SessionStateUpdaters;
+  private readonly externalSubscriptions: Array<() => void> = [];
   private roomBridgeCleanup: (() => void) | null = null;
 
   constructor(config: ChalkSessionConfig) {
@@ -199,58 +200,89 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     return this.incidentPipeline.reportIncident(incidentInput);
   }
 
+  private addExternalSubscription(unsubscribe: () => void): void {
+    this.externalSubscriptions.push(unsubscribe);
+  }
+
+  private teardownExternalSubscriptions(): void {
+    while (this.externalSubscriptions.length > 0) {
+      const unsubscribe = this.externalSubscriptions.pop();
+      if (!unsubscribe) {
+        continue;
+      }
+
+      try {
+        unsubscribe();
+      } catch {
+        // best effort cleanup
+      }
+    }
+  }
+
   private setupEventForwarding(): void {
+    this.teardownExternalSubscriptions();
+
     // Forward room events
-    this.room._emitter.on("connected", (data) => {
-      this.recordIncidentBreadcrumb({
-        category: "room",
-        message: "ConferenceSession connected",
-        data,
-      });
-      this.emit("connected", data);
-    });
+    this.addExternalSubscription(
+      this.room._emitter.on("connected", (data) => {
+        this.recordIncidentBreadcrumb({
+          category: "room",
+          message: "ConferenceSession connected",
+          data,
+        });
+        this.emit("connected", data);
+      }),
+    );
 
-    this.room._emitter.on("disconnected", (data) => {
-      this.recordIncidentBreadcrumb({
-        category: "room",
-        message: "ConferenceSession disconnected",
-        data,
-      });
-      this.emit("disconnected", data);
-    });
+    this.addExternalSubscription(
+      this.room._emitter.on("disconnected", (data) => {
+        this.recordIncidentBreadcrumb({
+          category: "room",
+          message: "ConferenceSession disconnected",
+          data,
+        });
+        this.emit("disconnected", data);
+      }),
+    );
 
-    this.room._emitter.on("status:changed", (data) => {
-      this.recordIncidentBreadcrumb({
-        category: "room",
-        message: "ConferenceSession status changed",
-        data,
-      });
-      this.emit("status:changed", data);
-    });
+    this.addExternalSubscription(
+      this.room._emitter.on("status:changed", (data) => {
+        this.recordIncidentBreadcrumb({
+          category: "room",
+          message: "ConferenceSession status changed",
+          data,
+        });
+        this.emit("status:changed", data);
+      }),
+    );
 
-    this.room._emitter.on("error", (error) => {
-      this.emitErrorWithIncident(error, "room");
-    });
+    this.addExternalSubscription(
+      this.room._emitter.on("error", (error) => {
+        this.emitErrorWithIncident(error, "room");
+      }),
+    );
 
     // Forward errors from all managers
-    this.media._emitter.on("error", (error) => this.emitErrorWithIncident(error, "media"));
-    this.screenShare.on("error", (error) => this.emitErrorWithIncident(error, "screen_share"));
-    this.chat.on("error", (error) => this.emitErrorWithIncident(error, "chat"));
-    this.recording.on("error", (error) => this.emitErrorWithIncident(error, "recording"));
-    this.interactions.on("error", (error) => this.emitErrorWithIncident(error, "interactions"));
-    this.whiteboard.on("error", (error) => this.emitErrorWithIncident(error, "whiteboard"));
+    this.addExternalSubscription(this.media._emitter.on("error", (error) => this.emitErrorWithIncident(error, "media")));
+    this.addExternalSubscription(this.screenShare.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
+    this.addExternalSubscription(this.chat.on("error", (error) => this.emitErrorWithIncident(error, "chat")));
+    this.addExternalSubscription(this.recording.on("error", (error) => this.emitErrorWithIncident(error, "recording")));
+    this.addExternalSubscription(this.interactions.on("error", (error) => this.emitErrorWithIncident(error, "interactions")));
+    this.addExternalSubscription(this.whiteboard.on("error", (error) => this.emitErrorWithIncident(error, "whiteboard")));
 
     // Forward token expired from client
-    this.client.on("token.expired", () => {
-      this.emit("token.expired", undefined);
-      void this.reportIncident({
-        severity: "warning",
-        source: "api",
-        code: "TOKEN_EXPIRED",
-        message: "Token expired",
-        stage: "auth_refresh",
-      });
-    });
+    this.addExternalSubscription(
+      this.client.on("token.expired", () => {
+        this.emit("token.expired", undefined);
+        void this.reportIncident({
+          severity: "warning",
+          source: "api",
+          code: "TOKEN_EXPIRED",
+          message: "Token expired",
+          stage: "auth_refresh",
+        });
+      }),
+    );
   }
 
   private _initEventBridges(): void {
@@ -546,6 +578,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     this.whiteboard.dispose();
 
     this.client.disconnect();
+    this.teardownExternalSubscriptions();
     this.roomBridgeCleanup?.();
     this.roomBridgeCleanup = null;
     this._currentRoom = null;
