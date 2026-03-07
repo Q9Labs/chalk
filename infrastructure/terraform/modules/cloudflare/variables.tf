@@ -37,3 +37,39 @@ variable "enable_lifecycle_rules" {
   type        = bool
   default     = true
 }
+
+variable "enable_r2_cors" {
+  description = "Enable browser CORS rules for the R2 recordings bucket"
+  type        = bool
+  default     = true
+}
+
+variable "r2_cors_allowed_origins" {
+  description = "Allowed browser origins for presigned R2 object access"
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "r2_cors_allowed_methods" {
+  description = "Allowed browser methods for presigned R2 object access"
+  type        = list(string)
+  default     = ["GET", "HEAD", "PUT"]
+}
+
+variable "r2_cors_allowed_headers" {
+  description = "Allowed request headers for browser preflight on R2 object access"
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "r2_cors_expose_headers" {
+  description = "Response headers exposed to browser clients for R2 object access"
+  type        = list(string)
+  default     = ["ETag"]
+}
+
+variable "r2_cors_max_age_seconds" {
+  description = "Browser preflight cache TTL for R2 CORS rules"
+  type        = number
+  default     = 3600
+}

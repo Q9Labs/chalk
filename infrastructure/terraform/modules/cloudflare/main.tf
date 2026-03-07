@@ -28,6 +28,24 @@ resource "cloudflare_r2_bucket" "recordings" {
   storage_class = "Standard"
 }
 
+# R2 CORS - Required for browser PUT/GET via presigned URLs (whiteboard + downloads)
+resource "cloudflare_r2_bucket_cors" "recordings" {
+  count       = var.enabled && var.enable_r2_cors ? 1 : 0
+  account_id  = var.cloudflare_account_id
+  bucket_name = cloudflare_r2_bucket.recordings[0].name
+
+  rules = [{
+    id = "browser-presigned-access"
+    allowed = {
+      origins = var.r2_cors_allowed_origins
+      methods = var.r2_cors_allowed_methods
+      headers = var.r2_cors_allowed_headers
+    }
+    expose_headers  = var.r2_cors_expose_headers
+    max_age_seconds = var.r2_cors_max_age_seconds
+  }]
+}
+
 # R2 Lifecycle - Auto-transition to InfrequentAccess after 7 days
 resource "cloudflare_r2_bucket_lifecycle" "recordings" {
   count       = var.enabled && var.enable_lifecycle_rules ? 1 : 0
