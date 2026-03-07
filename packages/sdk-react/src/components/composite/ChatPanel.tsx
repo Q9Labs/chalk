@@ -18,6 +18,7 @@ export interface ChatMessage {
 export interface ChatPanelProps {
   messages: ChatMessage[];
   onSendMessage: (content: string) => void;
+  localParticipantId?: string;
   onClose?: () => void;
   disabled?: boolean;
   placeholder?: string;
@@ -55,6 +56,7 @@ const groupMessages = (messages: ChatMessage[]) => {
 export const ChatPanel = React.memo(({
   messages,
   onSendMessage,
+  localParticipantId,
   onClose,
   disabled = false,
   placeholder = "Type a message...",
@@ -161,20 +163,26 @@ export const ChatPanel = React.memo(({
           <div>
             {messageGroups.map((group, groupIndex) => (
               <div key={`group-${groupIndex}`}>
-                {group.messages.map((msg, msgIndex) => (
+                {group.messages.map((msg, msgIndex) => {
+                  const isLocalMessage =
+                    msg.isLocal ??
+                    (localParticipantId !== undefined && msg.senderId === localParticipantId);
+
+                  return (
                   <MessageBubble
                     key={msg.id}
                     content={msg.content}
                     senderName={msg.senderName}
                     timestamp={msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)}
-                    isLocal={msg.isLocal}
+                    isLocal={isLocalMessage}
                     isFirstInGroup={msgIndex === 0}
                     isLastInGroup={msgIndex === group.messages.length - 1}
                     showSender={msgIndex === 0}
                     showTimestamp={msgIndex === group.messages.length - 1}
                     showAvatar={true}
                   />
-                ))}
+                  );
+                })}
               </div>
             ))}
           </div>

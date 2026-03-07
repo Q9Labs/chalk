@@ -20,6 +20,25 @@ describe('ChatPanel', () => {
     expect(getByText('Hi')).toBeDefined();
   });
 
+  it('aligns local messages to the right when localParticipantId matches senderId', () => {
+    const { getByText } = render(
+      <ChatPanel
+        messages={[
+          { id: '1', senderId: 'local-user', senderName: 'Hasan', content: 'My message', timestamp: new Date() },
+          { id: '2', senderId: 'remote-user', senderName: 'Alice', content: 'Incoming message', timestamp: new Date() },
+        ]}
+        localParticipantId="local-user"
+        onSendMessage={() => {}}
+      />
+    );
+
+    const localWrapper = getByText('My message').closest('.justify-end');
+    const remoteWrapper = getByText('Incoming message').closest('.justify-start');
+
+    expect(localWrapper).toBeDefined();
+    expect(remoteWrapper).toBeDefined();
+  });
+
   it('calls onSendMessage when send button is clicked', async () => {
     const onSendMessage = vi.fn();
     const { getByPlaceholderText, getByLabelText } = render(

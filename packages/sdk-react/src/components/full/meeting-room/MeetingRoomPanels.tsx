@@ -22,11 +22,13 @@ interface MeetingRoomPanelsProps {
 const NOOP = () => {};
 
 export function MeetingRoomPanels({ isMobile, activePanel, onClosePanel, allParticipants, canManageParticipants, onToggleParticipantMute, onRemoveParticipant, onAddPeople, chatMessages, onSendMessage, transcripts, participantVolumes, onParticipantVolumeChange, localParticipantColorSeed }: MeetingRoomPanelsProps) {
+  const localParticipantId = allParticipants.find((participant) => participant.isLocal)?.id;
+
   return (
     <>
       {!isMobile && activePanel && (
         <div className={cn("w-[360px] shrink-0 h-full rounded-3xl overflow-hidden flex flex-col bg-card/80 backdrop-blur-xl border border-border/50 shadow-xl transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]", "animate-in slide-in-from-right-10 fade-in duration-300")}>
-          {activePanel === "chat" && <ChatPanel messages={chatMessages} onSendMessage={onSendMessage || NOOP} onClose={onClosePanel} participantColorSeed={localParticipantColorSeed} />}
+          {activePanel === "chat" && <ChatPanel messages={chatMessages} onSendMessage={onSendMessage || NOOP} localParticipantId={localParticipantId} onClose={onClosePanel} participantColorSeed={localParticipantColorSeed} />}
           {activePanel === "participants" && (
             <ParticipantList
               participants={allParticipants}
@@ -47,7 +49,7 @@ export function MeetingRoomPanels({ isMobile, activePanel, onClosePanel, allPart
 
       {isMobile && activePanel === "chat" && (
         <MobilePanel title="Chat" onClose={onClosePanel}>
-          <ChatPanel messages={chatMessages} onSendMessage={onSendMessage || NOOP} variant="mobile" participantColorSeed={localParticipantColorSeed} />
+          <ChatPanel messages={chatMessages} onSendMessage={onSendMessage || NOOP} localParticipantId={localParticipantId} variant="mobile" participantColorSeed={localParticipantColorSeed} />
         </MobilePanel>
       )}
       {isMobile && activePanel === "participants" && (
