@@ -116,7 +116,7 @@ function PreJoinLobbyBase({
 					isLoading ? "opacity-100 pointer-events-auto" : "opacity-0",
 				)}
 			>
-				<LoadingScreen message="Joining room..." className="w-full h-full" />
+				<LoadingScreen message="Joining room..." className="w-full h-full" displayName={ui.displayName} />
 			</div>
 
 			<div
