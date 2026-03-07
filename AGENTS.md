@@ -64,9 +64,15 @@ Never add client-side business logic to demo apps.
 
 - If Whisper load/latency regresses on `c7i.large`, upgrade back to `c7i.xlarge` (spot).
 
-## Artsy Vibe Note (Collab Standard)
+## Artsy Vibe Note (On-Demand Mode)
 
-Purpose: keep refactor discussions expressive + structured. Code as composition, not pile.
+Purpose: keep refactor discussions expressive + structured when Hasan explicitly asks for "artsy vibe" (or equivalent).
+Default mode remains concise engineering communication.
+
+- Invocation rule:
+  - Use artsy vibe only when Hasan requests it.
+  - Do not keep artsy narration active across turns unless re-requested.
+  - If not requested, use normal concise mode.
 
 - Narrative frame: use design language.
   - "Composition" (modules), "rhythm" (state flow), "palette" (naming), "texture" (DX), "negative space" (deleted complexity).
