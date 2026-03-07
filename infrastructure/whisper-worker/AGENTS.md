@@ -13,7 +13,7 @@
   - Timing: `ProcessingTimeSeconds`, `AudioDurationSeconds`, `RtfRatio`, `TranscriptionDurationMs`
   - Runtime (GPU nodes): `GpuUtilizationPercent`, `GpuMemoryUtilizationPercent`, `GpuDeviceCount`
 
-## Deploy (Prod)
+## Deploy (Prod Lean)
 1. Make code/infra changes in `infrastructure/whisper-worker` and/or `infrastructure/terraform`.
 2. Run gate locally:
    - `bun run lint`
@@ -21,12 +21,12 @@
    - `bun run test`
    - `bun run --cwd apps/docs build`
    - `cd infrastructure/terraform && terraform fmt -check -recursive`
-   - `cd infrastructure/terraform/environments/prod && AWS_PROFILE=q9labs AWS_REGION=us-east-1 terraform init -input=false && terraform validate`
+   - `cd infrastructure/terraform/environments/prod-lean && AWS_PROFILE=q9labs AWS_REGION=us-east-1 terraform init -input=false && terraform validate`
    - `python3 -m py_compile infrastructure/whisper-worker/*.py`
 3. Update `CHANGELOG.md` under `[Unreleased]`.
 4. Commit (Conventional Commits) and push to `master`.
 5. Build image: `gh workflow run whisper-worker.yml` and wait for green.
-6. Apply infra: `gh workflow run infra.yml -f environment=prod -f action=apply` and wait for green.
+6. Apply infra: `gh workflow run infra-lean.yml -f action=apply` and wait for green.
 7. Roll instances:
    - `aws --profile q9labs --region us-east-1 autoscaling start-instance-refresh --auto-scaling-group-name <asg> --preferences MinHealthyPercentage=0,InstanceWarmup=300`
 
@@ -36,7 +36,7 @@
 - `AXIOM_DATASET` set by Terraform (`chalk-api-prod`).
 - `AXIOM_DOMAIN` set by Terraform (`api.axiom.co`).
 - `AXIOM_TRACES_DATASET` set by Terraform (`chalk-prod-traces`).
-- `ENVIRONMENT` from Terraform (`prod`).
+- `ENVIRONMENT` from Terraform (`prod-lean`).
 - `LOG_LEVEL` defaults to `INFO` unless overridden.
 - `WHISPER_CHUNK_LENGTH_SECONDS` controls segment/window size for language detection.
   - Default: `15` when `WHISPER_MULTILINGUAL=true`

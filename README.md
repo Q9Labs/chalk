@@ -89,13 +89,13 @@ Native app specs + integration notes live in `apps/native/`.
 
 | Resource | Service                           |
 | -------- | --------------------------------- |
-| Compute  | ECS Fargate (auto-scaling)        |
-| Database | Aurora Serverless v2              |
-| Cache    | ElastiCache Redis                 |
-| CDN/WAF  | CloudFront + WAF                  |
-| DNS      | Route53                           |
-| Secrets  | Secrets Manager                   |
-| IaC      | Terraform (dev/prod environments) |
+| Compute  | EC2 `t4g.micro` (prod-lean)       |
+| Database | PlanetScale Postgres              |
+| Cache    | Upstash Redis                     |
+| CDN/WAF  | Cloudflare edge + Caddy TLS       |
+| DNS      | Cloudflare DNS                    |
+| Secrets  | SSM Parameter Store               |
+| IaC      | Terraform (dev/prod-lean)         |
 
 ## License
 

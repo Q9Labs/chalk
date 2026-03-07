@@ -42,14 +42,13 @@ Observe for 24h after traffic shift:
 
 If gate fails:
 
-1. Point DNS back to legacy stack.
-2. Redeploy prior ECS image if needed.
-3. Keep lean stack up for forensics.
-4. Capture failure artifacts (logs, metrics, timeline).
+1. Roll back to previous known-good lean API image/config.
+2. Keep failing lean revision artifacts (logs, metrics, timeline).
+3. Capture failure timeline and diff since last green deploy.
 
 ## Decommission (post-gate)
 
-After passing 24h gate, remove legacy infra immediately:
+Legacy stack removed. Keep this checklist for historical audits:
 
 1. ECS service/cluster.
 2. API Gateway + related VPC link resources.

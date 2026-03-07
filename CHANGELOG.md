@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Infra: remove deprecated Terraform prod environment** — deleted `infrastructure/terraform/environments/prod` and updated infra docs/ops guides to standardize on `prod-lean` workflows only.
+
 ### Fixed
 
 - **Infra: R2 browser uploads/downloads CORS** — configure `cloudflare_r2_bucket_cors` on recordings bucket with browser-safe rules (`GET/HEAD/PUT`, wildcard headers/origins by default, preflight cache TTL) so whiteboard/image presigned URL uploads no longer fail preflight (`No 'Access-Control-Allow-Origin' header`).

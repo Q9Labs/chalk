@@ -4,14 +4,7 @@ Terraform infrastructure for Chalk control-plane.
 
 ## Stacks
 
-### Legacy (`environments/prod`, `environments/dev`)
-
-- VPC + NAT + ECS (EC2)
-- Aurora PostgreSQL
-- ElastiCache Redis
-- API Gateway + WAF + CloudWatch-heavy setup
-
-### Lean (`environments/prod-lean`)
+### Active (`environments/prod-lean`)
 
 - EC2 `t4g.micro` (single instance)
 - PlanetScale Postgres
@@ -46,18 +39,15 @@ infrastructure/terraform/
 ├── bootstrap/
 ├── modules/
 │   ├── ec2-api-lean/
-│   └── ...legacy modules...
+│   └── ...
 └── environments/
     ├── dev/
-    ├── prod/
     └── prod-lean/
 ```
 
 ## CI/CD
 
-- `infra.yml`: legacy infra plan/apply.
 - `infra-lean.yml`: lean infra plan/apply/destroy.
-- `api.yml`: legacy ECS API deploy.
 - `api-lean.yml`: arm64 image build + EC2 SSM restart deploy.
 
 ## Requirements
@@ -70,6 +60,7 @@ infrastructure/terraform/
 
 ## Notes
 
+- `prod` Terraform environment is deprecated and removed.
 - Lean stack is designed for cost-first control-plane operation.
 - Media-layer cost is separate from this Terraform scope.
 - For cutover/decommission flow, see `docs/infrastructure/lean-cutover-runbook.md`.
