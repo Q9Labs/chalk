@@ -1,4 +1,4 @@
-import type { ChalkError, Participant } from "../types.ts";
+import { ChalkErrorCode, type ChalkError, type Participant } from "../types.ts";
 import { getRtkIds, mapRtkParticipant } from "./rtk-identity.ts";
 import { collectJoinedParticipants, getParticipantEmitters, onParticipantsEvent, toRtkParticipantsApi, type RtkParticipantsApi, type ParticipantEventEmitter } from "./rtk-participant-adapter.ts";
 import { applyAudioUpdatePatch, applyScreenShareUpdatePatch, applyVideoUpdatePatch, hasMediaStateChanged, mergeParticipantMediaState } from "./participant-sync-reducer.ts";
@@ -75,6 +75,13 @@ const emitTrackError = (deps: RtkSignalingDeps, error: ChalkError): void => {
   deps.emit("error", error);
 };
 
+const RTK_RECONNECT_DELAYS_MS = [0, 1000, 2000, 4000, 8000] as const;
+
+const waitFor = (delayMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
 export const setupRtkParticipantDebugHooks = (deps: Pick<RtkSignalingDeps, "debug" | "getRtkClient">): void => {
   const rtkClient = deps.getRtkClient();
   if (!deps.debug || !rtkClient?.participants?.joined) {
@@ -101,8 +108,75 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
   }
 
   const participantsApi = toRtkParticipantsApi(rtkClient.participants);
+  let reconnectRunId = 0;
+  let reconnectInFlight = false;
+
+  const clearReconnectRun = (): void => {
+    reconnectRunId += 1;
+    reconnectInFlight = false;
+  };
+
+  const startReconnectLoop = (): void => {
+    if (reconnectInFlight) {
+      return;
+    }
+
+    reconnectInFlight = true;
+    reconnectRunId += 1;
+    const runId = reconnectRunId;
+    deps.setConnectionState("reconnecting");
+
+    void (async () => {
+      for (let attempt = 0; attempt < RTK_RECONNECT_DELAYS_MS.length; attempt += 1) {
+        if (runId !== reconnectRunId || deps.isLeaving()) {
+          return;
+        }
+
+        const delayMs = RTK_RECONNECT_DELAYS_MS[attempt] ?? 0;
+        if (delayMs > 0) {
+          await waitFor(delayMs);
+          if (runId !== reconnectRunId || deps.isLeaving()) {
+            return;
+          }
+        }
+
+        const nextRtkClient = deps.getRtkClient();
+        if (!nextRtkClient) {
+          return;
+        }
+
+        try {
+          await nextRtkClient.join();
+          return;
+        } catch (error) {
+          const isLastAttempt = attempt === RTK_RECONNECT_DELAYS_MS.length - 1;
+          if (!isLastAttempt) {
+            continue;
+          }
+
+          deps.setConnectionState("failed");
+          deps.emit("error", {
+            code: ChalkErrorCode.MAX_RECONNECT_ATTEMPTS,
+            message: "Failed to reconnect after multiple attempts",
+            details: {
+              transport: "rtk",
+              roomId: deps.roomId,
+              reconnectAttempts: RTK_RECONNECT_DELAYS_MS.length,
+              lastError:
+                error instanceof Error ? error.message : String(error),
+            },
+          } as ChalkError);
+        }
+      }
+    })().finally(() => {
+      if (runId === reconnectRunId) {
+        reconnectInFlight = false;
+      }
+    });
+  };
 
   rtkClient.self.on("roomJoined", () => {
+    clearReconnectRun();
     deps.setConnectionState("connected");
 
     const localParticipant = deps.getLocalParticipant();
@@ -125,7 +199,13 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
   });
 
   rtkClient.self.on("roomLeft", () => {
-    deps.setConnectionState("disconnected");
+    if (deps.isLeaving()) {
+      clearReconnectRun();
+      deps.setConnectionState("disconnected");
+      return;
+    }
+
+    startReconnectLoop();
   });
 
   rtkClient.self.on("videoUpdate", (data: { videoEnabled: boolean; videoTrack: MediaStreamTrack | null }) => {

@@ -281,6 +281,7 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     setupConferenceSessionRtkSignaling({
       roomId: this.id,
       debug: this.debug,
+      isLeaving: () => this.leaveState.isLeaving,
       getRtkClient: () => this.rtkClient,
       getWsClient: () => this.wsClient,
       getParticipants: () => this.sessionStore.getParticipants(),

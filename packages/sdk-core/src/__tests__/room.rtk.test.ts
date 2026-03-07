@@ -77,6 +77,8 @@ const createMockRtkClient = () => {
 	return {
 		self,
 		participants,
+		join: mock(async () => {}),
+		leave: mock(async () => {}),
 	};
 };
 
@@ -429,5 +431,30 @@ describe("ConferenceSession (RTK identity mapping)", () => {
 
 		expect(ws.muteParticipant).toHaveBeenCalledWith("uuid_a");
 		expect(ws.unmuteParticipant).toHaveBeenCalledWith("uuid_a");
+	});
+
+	it("attempts RTK reconnect when roomLeft fires unexpectedly", async () => {
+		room._setStatus("connected");
+
+		rtk.self.emit("roomLeft");
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(rtk.join).toHaveBeenCalledTimes(1);
+		expect(room.status).toBe("reconnecting");
+
+		rtk.self.emit("roomJoined");
+		expect(room.status).toBe("connected");
+	});
+
+	it("does not reconnect RTK when leave flow triggers roomLeft", async () => {
+		room._setStatus("connected");
+		rtk.leave.mockImplementation(async () => {
+			rtk.self.emit("roomLeft");
+		});
+
+		await room.leave();
+
+		expect(rtk.join).not.toHaveBeenCalled();
+		expect(room.status).toBe("disconnected");
 	});
 });

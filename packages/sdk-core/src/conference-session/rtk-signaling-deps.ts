@@ -6,6 +6,7 @@ import type { ConferenceSessionEvents, Transcript } from "./types.ts";
 export interface RtkSignalingDeps {
   roomId: string;
   debug: boolean;
+  isLeaving: () => boolean;
   getRtkClient: () => RealtimeKitClient | undefined;
   getWsClient: () => WSClient | undefined;
   getParticipants: () => Map<string, Participant>;
