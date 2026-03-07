@@ -3,20 +3,28 @@
 <!-- whats-new -->
 ## Features
 
-- **Whiteboard collaboration feels steadier** — participants joining or leaving the whiteboard now stay in sync without unexpected flicker.
+- **Scheduled Classes + Join Links** — Hosts can now create and manage scheduled classes and generate join links directly through Chalk flows.
+- **SDK Room Listing + Join Tokens** — Apps can now list rooms and create/exchange join tokens with first-class SDK methods.
 
 ## Improvements
 
-- **Whiteboard event handling is clearer** — remote open/close activity updates shared state directly, keeping everyone aligned in real time.
+- **Participant Color Experience** — Meeting controls, chat, transcription, and participant UI now consistently follow participant-aware color themes.
+- **Join-Link Preflight UX** — Early joiners now see a clear waiting state with countdown before auto-entering at meeting time.
 
 ## Bug Fixes
 
-- **Fixed whiteboard open/close signaling** — remote users opening or closing the board no longer triggers a local re-broadcast loop.
-- **Prevented unexpected state swings** — whiteboard state no longer flips incorrectly when another participant starts or ends a shared board session.
+- Whiteboard image sync now shows clear progress states so the short sync window feels reliable, not failed.
+- Chat alignment is now consistent: your messages stay on the right, incoming stays on the left.
+- Reactions and hand raises now sync and sound exactly once across reconnects and peers.
+- SDK sound effects now start immediately with less leading delay.
+- Browser preflight for R2 uploads/downloads is fixed with proper CORS rules.
+- Localhost internal auth callback flows now route back to local app callbacks correctly.
+<!-- /whats-new -->
 
 ## Technical Notes
 
-- SDK Core: whiteboard manager now updates `isOpen` and participant presence directly from remote events.
-- SDK React: removed remote event-driven local auto-open/close logic from `useWhiteboard` to avoid duplicate actions.
-- Test coverage: added regression coverage for sync behavior in `packages/sdk-core/src/__tests__/whiteboard-manager.test.ts`.
-<!-- /whats-new -->
+- Added SDK client/session APIs: `listRooms`, `createJoinToken`, `exchangeJoinToken`.
+- Added multi-status room filtering + participant counts on `GET /api/v1/rooms`.
+- Removed deprecated Terraform `prod` environment and standardized on `prod-lean` operations.
+- Added whiteboard sync status states (`uploading`, `awaiting remote upload`, `downloading`, `error`) with SDK-React/whiteboard UI wiring.
+- Hardened SDK reaction/hand-raise replay and participant-state enrichment during reconnect paths.

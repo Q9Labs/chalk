@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { cn } from '../../utils/cn';
 import { Avatar } from '../atomic/Avatar';
 import { Tick01Icon, TickDouble01Icon } from '../../utils/icons';
+import { getParticipantColor } from '../../utils/colorGenerator';
 
 export interface MessageBubbleProps {
   content: string;
@@ -44,6 +45,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
     }).format(date);
   };
 
+  const senderColors = useMemo(() => getParticipantColor(senderName), [senderName]);
+
   const renderContent = (text: string) => {
     const parts = text.split(URL_REGEX);
 
@@ -55,7 +58,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline"
+            className={cn("underline", isLocal ? "text-primary-foreground" : "text-primary")}
           >
             {part}
           </a>
@@ -109,6 +112,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(({
         isLocal ? "justify-end" : "justify-start",
         className
       )}
+      style={{ '--primary': senderColors.primary } as React.CSSProperties}
     >
       {!isLocal && (
         <div className="shrink-0 w-10">

@@ -126,12 +126,12 @@ export function PreJoinFloatingControls({
 									className={cn(
 										"w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center gap-3 outline-none focus-visible:bg-white/10",
 										isSelected
-											? "bg-[#1bb6a6]/20 text-[#1bb6a6]"
+											? "bg-[var(--primary)]/20 text-[var(--primary)]"
 											: "text-white/90 hover:bg-white/10",
 									)}
 								>
 									{isSelected && (
-										<span className="w-1.5 h-1.5 rounded-full bg-[#1bb6a6] shrink-0" />
+										<span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] shrink-0" />
 									)}
 									<span className={cn("truncate", !isSelected && "ml-[18px]")}>
 										{device.label ||
@@ -160,7 +160,7 @@ export function PreJoinFloatingControls({
 						title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
 						aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
 						className={cn(
-							"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90 touch-manipulation",
+							"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] active:scale-90 touch-manipulation",
 							!isAudioEnabled
 								? "bg-red-500 text-white hover:bg-red-600"
 								: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -185,9 +185,9 @@ export function PreJoinFloatingControls({
 							aria-controls={AUDIO_DEVICE_MENU_ID}
 							aria-expanded={openDropdown === "audio"}
 							className={cn(
-								"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
+								"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[var(--primary)]/10",
 								openDropdown === "audio"
-									? "text-[#1bb6a6]"
+									? "text-[var(--primary)]"
 									: "text-(--muted-foreground) hover:text-(--foreground) hover:bg-black/5 dark:hover:bg-white/5",
 							)}
 						>
@@ -209,7 +209,7 @@ export function PreJoinFloatingControls({
 						title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
 						aria-label={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
 						className={cn(
-							"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90 touch-manipulation",
+							"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] active:scale-90 touch-manipulation",
 							!isVideoEnabled
 								? "bg-red-500 text-white hover:bg-red-600"
 								: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
@@ -230,9 +230,9 @@ export function PreJoinFloatingControls({
 							aria-controls={VIDEO_DEVICE_MENU_ID}
 							aria-expanded={openDropdown === "video"}
 							className={cn(
-								"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[#1bb6a6]/10",
+								"w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-[var(--primary)]/10",
 								openDropdown === "video"
-									? "text-[#1bb6a6]"
+									? "text-[var(--primary)]"
 									: "text-(--muted-foreground) hover:text-(--foreground) hover:bg-black/5 dark:hover:bg-white/5",
 							)}
 						>
@@ -254,7 +254,7 @@ export function PreJoinFloatingControls({
 					onClick={onToggleSettings}
 					title="Settings"
 					aria-label="Settings"
-					className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] active:scale-90"
+					className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] active:scale-90"
 				>
 					<MoreVerticalIcon size={18} />
 				</button>

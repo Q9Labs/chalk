@@ -35,7 +35,6 @@ interface MeetingRoomControlsProps {
   onToggleTranscription?: () => void;
   onSendReaction?: (emoji: string) => void;
   onLeave?: () => void;
-  onAnimatedLeave: () => void;
   isExiting: boolean;
   localParticipantColorSeed?: string;
 }
@@ -73,7 +72,6 @@ export function MeetingRoomControls({
   onToggleTranscription,
   onSendReaction,
   onLeave,
-  onAnimatedLeave,
   isExiting,
   localParticipantColorSeed,
 }: MeetingRoomControlsProps) {
@@ -160,7 +158,7 @@ export function MeetingRoomControls({
             onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
             onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
             onToggleWhiteboard={enableWhiteboard ? onToggleWhiteboard : undefined}
-            onLeave={onAnimatedLeave}
+            onLeave={onLeave}
             onToggleChat={enableChat ? () => onTogglePanel("chat") : undefined}
             onToggleParticipants={() => onTogglePanel("participants")}
             onToggleTranscription={

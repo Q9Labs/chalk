@@ -2,7 +2,7 @@ import type React from "react";
 import { memo, useCallback, useMemo, useRef } from "react";
 
 import { cn } from "../../utils/cn";
-import { getParticipantGradient } from "../../utils/colorGenerator";
+import { getParticipantGradient, getParticipantColor } from "../../utils/colorGenerator";
 import { DiagnosticErrorSheet } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
 import { PreJoinFloatingControls } from "./prejoin-lobby/PreJoinFloatingControls";
@@ -109,6 +109,7 @@ function PreJoinLobbyBase({
 				isDarkMode && "dark",
 				className,
 			)}
+			style={{ '--primary': getParticipantColor(ui.displayName).primary } as React.CSSProperties}
 		>
 			<div
 				className={cn(
@@ -189,11 +190,11 @@ function PreJoinLobbyBase({
 							canJoin={ui.canJoin}
 							onDisplayNameChange={ui.setDisplayNameFromInput}
 							onJoin={ui.handleJoin}
+							participantGradient={participantGradient}
 						/>
 					</div>
 				</div>
 			</div>
-
 			{ui.localError && (
 				<DiagnosticErrorSheet
 					error={ui.localError}

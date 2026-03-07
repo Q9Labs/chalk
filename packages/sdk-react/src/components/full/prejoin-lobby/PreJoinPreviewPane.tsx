@@ -3,6 +3,7 @@ import type { RefObject } from "react";
 
 import { Avatar } from "../../atomic";
 import { cn } from "../../../utils/cn";
+import { getParticipantColor } from "../../../utils/colorGenerator";
 
 interface PreJoinPreviewPaneProps {
 	videoRef: RefObject<HTMLVideoElement | null>;
@@ -25,8 +26,10 @@ export function PreJoinPreviewPane({
 	participantGradient,
 	controls,
 }: PreJoinPreviewPaneProps): React.JSX.Element {
+	const participantColors = getParticipantColor(displayName);
+
 	return (
-		<div className="w-full relative">
+		<div className="w-full relative" style={{ '--primary': participantColors.primary } as React.CSSProperties}>
 			<div
 				className="absolute -inset-1 rounded-3xl opacity-30 blur-xl"
 				style={{ background: participantGradient }}
@@ -37,9 +40,9 @@ export function PreJoinPreviewPane({
 			/>
 
 			<div
-				className="relative w-full aspect-video rounded-2xl overflow-hidden"
+				className="relative w-full aspect-video rounded-2xl overflow-hidden bg-[var(--chalk-bg-tile)]"
 				style={{
-					background: participantGradient,
+					backgroundImage: participantGradient,
 					boxShadow: "var(--chalk-shadow-lg), inset 0 1px 0 rgba(255,255,255,0.1)",
 				}}
 			>
@@ -69,7 +72,7 @@ export function PreJoinPreviewPane({
 							className={cn(
 								"w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors",
 								isAudioEnabled
-									? "bg-[#1bb6a6] shadow-[0_0_8px_rgba(27,182,166,0.6)]"
+									? "bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]"
 									: "bg-muted-foreground/40",
 							)}
 						/>
@@ -80,7 +83,7 @@ export function PreJoinPreviewPane({
 						{isAudioEnabled && (
 							<div className="w-16 h-1.5 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
 								<div
-									className="h-full bg-[#1bb6a6] rounded-full"
+									className="h-full bg-[var(--primary)] rounded-full"
 									style={{
 										width: `${normalizedAudioLevel}%`,
 										transition: "width 50ms ease-out",

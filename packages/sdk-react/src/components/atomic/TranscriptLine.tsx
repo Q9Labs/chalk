@@ -105,6 +105,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(({
         isCurrentMatch && 'ring-2 ring-primary/50 bg-primary/5',
         className
       )}
+      style={speakerColor ? { '--primary': speakerColor } as React.CSSProperties : undefined}
       role="listitem"
       aria-live={isInterim ? 'off' : 'polite'}
       data-speaker-id={speakerId}
@@ -115,7 +116,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(({
         {showAvatar && showSpeaker && showHeader && (
           <div
             className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white"
-            style={{ backgroundColor: speakerColor || 'var(--primary)' }}
+            style={{ backgroundColor: 'var(--primary)' }}
             aria-hidden="true"
           >
             {initials}

@@ -66,13 +66,30 @@ export const VideoGrid = React.memo(({
   const overflowCount = participants.length - visibleParticipants.length;
 
   const getGridLayout = (count: number) => {
-    if (count <= 1) return { cols: 'grid-cols-1', rows: '' };
-    if (count === 2) return { cols: 'grid-cols-2', rows: '' };
-    if (count === 3) return { cols: 'grid-cols-3', rows: '' };
+    if (count <= 1) return { cols: 'grid-cols-1', rows: 'grid-rows-1' };
+    if (count === 2) return { cols: 'grid-cols-2', rows: 'grid-rows-1' };
+    if (count === 3) return { cols: 'grid-cols-3', rows: 'grid-rows-1' };
     if (count === 4) return { cols: 'grid-cols-2', rows: 'grid-rows-2' };
-    if (count <= 6) return { cols: 'grid-cols-3', rows: 'grid-rows-2' };
-    if (count <= 9) return { cols: 'grid-cols-3', rows: 'grid-rows-3' };
-    return { cols: 'grid-cols-4', rows: '' };
+    if (count === 5) return { cols: 'grid-cols-6', rows: 'grid-rows-2' };
+    if (count === 6) return { cols: 'grid-cols-3', rows: 'grid-rows-2' };
+    if (count === 7) return { cols: 'grid-cols-12', rows: 'grid-rows-3' };
+    if (count === 8) return { cols: 'grid-cols-12', rows: 'grid-rows-3' };
+    if (count === 9) return { cols: 'grid-cols-3', rows: 'grid-rows-3' };
+    if (count === 10) return { cols: 'grid-cols-12', rows: 'grid-rows-3' };
+    if (count === 11) return { cols: 'grid-cols-12', rows: 'grid-rows-3' };
+    if (count === 12) return { cols: 'grid-cols-4', rows: 'grid-rows-3' };
+    if (count <= 16) return { cols: 'grid-cols-4', rows: 'grid-rows-4' };
+    if (count <= 20) return { cols: 'grid-cols-5', rows: 'grid-rows-4' };
+    return { cols: 'grid-cols-5', rows: 'grid-rows-5' };
+  };
+
+  const getGridItemClass = (count: number, index: number) => {
+    if (count === 5) return index < 3 ? 'col-span-2' : 'col-span-3';
+    if (count === 7) return index < 3 ? 'col-span-4' : 'col-span-6'; // 3, 2, 2
+    if (count === 8) return index < 6 ? 'col-span-4' : 'col-span-6'; // 3, 3, 2
+    if (count === 10) return index < 4 ? 'col-span-3' : 'col-span-4'; // 4, 3, 3
+    if (count === 11) return index < 8 ? 'col-span-3' : 'col-span-4'; // 4, 4, 3
+    return 'col-span-1';
   };
 
   const mapToVideoTileParticipant = (p: Participant | undefined) => {
@@ -431,10 +448,11 @@ export const VideoGrid = React.memo(({
   }
 
   // Default grid layout
-  const gridLayout = getGridLayout(visibleParticipants.length);
+  const totalGridItems = visibleParticipants.length + (overflowCount > 0 ? 1 : 0);
+  const gridLayout = getGridLayout(totalGridItems);
 
   // Single participant: full bleed with minimal padding
-  if (visibleParticipants.length === 1) {
+  if (visibleParticipants.length === 1 && overflowCount === 0) {
     const p = visibleParticipants[0]!;
     return (
       <div className={cn("h-full w-full flex items-center justify-center", className)} data-tour="video-grid">
@@ -467,13 +485,20 @@ export const VideoGrid = React.memo(({
           onClick={() => onParticipantClick?.(p.id)}
           onDoubleClick={() => onParticipantDoubleClick?.(p.id)}
           pinned={p.id === pinnedParticipantId}
-          className="w-full h-full max-h-full chalk-animate-tile-pop"
+          aspectRatio="fill"
+          className={cn(
+            "w-full h-full max-h-full chalk-animate-tile-pop",
+            getGridItemClass(totalGridItems, index)
+          )}
           style={{ animationDelay: `${index * 100}ms` }}
         />
       ))}
       {overflowCount > 0 && (
         <div 
-          className="rounded-2xl bg-[var(--chalk-bg-tile)] aspect-video flex items-center justify-center w-full h-full chalk-animate-tile-pop"
+          className={cn(
+            "rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center w-full h-full chalk-animate-tile-pop",
+            getGridItemClass(totalGridItems, visibleParticipants.length)
+          )}
           style={{ animationDelay: `${visibleParticipants.length * 100}ms` }}
         >
           <span className="text-xl font-medium text-muted-foreground">+{overflowCount} more</span>

@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>More Loading Screen Concepts</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg-dark: #030305;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      background: var(--bg-dark);
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+
+    .concept-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      background: var(--bg-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .overlay-ui {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 3rem;
+    }
+
+    .title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .concept-number {
+      font-size: 0.8rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      font-weight: 600;
+    }
+
+    .concept-title {
+      font-size: 2.5rem;
+      font-weight: 300;
+      letter-spacing: -0.02em;
+      margin: 0;
+      background: linear-gradient(to right, #fff, rgba(255,255,255,0.5));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .concept-desc {
+      max-width: 400px;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.6);
+      margin-top: 1rem;
+    }
+
+    .controls {
+      pointer-events: auto;
+      align-self: flex-start;
+    }
+
+    .btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,1);
+      color: black;
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -10px rgba(255,255,255,0.3);
+    }
+
+    /* CONCEPT 4: OPTICAL TUNNEL */
+    #c4 {
+      perspective: 1000px;
+    }
+    .tunnel-ring {
+      position: absolute;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 50%;
+      transform-style: preserve-3d;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.2);
+    }
+    .tunnel-core {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 100px 50px rgba(255,255,255,1);
+      opacity: 0;
+      transition: opacity 0.5s, transform 2s cubic-bezier(0.7, 0, 0.3, 1);
+      z-index: 10;
+    }
+
+    /* CONCEPT 5: TYPOGRAPHIC CASCADE */
+    #c5 {
+      background: #000;
+    }
+    .grid-bg {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      background-position: center center;
+    }
+    .type-container {
+      position: relative;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 14vw;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      line-height: 0.8;
+      text-transform: uppercase;
+      mix-blend-mode: difference;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .type-layer {
+      position: absolute;
+      white-space: nowrap;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(255,255,255,0.2);
+    }
+    .type-layer.solid {
+      position: relative;
+      color: white;
+      -webkit-text-stroke: 0;
+      text-shadow: 0 0 40px rgba(255,255,255,0.5);
+    }
+    .scanline {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 20px;
+      background: linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.8), transparent);
+      opacity: 0;
+      z-index: 20;
+    }
+
+    /* CONCEPT 6: FLUID GLASE */
+    #c6 {
+      background: #000;
+    }
+    .glass-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(40px);
+      mix-blend-mode: screen;
+      opacity: 0.8;
+      transition: all 2s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .glass-orb.blue { background: #3b82f6; width: 40vw; height: 40vw; }
+    .glass-orb.purple { background: #8b5cf6; width: 35vw; height: 35vw; }
+    .glass-orb.cyan { background: #06b6d4; width: 30vw; height: 30vw; }
+    
+    .glass-overlay {
+      position: absolute;
+      inset: 20%;
+      border-radius: 32px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: all 1s cubic-bezier(0.7, 0, 0.3, 1);
+    }
+    
+    .glass-progress {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 4px;
+      background: rgba(255,255,255,0.8);
+      width: 0%;
+      box-shadow: 0 0 20px rgba(255,255,255,0.8);
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- CONCEPT 4: OPTICAL TUNNEL -->
+  <div class="concept-container" id="c4">
+    <div id="tunnel-container" style="position: absolute; inset:0; display:flex; align-items:center; justify-content:center;">
+      <!-- Rings injected by JS -->
+    </div>
+    <div class="tunnel-core" id="t-core"></div>
+    
+    <div class="overlay-ui">
+      <div class="title-group">
+        <span class="concept-number">Concept 04</span>
+        <h1 class="concept-title">Hyper-Space Tunnel</h1>
+        <p class="concept-desc">A pure 3D CSS approach. Visualizes moving through the cloud to the edge server. The rings accelerate past you until you smash into the bright core at the end.</p>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="playTunnel()">Trigger Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONCEPT 5: TYPOGRAPHIC CASCADE -->
+  <div class="concept-container" id="c5">
+    <div class="grid-bg"></div>
+    <div class="type-container" id="type-wrap">
+      <div class="type-layer solid" id="type-main">JOINING</div>
+    </div>
+    <div class="scanline" id="scanline"></div>
+    
+    <div class="overlay-ui">
+      <div class="title-group">
+        <span class="concept-number">Concept 05</span>
+        <h1 class="concept-title">Brutalist Sync</h1>
+        <p class="concept-desc">Aggressive, massive typography. The text splits into "ghost" layers that vibrate and glitch, symbolizing out-of-sync data. They forcefully snap together perfectly when the connection drops latency to 0.</p>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="playType()">Trigger Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONCEPT 6: FLUID GLASS -->
+  <div class="concept-container" id="c6">
+    <div class="glass-orb blue" id="o1"></div>
+    <div class="glass-orb purple" id="o2"></div>
+    <div class="glass-orb cyan" id="o3"></div>
+    
+    <div class="glass-overlay" id="g-overlay">
+      <div class="glass-progress" id="g-prog"></div>
+    </div>
+
+    <div class="overlay-ui">
+      <div class="title-group">
+        <span class="concept-number">Concept 06</span>
+        <h1 class="concept-title">Fluid Frost</h1>
+        <p class="concept-desc">An elegant, Apple-esque approach. Soft gradient orbs wander behind heavily frosted glass. Upon connection, the glass expands to fill the screen, and the orbs snap to the corners to frame the video UI.</p>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="playGlass()">Trigger Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* EASING FUNCTIONS */
+    const easeInExpo = x => x === 0 ? 0 : Math.pow(2, 10 * x - 10);
+    const easeOutExpo = x => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+    const easeInOutCubic = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+
+    // --- 4. OPTICAL TUNNEL ---
+    const tunnelContainer = document.getElementById('tunnel-container');
+    const numRings = 20;
+    const rings = [];
+    
+    for(let i=0; i<numRings; i++) {
+      let r = document.createElement('div');
+      r.className = 'tunnel-ring';
+      tunnelContainer.appendChild(r);
+      rings.push(r);
+    }
+
+    let tAnim;
+    function playTunnel() {
+      if(tAnim) cancelAnimationFrame(tAnim);
+      const core = document.getElementById('t-core');
+      core.style.opacity = 0;
+      core.style.transform = 'scale(1)';
+
+      let start = performance.now();
+      const duration = 5000;
+
+      function render(now) {
+        let elapsed = now - start;
+        let p = Math.min(elapsed / duration, 1);
+        
+        let baseSpeed = elapsed * 0.05;
+        let accel = easeInExpo(p) * 200; // warp speed at the end
+
+        rings.forEach((r, i) => {
+          // Calculate Z position to loop
+          let zPos = ((i * 50) + baseSpeed + accel) % 1000; 
+          let actualZ = zPos - 1000; // start deep, move forward
+          
+          let size = 600;
+          r.style.width = `${size}px`;
+          r.style.height = `${size}px`;
+          
+          // Fade out as they get super close
+          let opacity = 1 - Math.pow(zPos / 1000, 3);
+          
+          r.style.transform = `translateZ(${actualZ}px)`;
+          r.style.opacity = opacity;
+          
+          // Color shift to white at the end
+          if (p > 0.8) {
+            let wp = (p-0.8)/0.2;
+            r.style.borderColor = `rgba(255,255,255,${0.1 + wp*0.9})`;
+            r.style.boxShadow = `0 0 20px rgba(255,255,255,${wp}), inset 0 0 20px rgba(255,255,255,${wp})`;
+          } else {
+             r.style.borderColor = 'rgba(255,255,255,0.1)';
+             r.style.boxShadow = '0 0 20px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.2)';
+          }
+        });
+
+        // Smash into core
+        if (p > 0.9) {
+          core.style.opacity = 1;
+          let scale = easeInExpo((p - 0.9) / 0.1) * 200;
+          core.style.transform = `scale(${scale})`;
+        }
+
+        if (p < 1) {
+          tAnim = requestAnimationFrame(render);
+        } else {
+          // reset visual after smash
+          setTimeout(() => {
+            core.style.opacity = 0;
+            core.style.transform = 'scale(1)';
+          }, 1000);
+        }
+      }
+      requestAnimationFrame(render);
+    }
+    // initialize first frame
+    playTunnel(); cancelAnimationFrame(tAnim);
+
+    // --- 5. TYPOGRAPHIC CASCADE ---
+    const typeWrap = document.getElementById('type-wrap');
+    const text = "JOINING";
+    const numLayers = 6;
+    const typeLayers = [];
+    
+    // Inject ghost layers
+    for(let i=0; i<numLayers; i++) {
+      let l = document.createElement('div');
+      l.className = 'type-layer';
+      l.innerText = text;
+      typeWrap.insertBefore(l, typeWrap.firstChild);
+      typeLayers.push(l);
+    }
+
+    let tpAnim;
+    function playType() {
+      if(tpAnim) cancelAnimationFrame(tpAnim);
+      const scanline = document.getElementById('scanline');
+      
+      let start = performance.now();
+      const duration = 4000;
+
+      function render(now) {
+        let elapsed = now - start;
+        let p = Math.min(elapsed / duration, 1);
+        
+        let height = window.innerHeight;
+        scanline.style.opacity = p < 0.9 ? 1 : 0;
+        let scanY = (elapsed * 0.5) % height;
+        scanline.style.transform = `translateY(${scanY}px)`;
+
+        // Chaos level (starts high, drops to 0)
+        let chaos = 1 - easeInExpo(p);
+        
+        typeLayers.forEach((l, i) => {
+          if (p === 1) {
+            l.style.transform = `translate(0px, 0px) skewX(0deg)`;
+            l.style.opacity = 0;
+          } else {
+            // Random jitter based on chaos
+            let spreadX = (Math.random() - 0.5) * 100 * chaos * (i+1);
+            let spreadY = (Math.random() - 0.5) * 50 * chaos * (i+1);
+            let skew = (Math.random() - 0.5) * 20 * chaos;
+            
+            l.style.transform = `translate(${spreadX}px, ${spreadY}px) skewX(${skew}deg)`;
+            l.style.opacity = 0.2 + (Math.random() * 0.3 * chaos);
+            
+            // Random color glitching
+            if (Math.random() > 0.9) {
+               l.style.webkitTextStrokeColor = ['#3b82f6', '#f43f5e', '#10b981'][Math.floor(Math.random()*3)];
+            } else {
+               l.style.webkitTextStrokeColor = 'rgba(255,255,255,0.2)';
+            }
+          }
+        });
+
+        // Flash white on snap
+        if (p > 0.95) {
+          document.getElementById('type-main').style.color = '#fff';
+          document.getElementById('type-main').style.textShadow = '0 0 100px #fff';
+        } else {
+          document.getElementById('type-main').style.color = `rgba(255,255,255,${1 - chaos*0.5})`;
+          document.getElementById('type-main').style.textShadow = 'none';
+        }
+
+        if (p < 1) {
+          tpAnim = requestAnimationFrame(render);
+        } else {
+          document.getElementById('type-main').style.transition = 'all 1s';
+          setTimeout(() => {
+            document.getElementById('type-main').style.textShadow = '0 0 40px rgba(255,255,255,0.5)';
+            document.getElementById('type-main').style.transition = '';
+          }, 50);
+        }
+      }
+      requestAnimationFrame(render);
+    }
+
+    // --- 6. FLUID GLASS ---
+    let gAnim;
+    function playGlass() {
+      if(gAnim) cancelAnimationFrame(gAnim);
+      
+      const o1 = document.getElementById('o1');
+      const o2 = document.getElementById('o2');
+      const o3 = document.getElementById('o3');
+      const overlay = document.getElementById('g-overlay');
+      const prog = document.getElementById('g-prog');
+      
+      // Reset
+      overlay.style.inset = '20%';
+      overlay.style.borderRadius = '32px';
+      
+      let start = performance.now();
+      const duration = 5000;
+
+      function render(now) {
+        let elapsed = now - start;
+        let p = Math.min(elapsed / duration, 1);
+        
+        // Progress bar
+        let progP = easeInOutCubic(p);
+        prog.style.width = `${progP * 100}%`;
+
+        // Orbs wandering until the end, then snapping
+        if (p < 0.8) {
+          let t = elapsed * 0.001;
+          o1.style.transform = `translate(${Math.sin(t)*20}vw, ${Math.cos(t*1.2)*20}vh)`;
+          o2.style.transform = `translate(${Math.cos(t*0.8)*15}vw, ${Math.sin(t*1.5)*25}vh)`;
+          o3.style.transform = `translate(${Math.sin(t*1.1)*-20}vw, ${Math.cos(t*0.9)*-15}vh)`;
+        } else {
+          let snapP = (p - 0.8) / 0.2;
+          let eSnap = easeOutExpo(snapP);
+          
+          // Snap to corners to act as ambient glow for UI
+          o1.style.transform = `translate(-30vw, -30vh) scale(${1 - eSnap*0.5})`;
+          o2.style.transform = `translate(30vw, 30vh) scale(${1 - eSnap*0.5})`;
+          o3.style.transform = `translate(30vw, -30vh) scale(${1 - eSnap*0.5})`;
+
+          // Glass expands to full screen
+          overlay.style.inset = `${20 * (1 - eSnap)}%`;
+          overlay.style.borderRadius = `${32 * (1 - eSnap)}px`;
+          prog.style.opacity = 1 - eSnap;
+        }
+
+        if (p < 1) {
+          gAnim = requestAnimationFrame(render);
+        }
+      }
+      requestAnimationFrame(render);
+    }
+    // Set initial orb movement
+    playGlass(); cancelAnimationFrame(gAnim);
+
+  </script>
+</body>
+</html>

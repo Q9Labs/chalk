@@ -6,31 +6,32 @@
 interface ColorPalette {
   primary: string;
   secondary: string;
+  gradientEnd: string;
   border: string;
 }
 
-// Curated color palettes that work well for video tiles - teal-themed
+// Curated color palettes that work well for video tiles
 const COLOR_PALETTES: ColorPalette[] = [
-  // Brand Teal (primary)
-  { primary: '#1bb6a6', secondary: '#0a1f1c', border: 'rgba(27, 182, 166, 0.3)' },
+  // Brand Teal
+  { primary: '#1bb6a6', secondary: '#0a1f1c', gradientEnd: '#0d9488', border: 'rgba(27, 182, 166, 0.3)' },
   // Teal 600
-  { primary: '#0d9488', secondary: '#0a1917', border: 'rgba(13, 148, 136, 0.3)' },
+  { primary: '#0d9488', secondary: '#0a1917', gradientEnd: '#115e59', border: 'rgba(13, 148, 136, 0.3)' },
   // Cyan
-  { primary: '#06b6d4', secondary: '#0a1a1f', border: 'rgba(6, 182, 212, 0.3)' },
+  { primary: '#06b6d4', secondary: '#0a1a1f', gradientEnd: '#0891b2', border: 'rgba(6, 182, 212, 0.3)' },
   // Emerald
-  { primary: '#10b981', secondary: '#0a1f16', border: 'rgba(16, 185, 129, 0.3)' },
+  { primary: '#10b981', secondary: '#0a1f16', gradientEnd: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
   // Sky
-  { primary: '#0ea5e9', secondary: '#0a161f', border: 'rgba(14, 165, 233, 0.3)' },
+  { primary: '#0ea5e9', secondary: '#0a161f', gradientEnd: '#0284c7', border: 'rgba(14, 165, 233, 0.3)' },
   // Blue
-  { primary: '#3b82f6', secondary: '#0a1429', border: 'rgba(59, 130, 246, 0.3)' },
+  { primary: '#3b82f6', secondary: '#0a1429', gradientEnd: '#2563eb', border: 'rgba(59, 130, 246, 0.3)' },
   // Indigo
-  { primary: '#6366f1', secondary: '#0f0a29', border: 'rgba(99, 102, 241, 0.3)' },
+  { primary: '#6366f1', secondary: '#0f0a29', gradientEnd: '#4f46e5', border: 'rgba(99, 102, 241, 0.3)' },
   // Violet
-  { primary: '#8b5cf6', secondary: '#140a29', border: 'rgba(139, 92, 246, 0.3)' },
+  { primary: '#8b5cf6', secondary: '#140a29', gradientEnd: '#7c3aed', border: 'rgba(139, 92, 246, 0.3)' },
   // Teal Light
-  { primary: '#2dd4bf', secondary: '#0a1f1c', border: 'rgba(45, 212, 191, 0.3)' },
+  { primary: '#2dd4bf', secondary: '#0a1f1c', gradientEnd: '#14b8a6', border: 'rgba(45, 212, 191, 0.3)' },
   // Green
-  { primary: '#22c55e', secondary: '#0f1f10', border: 'rgba(34, 197, 94, 0.3)' },
+  { primary: '#22c55e', secondary: '#0f1f10', gradientEnd: '#16a34a', border: 'rgba(34, 197, 94, 0.3)' },
 ];
 
 /**
@@ -88,12 +89,20 @@ export function getParticipantThemeVariables(participantId?: string) {
 }
 
 /**
- * Generate a gradient background string for a video tile
- * Uses a clean 2-stop gradient to prevent muddy middle bands
+ * Generate a rich, fully-saturated gradient string for Avatars and small badges.
+ */
+export function getParticipantAvatarGradient(participantId?: string): string {
+  const colors = getParticipantColor(participantId);
+  return `linear-gradient(135deg, ${colors.primary} 0%, ${colors.gradientEnd} 100%)`;
+}
+
+/**
+ * Generate a gradient background string for a video tile.
+ * Returns a consistent, rich 2-stop gradient that works beautifully in both light and dark modes.
  */
 export function getParticipantGradient(participantId?: string): string {
   const colors = getParticipantColor(participantId);
-  return `linear-gradient(180deg, ${colors.primary} 0%, var(--chalk-tile-gradient-end, #000000) 100%)`;
+  return `linear-gradient(180deg, ${colors.primary} 0%, ${colors.gradientEnd} 100%)`;
 }
 
 /**

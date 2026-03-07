@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.71] - 2026-03-08
+
+### Added
+
 - **SDK-Core: room listing + join-token APIs** — add typed `listRooms`, `createJoinToken`, and `exchangeJoinToken` client/session APIs so consumers can use SDK-first flows instead of manual HTTP calls.
 - **Web: scheduled classes panel** — add dashboard UI to create scheduled classes, list upcoming/live classes, and generate join links through SDK methods.
 

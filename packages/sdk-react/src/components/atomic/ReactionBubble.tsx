@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { getParticipantColor } from '../../utils/colorGenerator';
 
 interface ReactionBubbleProps {
   emoji: string;
@@ -11,7 +12,7 @@ interface ReactionBubbleProps {
 }
 
 const CELEBRATION_EMOJIS = ['🎉', '🎊', '🥳', '🎈', '🏆', '🥇', '⭐', '🌟', '✨', '💫', '🔥', '💥', '💯', '🎆', '🎇'];
-const PARTICLE_COLORS = ['#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#22c55e'];
+const BASE_PARTICLE_COLORS = ['#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#22c55e'];
 
 // Generate random animation properties for natural movement
 const generateAnimationProps = () => ({
@@ -24,8 +25,9 @@ const generateAnimationProps = () => ({
 });
 
 // Generate particle data once
-const generateParticles = () =>
-  Array.from({ length: 16 }, (_, i) => {
+const generateParticles = (primaryColor: string) => {
+  const particleColors = [...BASE_PARTICLE_COLORS, primaryColor, primaryColor]; // Weight primary color more
+  return Array.from({ length: 16 }, (_, i) => {
     const angle = (360 / 16) * i + (Math.random() * 20 - 10);
     const radians = (angle * Math.PI) / 180;
     const distance = 35 + Math.random() * 25;
@@ -34,11 +36,12 @@ const generateParticles = () =>
       x: Math.cos(radians) * distance,
       y: Math.sin(radians) * distance,
       size: 4 + Math.random() * 5,
-      color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+      color: particleColors[Math.floor(Math.random() * particleColors.length)],
       delay: Math.random() * 150,
       duration: 600 + Math.random() * 300,
     };
   });
+};
 
 export const ReactionBubble = React.memo(({
   emoji,
@@ -50,9 +53,10 @@ export const ReactionBubble = React.memo(({
   const [isVisible, setIsVisible] = useState(true);
   const prefersReducedMotion = usePrefersReducedMotion();
 
+  const participantColors = useMemo(() => getParticipantColor(participantName || 'unknown'), [participantName]);
   const isCelebration = CELEBRATION_EMOJIS.includes(emoji);
   const animProps = useMemo(() => generateAnimationProps(), []);
-  const particles = useMemo(() => isCelebration ? generateParticles() : [], [isCelebration]);
+  const particles = useMemo(() => isCelebration ? generateParticles(participantColors.primary) : [], [isCelebration, participantColors.primary]);
   const timeoutMs = baseDuration;
   const floatDurationMs = prefersReducedMotion ? baseDuration : animProps.duration;
 
@@ -68,8 +72,9 @@ export const ReactionBubble = React.memo(({
   if (!isVisible) return null;
 
   const animationStyle = prefersReducedMotion
-    ? {}
+    ? { '--primary': participantColors.primary } as React.CSSProperties
     : {
+        '--primary': participantColors.primary,
         '--float-offset-x': `${animProps.offsetX}px`,
         '--float-travel-y': `${animProps.travelY}px`,
         '--float-rotation': `${animProps.rotation}deg`,
@@ -126,10 +131,11 @@ export const ReactionBubble = React.memo(({
           className={cn(
             'absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap',
             'px-2 py-0.5 rounded-full text-xs font-medium',
-            'bg-zinc-800/90 text-white backdrop-blur-sm',
+            'text-white backdrop-blur-sm',
             'border border-white/10',
             !prefersReducedMotion && 'animate-in fade-in duration-300'
           )}
+          style={{ backgroundColor: `${participantColors.primary}E6` }} // 90% opacity hex
         >
           {participantName}
         </div>

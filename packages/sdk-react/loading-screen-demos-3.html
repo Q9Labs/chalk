@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Avant-Garde Loading Screen Concepts</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg-dark: #050505;
+      --text-main: #ffffff;
+      --accent: #e2e8f0;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+
+    .concept-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      background: var(--bg-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .overlay-ui {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 3rem;
+    }
+
+    .title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .concept-number {
+      font-size: 0.8rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      font-weight: 600;
+    }
+
+    .concept-title {
+      font-size: 2.5rem;
+      font-weight: 300;
+      letter-spacing: -0.02em;
+      margin: 0;
+      background: linear-gradient(to right, #fff, rgba(255,255,255,0.5));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .concept-desc {
+      max-width: 450px;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.6);
+      margin-top: 1rem;
+    }
+
+    .controls {
+      pointer-events: auto;
+      align-self: flex-start;
+    }
+
+    .btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,1);
+      color: black;
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -10px rgba(255,255,255,0.3);
+    }
+
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* CONCEPT 7: THE APERTURE */
+    #c7 {
+      background: #000;
+    }
+    .aperture-wrap {
+      position: relative;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .blade {
+      position: absolute;
+      width: 150%;
+      height: 150%;
+      background: #111;
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      transform-origin: 0% 50%;
+      transition: transform 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+    .aperture-core {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 50px 20px rgba(255,255,255,0.5);
+      z-index: 10;
+      transition: all 1s ease-in-out;
+    }
+    
+    /* Active Aperture States */
+    .aperture-wrap.opening .blade {
+      transform: rotate(var(--rot)) translateY(200px) !important;
+    }
+    .aperture-wrap.opening .aperture-core {
+      width: 200vw;
+      height: 200vw;
+      box-shadow: 0 0 100px 50px rgba(255,255,255,1);
+    }
+    .aperture-wrap.opening {
+      transform: scale(3);
+    }
+
+    /* CONCEPT 9: CHALK DUST (VORTEX) */
+    /* Only Canvas used here */
+
+  </style>
+</head>
+<body>
+
+  <!-- CONCEPT 7: PARTICLE VORTEX (CHALK DUST) -->
+  <div class="concept-container" id="c9">
+    <canvas id="vortex-canvas"></canvas>
+    
+    <div class="overlay-ui">
+      <div class="title-group">
+        <span class="concept-number">Concept 07</span>
+        <h1 class="concept-title">Chalk Dust Vortex</h1>
+        <p class="concept-desc">An organic, physics-based simulation. Thousands of micro-particles (representing chalk dust or raw data) orbit a gravity well. Upon connection, they compress into a hyper-dense singularity before exploding outward as a shockwave.</p>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="playVortex()">Trigger Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONCEPT 8: THE APERTURE (OPTICAL) -->
+  <div class="concept-container" id="c7">
+    <div class="aperture-wrap" id="aperture">
+      <!-- Blades injected by JS -->
+      <div class="aperture-core" id="aperture-core"></div>
+    </div>
+
+    <div class="overlay-ui" id="aperture-ui">
+      <div class="title-group">
+        <span class="concept-number">Concept 08</span>
+        <h1 class="concept-title">Optical Aperture</h1>
+        <p class="concept-desc">A mechanical, cinematic nod to video and lenses. Overlapping physical "blades" breathe and rotate, tightly focusing the light. Upon connection, the aperture snaps wide open, letting a blinding flash consume the screen.</p>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="playAperture()">Trigger Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONCEPT 9: THE CONSTRUCT (ARCHITECTURAL) -->
+  <div class="concept-container" id="c8">
+    <canvas id="grid-canvas"></canvas>
+    
+    <div class="overlay-ui" id="grid-ui">
+      <div class="title-group">
+        <span class="concept-number">Concept 09</span>
+        <h1 class="concept-title">The Construct</h1>
+        <p class="concept-desc">Architectural and spatial. You are moving through a wireframe environment—literally "building" the virtual room. When the connection completes, the camera accelerates to warp speed, pulling you physically into the space.</p>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="playGrid()">Trigger Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* EASING */
+    const easeInExpo = x => x === 0 ? 0 : Math.pow(2, 10 * x - 10);
+    const easeOutExpo = x => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+
+    // --- 7. CHALK DUST VORTEX (Canvas Physics) ---
+    let vAnim;
+    function playVortex() {
+      if(vAnim) cancelAnimationFrame(vAnim);
+      
+      const canvas = document.getElementById('vortex-canvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      
+      const resize = () => {
+        canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+        canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      };
+      window.addEventListener('resize', resize);
+      resize();
+
+      const width = canvas.offsetWidth;
+      const height = canvas.offsetHeight;
+      const cx = width / 2;
+      const cy = height / 2;
+
+      // Create Particles
+      const numParticles = 800;
+      const particles = [];
+      for(let i=0; i<numParticles; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let radius = 50 + Math.random() * 400;
+        particles.push({
+          angle: angle,
+          radius: radius,
+          speed: 0.002 + Math.random() * 0.005,
+          size: Math.random() * 1.5 + 0.5,
+          color: `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.2})`
+        });
+      }
+
+      let start = performance.now();
+      const duration = 5000;
+
+      function render(now) {
+        let elapsed = now - start;
+        let p = Math.min(elapsed / duration, 1);
+        
+        ctx.fillStyle = `rgba(5, 5, 5, ${p > 0.8 ? 1 : 0.2})`;
+        ctx.fillRect(0, 0, width, height);
+
+        let isCompressing = p > 0.6 && p < 0.9;
+        let isExploding = p >= 0.9;
+        let compP = isCompressing ? (p - 0.6)/0.3 : 0;
+        let expP = isExploding ? (p - 0.9)/0.1 : 0;
+
+        ctx.globalCompositeOperation = 'screen';
+
+        particles.forEach(pt => {
+          if (!isCompressing && !isExploding) {
+            // Normal orbit
+            pt.angle += pt.speed * (1 + p * 5); // spin faster over time
+            pt.radius -= 0.1; // slow decay inward
+          } else if (isCompressing) {
+            // Suck to center violently
+            pt.angle += pt.speed * 20; 
+            pt.radius = pt.radius * (1 - easeInExpo(compP)*0.2); // compress
+          } else if (isExploding) {
+            // Shockwave outward
+            pt.radius += easeOutExpo(expP) * 100;
+            pt.size += 0.5;
+          }
+
+          let x = cx + Math.cos(pt.angle) * pt.radius;
+          let y = cy + Math.sin(pt.angle) * pt.radius;
+
+          ctx.fillStyle = pt.color;
+          ctx.beginPath();
+          ctx.arc(x, y, pt.size, 0, Math.PI*2);
+          ctx.fill();
+        });
+
+        // Center Glow
+        if (isCompressing) {
+          let glowSize = compP * 50;
+          ctx.fillStyle = `rgba(255,255,255,${compP})`;
+          ctx.beginPath();
+          ctx.arc(cx, cy, glowSize, 0, Math.PI*2);
+          ctx.fill();
+        }
+        if (isExploding) {
+          let flashSize = easeOutExpo(expP) * width * 1.5;
+          let grad = ctx.createRadialGradient(cx,cy,0, cx,cy,flashSize);
+          grad.addColorStop(0, `rgba(255,255,255,${1 - expP})`);
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, flashSize, 0, Math.PI*2);
+          ctx.fill();
+        }
+
+        ctx.globalCompositeOperation = 'source-over';
+
+        if (p < 1) {
+          vAnim = requestAnimationFrame(render);
+        } else {
+          ctx.fillStyle = '#050505';
+          ctx.fillRect(0,0,width,height);
+        }
+      }
+      requestAnimationFrame(render);
+    }
+    // Set initial state
+    playVortex(); cancelAnimationFrame(vAnim);
+
+    // --- 8. THE APERTURE (CSS/DOM) ---
+    const aperture = document.getElementById('aperture');
+    const numBlades = 8;
+    for(let i=0; i<numBlades; i++) {
+      let b = document.createElement('div');
+      b.className = 'blade';
+      let rot = i * (360 / numBlades);
+      b.style.setProperty('--rot', `${rot}deg`);
+      // Initial closed state
+      b.style.transform = `rotate(${rot}deg) translateY(40px)`;
+      aperture.appendChild(b);
+    }
+
+    function playAperture() {
+      aperture.classList.remove('opening');
+      
+      // Reset blades
+      document.querySelectorAll('.blade').forEach(b => {
+        b.style.transition = 'none';
+        b.style.transform = `rotate(${b.style.getPropertyValue('--rot')}) translateY(40px)`;
+      });
+
+      // Force reflow
+      void aperture.offsetWidth;
+
+      // Animate "focusing" (breathing inward slightly)
+      document.querySelectorAll('.blade').forEach(b => {
+        b.style.transition = 'transform 2s cubic-bezier(0.4, 0, 0.2, 1)';
+        b.style.transform = `rotate(${b.style.getPropertyValue('--rot')}) translateY(20px)`;
+      });
+
+      // After focusing, snap open
+      setTimeout(() => {
+        aperture.classList.add('opening');
+      }, 2000);
+    }
+
+
+    // --- 9. THE CONSTRUCT (Perspective Grid Canvas) ---
+    let gAnim;
+    function playGrid() {
+      if(gAnim) cancelAnimationFrame(gAnim);
+      
+      const canvas = document.getElementById('grid-canvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      
+      const resize = () => {
+        canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+        canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      };
+      window.addEventListener('resize', resize);
+      resize();
+
+      let start = performance.now();
+      const duration = 5000;
+      
+      let speed = 2; // lines per second
+      let offset = 0;
+
+      function render(now) {
+        let elapsed = now - start;
+        let p = Math.min(elapsed / duration, 1);
+        
+        const w = canvas.offsetWidth;
+        const h = canvas.offsetHeight;
+        const cx = w / 2;
+        const cy = h / 2;
+
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 + p * 0.2})`;
+        ctx.lineWidth = 1;
+
+        // Acceleration
+        let currentSpeed = speed + easeInExpo(p) * 50;
+        offset += currentSpeed;
+
+        // Draw Floor Grid
+        const horizon = cy;
+        const fov = 300 + easeInExpo(p) * 1000; // FOV warps at the end
+
+        ctx.beginPath();
+        
+        // Vertical lines (perspective)
+        for (let i = -20; i <= 20; i++) {
+          let xBase = i * 100;
+          
+          // Project
+          let zStart = 10;
+          let scaleStart = fov / zStart;
+          let xScreenStart = cx + (xBase * scaleStart);
+          let yScreenStart = horizon + (50 * scaleStart); // camera height = 50
+
+          let zEnd = 1000;
+          let scaleEnd = fov / zEnd;
+          let xScreenEnd = cx + (xBase * scaleEnd);
+          let yScreenEnd = horizon + (50 * scaleEnd);
+
+          ctx.moveTo(xScreenStart, yScreenStart);
+          ctx.lineTo(xScreenEnd, yScreenEnd);
+        }
+
+        // Horizontal lines (moving)
+        const spacing = 100;
+        for (let i = 1; i < 30; i++) {
+          let z = (i * spacing) - (offset % spacing);
+          if (z < 10) continue; // behind camera
+
+          let scale = fov / z;
+          let yScreen = horizon + (50 * scale);
+          
+          let wSpan = 2000 * scale;
+          
+          // Fade based on distance
+          let alpha = 1 - (z / 1500);
+          if (alpha < 0) alpha = 0;
+          
+          ctx.globalAlpha = alpha;
+          ctx.moveTo(cx - wSpan, yScreen);
+          ctx.lineTo(cx + wSpan, yScreen);
+        }
+        
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // Flash
+        if (p > 0.85) {
+          let flashP = (p - 0.85) / 0.15;
+          ctx.fillStyle = `rgba(255,255,255,${easeInExpo(flashP)})`;
+          ctx.fillRect(0,0,w,h);
+        }
+
+        if (p < 1) {
+          gAnim = requestAnimationFrame(render);
+        }
+      }
+      requestAnimationFrame(render);
+    }
+    playGrid(); cancelAnimationFrame(gAnim);
+
+  </script>
+</body>
+</html>

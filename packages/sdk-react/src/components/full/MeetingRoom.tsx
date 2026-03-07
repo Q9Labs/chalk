@@ -94,7 +94,7 @@ function MeetingRoomBase({
     onChatOpen,
   });
   const { isDarkMode, toggleTheme } = useMeetingRoomTheme({ theme });
-  const { handleLeave, handleTourComplete, handleCopyLink } = useMeetingRoomLifecycle({
+  const { handleTourComplete, handleCopyLink } = useMeetingRoomLifecycle({
     enableTour,
     showTourOnFirstVisit,
     defaultChatOpen,
@@ -121,10 +121,33 @@ function MeetingRoomBase({
   }, [onAddPeople, ui.setShowInviteModal]);
 
   return (
-    <div ref={containerRef} data-chalk className={cn("chalk-root chalk-theme-transition relative h-screen w-full overflow-hidden flex flex-col bg-background text-foreground", isMobile ? "p-2" : "p-0", className)} data-chalk-theme={theme === "system" ? undefined : theme} style={getParticipantThemeVariables(participantColorSeed) as React.CSSProperties}>
-      <MeetingRoomTopBar isMobile={isMobile} roomName={roomName} activePanel={ui.activePanel} layout={ui.layout} setLayout={ui.setLayout} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} pillRef={pillRef} pillDragHandlers={pillDragHandlers} />
+    <div
+      ref={containerRef}
+      data-chalk
+      className={cn("chalk-root chalk-theme-transition relative h-screen w-full overflow-hidden flex flex-col bg-background text-foreground", isMobile ? "p-2" : "p-0", className)}
+      data-chalk-theme={theme === "system" ? undefined : theme}
+      style={getParticipantThemeVariables(participantColorSeed) as React.CSSProperties}
+    >
+      {/* Initial Ambient Mist FX */}
+      <div className={cn(
+        "absolute inset-0 pointer-events-none z-0 overflow-hidden animate-out fade-out duration-[7000ms] delay-[4000ms] fill-mode-forwards",
+        isDarkMode ? "mix-blend-screen" : "mix-blend-multiply"
+      )}>
+        <div 
+          className="absolute w-[150vw] h-[150vh] -top-[25vh] -left-[25vw] opacity-40 dark:opacity-20 animate-[spin_15s_linear_infinite]"
+          style={{ background: 'radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)', filter: 'blur(100px)' }} 
+        />
+        <div 
+          className="absolute w-[150vw] h-[150vh] -top-[25vh] -left-[25vw] opacity-30 dark:opacity-10 animate-[spin_20s_linear_infinite_reverse]"
+          style={{ background: 'radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)', filter: 'blur(120px)' }} 
+        />
+      </div>
 
-      <div className={cn("flex-1 min-h-0 relative flex flex-row overflow-hidden", isMobile ? "gap-2 pt-2" : "gap-4 px-4 pt-4", ui.isExiting && "pointer-events-none")}>
+      <div className="animate-in fade-in slide-in-from-top-4 duration-700 ease-out fill-mode-both delay-100 w-full z-10 relative">
+        <MeetingRoomTopBar isMobile={isMobile} roomName={roomName} activePanel={ui.activePanel} layout={ui.layout} setLayout={ui.setLayout} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} pillRef={pillRef} pillDragHandlers={pillDragHandlers} />
+      </div>
+
+      <div className={cn("flex-1 min-h-0 relative flex flex-row overflow-hidden animate-in fade-in zoom-in-[0.98] duration-1000 ease-out fill-mode-both z-0", isMobile ? "gap-2 pt-2" : "gap-4 px-4 pt-4", ui.isExiting && "pointer-events-none")}>
         <MeetingRoomStage
           isMobile={isMobile}
           layout={ui.layout}
@@ -161,43 +184,44 @@ function MeetingRoomBase({
         />
       </div>
 
-      <MeetingRoomControls
-        isMobile={isMobile}
-        activePanel={ui.activePanel}
-        onTogglePanel={ui.togglePanel}
-        isMobileSheetOpen={ui.isMobileSheetOpen}
-        setIsMobileSheetOpen={ui.setIsMobileSheetOpen}
-        isReactionPickerOpen={ui.isReactionPickerOpen}
-        setIsReactionPickerOpen={ui.setIsReactionPickerOpen}
-        isMuted={isMuted}
-        isVideoEnabled={isVideoEnabled}
-        isScreenSharing={isScreenSharing}
-        isHandRaised={isHandRaised}
-        isWhiteboardOpen={isWhiteboardOpen}
-        isRecording={isRecording}
-        meetingDuration={meetingDuration}
-        unreadChatCount={unreadChatCount}
-        canRecord={canRecord}
-        enableScreenShare={enableScreenShare}
-        enableRecording={enableRecording}
-        enableHandRaise={enableHandRaise}
-        enableReactions={enableReactions}
-        enableWhiteboard={enableWhiteboard}
-        enableTranscription={enableTranscription}
-        enableChat={enableChat}
-        onToggleMute={onToggleMute}
-        onToggleVideo={onToggleVideo}
-        onToggleScreenShare={onToggleScreenShare}
-        onToggleRecording={onToggleRecording}
-        onToggleHandRaise={onToggleHandRaise}
-        onToggleWhiteboard={onToggleWhiteboard}
-        onToggleTranscription={onToggleTranscription}
-        onSendReaction={onSendReaction}
-        onLeave={onLeave}
-        onAnimatedLeave={handleLeave}
-        isExiting={ui.isExiting}
-        localParticipantColorSeed={participantColorSeed}
-      />
+      <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out fill-mode-both delay-300 w-full z-10 relative">
+        <MeetingRoomControls
+          isMobile={isMobile}
+          activePanel={ui.activePanel}
+          onTogglePanel={ui.togglePanel}
+          isMobileSheetOpen={ui.isMobileSheetOpen}
+          setIsMobileSheetOpen={ui.setIsMobileSheetOpen}
+          isReactionPickerOpen={ui.isReactionPickerOpen}
+          setIsReactionPickerOpen={ui.setIsReactionPickerOpen}
+          isMuted={isMuted}
+          isVideoEnabled={isVideoEnabled}
+          isScreenSharing={isScreenSharing}
+          isHandRaised={isHandRaised}
+          isWhiteboardOpen={isWhiteboardOpen}
+          isRecording={isRecording}
+          meetingDuration={meetingDuration}
+          unreadChatCount={unreadChatCount}
+          canRecord={canRecord}
+          enableScreenShare={enableScreenShare}
+          enableRecording={enableRecording}
+          enableHandRaise={enableHandRaise}
+          enableReactions={enableReactions}
+          enableWhiteboard={enableWhiteboard}
+          enableTranscription={enableTranscription}
+          enableChat={enableChat}
+          onToggleMute={onToggleMute}
+          onToggleVideo={onToggleVideo}
+          onToggleScreenShare={onToggleScreenShare}
+          onToggleRecording={onToggleRecording}
+          onToggleHandRaise={onToggleHandRaise}
+          onToggleWhiteboard={onToggleWhiteboard}
+          onToggleTranscription={onToggleTranscription}
+          onSendReaction={onSendReaction}
+          onLeave={onLeave}
+          isExiting={ui.isExiting}
+          localParticipantColorSeed={participantColorSeed}
+        />
+      </div>
 
       <MeetingRoomOverlays
         connectionState={connectionState}

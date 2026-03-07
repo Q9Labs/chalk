@@ -42,8 +42,9 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
     <div
       data-chalk
       className={cn(
-        'chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm',
-        'bg-transparent',
+        'chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4',
+        'bg-background/80 backdrop-blur-sm',
+        !prefersReducedMotion && 'animate-in fade-in duration-200',
         className
       )}
       role="dialog"
@@ -54,53 +55,53 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
       <div
         ref={modalRef}
         className={cn(
-          "w-full max-w-sm overflow-hidden rounded-2xl relative",
-          !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200"
+          "w-full max-w-[400px] overflow-hidden rounded-[24px] relative",
+          "bg-card text-card-foreground shadow-2xl border border-border/50",
+          !prefersReducedMotion && "animate-in fade-in zoom-in-[0.95] slide-in-from-bottom-4 duration-300 ease-out"
         )}
-        style={{
-          background: "var(--chalk-lobby-glass-bg)",
-          border: "1px solid var(--chalk-lobby-glass-border)",
-          backdropFilter: "blur(20px)",
-          boxShadow: "var(--chalk-shadow-xl)",
-        }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6 space-y-6">
-          <div className="flex flex-col items-center text-center space-y-4">
+        <div className="p-8">
+          <div className="flex flex-col items-center text-center space-y-5">
             <div 
-              className="p-4 rounded-full"
-              style={{ background: "oklch(from var(--destructive) l c h / 0.15)" }}
+              className="w-16 h-16 rounded-full flex items-center justify-center relative"
             >
-              <CallEnd01Icon size={28} className="text-(--destructive)" />
+              <div className="absolute inset-0 bg-destructive/10 rounded-full animate-ping" style={{ animationDuration: '3s' }} />
+              <div className="absolute inset-0 bg-destructive/20 rounded-full" />
+              <CallEnd01Icon size={28} className="text-destructive relative z-10" />
             </div>
+            
             <div className="space-y-2">
-              <h2 id="leave-modal-title" className="text-2xl font-bold text-(--foreground) tracking-tight">
-                Leave Meeting
+              <h2 id="leave-modal-title" className="text-xl font-bold tracking-tight">
+                Leave Meeting?
               </h2>
-              <p className="text-(--muted-foreground) text-balance">
-                Are you sure you want to leave the current meeting?
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                You will be disconnected from the current session. You can always rejoin using the meeting link later.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={onConfirm}
-              className={cn(
-                "w-full py-3.5 rounded-xl font-bold transition-all active:scale-[0.98] text-white",
-                "bg-(--destructive) hover:opacity-90 shadow-lg shadow-destructive/20"
-              )}
-            >
-              Leave Meeting
-            </button>
+          <div className="flex gap-3 mt-8">
             <button
               onClick={onClose}
               className={cn(
-                "w-full py-3.5 rounded-xl font-semibold transition-all text-(--foreground)",
-                "bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 border border-black/5 dark:border-white/5"
+                "flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none",
+                "bg-secondary/50 text-secondary-foreground hover:bg-secondary border border-transparent",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-border"
               )}
             >
               Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className={cn(
+                "flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none text-destructive-foreground",
+                "bg-destructive hover:opacity-90 shadow-sm",
+                "focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                "active:scale-[0.98]"
+              )}
+            >
+              Leave
             </button>
           </div>
         </div>

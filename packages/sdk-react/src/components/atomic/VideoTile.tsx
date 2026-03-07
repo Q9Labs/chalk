@@ -3,7 +3,7 @@ import { cn } from '../../utils/cn';
 import { MicrophoneOff01Icon, Monitor01Icon, HandIcon } from '../../utils/icons';
 import { Avatar } from './Avatar';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
-import { getParticipantGradient } from '../../utils/colorGenerator';
+import { getParticipantGradient, getParticipantColor } from '../../utils/colorGenerator';
 
 export interface VideoTileProps {
   participant: {
@@ -143,20 +143,27 @@ export const VideoTile = React.memo(({
   const isTrackValid = isTrackUsable(videoTrack);
   const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError && isLoaded;
 
-  const participantGradient = useMemo(() => getParticipantGradient(participant.id), [participant.id]);
+  const participantColors = useMemo(() => getParticipantColor(participant.displayName || participant.id), [participant.displayName, participant.id]);
+  const participantGradient = useMemo(() => getParticipantGradient(participant.displayName || participant.id), [participant.displayName, participant.id]);
 
   return (
     <div
       className={cn(
         'relative overflow-hidden rounded-2xl border-2 border-transparent outline-none transition-all duration-300',
         aspectRatioClasses[aspectRatio],
-        pinned && 'ring-2 ring-primary/50',
+        pinned && 'ring-2',
         participant.isSpeaking && !prefersReducedMotion && 'chalk-animate-harmonic-pulse',
-        participant.isSpeaking && prefersReducedMotion && 'border-green-500',
+        participant.isSpeaking && prefersReducedMotion && 'border-solid',
         onClick && 'cursor-pointer',
         className
       )}
-      style={style}
+      style={{
+        ...style,
+        '--chalk-accent-speaking': participantColors.primary,
+        '--chalk-accent-speaking-glow': `${participantColors.primary}4D`, // 30% opacity hex
+        borderColor: (participant.isSpeaking && prefersReducedMotion) ? participantColors.primary : undefined,
+        ...(pinned ? { '--tw-ring-color': `${participantColors.primary}80` } : {}),
+      } as React.CSSProperties}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       data-tour={participant.isLocal ? 'local-video' : 'video-grid'}
@@ -180,8 +187,8 @@ export const VideoTile = React.memo(({
       {/* Avatar background when video is off or loading */}
       {!showVideo && showAvatar && (
         <div
-          className="absolute inset-0 flex items-center justify-center transition-opacity duration-300"
-          style={{ background: participantGradient }}
+          className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 bg-[var(--chalk-bg-tile)]"
+          style={{ backgroundImage: participantGradient }}
         >
           <Avatar
             name={participant.displayName}
@@ -236,7 +243,7 @@ export const VideoTile = React.memo(({
                   </div>
                 )}
                 {participant.isScreenSharing && (
-                  <div className="rounded-full bg-primary/80 p-0.5">
+                  <div className="rounded-full p-0.5" style={{ backgroundColor: `${participantColors.primary}CC` }}>
                     <Monitor01Icon size={10} className="text-white" />
                   </div>
                 )}
