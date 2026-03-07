@@ -6,6 +6,7 @@ interface PreJoinJoinPanelProps {
 	displayName: string;
 	isLoading: boolean;
 	canJoin: boolean;
+	participantGradient: string;
 	onDisplayNameChange: (value: string) => void;
 	onJoin: () => void;
 }
@@ -14,6 +15,7 @@ export function PreJoinJoinPanel({
 	displayName,
 	isLoading,
 	canJoin,
+	participantGradient: _participantGradient,
 	onDisplayNameChange,
 	onJoin,
 }: PreJoinJoinPanelProps): React.JSX.Element {
@@ -44,7 +46,7 @@ export function PreJoinJoinPanel({
 							"w-full h-12 px-4 rounded-xl text-base transition-all outline-none text-(--foreground) placeholder:text-(--muted-foreground) disabled:opacity-50",
 							"border bg-[var(--chalk-lobby-glass-bg)] backdrop-blur-md shadow-sm",
 							"border-[var(--chalk-lobby-glass-border)]",
-							"focus-visible:border-[#1bb6a6] focus-visible:ring-4 focus-visible:ring-[#1bb6a6]/20 focus-visible:shadow-[0_0_15px_rgba(27,182,166,0.1)]",
+							"focus-visible:border-[var(--primary)] focus-visible:ring-4 focus-visible:ring-[var(--primary)]/20 focus-visible:shadow-[0_0_15px_var(--primary)]",
 						)}
 					/>
 				</div>
@@ -55,23 +57,13 @@ export function PreJoinJoinPanel({
 					disabled={!canJoin || isLoading}
 					className={cn(
 						"relative w-full h-12 rounded-full font-semibold text-base text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group",
-						"outline-none focus-visible:ring-4 focus-visible:ring-[#1bb6a6]/30",
+						"outline-none focus-visible:ring-4 focus-visible:ring-[var(--primary)]/30",
+						"shadow-lg hover:shadow-xl hover:opacity-95"
 					)}
 					style={{
-						background: "linear-gradient(135deg, #1bb6a6 0%, #14a89a 50%, #0d9488 100%)",
-						boxShadow:
-							"0 4px 14px rgba(27, 182, 166, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
+						backgroundColor: "var(--primary)",
 					}}
 				>
-					<div
-						className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-						style={{
-							background:
-								"linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)",
-							backgroundSize: "200% 100%",
-							animation: "chalk-shimmer 1.5s ease-in-out infinite",
-						}}
-					/>
 					<span className="relative z-10 flex items-center gap-2">
 						{isLoading ? "Joining..." : "Ask to join"}
 					</span>

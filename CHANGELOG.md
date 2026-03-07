@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Infra: remove deprecated Terraform prod environment** — deleted `infrastructure/terraform/environments/prod` and updated infra docs/ops guides to standardize on `prod-lean` workflows only.
 - **API: room list status filtering** — `GET /api/v1/rooms` now supports multi-status filters (`scheduled|active|ended`) and returns participant counts for filtered listings.
 - **Web: join-link preflight behavior** — join-link flow now checks schedule window and shows a “not meeting time yet” waiting state with countdown before auto-entering.
+- **SDK-React: participant-color theming expansion** — meeting controls, chat, transcription, participant panels, pickers, and overlay affordances now inherit the local participant’s generated theme color instead of falling back to brand teal.
 
 ### Fixed
 

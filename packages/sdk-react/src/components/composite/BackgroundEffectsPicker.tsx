@@ -1,6 +1,7 @@
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { Cancel01Icon, Upload01Icon, Image01Icon } from '../../utils/icons';
 import { cn } from '../../utils/cn';
+import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface BackgroundEffect {
   id: string;
@@ -16,6 +17,7 @@ export interface BackgroundEffectsPickerProps {
   onSelect: (effectId: string) => void;
   onCustomUpload?: (file: File) => void;
   disabled?: boolean;
+  participantColorSeed?: string;
   className?: string;
 }
 
@@ -25,9 +27,11 @@ export const BackgroundEffectsPicker = React.memo(({
   onSelect,
   onCustomUpload,
   disabled = false,
+  participantColorSeed,
   className
 }: BackgroundEffectsPickerProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -47,7 +51,7 @@ export const BackgroundEffectsPicker = React.memo(({
     selectedEffectId === id || (id === 'none' && !selectedEffectId && !effects.find(e => e.id === selectedEffectId));
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
+    <div className={cn("flex flex-col gap-3", className)} style={themeVariables as React.CSSProperties}>
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-muted-foreground">
           Background Effects

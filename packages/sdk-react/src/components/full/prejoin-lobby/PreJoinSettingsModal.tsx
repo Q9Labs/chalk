@@ -67,7 +67,7 @@ export function PreJoinSettingsModal({
 					type="button"
 					onClick={onClose}
 					aria-label="Close settings"
-					className="absolute top-4 right-4 p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors text-(--muted-foreground) hover:text-(--foreground) outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6]"
+					className="absolute top-4 right-4 p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors text-(--muted-foreground) hover:text-(--foreground) outline-none focus-visible:ring-2 focus-visible:ring-primary"
 				>
 					<Cancel01Icon size={20} />
 				</button>
@@ -116,7 +116,7 @@ export function PreJoinSettingsModal({
 					<button
 						type="button"
 						onClick={onClose}
-						className="px-5 py-2.5 bg-[#1bb6a6] text-white rounded-full hover:bg-[#19a396] transition-colors font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#1bb6a6] focus-visible:ring-offset-2"
+						className="px-5 py-2.5 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
 					>
 						Done
 					</button>

@@ -4,6 +4,7 @@ import { memo, useCallback, useRef } from "react";
 import { useDraggable } from "../../hooks/ui/useDraggable";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
+import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 import { MeetingRoomControls } from "./meeting-room/MeetingRoomControls";
 import { MeetingRoomOverlays } from "./meeting-room/MeetingRoomOverlays";
 import { MeetingRoomPanels } from "./meeting-room/MeetingRoomPanels";
@@ -112,6 +113,7 @@ function MeetingRoomBase({
     enableWhiteboard,
     isWhiteboardOpen,
   });
+  const participantColorSeed = localParticipant.displayName || localParticipant.id;
 
   const handleAddPeople = useCallback(() => {
     ui.setShowInviteModal(true);
@@ -119,7 +121,7 @@ function MeetingRoomBase({
   }, [onAddPeople, ui.setShowInviteModal]);
 
   return (
-    <div ref={containerRef} data-chalk className={cn("chalk-root chalk-theme-transition relative h-screen w-full overflow-hidden flex flex-col bg-background text-foreground", isMobile ? "p-2" : "p-0", className)} data-chalk-theme={theme === "system" ? undefined : theme}>
+    <div ref={containerRef} data-chalk className={cn("chalk-root chalk-theme-transition relative h-screen w-full overflow-hidden flex flex-col bg-background text-foreground", isMobile ? "p-2" : "p-0", className)} data-chalk-theme={theme === "system" ? undefined : theme} style={getParticipantThemeVariables(participantColorSeed) as React.CSSProperties}>
       <MeetingRoomTopBar isMobile={isMobile} roomName={roomName} activePanel={ui.activePanel} layout={ui.layout} setLayout={ui.setLayout} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} pillRef={pillRef} pillDragHandlers={pillDragHandlers} />
 
       <div className={cn("flex-1 min-h-0 relative flex flex-row overflow-hidden", isMobile ? "gap-2 pt-2" : "gap-4 px-4 pt-4", ui.isExiting && "pointer-events-none")}>
@@ -138,6 +140,7 @@ function MeetingRoomBase({
           onWhiteboardExcalidrawApiReady={onWhiteboardExcalidrawApiReady}
           activeReactions={activeReactions}
           isExiting={ui.isExiting}
+          localParticipantColorSeed={participantColorSeed}
         />
 
         <MeetingRoomPanels
@@ -154,6 +157,7 @@ function MeetingRoomBase({
           transcripts={transcripts}
           participantVolumes={participantVolumes}
           onParticipantVolumeChange={onParticipantVolumeChange}
+          localParticipantColorSeed={participantColorSeed}
         />
       </div>
 
@@ -192,6 +196,7 @@ function MeetingRoomBase({
         onLeave={onLeave}
         onAnimatedLeave={handleLeave}
         isExiting={ui.isExiting}
+        localParticipantColorSeed={participantColorSeed}
       />
 
       <MeetingRoomOverlays

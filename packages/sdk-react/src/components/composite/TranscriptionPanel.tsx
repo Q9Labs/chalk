@@ -15,6 +15,7 @@ import {
 } from '../atomic';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { getParticipantColor, getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface TranscriptEntry {
   id: string;
@@ -41,25 +42,8 @@ export interface TranscriptionPanelProps {
   position?: 'right' | 'bottom';
   variant?: 'default' | 'sidebar' | 'mobile';
   localParticipantId?: string;
+  participantColorSeed?: string;
   className?: string;
-}
-
-// Teal-focused colors that work well on both light and dark backgrounds
-const SPEAKER_COLORS = [
-  '#1bb6a6', // teal (brand) - primary
-  '#0d9488', // teal darker
-  '#14b8a6', // teal lighter
-  '#06b6d4', // cyan
-  '#0891b2', // cyan darker
-  '#10B981', // emerald
-];
-
-function getSpeakerColor(speakerId: string): string {
-  let hash = 0;
-  for (let i = 0; i < speakerId.length; i++) {
-    hash = speakerId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return SPEAKER_COLORS[Math.abs(hash) % SPEAKER_COLORS.length] ?? '#1bb6a6';
 }
 
 interface GroupedTranscript {
@@ -80,7 +64,7 @@ function groupTranscriptsBySpeaker(transcripts: TranscriptEntry[]): GroupedTrans
       groups.push({
         speakerId: entry.speakerId,
         speaker: entry.speaker,
-        speakerColor: getSpeakerColor(entry.speakerId),
+        speakerColor: getParticipantColor(entry.speaker || entry.speakerId).primary,
         isHost: entry.isHost,
         isLocalParticipant: entry.isLocalParticipant,
         entries: [entry],
@@ -266,6 +250,7 @@ export const TranscriptionPanel = React.memo(({
   position = 'right',
   variant = 'default',
   localParticipantId,
+  participantColorSeed,
   className
 }: TranscriptionPanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -275,6 +260,7 @@ export const TranscriptionPanel = React.memo(({
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed ?? localParticipantId), [participantColorSeed, localParticipantId]);
 
   // Search matches
   const searchMatches = useMemo(
@@ -538,6 +524,7 @@ export const TranscriptionPanel = React.memo(({
         data-tour="transcription-panel"
         role="complementary"
         aria-label="Live transcription"
+        style={themeVariables as React.CSSProperties}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -602,6 +589,7 @@ export const TranscriptionPanel = React.memo(({
         data-tour="transcription-panel"
         role="complementary"
         aria-label="Live transcription"
+        style={themeVariables as React.CSSProperties}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4">
@@ -667,6 +655,7 @@ export const TranscriptionPanel = React.memo(({
       data-tour="transcription-panel"
       role="complementary"
       aria-label="Live transcription"
+      style={themeVariables as React.CSSProperties}
     >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-border/50">

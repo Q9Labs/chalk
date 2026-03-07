@@ -4,6 +4,7 @@ import { Badge, IconButton, Input } from '../../atomic';
 import { Button } from '../../ui';
 import { usePrefersReducedMotion } from '../../../hooks/useMediaQuery';
 import { cn } from '../../../utils/cn';
+import { getParticipantThemeVariables } from '../../../utils/colorGenerator';
 import { ParticipantRow } from './ParticipantRow';
 
 export interface Participant {
@@ -33,6 +34,7 @@ export interface ParticipantListProps {
 	participantVolumes?: ReadonlyMap<string, number>;
 	/** Called when a participant's volume is changed via the slider. */
 	onParticipantVolumeChange?: (id: string, volume: number) => void;
+	participantColorSeed?: string;
 	className?: string;
 	variant?: ParticipantListVariant;
 	title?: string;
@@ -47,6 +49,7 @@ export const ParticipantList = React.memo(({
 	onAddPeople,
 	participantVolumes,
 	onParticipantVolumeChange,
+	participantColorSeed,
 	canManageParticipants = false,
 	searchable = true,
 	onClose,
@@ -57,6 +60,7 @@ export const ParticipantList = React.memo(({
 	const prefersReducedMotion = usePrefersReducedMotion();
 	const [searchQuery, setSearchQuery] = useState('');
 	const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+	const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
 	const filteredParticipants = useMemo(() => {
 		let sorted = [...participants].sort((a, b) => {
@@ -122,6 +126,7 @@ export const ParticipantList = React.memo(({
 					'flex flex-col h-full w-full overflow-hidden font-sans relative bg-card',
 					className,
 				)}
+				style={themeVariables as React.CSSProperties}
 				data-tour="participants-panel"
 				role="complementary"
 				aria-label="Participants list"
@@ -130,7 +135,7 @@ export const ParticipantList = React.memo(({
 					{onAddPeople && (
 						<Button
 							onClick={onAddPeople}
-							className="w-full bg-[#1bb6a6] hover:bg-[#0d9488] text-white rounded-full py-3 px-4 mb-4 shadow-lg shadow-[#1bb6a6]/25 min-h-[48px]"
+							className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-full py-3 px-4 mb-4 shadow-lg shadow-primary/25 min-h-[48px]"
 						>
 							<UserGroupIcon className="w-4 h-4" />
 							<span>Add people</span>
@@ -159,6 +164,7 @@ export const ParticipantList = React.memo(({
 					!prefersReducedMotion && 'chalk-animate-slide-right',
 					className,
 				)}
+				style={themeVariables as React.CSSProperties}
 				data-tour="participants-panel"
 				role="complementary"
 				aria-label="Participants list"
@@ -232,6 +238,7 @@ export const ParticipantList = React.memo(({
 				!prefersReducedMotion && 'chalk-animate-slide-right',
 				className,
 			)}
+			style={themeVariables as React.CSSProperties}
 			data-tour="participants-panel"
 			role="complementary"
 			aria-label="Participants list"

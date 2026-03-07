@@ -37,6 +37,7 @@ interface MeetingRoomControlsProps {
   onLeave?: () => void;
   onAnimatedLeave: () => void;
   isExiting: boolean;
+  localParticipantColorSeed?: string;
 }
 
 export function MeetingRoomControls({
@@ -74,6 +75,7 @@ export function MeetingRoomControls({
   onLeave,
   onAnimatedLeave,
   isExiting,
+  localParticipantColorSeed,
 }: MeetingRoomControlsProps) {
   return (
     <>
@@ -133,6 +135,7 @@ export function MeetingRoomControls({
           enableWhiteboard={enableWhiteboard}
           enableTranscription={enableTranscription}
           enableChat={enableChat}
+          participantColorSeed={localParticipantColorSeed}
         />
       )}
 
@@ -170,6 +173,7 @@ export function MeetingRoomControls({
             }
             onOpenReactions={enableReactions ? () => setIsReactionPickerOpen(true) : undefined}
             onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
+            participantColorSeed={localParticipantColorSeed}
             className={cn(isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] touch-manipulation" : "", isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up")}
           />
           {enableReactions && !isMobile && (
@@ -180,6 +184,7 @@ export function MeetingRoomControls({
                 onSendReaction?.(emoji);
                 setIsReactionPickerOpen(false);
               }}
+              participantColorSeed={localParticipantColorSeed}
               position="top"
               className="absolute bottom-24 left-1/2 -translate-x-1/2"
             />

@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 import { Cancel01Icon } from '../../utils/icons';
+import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface ReactionPickerProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ export interface ReactionPickerProps {
   onSelect: (emoji: string) => void;
   recentReactions?: string[];
   position?: 'top' | 'bottom';
+  participantColorSeed?: string;
   className?: string;
 }
 
@@ -44,10 +46,12 @@ export const ReactionPicker = React.memo(({
   onSelect,
   recentReactions = [],
   position = 'top',
+  participantColorSeed,
   className,
 }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('smileys');
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
   // Reset to smileys when closed
   useEffect(() => {
@@ -104,6 +108,7 @@ export const ReactionPicker = React.memo(({
         )}
         role="dialog"
         aria-label="Reaction picker"
+        style={themeVariables as React.CSSProperties}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { VolumeHighIcon } from '../../utils/icons';
 import { Select, AudioIndicator, Thumbnail, IconButton } from '../atomic';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface DeviceSelectorProps {
   type: 'audioinput' | 'audiooutput' | 'videoinput';
@@ -13,6 +14,7 @@ export interface DeviceSelectorProps {
   previewTrack?: MediaStreamTrack | null;
   audioLevel?: number;
   disabled?: boolean;
+  participantColorSeed?: string;
   className?: string;
 }
 
@@ -25,11 +27,13 @@ export const DeviceSelector = React.memo(({
   previewTrack,
   audioLevel,
   disabled = false,
+  participantColorSeed,
   className
 }: DeviceSelectorProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
   const options = devices.map(d => ({
     label: d.label || `${type} ${devices.indexOf(d) + 1}`,
@@ -60,7 +64,7 @@ export const DeviceSelector = React.memo(({
   }, [type, selectedDeviceId]);
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={cn("flex flex-col gap-2", className)} style={themeVariables as React.CSSProperties}>
       <div className="flex items-center justify-between">
         {label && (
           <label className="text-sm font-medium text-muted-foreground">

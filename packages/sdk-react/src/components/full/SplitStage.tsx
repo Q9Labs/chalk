@@ -95,7 +95,7 @@ export function SplitStage({
 				{leftPanel}
 			</Panel>
 
-			<Separator className="relative w-px bg-white/10 hover:bg-teal-500/50 transition-colors group z-50 flex items-center justify-center mx-1 focus:outline-none">
+			<Separator className="relative w-px bg-white/10 hover:bg-primary/50 transition-colors group z-50 flex items-center justify-center mx-1 focus:outline-none">
 				<div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
 					<DocketControl
 						isLeftCollapsed={isLeftCollapsed}
@@ -143,7 +143,7 @@ function DocketControl({
 			className={cn(
 				"flex items-center gap-0.5 p-1 rounded-full shadow-2xl transition-all duration-300 ring-1 ring-white/20",
 				isLeftCollapsed || isRightCollapsed
-					? "bg-teal-600 scale-110 opacity-100"
+					? "bg-primary text-primary-foreground scale-110 opacity-100"
 					: "bg-zinc-900/95 backdrop-blur-md scale-95 group-hover:scale-100 opacity-90 group-hover:opacity-100",
 			)}
 		>
@@ -192,7 +192,7 @@ function DocketControl({
 						render={
 							<button
 								onClick={onReset}
-								className="p-2 bg-teal-500 hover:bg-teal-400 rounded-full text-white shadow-lg transition-all active:scale-95"
+								className="p-2 bg-primary hover:bg-primary/90 rounded-full text-primary-foreground shadow-lg transition-all active:scale-95"
 							>
 								<ArrowLeft01Icon className="w-4 h-4" />
 							</button>
@@ -210,7 +210,7 @@ function DocketControl({
 						render={
 							<button
 								onClick={onReset}
-								className="p-2 bg-teal-500 hover:bg-teal-400 rounded-full text-white shadow-lg transition-all active:scale-95"
+								className="p-2 bg-primary hover:bg-primary/90 rounded-full text-primary-foreground shadow-lg transition-all active:scale-95"
 							>
 								<ArrowRight01Icon className="w-4 h-4" />
 							</button>

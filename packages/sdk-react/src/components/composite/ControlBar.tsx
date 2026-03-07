@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { cn } from "../../utils/cn";
 import {
 	CallEnd01Icon,
@@ -21,6 +21,7 @@ import {
 	VideoOffIcon,
 } from "../../utils/icons";
 import { ControlButton } from "../atomic";
+import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 
 export type ControlBarButton =
 	| "mic"
@@ -72,6 +73,7 @@ export interface ControlBarProps {
 	onOpenInfo?: () => void;
 	onLeave?: () => void;
 
+	participantColorSeed?: string;
 	className?: string;
 }
 
@@ -117,9 +119,11 @@ export const ControlBar = React.memo(
 		onOpenMore,
 		onOpenInfo,
 		onLeave,
+		participantColorSeed,
 
 		className,
 	}: ControlBarProps) => {
+		const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 		const defaultButtons: ControlBarButton[] = [
 			"mic",
 			"video",
@@ -200,7 +204,7 @@ export const ControlBar = React.memo(
 							label={isScreenSharing ? "Stop Share" : "Share Screen"}
 							onClick={onToggleScreenShare}
 							active={isScreenSharing}
-							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							showLabel={showLabels}
 							data-tour="controls-screenshare"
 						/>
@@ -227,7 +231,7 @@ export const ControlBar = React.memo(
 								label="Chat"
 								onClick={onToggleChat}
 								active={isChatOpen}
-								activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+								activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 								showLabel={showLabels}
 								data-tour="controls-chat"
 							/>
@@ -246,7 +250,7 @@ export const ControlBar = React.memo(
 							label="People"
 							onClick={onToggleParticipants}
 							active={isParticipantsOpen}
-							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							showLabel={showLabels}
 							data-tour="controls-participants"
 						/>
@@ -259,7 +263,7 @@ export const ControlBar = React.memo(
 							label="Transcript"
 							onClick={onToggleTranscription}
 							active={isTranscriptionEnabled}
-							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							showLabel={showLabels}
 						/>
 					);
@@ -271,7 +275,7 @@ export const ControlBar = React.memo(
 							label={isHandRaised ? "Lower Hand" : "Raise Hand"}
 							onClick={onToggleHandRaise}
 							active={isHandRaised}
-							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							showLabel={showLabels}
 						/>
 					);
@@ -282,7 +286,7 @@ export const ControlBar = React.memo(
 							icon={<SmileIcon />}
 							label="Reactions"
 							onClick={onOpenReactions}
-							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							showLabel={showLabels}
 						/>
 					);
@@ -294,7 +298,7 @@ export const ControlBar = React.memo(
 							label="Whiteboard"
 							onClick={onToggleWhiteboard}
 							active={isWhiteboardOpen}
-							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							showLabel={showLabels}
 						/>
 					);
@@ -336,7 +340,7 @@ export const ControlBar = React.memo(
 						<ControlButton
 							key="thumbsup"
 							icon={<ThumbsUpIcon size={20} className="text-[#FFD700]" />}
-							activeClassName="bg-teal-500 text-white hover:bg-teal-600"
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							label="Reactions"
 							onClick={onOpenReactions}
 							noBorder
@@ -356,6 +360,7 @@ export const ControlBar = React.memo(
 						className,
 					)}
 					style={{
+						...(themeVariables as React.CSSProperties),
 						background: "rgba(0, 0, 0, 0.7)",
 						backdropFilter: "blur(12px)",
 						WebkitBackdropFilter: "blur(12px)",
@@ -443,6 +448,7 @@ export const ControlBar = React.memo(
 							"bg-white/90 dark:bg-zinc-950/90",
 							className,
 						)}
+						style={themeVariables as React.CSSProperties}
 						role="toolbar"
 						aria-label="Meeting controls"
 					>
@@ -493,6 +499,7 @@ export const ControlBar = React.memo(
 					"flex items-center justify-between w-full px-6 py-4",
 					className,
 				)}
+				style={themeVariables as React.CSSProperties}
 				role="toolbar"
 				aria-label="Meeting controls"
 			>

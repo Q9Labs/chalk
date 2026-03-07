@@ -59,6 +59,34 @@ export function getParticipantColor(participantId?: string): ColorPalette {
   return COLOR_PALETTES[index] as ColorPalette;
 }
 
+function getReadableTextColor(hexColor: string): string {
+  const normalized = hexColor.replace('#', '');
+  const hex = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized;
+
+  const r = Number.parseInt(hex.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(hex.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(hex.slice(4, 6), 16) / 255;
+
+  const linearize = (channel: number) =>
+    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+
+  const luminance = (0.2126 * linearize(r)) + (0.7152 * linearize(g)) + (0.0722 * linearize(b));
+
+  return luminance > 0.5 ? '#0f172a' : '#f8fafc';
+}
+
+export function getParticipantThemeVariables(participantId?: string) {
+  const colors = getParticipantColor(participantId);
+
+  return {
+    '--primary': colors.primary,
+    '--primary-foreground': getReadableTextColor(colors.primary),
+    '--ring': colors.primary,
+  };
+}
+
 /**
  * Generate a gradient background string for a video tile
  * Uses a clean 2-stop gradient to prevent muddy middle bands

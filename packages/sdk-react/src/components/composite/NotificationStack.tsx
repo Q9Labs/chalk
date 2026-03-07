@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import { cn } from '../../utils/cn';
 import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon } from '../../utils/icons';
+import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface Notification {
   id: string;
@@ -19,6 +20,7 @@ export interface NotificationStackProps {
   onDismiss: (id: string) => void;
   position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
   maxVisible?: number;
+  participantColorSeed?: string;
   className?: string;
 }
 
@@ -34,6 +36,7 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
   onDismiss,
   position = 'top-right',
   maxVisible = 5,
+  participantColorSeed,
   className,
 }) => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -42,6 +45,7 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
     }
     return 'light';
   });
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
   useEffect(() => {
     const handleThemeChange = () => {
@@ -130,6 +134,7 @@ export const NotificationStack = React.memo<NotificationStackProps>(({
         },
       }}
       className={cn(className)}
+      style={themeVariables as React.CSSProperties}
     />
   );
 });

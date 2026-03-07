@@ -4,6 +4,7 @@ import { MessageBubble } from './MessageBubble';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 import { Button } from '../ui';
+import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface ChatMessage {
   id: string;
@@ -24,6 +25,7 @@ export interface ChatPanelProps {
   title?: string;
   /** Variant for different layouts */
   variant?: 'sidebar' | 'mobile';
+  participantColorSeed?: string;
 }
 
 // Group messages by sender within a time window (2 minutes)
@@ -58,6 +60,7 @@ export const ChatPanel = React.memo(({
   placeholder = "Type a message...",
   title = "Chat",
   variant = 'sidebar',
+  participantColorSeed,
   className
 }: ChatPanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -65,6 +68,7 @@ export const ChatPanel = React.memo(({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
   const messageGroups = useMemo(() => groupMessages(messages), [messages]);
 
@@ -112,6 +116,7 @@ export const ChatPanel = React.memo(({
       data-tour="chat-panel"
       role="complementary"
       aria-label="Chat panel"
+      style={themeVariables as React.CSSProperties}
     >
       {variant === 'sidebar' && (
         <div className="flex items-center justify-between px-6 py-5">
@@ -144,7 +149,7 @@ export const ChatPanel = React.memo(({
       >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-[#1bb6a6]/10 text-[#1bb6a6]">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-primary/10 text-primary">
               <Message01Icon className="w-8 h-8" />
             </div>
             <h3 className="font-medium mb-1 text-card-foreground">No messages yet</h3>
@@ -181,7 +186,7 @@ export const ChatPanel = React.memo(({
         <Button
           onClick={() => scrollToBottom()}
           size="sm"
-          className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-[#1bb6a6] hover:bg-[#0d9488]"
+          className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           New messages
         </Button>
@@ -210,7 +215,7 @@ export const ChatPanel = React.memo(({
                 "bg-muted/50 backdrop-blur-sm",
                 "text-foreground",
                 "placeholder:text-muted-foreground",
-                "focus:ring-2 focus:ring-[#1bb6a6]/50 focus:bg-muted/70",
+                "focus:ring-2 focus:ring-primary/50 focus:bg-muted/70",
                 "transition-all"
               )}
               style={{ minHeight: '44px', maxHeight: '120px' }}
@@ -222,7 +227,7 @@ export const ChatPanel = React.memo(({
             onClick={handleSend}
             disabled={!inputValue.trim() || disabled}
             size="icon"
-            className="flex-shrink-0 w-11 h-11 rounded-full bg-[#1bb6a6] hover:bg-[#0d9488] shadow-lg shadow-[#1bb6a6]/25"
+            className="flex-shrink-0 w-11 h-11 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25"
             aria-label="Send message"
           >
             <SentIcon className="w-5 h-5 ml-0.5" />

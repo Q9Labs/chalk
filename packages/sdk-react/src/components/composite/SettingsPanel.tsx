@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Cancel01Icon, Microphone01Icon, Video01Icon, Settings01Icon } from '../../utils/icons';
 import { IconButton } from '../atomic';
 import { DeviceSelector } from './DeviceSelector';
@@ -6,6 +6,7 @@ import { NoiseSuppressionToggle } from './NoiseSuppressionToggle';
 import { VolumeSlider } from '../atomic';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface SettingsPanelProps {
   audioInputDevices: MediaDeviceInfo[];
@@ -25,6 +26,7 @@ export interface SettingsPanelProps {
   onNoiseSuppressionChange?: (enabled: boolean) => void;
 
   onClose?: () => void;
+  participantColorSeed?: string;
   className?: string;
 }
 
@@ -43,11 +45,13 @@ export const SettingsPanel = React.memo(({
   noiseSuppression = false,
   onNoiseSuppressionChange,
   onClose,
+  participantColorSeed,
   className
 }: SettingsPanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [activeTab, setActiveTab] = useState<'audio' | 'video' | 'general'>('audio');
   const [speakerVolume, setSpeakerVolume] = useState(100);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
   return (
     <div
@@ -61,6 +65,7 @@ export const SettingsPanel = React.memo(({
       data-tour="settings-panel"
       role="dialog"
       aria-label="Settings"
+      style={themeVariables as React.CSSProperties}
     >
       <div className="flex items-center justify-between p-4 border-b border-border/50">
         <div className="flex items-center gap-2">
@@ -121,6 +126,7 @@ export const SettingsPanel = React.memo(({
                 onChange={(id) => onAudioInputChange?.(id)}
                 label="Input Device"
                 audioLevel={audioLevel}
+                participantColorSeed={participantColorSeed}
               />
 
               {onNoiseSuppressionChange && (
@@ -141,6 +147,7 @@ export const SettingsPanel = React.memo(({
                 selectedDeviceId={selectedAudioOutput}
                 onChange={(id) => onAudioOutputChange?.(id)}
                 label="Output Device"
+                participantColorSeed={participantColorSeed}
               />
 
               <div className="space-y-2">
@@ -166,6 +173,7 @@ export const SettingsPanel = React.memo(({
                 onChange={(id) => onVideoInputChange?.(id)}
                 label="Input Device"
                 previewTrack={videoTrack}
+                participantColorSeed={participantColorSeed}
               />
             </div>
           </div>

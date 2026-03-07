@@ -19,6 +19,7 @@ import {
   VideoOffIcon,
 } from '../../utils/icons';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
 export interface MobileControlSheetProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ export interface MobileControlSheetProps {
   enableTranscription?: boolean;
   enableChat?: boolean;
 
+  participantColorSeed?: string;
   className?: string;
 }
 
@@ -92,12 +94,14 @@ export const MobileControlSheet = React.memo(({
   enableWhiteboard = true,
   enableTranscription = true,
   enableChat = true,
+  participantColorSeed,
   className,
 }: MobileControlSheetProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [translateY, setTranslateY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartRef = useRef<{ y: number; time: number } | null>(null);
+  const themeVariables = getParticipantThemeVariables(participantColorSeed);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
@@ -165,7 +169,7 @@ export const MobileControlSheet = React.memo(({
       icon: isScreenSharing ? <MonitorOffIcon className="w-6 h-6" /> : <Monitor01Icon className="w-6 h-6" />,
       label: isScreenSharing ? 'Stop Share' : 'Share Screen',
       active: isScreenSharing,
-      activeClassName: 'bg-teal-500 text-white',
+      activeClassName: 'bg-primary text-primary-foreground',
       action: onToggleScreenShare,
       enabled: enableScreenShare && !!onToggleScreenShare,
     },
@@ -174,7 +178,7 @@ export const MobileControlSheet = React.memo(({
       icon: <Message01Icon className="w-6 h-6" />,
       label: 'Chat',
       active: isChatOpen,
-      activeClassName: 'bg-teal-500 text-white',
+      activeClassName: 'bg-primary text-primary-foreground',
       action: onToggleChat,
       enabled: enableChat && !!onToggleChat,
     },
@@ -183,7 +187,7 @@ export const MobileControlSheet = React.memo(({
       icon: <UserGroupIcon className="w-6 h-6" />,
       label: 'People',
       active: isParticipantsOpen,
-      activeClassName: 'bg-teal-500 text-white',
+      activeClassName: 'bg-primary text-primary-foreground',
       action: onToggleParticipants,
       enabled: !!onToggleParticipants,
     },
@@ -192,7 +196,7 @@ export const MobileControlSheet = React.memo(({
       icon: <HandIcon className="w-6 h-6" />,
       label: isHandRaised ? 'Lower Hand' : 'Raise Hand',
       active: isHandRaised,
-      activeClassName: 'bg-teal-500 text-white',
+      activeClassName: 'bg-primary text-primary-foreground',
       action: onToggleHandRaise,
       enabled: enableHandRaise && !!onToggleHandRaise,
     },
@@ -209,7 +213,7 @@ export const MobileControlSheet = React.memo(({
       icon: <Edit02Icon className="w-6 h-6" />,
       label: 'Whiteboard',
       active: isWhiteboardOpen,
-      activeClassName: 'bg-teal-500 text-white',
+      activeClassName: 'bg-primary text-primary-foreground',
       action: onToggleWhiteboard,
       enabled: enableWhiteboard && !!onToggleWhiteboard,
     },
@@ -226,7 +230,7 @@ export const MobileControlSheet = React.memo(({
       icon: <FileTextIcon className="w-6 h-6" />,
       label: 'Transcript',
       active: isTranscriptionEnabled,
-      activeClassName: 'bg-teal-500 text-white',
+      activeClassName: 'bg-primary text-primary-foreground',
       action: onToggleTranscription,
       enabled: enableTranscription && !!onToggleTranscription,
     },
@@ -260,6 +264,7 @@ export const MobileControlSheet = React.memo(({
             className
           )}
           style={{
+            ...(themeVariables as React.CSSProperties),
             transform: isOpen && translateY > 0 ? `translateY(${translateY}px)` : undefined,
             paddingBottom: 'env(safe-area-inset-bottom)',
           }}

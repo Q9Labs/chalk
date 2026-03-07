@@ -196,12 +196,12 @@ export const ScreenShareView = React.memo(
 					{isLoading && (
 						<div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-900/50 backdrop-blur-md transition-opacity duration-500">
 							<div className="relative">
-								<div className="absolute -inset-4 rounded-full bg-teal-500/20 blur-xl animate-pulse" />
-								<Spinner size="lg" className="text-teal-500 relative z-10" />
+								<div className="absolute -inset-4 rounded-full bg-primary/20 blur-xl animate-pulse" />
+								<Spinner size="lg" className="text-primary relative z-10" />
 							</div>
 							<div className="mt-6 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
 								<div className="flex items-center gap-2 text-white/90 font-medium">
-									<Monitor01Icon size={18} className="text-teal-400" />
+									<Monitor01Icon size={18} className="text-primary" />
 									<span>Connecting to {sharedByName}'s screen...</span>
 								</div>
 								<p className="text-xs text-white/50">
@@ -245,7 +245,7 @@ export const ScreenShareView = React.memo(
 								onClick={toggleRotation}
 								className={cn(
 									"p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-all mr-1",
-									rotation !== 0 && "text-teal-400 border-teal-500/50",
+									rotation !== 0 && "text-primary border-primary/50",
 								)}
 								aria-label="Rotate view"
 							>
