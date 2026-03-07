@@ -17,15 +17,17 @@ import { WhiteboardManager } from "../managers/whiteboard-manager";
 import type { ConferenceSession } from "../room";
 import { makeManagerServicesLayer } from "../effect/services/manager-layers";
 import { RoomService } from "../effect/services/room-service";
-import { ParticipantService } from "../effect/services/participant-service";
-import { MediaService } from "../effect/services/media-service";
+import type { ParticipantService } from "../effect/services/participant-service";
+import type { MediaService } from "../effect/services/media-service";
 import type { JoinOptions, LeaveOptions } from "../effect/services/room-service";
 import { RoomError } from "../effect/errors";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 import { wideEvents } from "../wide-events/index";
-import { createBrowserIncidentContext, createSupportCode, type ChalkIncident, type ChalkIncidentBreadcrumb, type ChalkIncidentConfig, type ChalkIncidentInput, type ChalkIncidentSource } from "../incident.ts";
+import type { ChalkIncident, ChalkIncidentBreadcrumb, ChalkIncidentConfig, ChalkIncidentInput, ChalkIncidentSource } from "../incident.ts";
 import type { ChalkPostHogConfig } from "../posthog.ts";
 import { createDefaultMediaState, createDefaultParticipantState, createDefaultRoomState, createSessionStateApis, type MediaSessionApi, type ParticipantSessionApi, type RoomSessionApi, type SessionStateUpdaters } from "./chalk-session-state";
+import { ChalkSessionIncidentPipeline } from "./chalk-session-incidents";
+import { attachRoomToManagersAndBridgeState } from "./chalk-session-bridges";
 
 /** ChalkSession configuration */
 export interface ChalkSessionConfig {
@@ -115,15 +117,12 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   private readonly client: ConferenceClient;
   private _runtime: ManagedRuntime.ManagedRuntime<RoomService | ParticipantService | MediaService, never>;
   private _currentRoom: ConferenceSession | null = null;
-  private incidentConfig?: ChalkIncidentConfig;
-  private incidentBreadcrumbs: ChalkIncidentBreadcrumb[] = [];
-  private incidentSequence = 0;
+  private readonly incidentPipeline: ChalkSessionIncidentPipeline;
   private readonly stateUpdaters: SessionStateUpdaters;
 
   constructor(config: ChalkSessionConfig) {
     super();
     const debug = config.debug ?? false;
-    this.incidentConfig = config.incident;
 
     // Initialize ConferenceClient for API/WebRTC
     this.client = new ConferenceClient({
@@ -148,6 +147,14 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     this.participants = sessionState.participants;
     this.media = sessionState.media;
     this.stateUpdaters = sessionState.updaters;
+    this.incidentPipeline = new ChalkSessionIncidentPipeline({
+      emitError: (error) => this.emit("error", error),
+      getSnapshot: () => ({
+        roomId: this.room.getState().roomId,
+        localParticipantId: this.participants.getState().localParticipant?.id ?? null,
+      }),
+    });
+    this.configureIncident(config.incident);
 
     // Initialize other managers (non-Effect)
     this.screenShare = new ScreenShareManager();
@@ -167,11 +174,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   }
 
   configureIncident(config?: ChalkIncidentConfig): void {
-    this.incidentConfig = config;
-    const maxBreadcrumbs = config?.maxBreadcrumbs ?? 40;
-    if (this.incidentBreadcrumbs.length > maxBreadcrumbs) {
-      this.incidentBreadcrumbs = this.incidentBreadcrumbs.slice(-maxBreadcrumbs);
-    }
+    this.incidentPipeline.configure(config);
   }
 
   configurePostHog(config?: ChalkPostHogConfig): void {
@@ -183,96 +186,15 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       timestamp?: string;
     },
   ): void {
-    const maxBreadcrumbs = this.incidentConfig?.maxBreadcrumbs ?? 40;
-    const next: ChalkIncidentBreadcrumb = {
-      timestamp: breadcrumb.timestamp ?? new Date().toISOString(),
-      category: breadcrumb.category,
-      message: breadcrumb.message,
-      data: breadcrumb.data,
-    };
-    this.incidentBreadcrumbs.push(next);
-    if (this.incidentBreadcrumbs.length > maxBreadcrumbs) {
-      this.incidentBreadcrumbs = this.incidentBreadcrumbs.slice(-maxBreadcrumbs);
-    }
-  }
-
-  private isIncidentEnabled(): boolean {
-    const config = this.incidentConfig;
-    if (!config) return false;
-    if (typeof config.enabled === "boolean") return config.enabled;
-    return Boolean(config.onIncident || config.reporter);
+    this.incidentPipeline.recordBreadcrumb(breadcrumb);
   }
 
   private emitErrorWithIncident(error: ChalkError, source: ChalkIncidentSource, details?: Record<string, unknown>): void {
-    this.emit("error", error);
-    void this.reportIncident({
-      source,
-      severity: "error",
-      message: error.message ?? "Unexpected error",
-      code: typeof error.code === "string" ? error.code : String(error.code),
-      stage: typeof error.details?.stage === "string" ? error.details.stage : typeof details?.stage === "string" ? details.stage : undefined,
-      retryable: typeof error.details?.retryable === "boolean" ? error.details.retryable : typeof details?.retryable === "boolean" ? details.retryable : undefined,
-      details: {
-        ...(error.details ?? {}),
-        ...(details ?? {}),
-      },
-    });
+    this.incidentPipeline.emitErrorWithIncident(error, source, details);
   }
 
   async reportIncident(incidentInput: ChalkIncidentInput): Promise<ChalkIncident | null> {
-    if (!this.isIncidentEnabled()) return null;
-
-    this.incidentSequence += 1;
-    const state = this.room.getState();
-    const localParticipantId = this.participants.getState().localParticipant?.id ?? null;
-    const maxBreadcrumbs = this.incidentConfig?.maxBreadcrumbs ?? 40;
-
-    const incident: ChalkIncident = {
-      id: incidentInput.id ?? createSupportCode(this.incidentSequence),
-      timestamp: new Date().toISOString(),
-      severity: incidentInput.severity ?? "error",
-      source: incidentInput.source ?? "unknown",
-      message: incidentInput.message,
-      code: incidentInput.code,
-      roomId: state.roomId,
-      participantId: localParticipantId,
-      traceId: wideEvents.sessionId,
-      phase: incidentInput.phase,
-      stage: incidentInput.stage,
-      retryable: incidentInput.retryable,
-      details: incidentInput.details,
-      breadcrumbs: incidentInput.breadcrumbs ?? [...this.incidentBreadcrumbs].slice(-maxBreadcrumbs),
-      context: {
-        ...createBrowserIncidentContext(),
-        ...(incidentInput.context ?? {}),
-      },
-    };
-
-    const onIncident = this.incidentConfig?.onIncident;
-    if (onIncident) {
-      try {
-        onIncident(incident);
-      } catch {
-        // Keep incident pipeline non-blocking.
-      }
-    }
-
-    const reporter = this.incidentConfig?.reporter;
-    if (reporter) {
-      try {
-        await reporter(incident);
-      } catch (error) {
-        this.recordIncidentBreadcrumb({
-          category: "incident_reporter",
-          message: "Incident reporter failed",
-          data: {
-            error: error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown reporter error",
-          },
-        });
-      }
-    }
-
-    return incident;
+    return this.incidentPipeline.reportIncident(incidentInput);
   }
 
   private setupEventForwarding(): void {
@@ -335,183 +257,23 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   }
 
   private attachRoomToManagers(room: ConferenceSession): void {
-    // Store current room reference
-    this._currentRoom = room;
-
-    // Attach to non-Effect managers
-    this.screenShare.attachRoom(room);
-    this.chat.attachRoom(room);
-    this.recording.attachRoom(room);
-    this.interactions.attachRoom(room);
-    this.whiteboard.attachRoom(room);
-
-    // Attach to Effect services via runtime
-    this._runtime
-      .runPromise(
-        Effect.gen(function* () {
-          const roomSvc = yield* RoomService;
-          const participantSvc = yield* ParticipantService;
-          const mediaSvc = MediaService;
-
-          yield* roomSvc.joinComplete(room);
-          yield* participantSvc.attachRoom(room);
-          yield* mediaSvc.pipe(Effect.andThen((ms) => ms.attachRoom(room)));
-        }),
-      )
-      .catch(() => {
-        // ConferenceSession attachment failed - error already emitted via wide events in client
-      });
-
-    // Set up recording API callbacks
-    this.recording.setApiCallbacks(
-      () => this.client.startRecording(),
-      () => this.client.stopRecording(),
-    );
-
-    // Bridge ConferenceSession events to session state for React hooks
-    this.setupRoomStateBridges(room);
-  }
-
-  /**
-   * Set up direct event bridges from ConferenceSession to session state
-   * This ensures React hooks receive state updates
-   */
-  private setupRoomStateBridges(room: ConferenceSession): void {
-    const { updateRoomState, updateParticipantState, updateMediaState } = this.stateUpdaters;
-
-    // Helper to normalize participant for state
-    const normalizeParticipant = (p: any) => ({
-      id: p.id,
-      displayName: p.displayName,
-      role: p.role ?? "participant",
-      isLocal: p.isLocal,
-      videoEnabled: p.videoEnabled ?? false,
-      audioEnabled: p.audioEnabled ?? false,
-      isScreenSharing: p.isScreenSharing ?? false,
-      isSpeaking: p.isSpeaking ?? false,
-      handRaised: p.handRaised ?? false,
-      connectionQuality: p.connectionQuality ?? 100,
-      videoTrack: p.videoTrack ?? undefined,
-      audioTrack: p.audioTrack ?? undefined,
-      screenShareTrack: p.screenShareTrack ?? undefined,
-      screenShareAudioTrack: p.screenShareAudioTrack ?? undefined,
-    });
-
-    // Sync initial room state
-    updateRoomState({
-      status: room.status,
-      roomId: room.id,
-      roomName: room.info?.name ?? null,
-      isJoining: false,
-      hostId: null,
-    });
-
-    // Sync initial participants
-    const participants = Array.from(room.participants.values()).map(normalizeParticipant);
-    const localParticipant = room.localParticipant ? normalizeParticipant(room.localParticipant) : null;
-    const initialParticipants = localParticipant ? [...participants.filter((p: any) => p.id !== localParticipant.id), localParticipant] : participants;
-    updateParticipantState({
-      participants: initialParticipants,
-      localParticipant,
-      activeSpeaker: null,
-      count: initialParticipants.length,
-    });
-
-    // Sync initial media state from local participant
-    if (localParticipant) {
-      updateMediaState({
-        isVideoEnabled: localParticipant.videoEnabled,
-        isAudioEnabled: localParticipant.audioEnabled,
-        isTogglingVideo: false,
-        isTogglingAudio: false,
-        selectedCamera: null,
-        selectedMicrophone: null,
-        selectedSpeaker: null,
-        devices: [],
-      });
-    }
-
-    // ConferenceSession status changes
-    room.on("connection.state.changed", (status) => {
-      updateRoomState({
-        status,
-        roomId: room.id,
-        roomName: room.info?.name ?? null,
-        isJoining: false,
-        hostId: null,
-      });
-      this.room._emitter.emit("status:changed", { status });
-    });
-
-    // Participant events
-    room.on("participant.joined", (participant) => {
-      const normalized = normalizeParticipant(participant);
-      const currentState = this.participants._state;
-      const updatedParticipants = [...currentState.participants.filter((p) => p.id !== normalized.id), normalized];
-      updateParticipantState({
-        ...currentState,
-        participants: updatedParticipants,
-        count: updatedParticipants.length,
-      });
-      this.participants._emitter.emit("participant:joined", { participant: normalized });
-    });
-
-    room.on("participant.left", (participantId) => {
-      const currentState = this.participants._state;
-      const updatedParticipants = currentState.participants.filter((p) => p.id !== participantId);
-      updateParticipantState({
-        ...currentState,
-        participants: updatedParticipants,
-        count: updatedParticipants.length,
-      });
-      this.participants._emitter.emit("participant:left", { participantId });
-    });
-
-    room.on("participant.updated", ({ participantId, participant }) => {
-      const normalized = normalizeParticipant(participant);
-      const currentState = this.participants._state;
-      const existingIndex = currentState.participants.findIndex((p) => p.id === participantId || p.id === normalized.id);
-      const updatedParticipants = existingIndex === -1 ? [...currentState.participants, normalized] : currentState.participants.map((p) => (p.id === participantId || p.id === normalized.id ? normalized : p));
-
-      // Also update localParticipant if it's the local user
-      const localParticipant = normalized.isLocal ? normalized : currentState.localParticipant;
-
-      updateParticipantState({
-        ...currentState,
-        participants: updatedParticipants,
-        count: updatedParticipants.length,
-        localParticipant,
-      });
-      this.participants._emitter.emit("participant:updated", { participantId, participant: normalized });
-
-      // Update media state if local participant changed
-      if (normalized.isLocal) {
-        const currentMediaState = this.media._state;
-        updateMediaState({
-          ...currentMediaState,
-          isVideoEnabled: normalized.videoEnabled,
-          isAudioEnabled: normalized.audioEnabled,
-        });
-      }
-    });
-
-    room.on("speaker.active.changed", (speaker) => {
-      const normalized = speaker ? normalizeParticipant(speaker) : null;
-      const currentState = this.participants._state;
-      updateParticipantState({
-        ...currentState,
-        activeSpeaker: normalized,
-      });
-      this.participants._emitter.emit("active-speaker:changed", { participant: normalized });
-    });
-
-    // ConferenceSession connected/disconnected
-    room.on("connection.state.changed", (status) => {
-      if (status === "connected") {
-        this.room._emitter.emit("connected", { roomId: room.id });
-      } else if (status === "disconnected") {
-        this.room._emitter.emit("disconnected", { reason: "connection_lost" });
-      }
+    attachRoomToManagersAndBridgeState({
+      room,
+      setCurrentRoom: (nextRoom) => {
+        this._currentRoom = nextRoom;
+      },
+      roomApi: this.room,
+      participantsApi: this.participants,
+      mediaApi: this.media,
+      stateUpdaters: this.stateUpdaters,
+      runtime: this._runtime,
+      screenShare: this.screenShare,
+      chat: this.chat,
+      recording: this.recording,
+      interactions: this.interactions,
+      whiteboard: this.whiteboard,
+      startRecording: () => this.client.startRecording(),
+      stopRecording: () => this.client.stopRecording(),
     });
   }
 
