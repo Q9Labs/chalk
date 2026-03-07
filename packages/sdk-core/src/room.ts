@@ -44,6 +44,7 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   private wsClient?: WSClient;
   private readonly debug: boolean;
   private readonly sessionStore: ConferenceSessionStore;
+  private wsSignalingCleanup: (() => void) | null = null;
 
   private readonly leaveState: { isLeaving: boolean; leavePromise: Promise<void> | null } = {
     isLeaving: false,
@@ -230,6 +231,8 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   }
 
   private clearRuntimeState(): void {
+    this.wsSignalingCleanup?.();
+    this.wsSignalingCleanup = null;
     this.sessionStore.clearRuntimeState();
   }
 
@@ -250,7 +253,8 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   }
 
   private setupWSListeners(): void {
-    setupConferenceSessionWsSignaling({
+    this.wsSignalingCleanup?.();
+    this.wsSignalingCleanup = setupConferenceSessionWsSignaling({
       roomId: this.id,
       getWsClient: () => this.wsClient,
       hasRtkClient: () => !!this.rtkClient,

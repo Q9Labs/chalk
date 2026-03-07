@@ -1,6 +1,7 @@
 import { wideEvents } from "../wide-events/index.ts";
 import type { ChalkError, ChatMessage, Participant, Recording, SessionConnectionState } from "../types.ts";
 import type { WSClient } from "../ws-client.ts";
+import type { WSEvents } from "../ws-client/emitted-events.ts";
 import type { ConferenceSessionEvents, WhiteboardCursorEvent, WhiteboardSnapshotEvent, WhiteboardUpdateEvent } from "./types.ts";
 
 interface WsSignalingDeps {
@@ -19,32 +20,36 @@ interface WsSignalingDeps {
   handleHostAudioCommand: (participantId: string, enable: boolean) => Promise<void>;
 }
 
-export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void => {
+export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): (() => void) => {
   const wsClient = deps.getWsClient();
   if (!wsClient) {
-    return;
+    return () => {};
   }
+  const unsubscribers: Array<() => void> = [];
+  const subscribe = <K extends keyof WSEvents>(event: K, handler: (data: WSEvents[K]) => void): void => {
+    unsubscribers.push(wsClient.on(event, handler));
+  };
 
-  wsClient.on("connected", () => {
+  subscribe("connected", () => {
     if (!deps.hasRtkClient()) {
       deps.setConnectionState("connected");
     }
   });
 
-  wsClient.on("disconnected", () => {
+  subscribe("disconnected", () => {
     if (!deps.hasRtkClient()) {
       deps.setConnectionState("disconnected");
     }
   });
 
-  wsClient.on("reconnecting", () => {
+  subscribe("reconnecting", () => {
     if (!deps.hasRtkClient()) {
       deps.setConnectionState("reconnecting");
     }
   });
 
   if (!deps.hasRtkClient()) {
-    wsClient.on("participant.joined", (data) => {
+    subscribe("participant.joined", (data) => {
       const participants = deps.getParticipants();
       if (participants.has(data.id)) {
         return;
@@ -53,7 +58,7 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
       deps.emit("participant.joined", data);
     });
 
-    wsClient.on("participant.left", (data) => {
+    subscribe("participant.left", (data) => {
       const participants = deps.getParticipants();
       const participant = participants.get(data.participantId);
       participants.delete(data.participantId);
@@ -62,7 +67,7 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
       }
     });
 
-    wsClient.on("participant.updated", (data) => {
+    subscribe("participant.updated", (data) => {
       const participants = deps.getParticipants();
       const participant = participants.get(data.participantId);
       if (participant) {
@@ -76,24 +81,24 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     });
   }
 
-  wsClient.on("participant.mute", (data) => {
+  subscribe("participant.mute", (data) => {
     void deps.handleHostAudioCommand(data.participantId, false);
   });
 
-  wsClient.on("participant.unmute", (data) => {
+  subscribe("participant.unmute", (data) => {
     void deps.handleHostAudioCommand(data.participantId, true);
   });
 
-  wsClient.on("chat.message", (data) => {
+  subscribe("chat.message", (data) => {
     deps.appendMessage(data as ChatMessage);
     deps.emit("chat.message", data as ChatMessage);
   });
 
-  wsClient.on("reaction", (data) => {
+  subscribe("reaction", (data) => {
     deps.emit("reaction", data);
   });
 
-  wsClient.on("hand.raised", (data) => {
+  subscribe("hand.raised", (data) => {
     const participants = deps.getParticipants();
     const participant = participants.get(data.participantId);
     if (participant) {
@@ -107,7 +112,7 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     deps.emit("hand.raised", { participantId: data.participantId });
   });
 
-  wsClient.on("hand.lowered", (data) => {
+  subscribe("hand.lowered", (data) => {
     const participants = deps.getParticipants();
     const participant = participants.get(data.participantId);
     if (participant) {
@@ -121,12 +126,12 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     deps.emit("hand.lowered", { participantId: data.participantId });
   });
 
-  wsClient.on("recording.started", (data) => {
+  subscribe("recording.started", (data) => {
     deps.setCurrentRecording({ id: data.recordingId });
     deps.emit("recording.started", { recordingId: data.recordingId });
   });
 
-  wsClient.on("recording.stopped", (data) => {
+  subscribe("recording.stopped", (data) => {
     const currentRecording = deps.getCurrentRecording();
     const recording: Recording = {
       id: currentRecording?.id ?? data.recordingId,
@@ -138,7 +143,7 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     deps.emit("recording.stopped", recording);
   });
 
-  wsClient.on("error", (data) => {
+  subscribe("error", (data) => {
     deps.emit("error", {
       code: data.code,
       message: data.message,
@@ -146,7 +151,7 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     } as ChalkError);
   });
 
-  wsClient.on("room.snapshot", (snapshot) => {
+  subscribe("room.snapshot", (snapshot) => {
     deps.emitRoomSyncReady("ws.snapshot", snapshot.participants.length);
 
     if (deps.hasRtkClient()) {
@@ -182,7 +187,7 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     }
   });
 
-  wsClient.on("whiteboard.data", (data) => {
+  subscribe("whiteboard.data", (data) => {
     deps.emit("whiteboard.update", {
       schemaVersion: data.schemaVersion,
       sceneId: data.sceneId,
@@ -195,11 +200,11 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     } as WhiteboardUpdateEvent);
   });
 
-  wsClient.on("whiteboard.snapshot", (snapshot) => {
+  subscribe("whiteboard.snapshot", (snapshot) => {
     deps.emit("whiteboard.snapshot", snapshot as WhiteboardSnapshotEvent);
   });
 
-  wsClient.on("whiteboard.cursor", (data) => {
+  subscribe("whiteboard.cursor", (data) => {
     deps.emit("whiteboard.cursor", {
       participantId: data.participantId,
       displayName: data.displayName,
@@ -208,7 +213,7 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     } as WhiteboardCursorEvent);
   });
 
-  wsClient.on("permission.changed", (data) => {
+  subscribe("permission.changed", (data) => {
     if (data.feature === "whiteboard") {
       deps.setWhiteboardPermission(data.participantId, data.canDraw);
       deps.emit("whiteboard.permission.changed", {
@@ -218,18 +223,28 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): void =
     }
   });
 
-  wsClient.on("whiteboard.opened", (data) => {
+  subscribe("whiteboard.opened", (data) => {
     deps.emit("whiteboard.opened", {
       participantId: data.participantId,
       displayName: data.displayName,
     });
   });
 
-  wsClient.on("whiteboard.closed", (data) => {
+  subscribe("whiteboard.closed", (data) => {
     deps.emit("whiteboard.closed", {
       participantId: data.participantId,
     });
   });
+
+  return () => {
+    for (const unsubscribe of unsubscribers) {
+      try {
+        unsubscribe();
+      } catch {
+        // best effort cleanup
+      }
+    }
+  };
 };
 
 interface HostAudioCommandDeps {

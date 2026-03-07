@@ -29,3 +29,42 @@
 ### Notes
 
 - Unrelated pre-existing dirty files in `apps/web/...` were not touched.
+
+## 13:42 PKT — teardown pattern sweep (listener lifecycle)
+
+- Fixed teardown regression in `packages/sdk-core/src/conference-session/ws-signaling.ts`:
+  - restored `WSEvents` typing import
+  - retained unsubscribe collector contract (`setupConferenceSessionWsSignaling` returns cleanup).
+- Fixed typed listener teardown in `packages/sdk-core/src/managers/whiteboard-manager.ts`:
+  - removed broad `onRoom(...)` helper that erased inference
+  - switched to strongly-typed `room.on(...)` registrations while collecting unsubscribers.
+- Applied same attach/teardown/dispose lifecycle pattern to manager modules:
+  - `packages/sdk-core/src/managers/chat-manager.ts`
+  - `packages/sdk-core/src/managers/recording-manager.ts`
+  - `packages/sdk-core/src/managers/interaction-manager.ts`
+  - `packages/sdk-core/src/managers/screen-share-manager.ts`
+- New manager behavior:
+  - `attachRoom(...)` now tears down previous room listeners before binding new ones.
+  - `dispose()` now tears down room listeners + nulls room refs.
+  - listener arrays use best-effort unsubscribe guards.
+
+### Verification
+
+- `bunx --bun oxfmt --write` on touched files ✅
+- `bun run --cwd packages/sdk-core check-types` ✅
+- `bun run --cwd packages/sdk-core test` ✅ (182 pass)
+
+## 13:45 PKT — teardown regression tests
+
+- Added `packages/sdk-core/src/__tests__/manager-teardown.test.ts`.
+- New assertions verify no duplicate listener behavior after re-attaching same room for:
+  - `ChatManager`
+  - `RecordingManager`
+  - `InteractionManager`
+  - `ScreenShareManager`
+  - `WhiteboardManager`
+
+### Verification
+
+- `bun run --cwd packages/sdk-core check-types` ✅
+- `bun run --cwd packages/sdk-core test` ✅ (187 pass)

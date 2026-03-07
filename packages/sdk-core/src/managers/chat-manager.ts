@@ -13,24 +13,24 @@ import { TypedEventEmitter } from "../utils/typed-emitter";
 
 /** Chat manager state */
 export interface ChatState {
-	/** All messages in chronological order */
-	readonly messages: readonly ChatMessage[];
-	/** Whether chat is enabled */
-	readonly isEnabled: boolean;
-	/** Message count */
-	readonly count: number;
-	/** Unread message count */
-	readonly unreadCount: number;
+  /** All messages in chronological order */
+  readonly messages: readonly ChatMessage[];
+  /** Whether chat is enabled */
+  readonly isEnabled: boolean;
+  /** Message count */
+  readonly count: number;
+  /** Unread message count */
+  readonly unreadCount: number;
 }
 
 /** Chat manager events */
 export interface ChatManagerEvents {
-	/** New message received */
-	message: { message: ChatMessage };
-	/** Message reaction added */
-	reaction: { messageId: string; emoji: string; participantId: string };
-	/** Error occurred */
-	error: ChalkError;
+  /** New message received */
+  message: { message: ChatMessage };
+  /** Message reaction added */
+  reaction: { messageId: string; emoji: string; participantId: string };
+  /** Error occurred */
+  error: ChalkError;
 }
 
 /**
@@ -39,144 +39,151 @@ export interface ChatManagerEvents {
  * Chat is ephemeral - messages are cleared when the meeting ends.
  */
 export class ChatManager extends StateContainer<ChatState> {
-	private readonly events = new TypedEventEmitter<ChatManagerEvents>();
-	private room: ConferenceSession | null = null;
-	private messages: ChatMessage[] = [];
-	private unreadCount = 0;
-	private isChatVisible = false;
+  private readonly events = new TypedEventEmitter<ChatManagerEvents>();
+  private room: ConferenceSession | null = null;
+  private roomUnsubscribers: Array<() => void> = [];
+  private messages: ChatMessage[] = [];
+  private unreadCount = 0;
+  private isChatVisible = false;
 
-	constructor(_debug = false) {
-		super({
-			messages: [],
-			isEnabled: true,
-			count: 0,
-			unreadCount: 0,
-		});
-	}
+  constructor(_debug = false) {
+    super({
+      messages: [],
+      isEnabled: true,
+      count: 0,
+      unreadCount: 0,
+    });
+  }
 
-	/** Subscribe to chat events */
-	on<K extends keyof ChatManagerEvents>(
-		event: K,
-		handler: (data: ChatManagerEvents[K]) => void,
-	): () => void {
-		return this.events.on(event, handler);
-	}
+  /** Subscribe to chat events */
+  on<K extends keyof ChatManagerEvents>(event: K, handler: (data: ChatManagerEvents[K]) => void): () => void {
+    return this.events.on(event, handler);
+  }
 
-	/** Attach ConferenceSession instance */
-	attachRoom(room: ConferenceSession): void {
-		this.room = room;
-		this.setupRoomListeners();
-		this.syncFromRoom();
-	}
+  /** Attach ConferenceSession instance */
+  attachRoom(room: ConferenceSession): void {
+    this.teardownRoomListeners();
+    this.room = room;
+    this.setupRoomListeners();
+    this.syncFromRoom();
+  }
 
-	private syncFromRoom(): void {
-		if (!this.room) return;
+  private teardownRoomListeners(): void {
+    for (const unsubscribe of this.roomUnsubscribers) {
+      try {
+        unsubscribe();
+      } catch {
+        // best effort cleanup
+      }
+    }
+    this.roomUnsubscribers = [];
+  }
 
-		this.messages = this.room.messages.map((m) => this.normalizeMessage(m));
-		this.updateState();
-	}
+  private syncFromRoom(): void {
+    if (!this.room) return;
 
-	private normalizeMessage(m: ChatMessage): ChatMessage {
-		return {
-			id: m.id,
-			content: m.content,
-			senderId: m.senderId,
-			senderName: m.senderName,
-			timestamp:
-				m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp),
-		};
-	}
+    this.messages = this.room.messages.map((m) => this.normalizeMessage(m));
+    this.updateState();
+  }
 
-	private setupRoomListeners(): void {
-		if (!this.room) return;
+  private normalizeMessage(m: ChatMessage): ChatMessage {
+    return {
+      id: m.id,
+      content: m.content,
+      senderId: m.senderId,
+      senderName: m.senderName,
+      timestamp: m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp),
+    };
+  }
 
-		this.room.on("chat.message", (message) => {
-			const normalized = this.normalizeMessage(message);
-			this.messages.push(normalized);
+  private setupRoomListeners(): void {
+    if (!this.room) return;
 
-			// Increment unread if chat is not visible
-			if (!this.isChatVisible) {
-				this.unreadCount++;
-			}
+    this.roomUnsubscribers.push(
+      this.room.on("chat.message", (message) => {
+        const normalized = this.normalizeMessage(message);
+        this.messages.push(normalized);
 
-			this.updateState();
-			this.events.emit("message", { message: normalized });
-		});
-	}
+        // Increment unread if chat is not visible
+        if (!this.isChatVisible) {
+          this.unreadCount++;
+        }
 
-	private updateState(): void {
-		this.setState({
-			messages: [...this.messages],
-			count: this.messages.length,
-			unreadCount: this.unreadCount,
-		});
-	}
+        this.updateState();
+        this.events.emit("message", { message: normalized });
+      }),
+    );
+  }
 
-	/** Send a chat message */
-	sendMessage(content: string): void {
-		if (!this.room) {
-			throw new ChalkError(
-				ChalkErrorCode.NOT_IN_ROOM,
-				"Not connected to a room",
-			);
-		}
+  private updateState(): void {
+    this.setState({
+      messages: [...this.messages],
+      count: this.messages.length,
+      unreadCount: this.unreadCount,
+    });
+  }
 
-		if (!content.trim()) {
-			return;
-		}
+  /** Send a chat message */
+  sendMessage(content: string): void {
+    if (!this.room) {
+      throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+    }
 
-		this.room.sendMessage(content);
-	}
+    if (!content.trim()) {
+      return;
+    }
 
-	/** React to a message with an emoji */
-	reactToMessage(messageId: string, emoji: ReactionEmoji): void {
-		if (!this.room) {
-			throw new ChalkError(
-				ChalkErrorCode.NOT_IN_ROOM,
-				"Not connected to a room",
-			);
-		}
+    this.room.sendMessage(content);
+  }
 
-		// Find the message
-		const message = this.messages.find((m) => m.id === messageId);
-		if (!message) return;
+  /** React to a message with an emoji */
+  reactToMessage(messageId: string, emoji: ReactionEmoji): void {
+    if (!this.room) {
+      throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+    }
 
-		const localId = this.room.localParticipant?.id;
-		if (!localId) return;
+    // Find the message
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) return;
 
-		// TODO: Send reaction to server when API supports it
-		// For now, just emit the event locally
-		this.updateState();
-		this.events.emit("reaction", { messageId, emoji, participantId: localId });
-	}
+    const localId = this.room.localParticipant?.id;
+    if (!localId) return;
 
-	/** Mark chat as visible (resets unread count) */
-	markAsRead(): void {
-		this.isChatVisible = true;
-		this.unreadCount = 0;
-		this.updateState();
-	}
+    // TODO: Send reaction to server when API supports it
+    // For now, just emit the event locally
+    this.updateState();
+    this.events.emit("reaction", { messageId, emoji, participantId: localId });
+  }
 
-	/** Mark chat as hidden (starts counting unread) */
-	markAsHidden(): void {
-		this.isChatVisible = false;
-	}
+  /** Mark chat as visible (resets unread count) */
+  markAsRead(): void {
+    this.isChatVisible = true;
+    this.unreadCount = 0;
+    this.updateState();
+  }
 
-	/** Clear all messages (used when meeting ends) */
-	clear(): void {
-		this.messages = [];
-		this.unreadCount = 0;
-		this.updateState();
-	}
+  /** Mark chat as hidden (starts counting unread) */
+  markAsHidden(): void {
+    this.isChatVisible = false;
+  }
 
-	/** Get message by ID */
-	getMessage(id: string): ChatMessage | undefined {
-		return this.messages.find((m) => m.id === id);
-	}
+  /** Clear all messages (used when meeting ends) */
+  clear(): void {
+    this.messages = [];
+    this.unreadCount = 0;
+    this.updateState();
+  }
 
-	/** Cleanup resources */
-	dispose(): void {
-		this.clear();
-		this.events.removeAllListeners();
-	}
+  /** Get message by ID */
+  getMessage(id: string): ChatMessage | undefined {
+    return this.messages.find((m) => m.id === id);
+  }
+
+  /** Cleanup resources */
+  dispose(): void {
+    this.teardownRoomListeners();
+    this.room = null;
+    this.clear();
+    this.events.removeAllListeners();
+  }
 }

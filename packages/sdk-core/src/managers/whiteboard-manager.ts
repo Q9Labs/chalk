@@ -64,6 +64,7 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
   private readonly updateScheduler = new WhiteboardDebouncedScheduler(UPDATE_DEBOUNCE_MS);
   private readonly cursorScheduler = new WhiteboardDebouncedScheduler(CURSOR_DEBOUNCE_MS);
   private room: ConferenceSession | null = null;
+  private roomUnsubscribers: Array<() => void> = [];
   private cursors = new Map<string, WhiteboardCursor>();
   private pendingElements: unknown[] | null = null;
   private pendingFiles: Record<string, unknown> | null = null;
@@ -90,9 +91,21 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
   /** Attach ConferenceSession instance */
   attachRoom(room: ConferenceSession): void {
+    this.teardownRoomListeners();
     this.room = room;
     this.setupRoomListeners();
     this.syncFromRoom();
+  }
+
+  private teardownRoomListeners(): void {
+    for (const unsubscribe of this.roomUnsubscribers) {
+      try {
+        unsubscribe();
+      } catch {
+        // best effort cleanup
+      }
+    }
+    this.roomUnsubscribers = [];
   }
 
   private syncFromRoom(): void {
@@ -105,126 +118,140 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
   private setupRoomListeners(): void {
     if (!this.room) return;
+    const room = this.room;
+    this.roomUnsubscribers.push(
+      room.on("whiteboard.update", (data) => {
+        const update: WhiteboardUpdate = {
+          schemaVersion: data.schemaVersion,
+          sceneId: data.sceneId,
+          syncAll: data.syncAll,
+          participantId: data.participantId,
+          displayName: data.displayName,
+          elements: data.elements,
+          files: data.files,
+          seq: data.seq,
+          timestamp: new Date(),
+        };
 
-    this.room.on("whiteboard.update", (data) => {
-      const update: WhiteboardUpdate = {
-        schemaVersion: data.schemaVersion,
-        sceneId: data.sceneId,
-        syncAll: data.syncAll,
-        participantId: data.participantId,
-        displayName: data.displayName,
-        elements: data.elements,
-        files: data.files,
-        seq: data.seq,
-        timestamp: new Date(),
-      };
+        const lastSeq = this.lastSeqByParticipant.get(data.participantId) ?? 0;
+        if (data.seq > lastSeq) {
+          const currentState = this.getState();
+          this.lastSeqByParticipant.set(data.participantId, data.seq);
+          this.setState(
+            reduceRemoteWhiteboardUpdate({
+              state: currentState,
+              sceneId: data.sceneId,
+              syncAll: data.syncAll,
+              elements: data.elements,
+              files: data.files,
+              seq: data.seq,
+            }),
+          );
+        }
 
-      const lastSeq = this.lastSeqByParticipant.get(data.participantId) ?? 0;
-      if (data.seq > lastSeq) {
-        const currentState = this.getState();
-        this.lastSeqByParticipant.set(data.participantId, data.seq);
-        this.setState(
-          reduceRemoteWhiteboardUpdate({
-            state: currentState,
-            sceneId: data.sceneId,
-            syncAll: data.syncAll,
-            elements: data.elements,
-            files: data.files,
-            seq: data.seq,
-          }),
-        );
-      }
+        this.events.emit("update", update);
+      }),
+    );
 
-      this.events.emit("update", update);
-    });
-
-    this.room.on("whiteboard.snapshot", (data) => {
-      const snapshot: WhiteboardSnapshot = {
-        schemaVersion: data.schemaVersion,
-        roomId: data.roomId,
-        sceneId: data.sceneId,
-        elements: data.elements,
-        files: data.files,
-        appState: data.appState,
-        updatedAtMs: data.updatedAtMs,
-        lastSeq: data.lastSeq,
-      };
-
-      this.lastSeqByParticipant.clear();
-      this.setState(
-        reduceWhiteboardSnapshot({
+    this.roomUnsubscribers.push(
+      room.on("whiteboard.snapshot", (data) => {
+        const snapshot: WhiteboardSnapshot = {
+          schemaVersion: data.schemaVersion,
+          roomId: data.roomId,
           sceneId: data.sceneId,
           elements: data.elements,
           files: data.files,
+          appState: data.appState,
+          updatedAtMs: data.updatedAtMs,
           lastSeq: data.lastSeq,
-        }),
-      );
-      this.events.emit("snapshot", snapshot);
-    });
+        };
 
-    this.room.on("whiteboard.cursor", (data) => {
-      const cursor: WhiteboardCursor = {
-        participantId: data.participantId,
-        displayName: data.displayName,
-        x: data.x,
-        y: data.y,
-        timestamp: new Date(),
-      };
+        this.lastSeqByParticipant.clear();
+        this.setState(
+          reduceWhiteboardSnapshot({
+            sceneId: data.sceneId,
+            elements: data.elements,
+            files: data.files,
+            lastSeq: data.lastSeq,
+          }),
+        );
+        this.events.emit("snapshot", snapshot);
+      }),
+    );
 
-      this.cursors.set(data.participantId, cursor);
-      this.setState(reduceWhiteboardCursorState(this.cursors));
-      this.events.emit("cursor", cursor);
-    });
+    this.roomUnsubscribers.push(
+      room.on("whiteboard.cursor", (data) => {
+        const cursor: WhiteboardCursor = {
+          participantId: data.participantId,
+          displayName: data.displayName,
+          x: data.x,
+          y: data.y,
+          timestamp: new Date(),
+        };
 
-    this.room.on("whiteboard.permission.changed", (data) => {
-      // Update local permission if it's for us
-      const localId = this.room?.localParticipant?.id;
-      if (data.participantId === localId) {
-        this.setState(reduceWhiteboardPermissionSync(data.canDraw));
-      }
+        this.cursors.set(data.participantId, cursor);
+        this.setState(reduceWhiteboardCursorState(this.cursors));
+        this.events.emit("cursor", cursor);
+      }),
+    );
 
-      const permission: WhiteboardPermission = {
-        participantId: data.participantId,
-        feature: "whiteboard",
-        canDraw: data.canDraw,
-        grantedBy: "", // Not provided by room event
-        timestamp: new Date(),
-      };
+    this.roomUnsubscribers.push(
+      room.on("whiteboard.permission.changed", (data) => {
+        // Update local permission if it's for us
+        const localId = this.room?.localParticipant?.id;
+        if (data.participantId === localId) {
+          this.setState(reduceWhiteboardPermissionSync(data.canDraw));
+        }
 
-      this.events.emit("permission:changed", permission);
-    });
+        const permission: WhiteboardPermission = {
+          participantId: data.participantId,
+          feature: "whiteboard",
+          canDraw: data.canDraw,
+          grantedBy: "", // Not provided by room event
+          timestamp: new Date(),
+        };
 
-    this.room.on("whiteboard.opened", (data) => {
-      this.openParticipants.add(data.participantId);
-      this.setState(reduceWhiteboardOpened(this.openParticipants));
-      this.events.emit("opened", {
-        participantId: data.participantId,
-        displayName: data.displayName,
-      });
-    });
+        this.events.emit("permission:changed", permission);
+      }),
+    );
 
-    this.room.on("whiteboard.closed", (data) => {
-      this.openParticipants.delete(data.participantId);
-      this.cursors.delete(data.participantId);
-      this.setState(
-        reduceWhiteboardClosed({
-          openParticipants: this.openParticipants,
-          cursors: this.cursors,
-        }),
-      );
-      this.events.emit("closed", { participantId: data.participantId });
-    });
+    this.roomUnsubscribers.push(
+      room.on("whiteboard.opened", (data) => {
+        this.openParticipants.add(data.participantId);
+        this.setState(reduceWhiteboardOpened(this.openParticipants));
+        this.events.emit("opened", {
+          participantId: data.participantId,
+          displayName: data.displayName,
+        });
+      }),
+    );
 
-    this.room.on("participant.left", (participantId) => {
-      this.openParticipants.delete(participantId);
-      this.cursors.delete(participantId);
-      this.setState(
-        reduceWhiteboardParticipantLeft({
-          openParticipants: this.openParticipants,
-          cursors: this.cursors,
-        }),
-      );
-    });
+    this.roomUnsubscribers.push(
+      room.on("whiteboard.closed", (data) => {
+        this.openParticipants.delete(data.participantId);
+        this.cursors.delete(data.participantId);
+        this.setState(
+          reduceWhiteboardClosed({
+            openParticipants: this.openParticipants,
+            cursors: this.cursors,
+          }),
+        );
+        this.events.emit("closed", { participantId: data.participantId });
+      }),
+    );
+
+    this.roomUnsubscribers.push(
+      room.on("participant.left", (participantId) => {
+        this.openParticipants.delete(participantId);
+        this.cursors.delete(participantId);
+        this.setState(
+          reduceWhiteboardParticipantLeft({
+            openParticipants: this.openParticipants,
+            cursors: this.cursors,
+          }),
+        );
+      }),
+    );
   }
 
   /** Open whiteboard locally and notify others */
@@ -360,6 +387,8 @@ export class WhiteboardManager extends StateContainer<WhiteboardState> {
 
   /** Cleanup resources */
   dispose(): void {
+    this.teardownRoomListeners();
+    this.room = null;
     this.updateScheduler.cancel();
     this.cursorScheduler.cancel();
     this.lastSeqByParticipant.clear();

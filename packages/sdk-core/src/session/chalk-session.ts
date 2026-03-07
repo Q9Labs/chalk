@@ -119,6 +119,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   private _currentRoom: ConferenceSession | null = null;
   private readonly incidentPipeline: ChalkSessionIncidentPipeline;
   private readonly stateUpdaters: SessionStateUpdaters;
+  private roomBridgeCleanup: (() => void) | null = null;
 
   constructor(config: ChalkSessionConfig) {
     super();
@@ -257,7 +258,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   }
 
   private attachRoomToManagers(room: ConferenceSession): void {
-    attachRoomToManagersAndBridgeState({
+    this.roomBridgeCleanup?.();
+    this.roomBridgeCleanup = attachRoomToManagersAndBridgeState({
       room,
       setCurrentRoom: (nextRoom) => {
         this._currentRoom = nextRoom;
@@ -343,6 +345,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
         }),
       );
       this.client.disconnect();
+      this.roomBridgeCleanup?.();
+      this.roomBridgeCleanup = null;
       this._currentRoom = null;
 
       // Ensure hooks see a clean slate after leaving (ConferenceSession.leave clears maps without per-participant events).
@@ -511,6 +515,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     this.whiteboard.dispose();
 
     this.client.disconnect();
+    this.roomBridgeCleanup?.();
+    this.roomBridgeCleanup = null;
     this._currentRoom = null;
     this.removeAllListeners();
 

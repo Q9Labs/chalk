@@ -48,7 +48,7 @@ const normalizeParticipant = (participant: Participant): ParticipantState["parti
   metadata: participant.metadata,
 });
 
-export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomApi, participantsApi, mediaApi, stateUpdaters, runtime, screenShare, chat, recording, interactions, whiteboard, startRecording, stopRecording }: AttachRoomBridgeArgs): void => {
+export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomApi, participantsApi, mediaApi, stateUpdaters, runtime, screenShare, chat, recording, interactions, whiteboard, startRecording, stopRecording }: AttachRoomBridgeArgs): (() => void) => {
   setCurrentRoom(room);
 
   screenShare.attachRoom(room);
@@ -75,7 +75,7 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
 
   recording.setApiCallbacks(startRecording, stopRecording);
 
-  bridgeRoomToSessionState({
+  return bridgeRoomToSessionState({
     room,
     roomApi,
     participantsApi,
@@ -92,8 +92,9 @@ interface BridgeRoomToSessionStateArgs {
   stateUpdaters: SessionStateUpdaters;
 }
 
-const bridgeRoomToSessionState = ({ room, roomApi, participantsApi, mediaApi, stateUpdaters }: BridgeRoomToSessionStateArgs): void => {
+const bridgeRoomToSessionState = ({ room, roomApi, participantsApi, mediaApi, stateUpdaters }: BridgeRoomToSessionStateArgs): (() => void) => {
   const { updateRoomState, updateParticipantState, updateMediaState } = stateUpdaters;
+  const unsubscribers: Array<() => void> = [];
 
   updateRoomState({
     status: room.status,
@@ -127,88 +128,110 @@ const bridgeRoomToSessionState = ({ room, roomApi, participantsApi, mediaApi, st
     });
   }
 
-  room.on("connection.state.changed", (status) => {
-    updateRoomState({
-      status,
-      roomId: room.id,
-      roomName: room.info?.name ?? null,
-      isJoining: false,
-      hostId: null,
-    });
-    roomApi._emitter.emit("status:changed", { status });
-  });
-
-  room.on("participant.joined", (participant) => {
-    const normalized = normalizeParticipant(participant);
-    const currentState = participantsApi._state;
-    const updatedParticipants = [...currentState.participants.filter((p) => p.id !== normalized.id), normalized];
-
-    updateParticipantState({
-      ...currentState,
-      participants: updatedParticipants,
-      count: updatedParticipants.length,
-    });
-
-    participantsApi._emitter.emit("participant:joined", { participant: normalized });
-  });
-
-  room.on("participant.left", (participantId) => {
-    const currentState = participantsApi._state;
-    const updatedParticipants = currentState.participants.filter((participant) => participant.id !== participantId);
-
-    updateParticipantState({
-      ...currentState,
-      participants: updatedParticipants,
-      count: updatedParticipants.length,
-    });
-
-    participantsApi._emitter.emit("participant:left", { participantId });
-  });
-
-  room.on("participant.updated", ({ participantId, participant }) => {
-    const normalized = normalizeParticipant(participant);
-    const currentState = participantsApi._state;
-    const existingIndex = currentState.participants.findIndex((currentParticipant) => currentParticipant.id === participantId || currentParticipant.id === normalized.id);
-    const updatedParticipants = existingIndex === -1 ? [...currentState.participants, normalized] : currentState.participants.map((currentParticipant) => (currentParticipant.id === participantId || currentParticipant.id === normalized.id ? normalized : currentParticipant));
-
-    const localParticipant = normalized.isLocal ? normalized : currentState.localParticipant;
-
-    updateParticipantState({
-      ...currentState,
-      participants: updatedParticipants,
-      count: updatedParticipants.length,
-      localParticipant,
-    });
-
-    participantsApi._emitter.emit("participant:updated", { participantId, participant: normalized });
-
-    if (normalized.isLocal) {
-      const currentMediaState = mediaApi._state;
-      updateMediaState({
-        ...currentMediaState,
-        isVideoEnabled: normalized.videoEnabled,
-        isAudioEnabled: normalized.audioEnabled,
+  unsubscribers.push(
+    room.on("connection.state.changed", (status) => {
+      updateRoomState({
+        status,
+        roomId: room.id,
+        roomName: room.info?.name ?? null,
+        isJoining: false,
+        hostId: null,
       });
+      roomApi._emitter.emit("status:changed", { status });
+    }),
+  );
+
+  unsubscribers.push(
+    room.on("participant.joined", (participant) => {
+      const normalized = normalizeParticipant(participant);
+      const currentState = participantsApi._state;
+      const updatedParticipants = [...currentState.participants.filter((p) => p.id !== normalized.id), normalized];
+
+      updateParticipantState({
+        ...currentState,
+        participants: updatedParticipants,
+        count: updatedParticipants.length,
+      });
+
+      participantsApi._emitter.emit("participant:joined", { participant: normalized });
+    }),
+  );
+
+  unsubscribers.push(
+    room.on("participant.left", (participantId) => {
+      const currentState = participantsApi._state;
+      const updatedParticipants = currentState.participants.filter((participant) => participant.id !== participantId);
+
+      updateParticipantState({
+        ...currentState,
+        participants: updatedParticipants,
+        count: updatedParticipants.length,
+      });
+
+      participantsApi._emitter.emit("participant:left", { participantId });
+    }),
+  );
+
+  unsubscribers.push(
+    room.on("participant.updated", ({ participantId, participant }) => {
+      const normalized = normalizeParticipant(participant);
+      const currentState = participantsApi._state;
+      const existingIndex = currentState.participants.findIndex((currentParticipant) => currentParticipant.id === participantId || currentParticipant.id === normalized.id);
+      const updatedParticipants = existingIndex === -1 ? [...currentState.participants, normalized] : currentState.participants.map((currentParticipant) => (currentParticipant.id === participantId || currentParticipant.id === normalized.id ? normalized : currentParticipant));
+
+      const localParticipant = normalized.isLocal ? normalized : currentState.localParticipant;
+
+      updateParticipantState({
+        ...currentState,
+        participants: updatedParticipants,
+        count: updatedParticipants.length,
+        localParticipant,
+      });
+
+      participantsApi._emitter.emit("participant:updated", { participantId, participant: normalized });
+
+      if (normalized.isLocal) {
+        const currentMediaState = mediaApi._state;
+        updateMediaState({
+          ...currentMediaState,
+          isVideoEnabled: normalized.videoEnabled,
+          isAudioEnabled: normalized.audioEnabled,
+        });
+      }
+    }),
+  );
+
+  unsubscribers.push(
+    room.on("speaker.active.changed", (speaker) => {
+      const normalized = speaker ? normalizeParticipant(speaker) : null;
+      const currentState = participantsApi._state;
+
+      updateParticipantState({
+        ...currentState,
+        activeSpeaker: normalized,
+      });
+
+      participantsApi._emitter.emit("active-speaker:changed", { participant: normalized });
+    }),
+  );
+
+  unsubscribers.push(
+    room.on("connection.state.changed", (status) => {
+      if (status === "connected") {
+        roomApi._emitter.emit("connected", { roomId: room.id });
+      } else if (status === "disconnected") {
+        roomApi._emitter.emit("disconnected", { reason: "connection_lost" });
+      }
+    }),
+  );
+
+  return () => {
+    for (const unsubscribe of unsubscribers) {
+      try {
+        unsubscribe();
+      } catch {
+        // best effort cleanup
+      }
     }
-  });
-
-  room.on("speaker.active.changed", (speaker) => {
-    const normalized = speaker ? normalizeParticipant(speaker) : null;
-    const currentState = participantsApi._state;
-
-    updateParticipantState({
-      ...currentState,
-      activeSpeaker: normalized,
-    });
-
-    participantsApi._emitter.emit("active-speaker:changed", { participant: normalized });
-  });
-
-  room.on("connection.state.changed", (status) => {
-    if (status === "connected") {
-      roomApi._emitter.emit("connected", { roomId: room.id });
-    } else if (status === "disconnected") {
-      roomApi._emitter.emit("disconnected", { reason: "connection_lost" });
-    }
-  });
+  };
 };
