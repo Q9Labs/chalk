@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **SDK-Core: RTK signaling modularization** — split `conference-session/rtk-signaling.ts` into focused identity, participant-sync, chat, transcript, and shared-deps helpers while keeping `setupConferenceSessionRtkSignaling` behavior and API stable.
 - **API: DB pool tunables via env** — support `DATABASE_MAX_CONNS` and `DATABASE_MIN_CONNS` with validation so lean `t4g.micro` can run lower connection pressure safely.
 - **API Docker: Multi-arch build support** — Dockerfile now honors `TARGETARCH` for arm64-compatible builds used by lean EC2 deploys.
 - **CI: Terraform validate scope** — include `ec2-api-lean` module in legacy infra validation loop.
