@@ -1,140 +1,14 @@
 import type { ChalkError, Participant } from "../types.ts";
 import { getRtkIds, mapRtkParticipant } from "./rtk-identity.ts";
+import { collectJoinedParticipants, getParticipantEmitters, onParticipantsEvent, toRtkParticipantsApi, type RtkParticipantsApi, type ParticipantEventEmitter } from "./rtk-participant-adapter.ts";
+import { applyAudioUpdatePatch, applyScreenShareUpdatePatch, applyVideoUpdatePatch, hasMediaStateChanged, mergeParticipantMediaState } from "./participant-sync-reducer.ts";
 import type { RtkSignalingDeps } from "./rtk-signaling-deps.ts";
-
-interface ParticipantEventEmitter {
-  on?: (eventName: string, fn: (payload?: unknown) => void) => void;
-}
-
-const hasMediaStateChanged = (before: Participant, after: Participant): boolean =>
-  before.displayName !== after.displayName ||
-  before.videoEnabled !== after.videoEnabled ||
-  before.audioEnabled !== after.audioEnabled ||
-  before.isScreenSharing !== after.isScreenSharing ||
-  before.videoTrack?.id !== after.videoTrack?.id ||
-  before.audioTrack?.id !== after.audioTrack?.id ||
-  before.screenShareTrack?.id !== after.screenShareTrack?.id ||
-  before.screenShareAudioTrack?.id !== after.screenShareAudioTrack?.id;
-
-const mergeParticipantMediaState = (existing: Participant, incoming: Participant): Participant => ({
-  ...existing,
-  userId: incoming.userId ?? existing.userId,
-  displayName: incoming.displayName || existing.displayName,
-  videoEnabled: incoming.videoEnabled,
-  audioEnabled: incoming.audioEnabled,
-  videoTrack: incoming.videoTrack,
-  audioTrack: incoming.audioTrack,
-  isScreenSharing: incoming.isScreenSharing,
-  screenShareTrack: incoming.screenShareTrack,
-  screenShareAudioTrack: incoming.screenShareAudioTrack,
-  isLocal: false,
-});
-
-const toParticipantArray = (source: unknown): unknown[] => {
-  if (!source) {
-    return [];
-  }
-  if (Array.isArray(source)) {
-    return source;
-  }
-  if (typeof (source as Iterable<unknown>)[Symbol.iterator] === "function") {
-    try {
-      return Array.from(source as Iterable<unknown>);
-    } catch {
-      return [];
-    }
-  }
-  return [];
-};
 
 const emitParticipantUpdated = (deps: RtkSignalingDeps, participantId: string, participant: Participant): void => {
   deps.emit("participant.updated", {
     participantId,
     participant,
   });
-};
-
-const collectJoinedParticipants = (participantsApi: {
-  toArray?: () => unknown[] | Iterable<unknown>;
-  joined: {
-    toArray?: () => unknown[] | Iterable<unknown>;
-    values?: () => Iterable<unknown>;
-    forEach?: (cb: (participant: unknown) => void) => void;
-    [Symbol.iterator]?: () => Iterator<unknown>;
-  };
-}): unknown[] => {
-  if (typeof participantsApi.toArray === "function") {
-    try {
-      const snapshot = toParticipantArray(participantsApi.toArray());
-      if (snapshot.length > 0) {
-        return snapshot;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  if (typeof participantsApi.joined.toArray === "function") {
-    try {
-      const snapshot = toParticipantArray(participantsApi.joined.toArray());
-      if (snapshot.length > 0) {
-        return snapshot;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  if (typeof participantsApi.joined[Symbol.iterator] === "function") {
-    try {
-      const snapshot = Array.from(participantsApi.joined as Iterable<unknown>);
-      if (snapshot.length > 0) {
-        return snapshot;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  const participants: unknown[] = [];
-  if (typeof participantsApi.joined.values === "function") {
-    try {
-      for (const participant of participantsApi.joined.values()) {
-        participants.push(participant);
-      }
-      if (participants.length > 0) {
-        return participants;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  if (typeof participantsApi.joined.forEach === "function") {
-    try {
-      participantsApi.joined.forEach((participant) => participants.push(participant));
-    } catch {
-      // best effort
-    }
-  }
-
-  return participants;
-};
-
-const onParticipantsEvent = (emitters: ParticipantEventEmitter[], event: string, handler: (payload?: unknown) => void): void => {
-  const attached = new Set<unknown>();
-
-  for (const emitter of emitters) {
-    if (!emitter || typeof emitter.on !== "function" || attached.has(emitter)) {
-      continue;
-    }
-    attached.add(emitter);
-    try {
-      emitter.on(event, handler);
-    } catch {
-      // unsupported by this RTK build
-    }
-  }
 };
 
 const ensureRemoteParticipant = (deps: RtkSignalingDeps, rtkParticipant: unknown): Participant | null => {
@@ -171,18 +45,7 @@ const ensureRemoteParticipant = (deps: RtkSignalingDeps, rtkParticipant: unknown
   return participant;
 };
 
-const reconcileJoinedParticipants = (
-  deps: RtkSignalingDeps,
-  participantsApi: {
-    toArray?: () => unknown[] | Iterable<unknown>;
-    joined: {
-      toArray?: () => unknown[] | Iterable<unknown>;
-      values?: () => Iterable<unknown>;
-      forEach?: (cb: (participant: unknown) => void) => void;
-      [Symbol.iterator]?: () => Iterator<unknown>;
-    };
-  },
-): void => {
+const reconcileJoinedParticipants = (deps: RtkSignalingDeps, participantsApi: RtkParticipantsApi): void => {
   const joinedParticipants = collectJoinedParticipants(participantsApi);
   deps.emitRoomSyncReady("rtk.snapshot", joinedParticipants.length + (deps.getLocalParticipant() ? 1 : 0));
 
@@ -237,17 +100,7 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
     return;
   }
 
-  const participantsApi = rtkClient.participants as unknown as {
-    toArray?: () => unknown[] | Iterable<unknown>;
-    on?: (event: string, handler: (speaker: unknown) => void) => void;
-    joined: {
-      on?: (eventName: string, fn: (payload?: unknown) => void) => void;
-      toArray?: () => unknown[] | Iterable<unknown>;
-      values?: () => Iterable<unknown>;
-      forEach?: (cb: (participant: unknown) => void) => void;
-      [Symbol.iterator]?: () => Iterator<unknown>;
-    };
-  };
+  const participantsApi = toRtkParticipantsApi(rtkClient.participants);
 
   rtkClient.self.on("roomJoined", () => {
     deps.setConnectionState("connected");
@@ -343,7 +196,7 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
     },
   );
 
-  const emitters: ParticipantEventEmitter[] = [participantsApi.joined, participantsApi];
+  const emitters: ParticipantEventEmitter[] = getParticipantEmitters(participantsApi);
 
   onParticipantsEvent(emitters, "participantJoined", (rtkParticipant: unknown) => {
     ensureRemoteParticipant(deps, rtkParticipant);
@@ -374,11 +227,7 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       return;
     }
 
-    const updated: Participant = {
-      ...existing,
-      videoEnabled: participant.videoEnabled,
-      videoTrack: participant.videoTrack,
-    };
+    const updated = applyVideoUpdatePatch(existing, participant);
     participants.set(participant.id, updated);
 
     if (participant.videoEnabled) {
@@ -400,11 +249,7 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       return;
     }
 
-    const updated: Participant = {
-      ...existing,
-      audioEnabled: participant.audioEnabled,
-      audioTrack: participant.audioTrack,
-    };
+    const updated = applyAudioUpdatePatch(existing, participant);
     participants.set(participant.id, updated);
 
     if (participant.audioEnabled) {
@@ -426,12 +271,7 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       return;
     }
 
-    const updated: Participant = {
-      ...existing,
-      isScreenSharing: participant.isScreenSharing,
-      screenShareTrack: participant.screenShareTrack,
-      screenShareAudioTrack: participant.screenShareAudioTrack,
-    };
+    const updated = applyScreenShareUpdatePatch(existing, participant);
     participants.set(participant.id, updated);
 
     if (participant.isScreenSharing) {
