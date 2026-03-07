@@ -44,10 +44,6 @@ export const createConferenceSessionWhiteboardActions = (deps: WhiteboardActions
     deps.getWsClient()?.revokeWhiteboardPermission(participantId);
   };
 
-  const sendWhiteboardUpdate = (elements: unknown[], files?: Record<string, unknown>, seq?: number): void => {
-    deps.getWsClient()?.sendWhiteboardUpdate(elements, files, seq);
-  };
-
   const sendWhiteboardUpdateV2 = (payload: { sceneId: string; syncAll: boolean; elements: unknown[]; seq?: number }): void => {
     deps.getWsClient()?.sendWhiteboardUpdateV2(payload);
   };
@@ -76,7 +72,6 @@ export const createConferenceSessionWhiteboardActions = (deps: WhiteboardActions
     canDrawWhiteboard,
     grantWhiteboardPermission,
     revokeWhiteboardPermission,
-    sendWhiteboardUpdate,
     sendWhiteboardUpdateV2,
     sendWhiteboardCursor,
     clearWhiteboard,

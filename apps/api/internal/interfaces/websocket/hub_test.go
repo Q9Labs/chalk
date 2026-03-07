@@ -396,3 +396,56 @@ func TestHubGetRoomSnapshotUsesRoomStateSource(t *testing.T) {
 	assert.Equal(t, "Remote User", snapshot.Participants[0].DisplayName)
 	assert.Equal(t, joinedAt, snapshot.Participants[0].JoinedAt)
 }
+
+func TestParseWhiteboardRoomPolicy(t *testing.T) {
+	policy := ParseWhiteboardRoomPolicy([]byte(`{"default_access":"host_only","host_can_override":false}`))
+	assert.Equal(t, WhiteboardDefaultAccessHostOnly, policy.DefaultAccess)
+	assert.False(t, policy.HostCanOverride)
+
+	fallback := ParseWhiteboardRoomPolicy([]byte(`{"default_access":"invalid"}`))
+	assert.Equal(t, WhiteboardDefaultAccessAll, fallback.DefaultAccess)
+	assert.True(t, fallback.HostCanOverride)
+}
+
+func TestHubCanParticipantDraw_DefaultAndOverrides(t *testing.T) {
+	mockRedis := &MockRedisClient{}
+	hub := NewHub(mockRedis, nil)
+	defer hub.Close()
+
+	roomID := uuid.New()
+	hostID := uuid.New()
+	participantID := uuid.New()
+
+	hub.SetParticipantMetadata(hostID, domain.ParticipantMetadata{
+		DisplayName: "Host",
+		Role:        "host",
+		JoinedAt:    time.Now(),
+	})
+	hub.SetParticipantMetadata(participantID, domain.ParticipantMetadata{
+		DisplayName: "Participant",
+		Role:        "participant",
+		JoinedAt:    time.Now(),
+	})
+
+	// Default policy is "all".
+	assert.True(t, hub.CanParticipantDraw(roomID, hostID))
+	assert.True(t, hub.CanParticipantDraw(roomID, participantID))
+
+	hub.SetRoomWhiteboardPolicy(roomID, WhiteboardRoomPolicy{
+		DefaultAccess:   WhiteboardDefaultAccessHostOnly,
+		HostCanOverride: true,
+	})
+	assert.True(t, hub.CanParticipantDraw(roomID, hostID))
+	assert.False(t, hub.CanParticipantDraw(roomID, participantID))
+
+	hub.SetParticipantWhiteboardPermission(roomID, participantID, true)
+	assert.True(t, hub.CanParticipantDraw(roomID, participantID))
+	assert.True(t, hub.CanHostOverrideWhiteboard(roomID))
+
+	hub.SetRoomWhiteboardPolicy(roomID, WhiteboardRoomPolicy{
+		DefaultAccess:   WhiteboardDefaultAccessNone,
+		HostCanOverride: false,
+	})
+	assert.False(t, hub.CanHostOverrideWhiteboard(roomID))
+	assert.False(t, hub.CanParticipantDraw(roomID, hostID))
+}

@@ -52,12 +52,14 @@ type TranscriptInput struct {
 }
 
 type Hub struct {
-	clients         map[uuid.UUID]*Client
-	rooms           map[uuid.UUID]map[uuid.UUID]*Client
-	participantMeta map[uuid.UUID]domain.ParticipantMetadata
-	roomRecording   map[uuid.UUID]*RoomRecordingState
-	whiteboardState map[uuid.UUID]*WhiteboardState
-	whiteboardStore WhiteboardStateStore
+	clients               map[uuid.UUID]*Client
+	rooms                 map[uuid.UUID]map[uuid.UUID]*Client
+	participantMeta       map[uuid.UUID]domain.ParticipantMetadata
+	roomRecording         map[uuid.UUID]*RoomRecordingState
+	whiteboardState       map[uuid.UUID]*WhiteboardState
+	whiteboardStore       WhiteboardStateStore
+	whiteboardPolicy      map[uuid.UUID]WhiteboardRoomPolicy
+	whiteboardPermissions map[uuid.UUID]map[uuid.UUID]bool
 
 	register   chan *Client
 	unregister chan *Client
@@ -101,6 +103,8 @@ func NewHub(redisClient RedisInterface, logger *slog.Logger) *Hub {
 		participantMeta:         make(map[uuid.UUID]domain.ParticipantMetadata),
 		roomRecording:           make(map[uuid.UUID]*RoomRecordingState),
 		whiteboardState:         make(map[uuid.UUID]*WhiteboardState),
+		whiteboardPolicy:        make(map[uuid.UUID]WhiteboardRoomPolicy),
+		whiteboardPermissions:   make(map[uuid.UUID]map[uuid.UUID]bool),
 		register:                make(chan *Client),
 		unregister:              make(chan *Client),
 		redisClient:             redisClient,
@@ -376,6 +380,8 @@ func (h *Hub) unregisterClient(client *Client) {
 		delete(h.rooms, client.roomID)
 		delete(h.roomRecording, client.roomID)
 		delete(h.whiteboardState, client.roomID)
+		delete(h.whiteboardPolicy, client.roomID)
+		delete(h.whiteboardPermissions, client.roomID)
 		if cancel, ok := h.roomSubCancel[client.roomID]; ok {
 			cancel()
 			delete(h.roomSubCancel, client.roomID)
@@ -812,6 +818,8 @@ func (h *Hub) Close() {
 
 	h.clients = make(map[uuid.UUID]*Client)
 	h.rooms = make(map[uuid.UUID]map[uuid.UUID]*Client)
+	h.whiteboardPolicy = make(map[uuid.UUID]WhiteboardRoomPolicy)
+	h.whiteboardPermissions = make(map[uuid.UUID]map[uuid.UUID]bool)
 }
 
 // Stop signals the hub to stop running

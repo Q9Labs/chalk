@@ -201,14 +201,6 @@ type PongPayload struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// WhiteboardUpdatePayload - client sends drawing changes
-type WhiteboardUpdatePayload struct {
-	Elements json.RawMessage `json:"elements"`  // Excalidraw elements array
-	Files    json.RawMessage `json:"files"`     // Image files map (optional)
-	AppState json.RawMessage `json:"app_state"` // View state (optional)
-	Seq      int64           `json:"seq"`       // Sequence number for ordering
-}
-
 // WhiteboardUpdateV2Payload - client sends drawing changes (v2)
 //
 // NOTE: Elements are Excalidraw-native JSON objects; do not transform nested keys.
@@ -222,9 +214,9 @@ type WhiteboardUpdateV2Payload struct {
 
 // WhiteboardDataPayload - server broadcasts to room
 type WhiteboardDataPayload struct {
-	SchemaVersion *int64          `json:"schema_version,omitempty"`
-	SceneID       *string         `json:"scene_id,omitempty"`
-	SyncAll       *bool           `json:"sync_all,omitempty"`
+	SchemaVersion int64           `json:"schema_version"`
+	SceneID       string          `json:"scene_id"`
+	SyncAll       bool            `json:"sync_all"`
 	ParticipantID uuid.UUID       `json:"participant_id"`
 	DisplayName   string          `json:"display_name"`
 	Elements      json.RawMessage `json:"elements"`
@@ -235,13 +227,13 @@ type WhiteboardDataPayload struct {
 
 // WhiteboardSnapshotPayload - full state sent on join
 type WhiteboardSnapshotPayload struct {
-	SchemaVersion *int64          `json:"schema_version,omitempty"`
+	SchemaVersion int64           `json:"schema_version"`
 	RoomID        uuid.UUID       `json:"room_id"`
-	SceneID       *string         `json:"scene_id,omitempty"`
+	SceneID       string          `json:"scene_id"`
 	Elements      json.RawMessage `json:"elements"`
 	Files         json.RawMessage `json:"files"`
 	AppState      json.RawMessage `json:"app_state"`
-	UpdatedAtMs   *int64          `json:"updated_at_ms,omitempty"`
+	UpdatedAtMs   int64           `json:"updated_at_ms"`
 	LastSeq       int64           `json:"last_seq"`
 }
 

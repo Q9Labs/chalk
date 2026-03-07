@@ -26,10 +26,10 @@ export type WSMessage = Schema.Schema.Type<typeof WSMessage>;
  * Server typically includes a timestamp, but accept `void` for compatibility.
  */
 export const HeartbeatPayload = Schema.Union(
-	Schema.Void,
-	Schema.Struct({
-		timestamp: Schema.optional(Schema.Union(Schema.String, Schema.DateFromSelf)),
-	}),
+  Schema.Void,
+  Schema.Struct({
+    timestamp: Schema.optional(Schema.Union(Schema.String, Schema.DateFromSelf)),
+  }),
 );
 export type HeartbeatPayload = Schema.Schema.Type<typeof HeartbeatPayload>;
 
@@ -63,7 +63,7 @@ export const ParticipantJoinedPayload = Schema.Union(
     participant: ParticipantPayload,
   }),
   // Flat format: {...participant fields}
-  ParticipantPayload
+  ParticipantPayload,
 );
 export type ParticipantJoinedPayload = Schema.Schema.Type<typeof ParticipantJoinedPayload>;
 
@@ -184,9 +184,9 @@ export type RegisteredPayload = Schema.Schema.Type<typeof RegisteredPayload>;
  * whiteboard.data event payload
  */
 export const WhiteboardDataPayload = Schema.Struct({
-  schemaVersion: Schema.optional(Schema.Number),
-  sceneId: Schema.optional(Schema.String),
-  syncAll: Schema.optional(Schema.Boolean),
+  schemaVersion: Schema.Literal(2),
+  sceneId: Schema.String,
+  syncAll: Schema.Boolean,
   participantId: Schema.String,
   displayName: Schema.String,
   elements: Schema.Array(Schema.Unknown),
@@ -200,9 +200,9 @@ export type WhiteboardDataPayload = Schema.Schema.Type<typeof WhiteboardDataPayl
  * whiteboard.snapshot event payload
  */
 export const WhiteboardSnapshotPayload = Schema.Struct({
-  schemaVersion: Schema.optional(Schema.Number),
+  schemaVersion: Schema.Literal(2),
   roomId: Schema.String,
-  sceneId: Schema.optional(Schema.String),
+  sceneId: Schema.String,
   elements: Schema.Array(Schema.Unknown),
   files: Schema.Record({ key: Schema.String, value: Schema.Unknown }),
   appState: AppStateSchema,
@@ -268,11 +268,11 @@ export type ErrorPayload = Schema.Schema.Type<typeof ErrorPayload>;
  * transcript.ack payload
  */
 export const TranscriptAckPayload = Schema.Union(
-	Schema.Void,
-	Schema.Struct({
-		id: Schema.String,
-		timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
-	}),
+  Schema.Void,
+  Schema.Struct({
+    id: Schema.String,
+    timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
+  }),
 );
 export type TranscriptAckPayload = Schema.Schema.Type<typeof TranscriptAckPayload>;
 
@@ -286,7 +286,7 @@ export const WSPayloadSchemas = {
   "participant.mute": ParticipantControlPayload,
   "participant.unmute": ParticipantControlPayload,
   "chat.message": ChatMessagePayload,
-  "reaction": ReactionPayload,
+  reaction: ReactionPayload,
   "hand.raised": HandPayload,
   "hand.lowered": HandPayload,
   "recording.started": RecordingStartedPayload,
@@ -294,7 +294,7 @@ export const WSPayloadSchemas = {
   "room.updated": RoomUpdatedPayload,
   "room.snapshot": RoomSnapshotPayload,
   "room.sync": RoomSnapshotPayload,
-  "connected": RegisteredPayload,
+  connected: RegisteredPayload,
   "whiteboard.data": WhiteboardDataPayload,
   "whiteboard.snapshot": WhiteboardSnapshotPayload,
   "whiteboard.cursor": WhiteboardCursorPayload,
@@ -304,7 +304,7 @@ export const WSPayloadSchemas = {
   ping: HeartbeatPayload,
   pong: HeartbeatPayload,
   "transcript.ack": TranscriptAckPayload,
-  "error": ErrorPayload,
+  error: ErrorPayload,
 } as const;
 
 export type WSMessageType = keyof typeof WSPayloadSchemas;

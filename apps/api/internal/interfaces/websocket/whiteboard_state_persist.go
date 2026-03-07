@@ -15,14 +15,6 @@ type persistedWhiteboardStateV2 struct {
 	LastSeq       int64             `json:"lastSeq"`
 }
 
-// v1 persisted format (legacy). Restore-only.
-type persistedWhiteboardStateV1 struct {
-	Elements json.RawMessage `json:"elements"`
-	Files    json.RawMessage `json:"files"`
-	AppState json.RawMessage `json:"appState"`
-	LastSeq  int64           `json:"lastSeq"`
-}
-
 func (h *Hub) scheduleWhiteboardPersist(roomID uuid.UUID) {
 	if h.whiteboardStore == nil {
 		return
@@ -57,9 +49,9 @@ func (h *Hub) persistWhiteboardState(roomID uuid.UUID) {
 
 	state := persistedWhiteboardStateV2{
 		SchemaVersion: whiteboardSchemaVersionV2,
-		SceneID:       derefString(snapshot.SceneID),
+		SceneID:       snapshot.SceneID,
 		Elements:      rawElements,
-		UpdatedAtMs:   derefInt64(snapshot.UpdatedAtMs),
+		UpdatedAtMs:   snapshot.UpdatedAtMs,
 		LastSeq:       snapshot.LastSeq,
 	}
 
@@ -101,7 +93,6 @@ func (h *Hub) getOrRestoreWhiteboardState(roomID uuid.UUID) *WhiteboardState {
 }
 
 func (h *Hub) restoreWhiteboardState(roomID uuid.UUID, raw []byte) *WhiteboardState {
-	// Try v2 first
 	var persistedV2 persistedWhiteboardStateV2
 	if err := json.Unmarshal(raw, &persistedV2); err == nil &&
 		persistedV2.SchemaVersion == whiteboardSchemaVersionV2 &&
@@ -134,58 +125,8 @@ func (h *Hub) restoreWhiteboardState(roomID uuid.UUID, raw []byte) *WhiteboardSt
 		return state
 	}
 
-	// Fallback v1 restore → v2 state
-	var persistedV1 persistedWhiteboardStateV1
-	if err := json.Unmarshal(raw, &persistedV1); err != nil {
-		h.logger.Error("failed to parse persisted whiteboard state",
-			"room_id", roomID,
-			"error", err.Error(),
-		)
-		return nil
-	}
-
-	state := newWhiteboardState("")
-	state.LastSeq = persistedV1.LastSeq
-
-	if len(persistedV1.Elements) > 0 {
-		var rawElements []json.RawMessage
-		if err := json.Unmarshal(persistedV1.Elements, &rawElements); err == nil {
-			for _, rawElement := range rawElements {
-				var meta elementMeta
-				if err := json.Unmarshal(rawElement, &meta); err != nil {
-					continue
-				}
-				if meta.ID == "" {
-					continue
-				}
-				state.Elements[meta.ID] = storedElement{
-					Raw:          rawElement,
-					Version:      meta.Version,
-					VersionNonce: meta.VersionNonce,
-					Updated:      meta.Updated,
-					IsDeleted:    meta.IsDeleted,
-					Index:        meta.Index,
-				}
-			}
-		}
-	}
-
-	h.mu.Lock()
-	h.whiteboardState[roomID] = state
-	h.mu.Unlock()
-	return state
-}
-
-func derefString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func derefInt64(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
+	h.logger.Warn("ignoring persisted whiteboard state with unsupported schema version",
+		"room_id", roomID,
+	)
+	return nil
 }

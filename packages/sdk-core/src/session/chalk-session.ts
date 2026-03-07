@@ -53,14 +53,15 @@ export interface ChalkSessionConfig {
 	token?: string;
 	/** Token provider for refresh */
 	tokenProvider?: () => Promise<string>;
-	/** API key (for server-to-server auth) */
+	/**
+	 * API key (deprecated; prefer `token` or `tokenProvider`).
+	 * @deprecated Will be removed in v2.
+	 */
 	apiKey?: string;
 	/** Enable debug logging */
 	debug?: boolean;
 	/** Use demo API endpoints (demoJoin instead of addParticipant) */
 	demoMode?: boolean;
-	/** Enable Excalidraw-native whiteboard sync (v2) */
-	whiteboardSyncV2?: boolean;
 	/** Incident reporting callback + transport options. */
 	incident?: ChalkIncidentConfig;
 	/** Optional PostHog session replay integration. */
@@ -128,8 +129,6 @@ type MediaManagerEvents = {
 };
 
 export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
-	/** Whiteboard sync v2 toggle */
-	readonly whiteboardSyncV2: boolean;
 	/** ConferenceSession API object with state and events */
 	readonly room: {
 		readonly getState: () => RoomState;
@@ -221,7 +220,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 	constructor(config: ChalkSessionConfig) {
 		super();
 		const debug = config.debug ?? false;
-		this.whiteboardSyncV2 = config.whiteboardSyncV2 ?? true;
 		this.incidentConfig = config.incident;
 
 		// Initialize ConferenceClient for API/WebRTC

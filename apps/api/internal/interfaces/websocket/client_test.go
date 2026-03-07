@@ -253,12 +253,68 @@ func TestClient_handleMessage_WhiteboardUpdate(t *testing.T) {
 
 	msg := &Message{
 		Type:    MessageTypeWhiteboardUpdate,
-		Payload: json.RawMessage(`{"elements": [], "files": {}, "seq": 1}`),
+		Payload: json.RawMessage(`{"schema_version":2,"scene_id":"scene-1","sync_all":false,"elements":[],"seq":1}`),
 	}
 
 	assert.NotPanics(t, func() {
 		client.handleMessage(msg)
 	})
+}
+
+func TestClient_handleMessage_WhiteboardUpdate_V1Rejected(t *testing.T) {
+	hub := newTestHub()
+	client := NewClient(nil, hub, uuid.New(), uuid.New(), uuid.New())
+
+	msg := &Message{
+		Type:    MessageTypeWhiteboardUpdate,
+		Payload: json.RawMessage(`{"elements": [], "files": {}, "seq": 1}`),
+	}
+
+	client.handleMessage(msg)
+
+	select {
+	case raw := <-client.send:
+		var envelope Message
+		require.NoError(t, json.Unmarshal(raw, &envelope))
+		assert.Equal(t, MessageTypeError, envelope.Type)
+
+		var payload ErrorPayload
+		require.NoError(t, json.Unmarshal(envelope.Payload, &payload))
+		assert.Equal(t, "unsupported_version", payload.Code)
+	default:
+		t.Fatal("expected unsupported_version error message")
+	}
+}
+
+func TestClient_handleMessage_WhiteboardUpdate_ForbiddenWithoutDrawAccess(t *testing.T) {
+	hub := newTestHub()
+	roomID := uuid.New()
+	participantID := uuid.New()
+	client := NewClient(nil, hub, roomID, participantID, uuid.New())
+	hub.SetRoomWhiteboardPolicy(roomID, WhiteboardRoomPolicy{
+		DefaultAccess:   WhiteboardDefaultAccessNone,
+		HostCanOverride: false,
+	})
+
+	msg := &Message{
+		Type:    MessageTypeWhiteboardUpdate,
+		Payload: json.RawMessage(`{"schema_version":2,"scene_id":"scene-1","sync_all":false,"elements":[],"seq":1}`),
+	}
+
+	client.handleMessage(msg)
+
+	select {
+	case raw := <-client.send:
+		var envelope Message
+		require.NoError(t, json.Unmarshal(raw, &envelope))
+		assert.Equal(t, MessageTypeError, envelope.Type)
+
+		var payload ErrorPayload
+		require.NoError(t, json.Unmarshal(envelope.Payload, &payload))
+		assert.Equal(t, "forbidden", payload.Code)
+	default:
+		t.Fatal("expected forbidden error message")
+	}
 }
 
 func TestClient_handleMessage_WhiteboardSync(t *testing.T) {

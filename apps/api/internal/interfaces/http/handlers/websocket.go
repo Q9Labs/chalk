@@ -361,6 +361,11 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 				JoinedAt:    joinedAt,
 			})
 		}
+
+		// Best-effort: hydrate room whiteboard policy from tenant config.
+		if tenant, err := h.queries.GetTenantByRoomID(c.Request.Context(), claims.RoomID); err == nil {
+			h.hub.SetRoomWhiteboardPolicy(claims.RoomID, wsocket.ParseWhiteboardRoomPolicy(tenant.WhiteboardConfig))
+		}
 	}
 
 	// Create client

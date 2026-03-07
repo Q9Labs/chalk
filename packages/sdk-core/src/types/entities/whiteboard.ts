@@ -15,20 +15,20 @@ export type WhiteboardFeature = "whiteboard" | "annotations";
  * Cursor position for a participant on the whiteboard
  */
 export interface WhiteboardCursor {
-	/** Participant ID */
-	participantId: string;
+  /** Participant ID */
+  participantId: string;
 
-	/** Display name of the participant */
-	displayName: string;
+  /** Display name of the participant */
+  displayName: string;
 
-	/** X coordinate on the canvas */
-	x: number;
+  /** X coordinate on the canvas */
+  x: number;
 
-	/** Y coordinate on the canvas */
-	y: number;
+  /** Y coordinate on the canvas */
+  y: number;
 
-	/** When the cursor was last updated */
-	timestamp: Date;
+  /** When the cursor was last updated */
+  timestamp: Date;
 }
 
 /**
@@ -38,79 +38,79 @@ export interface WhiteboardCursor {
  * (all participants leave).
  */
 export interface WhiteboardSnapshot {
-	/** Wire schema version (v2 = 2) */
-	schemaVersion?: number;
+  /** Wire schema version (v2 = 2) */
+  schemaVersion: 2;
 
-	/** ConferenceSession ID */
-	roomId: string;
+  /** ConferenceSession ID */
+  roomId: string;
 
-	/** Scene epoch; changes on clear */
-	sceneId?: string;
+  /** Scene epoch; changes on clear */
+  sceneId: string;
 
-	/** Excalidraw elements array */
-	elements: unknown[];
+  /** Excalidraw elements array */
+  elements: unknown[];
 
-	/** Image files map */
-	files: Record<string, unknown>;
+  /** Image files map */
+  files: Record<string, unknown>;
 
-	/** Excalidraw app state (view settings) */
-	appState: AppState;
+  /** Excalidraw app state (view settings) */
+  appState: AppState;
 
-	/** Snapshot updated timestamp (ms) */
-	updatedAtMs?: number;
+  /** Snapshot updated timestamp (ms) */
+  updatedAtMs?: number;
 
-	/** Last sequence number for ordering */
-	lastSeq: number;
+  /** Last sequence number for ordering */
+  lastSeq: number;
 }
 
 /**
  * Whiteboard update from a participant
  */
 export interface WhiteboardUpdate {
-	/** Wire schema version (v2 = 2) */
-	schemaVersion?: number;
+  /** Wire schema version (v2 = 2) */
+  schemaVersion: 2;
 
-	/** Scene epoch; changes on clear */
-	sceneId?: string;
+  /** Scene epoch; changes on clear */
+  sceneId: string;
 
-	/** Whether this update represents a full-scene sync */
-	syncAll?: boolean;
+  /** Whether this update represents a full-scene sync */
+  syncAll: boolean;
 
-	/** Participant ID who made the update */
-	participantId: string;
+  /** Participant ID who made the update */
+  participantId: string;
 
-	/** Display name of the participant */
-	displayName: string;
+  /** Display name of the participant */
+  displayName: string;
 
-	/** Updated Excalidraw elements */
-	elements: unknown[];
+  /** Updated Excalidraw elements */
+  elements: unknown[];
 
-	/** Updated files (if any) */
-	files?: Record<string, unknown>;
+  /** Updated files (if any) */
+  files?: Record<string, unknown>;
 
-	/** Sequence number for ordering */
-	seq: number;
+  /** Sequence number for ordering */
+  seq: number;
 
-	/** When the update was made */
-	timestamp: Date;
+  /** When the update was made */
+  timestamp: Date;
 }
 
 /**
  * Permission change for whiteboard access
  */
 export interface WhiteboardPermission {
-	/** Participant ID whose permission changed */
-	participantId: string;
+  /** Participant ID whose permission changed */
+  participantId: string;
 
-	/** Feature the permission applies to */
-	feature: WhiteboardFeature;
+  /** Feature the permission applies to */
+  feature: WhiteboardFeature;
 
-	/** Whether the participant can draw */
-	canDraw: boolean;
+  /** Whether the participant can draw */
+  canDraw: boolean;
 
-	/** Participant ID who granted/revoked the permission */
-	grantedBy: string;
+  /** Participant ID who granted/revoked the permission */
+  grantedBy: string;
 
-	/** When the permission was changed */
-	timestamp: Date;
+  /** When the permission was changed */
+  timestamp: Date;
 }

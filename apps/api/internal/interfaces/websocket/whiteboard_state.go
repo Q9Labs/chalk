@@ -200,15 +200,14 @@ func (h *Hub) GetWhiteboardSnapshot(roomID uuid.UUID) WhiteboardSnapshotPayload 
 	filesData := json.RawMessage("{}")
 	appState := json.RawMessage("{}")
 
-	schema := int64(whiteboardSchemaVersionV2)
 	return WhiteboardSnapshotPayload{
-		SchemaVersion: &schema,
+		SchemaVersion: int64(whiteboardSchemaVersionV2),
 		RoomID:        roomID,
-		SceneID:       &sceneID,
+		SceneID:       sceneID,
 		Elements:      elementsData,
 		Files:         filesData,
 		AppState:      appState,
-		UpdatedAtMs:   &updatedAt,
+		UpdatedAtMs:   updatedAt,
 		LastSeq:       lastSeq,
 	}
 }

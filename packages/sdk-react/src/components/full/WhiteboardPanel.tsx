@@ -53,11 +53,9 @@ export interface WhiteboardPanelProps {
  * Automatically handles permissions, cursors, and element syncing.
  */
 function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = EXCALIDRAW_CSS_CDN, theme = "auto", participants = [], showThumbnails = true, thumbnailPosition = "bottom", onExcalidrawApiReady }: WhiteboardPanelProps): React.JSX.Element {
-  const rawSession = useSession();
-  const session = rawSession as unknown as WhiteboardSessionLike;
-  const { canDraw, cursors, latestUpdate, latestSnapshot, sendUpdate, sendCursor, requestSync } = useWhiteboard();
+  const session = useSession() as unknown as WhiteboardSessionLike;
+  const { canDraw, latestUpdate, latestSnapshot, requestSync } = useWhiteboard();
   const { canGrant, grantAll, revokeAll } = useWhiteboardPermissions();
-  const useV2 = rawSession.whiteboardSyncV2 ?? true;
 
   const [isThumbnailsOpen, setIsThumbnailsOpen] = useState(true);
   const toggleThumbnails = useCallback(() => {
@@ -67,23 +65,18 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
   const resolvedTheme = theme === "auto" ? (typeof document !== "undefined" && document.documentElement.classList.contains("dark") ? "dark" : "light") : theme;
 
   const { refs, containerRef, isReady, cssLoaded, loadError } = useWhiteboardExcalidrawMount({
-    useV2,
     canDraw,
     resolvedTheme,
     excalidrawCssPath,
     session,
-    sendUpdate,
-    sendCursor,
     onExcalidrawApiReady,
   });
 
   useWhiteboardSync({
-    useV2,
     canDraw,
     requestSync,
     latestUpdate,
     latestSnapshot,
-    cursors,
     session,
     refs,
   });

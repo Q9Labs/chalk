@@ -393,10 +393,6 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     this.whiteboardActions.revokeWhiteboardPermission(participantId);
   }
 
-  sendWhiteboardUpdate(elements: unknown[], files?: Record<string, unknown>, seq?: number): void {
-    this.whiteboardActions.sendWhiteboardUpdate(elements, files, seq);
-  }
-
   sendWhiteboardUpdateV2(payload: { sceneId: string; syncAll: boolean; elements: unknown[]; seq?: number }): void {
     this.whiteboardActions.sendWhiteboardUpdateV2(payload);
   }

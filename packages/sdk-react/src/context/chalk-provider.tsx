@@ -45,7 +45,10 @@ export interface ChalkProviderProps {
 	token?: string;
 	/** Dynamic token provider for refresh */
 	tokenProvider?: () => Promise<string>;
-	/** API key (server-to-server auth) */
+	/**
+	 * API key (deprecated; prefer `token` or `tokenProvider`).
+	 * @deprecated Will be removed in v2.
+	 */
 	apiKey?: string;
 	/** Room ID to auto-connect to */
 	roomId?: string;
@@ -55,8 +58,6 @@ export interface ChalkProviderProps {
 	debug?: boolean;
 	/** Use demo API endpoints (demoJoin instead of addParticipant) */
 	demoMode?: boolean;
-	/** Enable Excalidraw-native whiteboard sync (v2) */
-	whiteboardSyncV2?: boolean;
 	/** Full incident pipeline config (SDK-native reporting). */
 	incident?: ChalkSessionConfig["incident"];
 	/** PostHog session replay integration. */
@@ -118,7 +119,6 @@ export function ChalkProvider({
 	userName,
 	debug,
 	demoMode,
-	whiteboardSyncV2,
 	incident,
 	posthog,
 	onIncident,
@@ -156,7 +156,6 @@ export function ChalkProvider({
 			apiKey,
 			debug,
 			demoMode,
-			whiteboardSyncV2,
 			posthog,
 		};
 		const newSession = new ChalkSession(config);

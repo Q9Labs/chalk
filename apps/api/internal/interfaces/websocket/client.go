@@ -508,8 +508,20 @@ func (c *Client) sendErrorMessage(code, message string) {
 	c.Send(data)
 }
 
+func (c *Client) requireWhiteboardDrawAccess() bool {
+	if c.hub.CanParticipantDraw(c.roomID, c.participantID) {
+		return true
+	}
+	c.sendErrorMessage("forbidden", "You do not have whiteboard draw permissions")
+	return false
+}
+
 // handleWhiteboardUpdate processes a whiteboard update and broadcasts it
 func (c *Client) handleWhiteboardUpdate(msg *Message) {
+	if !c.requireWhiteboardDrawAccess() {
+		return
+	}
+
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 
 	var v2 WhiteboardUpdateV2Payload
@@ -518,71 +530,34 @@ func (c *Client) handleWhiteboardUpdate(msg *Message) {
 		return
 	}
 
-	// v2 message (schema_version: 2)
-	if v2.SchemaVersion == 2 {
-		if v2.SceneID == "" {
-			c.sendErrorMessage("invalid_payload", "scene_id is required for schema_version=2")
-			return
-		}
-
-		sceneID, applied := c.hub.UpdateWhiteboardState(c.roomID, v2)
-		if !applied {
-			// Stale epoch; heal sender with a fresh snapshot.
-			payload := c.hub.GetWhiteboardSnapshot(c.roomID)
-			snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, payload)
-			data, _ := json.Marshal(snapshot)
-			c.SendReliable(data)
-			return
-		}
-
-		schema := int64(2)
-		syncAll := v2.SyncAll
-		dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
-			SchemaVersion: &schema,
-			SceneID:       &sceneID,
-			SyncAll:       &syncAll,
-			ParticipantID: c.participantID,
-			DisplayName:   meta.DisplayName,
-			Elements:      v2.Elements,
-			Seq:           v2.Seq,
-			Timestamp:     time.Now(),
-		})
-
-		msgData, _ := json.Marshal(dataMsg)
-		// Relay to everyone except sender (no echo).
-		c.hub.FanoutToRoomReliable(c.roomID, msgData, c.participantID.String())
+	if v2.SchemaVersion != 2 {
+		c.sendErrorMessage("unsupported_version", "whiteboard.update requires schema_version=2")
 		return
 	}
 
-	// v1 message fallback → treat as v2 update with current epoch.
-	var v1 WhiteboardUpdatePayload
-	if err := msg.UnmarshalPayload(&v1); err != nil {
-		c.sendErrorMessage("invalid_payload", "Failed to parse whiteboard update")
+	if v2.SceneID == "" {
+		c.sendErrorMessage("invalid_payload", "scene_id is required for schema_version=2")
 		return
 	}
 
-	snapshot := c.hub.GetWhiteboardSnapshot(c.roomID)
-	sceneID := derefString(snapshot.SceneID)
-	internal := WhiteboardUpdateV2Payload{
+	sceneID, applied := c.hub.UpdateWhiteboardState(c.roomID, v2)
+	if !applied {
+		// Stale epoch; heal sender with a fresh snapshot.
+		payload := c.hub.GetWhiteboardSnapshot(c.roomID)
+		snapshot, _ := NewMessage(MessageTypeWhiteboardSnapshot, payload)
+		data, _ := json.Marshal(snapshot)
+		c.SendReliable(data)
+		return
+	}
+
+	dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
 		SchemaVersion: 2,
 		SceneID:       sceneID,
-		SyncAll:       false,
-		Elements:      v1.Elements,
-		Seq:           v1.Seq,
-	}
-	_, _ = c.hub.UpdateWhiteboardState(c.roomID, internal)
-
-	schema := int64(2)
-	syncAll := false
-	dataMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
-		SchemaVersion: &schema,
-		SceneID:       &sceneID,
-		SyncAll:       &syncAll,
+		SyncAll:       v2.SyncAll,
 		ParticipantID: c.participantID,
 		DisplayName:   meta.DisplayName,
-		Elements:      v1.Elements,
-		Files:         v1.Files,
-		Seq:           v1.Seq,
+		Elements:      v2.Elements,
+		Seq:           v2.Seq,
 		Timestamp:     time.Now(),
 	})
 
@@ -600,17 +575,19 @@ func (c *Client) handleWhiteboardSync() {
 
 // handleWhiteboardClear broadcasts a whiteboard clear event
 func (c *Client) handleWhiteboardClear() {
+	if !c.requireWhiteboardDrawAccess() {
+		return
+	}
+
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 
 	sceneID := c.hub.ClearWhiteboardState(c.roomID)
 
-	schema := int64(2)
-	syncAll := true
 	seq := time.Now().UnixMilli()
 	clearMsg, _ := NewMessage(MessageTypeWhiteboardData, WhiteboardDataPayload{
-		SchemaVersion: &schema,
-		SceneID:       &sceneID,
-		SyncAll:       &syncAll,
+		SchemaVersion: 2,
+		SceneID:       sceneID,
+		SyncAll:       true,
 		ParticipantID: c.participantID,
 		DisplayName:   meta.DisplayName,
 		Elements:      json.RawMessage("[]"),
@@ -625,6 +602,10 @@ func (c *Client) handleWhiteboardClear() {
 
 // handleWhiteboardCursor broadcasts cursor position to other participants
 func (c *Client) handleWhiteboardCursor(msg *Message) {
+	if !c.requireWhiteboardDrawAccess() {
+		return
+	}
+
 	var payload struct {
 		X float64 `json:"x"`
 		Y float64 `json:"y"`
@@ -657,12 +638,17 @@ func (c *Client) handlePermissionGrant(msg *Message) {
 		c.sendErrorMessage("forbidden", "Only hosts can grant permissions")
 		return
 	}
+	if !c.hub.CanHostOverrideWhiteboard(c.roomID) {
+		c.sendErrorMessage("forbidden", "Host overrides are disabled for this tenant")
+		return
+	}
 
 	var payload PermissionGrantPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
 		c.sendErrorMessage("invalid_payload", "Failed to parse permission grant")
 		return
 	}
+	c.hub.SetParticipantWhiteboardPermission(c.roomID, payload.ParticipantID, true)
 
 	// Broadcast permission change
 	changeMsg, _ := NewMessage(MessageTypePermissionChanged, PermissionChangedPayload{
@@ -686,12 +672,17 @@ func (c *Client) handlePermissionRevoke(msg *Message) {
 		c.sendErrorMessage("forbidden", "Only hosts can revoke permissions")
 		return
 	}
+	if !c.hub.CanHostOverrideWhiteboard(c.roomID) {
+		c.sendErrorMessage("forbidden", "Host overrides are disabled for this tenant")
+		return
+	}
 
 	var payload PermissionGrantPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
 		c.sendErrorMessage("invalid_payload", "Failed to parse permission revoke")
 		return
 	}
+	c.hub.SetParticipantWhiteboardPermission(c.roomID, payload.ParticipantID, false)
 
 	changeMsg, _ := NewMessage(MessageTypePermissionChanged, PermissionChangedPayload{
 		ParticipantID: payload.ParticipantID,
@@ -707,6 +698,10 @@ func (c *Client) handlePermissionRevoke(msg *Message) {
 
 // handleWhiteboardOpen broadcasts that this participant opened the whiteboard
 func (c *Client) handleWhiteboardOpen() {
+	if !c.requireWhiteboardDrawAccess() {
+		return
+	}
+
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 
 	openedMsg, _ := NewMessage(MessageTypeWhiteboardOpened, WhiteboardOpenedPayload{
@@ -721,6 +716,10 @@ func (c *Client) handleWhiteboardOpen() {
 
 // handleWhiteboardClose broadcasts that this participant closed the whiteboard
 func (c *Client) handleWhiteboardClose() {
+	if !c.requireWhiteboardDrawAccess() {
+		return
+	}
+
 	closedMsg, _ := NewMessage(MessageTypeWhiteboardClosed, WhiteboardClosedPayload{
 		ParticipantID: c.participantID,
 		Timestamp:     time.Now(),

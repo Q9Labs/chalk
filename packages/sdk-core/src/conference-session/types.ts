@@ -13,9 +13,9 @@ export interface Transcript {
 }
 
 export interface WhiteboardUpdateEvent {
-  schemaVersion?: number;
-  sceneId?: string;
-  syncAll?: boolean;
+  schemaVersion: 2;
+  sceneId: string;
+  syncAll: boolean;
   participantId: string;
   displayName: string;
   elements: unknown[];
@@ -24,9 +24,9 @@ export interface WhiteboardUpdateEvent {
 }
 
 export interface WhiteboardSnapshotEvent {
-  schemaVersion?: number;
+  schemaVersion: 2;
   roomId: string;
-  sceneId?: string;
+  sceneId: string;
   elements: unknown[];
   files: Record<string, unknown>;
   appState: AppState;
