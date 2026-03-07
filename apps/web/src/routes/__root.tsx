@@ -2,6 +2,7 @@ import { createTokenProvider } from "@q9labs/chalk-core";
 import {
 	ChalkProvider,
 	type ChalkPostHogClient,
+	createHttpIncidentReporter,
 	useWhatsNew,
 	WhatsNewDialog,
 	WhatsNewTrigger,
@@ -173,6 +174,23 @@ function RootComponent() {
 		[posthogClient],
 	);
 
+	const incidentReporter = useMemo(() => {
+		if (isServer) return undefined;
+		const trimmedApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
+		if (!trimmedApiKey) return undefined;
+		return createHttpIncidentReporter({
+			endpoint: `${apiUrl}/api/v1/debug/client-incident`,
+			headers: {
+				"x-api-key": trimmedApiKey,
+				"x-chalk-source": "chalk-web",
+			},
+			retries: 1,
+			retryDelayMs: 200,
+			timeoutMs: 3000,
+			useBeacon: true,
+		});
+	}, [apiKey, apiUrl]);
+
 	const content = (
 		<ThemeProvider>
 			<ErrorProvider>
@@ -215,6 +233,10 @@ function RootComponent() {
 			wsUrl={wsUrl}
 			tokenProvider={tokenProvider}
 			posthog={posthogConfig}
+			incident={{
+				reporter: incidentReporter,
+				maxBreadcrumbs: 80,
+			}}
 		>
 			{content}
 		</ChalkProvider>
