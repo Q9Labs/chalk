@@ -13,6 +13,7 @@ import { createConferenceSessionDeviceController } from "./conference-session/de
 import { createConferenceSessionInteractionActions } from "./conference-session/interaction-actions.ts";
 import { createConferenceSessionLeaveFlow } from "./conference-session/leave-flow.ts";
 import { createConferenceSessionMediaController } from "./conference-session/media-controls.ts";
+import { createConferenceSessionStore, type ConferenceSessionStore } from "./conference-session/session-store.ts";
 import { setupConferenceSessionRtkSignaling } from "./conference-session/rtk-signaling.ts";
 import type { ConferenceSessionEvents, Transcript } from "./conference-session/types.ts";
 import { createConferenceSessionWhiteboardActions } from "./conference-session/whiteboard-actions.ts";
@@ -42,6 +43,7 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   private rtkClient?: RealtimeKitClient;
   private wsClient?: WSClient;
   private readonly debug: boolean;
+  private readonly sessionStore: ConferenceSessionStore;
 
   private readonly leaveState: { isLeaving: boolean; leavePromise: Promise<void> | null } = {
     isLeaving: false,
@@ -59,9 +61,34 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     super();
     this.id = roomId;
     this.debug = debug;
+    this.sessionStore = createConferenceSessionStore({
+      getParticipants: () => this._participants,
+      getPeerIdMap: () => this._rtkPeerIdToStableId,
+      getMessages: () => this._messages,
+      setMessages: (messages) => {
+        this._messages = messages;
+      },
+      getTranscripts: () => this._transcripts,
+      setTranscripts: (transcripts) => {
+        this._transcripts = transcripts;
+      },
+      getWhiteboardPermissions: () => this._whiteboardPermissions,
+      getLocalParticipant: () => this._localParticipant,
+      setLocalParticipant: (participant) => {
+        this._localParticipant = participant;
+      },
+      getActiveSpeaker: () => this._activeSpeaker,
+      setActiveSpeaker: (participant) => {
+        this._activeSpeaker = participant;
+      },
+      getCurrentRecording: () => this._currentRecording,
+      setCurrentRecording: (recording) => {
+        this._currentRecording = recording;
+      },
+    });
 
     this.hostAudioCommandHandler = createHostAudioCommandHandler({
-      getLocalParticipant: () => this._localParticipant,
+      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
       getRtkClient: () =>
         this.rtkClient
           ? (this.rtkClient as unknown as {
@@ -79,21 +106,21 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
 
     this.mediaController = createConferenceSessionMediaController({
       getRtkClient: () => this.rtkClient,
-      getLocalParticipant: () => this._localParticipant,
+      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
       emitError: (error) => this.emit("error", error),
       emitParticipantUpdated: (participantId, participant) => this.emitParticipantUpdated(participantId, participant),
     });
 
     this.deviceController = createConferenceSessionDeviceController({
       getRtkClient: () => this.rtkClient,
-      getLocalParticipant: () => this._localParticipant,
+      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
       emitError: (error) => this.emit("error", error),
     });
 
     this.interactionActions = createConferenceSessionInteractionActions({
       getWsClient: () => this.wsClient,
       getRtkClient: () => this.rtkClient,
-      getLocalParticipant: () => this._localParticipant,
+      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
       emitChatMessage: (message) => this.pushAndEmitChatMessage(message),
       emitParticipantUpdated: (participantId, participant) => this.emitParticipantUpdated(participantId, participant),
       emitHandRaised: (participantId) => this.emit("hand.raised", { participantId }),
@@ -102,9 +129,9 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
 
     this.whiteboardActions = createConferenceSessionWhiteboardActions({
       getWsClient: () => this.wsClient,
-      getLocalParticipant: () => this._localParticipant,
-      getParticipants: () => this._participants,
-      getWhiteboardPermission: (participantId) => this._whiteboardPermissions.get(participantId),
+      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
+      getParticipants: () => this.sessionStore.getParticipants(),
+      getWhiteboardPermission: (participantId) => this.sessionStore.getWhiteboardPermission(participantId),
       getDefaultWhiteboardAccess: () => this._whiteboardDefaultAccess,
     });
 
@@ -141,27 +168,27 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   }
 
   get participants(): Map<string, Participant> {
-    return new Map(this._participants);
+    return new Map(this.sessionStore.getParticipants());
   }
 
   get localParticipant(): Participant | null {
-    return this._localParticipant;
+    return this.sessionStore.getLocalParticipant();
   }
 
   get activeSpeaker(): Participant | null {
-    return this._activeSpeaker;
+    return this.sessionStore.getActiveSpeaker();
   }
 
   get messages(): ChatMessage[] {
-    return [...this._messages];
+    return [...this.sessionStore.getMessages()];
   }
 
   get transcripts(): Transcript[] {
-    return [...this._transcripts];
+    return [...this.sessionStore.getTranscripts()];
   }
 
   get isRecording(): boolean {
-    return this._currentRecording !== null;
+    return this.sessionStore.getCurrentRecording() !== null;
   }
 
   get roomCreated(): boolean {
@@ -193,23 +220,17 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   }
 
   private pushAndEmitChatMessage(message: ChatMessage): void {
-    this._messages.push(message);
+    this.sessionStore.appendMessage(message);
     this.emit("chat.message", message);
   }
 
   private emitParticipantUpdated(participantId: string, participant: Participant): void {
-    this._participants.set(participantId, participant);
+    this.sessionStore.setParticipant(participantId, participant);
     this.emit("participant.updated", { participantId, participant });
   }
 
   private clearRuntimeState(): void {
-    this._participants.clear();
-    this._rtkPeerIdToStableId.clear();
-    this._activeSpeaker = null;
-    this._messages = [];
-    this._transcripts = [];
-    this._currentRecording = null;
-    this._localParticipant = null;
+    this.sessionStore.clearRuntimeState();
   }
 
   private emitRoomSyncReady(source: "rtk.snapshot" | "ws.snapshot", participantCount: number): void {
@@ -234,15 +255,15 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       getWsClient: () => this.wsClient,
       hasRtkClient: () => !!this.rtkClient,
       setConnectionState: (state) => this._setConnectionState(state),
-      getParticipants: () => this._participants,
-      getLocalParticipant: () => this._localParticipant,
-      getCurrentRecording: () => this._currentRecording,
-      appendMessage: (message) => this._messages.push(message),
+      getParticipants: () => this.sessionStore.getParticipants(),
+      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
+      getCurrentRecording: () => this.sessionStore.getCurrentRecording(),
+      appendMessage: (message) => this.sessionStore.appendMessage(message),
       setWhiteboardPermission: (participantId, canDraw) => {
-        this._whiteboardPermissions.set(participantId, canDraw);
+        this.sessionStore.setWhiteboardPermission(participantId, canDraw);
       },
       setCurrentRecording: (recording) => {
-        this._currentRecording = recording;
+        this.sessionStore.setCurrentRecording(recording);
       },
       emitRoomSyncReady: (source, participantCount) => this.emitRoomSyncReady(source, participantCount),
       emit: (event, data) => {
@@ -258,15 +279,15 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       debug: this.debug,
       getRtkClient: () => this.rtkClient,
       getWsClient: () => this.wsClient,
-      getParticipants: () => this._participants,
-      getPeerIdMap: () => this._rtkPeerIdToStableId,
-      getLocalParticipant: () => this._localParticipant,
-      getActiveSpeaker: () => this._activeSpeaker,
+      getParticipants: () => this.sessionStore.getParticipants(),
+      getPeerIdMap: () => this.sessionStore.getPeerIdMap(),
+      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
+      getActiveSpeaker: () => this.sessionStore.getActiveSpeaker(),
       setActiveSpeaker: (participant) => {
-        this._activeSpeaker = participant;
+        this.sessionStore.setActiveSpeaker(participant);
       },
-      getMessages: () => this._messages,
-      getTranscripts: () => this._transcripts,
+      getMessages: () => this.sessionStore.getMessages(),
+      getTranscripts: () => this.sessionStore.getTranscripts(),
       setConnectionState: (state) => this._setConnectionState(state),
       emitRoomSyncReady: (source, participantCount) => this.emitRoomSyncReady(source, participantCount),
       emit: (event, data) => {
@@ -293,8 +314,8 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   }
 
   _setLocalParticipant(participant: Participant): void {
-    this._localParticipant = participant;
-    this._participants.set(participant.id, participant);
+    this.sessionStore.setLocalParticipant(participant);
+    this.sessionStore.setParticipant(participant.id, participant);
   }
 
   _setTokens(tokens: TokenSet): void {
