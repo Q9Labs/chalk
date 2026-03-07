@@ -281,6 +281,44 @@ describe("ConferenceSession (RTK identity mapping)", () => {
 		expect(room.participants.has("uuid_c")).toBe(true);
 	});
 
+	it("prunes stale remotes and hydrates missed joins on roomJoined snapshot", () => {
+		room._setLocalParticipant({
+			id: "uuid_local",
+			userId: "uuid_local",
+			displayName: "Me",
+			role: "participant",
+			isLocal: true,
+			videoEnabled: false,
+			audioEnabled: false,
+			isSpeaking: false,
+			isScreenSharing: false,
+			handRaised: false,
+			connectionQuality: 100,
+		});
+
+		rtk.participants.joined.emit("participantJoined", {
+			id: "peer_a",
+			userId: "uuid_a",
+			name: "Alice",
+		});
+		expect(room.participants.has("uuid_a")).toBe(true);
+
+		rtk.participants.joined.setSnapshot([
+			{
+				id: "peer_b",
+				userId: "uuid_b",
+				name: "Bob",
+				videoEnabled: false,
+				audioEnabled: true,
+			},
+		]);
+
+		rtk.self.emit("roomJoined");
+
+		expect(room.participants.has("uuid_a")).toBe(false);
+		expect(room.participants.has("uuid_b")).toBe(true);
+	});
+
 	it("recovers remote participant from participants.toArray when joined iterators are unavailable", () => {
 		room._setLocalParticipant({
 			id: "uuid_local",

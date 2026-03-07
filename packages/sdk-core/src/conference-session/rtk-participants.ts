@@ -45,15 +45,21 @@ const ensureRemoteParticipant = (deps: RtkSignalingDeps, rtkParticipant: unknown
   return participant;
 };
 
-const reconcileJoinedParticipants = (deps: RtkSignalingDeps, participantsApi: RtkParticipantsApi): void => {
+const reconcileJoinedParticipants = (
+  deps: RtkSignalingDeps,
+  participantsApi: RtkParticipantsApi,
+  options: { pruneStaleRemotes?: boolean } = {},
+): void => {
   const joinedParticipants = collectJoinedParticipants(participantsApi);
   deps.emitRoomSyncReady("rtk.snapshot", joinedParticipants.length + (deps.getLocalParticipant() ? 1 : 0));
+  const joinedRemoteIds = new Set<string>();
 
   for (const joinedParticipant of joinedParticipants) {
     const participant = ensureRemoteParticipant(deps, joinedParticipant);
     if (!participant) {
       continue;
     }
+    joinedRemoteIds.add(participant.id);
 
     const participants = deps.getParticipants();
     const existing = participants.get(participant.id);
@@ -68,6 +74,18 @@ const reconcileJoinedParticipants = (deps: RtkSignalingDeps, participantsApi: Rt
 
     participants.set(participant.id, merged);
     emitParticipantUpdated(deps, participant.id, merged);
+  }
+
+  if (options.pruneStaleRemotes) {
+    const participants = deps.getParticipants();
+    const staleRemoteIds = Array.from(participants.values())
+      .filter((participant) => !participant.isLocal && !joinedRemoteIds.has(participant.id))
+      .map((participant) => participant.id);
+
+    for (const participantId of staleRemoteIds) {
+      participants.delete(participantId);
+      deps.emit("participant.left", participantId);
+    }
   }
 };
 
@@ -195,7 +213,9 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
     }
 
     deps.logConnectionState();
-    reconcileJoinedParticipants(deps, participantsApi);
+    reconcileJoinedParticipants(deps, participantsApi, {
+      pruneStaleRemotes: true,
+    });
   });
 
   rtkClient.self.on("roomLeft", () => {
