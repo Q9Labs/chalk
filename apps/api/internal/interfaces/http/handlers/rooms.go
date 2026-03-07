@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/room"
@@ -137,14 +138,46 @@ func (h *RoomHandler) List(c *gin.Context) {
 
 	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "20"), 10, 32)
 	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 32)
+	statusFilterRaw := strings.TrimSpace(c.Query("status"))
+	statuses := []string{"active"}
+	if statusFilterRaw != "" {
+		parts := strings.Split(statusFilterRaw, ",")
+		statuses = make([]string, 0, len(parts))
+		seen := map[string]bool{}
+		for _, part := range parts {
+			status := strings.ToLower(strings.TrimSpace(part))
+			if status == "" || seen[status] {
+				continue
+			}
+			if status != "scheduled" && status != "active" && status != "ended" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status filter"})
+				return
+			}
+			seen[status] = true
+			statuses = append(statuses, status)
+		}
+		if len(statuses) == 0 {
+			statuses = []string{"active"}
+		}
+	}
 
-	rooms, err := h.roomService.ListActiveRoomsWithParticipantCount(c.Request.Context(), claims.TenantID, int32(limit), int32(offset))
+	rooms, err := h.roomService.ListRoomsWithParticipantCountByStatuses(
+		c.Request.Context(),
+		claims.TenantID,
+		statuses,
+		int32(limit),
+		int32(offset),
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	total, _ := h.roomService.CountActiveRoomsByTenant(c.Request.Context(), claims.TenantID)
+	total, err := h.roomService.CountRoomsByTenantAndStatuses(c.Request.Context(), claims.TenantID, statuses)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"rooms":  rooms,

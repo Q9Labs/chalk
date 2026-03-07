@@ -1,3 +1,5 @@
+import { APIClient, type RoomResource } from "@q9labs/chalk-core";
+
 type JoinContextV1 = {
 	joinToken: string;
 	roomName?: string;
@@ -76,19 +78,26 @@ export async function verifyMagicLink(apiUrl: string, token: string) {
 }
 
 export async function exchangeJoinToken(apiUrl: string, joinToken: string) {
-	const res = await fetch(`${apiUrl}/api/v1/public/join-token/exchange`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ join_token: joinToken }),
-	});
-	if (!res.ok) {
-		throw new Error(`invalid join link (${res.status})`);
+	const client = new APIClient({ apiUrl });
+	const response = await client.exchangeJoinToken(joinToken);
+	if (!response.success || !response.data) {
+		throw new Error(response.error?.message ?? "invalid join link");
 	}
-	return (await res.json()) as {
-		access_token: string;
-		expires_in: number;
-		room_name: string;
+
+	return {
+		access_token: response.data.accessToken,
+		expires_in: response.data.expiresIn,
+		room_name: response.data.roomName,
 	};
+}
+
+export async function getRoomWithAccessToken(apiUrl: string, accessToken: string, roomId: string): Promise<RoomResource> {
+	const client = new APIClient({ apiUrl, token: accessToken });
+	const response = await client.getRoom(roomId);
+	if (!response.success || !response.data) {
+		throw new Error(response.error?.message ?? "failed to load room");
+	}
+	return response.data;
 }
 
 export function createWebTokenProvider(apiUrl: string) {

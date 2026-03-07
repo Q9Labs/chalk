@@ -289,8 +289,32 @@ func (s *Service) ListActiveRoomsWithParticipantCount(ctx context.Context, tenan
 	return rooms, nil
 }
 
+func (s *Service) ListRoomsWithParticipantCountByStatuses(ctx context.Context, tenantID uuid.UUID, statuses []string, limit, offset int32) ([]db.ListRoomsWithParticipantCountByStatusesRow, error) {
+	rooms, err := s.db.ListRoomsWithParticipantCountByStatuses(ctx, db.ListRoomsWithParticipantCountByStatusesParams{
+		TenantID:    tenantID,
+		Statuses:    statuses,
+		OffsetCount: offset,
+		LimitCount:  limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list rooms: %w", err)
+	}
+	return rooms, nil
+}
+
 func (s *Service) CountActiveRoomsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error) {
 	count, err := s.db.CountActiveRoomsByTenant(ctx, tenantID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count rooms: %w", err)
+	}
+	return count, nil
+}
+
+func (s *Service) CountRoomsByTenantAndStatuses(ctx context.Context, tenantID uuid.UUID, statuses []string) (int64, error) {
+	count, err := s.db.CountRoomsByTenantAndStatuses(ctx, db.CountRoomsByTenantAndStatusesParams{
+		TenantID: tenantID,
+		Statuses: statuses,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count rooms: %w", err)
 	}

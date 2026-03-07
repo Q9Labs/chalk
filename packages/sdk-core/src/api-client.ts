@@ -10,13 +10,16 @@ import type {
 	ApiResponse,
 	ConferenceClientConfig,
 	ChalkError as ChalkErrorType,
+	CreateJoinTokenResponse,
 	CreateRoomOptions,
 	CreateRoomResponse,
+	ExchangeJoinTokenResponse,
 	JoinSessionResponse,
+	ListRoomsOptions,
+	ListRoomsResponse,
 	Recording,
 	RoomResource,
 	ScheduleRoomOptions,
-	SessionInfo,
 	TokenProvider,
 	TransformedJoinSessionApiResponse,
 } from "./types.ts";
@@ -62,6 +65,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		path: string,
 		body?: unknown,
 		isRetry = false,
+		options?: { skipAuth?: boolean },
 	): Promise<ApiResponse<T>> {
 		const ctx = wideEvents.start("api.request");
 		ctx.set("request", { method, path, hasBody: !!body });
@@ -73,7 +77,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		// Only call tokenProvider if we don't have a token yet
 		// tokenProvider is for REFRESH, not initial token acquisition
 		// The token is set via setToken() after join
-		if (!this.token && this.tokenProvider && !isRetry) {
+		if (!options?.skipAuth && !this.token && this.tokenProvider && !isRetry) {
 			try {
 				const newToken = await this.tokenProvider();
 				// Only use the token if it's non-empty
@@ -98,10 +102,12 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			}
 		}
 
-		if (this.token) {
-			headers["Authorization"] = `Bearer ${this.token}`;
-		} else if (this.apiKey) {
-			headers["X-API-Key"] = this.apiKey;
+		if (!options?.skipAuth) {
+			if (this.token) {
+				headers["Authorization"] = `Bearer ${this.token}`;
+			} else if (this.apiKey) {
+				headers["X-API-Key"] = this.apiKey;
+			}
 		}
 
 		const url = `${this.apiUrl}${path}`;
@@ -121,10 +127,10 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				cfRay: response.headers.get("cf-ray"),
 			};
 
-			if (response.status === 401 && !isRetry) {
+			if (response.status === 401 && !isRetry && !options?.skipAuth) {
 				ctx.set("response", responseMeta);
 				ctx.complete("error", { code: "HTTP_401", message: "Unauthorized - attempting refresh" });
-				return this.handle401<T>(method, path, body);
+				return this.handle401<T>(method, path, body, options);
 			}
 
 			// SDKCORE-MED-01: Handle empty/204 responses before parsing JSON
@@ -187,6 +193,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		method: string,
 		path: string,
 		body?: unknown,
+		options?: { skipAuth?: boolean },
 	): Promise<ApiResponse<T>> {
 		if (!this.tokenProvider) {
 			const error: ChalkErrorType = {
@@ -202,7 +209,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		if (this.isRefreshingToken && this.refreshPromise) {
 			const token = await this.refreshPromise;
 			if (token) {
-				return this.request<T>(method, path, body, true);
+				return this.request<T>(method, path, body, true, options);
 			}
 			return {
 				success: false,
@@ -244,7 +251,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			return { success: false, error };
 		}
 
-		return this.request<T>(method, path, body, true);
+		return this.request<T>(method, path, body, true, options);
 	}
 
 	// ConferenceSession endpoints
@@ -316,8 +323,58 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		};
 	}
 
-	async getRoom(roomId: string): Promise<ApiResponse<SessionInfo>> {
-		return this.request<SessionInfo>("GET", `/api/v1/rooms/${roomId}`);
+	async getRoom(roomId: string): Promise<ApiResponse<RoomResource>> {
+		const response = await this.request<RoomResource>("GET", `/api/v1/rooms/${roomId}`);
+		if (!response.success || !response.data) {
+			return response;
+		}
+
+		return {
+			success: true,
+			data: this.normalizeRoomResource(response.data),
+		};
+	}
+
+	async listRooms(options: ListRoomsOptions = {}): Promise<ApiResponse<ListRoomsResponse>> {
+		const params = new URLSearchParams();
+		if (typeof options.limit === "number") {
+			params.set("limit", String(options.limit));
+		}
+		if (typeof options.offset === "number") {
+			params.set("offset", String(options.offset));
+		}
+		if (options.status?.length) {
+			params.set("status", options.status.join(","));
+		}
+		const query = params.toString();
+		const path = query ? `/api/v1/rooms?${query}` : "/api/v1/rooms";
+
+		const response = await this.request<ListRoomsResponse>("GET", path);
+		if (!response.success || !response.data) {
+			return response;
+		}
+
+		return {
+			success: true,
+			data: {
+				...response.data,
+				rooms: response.data.rooms.map((room) => this.normalizeRoomResource(room)),
+			},
+		};
+	}
+
+	async createJoinToken(roomId: string): Promise<ApiResponse<CreateJoinTokenResponse>> {
+		return this.request<CreateJoinTokenResponse>("POST", `/api/v1/rooms/${roomId}/join-token`);
+	}
+
+	async exchangeJoinToken(joinToken: string): Promise<ApiResponse<ExchangeJoinTokenResponse>> {
+		return this.request<ExchangeJoinTokenResponse>(
+			"POST",
+			"/api/v1/public/join-token/exchange",
+			{ joinToken },
+			false,
+			{ skipAuth: true },
+		);
 	}
 
 	async endSession(roomId: string): Promise<ApiResponse<void>> {

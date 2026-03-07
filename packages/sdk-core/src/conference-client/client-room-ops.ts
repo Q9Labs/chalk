@@ -1,6 +1,6 @@
 import type { APIClient } from "../api-client.ts";
 import { ConferenceSession } from "../room.ts";
-import type { CreateRoomOptions, RoomResource, ScheduleRoomOptions } from "../types.ts";
+import type { CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, RoomResource, ScheduleRoomOptions } from "../types.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import type { WSClient } from "../ws-client.ts";
 
@@ -61,6 +61,60 @@ export const scheduleRoom = async (apiClient: APIClient, options: ScheduleRoomOp
     ctx.complete("error", error);
     throw error;
   }
+};
+
+export const listRooms = async (apiClient: APIClient, options: ListRoomsOptions = {}): Promise<ListRoomsResponse> => {
+	const ctx = wideEvents.start("room.list");
+	ctx.set("input", options);
+
+	try {
+		const response = await apiClient.listRooms(options);
+		if (!response.success || !response.data) {
+			throw new Error(response.error?.message ?? "Failed to list rooms");
+		}
+
+		ctx.complete("success", { count: response.data.rooms.length, total: response.data.total });
+		return response.data;
+	} catch (error) {
+		ctx.complete("error", error);
+		throw error;
+	}
+};
+
+export const createJoinToken = async (apiClient: APIClient, roomId: string): Promise<CreateJoinTokenResponse> => {
+	const ctx = wideEvents.start("room.create_join_token");
+	ctx.set("input", { roomId });
+
+	try {
+		const response = await apiClient.createJoinToken(roomId);
+		if (!response.success || !response.data) {
+			throw new Error(response.error?.message ?? "Failed to create join token");
+		}
+
+		ctx.complete("success");
+		return response.data;
+	} catch (error) {
+		ctx.complete("error", error);
+		throw error;
+	}
+};
+
+export const exchangeJoinToken = async (apiClient: APIClient, joinToken: string): Promise<ExchangeJoinTokenResponse> => {
+	const ctx = wideEvents.start("room.exchange_join_token");
+	ctx.set("input", { hasJoinToken: !!joinToken });
+
+	try {
+		const response = await apiClient.exchangeJoinToken(joinToken);
+		if (!response.success || !response.data) {
+			throw new Error(response.error?.message ?? "Failed to exchange join token");
+		}
+
+		ctx.complete("success");
+		return response.data;
+	} catch (error) {
+		ctx.complete("error", error);
+		throw error;
+	}
 };
 
 export const endSession = async (apiClient: APIClient, sessionId: string): Promise<void> => {

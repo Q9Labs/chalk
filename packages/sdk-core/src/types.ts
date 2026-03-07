@@ -323,6 +323,7 @@ export interface RoomResource {
 	name?: string | null;
 	config: Record<string, unknown>;
 	status: RoomLifecycleStatus;
+	activeParticipantCount?: number;
 	scheduledStartAt?: string | null;
 	scheduledEndAt?: string | null;
 	allowEarlyJoinMinutes: number;
@@ -330,6 +331,29 @@ export interface RoomResource {
 	endedAt?: string | null;
 	createdAt: string;
 	updatedAt: string;
+}
+
+export interface ListRoomsOptions {
+	limit?: number;
+	offset?: number;
+	status?: RoomLifecycleStatus[];
+}
+
+export interface ListRoomsResponse {
+	rooms: RoomResource[];
+	total: number;
+	limit: number;
+	offset: number;
+}
+
+export interface CreateJoinTokenResponse {
+	joinToken: string;
+}
+
+export interface ExchangeJoinTokenResponse {
+	accessToken: string;
+	expiresIn: number;
+	roomName: string;
 }
 
 // ============================================================================

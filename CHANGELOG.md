@@ -9,9 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SDK-Core: room listing + join-token APIs** — add typed `listRooms`, `createJoinToken`, and `exchangeJoinToken` client/session APIs so consumers can use SDK-first flows instead of manual HTTP calls.
+- **Web: scheduled classes panel** — add dashboard UI to create scheduled classes, list upcoming/live classes, and generate join links through SDK methods.
+
 ### Changed
 
 - **Infra: remove deprecated Terraform prod environment** — deleted `infrastructure/terraform/environments/prod` and updated infra docs/ops guides to standardize on `prod-lean` workflows only.
+- **API: room list status filtering** — `GET /api/v1/rooms` now supports multi-status filters (`scheduled|active|ended`) and returns participant counts for filtered listings.
+- **Web: join-link preflight behavior** — join-link flow now checks schedule window and shows a “not meeting time yet” waiting state with countdown before auto-entering.
 
 ### Fixed
 

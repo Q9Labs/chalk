@@ -25,7 +25,7 @@ import { TypedEventEmitter } from "../utils/typed-emitter";
 import { wideEvents } from "../wide-events/index";
 import type { ChalkIncident, ChalkIncidentBreadcrumb, ChalkIncidentConfig, ChalkIncidentInput, ChalkIncidentSource } from "../incident.ts";
 import type { ChalkPostHogConfig } from "../posthog.ts";
-import type { CreateRoomOptions, RoomResource, ScheduleRoomOptions } from "../types.ts";
+import type { CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, RoomResource, ScheduleRoomOptions } from "../types.ts";
 import { createDefaultMediaState, createDefaultParticipantState, createDefaultRoomState, createSessionStateApis, type MediaSessionApi, type ParticipantSessionApi, type RoomSessionApi, type SessionStateUpdaters } from "./chalk-session-state";
 import { ChalkSessionIncidentPipeline } from "./chalk-session-incidents";
 import { attachRoomToManagersAndBridgeState } from "./chalk-session-bridges";
@@ -443,6 +443,52 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       const error = ChalkError.wrap(err);
       this.emitErrorWithIncident(error, "session", {
         operation: "schedule_room",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * List rooms for the current tenant.
+   */
+  async listRooms(options: ListRoomsOptions = {}): Promise<ListRoomsResponse> {
+    try {
+      return await this.client.listRooms(options);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "list_rooms",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Create an opaque join token for a room.
+   */
+  async createJoinToken(roomId: string): Promise<CreateJoinTokenResponse> {
+    try {
+      return await this.client.createJoinToken(roomId);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "create_join_token",
+        roomId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Exchange an opaque join token for an access token.
+   */
+  async exchangeJoinToken(joinToken: string): Promise<ExchangeJoinTokenResponse> {
+    try {
+      return await this.client.exchangeJoinToken(joinToken);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "exchange_join_token",
       });
       throw error;
     }

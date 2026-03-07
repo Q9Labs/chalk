@@ -129,6 +129,26 @@ GROUP BY r.id
 ORDER BY r.created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListRoomsWithParticipantCountByStatuses :many
+SELECT
+    r.*,
+    COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
+FROM rooms r
+LEFT JOIN participants p ON p.room_id = r.id
+WHERE r.tenant_id = sqlc.arg(tenant_id)
+  AND r.status = ANY(sqlc.arg(statuses)::text[])
+GROUP BY r.id
+ORDER BY
+    CASE
+        WHEN r.status = 'scheduled' THEN COALESCE(r.scheduled_start_at, r.created_at)
+        ELSE r.created_at
+    END DESC
+LIMIT sqlc.arg(limit_count) OFFSET sqlc.arg(offset_count);
+
+-- name: CountRoomsByTenantAndStatuses :one
+SELECT COUNT(*) FROM rooms
+WHERE tenant_id = sqlc.arg(tenant_id) AND status = ANY(sqlc.arg(statuses)::text[]);
+
 -- name: ListEmptyActiveRooms :many
 SELECT r.* FROM rooms r
 LEFT JOIN participants p ON p.room_id = r.id AND p.left_at IS NULL

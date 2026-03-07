@@ -202,9 +202,13 @@ export type {
 export type {
 	ApiResponse,
 	ConferenceClientConfig,
+	CreateJoinTokenResponse,
 	ChalkError,
 	ChalkEventType,
+	ExchangeJoinTokenResponse,
 	ChatMessage,
+	ListRoomsOptions,
+	ListRoomsResponse,
 	CreateRoomResponse,
 	CreateRoomConfig,
 	CreateRoomOptions,

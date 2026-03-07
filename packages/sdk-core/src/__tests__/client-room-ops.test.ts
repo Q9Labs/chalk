@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createRoom, createSession, scheduleRoom } from "../conference-client/client-room-ops.ts";
+import { createJoinToken, createRoom, createSession, exchangeJoinToken, listRooms, scheduleRoom } from "../conference-client/client-room-ops.ts";
 
 describe("client-room-ops", () => {
 	it("createSession returns id when API returns Room payload", async () => {
@@ -67,6 +67,58 @@ describe("client-room-ops", () => {
 		).resolves.toMatchObject({
 			id: "room_uuid_3",
 			status: "scheduled",
+		});
+	});
+
+	it("listRooms returns typed room list payload", async () => {
+		const apiClient = {
+			listRooms: async () => ({
+				success: true,
+				data: {
+					rooms: [{ id: "room_uuid_4", status: "scheduled" }],
+					total: 1,
+					limit: 20,
+					offset: 0,
+				},
+			}),
+		};
+
+		await expect(
+			listRooms(apiClient as any, { status: ["scheduled"] }),
+		).resolves.toMatchObject({
+			total: 1,
+			rooms: [{ id: "room_uuid_4", status: "scheduled" }],
+		});
+	});
+
+	it("createJoinToken returns join token payload", async () => {
+		const apiClient = {
+			createJoinToken: async () => ({
+				success: true,
+				data: { joinToken: "tok_123" },
+			}),
+		};
+
+		await expect(createJoinToken(apiClient as any, "room_uuid_5")).resolves.toEqual({
+			joinToken: "tok_123",
+		});
+	});
+
+	it("exchangeJoinToken returns access token payload", async () => {
+		const apiClient = {
+			exchangeJoinToken: async () => ({
+				success: true,
+				data: {
+					accessToken: "jwt_123",
+					expiresIn: 900,
+					roomName: "room_uuid_6",
+				},
+			}),
+		};
+
+		await expect(exchangeJoinToken(apiClient as any, "tok_abc")).resolves.toMatchObject({
+			accessToken: "jwt_123",
+			roomName: "room_uuid_6",
 		});
 	});
 });

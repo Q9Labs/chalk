@@ -40,6 +40,7 @@ type Querier interface {
 	CountAuditLogsByAction(ctx context.Context, action string) (int64, error)
 	CountAuditLogsByTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountMeetingsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountRoomsByTenantAndStatuses(ctx context.Context, arg CountRoomsByTenantAndStatusesParams) (int64, error)
 	CountTenants(ctx context.Context) (int64, error)
 	CountTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	// Audit Log Queries
@@ -156,6 +157,7 @@ type Querier interface {
 	ListRecordingsReadyForArchive(ctx context.Context, limit int32) ([]Recording, error)
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]Room, error)
 	ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantParams) ([]Room, error)
+	ListRoomsWithParticipantCountByStatuses(ctx context.Context, arg ListRoomsWithParticipantCountByStatusesParams) ([]ListRoomsWithParticipantCountByStatusesRow, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
 	ListTranscriptsByRoom(ctx context.Context, arg ListTranscriptsByRoomParams) ([]Transcript, error)
 	MarkPostMeetingTranscriptFailed(ctx context.Context, arg MarkPostMeetingTranscriptFailedParams) error

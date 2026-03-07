@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import z from "zod";
-import { fetchInternalAccessToken, getApiUrl, startMagicLink } from "../lib/internalAuth";
+import { ConferenceClient, type RoomResource } from "@q9labs/chalk-core";
+import { fetchInternalAccessToken, getApiUrl, startMagicLink, createWebTokenProvider } from "../lib/internalAuth";
 import { cn } from "../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { 
@@ -23,6 +24,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { useTheme } from "../context/theme";
 import { toast, Toaster } from "sonner";
+import { ScheduledClassesPanel } from "../features/classes/components/ScheduledClassesPanel";
 
 function ChalkLogo({ className }: { className?: string }) {
 	return (
@@ -98,6 +100,14 @@ function formatDuration(seconds: number) {
 
 function DashboardPage() {
 	const apiUrl = useMemo(() => getApiUrl(), []);
+	const sdkClient = useMemo(
+		() =>
+			new ConferenceClient({
+				apiUrl,
+				tokenProvider: createWebTokenProvider(apiUrl),
+			}),
+		[apiUrl],
+	);
   const { theme, toggleTheme } = useTheme();
 	const [state, setState] = useState<
 		| { kind: "loading" }
@@ -110,6 +120,26 @@ function DashboardPage() {
 	const [emailSent, setEmailSent] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
+	const [classRooms, setClassRooms] = useState<RoomResource[]>([]);
+	const [classesLoading, setClassesLoading] = useState(false);
+	const [classesError, setClassesError] = useState<string | null>(null);
+
+	const refreshClasses = useCallback(async () => {
+		setClassesLoading(true);
+		setClassesError(null);
+		try {
+			const response = await sdkClient.listRooms({
+				status: ["scheduled", "active"],
+				limit: 100,
+				offset: 0,
+			});
+			setClassRooms(response.rooms);
+		} catch (err) {
+			setClassesError(err instanceof Error ? err.message : "Failed to load classes");
+		} finally {
+			setClassesLoading(false);
+		}
+	}, [sdkClient]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -137,6 +167,13 @@ function DashboardPage() {
 			cancelled = true;
 		};
 	}, [apiUrl]);
+
+	useEffect(() => {
+		if (state.kind !== "ready") {
+			return;
+		}
+		void refreshClasses();
+	}, [refreshClasses, state.kind]);
 
 	async function sendLink() {
 		setEmailSent(null);
@@ -375,6 +412,14 @@ function DashboardPage() {
         )}
 
 				{/* Meetings Feed */}
+				<ScheduledClassesPanel
+					client={sdkClient}
+					rooms={classRooms}
+					isLoading={classesLoading}
+					error={classesError}
+					onRefresh={refreshClasses}
+				/>
+
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -576,4 +621,3 @@ function DashboardPage() {
 		</div>
 	);
 }
-

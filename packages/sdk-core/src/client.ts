@@ -6,10 +6,13 @@
 import { Effect } from "effect";
 import { APIClient } from "./api-client.ts";
 import {
+  createJoinToken as createJoinTokenOp,
   createRoom as createRoomOp,
   createSession as createSessionOp,
   disconnectCurrentRoom,
   endSession as endSessionOp,
+  exchangeJoinToken as exchangeJoinTokenOp,
+  listRooms as listRoomsOp,
   presignWhiteboardDownload as presignWhiteboardDownloadOp,
   presignWhiteboardUpload as presignWhiteboardUploadOp,
   removeParticipant as removeParticipantOp,
@@ -26,7 +29,7 @@ import { EventEmitter } from "./events.ts";
 import { ChalkPostHogSessionReplay, type ChalkPostHogConfig } from "./posthog.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
 import { ConferenceSession } from "./room.ts";
-import type { ChalkError, ConferenceClientConfig, CreateRoomOptions, JoinSessionConfig, RoomResource, ScheduleRoomOptions, SessionConnectionState } from "./types.ts";
+import type { ChalkError, ConferenceClientConfig, CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, JoinSessionConfig, RoomResource, ScheduleRoomOptions, SessionConnectionState } from "./types.ts";
 import { WSClient } from "./ws-client.ts";
 
 interface ConferenceClientEvents {
@@ -237,6 +240,18 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
 
   async scheduleRoom(options: ScheduleRoomOptions): Promise<RoomResource> {
     return scheduleRoomOp(this.apiClient, options);
+  }
+
+  async listRooms(options: ListRoomsOptions = {}): Promise<ListRoomsResponse> {
+    return listRoomsOp(this.apiClient, options);
+  }
+
+  async createJoinToken(roomId: string): Promise<CreateJoinTokenResponse> {
+    return createJoinTokenOp(this.apiClient, roomId);
+  }
+
+  async exchangeJoinToken(joinToken: string): Promise<ExchangeJoinTokenResponse> {
+    return exchangeJoinTokenOp(this.apiClient, joinToken);
   }
 
   async endSession(sessionId: string): Promise<void> {

@@ -58,6 +58,23 @@ func (q *Queries) CountActiveRoomsByTenant(ctx context.Context, tenantID uuid.UU
 	return count, err
 }
 
+const countRoomsByTenantAndStatuses = `-- name: CountRoomsByTenantAndStatuses :one
+SELECT COUNT(*) FROM rooms
+WHERE tenant_id = $1 AND status = ANY($2::text[])
+`
+
+type CountRoomsByTenantAndStatusesParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Statuses []string  `db:"statuses" json:"statuses"`
+}
+
+func (q *Queries) CountRoomsByTenantAndStatuses(ctx context.Context, arg CountRoomsByTenantAndStatusesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRoomsByTenantAndStatuses, arg.TenantID, arg.Statuses)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createRoom = `-- name: CreateRoom :one
 
 INSERT INTO rooms (
@@ -656,6 +673,91 @@ func (q *Queries) ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantPa
 			&i.ScheduledStartAt,
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoomsWithParticipantCountByStatuses = `-- name: ListRoomsWithParticipantCountByStatuses :many
+SELECT
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes,
+    COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
+FROM rooms r
+LEFT JOIN participants p ON p.room_id = r.id
+WHERE r.tenant_id = $1
+  AND r.status = ANY($2::text[])
+GROUP BY r.id
+ORDER BY
+    CASE
+        WHEN r.status = 'scheduled' THEN COALESCE(r.scheduled_start_at, r.created_at)
+        ELSE r.created_at
+    END DESC
+LIMIT $4 OFFSET $3
+`
+
+type ListRoomsWithParticipantCountByStatusesParams struct {
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Statuses    []string  `db:"statuses" json:"statuses"`
+	OffsetCount int32     `db:"offset_count" json:"offset_count"`
+	LimitCount  int32     `db:"limit_count" json:"limit_count"`
+}
+
+type ListRoomsWithParticipantCountByStatusesRow struct {
+	ID                     uuid.UUID          `db:"id" json:"id"`
+	TenantID               uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	CloudflareMeetingID    string             `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
+	Name                   *string            `db:"name" json:"name"`
+	Config                 []byte             `db:"config" json:"config"`
+	Status                 string             `db:"status" json:"status"`
+	StartedAt              pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt                pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	CreatedAt              time.Time          `db:"created_at" json:"created_at"`
+	UpdatedAt              time.Time          `db:"updated_at" json:"updated_at"`
+	WhiteboardState        []byte             `db:"whiteboard_state" json:"whiteboard_state"`
+	Metadata               []byte             `db:"metadata" json:"metadata"`
+	ScheduledStartAt       pgtype.Timestamptz `db:"scheduled_start_at" json:"scheduled_start_at"`
+	ScheduledEndAt         pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
+	AllowEarlyJoinMinutes  int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
+	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
+}
+
+func (q *Queries) ListRoomsWithParticipantCountByStatuses(ctx context.Context, arg ListRoomsWithParticipantCountByStatusesParams) ([]ListRoomsWithParticipantCountByStatusesRow, error) {
+	rows, err := q.db.Query(ctx, listRoomsWithParticipantCountByStatuses,
+		arg.TenantID,
+		arg.Statuses,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRoomsWithParticipantCountByStatusesRow{}
+	for rows.Next() {
+		var i ListRoomsWithParticipantCountByStatusesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CloudflareMeetingID,
+			&i.Name,
+			&i.Config,
+			&i.Status,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.WhiteboardState,
+			&i.Metadata,
+			&i.ScheduledStartAt,
+			&i.ScheduledEndAt,
+			&i.AllowEarlyJoinMinutes,
+			&i.ActiveParticipantCount,
 		); err != nil {
 			return nil, err
 		}
