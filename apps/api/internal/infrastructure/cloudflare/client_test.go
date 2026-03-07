@@ -544,6 +544,55 @@ func TestAddParticipant_RetryOnTransientStatus(t *testing.T) {
 	assert.Equal(t, int32(3), attempts.Load())
 }
 
+func TestAddParticipant_SuccessWhenBodyArrivesAfterHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		// Simulate delayed response body after headers are sent. This used to fail
+		// when attempt context was canceled before body read completed.
+		time.Sleep(30 * time.Millisecond)
+
+		participantResp := Response[Participant]{
+			Success: true,
+			Data: Participant{
+				ID:               "participant-delayed",
+				Name:             "Delayed Body",
+				PresetName:       PresetParticipant,
+				ClientSpecificID: "user-delayed",
+				Token:            "auth-token-delayed",
+			},
+		}
+
+		_ = json.NewEncoder(w).Encode(participantResp)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		AccountID: "acc-123",
+		AppID:     "app-456",
+		APIToken:  "test-token",
+	}
+	client := NewClient(cfg)
+	client.baseURL = server.URL
+
+	participant, err := client.AddParticipant(context.Background(), "meeting-123", AddParticipantRequest{
+		Name:             "Delayed Body",
+		PresetName:       PresetParticipant,
+		ClientSpecificID: "user-delayed",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, participant)
+	assert.Equal(t, "participant-delayed", participant.ID)
+	assert.Equal(t, "auth-token-delayed", participant.Token)
+}
+
 func TestAddParticipant_NoRetryOnClientErrorStatus(t *testing.T) {
 	var attempts atomic.Int32
 

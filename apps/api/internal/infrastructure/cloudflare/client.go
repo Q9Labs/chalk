@@ -766,8 +766,8 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 		slog.DebugContext(operationCtx, "cloudflare add participant request", logAttrs...)
 
 		resp, err := c.doRequest(attemptCtx, http.MethodPost, path, req)
-		attemptCancel()
 		if err != nil {
+			attemptCancel()
 			attemptElapsed := time.Since(attemptStart)
 			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, 0, nil, err), attempt, requestContext)
 			totalElapsed := time.Since(totalStart)
@@ -812,6 +812,7 @@ func (c *Client) AddParticipant(ctx context.Context, meetingID string, req AddPa
 
 		bodyBytes, bodyErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		attemptCancel()
 		if bodyErr != nil {
 			attemptElapsed := time.Since(attemptStart)
 			apiErr := applyErrorContext(newAPIError(addParticipantOperation, http.MethodPost, path, resp.StatusCode, nil, bodyErr), attempt, requestContext)
