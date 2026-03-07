@@ -22,6 +22,7 @@ interface ScreenShareLike {
 
 interface InteractionsLike {
 	isHandRaised: boolean;
+	raisedHands: readonly string[];
 }
 
 export interface UseMeetingRoomViewModelParams {
@@ -94,6 +95,11 @@ export function useMeetingRoomViewModel({
 	lobbySelectedSpeaker,
 	localRole,
 }: UseMeetingRoomViewModelParams): UseMeetingRoomViewModelReturn {
+	const raisedHandIds = useMemo(
+		() => new Set(interactions.raisedHands),
+		[interactions.raisedHands],
+	);
+
 	const allParticipants = useMemo(
 		() =>
 			participants.map((participant) => ({
@@ -104,7 +110,7 @@ export function useMeetingRoomViewModel({
 				isMuted: !participant.audioEnabled,
 				isVideoEnabled: participant.videoEnabled,
 				isScreenSharing: participant.isScreenSharing,
-				isHandRaised: participant.handRaised,
+				isHandRaised: participant.handRaised || raisedHandIds.has(participant.id),
 				connectionQuality: participant.connectionQuality as 1 | 2 | 3 | 4 | undefined,
 				videoTrack: participant.videoTrack,
 				audioTrack: participant.audioTrack,
@@ -112,7 +118,7 @@ export function useMeetingRoomViewModel({
 				screenShareAudioTrack: participant.screenShareAudioTrack,
 				role: participant.role as "host" | "co-host" | "participant" | undefined,
 			})),
-		[participants, activeSpeakerId],
+		[participants, activeSpeakerId, raisedHandIds],
 	);
 
 	const localMeetingParticipant = useMemo(
@@ -125,17 +131,21 @@ export function useMeetingRoomViewModel({
 				isMuted: !media.isAudioEnabled,
 				isVideoEnabled: media.isVideoEnabled,
 				isScreenSharing: screenShare.isLocalSharing,
-				isHandRaised: interactions.isHandRaised,
+				isHandRaised:
+					interactions.isHandRaised ||
+					(localParticipantId ? raisedHandIds.has(localParticipantId) : false),
 				screenShareTrack: screenShare.videoTrack ?? undefined,
 			},
 		[
 			allParticipants,
 			userName,
+			localParticipantId,
 			media.isAudioEnabled,
 			media.isVideoEnabled,
 			screenShare.isLocalSharing,
 			screenShare.videoTrack,
 			interactions.isHandRaised,
+			raisedHandIds,
 		],
 	);
 

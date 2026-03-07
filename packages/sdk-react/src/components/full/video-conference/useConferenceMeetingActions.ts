@@ -155,8 +155,7 @@ export function useConferenceMeetingActions({
 			incrementHandRaiseCount();
 		}
 		interactions.toggleHand();
-		play("handRaise");
-	}, [interactions, incrementHandRaiseCount, play]);
+	}, [interactions, incrementHandRaiseCount]);
 
 	const handleSendReaction = useCallback(
 		(emoji: string) => {

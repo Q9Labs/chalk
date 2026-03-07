@@ -13,6 +13,55 @@ interface InteractionActionsDeps {
 }
 
 export const createConferenceSessionInteractionActions = (deps: InteractionActionsDeps) => {
+  let pendingHandRaised: boolean | null = null;
+  let pendingHandSyncCleanup: (() => void) | null = null;
+
+  const clearPendingHandSync = (): void => {
+    pendingHandSyncCleanup?.();
+    pendingHandSyncCleanup = null;
+  };
+
+  const flushPendingHandSync = (): void => {
+    const wsClient = deps.getWsClient();
+    if (!wsClient || pendingHandRaised === null || wsClient.connectionState !== "connected") {
+      return;
+    }
+
+    if (pendingHandRaised) {
+      wsClient.raiseHand();
+    } else {
+      wsClient.lowerHand();
+    }
+
+    pendingHandRaised = null;
+    clearPendingHandSync();
+  };
+
+  const syncHandState = (isRaised: boolean): void => {
+    const wsClient = deps.getWsClient();
+    if (!wsClient) {
+      return;
+    }
+
+    if (wsClient.connectionState === "connected") {
+      pendingHandRaised = null;
+      clearPendingHandSync();
+      if (isRaised) {
+        wsClient.raiseHand();
+      } else {
+        wsClient.lowerHand();
+      }
+      return;
+    }
+
+    pendingHandRaised = isRaised;
+    if (!pendingHandSyncCleanup) {
+      pendingHandSyncCleanup = wsClient.on("connected", () => {
+        flushPendingHandSync();
+      });
+    }
+  };
+
   const sendMessage = (content: string): void => {
     if (!content.trim()) {
       return;
@@ -74,7 +123,7 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
     }
 
     localParticipant.handRaised = true;
-    deps.getWsClient()?.raiseHand();
+    syncHandState(true);
     deps.emitParticipantUpdated(localParticipant.id, localParticipant);
     deps.emitHandRaised(localParticipant.id);
   };
@@ -86,7 +135,7 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
     }
 
     localParticipant.handRaised = false;
-    deps.getWsClient()?.lowerHand();
+    syncHandState(false);
     deps.emitParticipantUpdated(localParticipant.id, localParticipant);
     deps.emitHandLowered(localParticipant.id);
   };

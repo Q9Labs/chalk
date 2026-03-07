@@ -85,6 +85,7 @@ const createMockRtkClient = () => {
 const createMockWsClient = () => {
 	const handlers = new Map<string, Set<(payload: any) => void>>();
 	return {
+		connectionState: "connected" as const,
 		on: (event: string, handler: (payload: any) => void) => {
 			const set = handlers.get(event) ?? new Set();
 			set.add(handler);
@@ -96,6 +97,8 @@ const createMockWsClient = () => {
 			if (!set) return;
 			for (const h of set) h(payload);
 		},
+		raiseHand: mock(() => {}),
+		lowerHand: mock(() => {}),
 		muteParticipant: mock(() => {}),
 		unmuteParticipant: mock(() => {}),
 	};
@@ -469,6 +472,36 @@ describe("ConferenceSession (RTK identity mapping)", () => {
 
 		expect(ws.muteParticipant).toHaveBeenCalledWith("uuid_a");
 		expect(ws.unmuteParticipant).toHaveBeenCalledWith("uuid_a");
+	});
+
+	it("replays a pending hand raise once WS reconnects", () => {
+		const ws = createMockWsClient();
+		ws.connectionState = "reconnecting";
+		room.attachWsClient(ws as any);
+
+		room._setLocalParticipant({
+			id: "uuid_local",
+			userId: "uuid_local",
+			displayName: "Me",
+			role: "participant",
+			isLocal: true,
+			videoEnabled: false,
+			audioEnabled: true,
+			isSpeaking: false,
+			isScreenSharing: false,
+			handRaised: false,
+			connectionQuality: 100,
+		});
+
+		room.raiseHand();
+
+		expect(room.localParticipant?.handRaised).toBe(true);
+		expect(ws.raiseHand).not.toHaveBeenCalled();
+
+		ws.connectionState = "connected";
+		ws.emit("connected");
+
+		expect(ws.raiseHand).toHaveBeenCalledTimes(1);
 	});
 
 	it("attempts RTK reconnect when roomLeft fires unexpectedly", async () => {

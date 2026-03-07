@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React/Whiteboard: image sync progress UX** — add live whiteboard file-sync states (`uploading`, `awaiting remote upload`, `downloading`, `error`) and a top-center status pill so the 3–5s peer propagation window feels in-progress instead of failed.
 - **Internal auth: localhost magic-link callback support** — internal auth start now accepts a safe callback override (configured app origin + localhost) and `apps/web` sends its current callback URL, so local dev login links open the local app callback instead of forcing hosted-only flow.
 - **SDK-React: tighter bundled sound starts** — trim leading silence from bundled join/leave/message/reaction/hand-raise/nudge effects and regenerate baked-in base64 audio so alerts fire immediately.
+- **SDK hand raise sync** — replay pending `hand.raise`/`hand.lower` commands after WebSocket reconnect, derive participant hand indicators from interaction state when participant snapshots lag, and remove the local-only hand-raise sound shortcut so remote participants reliably see and hear raises too.
 
 ## [0.0.70] - 2026-03-07
 
