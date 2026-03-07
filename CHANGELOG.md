@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.0.70] - 2026-03-07
+
+### Added
+
+- **API: Room scheduling endpoint** — add `POST /api/v1/rooms/schedule` for scheduled room creation with start/end windows and early-join controls.
+- **SDK-Core: Room scheduling APIs** — add room scheduling support in the SDK client API so app integrations can create and manage scheduled rooms directly.
+
+### Changed
+
+- **SDK-React: Pre-join loading experience refresh** — loading screen now supports participant-aware gradients and richer animated visual states during room join.
+- **Ops: Agent guidance update** — artsy communication mode is now explicitly opt-in and defaults to concise engineering mode.
+
+### Fixed
+
 ## [0.0.69] - 2026-03-07
 
 
