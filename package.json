@@ -23,6 +23,7 @@
     "android:run": "bash scripts/mobile/android-run-debug.sh",
     "test": "turbo test",
     "test:join-stress:browser": "bash tests/scripts/run-agent-browser-join-stress.sh",
+    "test:join-chaos:browser": "bash tests/scripts/run-agent-browser-chaos.sh",
     "test:e2e": "CHALK_E2E_RUN=1 bun run --cwd apps/e2e src/index.ts --run",
     "test:e2e:require": "CHALK_E2E_RUN=1 CHALK_E2E_REQUIRE=1 bun run --cwd apps/e2e src/index.ts --run --require",
     "lint": "turbo lint",

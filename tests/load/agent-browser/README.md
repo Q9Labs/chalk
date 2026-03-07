@@ -36,6 +36,18 @@ Full-trace safe mode (captures detailed artifacts for every attempt + correlatio
 bash tests/scripts/run-agent-browser-join-stress.sh --count 100 --safe --full-trace
 ```
 
+Chaos repro suite (deterministic incident paths + support-code capture):
+
+```bash
+bash tests/scripts/run-agent-browser-chaos.sh
+```
+
+Optional:
+
+```bash
+bash tests/scripts/run-agent-browser-chaos.sh --scenarios prejoin_offline,post_join_offline
+```
+
 ## Outputs
 
 Each run writes to:
@@ -53,6 +65,19 @@ Main artifacts:
 - `attempt-XXXX/resources.json`
 - `attempt-XXXX/snapshot-prejoin.txt`
 - `attempt-XXXX/snapshot-final.txt`
+
+Chaos suite output directory:
+
+`tests/results/agent-browser-chaos/<timestamp>/`
+
+Artifacts per scenario:
+- `summary.json`
+- `report.md`
+- `<scenario>/snapshot.txt`
+- `<scenario>/body.txt`
+- `<scenario>/console.json`
+- `<scenario>/errors.json`
+- `<scenario>/final.png`
 
 Per-attempt correlation fields in `results.ndjson`:
 - `attempt`, `session` (agent-browser daemon session), `startedAt`, `finishedAt`

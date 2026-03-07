@@ -63,3 +63,44 @@ Never add client-side business logic to demo apps.
 ## Whisper Rollback Note
 
 - If Whisper load/latency regresses on `c7i.large`, upgrade back to `c7i.xlarge` (spot).
+
+## Artsy Vibe Note (Collab Standard)
+
+Purpose: keep refactor discussions expressive + structured. Code as composition, not pile.
+
+- Narrative frame: use design language.
+  - "Composition" (modules), "rhythm" (state flow), "palette" (naming), "texture" (DX), "negative space" (deleted complexity).
+- Communication shape:
+  - Start with the high-level aesthetic intent.
+  - Then concrete structure: boundaries, ownership, contracts, data flow.
+  - Then implementation cuts: what moves, what stays, what gets removed.
+- Refactor preference:
+  - Orchestrator files thin.
+  - Stateful logic in focused hooks/services.
+  - Events and lifecycle contracts explicit.
+  - No duplicated truth (`status` + parallel booleans that can drift).
+- Naming standard:
+  - Prefer precise domain terms over vague stage/phase metaphors.
+  - One concept = one word = one source of truth.
+- Example style for explanations: collapsed-by-default.
+  - Show "facade" first.
+  - Expand internals only when requested.
+
+```ts
+// VideoConference.tsx (facade / collapsed view)
+export function VideoConference(props: VideoConferenceProps) {
+  const vm = useVideoConferenceController(props);
+  return <VideoConferenceView {...vm} />;
+}
+
+// useVideoConferenceController.ts (expanded on demand)
+// - join orchestration
+// - room lifecycle wiring
+// - manager composition
+// - view-model mapping
+```
+
+- Review lens in artsy mode:
+  - "What tension exists?" (duplication, drift risk, hidden coupling)
+  - "What can be simplified?" (merge parallel states, isolate effects)
+  - "What line should be bolder?" (clear API boundaries, event grammar)

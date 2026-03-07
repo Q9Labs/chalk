@@ -68,3 +68,21 @@
 
 - `bun run --cwd packages/sdk-core check-types` ✅
 - `bun run --cwd packages/sdk-core test` ✅ (187 pass)
+
+## 14:18 PKT — agent-browser safe run + real-world failure repro audit
+
+- Executed safe/full-trace join stress run:
+  - `bash tests/scripts/run-agent-browser-join-stress.sh --count 20 --safe --full-trace`
+  - results: 20/20 success, join p50 6142ms, p95 8508ms, p99 9382ms.
+- Analyzed tail attempts and phase split from `results.ndjson`:
+  - average `room.join` phases: api ~2021ms, rtk.init ~1704ms, rtk.join ~2010ms.
+  - transient API 504->retry observed on attempts 1/9/13.
+- Reproduced pre-join failure sheet with support code via offline-on-join scenario:
+  - artifact dir: `tests/results/agent-browser-repro/2026-03-07T09-01-10Z-timeout-offline`.
+  - captured support code `CHK-20260307-090119-004` and join errors (`Failed to fetch`).
+- Reproduced post-join disconnect behavior for chalk web route:
+  - artifact dir: `tests/results/agent-browser-repro/2026-03-07T09-11-17Z-connection-failed-sleep`.
+  - observed app navigates to end screen (`Meeting ended`) after disconnect grace path, rather than staying on meeting overlay.
+- Checked Axiom for support-code correlation:
+  - datasets found: `chalk-api-prod`, `chalk-prod-traces`.
+  - no `client.incident`/`CHK-*` records in last 24h from current query window, indicating incident reporter likely not wired into API dataset for this environment.

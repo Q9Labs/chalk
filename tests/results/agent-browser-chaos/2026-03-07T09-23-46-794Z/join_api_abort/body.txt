@@ -1,0 +1,17 @@
+Joining room...Meeting On ChalkHostHReady to join?You'll be in a waiting room before entering the callDisplay NameAsk to joinSomething went wrongAn unexpected error occurred while trying to join the room. Our team has been notified.Technical DetailsSupport CodeCHK-20260307-092415-004Try AgainGo Back
+        @keyframes chalk-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        @keyframes chalk-pulse-subtle {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.8; }
+        }
+        .animate-float {
+          animation: chalk-float 3s ease-in-out infinite;
+        }
+        .animate-pulse-subtle {
+          animation: chalk-pulse-subtle 4s ease-in-out infinite;
+        }
+      v0.1.0 (595d86b)import('/assets/main-CPfXpG-j.js')
+

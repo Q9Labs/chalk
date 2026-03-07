@@ -1,0 +1,1 @@
+✓ Screenshot saved to /Users/macmini/Desktop/Code/chalk/tests/results/agent-browser-chaos/2026-03-07T09-29-55-902Z/prejoin_offline/final.png
