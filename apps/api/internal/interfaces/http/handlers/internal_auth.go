@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -79,7 +80,8 @@ func NewInternalAuthHandler(
 }
 
 type startInternalAuthRequest struct {
-	Email string `json:"email" binding:"required"`
+	Email       string `json:"email" binding:"required"`
+	CallbackURL string `json:"callback_url"`
 }
 
 // POST /api/v1/internal/auth/start
@@ -122,10 +124,7 @@ func (h *InternalAuthHandler) Start(c *gin.Context) {
 		return
 	}
 
-	appURL := "http://localhost:3070"
-	if h.cfg != nil && h.cfg.Auth.InternalAppURL != "" {
-		appURL = strings.TrimRight(h.cfg.Auth.InternalAppURL, "/")
-	}
+	appURL := h.resolveMagicLinkAppURL(req.CallbackURL)
 	link := appURL + "/auth/callback?token=" + magicToken
 
 	if err := h.resendClient.SendMagicLink(c.Request.Context(), emailAddr, link); err != nil {
@@ -470,6 +469,59 @@ func randomToken(bytesLen int) (string, error) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func (h *InternalAuthHandler) resolveMagicLinkAppURL(requestedCallbackURL string) string {
+	defaultAppURL := "http://localhost:3070"
+	if h.cfg != nil && h.cfg.Auth.InternalAppURL != "" {
+		defaultAppURL = strings.TrimRight(h.cfg.Auth.InternalAppURL, "/")
+	}
+
+	requestedOrigin, ok := normalizedOrigin(requestedCallbackURL)
+	if !ok {
+		return defaultAppURL
+	}
+	if !h.isAllowedMagicLinkOrigin(requestedOrigin) {
+		return defaultAppURL
+	}
+	return requestedOrigin
+}
+
+func (h *InternalAuthHandler) isAllowedMagicLinkOrigin(origin string) bool {
+	if h.cfg != nil {
+		configuredOrigin, ok := normalizedOrigin(h.cfg.Auth.InternalAppURL)
+		if ok && strings.EqualFold(origin, configuredOrigin) {
+			return true
+		}
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+func normalizedOrigin(rawURL string) (string, bool) {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return "", false
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", false
+	}
+	if parsed.Host == "" {
+		return "", false
+	}
+
+	return parsed.Scheme + "://" + parsed.Host, true
+}
 
 func pgUUID(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: id, Valid: true}

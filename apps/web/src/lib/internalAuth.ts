@@ -48,11 +48,16 @@ export async function fetchInternalAccessToken(apiUrl: string) {
 }
 
 export async function startMagicLink(apiUrl: string, email: string) {
+	const callbackUrl =
+		typeof window === "undefined"
+			? undefined
+			: `${window.location.origin}/auth/callback`;
+
 	const res = await fetch(`${apiUrl}/api/v1/internal/auth/start`, {
 		method: "POST",
 		credentials: "include",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ email }),
+		body: JSON.stringify({ email, callback_url: callbackUrl }),
 	});
 	if (!res.ok) {
 		const data = (await res.json().catch(() => null)) as {

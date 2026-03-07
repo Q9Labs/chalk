@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/config"
 	infraAuth "github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
@@ -194,4 +195,39 @@ func TestInternalAuthAccessToken_InvalidOwnerTenantCacheFallsBackToDB(t *testing
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, 1, queryStub.getInternalCalls)
 	require.Equal(t, tenantID.String(), cacheStub.values[internalTenantByOwnerRedisKey(userID)])
+}
+
+func TestInternalAuthResolveMagicLinkAppURL(t *testing.T) {
+	handler := &InternalAuthHandler{
+		cfg: &config.Config{
+			Auth: config.AuthConfig{
+				InternalAppURL: "https://app.chalk.q9labs.ai",
+			},
+		},
+	}
+
+	t.Run("uses configured app url by default", func(t *testing.T) {
+		got := handler.resolveMagicLinkAppURL("")
+		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+	})
+
+	t.Run("accepts configured origin callback", func(t *testing.T) {
+		got := handler.resolveMagicLinkAppURL("https://app.chalk.q9labs.ai/auth/callback")
+		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+	})
+
+	t.Run("accepts localhost callback for dev ui", func(t *testing.T) {
+		got := handler.resolveMagicLinkAppURL("http://localhost:3000/auth/callback")
+		require.Equal(t, "http://localhost:3000", got)
+	})
+
+	t.Run("rejects non-allowlisted domain", func(t *testing.T) {
+		got := handler.resolveMagicLinkAppURL("https://evil.example.com/auth/callback")
+		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+	})
+
+	t.Run("rejects invalid callback URL", func(t *testing.T) {
+		got := handler.resolveMagicLinkAppURL("javascript:alert(1)")
+		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+	})
 }

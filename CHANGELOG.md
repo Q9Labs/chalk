@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Infra: R2 browser uploads/downloads CORS** — configure `cloudflare_r2_bucket_cors` on recordings bucket with browser-safe rules (`GET/HEAD/PUT`, wildcard headers/origins by default, preflight cache TTL) so whiteboard/image presigned URL uploads no longer fail preflight (`No 'Access-Control-Allow-Origin' header`).
+- **Internal auth: localhost magic-link callback support** — internal auth start now accepts a safe callback override (configured app origin + localhost) and `apps/web` sends its current callback URL, so local dev login links open the local app callback instead of forcing hosted-only flow.
 
 ## [0.0.70] - 2026-03-07
 
