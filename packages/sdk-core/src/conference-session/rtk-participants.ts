@@ -6,10 +6,7 @@ interface ParticipantEventEmitter {
   on?: (eventName: string, fn: (payload?: unknown) => void) => void;
 }
 
-const hasMediaStateChanged = (
-  before: Participant,
-  after: Participant,
-): boolean =>
+const hasMediaStateChanged = (before: Participant, after: Participant): boolean =>
   before.displayName !== after.displayName ||
   before.videoEnabled !== after.videoEnabled ||
   before.audioEnabled !== after.audioEnabled ||
@@ -19,10 +16,7 @@ const hasMediaStateChanged = (
   before.screenShareTrack?.id !== after.screenShareTrack?.id ||
   before.screenShareAudioTrack?.id !== after.screenShareAudioTrack?.id;
 
-const mergeParticipantMediaState = (
-  existing: Participant,
-  incoming: Participant,
-): Participant => ({
+const mergeParticipantMediaState = (existing: Participant, incoming: Participant): Participant => ({
   ...existing,
   userId: incoming.userId ?? existing.userId,
   displayName: incoming.displayName || existing.displayName,
@@ -53,28 +47,22 @@ const toParticipantArray = (source: unknown): unknown[] => {
   return [];
 };
 
-const emitParticipantUpdated = (
-  deps: RtkSignalingDeps,
-  participantId: string,
-  participant: Participant,
-): void => {
+const emitParticipantUpdated = (deps: RtkSignalingDeps, participantId: string, participant: Participant): void => {
   deps.emit("participant.updated", {
     participantId,
     participant,
   });
 };
 
-const collectJoinedParticipants = (
-  participantsApi: {
+const collectJoinedParticipants = (participantsApi: {
+  toArray?: () => unknown[] | Iterable<unknown>;
+  joined: {
     toArray?: () => unknown[] | Iterable<unknown>;
-    joined: {
-      toArray?: () => unknown[] | Iterable<unknown>;
-      values?: () => Iterable<unknown>;
-      forEach?: (cb: (participant: unknown) => void) => void;
-      [Symbol.iterator]?: () => Iterator<unknown>;
-    };
-  },
-): unknown[] => {
+    values?: () => Iterable<unknown>;
+    forEach?: (cb: (participant: unknown) => void) => void;
+    [Symbol.iterator]?: () => Iterator<unknown>;
+  };
+}): unknown[] => {
   if (typeof participantsApi.toArray === "function") {
     try {
       const snapshot = toParticipantArray(participantsApi.toArray());
@@ -133,11 +121,7 @@ const collectJoinedParticipants = (
   return participants;
 };
 
-const onParticipantsEvent = (
-  emitters: ParticipantEventEmitter[],
-  event: string,
-  handler: (payload?: unknown) => void,
-): void => {
+const onParticipantsEvent = (emitters: ParticipantEventEmitter[], event: string, handler: (payload?: unknown) => void): void => {
   const attached = new Set<unknown>();
 
   for (const emitter of emitters) {
@@ -153,10 +137,7 @@ const onParticipantsEvent = (
   }
 };
 
-const ensureRemoteParticipant = (
-  deps: RtkSignalingDeps,
-  rtkParticipant: unknown,
-): Participant | null => {
+const ensureRemoteParticipant = (deps: RtkSignalingDeps, rtkParticipant: unknown): Participant | null => {
   const participant = mapRtkParticipant(deps.getPeerIdMap(), rtkParticipant);
   const localParticipant = deps.getLocalParticipant();
 
@@ -203,10 +184,7 @@ const reconcileJoinedParticipants = (
   },
 ): void => {
   const joinedParticipants = collectJoinedParticipants(participantsApi);
-  deps.emitRoomSyncReady(
-    "rtk.snapshot",
-    joinedParticipants.length + (deps.getLocalParticipant() ? 1 : 0),
-  );
+  deps.emitRoomSyncReady("rtk.snapshot", joinedParticipants.length + (deps.getLocalParticipant() ? 1 : 0));
 
   for (const joinedParticipant of joinedParticipants) {
     const participant = ensureRemoteParticipant(deps, joinedParticipant);
@@ -230,36 +208,21 @@ const reconcileJoinedParticipants = (
   }
 };
 
-const emitTrackError = (
-  deps: RtkSignalingDeps,
-  error: ChalkError,
-): void => {
+const emitTrackError = (deps: RtkSignalingDeps, error: ChalkError): void => {
   deps.emit("error", error);
 };
 
-export const setupRtkParticipantDebugHooks = (
-  deps: Pick<RtkSignalingDeps, "debug" | "getRtkClient">,
-): void => {
+export const setupRtkParticipantDebugHooks = (deps: Pick<RtkSignalingDeps, "debug" | "getRtkClient">): void => {
   const rtkClient = deps.getRtkClient();
   if (!deps.debug || !rtkClient?.participants?.joined) {
     return;
   }
 
-  const debugEvents = [
-    "participantJoined",
-    "participantLeft",
-    "videoUpdate",
-    "audioUpdate",
-    "screenShareUpdate",
-    "participantsUpdate",
-    "participantsCleared",
-  ];
+  const debugEvents = ["participantJoined", "participantLeft", "videoUpdate", "audioUpdate", "screenShareUpdate", "participantsUpdate", "participantsCleared"];
 
   for (const eventName of debugEvents) {
     try {
-      (
-        rtkClient.participants.joined as unknown as ParticipantEventEmitter
-      ).on?.(eventName, (_data: unknown) => {
+      (rtkClient.participants.joined as unknown as ParticipantEventEmitter).on?.(eventName, (_data: unknown) => {
         // debug hook
       });
     } catch {
@@ -268,9 +231,7 @@ export const setupRtkParticipantDebugHooks = (
   }
 };
 
-export const setupRtkParticipantSync = (
-  deps: RtkSignalingDeps,
-): void => {
+export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
   const rtkClient = deps.getRtkClient();
   if (!rtkClient?.participants) {
     return;
@@ -299,18 +260,10 @@ export const setupRtkParticipantSync = (
       localParticipant.audioTrack = rtkClient.self.audioTrack ?? undefined;
 
       if (localParticipant.videoEnabled) {
-        deps.validateTrack(
-          localParticipant.videoTrack,
-          "LOCAL_VIDEO",
-          localParticipant.id,
-        );
+        deps.validateTrack(localParticipant.videoTrack, "LOCAL_VIDEO", localParticipant.id);
       }
       if (localParticipant.audioEnabled) {
-        deps.validateTrack(
-          localParticipant.audioTrack,
-          "LOCAL_AUDIO",
-          localParticipant.id,
-        );
+        deps.validateTrack(localParticipant.audioTrack, "LOCAL_AUDIO", localParticipant.id);
       }
     }
 
@@ -322,65 +275,51 @@ export const setupRtkParticipantSync = (
     deps.setConnectionState("disconnected");
   });
 
-  rtkClient.self.on(
-    "videoUpdate",
-    (data: { videoEnabled: boolean; videoTrack: MediaStreamTrack | null }) => {
-      const localParticipant = deps.getLocalParticipant();
-      if (!localParticipant) {
-        return;
+  rtkClient.self.on("videoUpdate", (data: { videoEnabled: boolean; videoTrack: MediaStreamTrack | null }) => {
+    const localParticipant = deps.getLocalParticipant();
+    if (!localParticipant) {
+      return;
+    }
+
+    localParticipant.videoEnabled = data.videoEnabled;
+    localParticipant.videoTrack = data.videoTrack ?? undefined;
+
+    if (data.videoEnabled) {
+      const isValid = deps.validateTrack(data.videoTrack, "LOCAL_VIDEO", localParticipant.id);
+      if (!isValid) {
+        emitTrackError(deps, {
+          code: "MEDIA_ERROR",
+          message: "Video enabled but track unavailable or invalid",
+          details: { trackState: data.videoTrack?.readyState },
+        } as ChalkError);
       }
+    }
 
-      localParticipant.videoEnabled = data.videoEnabled;
-      localParticipant.videoTrack = data.videoTrack ?? undefined;
+    emitParticipantUpdated(deps, localParticipant.id, localParticipant);
+  });
 
-      if (data.videoEnabled) {
-        const isValid = deps.validateTrack(
-          data.videoTrack,
-          "LOCAL_VIDEO",
-          localParticipant.id,
-        );
-        if (!isValid) {
-          emitTrackError(deps, {
-            code: "MEDIA_ERROR",
-            message: "Video enabled but track unavailable or invalid",
-            details: { trackState: data.videoTrack?.readyState },
-          } as ChalkError);
-        }
+  rtkClient.self.on("audioUpdate", (data: { audioEnabled: boolean; audioTrack: MediaStreamTrack | null }) => {
+    const localParticipant = deps.getLocalParticipant();
+    if (!localParticipant) {
+      return;
+    }
+
+    localParticipant.audioEnabled = data.audioEnabled;
+    localParticipant.audioTrack = data.audioTrack ?? undefined;
+
+    if (data.audioEnabled) {
+      const isValid = deps.validateTrack(data.audioTrack, "LOCAL_AUDIO", localParticipant.id);
+      if (!isValid) {
+        emitTrackError(deps, {
+          code: "MEDIA_ERROR",
+          message: "Audio enabled but track unavailable or invalid",
+          details: { trackState: data.audioTrack?.readyState },
+        } as ChalkError);
       }
+    }
 
-      emitParticipantUpdated(deps, localParticipant.id, localParticipant);
-    },
-  );
-
-  rtkClient.self.on(
-    "audioUpdate",
-    (data: { audioEnabled: boolean; audioTrack: MediaStreamTrack | null }) => {
-      const localParticipant = deps.getLocalParticipant();
-      if (!localParticipant) {
-        return;
-      }
-
-      localParticipant.audioEnabled = data.audioEnabled;
-      localParticipant.audioTrack = data.audioTrack ?? undefined;
-
-      if (data.audioEnabled) {
-        const isValid = deps.validateTrack(
-          data.audioTrack,
-          "LOCAL_AUDIO",
-          localParticipant.id,
-        );
-        if (!isValid) {
-          emitTrackError(deps, {
-            code: "MEDIA_ERROR",
-            message: "Audio enabled but track unavailable or invalid",
-            details: { trackState: data.audioTrack?.readyState },
-          } as ChalkError);
-        }
-      }
-
-      emitParticipantUpdated(deps, localParticipant.id, localParticipant);
-    },
-  );
+    emitParticipantUpdated(deps, localParticipant.id, localParticipant);
+  });
 
   rtkClient.self.on(
     "screenShareUpdate",
@@ -397,19 +336,14 @@ export const setupRtkParticipantSync = (
       }
 
       localParticipant.isScreenSharing = data.screenShareEnabled;
-      localParticipant.screenShareTrack =
-        data.screenShareTracks?.video ?? undefined;
-      localParticipant.screenShareAudioTrack =
-        data.screenShareTracks?.audio ?? undefined;
+      localParticipant.screenShareTrack = data.screenShareTracks?.video ?? undefined;
+      localParticipant.screenShareAudioTrack = data.screenShareTracks?.audio ?? undefined;
 
       emitParticipantUpdated(deps, localParticipant.id, localParticipant);
     },
   );
 
-  const emitters: ParticipantEventEmitter[] = [
-    participantsApi.joined,
-    participantsApi,
-  ];
+  const emitters: ParticipantEventEmitter[] = [participantsApi.joined, participantsApi];
 
   onParticipantsEvent(emitters, "participantJoined", (rtkParticipant: unknown) => {
     ensureRemoteParticipant(deps, rtkParticipant);
@@ -421,8 +355,7 @@ export const setupRtkParticipantSync = (
 
     const participants = deps.getParticipants();
     const deletedStable = participants.delete(stableId);
-    const deletedPeer =
-      peerId !== stableId ? participants.delete(peerId) : false;
+    const deletedPeer = peerId !== stableId ? participants.delete(peerId) : false;
 
     if (deletedStable || deletedPeer) {
       deps.emit("participant.left", stableId);
@@ -481,47 +414,39 @@ export const setupRtkParticipantSync = (
     emitParticipantUpdated(deps, participant.id, updated);
   });
 
-  onParticipantsEvent(
-    emitters,
-    "screenShareUpdate",
-    (rtkParticipant: unknown) => {
-      const participant = ensureRemoteParticipant(deps, rtkParticipant);
-      if (!participant) {
-        return;
+  onParticipantsEvent(emitters, "screenShareUpdate", (rtkParticipant: unknown) => {
+    const participant = ensureRemoteParticipant(deps, rtkParticipant);
+    if (!participant) {
+      return;
+    }
+
+    const participants = deps.getParticipants();
+    const existing = participants.get(participant.id);
+    if (!existing) {
+      return;
+    }
+
+    const updated: Participant = {
+      ...existing,
+      isScreenSharing: participant.isScreenSharing,
+      screenShareTrack: participant.screenShareTrack,
+      screenShareAudioTrack: participant.screenShareAudioTrack,
+    };
+    participants.set(participant.id, updated);
+
+    if (participant.isScreenSharing) {
+      const isValid = deps.validateTrack(participant.screenShareTrack, "REMOTE_SCREENSHARE", participant.id);
+      if (!isValid) {
+        emitTrackError(deps, {
+          code: "SCREEN_SHARE_ERROR",
+          message: `Screen share track unavailable for participant ${participant.displayName}`,
+          details: { participantId: participant.id },
+        } as ChalkError);
       }
+    }
 
-      const participants = deps.getParticipants();
-      const existing = participants.get(participant.id);
-      if (!existing) {
-        return;
-      }
-
-      const updated: Participant = {
-        ...existing,
-        isScreenSharing: participant.isScreenSharing,
-        screenShareTrack: participant.screenShareTrack,
-        screenShareAudioTrack: participant.screenShareAudioTrack,
-      };
-      participants.set(participant.id, updated);
-
-      if (participant.isScreenSharing) {
-        const isValid = deps.validateTrack(
-          participant.screenShareTrack,
-          "REMOTE_SCREENSHARE",
-          participant.id,
-        );
-        if (!isValid) {
-          emitTrackError(deps, {
-            code: "SCREEN_SHARE_ERROR",
-            message: `Screen share track unavailable for participant ${participant.displayName}`,
-            details: { participantId: participant.id },
-          } as ChalkError);
-        }
-      }
-
-      emitParticipantUpdated(deps, participant.id, updated);
-    },
-  );
+    emitParticipantUpdated(deps, participant.id, updated);
+  });
 
   onParticipantsEvent(emitters, "participantsUpdate", () => {
     reconcileJoinedParticipants(deps, participantsApi);

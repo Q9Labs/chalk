@@ -14,16 +14,8 @@ const extractChatMessage = (payload: unknown): ChatMessage | null => {
     id: (messageData.id as string) ?? crypto.randomUUID(),
     senderId: (messageData.userId as string) ?? "unknown",
     senderName: (messageData.displayName as string) ?? "Unknown",
-    content:
-      (messageData.message as string) ??
-      (messageData.text as string) ??
-      (messageData.content as string) ??
-      "",
-    timestamp: new Date(
-      (messageData.time as string) ??
-        (messageData.timestamp as string) ??
-        Date.now(),
-    ),
+    content: (messageData.message as string) ?? (messageData.text as string) ?? (messageData.content as string) ?? "",
+    timestamp: new Date((messageData.time as string) ?? (messageData.timestamp as string) ?? Date.now()),
   };
 
   if (typeof chatMessage.content !== "string") {
@@ -50,16 +42,7 @@ export const setupRtkChatListener = (deps: RtkSignalingDeps): void => {
       return;
     }
 
-    const isDuplicate = deps.getMessages().some(
-      (message) =>
-        message.id === chatMessage.id ||
-        (message.senderId === chatMessage.senderId &&
-          message.content === chatMessage.content &&
-          Math.abs(
-            new Date(message.timestamp).getTime() -
-              new Date(chatMessage.timestamp).getTime(),
-          ) < 5000),
-    );
+    const isDuplicate = deps.getMessages().some((message) => message.id === chatMessage.id || (message.senderId === chatMessage.senderId && message.content === chatMessage.content && Math.abs(new Date(message.timestamp).getTime() - new Date(chatMessage.timestamp).getTime()) < 5000));
 
     if (isDuplicate) {
       return;

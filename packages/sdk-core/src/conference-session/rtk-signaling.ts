@@ -1,8 +1,5 @@
 import type { RtkSignalingDeps } from "./rtk-signaling-deps.ts";
-import {
-  setupRtkParticipantDebugHooks,
-  setupRtkParticipantSync,
-} from "./rtk-participants.ts";
+import { setupRtkParticipantDebugHooks, setupRtkParticipantSync } from "./rtk-participants.ts";
 import { setupRtkChatListener } from "./rtk-chat.ts";
 import { setupRtkTranscriptListener } from "./rtk-transcripts.ts";
 

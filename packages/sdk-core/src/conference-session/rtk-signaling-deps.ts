@@ -1,9 +1,5 @@
 import type RealtimeKitClient from "@cloudflare/realtimekit";
-import type {
-  ChatMessage,
-  Participant,
-  SessionConnectionState,
-} from "../types.ts";
+import type { ChatMessage, Participant, SessionConnectionState } from "../types.ts";
 import type { WSClient } from "../ws-client.ts";
 import type { ConferenceSessionEvents, Transcript } from "./types.ts";
 
@@ -20,18 +16,8 @@ export interface RtkSignalingDeps {
   getMessages: () => ChatMessage[];
   getTranscripts: () => Transcript[];
   setConnectionState: (state: SessionConnectionState) => void;
-  emitRoomSyncReady: (
-    source: "rtk.snapshot" | "ws.snapshot",
-    participantCount: number,
-  ) => void;
-  emit: <K extends keyof ConferenceSessionEvents>(
-    event: K,
-    data: ConferenceSessionEvents[K],
-  ) => void;
-  validateTrack: (
-    track: MediaStreamTrack | undefined | null,
-    type: string,
-    participantId: string,
-  ) => boolean;
+  emitRoomSyncReady: (source: "rtk.snapshot" | "ws.snapshot", participantCount: number) => void;
+  emit: <K extends keyof ConferenceSessionEvents>(event: K, data: ConferenceSessionEvents[K]) => void;
+  validateTrack: (track: MediaStreamTrack | undefined | null, type: string, participantId: string) => boolean;
   logConnectionState: () => void;
 }

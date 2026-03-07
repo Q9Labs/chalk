@@ -8,24 +8,11 @@ const mapRtkTranscript = (data: unknown): Transcript | null => {
 
   const raw = data as Record<string, unknown>;
 
-  const participantId =
-    (raw.peerId as string) ??
-    (raw.userId as string) ??
-    (raw.participantId as string) ??
-    (raw.customParticipantId as string) ??
-    "";
+  const participantId = (raw.peerId as string) ?? (raw.userId as string) ?? (raw.participantId as string) ?? (raw.customParticipantId as string) ?? "";
 
-  const speakerName =
-    (raw.name as string) ??
-    (raw.participantName as string) ??
-    (raw.displayName as string) ??
-    "Unknown";
+  const speakerName = (raw.name as string) ?? (raw.participantName as string) ?? (raw.displayName as string) ?? "Unknown";
 
-  const text =
-    (raw.transcript as string) ??
-    (raw.text as string) ??
-    (raw.content as string) ??
-    "";
+  const text = (raw.transcript as string) ?? (raw.text as string) ?? (raw.content as string) ?? "";
 
   if (!text) {
     return null;
@@ -38,19 +25,13 @@ const mapRtkTranscript = (data: unknown): Transcript | null => {
     participantId,
     speakerName,
     text,
-    timestamp: raw.date
-      ? new Date(raw.date as string | number)
-      : raw.timestamp
-        ? new Date(raw.timestamp as string | number)
-        : new Date(),
+    timestamp: raw.date ? new Date(raw.date as string | number) : raw.timestamp ? new Date(raw.timestamp as string | number) : new Date(),
     isInterim,
     confidence: raw.confidence as number | undefined,
   };
 };
 
-export const setupRtkTranscriptListener = (
-  deps: RtkSignalingDeps,
-): void => {
+export const setupRtkTranscriptListener = (deps: RtkSignalingDeps): void => {
   const rtkClient = deps.getRtkClient();
   if (!rtkClient) {
     return;
@@ -101,13 +82,7 @@ export const setupRtkTranscriptListener = (
     }
   }
 
-  const eventNames = [
-    "transcript",
-    "transcription",
-    "transcriptUpdate",
-    "newTranscript",
-    "message",
-  ];
+  const eventNames = ["transcript", "transcription", "transcriptUpdate", "newTranscript", "message"];
 
   if (typeof ai.on !== "function") {
     return;
