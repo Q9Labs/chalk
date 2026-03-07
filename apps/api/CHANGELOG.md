@@ -5,6 +5,7 @@
 ### Added
 
 - **Debug diagnostics endpoints**: Add `GET /api/v1/debug/auth` (token/server/build introspection) and `HEAD /api/v1/debug/ping` (latency probe) for client System Health.
+- **Room scheduling endpoint**: Add `POST /api/v1/rooms/schedule` to create scheduled rooms with `scheduled_start_at`, optional `scheduled_end_at`, and per-room `allow_early_join_minutes`.
 
 ### Changed
 
@@ -15,6 +16,7 @@
 - **Cloudflare participant/meeting observability**: Added structured Cloudflare request logs (`operation`, `attempt`, `status_code`, `tenant_id`, `room_id`, `request_id`, elapsed timing) for `CreateMeeting` and `AddParticipant`, plus propagated request context from participant handler.
 - **Redis cache for auth/join read paths**: Added short-TTL fail-open Redis caching for internal-owner tenant resolution in `GET /api/v1/internal/auth/access-token`, tenant config reads in participant join flow, and room-name to room-id mapping in `POST /api/v1/rooms/:id/participants` (positive cache only; no negative miss cache).
 - **WebSocket whiteboard protocol now v2-only (breaking)**: removed legacy v1 update/persist compatibility (`WhiteboardUpdatePayload`, v1 persisted restore fallback), and normalized whiteboard data/snapshot payloads to always include required v2 fields (`schema_version`, `scene_id`, `sync_all`, `updated_at_ms`).
+- **Scheduled room lifecycle**: Rooms now support `scheduled` status and first-class schedule fields (`scheduled_start_at`, `scheduled_end_at`, `allow_early_join_minutes`); participant join flow auto-activates scheduled rooms on first allowed join and rejects joins before the configured early-join window.
 
 ### Fixed
 

@@ -427,6 +427,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/rooms/schedule:
+    post:
+      summary: Schedule a room
+      description: |
+        Schedule a room to become active on first join at or after the
+        configured start time (optionally with an early-join window).
+      operationId: scheduleRoom
+      tags:
+        - Rooms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleRoomRequest'
+      responses:
+        '201':
+          description: Room scheduled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     get:
       summary: List rooms
       description: List all active rooms for the authenticated tenant
@@ -1626,9 +1667,26 @@ components:
           type: string
           description: Room status
           enum:
+            - scheduled
             - active
             - ended
           example: active
+        scheduled_start_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Scheduled room start timestamp
+          example: '2024-01-15T10:30:00Z'
+        scheduled_end_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional scheduled room end timestamp
+          example: null
+        allow_early_join_minutes:
+          type: integer
+          description: Minutes participants can join before scheduled_start_at
+          example: 10
         started_at:
           type: string
           format: date-time
@@ -1684,6 +1742,47 @@ components:
               type: boolean
               description: Enable chat
               example: true
+
+    ScheduleRoomRequest:
+      type: object
+      required:
+        - scheduled_start_at
+      properties:
+        name:
+          type: string
+          description: Room name
+          example: Math 101 - Session 4
+        config:
+          type: object
+          properties:
+            max_participants:
+              type: integer
+              description: Maximum participants (default from tenant)
+              example: 10
+            recording_enabled:
+              type: boolean
+              description: Enable recording
+              example: true
+            chat_enabled:
+              type: boolean
+              description: Enable chat
+              example: true
+        scheduled_start_at:
+          type: string
+          format: date-time
+          description: Scheduled room start timestamp (UTC recommended)
+          example: '2026-03-10T14:00:00Z'
+        scheduled_end_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional scheduled room end timestamp
+          example: '2026-03-10T15:00:00Z'
+        allow_early_join_minutes:
+          type: integer
+          minimum: 0
+          description: Minutes participants can join before scheduled_start_at
+          example: 10
 
     UpdateRoomRequest:
       type: object

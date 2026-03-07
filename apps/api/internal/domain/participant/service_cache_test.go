@@ -50,6 +50,10 @@ func (d *joinTenantDBStub) CountActiveParticipantsByRoom(context.Context, uuid.U
 	panic("unexpected CountActiveParticipantsByRoom")
 }
 
+func (d *joinTenantDBStub) ActivateScheduledRoom(context.Context, uuid.UUID) (db.Room, error) {
+	panic("unexpected ActivateScheduledRoom")
+}
+
 func (d *joinTenantDBStub) CreateParticipant(_ context.Context, arg db.CreateParticipantParams) (db.Participant, error) {
 	return db.Participant{
 		ID:                      arg.ID,

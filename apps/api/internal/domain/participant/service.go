@@ -56,6 +56,7 @@ type JoinCache interface {
 }
 
 type participantDB interface {
+	ActivateScheduledRoom(ctx context.Context, id uuid.UUID) (db.Room, error)
 	CountActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	CreateParticipant(ctx context.Context, arg db.CreateParticipantParams) (db.Participant, error)
 	CreateRoomWithID(ctx context.Context, arg db.CreateRoomWithIDParams) (db.Room, error)
@@ -235,18 +236,21 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 
 	roomFromCountRow := func(r db.GetRoomWithParticipantCountRow) db.Room {
 		return db.Room{
-			ID:                  r.ID,
-			TenantID:            r.TenantID,
-			CloudflareMeetingID: r.CloudflareMeetingID,
-			Name:                r.Name,
-			Config:              r.Config,
-			Status:              r.Status,
-			StartedAt:           r.StartedAt,
-			EndedAt:             r.EndedAt,
-			CreatedAt:           r.CreatedAt,
-			UpdatedAt:           r.UpdatedAt,
-			WhiteboardState:     r.WhiteboardState,
-			Metadata:            r.Metadata,
+			ID:                    r.ID,
+			TenantID:              r.TenantID,
+			CloudflareMeetingID:   r.CloudflareMeetingID,
+			Name:                  r.Name,
+			Config:                r.Config,
+			Status:                r.Status,
+			StartedAt:             r.StartedAt,
+			EndedAt:               r.EndedAt,
+			ScheduledStartAt:      r.ScheduledStartAt,
+			ScheduledEndAt:        r.ScheduledEndAt,
+			AllowEarlyJoinMinutes: r.AllowEarlyJoinMinutes,
+			CreatedAt:             r.CreatedAt,
+			UpdatedAt:             r.UpdatedAt,
+			WhiteboardState:       r.WhiteboardState,
+			Metadata:              r.Metadata,
 		}
 	}
 
@@ -327,8 +331,41 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 			return nil, ErrRoomNotFound
 		}
 
+		// Room exists and is scheduled - activate when join window opens.
+		if room.Status == "scheduled" {
+			if !room.ScheduledStartAt.Valid {
+				return nil, ErrRoomNotAvailable
+			}
+
+			joinAllowedAt := room.ScheduledStartAt.Time.Add(-time.Duration(room.AllowEarlyJoinMinutes) * time.Minute)
+			if time.Now().Before(joinAllowedAt) {
+				return nil, ErrRoomNotAvailable
+			}
+
+			activateScheduledRoomStart := time.Now()
+			room, err = s.db.ActivateScheduledRoom(ctx, input.RoomID)
+			telemetry.observeDB("db_activate_scheduled_room", time.Since(activateScheduledRoomStart))
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					refetchRoomStart := time.Now()
+					refetchedRoom, refetchErr := s.db.GetRoom(ctx, input.RoomID)
+					telemetry.observeDB("db_get_room_after_activate_race", time.Since(refetchRoomStart))
+					if refetchErr == nil && refetchedRoom.Status == "active" {
+						room = refetchedRoom
+					} else {
+						failedStep = "db_activate_scheduled_room"
+						return nil, fmt.Errorf("failed to activate scheduled room: %w", err)
+					}
+				} else {
+					failedStep = "db_activate_scheduled_room"
+					return nil, fmt.Errorf("failed to activate scheduled room: %w", err)
+				}
+			}
+			roomCreated = true
+		}
+
 		// Room exists but is ended - reactivate it.
-		if room.Status != "active" {
+		if room.Status == "ended" {
 			tenantLookupStart := time.Now()
 			t, fromCache, err := s.getTenantForJoin(ctx, room.TenantID)
 			if !fromCache {

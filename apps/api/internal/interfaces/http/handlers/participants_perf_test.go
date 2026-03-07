@@ -91,6 +91,9 @@ func (f *fakeJoinDB) CreateParticipant(ctx context.Context, arg db.CreatePartici
 func (f *fakeJoinDB) CountActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error) {
 	panic("unexpected CountActiveParticipantsByRoom")
 }
+func (f *fakeJoinDB) ActivateScheduledRoom(ctx context.Context, id uuid.UUID) (db.Room, error) {
+	panic("unexpected ActivateScheduledRoom")
+}
 func (f *fakeJoinDB) CreateRoomWithID(ctx context.Context, arg db.CreateRoomWithIDParams) (db.Room, error) {
 	panic("unexpected CreateRoomWithID")
 }

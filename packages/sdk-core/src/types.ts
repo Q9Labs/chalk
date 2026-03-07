@@ -281,6 +281,57 @@ export interface SessionInfo {
 	createdAt: Date;
 }
 
+/**
+ * Lifecycle status for persisted rooms managed by the REST API
+ */
+export type RoomLifecycleStatus = "scheduled" | "active" | "ended";
+
+/**
+ * Configuration payload for room creation/scheduling
+ */
+export interface CreateRoomConfig {
+	maxParticipants?: number;
+	recordingEnabled?: boolean;
+	chatEnabled?: boolean;
+	[key: string]: unknown;
+}
+
+/**
+ * SDK options for creating a room without joining it
+ */
+export interface CreateRoomOptions {
+	name?: string;
+	config?: CreateRoomConfig;
+}
+
+/**
+ * SDK options for scheduling a room
+ */
+export interface ScheduleRoomOptions extends CreateRoomOptions {
+	scheduledStartAt: string | Date;
+	scheduledEndAt?: string | Date;
+	allowEarlyJoinMinutes?: number;
+}
+
+/**
+ * Room resource returned from room create/schedule APIs
+ */
+export interface RoomResource {
+	id: string;
+	tenantId: string;
+	cloudflareMeetingId: string;
+	name?: string | null;
+	config: Record<string, unknown>;
+	status: RoomLifecycleStatus;
+	scheduledStartAt?: string | null;
+	scheduledEndAt?: string | null;
+	allowEarlyJoinMinutes: number;
+	startedAt?: string | null;
+	endedAt?: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
 // ============================================================================
 // Participant Types
 // ============================================================================
@@ -706,8 +757,24 @@ export interface ApiResponse<T> {
  * @internal
  */
 export interface CreateRoomResponse {
+	/**
+	 * Legacy room ID field kept for backward compatibility.
+	 * Prefer `id` for new integrations.
+	 */
 	roomId: string;
-	name?: string;
+	id?: string;
+	name?: string | null;
+	tenantId?: string;
+	cloudflareMeetingId?: string;
+	config?: Record<string, unknown>;
+	status?: RoomLifecycleStatus;
+	scheduledStartAt?: string | null;
+	scheduledEndAt?: string | null;
+	allowEarlyJoinMinutes?: number;
+	startedAt?: string | null;
+	endedAt?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
 }
 
 /** Tenant configuration returned from the API */

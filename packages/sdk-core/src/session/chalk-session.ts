@@ -25,6 +25,7 @@ import { TypedEventEmitter } from "../utils/typed-emitter";
 import { wideEvents } from "../wide-events/index";
 import type { ChalkIncident, ChalkIncidentBreadcrumb, ChalkIncidentConfig, ChalkIncidentInput, ChalkIncidentSource } from "../incident.ts";
 import type { ChalkPostHogConfig } from "../posthog.ts";
+import type { CreateRoomOptions, RoomResource, ScheduleRoomOptions } from "../types.ts";
 import { createDefaultMediaState, createDefaultParticipantState, createDefaultRoomState, createSessionStateApis, type MediaSessionApi, type ParticipantSessionApi, type RoomSessionApi, type SessionStateUpdaters } from "./chalk-session-state";
 import { ChalkSessionIncidentPipeline } from "./chalk-session-incidents";
 import { attachRoomToManagersAndBridgeState } from "./chalk-session-bridges";
@@ -380,6 +381,36 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       const error = ChalkError.wrap(err);
       this.emitErrorWithIncident(error, "session", {
         operation: "create_room",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Create a room without joining it.
+   */
+  async createRoom(options: CreateRoomOptions = {}): Promise<RoomResource> {
+    try {
+      return await this.client.createRoom(options);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "create_room_resource",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Schedule a room for future activation.
+   */
+  async scheduleRoom(options: ScheduleRoomOptions): Promise<RoomResource> {
+    try {
+      return await this.client.scheduleRoom(options);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "schedule_room",
       });
       throw error;
     }

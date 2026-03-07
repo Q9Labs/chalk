@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain/room"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
@@ -29,6 +30,14 @@ type CreateRoomConfig struct {
 	MaxParticipants  int  `json:"max_participants"`
 	RecordingEnabled bool `json:"recording_enabled"`
 	ChatEnabled      bool `json:"chat_enabled"`
+}
+
+type ScheduleRoomRequest struct {
+	Name                  string           `json:"name"`
+	Config                CreateRoomConfig `json:"config"`
+	ScheduledStartAt      time.Time        `json:"scheduled_start_at" binding:"required"`
+	ScheduledEndAt        *time.Time       `json:"scheduled_end_at"`
+	AllowEarlyJoinMinutes *int32           `json:"allow_early_join_minutes"`
 }
 
 func (h *RoomHandler) Create(c *gin.Context) {
@@ -58,6 +67,61 @@ func (h *RoomHandler) Create(c *gin.Context) {
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create room: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, output.Room)
+}
+
+func (h *RoomHandler) Schedule(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var req ScheduleRoomRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	now := time.Now().UTC()
+	if !req.ScheduledStartAt.After(now) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "scheduled_start_at must be in the future"})
+		return
+	}
+	if req.ScheduledEndAt != nil && !req.ScheduledEndAt.After(req.ScheduledStartAt) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "scheduled_end_at must be after scheduled_start_at"})
+		return
+	}
+
+	allowEarlyJoinMinutes := int32(0)
+	if req.AllowEarlyJoinMinutes != nil {
+		if *req.AllowEarlyJoinMinutes < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "allow_early_join_minutes must be >= 0"})
+			return
+		}
+		allowEarlyJoinMinutes = *req.AllowEarlyJoinMinutes
+	}
+
+	configBytes := []byte(`{}`)
+	if req.Config.MaxParticipants > 0 || req.Config.RecordingEnabled || req.Config.ChatEnabled {
+		configBytes = []byte(`{"max_participants":` + strconv.Itoa(req.Config.MaxParticipants) +
+			`,"recording_enabled":` + strconv.FormatBool(req.Config.RecordingEnabled) +
+			`,"chat_enabled":` + strconv.FormatBool(req.Config.ChatEnabled) + `}`)
+	}
+
+	output, err := h.roomService.ScheduleRoom(c.Request.Context(), room.ScheduleRoomInput{
+		TenantID:             claims.TenantID,
+		Name:                 req.Name,
+		Config:               configBytes,
+		ScheduledStartAt:     req.ScheduledStartAt.UTC(),
+		ScheduledEndAt:       req.ScheduledEndAt,
+		AllowEarlyJoinMinute: allowEarlyJoinMinutes,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to schedule room: " + err.Error()})
 		return
 	}
 

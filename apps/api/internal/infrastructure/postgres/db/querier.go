@@ -13,6 +13,7 @@ import (
 )
 
 type Querier interface {
+	ActivateScheduledRoom(ctx context.Context, id uuid.UUID) (Room, error)
 	ActivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	AdminGetMeetingDurations(ctx context.Context) ([]AdminGetMeetingDurationsRow, error)
 	// Admin Queries
@@ -60,6 +61,7 @@ type Querier interface {
 	// CRUD operations and room management
 	CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, error)
 	CreateRoomWithID(ctx context.Context, arg CreateRoomWithIDParams) (Room, error)
+	CreateScheduledRoom(ctx context.Context, arg CreateScheduledRoomParams) (Room, error)
 	// Tenant Queries
 	// CRUD operations and tenant-specific queries
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)

@@ -242,6 +242,7 @@ func (r *Router) setupRoutes() {
 		{
 			// Management endpoints (host-only)
 			roomsGroup.POST("", authMw.RequireHost(), rooms.Create)
+			roomsGroup.POST("/schedule", authMw.RequireHost(), rooms.Schedule)
 			roomsGroup.GET("", authMw.RequireHost(), rooms.List)
 			roomsGroup.GET("/:id", rooms.Get)
 			roomsGroup.PATCH("/:id", authMw.RequireHost(), rooms.Update)

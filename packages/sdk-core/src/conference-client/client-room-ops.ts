@@ -1,5 +1,6 @@
 import type { APIClient } from "../api-client.ts";
 import { ConferenceSession } from "../room.ts";
+import type { CreateRoomOptions, RoomResource, ScheduleRoomOptions } from "../types.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import type { WSClient } from "../ws-client.ts";
 
@@ -13,8 +14,49 @@ export const createSession = async (apiClient: APIClient, name?: string, config?
       throw new Error(response.error?.message ?? "Failed to create room");
     }
 
-    ctx.complete("success", { roomId: response.data.roomId });
-    return response.data.roomId;
+    const roomId = response.data.id ?? response.data.roomId;
+    if (!roomId) {
+      throw new Error("Missing room ID in create room response");
+    }
+
+    ctx.complete("success", { roomId });
+    return roomId;
+  } catch (error) {
+    ctx.complete("error", error);
+    throw error;
+  }
+};
+
+export const createRoom = async (apiClient: APIClient, options: CreateRoomOptions = {}): Promise<RoomResource> => {
+  const ctx = wideEvents.start("room.create_resource");
+  ctx.set("input", options);
+
+  try {
+    const response = await apiClient.createRoom(options);
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message ?? "Failed to create room");
+    }
+
+    ctx.complete("success", { roomId: response.data.id, status: response.data.status });
+    return response.data;
+  } catch (error) {
+    ctx.complete("error", error);
+    throw error;
+  }
+};
+
+export const scheduleRoom = async (apiClient: APIClient, options: ScheduleRoomOptions): Promise<RoomResource> => {
+  const ctx = wideEvents.start("room.schedule");
+  ctx.set("input", options);
+
+  try {
+    const response = await apiClient.scheduleRoom(options);
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message ?? "Failed to schedule room");
+    }
+
+    ctx.complete("success", { roomId: response.data.id, status: response.data.status });
+    return response.data;
   } catch (error) {
     ctx.complete("error", error);
     throw error;

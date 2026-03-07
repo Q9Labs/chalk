@@ -158,9 +158,12 @@ CREATE TABLE IF NOT EXISTS rooms (
     cloudflare_meeting_id VARCHAR(255) NOT NULL,
     name VARCHAR(255),
     config JSONB NOT NULL DEFAULT '{}',
-    status VARCHAR(50) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
+    status VARCHAR(50) NOT NULL DEFAULT 'active' CHECK (status IN ('scheduled', 'active', 'ended')),
     started_at TIMESTAMPTZ,
     ended_at TIMESTAMPTZ,
+    scheduled_start_at TIMESTAMPTZ,
+    scheduled_end_at TIMESTAMPTZ,
+    allow_early_join_minutes INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     whiteboard_state JSONB,
@@ -266,11 +269,22 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whiteboard_config JSONB DEFAULT '{"
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_config JSONB NOT NULL DEFAULT '{"force_recording": false, "duplicate_participant_policy": "allow", "empty_room_timeout_minutes": 30, "recording_retention_days": 90, "auto_start_recording": false, "allow_early_join": true}'::jsonb;
 ALTER TABLE rooms ADD COLUMN IF NOT EXISTS whiteboard_state JSONB;
 ALTER TABLE rooms ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS scheduled_start_at TIMESTAMPTZ;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS scheduled_end_at TIMESTAMPTZ;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS allow_early_join_minutes INT NOT NULL DEFAULT 0;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE recordings ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+ALTER TABLE rooms DROP CONSTRAINT IF EXISTS rooms_status_check;
+ALTER TABLE rooms ADD CONSTRAINT rooms_status_check
+  CHECK (status IN ('scheduled', 'active', 'ended'));
+ALTER TABLE rooms DROP CONSTRAINT IF EXISTS rooms_allow_early_join_minutes_nonnegative;
+ALTER TABLE rooms ADD CONSTRAINT rooms_allow_early_join_minutes_nonnegative
+  CHECK (allow_early_join_minutes >= 0);
+
 -- Create indexes that depend on columns added above
 CREATE INDEX IF NOT EXISTS idx_rooms_whiteboard_state ON rooms USING GIN (whiteboard_state) WHERE whiteboard_state IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_rooms_tenant_scheduled_start ON rooms(tenant_id, scheduled_start_at DESC) WHERE status = 'scheduled';
 
 -- ============================================================================
 -- MIGRATION 005: Add 'failed' status to recordings

@@ -6,12 +6,14 @@
 import { Effect } from "effect";
 import { APIClient } from "./api-client.ts";
 import {
+  createRoom as createRoomOp,
   createSession as createSessionOp,
   disconnectCurrentRoom,
   endSession as endSessionOp,
   presignWhiteboardDownload as presignWhiteboardDownloadOp,
   presignWhiteboardUpload as presignWhiteboardUploadOp,
   removeParticipant as removeParticipantOp,
+  scheduleRoom as scheduleRoomOp,
   startRecording as startRecordingOp,
   stopRecording as stopRecordingOp,
 } from "./conference-client/client-room-ops.ts";
@@ -24,7 +26,7 @@ import { EventEmitter } from "./events.ts";
 import { ChalkPostHogSessionReplay, type ChalkPostHogConfig } from "./posthog.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
 import { ConferenceSession } from "./room.ts";
-import type { ChalkError, ConferenceClientConfig, JoinSessionConfig, SessionConnectionState } from "./types.ts";
+import type { ChalkError, ConferenceClientConfig, CreateRoomOptions, JoinSessionConfig, RoomResource, ScheduleRoomOptions, SessionConnectionState } from "./types.ts";
 import { WSClient } from "./ws-client.ts";
 
 interface ConferenceClientEvents {
@@ -227,6 +229,14 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
 
   async createSession(name?: string, config?: Record<string, unknown>): Promise<string> {
     return createSessionOp(this.apiClient, name, config);
+  }
+
+  async createRoom(options: CreateRoomOptions = {}): Promise<RoomResource> {
+    return createRoomOp(this.apiClient, options);
+  }
+
+  async scheduleRoom(options: ScheduleRoomOptions): Promise<RoomResource> {
+    return scheduleRoomOp(this.apiClient, options);
   }
 
   async endSession(sessionId: string): Promise<void> {

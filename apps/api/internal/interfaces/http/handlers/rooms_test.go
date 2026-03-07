@@ -77,6 +77,56 @@ func TestRoomHandler_Create_MissingJWTClaims(t *testing.T) {
 	assert.Equal(t, "unauthorized", response["error"])
 }
 
+func TestRoomHandler_Schedule_WithoutClaims_ReturnsUnauthorized(t *testing.T) {
+	router := setupTestRouter()
+	handler := NewRoomHandler(nil)
+	router.POST("/rooms/schedule", handler.Schedule)
+
+	body := bytes.NewBufferString(`{"name":"Test","scheduled_start_at":"2026-12-01T10:00:00Z"}`)
+	req := httptest.NewRequest("POST", "/rooms/schedule", body)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "unauthorized", response["error"])
+}
+
+func TestRoomHandler_Schedule_MissingStartAt_ReturnsBadRequest(t *testing.T) {
+	router, _ := setupTestRouterWithClaims()
+	handler := NewRoomHandler(nil)
+	router.POST("/rooms/schedule", handler.Schedule)
+
+	body := bytes.NewBufferString(`{"name":"Test Room"}`)
+	req := httptest.NewRequest("POST", "/rooms/schedule", body)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRoomHandler_Schedule_PastStartAt_ReturnsBadRequest(t *testing.T) {
+	router, _ := setupTestRouterWithClaims()
+	handler := NewRoomHandler(nil)
+	router.POST("/rooms/schedule", handler.Schedule)
+
+	body := bytes.NewBufferString(`{"name":"Test Room","scheduled_start_at":"2024-01-01T10:00:00Z"}`)
+	req := httptest.NewRequest("POST", "/rooms/schedule", body)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "scheduled_start_at must be in the future", response["error"])
+}
+
 func TestRoomHandler_Create_RequestStructure(t *testing.T) {
 	req := CreateRoomRequest{
 		Name: "Test Room",

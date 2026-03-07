@@ -85,8 +85,11 @@ type Room struct {
 	CreatedAt           time.Time          `db:"created_at" json:"created_at"`
 	UpdatedAt           time.Time          `db:"updated_at" json:"updated_at"`
 	// Excalidraw state JSON (elements, files, appState)
-	WhiteboardState []byte `db:"whiteboard_state" json:"whiteboard_state"`
-	Metadata        []byte `db:"metadata" json:"metadata"`
+	WhiteboardState       []byte             `db:"whiteboard_state" json:"whiteboard_state"`
+	Metadata              []byte             `db:"metadata" json:"metadata"`
+	ScheduledStartAt      pgtype.Timestamptz `db:"scheduled_start_at" json:"scheduled_start_at"`
+	ScheduledEndAt        pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
+	AllowEarlyJoinMinutes int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
 }
 
 type Tenant struct {

@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CloudflareClient interface {
@@ -60,6 +62,21 @@ type CreateRoomInput struct {
 }
 
 type CreateRoomOutput struct {
+	RoomID              uuid.UUID
+	CloudflareMeetingID string
+	Room                *db.Room
+}
+
+type ScheduleRoomInput struct {
+	TenantID             uuid.UUID
+	Name                 string
+	Config               []byte
+	ScheduledStartAt     time.Time
+	ScheduledEndAt       *time.Time
+	AllowEarlyJoinMinute int32
+}
+
+type ScheduleRoomOutput struct {
 	RoomID              uuid.UUID
 	CloudflareMeetingID string
 	Room                *db.Room
@@ -126,6 +143,86 @@ func (s *Service) CreateRoom(ctx context.Context, input CreateRoomInput) (*Creat
 	}
 
 	return &CreateRoomOutput{
+		RoomID:              room.ID,
+		CloudflareMeetingID: cfMeeting.ID,
+		Room:                &room,
+	}, nil
+}
+
+func (s *Service) ScheduleRoom(ctx context.Context, input ScheduleRoomInput) (*ScheduleRoomOutput, error) {
+	if input.ScheduledStartAt.IsZero() {
+		return nil, fmt.Errorf("scheduled start is required")
+	}
+	if input.ScheduledEndAt != nil && input.ScheduledEndAt.Before(input.ScheduledStartAt) {
+		return nil, fmt.Errorf("scheduled end must be after start")
+	}
+	if input.AllowEarlyJoinMinute < 0 {
+		return nil, fmt.Errorf("allow early join minutes must be >= 0")
+	}
+
+	tenant, err := s.db.GetTenant(ctx, input.TenantID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting tenant: %w", err)
+	}
+
+	// Parse tenant transcription config
+	var tenantConfig struct {
+		TranscriptionEnabled         bool     `json:"transcription_enabled"`
+		TranscriptionLanguage        string   `json:"transcription_language"`
+		TranscriptionProfanityFilter bool     `json:"transcription_profanity_filter"`
+		TranscriptionKeywords        []string `json:"transcription_keywords"`
+	}
+	if tenant.TenantConfig != nil {
+		_ = json.Unmarshal(tenant.TenantConfig, &tenantConfig)
+	}
+
+	cfReq := cloudflare.CreateMeetingRequest{Title: input.Name}
+	if tenantConfig.TranscriptionEnabled {
+		lang := tenantConfig.TranscriptionLanguage
+		if lang == "" {
+			lang = "en-US"
+		}
+		cfReq.AIConfig = &cloudflare.AIConfig{
+			Transcription: &cloudflare.TranscriptionConfig{
+				Language:        lang,
+				ProfanityFilter: tenantConfig.TranscriptionProfanityFilter,
+				Keywords:        tenantConfig.TranscriptionKeywords,
+			},
+		}
+	}
+
+	cfMeeting, err := s.cfClient.CreateMeeting(ctx, cfReq)
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare meeting creation failed: %w", err)
+	}
+
+	scheduledStartAt := pgtype.Timestamptz{
+		Time:  input.ScheduledStartAt,
+		Valid: true,
+	}
+	scheduledEndAt := pgtype.Timestamptz{}
+	if input.ScheduledEndAt != nil {
+		scheduledEndAt = pgtype.Timestamptz{
+			Time:  *input.ScheduledEndAt,
+			Valid: true,
+		}
+	}
+
+	room, err := s.db.CreateScheduledRoom(ctx, db.CreateScheduledRoomParams{
+		TenantID:              input.TenantID,
+		CloudflareMeetingID:   cfMeeting.ID,
+		Name:                  strPtr(input.Name),
+		Config:                input.Config,
+		ScheduledStartAt:      scheduledStartAt,
+		ScheduledEndAt:        scheduledEndAt,
+		AllowEarlyJoinMinutes: input.AllowEarlyJoinMinute,
+	})
+	if err != nil {
+		_, _ = s.cfClient.EndMeeting(ctx, cfMeeting.ID)
+		return nil, fmt.Errorf("database insert failed: %w", err)
+	}
+
+	return &ScheduleRoomOutput{
 		RoomID:              room.ID,
 		CloudflareMeetingID: cfMeeting.ID,
 		Room:                &room,

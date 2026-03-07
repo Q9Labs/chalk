@@ -183,11 +183,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List rooms
-         * @description List all active rooms for the authenticated tenant
-         */
-        get: operations["listRooms"];
+        get?: never;
         put?: never;
         /**
          * Create a new room
@@ -195,6 +191,31 @@ export interface paths {
          *     is automatically provisioned.
          */
         post: operations["createRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rooms/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List rooms
+         * @description List all active rooms for the authenticated tenant
+         */
+        get: operations["listRooms"];
+        put?: never;
+        /**
+         * Schedule a room
+         * @description Schedule a room to become active on first join at or after the
+         *     configured start time (optionally with an early-join window).
+         */
+        post: operations["scheduleRoom"];
         delete?: never;
         options?: never;
         head?: never;
@@ -775,7 +796,24 @@ export interface components {
              * @example active
              * @enum {string}
              */
-            status: "active" | "ended";
+            status: "scheduled" | "active" | "ended";
+            /**
+             * Format: date-time
+             * @description Scheduled room start timestamp
+             * @example 2024-01-15T10:30:00Z
+             */
+            scheduled_start_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Optional scheduled room end timestamp
+             * @example null
+             */
+            scheduled_end_at?: string | null;
+            /**
+             * @description Minutes participants can join before scheduled_start_at
+             * @example 10
+             */
+            allow_early_join_minutes?: number;
             /**
              * Format: date-time
              * @description When the room was started
@@ -831,6 +869,47 @@ export interface components {
                  */
                 chat_enabled?: boolean;
             };
+        };
+        ScheduleRoomRequest: {
+            /**
+             * @description Room name
+             * @example Math 101 - Session 4
+             */
+            name?: string;
+            config?: {
+                /**
+                 * @description Maximum participants (default from tenant)
+                 * @example 10
+                 */
+                max_participants?: number;
+                /**
+                 * @description Enable recording
+                 * @example true
+                 */
+                recording_enabled?: boolean;
+                /**
+                 * @description Enable chat
+                 * @example true
+                 */
+                chat_enabled?: boolean;
+            };
+            /**
+             * Format: date-time
+             * @description Scheduled room start timestamp (UTC recommended)
+             * @example 2026-03-10T14:00:00Z
+             */
+            scheduled_start_at: string;
+            /**
+             * Format: date-time
+             * @description Optional scheduled room end timestamp
+             * @example 2026-03-10T15:00:00Z
+             */
+            scheduled_end_at?: string | null;
+            /**
+             * @description Minutes participants can join before scheduled_start_at
+             * @example 10
+             */
+            allow_early_join_minutes?: number;
         };
         UpdateRoomRequest: {
             /**
@@ -1796,6 +1875,57 @@ export interface operations {
             };
         };
     };
+    createRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRoomRequest"];
+            };
+        };
+        responses: {
+            /** @description Room created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Room"];
+                };
+            };
+            /** @description Invalid request body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listRooms: {
         parameters: {
             query?: {
@@ -1839,7 +1969,7 @@ export interface operations {
             };
         };
     };
-    createRoom: {
+    scheduleRoom: {
         parameters: {
             query?: never;
             header?: never;
@@ -1848,11 +1978,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateRoomRequest"];
+                "application/json": components["schemas"]["ScheduleRoomRequest"];
             };
         };
         responses: {
-            /** @description Room created successfully */
+            /** @description Room scheduled successfully */
             201: {
                 headers: {
                     [name: string]: unknown;

@@ -10,9 +10,12 @@ import type {
 	ApiResponse,
 	ConferenceClientConfig,
 	ChalkError as ChalkErrorType,
+	CreateRoomOptions,
 	CreateRoomResponse,
 	JoinSessionResponse,
 	Recording,
+	RoomResource,
+	ScheduleRoomOptions,
 	SessionInfo,
 	TokenProvider,
 	TransformedJoinSessionApiResponse,
@@ -245,14 +248,72 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 	}
 
 	// ConferenceSession endpoints
+	async createRoom(
+		options: CreateRoomOptions = {},
+	): Promise<ApiResponse<RoomResource>> {
+		const response = await this.request<RoomResource>("POST", "/api/v1/rooms", {
+			name: options.name,
+			config: options.config,
+		});
+
+		if (!response.success || !response.data) {
+			return response;
+		}
+
+		return {
+			success: true,
+			data: this.normalizeRoomResource(response.data),
+		};
+	}
+
+	async scheduleRoom(
+		options: ScheduleRoomOptions,
+	): Promise<ApiResponse<RoomResource>> {
+		const response = await this.request<RoomResource>(
+			"POST",
+			"/api/v1/rooms/schedule",
+			{
+				name: options.name,
+				config: options.config,
+				scheduledStartAt:
+					options.scheduledStartAt instanceof Date
+						? options.scheduledStartAt.toISOString()
+						: options.scheduledStartAt,
+				scheduledEndAt:
+					options.scheduledEndAt instanceof Date
+						? options.scheduledEndAt.toISOString()
+						: options.scheduledEndAt,
+				allowEarlyJoinMinutes: options.allowEarlyJoinMinutes,
+			},
+		);
+
+		if (!response.success || !response.data) {
+			return response;
+		}
+
+		return {
+			success: true,
+			data: this.normalizeRoomResource(response.data),
+		};
+	}
+
 	async createSession(
 		name?: string,
 		config?: Record<string, unknown>,
 	): Promise<ApiResponse<CreateRoomResponse>> {
-		return this.request<CreateRoomResponse>("POST", "/api/v1/rooms", {
-			name,
-			config,
-		});
+		const response = await this.createRoom({ name, config });
+		if (!response.success || !response.data) {
+			return response as unknown as ApiResponse<CreateRoomResponse>;
+		}
+
+		return {
+			success: true,
+			data: {
+				...response.data,
+				id: response.data.id,
+				roomId: response.data.id,
+			},
+		};
 	}
 
 	async getRoom(roomId: string): Promise<ApiResponse<SessionInfo>> {
@@ -345,6 +406,23 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			roomCreated: data.roomCreated,
 			tenantConfig: data.tenantConfig,
 			shouldStartRecording: data.shouldStartRecording,
+		};
+	}
+
+	private normalizeRoomResource(
+		data: RoomResource & Partial<CreateRoomResponse>,
+	): RoomResource {
+		const id = data.id ?? data.roomId;
+		if (!id) {
+			throw new ChalkError(
+				ChalkErrorCode.INVALID_PARAMS,
+				"Missing room ID in room response",
+			);
+		}
+
+		return {
+			...data,
+			id,
 		};
 	}
 

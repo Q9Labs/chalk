@@ -26,6 +26,21 @@ INSERT INTO rooms (
 )
 RETURNING *;
 
+-- name: CreateScheduledRoom :one
+INSERT INTO rooms (
+    tenant_id,
+    cloudflare_meeting_id,
+    name,
+    config,
+    status,
+    scheduled_start_at,
+    scheduled_end_at,
+    allow_early_join_minutes
+) VALUES (
+    $1, $2, $3, $4, 'scheduled', $5, $6, $7
+)
+RETURNING *;
+
 -- name: GetRoom :one
 SELECT * FROM rooms
 WHERE id = $1 LIMIT 1;
@@ -79,6 +94,15 @@ SET
     started_at = NOW(),
     ended_at = NULL
 WHERE id = $1
+RETURNING *;
+
+-- name: ActivateScheduledRoom :one
+UPDATE rooms
+SET
+    status = 'active',
+    started_at = COALESCE(started_at, NOW()),
+    ended_at = NULL
+WHERE id = $1 AND status = 'scheduled'
 RETURNING *;
 
 -- name: DeleteRoom :exec
