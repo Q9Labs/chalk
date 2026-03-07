@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Internal auth: localhost magic-link callback support** — internal auth start now accepts a safe callback override (configured app origin + localhost) and `apps/web` sends its current callback URL, so local dev login links open the local app callback instead of forcing hosted-only flow.
 - **SDK-React: tighter bundled sound starts** — trim leading silence from bundled join/leave/message/reaction/hand-raise/nudge effects and regenerate baked-in base64 audio so alerts fire immediately.
 - **SDK hand raise sync** — replay pending `hand.raise`/`hand.lower` commands after WebSocket reconnect, derive participant hand indicators from interaction state when participant snapshots lag, and remove the local-only hand-raise sound shortcut so remote participants reliably see and hear raises too.
+- **SDK reactions sync** — stop optimistic local reaction duplication, enrich echoed reaction names from participant state instead of showing `Unknown`, and remove the local-only reaction sound shortcut so each reaction renders and sounds once.
 
 ## [0.0.70] - 2026-03-07
 

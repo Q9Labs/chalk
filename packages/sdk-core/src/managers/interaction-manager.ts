@@ -194,18 +194,6 @@ export class InteractionManager extends StateContainer<InteractionState> {
     }
 
     this.room.sendReaction(emoji);
-
-    // Also show locally immediately
-    const localParticipant = this.room.localParticipant;
-    if (localParticipant) {
-      const reaction: Reaction = {
-        participantId: localParticipant.id,
-        participantName: localParticipant.displayName,
-        emoji,
-        timestamp: new Date(),
-      };
-      this.addReaction(reaction);
-    }
   }
 
   /** Raise hand */

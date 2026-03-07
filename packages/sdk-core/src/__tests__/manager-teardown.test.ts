@@ -71,6 +71,10 @@ class MockRoom {
   canDrawWhiteboard(): boolean {
     return true;
   }
+
+  sendReaction(_emoji: string): void {
+    // no-op for manager tests
+  }
 }
 
 describe("Manager teardown listeners", () => {
@@ -132,6 +136,26 @@ describe("Manager teardown listeners", () => {
 
     expect(raisedCount).toBe(1);
     expect(manager.getState().raisedHands).toContain("p1");
+  });
+
+  it("InteractionManager waits for echoed reaction instead of adding a local duplicate", () => {
+    const room = new MockRoom();
+    const manager = new InteractionManager();
+
+    manager.attachRoom(room as any);
+    manager.sendReaction("👍");
+
+    expect(manager.getState().activeReactions).toHaveLength(0);
+
+    room.emit("reaction", {
+      participantId: "local",
+      participantName: "Local",
+      emoji: "👍",
+      timestamp: new Date(),
+    });
+
+    expect(manager.getState().activeReactions).toHaveLength(1);
+    expect(manager.getState().activeReactions[0]?.participantName).toBe("Local");
   });
 
   it("ScreenShareManager does not duplicate listeners across re-attach", () => {

@@ -13,6 +13,7 @@ const createMockWSClient = (): Partial<WSClient> => {
 	const handlers = new Map<string, Function[]>();
 
 	return {
+		connectionState: "connected",
 		on: (event: string, handler: Function) => {
 			if (!handlers.has(event)) {
 				handlers.set(event, []);
@@ -278,6 +279,37 @@ describe("ConferenceSession", () => {
 			mockWSClient.emit("reaction", reaction);
 
 			expect(emittedReaction).toEqual(reaction);
+		});
+
+		it("should enrich reaction participantName from participant state", () => {
+			const participant: Participant = {
+				id: "participant_2",
+				displayName: "Bob",
+				role: "participant",
+				isLocal: false,
+				videoEnabled: true,
+				audioEnabled: true,
+				isSpeaking: false,
+				isScreenSharing: false,
+				handRaised: false,
+				connectionQuality: 100,
+			};
+
+			room._participants.set("participant_2", participant);
+
+			let emittedReaction: any = null;
+			room.on("reaction", (r) => {
+				emittedReaction = r;
+			});
+
+			mockWSClient.emit("reaction", {
+				participantId: "participant_2",
+				participantName: "Unknown",
+				emoji: "🔥",
+				timestamp: new Date(),
+			});
+
+			expect(emittedReaction.participantName).toBe("Bob");
 		});
 	});
 

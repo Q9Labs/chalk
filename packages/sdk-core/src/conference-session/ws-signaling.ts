@@ -95,7 +95,21 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): (() =>
   });
 
   subscribe("reaction", (data) => {
-    deps.emit("reaction", data);
+    const participants = deps.getParticipants();
+    const participant =
+      participants.get(data.participantId) ??
+      (deps.getLocalParticipant()?.id === data.participantId
+        ? deps.getLocalParticipant()
+        : undefined);
+    const resolvedParticipantName =
+      data.participantName && data.participantName !== "Unknown"
+        ? data.participantName
+        : participant?.displayName ?? "Unknown";
+
+    deps.emit("reaction", {
+      ...data,
+      participantName: resolvedParticipantName,
+    });
   });
 
   subscribe("hand.raised", (data) => {

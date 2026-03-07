@@ -160,9 +160,8 @@ export function useConferenceMeetingActions({
 	const handleSendReaction = useCallback(
 		(emoji: string) => {
 			interactions.sendReaction(emoji as ReactionEmoji);
-			play("reaction");
 		},
-		[interactions, play],
+		[interactions],
 	);
 
 	const handleSendMessage = useCallback(
