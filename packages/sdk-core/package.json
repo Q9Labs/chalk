@@ -1,52 +1,52 @@
 {
-	"name": "@q9labs/chalk-core",
-	"version": "0.0.68",
-	"type": "module",
-	"main": "./dist/index.js",
-	"module": "./dist/index.js",
-	"types": "./dist/index.d.ts",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/Q9Labs/chalk.git",
-		"directory": "packages/sdk-core"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com/"
-	},
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js",
-			"require": "./dist/index.js",
-			"default": "./dist/index.js"
-		}
-	},
-	"files": [
-		"dist"
-	],
-	"scripts": {
-		"build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
-		"build:types": "tsc --project tsconfig.json",
-		"dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
-		"test": "bun test",
-		"check-types": "tsc --noEmit",
-		"lint": "echo 'No linter configured yet'",
-		"clean": "rm -rf dist",
-		"generate:types": "openapi-typescript ../../apps/api/openapi.yaml -o src/generated/api-types.ts"
-	},
-	"dependencies": {
-		"@cloudflare/realtimekit": "^1.2.2",
-		"@effect/schema": "^0.75.5",
-		"@q9labs/chalk-whiteboard": "workspace:^",
-		"effect": "^3.11.9"
-	},
-	"devDependencies": {
-		"@types/bun": "latest",
-		"@types/express": "^5.0.0",
-		"openapi-typescript": "^7.0.0",
-		"typescript": "^5.7.2"
-	},
-	"peerDependencies": {
-		"typescript": "^5"
-	}
+  "name": "@q9labs/chalk-core",
+  "version": "0.0.69",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "packages/sdk-core"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
+    "build:types": "tsc --project tsconfig.json",
+    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
+    "test": "bun test",
+    "check-types": "tsc --noEmit",
+    "lint": "echo 'No linter configured yet'",
+    "clean": "rm -rf dist",
+    "generate:types": "openapi-typescript ../../apps/api/openapi.yaml -o src/generated/api-types.ts"
+  },
+  "dependencies": {
+    "@cloudflare/realtimekit": "^1.2.2",
+    "@effect/schema": "^0.75.5",
+    "@q9labs/chalk-whiteboard": "workspace:^",
+    "effect": "^3.11.9"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/express": "^5.0.0",
+    "openapi-typescript": "^7.0.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
 }

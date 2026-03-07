@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.69] - 2026-03-07
+
+
+### Added
+
 - **Infra: Lean control-plane stack** — add `prod-lean` Terraform environment for EC2 `t4g.micro` + PlanetScale Postgres + Upstash Redis + Cloudflare R2, with SSM-backed runtime env management.
 - **Infra: Lean EC2 runtime module** — add `ec2-api-lean` module (arm64 host bootstrap, Docker runtime, Caddy reverse proxy/TLS, minimal CloudWatch alarms, SSM/ECR IAM wiring).
 - **CI: Lean infrastructure workflow** — add `.github/workflows/infra-lean.yml` with plan/apply/destroy for `prod-lean`.

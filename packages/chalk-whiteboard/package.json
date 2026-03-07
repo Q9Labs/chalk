@@ -1,52 +1,54 @@
 {
-	"name": "@q9labs/chalk-whiteboard",
-	"version": "0.0.68",
-	"type": "module",
-	"main": "./dist/index.js",
-	"module": "./dist/index.js",
-	"types": "./dist/index.d.ts",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/Q9Labs/chalk.git",
-		"directory": "packages/chalk-whiteboard"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com/"
-	},
-	"exports": {
-		".": {
-			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
-		},
-		"./react": {
-			"import": "./dist/react/index.js",
-			"types": "./dist/react/index.d.ts"
-		},
-		"./collab": {
-			"import": "./dist/collab/index.js",
-			"types": "./dist/collab/index.d.ts"
-		}
-	},
-	"files": ["dist"],
-	"scripts": {
-		"build": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && bun run build:types",
-		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-		"dev": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
-		"test": "echo 'No tests configured yet'",
-		"check-types": "tsc --noEmit",
-		"lint": "echo 'No linter configured yet'",
-		"clean": "rm -rf dist"
-	},
-	"dependencies": {
-		"@excalidraw/excalidraw": "^0.18.0"
-	},
-	"peerDependencies": {
-		"react": "^18.0.0 || ^19.0.0",
-		"react-dom": "^18.0.0 || ^19.0.0"
-	},
-	"devDependencies": {
-		"@types/react": "^19.0.0",
-		"@types/bun": "latest",
-		"typescript": "^5.7.2"
-	}
+  "name": "@q9labs/chalk-whiteboard",
+  "version": "0.0.69",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "packages/chalk-whiteboard"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react/index.js",
+      "types": "./dist/react/index.d.ts"
+    },
+    "./collab": {
+      "import": "./dist/collab/index.js",
+      "types": "./dist/collab/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && bun run build:types",
+    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "dev": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
+    "test": "echo 'No tests configured yet'",
+    "check-types": "tsc --noEmit",
+    "lint": "echo 'No linter configured yet'",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/bun": "latest",
+    "typescript": "^5.7.2"
+  }
 }
