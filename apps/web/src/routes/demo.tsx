@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 export const Route = createFileRoute("/demo")({
@@ -6,14 +6,12 @@ export const Route = createFileRoute("/demo")({
 });
 
 function DemoPage() {
-	const navigate = useNavigate();
-
 	useEffect(() => {
 		const randomId = Math.floor(Math.random() * 10000)
 			.toString()
 			.padStart(4, "0");
-		navigate({ to: "/room/$roomId", params: { roomId: `room-${randomId}` } });
-	}, [navigate]);
+		window.location.assign(`/room/room-${randomId}`);
+	}, []);
 
 	return (
 		<div className="flex items-center justify-center min-h-screen bg-[#0D0D0D] text-white">

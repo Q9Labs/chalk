@@ -109,7 +109,7 @@ function MeetingEndPage() {
 
 	const handleRejoin = () => {
 		if (roomId) {
-			navigate({ to: "/room/$roomId", params: { roomId } });
+			window.location.assign(`/room/${encodeURIComponent(roomId)}`);
 		}
 	};
 

@@ -21,7 +21,7 @@ function RoomErrorPage() {
 
 	const handleRetry = () => {
 		if (roomId) {
-			navigate({ to: `/room/${roomId}`, search: { roomId } });
+			window.location.assign(`/room/${encodeURIComponent(roomId)}`);
 		} else {
 			navigate({ to: "/demo" });
 		}

@@ -1,0 +1,7 @@
+- button "Switch to light mode" [ref=e1]
+- button "Unmute microphone" [ref=e2]
+- button "Turn on camera" [ref=e3]
+- button "Settings" [ref=e4]
+- textbox "Display Name" [ref=e5]
+- button "Ask to join" [ref=e6]
+- button "v0.1.0 (2b55e26)" [ref=e7]
