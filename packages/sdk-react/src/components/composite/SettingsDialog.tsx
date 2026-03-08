@@ -471,7 +471,7 @@ export const SettingsDialog = React.memo(
 					/>
 					<Dialog.Popup
 						className={cn(
-							"fixed inset-x-4 top-1/2 z-[101] max-h-[min(720px,calc(100vh-2rem))] -translate-y-1/2 overflow-hidden rounded-[28px] border border-border/60 bg-card text-card-foreground shadow-2xl md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
+							"fixed inset-x-4 top-1/2 z-[101] h-[min(720px,calc(100vh-2rem))] -translate-y-1/2 overflow-hidden rounded-[28px] border border-border/60 bg-card text-card-foreground shadow-2xl md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
 							!disableMotion &&
 								"animate-in fade-in zoom-in-[0.98] slide-in-from-bottom-4 duration-200",
 							className,
@@ -479,8 +479,8 @@ export const SettingsDialog = React.memo(
 						style={themeVariables as React.CSSProperties}
 					>
 						<Dialog.Title className="sr-only">Meeting settings</Dialog.Title>
-						<div className="flex max-h-[inherit] flex-col md:flex-row">
-							<aside className="w-full border-b border-border/50 bg-secondary/20 md:w-[280px] md:border-b-0 md:border-r">
+						<div className="flex h-full flex-col md:flex-row">
+							<aside className="flex w-full flex-col border-b border-border/50 bg-secondary/20 md:w-[280px] md:border-b-0 md:border-r">
 								<div className="p-5">
 									<div className="mb-5 flex items-center gap-2">
 										<Settings01Icon className="h-5 w-5 text-primary" />
@@ -501,7 +501,7 @@ export const SettingsDialog = React.memo(
 										aria-label="Search settings"
 									/>
 								</div>
-								<nav className="space-y-1 px-3 pb-4">
+								<nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
 									{filteredSections.map((section) => {
 										const Icon = section.icon;
 

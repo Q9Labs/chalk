@@ -76,4 +76,22 @@ describe("SettingsDialog", () => {
 		fireEvent.click(getByRole("button", { name: "Select device" }));
 		expect(await findByText("Fallback Cam")).toBeDefined();
 	});
+
+	it("keeps a fixed dialog shell height across sections", () => {
+		const { getByRole } = render(
+			<SettingsDialog
+				isOpen
+				onClose={() => {}}
+				settings={settings}
+				onUpdateAudio={() => {}}
+				onUpdateVideo={() => {}}
+				onUpdateAppearance={() => {}}
+				onUpdateExperience={() => {}}
+			/>
+		);
+
+		expect(getByRole("dialog", { name: "Meeting settings" }).className).toContain(
+			"h-[min(720px,calc(100vh-2rem))]",
+		);
+	});
 });
