@@ -20,6 +20,7 @@ export interface Features {
 	whiteboard?: FeatureValue;
 	reactions?: FeatureValue;
 	handRaise?: FeatureValue;
+	pictureInPicture?: FeatureValue;
 	tour?: FeatureValue;
 }
 
@@ -99,7 +100,6 @@ export interface VideoConferenceProps {
 	roomId: string;
 	roomName?: string;
 	userName: string;
-	autoJoin?: boolean;
 	role?: "host" | "participant";
 	metadata?: Record<string, unknown>;
 	features?: Features;

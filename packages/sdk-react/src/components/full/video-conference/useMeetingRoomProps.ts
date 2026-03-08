@@ -10,7 +10,6 @@ export interface UseMeetingRoomPropsParams {
 	canManageParticipants: MeetingRoomProps["canManageParticipants"];
 	handleToggleParticipantMute: NonNullable<MeetingRoomProps["onToggleParticipantMute"]>;
 	handleRemoveParticipant: NonNullable<MeetingRoomProps["onRemoveParticipant"]>;
-	handleUpdateDisplayName: MeetingRoomProps["onUpdateDisplayName"];
 	activeReactions: NonNullable<MeetingRoomProps["activeReactions"]>;
 	transcripts: NonNullable<MeetingRoomProps["transcripts"]>;
 	isMuted: NonNullable<MeetingRoomProps["isMuted"]>;
@@ -66,7 +65,6 @@ export function useMeetingRoomProps({
 	canManageParticipants,
 	handleToggleParticipantMute,
 	handleRemoveParticipant,
-	handleUpdateDisplayName,
 	activeReactions,
 	transcripts,
 	isMuted,
@@ -125,7 +123,6 @@ export function useMeetingRoomProps({
 			canManageParticipants,
 			onToggleParticipantMute: handleToggleParticipantMute,
 			onRemoveParticipant: handleRemoveParticipant,
-			onUpdateDisplayName: handleUpdateDisplayName,
 			activeReactions,
 			transcripts,
 			isMuted,
@@ -187,7 +184,6 @@ export function useMeetingRoomProps({
 			canManageParticipants,
 			handleToggleParticipantMute,
 			handleRemoveParticipant,
-			handleUpdateDisplayName,
 			activeReactions,
 			transcripts,
 			isMuted,

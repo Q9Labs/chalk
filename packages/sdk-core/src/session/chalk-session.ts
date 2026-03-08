@@ -561,18 +561,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     }
   }
 
-  async updateOwnDisplayName(displayName: string): Promise<void> {
-    try {
-      await this.client.updateOwnDisplayName(displayName);
-    } catch (err) {
-      const error = ChalkError.wrap(err);
-      this.emitErrorWithIncident(error, "session", {
-        operation: "update_own_display_name",
-      });
-      throw error;
-    }
-  }
-
   /**
    * Mute a participant (host only).
    *

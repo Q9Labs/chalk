@@ -27,31 +27,6 @@ import { cn } from "../../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Calendar01Icon, Clock01Icon } from "@hugeicons/core-free-icons";
 
-function getStoredUserName() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return (
-    localStorage.getItem("chalk_default_name") ||
-    sessionStorage.getItem("chalk_display_name") ||
-    ""
-  );
-}
-
-function getStoredJoinDefaults() {
-  if (typeof window === "undefined") {
-    return { audioEnabled: true, videoEnabled: true };
-  }
-
-  const muteDefault = localStorage.getItem("chalk_join_muted") === "true";
-  const noVideoDefault = localStorage.getItem("chalk_join_no_video") === "true";
-  return {
-    audioEnabled: !muteDefault,
-    videoEnabled: !noVideoDefault,
-  };
-}
-
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
   params: z.object({
@@ -59,7 +34,6 @@ export const Route = createFileRoute("/room/$roomId")({
   }),
   validateSearch: z.object({
     roomName: z.string().optional(),
-    autoJoin: z.coerce.boolean().optional(),
   }),
 });
 
@@ -67,16 +41,14 @@ function RoomPage() {
   const { roomId } = Route.useParams() as {
     roomId: string;
   };
-  const { roomName, autoJoin } = Route.useSearch();
+  const { roomName } = Route.useSearch();
   const navigate = useNavigate();
 
-  const [storedUserName, setStoredUserName] = useState<string>(() =>
-    getStoredUserName(),
-  );
+  const [storedUserName, setStoredUserName] = useState<string>("");
   const [roomData, setRoomData] = useState<any>(null);
   const [isCheckingRoom, setIsCheckingRoom] = useState(true);
   const [now, setNow] = useState(Date.now());
-  const [defaults, setDefaults] = useState(() => getStoredJoinDefaults());
+  const [defaults, setDefaults] = useState({ audioEnabled: true, videoEnabled: true });
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -110,8 +82,17 @@ function RoomPage() {
 
   // Load username and defaults from storage after mount
   useEffect(() => {
-    setStoredUserName(getStoredUserName());
-    setDefaults(getStoredJoinDefaults());
+    const savedName = localStorage.getItem("chalk_default_name") || sessionStorage.getItem("chalk_display_name");
+    if (savedName) {
+      setStoredUserName(savedName);
+    }
+    
+    const muteDefault = localStorage.getItem("chalk_join_muted") === "true";
+    const noVideoDefault = localStorage.getItem("chalk_join_no_video") === "true";
+    setDefaults({
+      audioEnabled: !muteDefault,
+      videoEnabled: !noVideoDefault,
+    });
   }, []);
 
   const joinCtx = typeof window === "undefined" ? null : getJoinContext();
@@ -126,9 +107,7 @@ function RoomPage() {
   }
 
   // Waiting Room Logic
-  const startMs = roomData?.scheduled_start_at
-    ? new Date(roomData.scheduled_start_at).getTime()
-    : null;
+  const startMs = roomData?.scheduled_start_at ? new Date(roomData.scheduled_start_at).getTime() : null;
   const earlyJoinMinutes = roomData?.allow_early_join_minutes || 0;
   const joinAllowedAtMs = startMs ? startMs - earlyJoinMinutes * 60_000 : null;
 
@@ -153,73 +132,28 @@ function RoomPage() {
               <div className="w-2 h-2 rounded-full bg-primary animate-pulse mr-2" />
               Opening Soon
             </div>
-
+            
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight text-balance mb-4 leading-tight">
               {roomData?.name || roomName || "Scheduled Session"}
             </h1>
-
+            
             <div className="flex items-center justify-center gap-6 text-sm font-semibold text-white/50 uppercase tracking-widest mt-6">
-              <span className="flex items-center gap-2">
-                <HugeiconsIcon icon={Calendar01Icon} size={16} />{" "}
-                {startMs
-                  ? new Date(startMs).toLocaleDateString(undefined, {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })
-                  : ""}
-              </span>
-              <span className="flex items-center gap-2">
-                <HugeiconsIcon icon={Clock01Icon} size={16} />{" "}
-                {startMs
-                  ? new Date(startMs).toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : ""}
-              </span>
+              <span className="flex items-center gap-2"><HugeiconsIcon icon={Calendar01Icon} size={16} /> {startMs ? new Date(startMs).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : ""}</span>
+              <span className="flex items-center gap-2"><HugeiconsIcon icon={Clock01Icon} size={16} /> {startMs ? new Date(startMs).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ""}</span>
             </div>
           </div>
 
           <div className="py-8">
-            <div
-              className={cn(
-                "font-mono font-bold tracking-tighter flex justify-center gap-4 transition-all duration-500",
-                isImminent
-                  ? "text-primary text-8xl md:text-9xl"
-                  : "text-white/90 text-7xl md:text-8xl",
-              )}
-            >
-              {days > 0 && (
-                <span>
-                  {String(days).padStart(2, "0")}
-                  <span className="text-white/20 opacity-50 text-4xl mr-2">
-                    d
-                  </span>
-                </span>
-              )}
-              {(days > 0 || hours > 0) && (
-                <span>
-                  {String(hours).padStart(2, "0")}
-                  <span className="text-white/20 opacity-50 text-4xl mr-2">
-                    h
-                  </span>
-                </span>
-              )}
-              <span>
-                {String(minutes).padStart(2, "0")}
-                <span className="text-white/20 opacity-50 text-4xl mr-2">
-                  m
-                </span>
-              </span>
-              <span>
-                {String(seconds).padStart(2, "0")}
-                <span className="text-white/20 opacity-50 text-4xl">s</span>
-              </span>
+            <div className={cn(
+              "font-mono font-bold tracking-tighter flex justify-center gap-4 transition-all duration-500",
+              isImminent ? "text-primary text-8xl md:text-9xl" : "text-white/90 text-7xl md:text-8xl"
+            )}>
+              {days > 0 && <span>{String(days).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl mr-2">d</span></span>}
+              {(days > 0 || hours > 0) && <span>{String(hours).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl mr-2">h</span></span>}
+              <span>{String(minutes).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl mr-2">m</span></span>
+              <span>{String(seconds).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl">s</span></span>
             </div>
-            <p className="mt-6 text-sm font-medium text-white/40 uppercase tracking-[0.2em]">
-              Until waiting room opens
-            </p>
+            <p className="mt-6 text-sm font-medium text-white/40 uppercase tracking-[0.2em]">Until waiting room opens</p>
           </div>
 
           <div className="pt-8 flex flex-col items-center">
@@ -237,7 +171,6 @@ function RoomPage() {
         roomId={roomId}
         roomName={roomName || "Meeting On Chalk"}
         userName={storedUserName || (role === "host" ? "Host" : "Guest")}
-        autoJoin={autoJoin}
         onJoin={(data) => {
           console.log("Joined: ", data);
         }}

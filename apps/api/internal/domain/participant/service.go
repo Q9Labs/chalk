@@ -884,41 +884,6 @@ func (s *Service) UpdateParticipant(ctx context.Context, participantID uuid.UUID
 	if err != nil {
 		return nil, fmt.Errorf("failed to update participant: %w", err)
 	}
-
-	// Update metadata in roomState and hub
-	newDisplayName := ""
-	if participant.DisplayName != nil {
-		newDisplayName = *participant.DisplayName
-	}
-
-	meta := domain.ParticipantMetadata{
-		DisplayName: newDisplayName,
-		Role:        participant.Role,
-		JoinedAt:    participant.CreatedAt,
-	}
-	if participant.JoinedAt.Valid {
-		meta.JoinedAt = participant.JoinedAt.Time
-	}
-
-	if s.roomState != nil {
-		_ = s.roomState.AddParticipant(ctx, participant.RoomID, participant.ID, meta)
-	}
-
-	if s.hub != nil {
-		s.hub.SetParticipantMetadata(participant.ID, meta)
-
-		msg, _ := json.Marshal(map[string]interface{}{
-			"type": "participant.updated",
-			"payload": map[string]interface{}{
-				"participant_id": participant.ID,
-				"changes": map[string]interface{}{
-					"display_name": newDisplayName,
-				},
-			},
-		})
-		s.hub.BroadcastToRoom(participant.RoomID, msg, "")
-	}
-
 	return &participant, nil
 }
 

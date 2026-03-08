@@ -86,4 +86,23 @@ describe('ControlBar', () => {
       expect(getByText('Desk Cam')).toBeDefined();
     });
   });
+
+  it('renders picture in picture button only when a handler is provided', () => {
+    const onTogglePictureInPicture = vi.fn();
+    const withHandler = render(
+      <ControlBar
+        buttons={['pip']}
+        onTogglePictureInPicture={() => {
+          void onTogglePictureInPicture();
+        }}
+      />
+    );
+
+    fireEvent.click(withHandler.getByLabelText('Open picture in picture'));
+    expect(onTogglePictureInPicture).toHaveBeenCalledTimes(1);
+
+    withHandler.unmount();
+    const withoutHandler = render(<ControlBar buttons={['pip']} />);
+    expect(withoutHandler.queryByLabelText('Open picture in picture')).toBeNull();
+  });
 });

@@ -77,6 +77,11 @@ export {
 } from "./ui/useHaptics";
 export { type UseLayoutReturn, useLayout } from "./ui/useLayout";
 export {
+	type UsePictureInPictureOptions,
+	type UsePictureInPictureReturn,
+	usePictureInPicture,
+} from "./ui/usePictureInPicture";
+export {
 	type UseNotificationsReturn,
 	useNotifications,
 } from "./ui/useNotifications";

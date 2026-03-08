@@ -83,6 +83,9 @@ export interface MeetingRoomProps {
   transcripts?: TranscriptEntry[];
   chatMessages?: ChatMessage[];
   unreadChatCount?: number;
+  enablePictureInPicture?: boolean;
+  isPictureInPictureActive?: boolean;
+  isPictureInPictureSupported?: boolean;
   onSendMessage?: (content: string) => void;
   onSendMessageWithAttachments?: (content: string, files: File[]) => Promise<void>;
   onResolveChatAttachmentUrl?: (attachmentId: string) => Promise<string>;
@@ -112,6 +115,7 @@ export interface MeetingRoomProps {
   onToggleWhiteboard?: () => void;
   onSendReaction?: (emoji: string) => void;
   onToggleTranscription?: () => void;
+  onTogglePictureInPicture?: () => Promise<void> | void;
   onLeave?: () => void;
   onTourComplete?: () => void;
   onAddPeople?: () => void;

@@ -14,6 +14,7 @@ import {
 	Monitor01Icon,
 	MonitorOffIcon,
 	MoreHorizontalIcon,
+	PictureInPictureIcon,
 	Settings01Icon,
 	SmileIcon,
 	ThumbsUpIcon,
@@ -35,6 +36,7 @@ export type ControlBarButton =
 	| "handraise"
 	| "reactions"
 	| "whiteboard"
+	| "pip"
 	| "settings"
 	| "more"
 	| "info"
@@ -56,6 +58,7 @@ export interface ControlBarProps {
 	isTranscriptionEnabled?: boolean;
 	isHandRaised?: boolean;
 	isWhiteboardOpen?: boolean;
+	isPictureInPictureActive?: boolean;
 	meetingDuration?: number;
 	unreadChatCount?: number;
 	audioInputDevices?: readonly MediaDevice[];
@@ -77,6 +80,7 @@ export interface ControlBarProps {
 	onToggleTranscription?: () => void;
 	onToggleHandRaise?: () => void;
 	onToggleWhiteboard?: () => void;
+	onTogglePictureInPicture?: () => Promise<void> | void;
 	onOpenReactions?: () => void;
 	onOpenSettings?: () => void;
 	onOpenMore?: () => void;
@@ -198,6 +202,7 @@ export const ControlBar = React.memo(
 		isTranscriptionEnabled = false,
 		isHandRaised = false,
 		isWhiteboardOpen = false,
+		isPictureInPictureActive = false,
 		meetingDuration = 0,
 		unreadChatCount = 0,
 		audioInputDevices,
@@ -222,6 +227,7 @@ export const ControlBar = React.memo(
 		onToggleTranscription,
 		onToggleHandRaise,
 		onToggleWhiteboard,
+		onTogglePictureInPicture,
 		onOpenReactions,
 		onOpenSettings,
 		onOpenMore,
@@ -244,6 +250,7 @@ export const ControlBar = React.memo(
 			"chat",
 			"transcription",
 			"thumbsup",
+			"pip",
 			"settings",
 		];
 
@@ -320,6 +327,7 @@ export const ControlBar = React.memo(
 			b === "chat" ||
 			b === "transcription" ||
 			b === "thumbsup" ||
+			b === "pip" ||
 			b === "reactions" ||
 			b === "settings" ||
 			b === "more" ||
@@ -467,6 +475,31 @@ export const ControlBar = React.memo(
 							label="Whiteboard"
 							onClick={onToggleWhiteboard}
 							active={isWhiteboardOpen}
+							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+							showLabel={showLabels}
+						/>
+					);
+				case "pip":
+					if (!onTogglePictureInPicture) {
+						return null;
+					}
+					return (
+						<ControlButton
+							key="pip"
+							icon={<PictureInPictureIcon size={20} />}
+							label={
+								isPictureInPictureActive
+									? "Close picture in picture"
+									: "Open picture in picture"
+							}
+							onClick={
+								onTogglePictureInPicture
+									? () => {
+										void onTogglePictureInPicture();
+									}
+									: undefined
+							}
+							active={isPictureInPictureActive}
 							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
 							showLabel={showLabels}
 						/>

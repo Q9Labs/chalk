@@ -19,6 +19,7 @@ export interface ConferenceFeatureFlags {
 	reactions: boolean;
 	handRaise: boolean;
 	tour: boolean;
+	pictureInPicture: boolean;
 }
 
 const resolveFeature = (
@@ -45,6 +46,7 @@ export function useConferenceFeatureFlags({
 		reactions: reactionsFeature,
 		handRaise: handRaiseFeature,
 		tour: tourFeature,
+		pictureInPicture: pictureInPictureFeature,
 	} = features;
 
 	return useMemo(() => {
@@ -62,6 +64,7 @@ export function useConferenceFeatureFlags({
 			reactions: resolveFeature(reactionsFeature, ctx),
 			handRaise: resolveFeature(handRaiseFeature, ctx),
 			tour: resolveFeature(tourFeature, ctx),
+			pictureInPicture: resolveFeature(pictureInPictureFeature, ctx),
 		};
 	}, [
 		chatFeature,
@@ -71,6 +74,7 @@ export function useConferenceFeatureFlags({
 		reactionsFeature,
 		handRaiseFeature,
 		tourFeature,
+		pictureInPictureFeature,
 		participants,
 		localParticipant,
 		participantCount,

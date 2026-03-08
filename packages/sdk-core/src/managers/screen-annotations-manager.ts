@@ -231,6 +231,19 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
       return;
     }
 
+    this.cursors.clear();
+    this.room._setAnnotationSession(shareSessionId, sharerParticipantId);
+    this.room._setAnnotationAccessMode(accessMode);
+    this.setState({
+      shareSessionId,
+      sharerParticipantId,
+      accessMode,
+      items: [],
+      cursors: [],
+      lastSeq: 0,
+      isSessionActive: true,
+    });
+    this.syncDerivedState();
     this.room.startAnnotationSession(shareSessionId, accessMode);
   }
 

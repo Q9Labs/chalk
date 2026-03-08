@@ -6,6 +6,7 @@ import {
 	Microphone01Icon,
 	MicrophoneOff01Icon,
 	MoreVerticalIcon,
+	PictureInPictureIcon,
 	Video01Icon,
 	VideoOffIcon,
 } from "../../../utils/icons";
@@ -32,6 +33,10 @@ interface PreJoinFloatingControlsProps {
 	onToggleAudio: () => void;
 	onToggleVideo: () => void;
 	onToggleSettings: () => void;
+	enablePictureInPicture?: boolean;
+	isPictureInPictureSupported?: boolean;
+	isPictureInPictureActive?: boolean;
+	onTogglePictureInPicture?: () => Promise<void> | void;
 }
 
 export function PreJoinFloatingControls({
@@ -51,6 +56,10 @@ export function PreJoinFloatingControls({
 	onToggleAudio,
 	onToggleVideo,
 	onToggleSettings,
+	enablePictureInPicture = false,
+	isPictureInPictureSupported = false,
+	isPictureInPictureActive = false,
+	onTogglePictureInPicture,
 }: PreJoinFloatingControlsProps): React.JSX.Element {
 	const selectedAudioInputDevice = useMemo(
 		() =>
@@ -258,6 +267,32 @@ export function PreJoinFloatingControls({
 				>
 					<MoreVerticalIcon size={18} />
 				</button>
+				{enablePictureInPicture && isPictureInPictureSupported && onTogglePictureInPicture ? (
+					<button
+						type="button"
+						onClick={() => {
+							void onTogglePictureInPicture();
+						}}
+						title={
+							isPictureInPictureActive
+								? "Close picture in picture"
+								: "Open picture in picture"
+						}
+						aria-label={
+							isPictureInPictureActive
+								? "Close picture in picture"
+								: "Open picture in picture"
+						}
+						className={cn(
+							"w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] active:scale-90",
+							isPictureInPictureActive
+								? "bg-[var(--primary)] text-white"
+								: "bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20",
+						)}
+					>
+						<PictureInPictureIcon size={18} />
+					</button>
+				) : null}
 			</div>
 		</div>
 	);
