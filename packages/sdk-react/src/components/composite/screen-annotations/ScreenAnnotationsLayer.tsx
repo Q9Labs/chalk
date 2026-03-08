@@ -53,7 +53,6 @@ export const ScreenAnnotationsLayer = memo(
     const {
       isActive: isShareActive,
       isLocalSharing,
-      sharerParticipantId: activeSharerParticipantId,
     } = useScreenShare();
     const {
       accessMode,
@@ -65,6 +64,7 @@ export const ScreenAnnotationsLayer = memo(
       isSessionActive,
       items,
       open,
+      sharerParticipantId,
       startSession,
       replaceItems,
       requestSync,
@@ -74,6 +74,7 @@ export const ScreenAnnotationsLayer = memo(
     const layerRef = useRef<HTMLDivElement>(null);
     const suppressHistoryResetRef = useRef(false);
     const fallbackStartRef = useRef<string | null>(null);
+    const previousSessionActiveRef = useRef(false);
     const [activeTool, setActiveTool] = useState<ScreenAnnotationTool>("pen");
     const [draftItem, setDraftItem] = useState<ScreenAnnotationItem | null>(null);
     const [undoStack, setUndoStack] = useState<ScreenAnnotationItem[][]>([]);
@@ -87,6 +88,7 @@ export const ScreenAnnotationsLayer = memo(
 
     const isHost = localParticipant?.role === "host";
     const interactive = enabled && isOpen && canDraw && isSessionActive;
+    const localSharerParticipantId = localParticipant?.id ?? null;
 
     useEffect(() => {
       if (!enabled || !isSessionActive) {
@@ -102,8 +104,20 @@ export const ScreenAnnotationsLayer = memo(
         return;
       }
 
+      if (isLocalSharing && localSharerParticipantId && sharerParticipantId === localSharerParticipantId) {
+        return;
+      }
+
       requestSync();
-    }, [enabled, isSessionActive, requestSync]);
+    }, [enabled, isLocalSharing, isSessionActive, localSharerParticipantId, requestSync, sharerParticipantId]);
+
+    useEffect(() => {
+      if (!isSessionActive && previousSessionActiveRef.current) {
+        fallbackStartRef.current = null;
+      }
+
+      previousSessionActiveRef.current = isSessionActive;
+    }, [isSessionActive]);
 
     useEffect(() => {
       if (!enabled || !isShareActive || isSessionActive) {
@@ -113,30 +127,29 @@ export const ScreenAnnotationsLayer = memo(
         return;
       }
 
-      requestSync();
-
-      if (!isLocalSharing || !activeSharerParticipantId) {
+      if (!isLocalSharing || !localSharerParticipantId) {
+        requestSync();
         return;
       }
 
-      const fallbackKey = `${activeSharerParticipantId}:${accessMode}`;
+      const fallbackKey = `${localSharerParticipantId}:${accessMode}`;
       if (fallbackStartRef.current === fallbackKey) {
         return;
       }
 
       const timeoutId = window.setTimeout(() => {
         fallbackStartRef.current = fallbackKey;
-        startSession(createShareSessionId(), activeSharerParticipantId, accessMode);
+        startSession(createShareSessionId(), localSharerParticipantId, accessMode);
       }, 350);
 
       return () => window.clearTimeout(timeoutId);
     }, [
       accessMode,
-      activeSharerParticipantId,
       enabled,
       isLocalSharing,
       isSessionActive,
       isShareActive,
+      localSharerParticipantId,
       requestSync,
       startSession,
     ]);
@@ -354,11 +367,12 @@ export const ScreenAnnotationsLayer = memo(
 
     const handleOpen = () => {
       if (!isSessionActive) {
-        requestSync();
-        if (isLocalSharing && activeSharerParticipantId) {
-          const fallbackKey = `${activeSharerParticipantId}:${accessMode}`;
+        if (isLocalSharing && localSharerParticipantId) {
+          const fallbackKey = `${localSharerParticipantId}:${accessMode}`;
           fallbackStartRef.current = fallbackKey;
-          startSession(createShareSessionId(), activeSharerParticipantId, accessMode);
+          startSession(createShareSessionId(), localSharerParticipantId, accessMode);
+        } else {
+          requestSync();
         }
       }
       open();
