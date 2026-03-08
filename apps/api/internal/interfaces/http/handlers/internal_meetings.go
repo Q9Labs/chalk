@@ -1,19 +1,28 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-type InternalMeetingsHandler struct {
-	queries *db.Queries
+type internalMeetingsQueries interface {
+	GetTenant(ctx context.Context, id uuid.UUID) (db.Tenant, error)
+	ListMeetingsByTenant(ctx context.Context, arg db.ListMeetingsByTenantParams) ([]db.ListMeetingsByTenantRow, error)
+	CountMeetingsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 }
 
-func NewInternalMeetingsHandler(queries *db.Queries) *InternalMeetingsHandler {
+type InternalMeetingsHandler struct {
+	queries internalMeetingsQueries
+}
+
+func NewInternalMeetingsHandler(queries internalMeetingsQueries) *InternalMeetingsHandler {
 	return &InternalMeetingsHandler{queries: queries}
 }
 
@@ -31,8 +40,8 @@ func (h *InternalMeetingsHandler) List(c *gin.Context) {
 		return
 	}
 
-	// Optional signup: dashboard requires email-verified ownership.
-	if !tenant.OwnerUserID.Valid {
+	// Localhost dev should work without email auth; production still requires claimed ownership.
+	if !tenant.OwnerUserID.Valid && !isLocalInternalDashboardRequest(c.Request) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "login required"})
 		return
 	}
@@ -58,4 +67,12 @@ func (h *InternalMeetingsHandler) List(c *gin.Context) {
 		"limit":    limit,
 		"offset":   offset,
 	})
+}
+
+func isLocalInternalDashboardRequest(r *http.Request) bool {
+	origin, err := url.Parse(requestOrigin(r))
+	if err != nil {
+		return false
+	}
+	return isLocalMagicLinkHost(origin.Hostname())
 }
