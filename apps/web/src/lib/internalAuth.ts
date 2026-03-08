@@ -8,6 +8,8 @@ type JoinContextV1 = {
 };
 
 const JOIN_CONTEXT_KEY = "chalk_join_context_v1";
+const verifiedMagicLinks = new Set<string>();
+const inFlightMagicLinkVerifications = new Map<string, Promise<void>>();
 
 export function getApiUrl() {
 	return import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
@@ -68,18 +70,37 @@ export async function startMagicLink(apiUrl: string, email: string) {
 }
 
 export async function verifyMagicLink(apiUrl: string, token: string) {
-	const res = await fetch(`${apiUrl}/api/v1/internal/auth/verify`, {
-		method: "POST",
-		credentials: "include",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ token }),
-	});
-	if (!res.ok) {
-		const data = (await res.json().catch(() => null)) as {
-			error?: string;
-		} | null;
-		throw new Error(data?.error || `invalid link (${res.status})`);
+	const verificationKey = `${apiUrl}::${token}`;
+	if (verifiedMagicLinks.has(verificationKey)) {
+		return;
 	}
+
+	const existingRequest = inFlightMagicLinkVerifications.get(verificationKey);
+	if (existingRequest) {
+		await existingRequest;
+		return;
+	}
+
+	const request = (async () => {
+		const res = await fetch(`${apiUrl}/api/v1/internal/auth/verify`, {
+			method: "POST",
+			credentials: "include",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token }),
+		});
+		if (!res.ok) {
+			const data = (await res.json().catch(() => null)) as {
+				error?: string;
+			} | null;
+			throw new Error(data?.error || `invalid link (${res.status})`);
+		}
+		verifiedMagicLinks.add(verificationKey);
+	})().finally(() => {
+		inFlightMagicLinkVerifications.delete(verificationKey);
+	});
+
+	inFlightMagicLinkVerifications.set(verificationKey, request);
+	await request;
 }
 
 export async function exchangeJoinToken(apiUrl: string, joinToken: string) {
