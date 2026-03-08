@@ -7,6 +7,7 @@ import type {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParticipants } from "../../../hooks/participants/useParticipants";
 import { useScreenAnnotations } from "../../../hooks/features/useScreenAnnotations";
+import { useScreenShare } from "../../../hooks/stream/useScreenShare";
 import { cn } from "../../../utils/cn";
 import { ScreenAnnotationsSvg } from "./ScreenAnnotationsSvg";
 import { ScreenAnnotationsToolbar } from "./ScreenAnnotationsToolbar";
@@ -30,6 +31,7 @@ const getStyleForTool = (tool: ScreenAnnotationTool) => ({
 });
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const createShareSessionId = () => `share_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
 const replaceOrAppend = (
   items: readonly ScreenAnnotationItem[],
@@ -49,6 +51,11 @@ export const ScreenAnnotationsLayer = memo(
   ({ enabled, className }: ScreenAnnotationsLayerProps) => {
     const { localParticipant } = useParticipants();
     const {
+      isActive: isShareActive,
+      isLocalSharing,
+      sharerParticipantId: activeSharerParticipantId,
+    } = useScreenShare();
+    const {
       accessMode,
       canDraw,
       clear,
@@ -58,6 +65,7 @@ export const ScreenAnnotationsLayer = memo(
       isSessionActive,
       items,
       open,
+      startSession,
       replaceItems,
       requestSync,
       sendCursor,
@@ -65,6 +73,7 @@ export const ScreenAnnotationsLayer = memo(
     } = useScreenAnnotations();
     const layerRef = useRef<HTMLDivElement>(null);
     const suppressHistoryResetRef = useRef(false);
+    const fallbackStartRef = useRef<string | null>(null);
     const [activeTool, setActiveTool] = useState<ScreenAnnotationTool>("pen");
     const [draftItem, setDraftItem] = useState<ScreenAnnotationItem | null>(null);
     const [undoStack, setUndoStack] = useState<ScreenAnnotationItem[][]>([]);
@@ -95,6 +104,42 @@ export const ScreenAnnotationsLayer = memo(
 
       requestSync();
     }, [enabled, isSessionActive, requestSync]);
+
+    useEffect(() => {
+      if (!enabled || !isShareActive || isSessionActive) {
+        if (!isShareActive) {
+          fallbackStartRef.current = null;
+        }
+        return;
+      }
+
+      requestSync();
+
+      if (!isLocalSharing || !activeSharerParticipantId) {
+        return;
+      }
+
+      const fallbackKey = `${activeSharerParticipantId}:${accessMode}`;
+      if (fallbackStartRef.current === fallbackKey) {
+        return;
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        fallbackStartRef.current = fallbackKey;
+        startSession(createShareSessionId(), activeSharerParticipantId, accessMode);
+      }, 350);
+
+      return () => window.clearTimeout(timeoutId);
+    }, [
+      accessMode,
+      activeSharerParticipantId,
+      enabled,
+      isLocalSharing,
+      isSessionActive,
+      isShareActive,
+      requestSync,
+      startSession,
+    ]);
 
     useEffect(() => {
       if (suppressHistoryResetRef.current) {
@@ -301,21 +346,37 @@ export const ScreenAnnotationsLayer = memo(
       [cursors, localParticipant?.id],
     );
 
-    if (!enabled || !isSessionActive) {
+    if (!enabled || (!isSessionActive && !isShareActive)) {
       return null;
     }
+
+    const canLaunch = canDraw || isShareActive;
+
+    const handleOpen = () => {
+      if (!isSessionActive) {
+        requestSync();
+        if (isLocalSharing && activeSharerParticipantId) {
+          const fallbackKey = `${activeSharerParticipantId}:${accessMode}`;
+          fallbackStartRef.current = fallbackKey;
+          startSession(createShareSessionId(), activeSharerParticipantId, accessMode);
+        }
+      }
+      open();
+    };
 
     return (
       <div ref={layerRef} className={cn("absolute inset-0 z-20", className)}>
         <ScreenAnnotationsToolbar
           isOpen={isOpen}
           canDraw={canDraw}
+          canLaunch={canLaunch}
           isHost={isHost}
+          isSessionActive={isSessionActive}
           activeTool={activeTool}
           accessMode={accessMode}
           canUndo={undoStack.length > 0}
           canRedo={redoStack.length > 0}
-          onOpen={open}
+          onOpen={handleOpen}
           onClose={close}
           onToolChange={setActiveTool}
           onUndo={handleUndo}

@@ -23,6 +23,11 @@ export interface UseScreenAnnotationsReturn {
   open: () => void;
   close: () => void;
   toggle: () => void;
+  startSession: (
+    shareSessionId: string,
+    sharerParticipantId: string,
+    accessMode?: AnnotationAccessMode,
+  ) => void;
   replaceItems: (items: ScreenAnnotationItem[]) => void;
   clear: () => void;
   sendCursor: (x: number, y: number, tool: import("@q9labs/chalk-core").ScreenAnnotationTool) => void;
@@ -43,6 +48,14 @@ export function useScreenAnnotations(): UseScreenAnnotationsReturn {
   const open = useCallback(() => annotations.open(), [annotations]);
   const close = useCallback(() => annotations.close(), [annotations]);
   const toggle = useCallback(() => annotations.toggle(), [annotations]);
+  const startSession = useCallback(
+    (
+      shareSessionId: string,
+      sharerParticipantId: string,
+      accessMode?: AnnotationAccessMode,
+    ) => annotations.startSession(shareSessionId, sharerParticipantId, accessMode),
+    [annotations],
+  );
   const replaceItems = useCallback(
     (items: ScreenAnnotationItem[]) => annotations.replaceItems(items),
     [annotations],
@@ -73,12 +86,13 @@ export function useScreenAnnotations(): UseScreenAnnotationsReturn {
       open,
       close,
       toggle,
+      startSession,
       replaceItems,
       clear,
       sendCursor,
       requestSync,
       setAccessMode,
     }),
-    [state, open, close, toggle, replaceItems, clear, sendCursor, requestSync, setAccessMode],
+    [state, open, close, toggle, startSession, replaceItems, clear, sendCursor, requestSync, setAccessMode],
   );
 }

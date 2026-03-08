@@ -21,7 +21,9 @@ const ACCESS_MODES: Array<{ value: AnnotationAccessMode; label: string }> = [
 interface ScreenAnnotationsToolbarProps {
   isOpen: boolean;
   canDraw: boolean;
+  canLaunch: boolean;
   isHost: boolean;
+  isSessionActive: boolean;
   activeTool: ScreenAnnotationTool;
   accessMode: AnnotationAccessMode;
   canUndo: boolean;
@@ -42,7 +44,9 @@ export const ScreenAnnotationsToolbar = memo(
   ({
     isOpen,
     canDraw,
+    canLaunch,
     isHost,
+    isSessionActive,
     activeTool,
     accessMode,
     canUndo,
@@ -56,7 +60,7 @@ export const ScreenAnnotationsToolbar = memo(
     onAccessModeChange,
   }: ScreenAnnotationsToolbarProps) => {
     if (!isOpen) {
-      if (!canDraw) {
+      if (!canLaunch) {
         return null;
       }
 
@@ -75,6 +79,7 @@ export const ScreenAnnotationsToolbar = memo(
           <button
             key={tool}
             type="button"
+            disabled={!canDraw}
             className={cn(
               baseButtonClass,
               activeTool === tool && "border-cyan-400/50 bg-cyan-500/18 text-cyan-50",
@@ -85,13 +90,13 @@ export const ScreenAnnotationsToolbar = memo(
           </button>
         ))}
         <div className="mx-1 h-6 w-px bg-white/12" />
-        <button type="button" className={baseButtonClass} disabled={!canUndo} onClick={onUndo}>
+        <button type="button" className={baseButtonClass} disabled={!canDraw || !canUndo} onClick={onUndo}>
           Undo
         </button>
-        <button type="button" className={baseButtonClass} disabled={!canRedo} onClick={onRedo}>
+        <button type="button" className={baseButtonClass} disabled={!canDraw || !canRedo} onClick={onRedo}>
           Redo
         </button>
-        <button type="button" className={baseButtonClass} onClick={onClear}>
+        <button type="button" className={baseButtonClass} disabled={!canDraw} onClick={onClear}>
           Clear
         </button>
         {isHost ? (
@@ -101,6 +106,7 @@ export const ScreenAnnotationsToolbar = memo(
               <button
                 key={value}
                 type="button"
+                disabled={!isSessionActive}
                 className={cn(
                   baseButtonClass,
                   accessMode === value &&
@@ -111,6 +117,14 @@ export const ScreenAnnotationsToolbar = memo(
                 {label}
               </button>
             ))}
+          </>
+        ) : null}
+        {!isSessionActive ? (
+          <>
+            <div className="mx-1 h-6 w-px bg-white/12" />
+            <div className="px-2 text-xs font-medium text-white/60">
+              Connecting annotations...
+            </div>
           </>
         ) : null}
         <div className="mx-1 h-6 w-px bg-white/12" />

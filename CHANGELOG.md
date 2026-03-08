@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **SDK screen annotations: local sharer visibility** — screen annotation sessions now become active locally as soon as a share starts, so the sharer immediately sees the annotation affordance instead of waiting for the websocket echo.
+- **SDK screen annotations: launcher fallback** — the annotation launcher now stays visible during active screen share while session state syncs, requests a fresh sync automatically, and lets the local sharer bootstrap the session if the first signal is late.
 - **Web/SDK: instant room start + in-meeting self rename** — added `/new` instant-room creation with auto-join into the room flow, and wired participant self-renames through the SDK plus the API websocket contract so name changes propagate live inside the participants panel.
 - **Web/Internal auth: prod navigation + magic-link callback targeting** — landing-page header links now route through TanStack navigation, `/documentation` now aliases docs, and internal auth magic links now default to redirecting verified users to `/dashboard` instead of hard-wiring `/auth/callback`.
 - **SDK-React: persistent room preferences** — saved room settings now re-apply device choices when available, preserve layout/theme/filmstrip defaults between visits, and scale remote playback volume consistently inside the meeting room.
