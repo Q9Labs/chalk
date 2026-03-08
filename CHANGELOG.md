@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SDK-React: in-room media device switching** — the desktop meeting control bar now includes inline dropdowns for microphone input, speaker output, and camera device selection beside the existing mic/video controls.
+
 ### Changed
 
 ### Fixed

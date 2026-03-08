@@ -1,3 +1,4 @@
+import type { MediaDevice } from "@q9labs/chalk-core";
 import { cn } from "../../../utils/cn";
 import { ControlBar, MobileControlSheet, ReactionPicker } from "../../composite";
 import type { MeetingPanel } from "./types";
@@ -26,8 +27,17 @@ interface MeetingRoomControlsProps {
   enableWhiteboard: boolean;
   enableTranscription: boolean;
   enableChat: boolean;
+  audioInputDevices?: readonly MediaDevice[];
+  audioOutputDevices?: readonly MediaDevice[];
+  videoInputDevices?: readonly MediaDevice[];
+  selectedAudioInput?: string;
+  selectedAudioOutput?: string;
+  selectedVideoInput?: string;
   onToggleMute?: () => void;
   onToggleVideo?: () => void;
+  onAudioInputChange?: (deviceId: string) => void;
+  onAudioOutputChange?: (deviceId: string) => void;
+  onVideoInputChange?: (deviceId: string) => void;
   onToggleScreenShare?: () => void;
   onToggleRecording?: () => void;
   onToggleHandRaise?: () => void;
@@ -35,6 +45,7 @@ interface MeetingRoomControlsProps {
   onToggleTranscription?: () => void;
   onSendReaction?: (emoji: string) => void;
   onLeave?: () => void;
+  onOpenSettings?: () => void;
   isExiting: boolean;
   localParticipantColorSeed?: string;
 }
@@ -63,8 +74,17 @@ export function MeetingRoomControls({
   enableWhiteboard,
   enableTranscription,
   enableChat,
+  audioInputDevices,
+  audioOutputDevices,
+  videoInputDevices,
+  selectedAudioInput,
+  selectedAudioOutput,
+  selectedVideoInput,
   onToggleMute,
   onToggleVideo,
+  onAudioInputChange,
+  onAudioOutputChange,
+  onVideoInputChange,
   onToggleScreenShare,
   onToggleRecording,
   onToggleHandRaise,
@@ -72,6 +92,7 @@ export function MeetingRoomControls({
   onToggleTranscription,
   onSendReaction,
   onLeave,
+  onOpenSettings,
   isExiting,
   localParticipantColorSeed,
 }: MeetingRoomControlsProps) {
@@ -125,6 +146,10 @@ export function MeetingRoomControls({
                 }
               : undefined
           }
+          onOpenSettings={() => {
+            onOpenSettings?.();
+            setIsMobileSheetOpen(false);
+          }}
           onLeave={onLeave}
           enableScreenShare={enableScreenShare}
           enableRecording={enableRecording}
@@ -152,8 +177,17 @@ export function MeetingRoomControls({
             isChatOpen={activePanel === "chat"}
             isParticipantsOpen={activePanel === "participants"}
             isTranscriptionEnabled={activePanel === "transcription"}
+            audioInputDevices={audioInputDevices}
+            audioOutputDevices={audioOutputDevices}
+            videoInputDevices={videoInputDevices}
+            selectedAudioInput={selectedAudioInput}
+            selectedAudioOutput={selectedAudioOutput}
+            selectedVideoInput={selectedVideoInput}
             onToggleMute={onToggleMute}
             onToggleVideo={onToggleVideo}
+            onAudioInputChange={onAudioInputChange}
+            onAudioOutputChange={onAudioOutputChange}
+            onVideoInputChange={onVideoInputChange}
             onToggleScreenShare={enableScreenShare ? onToggleScreenShare : undefined}
             onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
             onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
@@ -170,6 +204,7 @@ export function MeetingRoomControls({
                 : undefined
             }
             onOpenReactions={enableReactions ? () => setIsReactionPickerOpen(true) : undefined}
+            onOpenSettings={onOpenSettings}
             onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
             participantColorSeed={localParticipantColorSeed}
             className={cn(isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] touch-manipulation" : "", isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up")}

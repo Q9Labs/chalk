@@ -1,3 +1,4 @@
+import type { MediaDevice } from "@q9labs/chalk-core";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 export type MeetingPanel = "chat" | "participants" | "transcription";
@@ -101,6 +102,9 @@ export interface MeetingRoomProps {
   showInviteToastOnJoin?: boolean;
   onToggleMute?: () => void;
   onToggleVideo?: () => void;
+  onAudioInputChange?: (deviceId: string) => void;
+  onAudioOutputChange?: (deviceId: string) => void;
+  onVideoInputChange?: (deviceId: string) => void;
   onToggleScreenShare?: () => void;
   onToggleRecording?: () => void;
   onToggleHandRaise?: () => void;
@@ -113,10 +117,15 @@ export interface MeetingRoomProps {
   connectionState?: "connected" | "connecting" | "reconnecting" | "failed";
   onRetryConnection?: () => void;
   connectionSupportCode?: string;
+  audioInputDevices?: readonly MediaDevice[];
+  audioOutputDevices?: readonly MediaDevice[];
+  videoInputDevices?: readonly MediaDevice[];
+  selectedAudioInput?: string;
   participantVolumes?: ReadonlyMap<string, number>;
   onParticipantVolumeChange?: (id: string, volume: number) => void;
   getParticipantVolume?: (participantId: string) => number;
   selectedAudioOutput?: string;
+  selectedVideoInput?: string;
   theme?: "light" | "dark" | "system";
   onWhiteboardExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
   className?: string;

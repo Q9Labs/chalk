@@ -99,4 +99,48 @@ describe('MeetingRoom', () => {
     expect(getByText('Support Code')).toBeDefined();
     expect(getByText('CHK-20260302-121212-001')).toBeDefined();
   });
+
+  it('lets users change in-meeting mic, speaker, and camera devices from the dock', () => {
+    const onAudioInputChange = vi.fn();
+    const onAudioOutputChange = vi.fn();
+    const onVideoInputChange = vi.fn();
+    const { getByText } = render(
+      <MeetingRoom
+        roomName="Test Room"
+        localParticipant={localParticipant}
+        participants={participants}
+        enableTour={false}
+        audioInputDevices={[
+          { deviceId: 'mic-1', kind: 'audioinput', label: 'Microphone 1' },
+          { deviceId: 'mic-2', kind: 'audioinput', label: 'Microphone 2' },
+        ]}
+        audioOutputDevices={[
+          { deviceId: 'spk-1', kind: 'audiooutput', label: 'Speaker 1' },
+          { deviceId: 'spk-2', kind: 'audiooutput', label: 'Speaker 2' },
+        ]}
+        videoInputDevices={[
+          { deviceId: 'cam-1', kind: 'videoinput', label: 'Camera 1' },
+          { deviceId: 'cam-2', kind: 'videoinput', label: 'Camera 2' },
+        ]}
+        selectedAudioInput="mic-1"
+        selectedAudioOutput="spk-1"
+        selectedVideoInput="cam-1"
+        onAudioInputChange={onAudioInputChange}
+        onAudioOutputChange={onAudioOutputChange}
+        onVideoInputChange={onVideoInputChange}
+      />
+    );
+
+    fireEvent.click(getByText('Microphone 1'));
+    fireEvent.click(getByText('Microphone 2'));
+    expect(onAudioInputChange).toHaveBeenCalledWith('mic-2');
+
+    fireEvent.click(getByText('Speaker 1'));
+    fireEvent.click(getByText('Speaker 2'));
+    expect(onAudioOutputChange).toHaveBeenCalledWith('spk-2');
+
+    fireEvent.click(getByText('Camera 1'));
+    fireEvent.click(getByText('Camera 2'));
+    expect(onVideoInputChange).toHaveBeenCalledWith('cam-2');
+  });
 });

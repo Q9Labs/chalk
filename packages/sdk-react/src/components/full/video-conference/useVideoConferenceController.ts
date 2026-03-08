@@ -31,6 +31,7 @@ import { useMeetingStats } from "./useMeetingStats";
 import { useVideoConferenceMeetingRoomProps } from "./useVideoConferenceMeetingRoomProps";
 import { useSessionEvents } from "./useSessionEvents";
 import { buildVideoConferenceViewState, type VideoConferenceControllerState } from "./view-state";
+import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
 
 const DISCONNECT_GRACE_MS = 8000;
 const EMPTY_FEATURES: Features = {};
@@ -46,6 +47,8 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const [isExiting, setIsExiting] = useState(false);
 
   const effectiveRoomName = roomName ?? roomId;
+
+  const { settings, updateAudioSettings, updateVideoSettings, updateAppearanceSettings, updateNotificationSettings } = useMeetingRoomSettings();
 
   const { join, leave, isJoining } = useConnection();
   const { isConnected, status } = useRoom();
@@ -222,6 +225,45 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
     disconnectGraceTimeoutRef,
   });
 
+  const selectedCamera = media.selectedCamera ?? lobbySelectedCamera;
+  const selectedMicrophone = media.selectedMicrophone ?? lobbySelectedMicrophone;
+
+  const handleMeetingRoomCameraChange = useCallback(
+    (deviceId: string) => {
+      void media.selectCamera(deviceId).catch((error) => {
+        pushIncidentBreadcrumb("media", "In-meeting camera selection failed", {
+          deviceId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+    },
+    [media, pushIncidentBreadcrumb],
+  );
+
+  const handleMeetingRoomMicrophoneChange = useCallback(
+    (deviceId: string) => {
+      void media.selectMicrophone(deviceId).catch((error) => {
+        pushIncidentBreadcrumb("media", "In-meeting microphone selection failed", {
+          deviceId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+    },
+    [media, pushIncidentBreadcrumb],
+  );
+
+  const handleMeetingRoomSpeakerChange = useCallback(
+    (deviceId: string) => {
+      void media.selectSpeaker(deviceId).catch((error) => {
+        pushIncidentBreadcrumb("media", "In-meeting speaker selection failed", {
+          deviceId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+    },
+    [media, pushIncidentBreadcrumb],
+  );
+
   const { meetingRoomProps } = useVideoConferenceMeetingRoomProps({
     viewModelParams: {
       participants,
@@ -258,6 +300,14 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       handleChatOpen,
       defaultChatOpen: resolvedDefaults.chatOpen ?? activePanel === "chat",
       defaultParticipantsOpen: resolvedDefaults.participantsOpen ?? activePanel === "participants",
+      audioInputDevices: microphones,
+      audioOutputDevices: audioOutputs,
+      videoInputDevices: cameras,
+      selectedAudioInput: selectedMicrophone,
+      selectedVideoInput: selectedCamera,
+      handleAudioInputChange: handleMeetingRoomMicrophoneChange,
+      handleAudioOutputChange: handleMeetingRoomSpeakerChange,
+      handleVideoInputChange: handleMeetingRoomCameraChange,
       handleToggleMute,
       handleToggleVideo,
       handleToggleScreenShare,
@@ -275,6 +325,11 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       handleRetryConnection,
       connectionSupportCode: supportCode ?? undefined,
       className: cn(className, isExiting && "chalk-animate-exit"),
+      settings,
+      onUpdateAudioSettings: updateAudioSettings,
+      onUpdateVideoSettings: updateVideoSettings,
+      onUpdateAppearanceSettings: updateAppearanceSettings,
+      onUpdateNotificationSettings: updateNotificationSettings,
     },
   });
 

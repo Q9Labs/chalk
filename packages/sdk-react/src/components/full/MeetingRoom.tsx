@@ -56,6 +56,9 @@ function MeetingRoomBase({
   showInviteToastOnJoin = true,
   onToggleMute,
   onToggleVideo,
+  onAudioInputChange,
+  onAudioOutputChange,
+  onVideoInputChange,
   onToggleScreenShare,
   onToggleRecording,
   onToggleHandRaise,
@@ -68,10 +71,15 @@ function MeetingRoomBase({
   connectionState = "connected",
   onRetryConnection,
   connectionSupportCode,
+  audioInputDevices,
+  audioOutputDevices,
+  videoInputDevices,
+  selectedAudioInput,
   participantVolumes,
   onParticipantVolumeChange,
   getParticipantVolume,
   selectedAudioOutput,
+  selectedVideoInput,
   theme = "system",
   onWhiteboardExcalidrawApiReady,
   className,
@@ -213,8 +221,17 @@ function MeetingRoomBase({
           enableWhiteboard={enableWhiteboard}
           enableTranscription={enableTranscription}
           enableChat={enableChat}
+          audioInputDevices={audioInputDevices}
+          audioOutputDevices={audioOutputDevices}
+          videoInputDevices={videoInputDevices}
+          selectedAudioInput={selectedAudioInput}
+          selectedAudioOutput={selectedAudioOutput}
+          selectedVideoInput={selectedVideoInput}
           onToggleMute={onToggleMute}
           onToggleVideo={onToggleVideo}
+          onAudioInputChange={onAudioInputChange}
+          onAudioOutputChange={onAudioOutputChange}
+          onVideoInputChange={onVideoInputChange}
           onToggleScreenShare={onToggleScreenShare}
           onToggleRecording={onToggleRecording}
           onToggleHandRaise={onToggleHandRaise}
