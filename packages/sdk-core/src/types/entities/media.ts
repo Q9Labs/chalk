@@ -67,6 +67,9 @@ export interface Track {
  * Screen share options
  */
 export interface ScreenShareOptions {
+	/** Open annotation mode after the local share starts */
+	withAnnotations?: boolean;
+
 	/** Include system audio in the share (browser support varies) */
 	withAudio?: boolean;
 

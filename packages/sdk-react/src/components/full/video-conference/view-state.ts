@@ -41,6 +41,10 @@ interface BuildVideoConferenceViewStateParams {
   isLoading: PreJoinLobbyProps["isLoading"];
   error: PreJoinLobbyProps["error"];
   supportCode: PreJoinLobbyProps["supportCode"];
+  enablePictureInPicture: PreJoinLobbyProps["enablePictureInPicture"];
+  isPictureInPictureSupported: PreJoinLobbyProps["isPictureInPictureSupported"];
+  isPictureInPictureActive: PreJoinLobbyProps["isPictureInPictureActive"];
+  onTogglePictureInPicture: PreJoinLobbyProps["onTogglePictureInPicture"];
   className: PreJoinLobbyProps["className"];
   meetingDuration: number;
   participantCount: number;
@@ -71,6 +75,10 @@ export function buildVideoConferenceViewState({
   isLoading,
   error,
   supportCode,
+  enablePictureInPicture,
+  isPictureInPictureSupported,
+  isPictureInPictureActive,
+  onTogglePictureInPicture,
   className,
   meetingDuration,
   participantCount,
@@ -101,6 +109,10 @@ export function buildVideoConferenceViewState({
       isLoading,
       error,
       supportCode,
+      enablePictureInPicture,
+      isPictureInPictureSupported,
+      isPictureInPictureActive,
+      onTogglePictureInPicture,
       className,
     },
     endScreenProps: {

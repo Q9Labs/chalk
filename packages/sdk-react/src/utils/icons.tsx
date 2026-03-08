@@ -119,6 +119,7 @@ export const MonitorOffIcon = createIcon(MonitorOffIconSvg);
 export const MoreHorizontalIcon = createIcon(MoreHorizontalIconSvg);
 export const MoreVerticalIcon = createIcon(MoreVerticalIconSvg);
 export const PauseIcon = createIcon(PauseIconSvg);
+export const PictureInPictureIcon = createIcon(LayoutTableIconSvg);
 export const Pin01Icon = createIcon(Pin01IconSvg);
 export const PlayIcon = createIcon(PlayIconSvg);
 export const PlusSignIcon = createIcon(PlusSignIconSvg);

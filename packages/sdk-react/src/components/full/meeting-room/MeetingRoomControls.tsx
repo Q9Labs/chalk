@@ -25,8 +25,11 @@ interface MeetingRoomControlsProps {
   enableHandRaise: boolean;
   enableReactions: boolean;
   enableWhiteboard: boolean;
+  enablePictureInPicture: boolean;
   enableTranscription: boolean;
   enableChat: boolean;
+  isPictureInPictureSupported?: boolean;
+  isPictureInPictureActive?: boolean;
   audioInputDevices?: readonly MediaDevice[];
   audioOutputDevices?: readonly MediaDevice[];
   videoInputDevices?: readonly MediaDevice[];
@@ -43,6 +46,7 @@ interface MeetingRoomControlsProps {
   onToggleHandRaise?: () => void;
   onToggleWhiteboard?: () => void;
   onToggleTranscription?: () => void;
+  onTogglePictureInPicture?: () => Promise<void> | void;
   onSendReaction?: (emoji: string) => void;
   onLeave?: () => void;
   onOpenSettings?: () => void;
@@ -72,8 +76,11 @@ export function MeetingRoomControls({
   enableHandRaise,
   enableReactions,
   enableWhiteboard,
+  enablePictureInPicture,
   enableTranscription,
   enableChat,
+  isPictureInPictureSupported,
+  isPictureInPictureActive,
   audioInputDevices,
   audioOutputDevices,
   videoInputDevices,
@@ -90,6 +97,7 @@ export function MeetingRoomControls({
   onToggleHandRaise,
   onToggleWhiteboard,
   onToggleTranscription,
+  onTogglePictureInPicture,
   onSendReaction,
   onLeave,
   onOpenSettings,
@@ -156,9 +164,18 @@ export function MeetingRoomControls({
           enableHandRaise={enableHandRaise}
           enableReactions={enableReactions}
           enableWhiteboard={enableWhiteboard}
+          enablePictureInPicture={
+            enablePictureInPicture && Boolean(isPictureInPictureSupported)
+          }
           enableTranscription={enableTranscription}
           enableChat={enableChat}
+          isPictureInPictureActive={isPictureInPictureActive}
           participantColorSeed={localParticipantColorSeed}
+          onTogglePictureInPicture={
+            enablePictureInPicture && isPictureInPictureSupported
+              ? onTogglePictureInPicture
+              : undefined
+          }
         />
       )}
 
@@ -172,6 +189,7 @@ export function MeetingRoomControls({
             isHandRaised={isHandRaised}
             isWhiteboardOpen={isWhiteboardOpen}
             isRecording={isRecording}
+            isPictureInPictureActive={isPictureInPictureActive}
             meetingDuration={meetingDuration}
             unreadChatCount={unreadChatCount}
             isChatOpen={activePanel === "chat"}
@@ -192,6 +210,11 @@ export function MeetingRoomControls({
             onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
             onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
             onToggleWhiteboard={enableWhiteboard ? onToggleWhiteboard : undefined}
+            onTogglePictureInPicture={
+              enablePictureInPicture && isPictureInPictureSupported
+                ? onTogglePictureInPicture
+                : undefined
+            }
             onLeave={onLeave}
             onToggleChat={enableChat ? () => onTogglePanel("chat") : undefined}
             onToggleParticipants={() => onTogglePanel("participants")}

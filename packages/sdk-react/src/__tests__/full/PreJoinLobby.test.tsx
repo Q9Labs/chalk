@@ -6,6 +6,7 @@ import { PreJoinLobby } from '../../components/full/PreJoinLobby';
 window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
 global.MediaStream = vi.fn().mockImplementation(() => ({})) as any;
 const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
+const originalDocumentPictureInPicture = window.documentPictureInPicture;
 
 describe('PreJoinLobby', () => {
   beforeEach(() => {
@@ -17,6 +18,7 @@ describe('PreJoinLobby', () => {
     document.body.className = '';
     document.body.removeAttribute('data-theme');
     document.body.removeAttribute('data-chalk-theme');
+    window.documentPictureInPicture = originalDocumentPictureInPicture;
   });
 
   it('renders correctly', async () => {
@@ -236,6 +238,24 @@ describe('PreJoinLobby', () => {
       expect(getUserMedia).toHaveBeenCalledTimes(2);
     });
     expect(firstTrack.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows picture in picture control when supported and enabled', async () => {
+    window.documentPictureInPicture = {
+      requestWindow: vi.fn(),
+    } as any;
+
+    const { getByLabelText } = render(
+      <PreJoinLobby
+        onJoin={() => {}}
+        enablePictureInPicture={true}
+        initialVideoEnabled={false}
+        initialAudioEnabled={false}
+      />
+    );
+
+    await act(async () => {});
+    expect(getByLabelText('Open picture in picture')).toBeDefined();
   });
 
   it('resolves theme from data-chalk-theme before data-theme and class', async () => {

@@ -31,6 +31,13 @@ export type {
 } from "./screen-share-manager";
 export { ScreenShareManager } from "./screen-share-manager";
 
+// Screen Annotations Manager
+export type {
+	ScreenAnnotationsManagerEvents,
+	ScreenAnnotationsState,
+} from "./screen-annotations-manager";
+export { ScreenAnnotationsManager } from "./screen-annotations-manager";
+
 // UI Manager
 export type {
 	LayoutMode,

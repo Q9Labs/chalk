@@ -12,6 +12,10 @@ export interface PreJoinLobbyProps {
 	userName?: string;
 	onJoin: (settings: JoinSettings) => void;
 	onCancel?: () => void;
+	enablePictureInPicture?: boolean;
+	isPictureInPictureActive?: boolean;
+	isPictureInPictureSupported?: boolean;
+	onTogglePictureInPicture?: () => Promise<void> | void;
 
 	videoTrack?: MediaStreamTrack | null;
 	audioTrack?: MediaStreamTrack | null;

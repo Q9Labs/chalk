@@ -8,6 +8,11 @@
  * @module @q9labs/chalk-core/types
  */
 import type { AppState } from "@q9labs/chalk-whiteboard/collab";
+import type {
+  ScreenAnnotationAccessMode,
+  ScreenAnnotationItem,
+  ScreenAnnotationTool,
+} from "../entities/annotations";
 
 // Server payloads use their own participant shape (ServerParticipant)
 // rather than the full Participant entity from entities/
@@ -188,6 +193,62 @@ export interface PermissionChangedPayload {
   timestamp: string;
 }
 
+/** Screen annotation session started */
+export interface AnnotationSessionStartedPayload {
+  shareSessionId: string;
+  sharerParticipantId: string;
+  accessMode: ScreenAnnotationAccessMode;
+  timestamp: string;
+}
+
+/** Screen annotation session ended */
+export interface AnnotationSessionEndedPayload {
+  shareSessionId: string;
+  timestamp: string;
+}
+
+/** Screen annotation full state */
+export interface AnnotationSnapshotPayload {
+  roomId: string;
+  shareSessionId: string;
+  sharerParticipantId: string;
+  accessMode: ScreenAnnotationAccessMode;
+  items: ScreenAnnotationItem[];
+  updatedAtMs?: number;
+  lastSeq: number;
+}
+
+/** Screen annotation update broadcast */
+export interface AnnotationDataPayload {
+  shareSessionId: string;
+  sharerParticipantId: string;
+  participantId: string;
+  displayName: string;
+  syncAll: boolean;
+  items: ScreenAnnotationItem[];
+  seq: number;
+  timestamp: string;
+}
+
+/** Screen annotation cursor position */
+export interface AnnotationCursorPayload {
+  shareSessionId: string;
+  participantId: string;
+  displayName: string;
+  tool: ScreenAnnotationTool;
+  x: number;
+  y: number;
+  timestamp: string;
+}
+
+/** Screen annotation access changed */
+export interface AnnotationAccessChangedPayload {
+  shareSessionId: string;
+  accessMode: ScreenAnnotationAccessMode;
+  changedBy: string;
+  timestamp: string;
+}
+
 // ============================================================================
 // Server Event Map
 // ============================================================================
@@ -239,6 +300,12 @@ export interface ServerEventMap {
   "whiteboard:cursor": WhiteboardCursorPayload;
   "whiteboard:opened": WhiteboardOpenedPayload;
   "whiteboard:closed": WhiteboardClosedPayload;
+  "annotation:session-started": AnnotationSessionStartedPayload;
+  "annotation:session-ended": AnnotationSessionEndedPayload;
+  "annotation:snapshot": AnnotationSnapshotPayload;
+  "annotation:data": AnnotationDataPayload;
+  "annotation:cursor": AnnotationCursorPayload;
+  "annotation:access-changed": AnnotationAccessChangedPayload;
 
   // Permission events
   "permission:changed": PermissionChangedPayload;

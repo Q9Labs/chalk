@@ -2,7 +2,18 @@ import { wideEvents } from "../wide-events/index.ts";
 import type { ChalkError, ChatMessage, Participant, Recording, SessionConnectionState } from "../types.ts";
 import type { WSClient } from "../ws-client.ts";
 import type { WSEvents } from "../ws-client/emitted-events.ts";
-import type { ConferenceSessionEvents, WhiteboardCursorEvent, WhiteboardSnapshotEvent, WhiteboardUpdateEvent } from "./types.ts";
+import type {
+  ConferenceSessionEvents,
+  ScreenAnnotationAccessChangedEvent,
+  ScreenAnnotationCursorEvent,
+  ScreenAnnotationSessionEndedEvent,
+  ScreenAnnotationSessionStartedEvent,
+  ScreenAnnotationSnapshotEvent,
+  ScreenAnnotationUpdateEvent,
+  WhiteboardCursorEvent,
+  WhiteboardSnapshotEvent,
+  WhiteboardUpdateEvent,
+} from "./types.ts";
 
 interface WsSignalingDeps {
   roomId: string;
@@ -16,6 +27,11 @@ interface WsSignalingDeps {
   appendMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
   setWhiteboardPermission: (participantId: string, canDraw: boolean) => void;
+  setAnnotationSession: (
+    shareSessionId: string | null,
+    sharerParticipantId: string | null,
+  ) => void;
+  setAnnotationAccessMode: (accessMode: "all" | "sharer_only" | "off") => void;
   setCurrentRecording: (recording: { id: string } | null) => void;
   emitRoomSyncReady: (source: "rtk.snapshot" | "ws.snapshot", participantCount: number) => void;
   emit: <K extends keyof ConferenceSessionEvents>(event: K, data: ConferenceSessionEvents[K]) => void;
@@ -279,6 +295,37 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): (() =>
     deps.emit("whiteboard.closed", {
       participantId: data.participantId,
     });
+  });
+
+  subscribe("annotation.session.started", (data) => {
+    deps.setAnnotationSession(data.shareSessionId, data.sharerParticipantId);
+    deps.setAnnotationAccessMode(data.accessMode);
+    deps.emit("annotation.session.started", data as ScreenAnnotationSessionStartedEvent);
+  });
+
+  subscribe("annotation.session.ended", (data) => {
+    deps.setAnnotationSession(null, null);
+    deps.emit("annotation.session.ended", data as ScreenAnnotationSessionEndedEvent);
+  });
+
+  subscribe("annotation.snapshot", (data) => {
+    deps.setAnnotationSession(data.shareSessionId, data.sharerParticipantId);
+    deps.setAnnotationAccessMode(data.accessMode);
+    deps.emit("annotation.snapshot", data as ScreenAnnotationSnapshotEvent);
+  });
+
+  subscribe("annotation.update", (data) => {
+    deps.setAnnotationSession(data.shareSessionId, data.sharerParticipantId);
+    deps.emit("annotation.update", data as ScreenAnnotationUpdateEvent);
+  });
+
+  subscribe("annotation.cursor", (data) => {
+    deps.emit("annotation.cursor", data as ScreenAnnotationCursorEvent);
+  });
+
+  subscribe("annotation.access.changed", (data) => {
+    deps.setAnnotationAccessMode(data.accessMode);
+    deps.emit("annotation.access.changed", data as ScreenAnnotationAccessChangedEvent);
   });
 
   return () => {

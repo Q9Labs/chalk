@@ -12,26 +12,33 @@ import { LeaveConfirmationDialog } from "../composite/LeaveConfirmationDialog";
 import { EndScreen } from "./EndScreen";
 import { MeetingRoom } from "./MeetingRoom";
 import { PreJoinLobby } from "./PreJoinLobby";
+import { SharedPictureInPictureProvider } from "./picture-in-picture/PictureInPictureContext";
 import type { VideoConferenceProps } from "./video-conference/types";
 import { useVideoConferenceController } from "./video-conference/useVideoConferenceController";
 
 function VideoConferenceBase(props: VideoConferenceProps): React.JSX.Element {
   const { phase, preJoinProps, meetingRoomProps, endScreenProps, leaveDialogProps } = useVideoConferenceController(props);
-
-  if (phase === "lobby" || phase === "joining") {
-    return <PreJoinLobby {...preJoinProps} />;
-  }
-
-  if (phase === "end") {
-    return <EndScreen {...endScreenProps} />;
-  }
+  const enableSharedPictureInPicture =
+    phase === "lobby" || phase === "joining"
+      ? Boolean(preJoinProps.enablePictureInPicture)
+      : phase === "meeting"
+        ? Boolean(meetingRoomProps.enablePictureInPicture)
+        : false;
 
   return (
-    <>
-      <MeetingRoom {...meetingRoomProps} />
+    <SharedPictureInPictureProvider enabled={enableSharedPictureInPicture}>
+      {phase === "lobby" || phase === "joining" ? (
+        <PreJoinLobby {...preJoinProps} />
+      ) : phase === "end" ? (
+        <EndScreen {...endScreenProps} />
+      ) : (
+        <>
+          <MeetingRoom {...meetingRoomProps} />
 
-      <LeaveConfirmationDialog isOpen={leaveDialogProps.isOpen} onClose={leaveDialogProps.onClose} onConfirm={leaveDialogProps.onConfirm} />
-    </>
+          <LeaveConfirmationDialog isOpen={leaveDialogProps.isOpen} onClose={leaveDialogProps.onClose} onConfirm={leaveDialogProps.onConfirm} />
+        </>
+      )}
+    </SharedPictureInPictureProvider>
   );
 }
 

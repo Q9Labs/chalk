@@ -1,16 +1,23 @@
 import type { ChatMessage, Participant, Reaction, SessionSnapshot } from "../types.ts";
+import type { ScreenAnnotationItem } from "../types/entities/annotations.ts";
 import type {
+  AnnotationAccessChangedPayload,
+  AnnotationCursorPayload,
+  AnnotationDataPayload,
+  AnnotationSessionEndedPayload,
+  AnnotationSessionStartedPayload,
+  AnnotationSnapshotPayload,
   ChatMessagePayload,
   ParticipantJoinedPayload,
   ParticipantPayload,
+  PermissionChangedPayload,
   ReactionPayload,
   RoomSnapshotPayload,
+  WhiteboardClosedPayload,
   WhiteboardCursorPayload,
   WhiteboardDataPayload,
-  WhiteboardSnapshotPayload,
-  PermissionChangedPayload,
   WhiteboardOpenedPayload,
-  WhiteboardClosedPayload,
+  WhiteboardSnapshotPayload,
 } from "../effect/schemas/ws-events.ts";
 
 const toDate = (value: string | Date): Date => (value instanceof Date ? value : new Date(value));
@@ -98,6 +105,44 @@ export const toWhiteboardOpened = (payload: WhiteboardOpenedPayload) => ({
 });
 
 export const toWhiteboardClosed = (payload: WhiteboardClosedPayload) => ({
+  ...payload,
+  timestamp: toDate(payload.timestamp),
+});
+
+export const toAnnotationSessionStarted = (
+  payload: AnnotationSessionStartedPayload,
+) => ({
+  shareSessionId: payload.shareSessionId,
+  sharerParticipantId: payload.sharerParticipantId,
+  accessMode: payload.accessMode,
+});
+
+export const toAnnotationSessionEnded = (
+  payload: AnnotationSessionEndedPayload,
+) => ({
+  shareSessionId: payload.shareSessionId,
+  endedAt: toDate(payload.timestamp),
+});
+
+export const toAnnotationSnapshot = (payload: AnnotationSnapshotPayload) => ({
+  ...payload,
+  items: payload.items as ScreenAnnotationItem[],
+});
+
+export const toAnnotationUpdate = (payload: AnnotationDataPayload) => ({
+  ...payload,
+  items: payload.items as ScreenAnnotationItem[],
+  timestamp: toDate(payload.timestamp),
+});
+
+export const toAnnotationCursor = (payload: AnnotationCursorPayload) => ({
+  ...payload,
+  timestamp: toDate(payload.timestamp),
+});
+
+export const toAnnotationAccessChanged = (
+  payload: AnnotationAccessChangedPayload,
+) => ({
   ...payload,
   timestamp: toDate(payload.timestamp),
 });

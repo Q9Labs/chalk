@@ -11,6 +11,7 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import { ChatManager } from "../managers/chat-manager";
 import { InteractionManager } from "../managers/interaction-manager";
 import { RecordingManager } from "../managers/recording-manager";
+import { ScreenAnnotationsManager } from "../managers/screen-annotations-manager";
 import { ScreenShareManager } from "../managers/screen-share-manager";
 import { UIManager } from "../managers/ui-manager";
 import { WhiteboardManager } from "../managers/whiteboard-manager";
@@ -100,6 +101,9 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   /** Screen share manager */
   readonly screenShare: ScreenShareManager;
 
+  /** Screen annotations manager */
+  readonly annotations: ScreenAnnotationsManager;
+
   /** Chat messages manager */
   readonly chat: ChatManager;
 
@@ -161,6 +165,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 
     // Initialize other managers (non-Effect)
     this.screenShare = new ScreenShareManager();
+    this.annotations = new ScreenAnnotationsManager();
     this.chat = new ChatManager();
     this.recording = new RecordingManager();
     this.interactions = new InteractionManager();
@@ -289,6 +294,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     // Forward errors from all managers
     this.addExternalSubscription(this.media._emitter.on("error", (error) => this.emitErrorWithIncident(error, "media")));
     this.addExternalSubscription(this.screenShare.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
+    this.addExternalSubscription(this.annotations.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
     this.addExternalSubscription(this.chat.on("error", (error) => this.emitErrorWithIncident(error, "chat")));
     this.addExternalSubscription(this.recording.on("error", (error) => this.emitErrorWithIncident(error, "recording")));
     this.addExternalSubscription(this.interactions.on("error", (error) => this.emitErrorWithIncident(error, "interactions")));
@@ -327,6 +333,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       stateUpdaters: this.stateUpdaters,
       runtime: this._runtime,
       screenShare: this.screenShare,
+      annotations: this.annotations,
       chat: this.chat,
       recording: this.recording,
       interactions: this.interactions,

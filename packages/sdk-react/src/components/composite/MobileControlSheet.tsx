@@ -17,6 +17,7 @@ import {
   UserGroupIcon,
   Video01Icon,
   VideoOffIcon,
+  PictureInPictureIcon,
 } from '../../utils/icons';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 import { getParticipantThemeVariables } from '../../utils/colorGenerator';
@@ -34,6 +35,7 @@ export interface MobileControlSheetProps {
   isTranscriptionEnabled?: boolean;
   isHandRaised?: boolean;
   isWhiteboardOpen?: boolean;
+  isPictureInPictureActive?: boolean;
 
   onToggleMute?: () => void;
   onToggleVideo?: () => void;
@@ -46,6 +48,7 @@ export interface MobileControlSheetProps {
   onToggleWhiteboard?: () => void;
   onOpenReactions?: () => void;
   onOpenSettings?: () => void;
+  onTogglePictureInPicture?: () => Promise<void> | void;
   onLeave?: () => void;
 
   /** Enable certain optional features */
@@ -54,6 +57,7 @@ export interface MobileControlSheetProps {
   enableHandRaise?: boolean;
   enableReactions?: boolean;
   enableWhiteboard?: boolean;
+  enablePictureInPicture?: boolean;
   enableTranscription?: boolean;
   enableChat?: boolean;
 
@@ -75,6 +79,7 @@ export const MobileControlSheet = React.memo(({
   isTranscriptionEnabled = false,
   isHandRaised = false,
   isWhiteboardOpen = false,
+  isPictureInPictureActive = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
@@ -86,12 +91,14 @@ export const MobileControlSheet = React.memo(({
   onToggleWhiteboard,
   onOpenReactions,
   onOpenSettings,
+  onTogglePictureInPicture,
   onLeave,
   enableScreenShare = true,
   enableRecording = true,
   enableHandRaise = true,
   enableReactions = true,
   enableWhiteboard = true,
+  enablePictureInPicture = false,
   enableTranscription = true,
   enableChat = true,
   participantColorSeed,
@@ -172,6 +179,15 @@ export const MobileControlSheet = React.memo(({
       activeClassName: 'bg-primary text-primary-foreground',
       action: onToggleScreenShare,
       enabled: enableScreenShare && !!onToggleScreenShare,
+    },
+    {
+      key: 'pip',
+      icon: <PictureInPictureIcon className="w-6 h-6" />,
+      label: isPictureInPictureActive ? 'Close PiP' : 'Open PiP',
+      active: isPictureInPictureActive,
+      activeClassName: 'bg-primary text-primary-foreground',
+      action: onTogglePictureInPicture ? () => void onTogglePictureInPicture() : undefined,
+      enabled: enablePictureInPicture && !!onTogglePictureInPicture,
     },
     {
       key: 'chat',

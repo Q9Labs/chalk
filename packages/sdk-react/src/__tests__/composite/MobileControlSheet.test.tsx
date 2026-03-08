@@ -24,4 +24,21 @@ describe('MobileControlSheet', () => {
     );
     expect(queryByText('More controls')).toBeNull();
   });
+
+  it('renders picture in picture control when enabled', () => {
+    const onTogglePictureInPicture = vi.fn();
+    const { getByLabelText } = render(
+      <MobileControlSheet
+        isOpen={true}
+        onClose={() => {}}
+        enablePictureInPicture={true}
+        onTogglePictureInPicture={() => {
+          void onTogglePictureInPicture();
+        }}
+      />
+    );
+
+    fireEvent.click(getByLabelText('Open PiP'));
+    expect(onTogglePictureInPicture).toHaveBeenCalledTimes(1);
+  });
 });

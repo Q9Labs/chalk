@@ -1,4 +1,9 @@
 import type { AppState } from "@q9labs/chalk-whiteboard/collab";
+import type {
+  ScreenAnnotationAccessMode,
+  ScreenAnnotationItem,
+  ScreenAnnotationTool,
+} from "../types/entities/annotations.ts";
 import type { ChalkError, ChatMessage, Participant, Reaction, Recording, SessionConnectionState } from "../types.ts";
 
 /** Real-time transcript entry from speech-to-text */
@@ -41,6 +46,55 @@ export interface WhiteboardCursorEvent {
   y: number;
 }
 
+export interface ScreenAnnotationSessionStartedEvent {
+  shareSessionId: string;
+  sharerParticipantId: string;
+  accessMode: ScreenAnnotationAccessMode;
+}
+
+export interface ScreenAnnotationSessionEndedEvent {
+  shareSessionId: string;
+  endedAt: Date;
+}
+
+export interface ScreenAnnotationUpdateEvent {
+  shareSessionId: string;
+  sharerParticipantId: string;
+  syncAll: boolean;
+  participantId: string;
+  displayName: string;
+  items: ScreenAnnotationItem[];
+  seq: number;
+  timestamp: Date;
+}
+
+export interface ScreenAnnotationSnapshotEvent {
+  roomId: string;
+  shareSessionId: string;
+  sharerParticipantId: string;
+  accessMode: ScreenAnnotationAccessMode;
+  items: ScreenAnnotationItem[];
+  updatedAtMs?: number;
+  lastSeq: number;
+}
+
+export interface ScreenAnnotationCursorEvent {
+  shareSessionId: string;
+  participantId: string;
+  displayName: string;
+  tool: ScreenAnnotationTool;
+  x: number;
+  y: number;
+  timestamp: Date;
+}
+
+export interface ScreenAnnotationAccessChangedEvent {
+  shareSessionId: string;
+  accessMode: ScreenAnnotationAccessMode;
+  changedBy: string;
+  timestamp: Date;
+}
+
 export interface ConferenceSessionEvents {
   "connection.state.changed": SessionConnectionState;
   "participant.joined": Participant;
@@ -75,4 +129,10 @@ export interface ConferenceSessionEvents {
   "whiteboard.closed": {
     participantId: string;
   };
+  "annotation.session.started": ScreenAnnotationSessionStartedEvent;
+  "annotation.session.ended": ScreenAnnotationSessionEndedEvent;
+  "annotation.snapshot": ScreenAnnotationSnapshotEvent;
+  "annotation.update": ScreenAnnotationUpdateEvent;
+  "annotation.cursor": ScreenAnnotationCursorEvent;
+  "annotation.access.changed": ScreenAnnotationAccessChangedEvent;
 }

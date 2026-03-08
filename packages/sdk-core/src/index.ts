@@ -161,6 +161,8 @@ export type {
 	RoomState,
 	ScreenShareManagerEvents,
 	ScreenShareState,
+	ScreenAnnotationsManagerEvents,
+	ScreenAnnotationsState,
 	UIManagerEvents,
 	UIState,
 	WhiteboardManagerEvents,
@@ -174,6 +176,7 @@ export {
 	InteractionManager,
 	RecordingManager,
 	ScreenShareManager,
+	ScreenAnnotationsManager,
 	UIManager,
 	WhiteboardManager,
 } from "./managers/index.ts";
@@ -188,6 +191,17 @@ export * as state from "./state/index.ts";
 // State container base class
 export { StateContainer } from "./state/state-container.ts";
 // Whiteboard types
+export type {
+	AnnotationAccessMode,
+	ScreenAnnotationAccessMode,
+	ScreenAnnotationAccessChange,
+	ScreenAnnotationCursor,
+	ScreenAnnotationItem,
+	ScreenAnnotationSession,
+	ScreenAnnotationSnapshot,
+	ScreenAnnotationTool,
+	ScreenAnnotationUpdate,
+} from "./types/entities/annotations.ts";
 export type {
 	WhiteboardCursor,
 	WhiteboardSnapshot,

@@ -1,10 +1,13 @@
 import type React from "react";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef } from "react";
 
 import { cn } from "../../utils/cn";
 import { getParticipantGradient, getParticipantColor } from "../../utils/colorGenerator";
+import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 import { DiagnosticErrorSheet } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
+import { buildPreJoinPictureInPictureSource } from "./picture-in-picture";
+import { useSharedPictureInPicture } from "./picture-in-picture/PictureInPictureContext";
 import { PreJoinFloatingControls } from "./prejoin-lobby/PreJoinFloatingControls";
 import { PreJoinHeader } from "./prejoin-lobby/PreJoinHeader";
 import { PreJoinJoinPanel } from "./prejoin-lobby/PreJoinJoinPanel";
@@ -41,6 +44,10 @@ function PreJoinLobbyBase({
 	supportCode,
 	participantGradient: propParticipantGradient,
 	initialTheme = "dark",
+	enablePictureInPicture = false,
+	isPictureInPictureActive,
+	isPictureInPictureSupported,
+	onTogglePictureInPicture,
 	className,
 }: PreJoinLobbyProps): React.JSX.Element {
 	const videoRef = useRef<HTMLVideoElement>(null);
@@ -68,6 +75,7 @@ function PreJoinLobbyBase({
 	}, [ui.setIsAudioEnabled]);
 
 	const {
+		activeVideoTrack,
 		activeAudioTrack,
 		effectiveVideoDevices,
 		effectiveAudioInputDevices,
@@ -95,6 +103,77 @@ function PreJoinLobbyBase({
 		() => propParticipantGradient || getParticipantGradient(ui.displayName),
 		[propParticipantGradient, ui.displayName],
 	);
+	const hasExternalPictureInPicture = typeof onTogglePictureInPicture === "function";
+	const sharedPictureInPicture = useSharedPictureInPicture();
+	const registerSharedPictureInPicture = sharedPictureInPicture?.register;
+	const pictureInPictureOwnerId = useId();
+	const pictureInPictureOptions = useMemo(
+		() => ({
+			phase: "prejoin" as const,
+			roomName,
+			displayName: ui.displayName,
+			source: buildPreJoinPictureInPictureSource({
+				displayName: ui.displayName,
+				videoTrack: activeVideoTrack,
+				isAudioEnabled: ui.isAudioEnabled,
+				isVideoEnabled: ui.isVideoEnabled,
+			}),
+			controls: {
+				isMuted: !ui.isAudioEnabled,
+				isVideoEnabled: ui.isVideoEnabled,
+				onToggleMute: ui.toggleAudio,
+				onToggleVideo: ui.toggleVideo,
+			},
+		}),
+		[
+			roomName,
+			ui.displayName,
+			activeVideoTrack,
+			ui.isAudioEnabled,
+			ui.isVideoEnabled,
+			ui.toggleAudio,
+			ui.toggleVideo,
+		],
+	);
+
+	useEffect(() => {
+		if (
+			!registerSharedPictureInPicture ||
+			hasExternalPictureInPicture ||
+			!enablePictureInPicture
+		) {
+			return;
+		}
+
+		registerSharedPictureInPicture(pictureInPictureOwnerId, pictureInPictureOptions);
+
+		return () => {
+			registerSharedPictureInPicture(pictureInPictureOwnerId, null);
+		};
+	}, [
+		enablePictureInPicture,
+		hasExternalPictureInPicture,
+		pictureInPictureOptions,
+		pictureInPictureOwnerId,
+		registerSharedPictureInPicture,
+	]);
+
+	const internalPictureInPicture = usePictureInPicture({
+		enabled:
+			enablePictureInPicture &&
+			!hasExternalPictureInPicture &&
+			!sharedPictureInPicture,
+		...pictureInPictureOptions,
+	});
+	const pictureInPicture = hasExternalPictureInPicture
+		? {
+				isActive: Boolean(isPictureInPictureActive),
+				isSupported: Boolean(isPictureInPictureSupported),
+				toggle: onTogglePictureInPicture,
+			}
+		: sharedPictureInPicture
+			? sharedPictureInPicture
+		: internalPictureInPicture;
 	const normalizedAudioLevel = Math.min(100, Math.max(0, activeAudioLevel * 100));
 	const hasVideoDevices = effectiveVideoDevices.length > 0;
 	const hasAudioInput = effectiveAudioInputDevices.length > 0;
@@ -180,6 +259,10 @@ function PreJoinLobbyBase({
 									onToggleAudio={ui.toggleAudio}
 									onToggleVideo={ui.toggleVideo}
 									onToggleSettings={ui.toggleSettings}
+									enablePictureInPicture={enablePictureInPicture}
+									isPictureInPictureSupported={pictureInPicture.isSupported}
+									isPictureInPictureActive={pictureInPicture.isActive}
+									onTogglePictureInPicture={pictureInPicture.toggle}
 								/>
 							}
 						/>

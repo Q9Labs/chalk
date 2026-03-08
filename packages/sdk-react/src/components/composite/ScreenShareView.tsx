@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import {
 	ArrowDown01Icon,
@@ -12,6 +12,7 @@ import {
 	ZoomOutIcon,
 } from "../../utils/icons";
 import { Spinner, VideoTile } from "../atomic";
+import { ScreenAnnotationsLayer } from "./screen-annotations/ScreenAnnotationsLayer";
 import type { Participant } from "./VideoGrid";
 
 export interface ScreenShareViewProps {
@@ -22,12 +23,42 @@ export interface ScreenShareViewProps {
 	showThumbnails?: boolean;
 	thumbnailPosition?: "bottom" | "right";
 	enableZoom?: boolean;
+	enableAnnotations?: boolean;
 	className?: string;
 }
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.5;
+
+const getContainedSize = (
+	containerWidth: number,
+	containerHeight: number,
+	videoWidth: number,
+	videoHeight: number,
+) => {
+	if (!containerWidth || !containerHeight || !videoWidth || !videoHeight) {
+		return {
+			width: containerWidth,
+			height: containerHeight,
+		};
+	}
+
+	const containerRatio = containerWidth / containerHeight;
+	const videoRatio = videoWidth / videoHeight;
+
+	if (videoRatio > containerRatio) {
+		return {
+			width: containerWidth,
+			height: containerWidth / videoRatio,
+		};
+	}
+
+	return {
+		width: containerHeight * videoRatio,
+		height: containerHeight,
+	};
+};
 
 export const ScreenShareView = React.memo(
 	({
@@ -38,6 +69,7 @@ export const ScreenShareView = React.memo(
 		showThumbnails = true,
 		thumbnailPosition = "bottom",
 		enableZoom = true,
+		enableAnnotations = true,
 		className,
 	}: ScreenShareViewProps) => {
 		const videoRef = useRef<HTMLVideoElement>(null);
@@ -51,6 +83,8 @@ export const ScreenShareView = React.memo(
 
 		// Rotation state
 		const [rotation, setRotation] = useState(0);
+		const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+		const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
 
 		// Zoom state
 		const [zoom, setZoom] = useState(1);
@@ -83,8 +117,33 @@ export const ScreenShareView = React.memo(
 			};
 		}, [screenShareTrack]);
 
+		useEffect(() => {
+			const element = containerRef.current;
+			if (!element) {
+				return;
+			}
+
+			const updateSize = () => {
+				const rect = element.getBoundingClientRect();
+				setContainerSize({ width: rect.width, height: rect.height });
+			};
+
+			updateSize();
+
+			const observer = new ResizeObserver(updateSize);
+			observer.observe(element);
+
+			return () => observer.disconnect();
+		}, []);
+
 		const handleVideoLoaded = useCallback(() => {
 			setIsLoading(false);
+			if (videoRef.current) {
+				setVideoSize({
+					width: videoRef.current.videoWidth,
+					height: videoRef.current.videoHeight,
+				});
+			}
 		}, []);
 
 		// Reset pan when zoom resets
@@ -114,6 +173,27 @@ export const ScreenShareView = React.memo(
 			setPan({ x: 0, y: 0 });
 		}, []);
 
+		const stageSize = useMemo(
+			() =>
+				getContainedSize(
+					containerSize.width,
+					containerSize.height,
+					videoSize.width,
+					videoSize.height,
+				),
+			[containerSize.height, containerSize.width, videoSize.height, videoSize.width],
+		);
+
+		const stageStyle = useMemo(
+			() => ({
+				width: stageSize.width || containerSize.width,
+				height: stageSize.height || containerSize.height,
+				transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) rotate(${rotation}deg) scale(${zoom})`,
+				transformOrigin: "center center",
+			}),
+			[containerSize.height, containerSize.width, pan.x, pan.y, rotation, stageSize.height, stageSize.width, zoom],
+		);
+
 		// Mouse wheel zoom
 		const handleWheel = useCallback(
 			(e: React.WheelEvent) => {
@@ -128,6 +208,13 @@ export const ScreenShareView = React.memo(
 		// Pan handlers
 		const handleMouseDown = useCallback(
 			(e: React.MouseEvent) => {
+				if (
+					e.target !== e.currentTarget &&
+					e.target !== videoRef.current
+				) {
+					return;
+				}
+
 				if (zoom <= 1) return;
 				setIsDragging(true);
 				dragStart.current = {
@@ -147,20 +234,14 @@ export const ScreenShareView = React.memo(
 				const dx = e.clientX - dragStart.current.x;
 				const dy = e.clientY - dragStart.current.y;
 
-				// Limit pan based on zoom level
-				const maxPan = (zoom - 1) * 50; // percentage
+				const maxPanX = (stageSize.width * (zoom - 1)) / 2;
+				const maxPanY = (stageSize.height * (zoom - 1)) / 2;
 				setPan({
-					x: Math.max(
-						-maxPan,
-						Math.min(maxPan, dragStart.current.panX + dx / 5),
-					),
-					y: Math.max(
-						-maxPan,
-						Math.min(maxPan, dragStart.current.panY + dy / 5),
-					),
+					x: Math.max(-maxPanX, Math.min(maxPanX, dragStart.current.panX + dx)),
+					y: Math.max(-maxPanY, Math.min(maxPanY, dragStart.current.panY + dy)),
 				});
 			},
-			[isDragging, zoom],
+			[isDragging, stageSize.height, stageSize.width, zoom],
 		);
 
 		const handleMouseUp = useCallback(() => {
@@ -211,23 +292,26 @@ export const ScreenShareView = React.memo(
 						</div>
 					)}
 
-					<video
-						ref={videoRef}
-						autoPlay
-						playsInline
-						muted
-						onLoadedData={handleVideoLoaded}
-						className={cn(
-							"w-full h-full object-contain rounded-xl transition-all duration-700",
-							isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100",
-							zoom > 1 && isDragging && "cursor-grabbing",
-							zoom > 1 && !isDragging && "cursor-grab",
-						)}
-						style={{
-							transform: `rotate(${rotation}deg) scale(${zoom}) translate(${pan.x}%, ${pan.y}%)`,
-							transformOrigin: "center center",
-						}}
-					/>
+					<div
+						className="absolute left-1/2 top-1/2"
+						style={stageStyle}
+					>
+						<video
+							ref={videoRef}
+							autoPlay
+							playsInline
+							muted
+							onLoadedData={handleVideoLoaded}
+							onLoadedMetadata={handleVideoLoaded}
+							className={cn(
+								"h-full w-full rounded-xl bg-black transition-all duration-700",
+								isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100",
+								zoom > 1 && isDragging && "cursor-grabbing",
+								zoom > 1 && !isDragging && "cursor-grab",
+							)}
+						/>
+						<ScreenAnnotationsLayer enabled={enableAnnotations} />
+					</div>
 
 					<div
 						className={cn(
