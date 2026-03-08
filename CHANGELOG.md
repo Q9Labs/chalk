@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Web: local route/type stability** — restored the `/room/end` route export, aligned route search validation with current TanStack router expectations, and fixed icon/button typing so web builds and typechecks pass cleanly again.
+- **Web: dashboard icon/runtime cleanup** — routed Hugeicons dashboard glyphs through `HugeiconsIcon`, removed invalid button sizing, and tightened meeting selection state so the local dashboard no longer throws invalid-element/TypeScript errors during dev.
 - **Internal auth: localhost magic-link flow** — magic links now verify through the API before redirecting back to the app, callback finalization accepts both client-verify and server-redirect flows, and localhost web now prefers local API/WS config instead of accidentally falling back to production endpoints.
 - **Internal dashboard: localhost no-auth dev flow** — unclaimed internal tenants can now load `/api/v1/internal/meetings` when the API request itself is served from loopback/`.localhost`, so local dashboard use no longer bounces into email sign-in while hosted environments still require claimed ownership.
 
