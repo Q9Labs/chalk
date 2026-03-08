@@ -1,3 +1,4 @@
+import type { MediaDevice } from "@q9labs/chalk-core";
 import React, { useMemo } from "react";
 import { cn } from "../../utils/cn";
 import {
@@ -20,7 +21,7 @@ import {
 	Video01Icon,
 	VideoOffIcon,
 } from "../../utils/icons";
-import { ControlButton } from "../atomic";
+import { ControlButton, Select } from "../atomic";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 
 export type ControlBarButton =
@@ -57,9 +58,18 @@ export interface ControlBarProps {
 	isWhiteboardOpen?: boolean;
 	meetingDuration?: number;
 	unreadChatCount?: number;
+	audioInputDevices?: readonly MediaDevice[];
+	audioOutputDevices?: readonly MediaDevice[];
+	videoInputDevices?: readonly MediaDevice[];
+	selectedAudioInput?: string;
+	selectedAudioOutput?: string;
+	selectedVideoInput?: string;
 
 	onToggleMute?: () => void;
 	onToggleVideo?: () => void;
+	onAudioInputChange?: (deviceId: string) => void;
+	onAudioOutputChange?: (deviceId: string) => void;
+	onVideoInputChange?: (deviceId: string) => void;
 	onToggleScreenShare?: () => void;
 	onToggleRecording?: () => void;
 	onToggleChat?: () => void;
@@ -75,6 +85,45 @@ export interface ControlBarProps {
 
 	participantColorSeed?: string;
 	className?: string;
+}
+
+interface InlineDevicePickerProps {
+	label: string;
+	devices?: readonly MediaDevice[];
+	value?: string;
+	onChange?: (deviceId: string) => void;
+	placeholder: string;
+}
+
+function InlineDevicePicker({
+	label,
+	devices = [],
+	value,
+	onChange,
+	placeholder,
+}: InlineDevicePickerProps) {
+	if (!onChange || devices.length === 0) {
+		return null;
+	}
+
+	return (
+		<div className="flex items-center gap-2 rounded-full bg-white/70 dark:bg-zinc-900/70 px-2.5 py-1">
+			<span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+				{label}
+			</span>
+			<Select
+				options={devices.map((device) => ({
+					label: device.label || placeholder,
+					value: device.deviceId,
+				}))}
+				value={value}
+				onChange={(event) => onChange(event.target.value)}
+				size="sm"
+				placeholder={placeholder}
+				className="w-[160px] border-black/10 bg-white/90 text-sm dark:border-white/10 dark:bg-zinc-950/90"
+			/>
+		</div>
+	);
 }
 
 const formatDuration = (seconds: number) => {
@@ -101,12 +150,21 @@ export const ControlBar = React.memo(
 		isWhiteboardOpen = false,
 		meetingDuration = 0,
 		unreadChatCount = 0,
+		audioInputDevices,
+		audioOutputDevices,
+		videoInputDevices,
+		selectedAudioInput,
+		selectedAudioOutput,
+		selectedVideoInput,
 		showLabels = false,
 		variant = "floating",
 		buttons,
 
 		onToggleMute,
 		onToggleVideo,
+		onAudioInputChange,
+		onAudioOutputChange,
+		onVideoInputChange,
 		onToggleScreenShare,
 		onToggleRecording,
 		onToggleChat,
@@ -457,10 +515,31 @@ export const ControlBar = React.memo(
 						<div className="flex items-center gap-1.5">
 							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
 								{renderButton("mic")}
+								<InlineDevicePicker
+									label="Mic"
+									devices={audioInputDevices}
+									value={selectedAudioInput}
+									onChange={onAudioInputChange}
+									placeholder="Select microphone"
+								/>
+								<InlineDevicePicker
+									label="Speaker"
+									devices={audioOutputDevices}
+									value={selectedAudioOutput}
+									onChange={onAudioOutputChange}
+									placeholder="Select speaker"
+								/>
 							</div>
 
 							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
 								{renderButton("video")}
+								<InlineDevicePicker
+									label="Cam"
+									devices={videoInputDevices}
+									value={selectedVideoInput}
+									onChange={onVideoInputChange}
+									placeholder="Select camera"
+								/>
 							</div>
 
 							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
