@@ -11,7 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Web: homepage and dashboard visual refresh** — refreshed the local web app shell with shared Chalk branding, new edge-network/meeting illustrations, and a more polished landing/dashboard presentation.
+
 ### Fixed
+
+- **Web: local route/type stability** — restored the `/room/end` route export, aligned route search validation with current TanStack router expectations, and fixed icon/button typing so web builds and typechecks pass cleanly again.
 
 ## [0.0.71] - 2026-03-08
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, ExternalLink } from "lucide-react";
+import { Download } from "lucide-react";
 
 import { DocsLayout } from "@/features/docs/components";
 

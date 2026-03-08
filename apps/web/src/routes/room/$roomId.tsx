@@ -18,7 +18,7 @@ import {
   VideoConference,
 } from "@q9labs/chalk-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
 import { getJoinContext } from "../../lib/internalAuth";
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/room/$roomId")({
   params: z.object({
     roomId: z.string(),
   }),
-  search: z.object({
+  validateSearch: z.object({
     roomName: z.string().optional(),
   }),
 });

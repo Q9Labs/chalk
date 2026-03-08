@@ -11,32 +11,8 @@ import { useTheme } from "@/context/theme";
 import { Callout } from "./Callout";
 import { CodeBlock } from "./CodeBlock";
 import { DocsSidebar } from "./DocsSidebar";
+import { ChalkLogo } from "../../../components/ChalkLogo";
 
-function ChalkLogo({ className }: { className?: string }) {
-	return (
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" fill="none" className={className}>
-			<g>
-				<g transform="rotate(-15 20 60)">
-					<rect x="8" y="20" width="14" height="50" rx="7" fill="#A8D5A2"/>
-					<ellipse cx="15" cy="20" rx="7" ry="4" fill="#8BC585"/>
-				</g>
-				<g transform="rotate(-8 32 55)">
-					<rect x="22" y="15" width="14" height="52" rx="7" fill="#F5D76E"/>
-					<ellipse cx="29" cy="15" rx="7" ry="4" fill="#E8C85A"/>
-				</g>
-				<g transform="rotate(12 60 30)">
-					<rect x="35" y="8" width="14" height="55" rx="7" fill="#7EC8E3"/>
-					<ellipse cx="42" cy="8" rx="7" ry="4" fill="#5FB8D9"/>
-				</g>
-				<g transform="rotate(5 55 50)">
-					<rect x="48" y="22" width="14" height="48" rx="7" fill="#F0A0A0"/>
-					<ellipse cx="55" cy="70" rx="7" ry="4" fill="#E88888"/>
-				</g>
-			</g>
-			<text x="90" y="52" fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fontSize="38" fontWeight="600" letterSpacing="-0.02em" fill="currentColor">chalk</text>
-		</svg>
-	);
-}
 
 const mdxComponents = {
 	h1: (props: ComponentProps<"h1">) => (

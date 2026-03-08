@@ -7,8 +7,6 @@ import { cn } from "../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { 
   Video01Icon, 
-  Download01Icon, 
-  Share01Icon, 
   Calendar01Icon, 
   Clock01Icon, 
   File02Icon, 
@@ -25,32 +23,9 @@ import {
 import { useTheme } from "../context/theme";
 import { toast, Toaster } from "sonner";
 import { ScheduledClassesPanel } from "../features/classes/components/ScheduledClassesPanel";
-
-function ChalkLogo({ className }: { className?: string }) {
-	return (
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" fill="none" className={className}>
-			<g>
-				<g transform="rotate(-15 20 60)">
-					<rect x="8" y="20" width="14" height="50" rx="7" fill="#A8D5A2"/>
-					<ellipse cx="15" cy="20" rx="7" ry="4" fill="#8BC585"/>
-				</g>
-				<g transform="rotate(-8 32 55)">
-					<rect x="22" y="15" width="14" height="52" rx="7" fill="#F5D76E"/>
-					<ellipse cx="29" cy="15" rx="7" ry="4" fill="#E8C85A"/>
-				</g>
-				<g transform="rotate(12 60 30)">
-					<rect x="35" y="8" width="14" height="55" rx="7" fill="#7EC8E3"/>
-					<ellipse cx="42" cy="8" rx="7" ry="4" fill="#5FB8D9"/>
-				</g>
-				<g transform="rotate(5 55 50)">
-					<rect x="48" y="22" width="14" height="48" rx="7" fill="#F0A0A0"/>
-					<ellipse cx="55" cy="70" rx="7" ry="4" fill="#E88888"/>
-				</g>
-			</g>
-			<text x="90" y="52" fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fontSize="38" fontWeight="600" letterSpacing="-0.02em" fill="currentColor">chalk</text>
-		</svg>
-	);
-}
+import { Badge, Button } from "@q9labs/chalk-ui";
+import { ChalkLogo } from "../components/ChalkLogo";
+import { MeetingCardIllustration } from "../components/MeetingCardIllustration";
 
 export const Route = createFileRoute("/dashboard")({
 	component: DashboardPage,
@@ -243,10 +218,10 @@ function DashboardPage() {
 
 	if (state.kind === "loading") {
 		return (
-			<div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-				<div className="flex flex-col items-center gap-4">
+			<div className="min-h-screen bg-background flex items-center justify-center">
+				<div className="flex flex-col items-center gap-6">
           <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-					<p className="text-sm font-medium text-muted-foreground animate-pulse">Initializing dashboard…</p>
+					<p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground animate-pulse">Syncing Hub...</p>
 				</div>
 			</div>
 		);
@@ -254,19 +229,19 @@ function DashboardPage() {
 
 	if (state.kind === "error") {
 		return (
-			<div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-				<div className="w-full max-w-md space-y-4 text-center">
-          <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
-            <HugeiconsIcon icon={AlertCircleIcon} size={24} />
+			<div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
+				<div className="max-w-md space-y-8 bg-card p-12 rounded-[2.5rem] shadow-soft">
+          <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+            <HugeiconsIcon icon={AlertCircleIcon} size={32} />
           </div>
-					<h1 className="text-xl font-semibold">Failed to load dashboard</h1>
-					<p className="text-sm text-muted-foreground">{state.message}</p>
-          <button 
+					<h1 className="text-2xl font-black tracking-tight">Access Error</h1>
+					<p className="text-muted-foreground font-medium">{state.message}</p>
+          <Button 
             onClick={() => window.location.reload()}
-            className="rounded-full bg-primary px-6 py-2 text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+            className="rounded-full px-10 h-12 font-bold"
           >
-            Try again
-          </button>
+            Try Again
+          </Button>
 				</div>
 			</div>
 		);
@@ -274,42 +249,42 @@ function DashboardPage() {
 
 	if (state.kind === "login") {
 		return (
-			<div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-				<div className="w-full max-w-md space-y-8 bg-card p-8 rounded-2xl border shadow-sm">
-					<div className="space-y-2 text-center">
-            <div className="mx-auto w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary mb-4">
-              <HugeiconsIcon icon={ZapIcon} size={28} />
+			<div className="min-h-screen bg-background flex items-center justify-center p-6">
+				<div className="w-full max-w-lg bg-card p-12 lg:p-16 rounded-[3rem] shadow-soft space-y-12">
+					<div className="space-y-4 text-center">
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mb-6">
+              <HugeiconsIcon icon={ZapIcon} size={32} />
             </div>
-						<h1 className="text-2xl font-bold tracking-tight">Host Dashboard</h1>
-						<p className="text-sm text-muted-foreground">
-							Sign in to manage your recordings and transcripts.
+						<h1 className="text-4xl font-black tracking-tight leading-none text-foreground">Welcome Back</h1>
+						<p className="text-lg text-muted-foreground font-medium">
+							Sign in to manage your edge records.
 						</p>
 					</div>
 
-					<div className="space-y-4">
-						<div className="space-y-2">
-							<label className="text-sm font-medium px-1">Email address</label>
+					<div className="space-y-6">
+						<div className="space-y-3">
+							<label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-4">Authorized Email</label>
 							<input
-								className="w-full rounded-xl border bg-background px-4 py-3 text-sm transition-all focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-								placeholder="name@company.com"
+								className="w-full rounded-2xl border bg-secondary/50 px-6 py-4 text-lg font-bold transition-all focus:ring-8 focus:ring-primary/5 focus:border-primary outline-none"
+								placeholder="you@company.com"
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && email.trim() && sendLink()}
 							/>
 						</div>
 
-            <button
-              type="button"
-              onClick={sendLink}
-              className="w-full inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
-              disabled={!email.trim()}
-            >
-              Send magic link
-            </button>
+	            <Button
+	              onClick={sendLink}
+	              size="lg"
+	              className="w-full h-16 rounded-2xl font-black text-lg shadow-xl shadow-primary/20 premium-button"
+	              disabled={!email.trim()}
+	            >
+              Get Access Link
+            </Button>
 
             {emailSent && (
-              <div className="flex gap-2 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground items-start">
-                <HugeiconsIcon icon={InformationCircleIcon} size={16} className="shrink-0 mt-0.5" />
+              <div className="flex gap-4 p-6 rounded-2xl bg-primary/5 text-sm text-primary font-bold items-center border border-primary/10 animate-in fade-in zoom-in-95">
+                <HugeiconsIcon icon={InformationCircleIcon} size={20} className="shrink-0" />
                 <p>{emailSent}</p>
               </div>
             )}
@@ -320,301 +295,231 @@ function DashboardPage() {
 	}
 
 	return (
-		<div className="flex flex-col min-h-screen bg-background text-foreground">
+		<div className="flex flex-col min-h-screen bg-background">
       <Toaster position="top-right" theme={theme} />
-      {/* Navigation Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2">
-              <ChalkLogo className="h-8 w-auto" />
+      
+      {/* Refined Navigation Header */}
+      <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-xl border-b border-border/50">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-8">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="hover:opacity-80 transition-opacity">
+              <ChalkLogo />
             </Link>
             <div className="h-4 w-px bg-border hidden sm:block" />
-            <h2 className="text-sm font-medium text-muted-foreground hidden sm:block uppercase tracking-widest text-[10px]">Dashboard</h2>
+            <h2 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest hidden sm:block">Personal Hub</h2>
           </div>
           
-          <div className="flex items-center gap-3">
-            <div className="relative hidden md:block">
-              <HugeiconsIcon icon={Search01Icon} size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex items-center gap-6">
+            <div className="relative hidden md:block group">
+              <HugeiconsIcon icon={Search01Icon} size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <input 
                 type="text" 
-                placeholder="Search meetings…" 
-                className="h-9 w-64 rounded-full border bg-muted/50 pl-10 pr-4 text-sm focus:bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                placeholder="Find a session..." 
+                className="h-11 w-72 rounded-xl border bg-secondary/50 pl-14 pr-6 text-sm font-bold focus:bg-background focus:ring-8 focus:ring-primary/5 outline-none transition-all"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
             <button
-							type="button"
 							onClick={toggleTheme}
-							className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-							aria-label="Toggle theme"
+							className="p-3 rounded-xl hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all"
 						>
-							<HugeiconsIcon
-								icon={theme === "dark" ? Sun01Icon : Moon02Icon}
-								size={18}
-							/>
+							<HugeiconsIcon icon={theme === "dark" ? Sun01Icon : Moon02Icon} size={20} />
 						</button>
-            <Link 
-              to="/" 
-              className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90 transition-all gap-1.5"
-            >
-              <HugeiconsIcon icon={Video01Icon} size={16} />
+            <Link to="/" className="hidden sm:flex h-11 items-center justify-center rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all gap-2">
+              <HugeiconsIcon icon={Video01Icon} size={18} />
               <span>New Meeting</span>
             </Link>
           </div>
         </div>
       </header>
 
-			<main className="mx-auto w-full max-w-7xl p-6 space-y-8 flex-1">
-				{/* Analytics Strip */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-2xl border bg-card shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">Meetings</span>
-                <HugeiconsIcon icon={Video01Icon} size={18} />
+			<main className="mx-auto w-full max-w-7xl p-8 lg:p-12 space-y-12 flex-1">
+				{/* Soft Analytics Header */}
+	        {stats && (
+	          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+	            {[
+	              { label: "Sessions", val: stats.totalMeetings, icon: Video01Icon },
+	              { label: "Tasks", val: stats.totalActionItems, icon: CheckmarkCircle01Icon },
+	              { label: "Storage", val: formatBytes(stats.totalSize), icon: Database01Icon },
+	              { label: "At Risk", val: stats.expiringSoon, icon: AlertCircleIcon, warn: stats.expiringSoon > 0 }
+	            ].map((s, i) => (
+	              <div key={i} className={cn(
+	                "bg-card p-8 rounded-[2rem] shadow-soft space-y-3 transition-all hover:translate-y-[-4px]",
+                s.warn && "bg-destructive/[0.02] border border-destructive/10"
+              )}>
+	                <div className="flex items-center justify-between text-muted-foreground">
+	                  <span className="text-[11px] font-black uppercase tracking-widest">{s.label}</span>
+	                  <div className={cn("p-2 rounded-lg bg-secondary/80", s.warn && "bg-destructive/10 text-destructive")}>
+	                    <HugeiconsIcon icon={s.icon} size={20} />
+	                  </div>
+	                </div>
+                <div className={cn("text-3xl font-black tracking-tight tabular-nums", s.warn && "text-destructive")}>{s.val}</div>
               </div>
-              <div className="text-2xl font-bold tabular-nums">{stats.totalMeetings}</div>
-              <p className="text-[10px] text-muted-foreground">Lifetime recording count</p>
-            </div>
-            
-            <div className="p-4 rounded-2xl border bg-card shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">Action Items</span>
-                <HugeiconsIcon icon={CheckmarkCircle01Icon} size={18} />
-              </div>
-              <div className="text-2xl font-bold tabular-nums">{stats.totalActionItems}</div>
-              <p className="text-[10px] text-muted-foreground">Extracted from transcripts</p>
-            </div>
-
-            <div className="p-4 rounded-2xl border bg-card shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">Storage</span>
-                <HugeiconsIcon icon={Database01Icon} size={18} />
-              </div>
-              <div className="text-2xl font-bold tabular-nums">{formatBytes(stats.totalSize)}</div>
-              <p className="text-[10px] text-muted-foreground">7-day auto-purge active</p>
-            </div>
-
-            <div className={cn(
-              "p-4 rounded-2xl border shadow-sm space-y-1 transition-colors",
-              stats.expiringSoon > 0 ? "bg-destructive/5 border-destructive/20 text-destructive" : "bg-card text-foreground"
-            )}>
-              <div className="flex items-center justify-between opacity-70">
-                <span className="text-xs font-bold uppercase tracking-wider text-[10px]">At Risk</span>
-                <HugeiconsIcon icon={AlertCircleIcon} size={18} />
-              </div>
-              <div className="text-2xl font-bold tabular-nums">{stats.expiringSoon}</div>
-              <p className="text-[10px] opacity-70">Expires in &lt; 24 hours</p>
-            </div>
+            ))}
           </div>
         )}
 
-				{/* Meetings Feed */}
-				<ScheduledClassesPanel
-					client={sdkClient}
-					rooms={classRooms}
-					isLoading={classesLoading}
-					error={classesError}
-					onRefresh={refreshClasses}
-				/>
+				{/* Records View */}
+        <div className="space-y-10">
+          <ScheduledClassesPanel
+            client={sdkClient}
+            rooms={classRooms}
+            isLoading={classesLoading}
+            error={classesError}
+            onRefresh={refreshClasses}
+          />
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              Recent Meetings
-              {search && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  · {filteredMeetings.length} results
-                </span>
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-3xl font-black tracking-tight flex items-center gap-4 text-foreground">
+                Recent Records
+                {search && <Badge variant="secondary" className="font-bold text-[10px] rounded-full px-3">{filteredMeetings.length} MATCHES</Badge>}
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+              {filteredMeetings.map((m) => {
+                const isExpanded = expandedMeetingId === m.id;
+                return (
+                  <div key={m.id} className={cn(
+                    "bg-card group relative p-10 rounded-[2.5rem] shadow-soft transition-all duration-500 overflow-hidden",
+                    isExpanded ? "ring-1 ring-primary/20 border-primary/10" : "hover:shadow-heavy"
+                  )}>
+                    <MeetingCardIllustration active={m.status === 'ready'} />
+                    <div className="relative z-10">
+                      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+                      <div className="space-y-4 flex-1">
+                        <div className="flex flex-wrap items-center gap-4">
+                          <h4 className="text-2xl font-black tracking-tight leading-none group-hover:text-primary transition-colors">
+                            {m.room_name || `Room ${m.room_id.slice(0, 8)}`}
+                          </h4>
+                          <Badge variant={m.status === "ready" ? "default" : "secondary"} className="rounded-full px-3 text-[10px] font-black uppercase tracking-widest shadow-sm">
+                            {m.status}
+                          </Badge>
+                        </div>
+                        
+	                        <div className="flex flex-wrap items-center gap-6 text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+	                          <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50">
+	                            <HugeiconsIcon icon={Calendar01Icon} size={14} className="text-primary" />
+	                            {new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+	                          </span>
+	                          {m.duration_seconds && (
+	                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50">
+	                              <HugeiconsIcon icon={Clock01Icon} size={14} className="text-primary" />
+	                              {formatDuration(m.duration_seconds)}
+	                            </span>
+	                          )}
+	                          {m.size_bytes && (
+	                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50">
+	                              <HugeiconsIcon icon={Database01Icon} size={14} className="text-primary" />
+	                              {formatBytes(m.size_bytes)}
+	                            </span>
+	                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 w-full lg:w-auto">
+                        <button
+                          disabled={m.status === "deleted" || m.status !== "ready"}
+                          className="flex-1 lg:flex-none h-12 px-6 rounded-xl bg-primary/10 text-primary text-[11px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all disabled:opacity-30"
+                          onClick={() => downloadRecording(m.id, state.token).then(() => toast.success("Sync complete")).catch(e => toast.error(e.message))}
+                        >
+                          Download
+                        </button>
+                        <button
+                          disabled={m.status === "deleted" || m.status !== "ready"}
+                          className="flex-1 lg:flex-none h-12 px-6 rounded-xl bg-secondary text-[11px] font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-all disabled:opacity-30"
+                          onClick={() => createShareLink(m.id, state.token).then(() => toast.success("Link copied")).catch(e => toast.error(e.message))}
+                        >
+                          Share
+                        </button>
+                        <button 
+                          onClick={() => setExpandedMeetingId(isExpanded ? null : m.id)}
+                          className="p-3.5 rounded-xl bg-secondary/50 text-muted-foreground hover:text-primary transition-all"
+                        >
+                          <HugeiconsIcon icon={ArrowRight01Icon} size={20} className={cn("transition-transform duration-500", isExpanded && "rotate-90")} />
+                        </button>
+                      </div>
+                    </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="pt-10 mt-10 border-t border-border/50 animate-in fade-in slide-in-from-top-4 duration-500 space-y-10">
+	                        {m.transcript_summary ? (
+	                          <div className="space-y-4">
+	                            <div className="text-[11px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
+	                              <HugeiconsIcon icon={File02Icon} size={16} />
+	                              Executive Summary
+	                            </div>
+                            <p className="text-xl text-muted-foreground leading-relaxed font-medium max-w-4xl">
+                              {m.transcript_summary}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-8 rounded-2xl bg-secondary/30 text-muted-foreground text-sm font-bold border border-dashed text-center uppercase tracking-widest">
+                            No transcript summary generated for this session.
+                          </div>
+                        )}
+
+	                        {m.transcript_action_items && m.transcript_action_items.length > 0 && (
+	                          <div className="space-y-6">
+	                            <div className="text-[11px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
+	                              <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} />
+	                              Action Items
+	                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {m.transcript_action_items.map((item, idx) => (
+                                <div key={idx} className="p-5 rounded-2xl bg-secondary/30 flex items-center gap-5 border border-border/50">
+                                  <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-black shrink-0">
+                                    {idx + 1}
+                                  </div>
+                                  <span className="text-base font-bold text-foreground/80 leading-tight">{item}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {m.status === "deleted" && (
+                      <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] rounded-[2.5rem] flex items-center justify-center pointer-events-none z-20">
+                        <div className="bg-destructive/10 text-destructive px-8 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest border border-destructive/20 shadow-xl rotate-[-2deg]">
+                          Purged from Edge
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+	              {filteredMeetings.length === 0 && (
+	                <div className="py-32 text-center space-y-6 bg-card rounded-[3rem] shadow-soft border border-dashed border-border/50">
+	                  <div className="mx-auto w-20 h-20 rounded-3xl bg-secondary/50 flex items-center justify-center text-muted-foreground/30">
+	                    <HugeiconsIcon icon={Video01Icon} size={40} />
+	                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-black tracking-tight">Records Empty</h3>
+                    <p className="text-lg text-muted-foreground font-medium uppercase tracking-widest text-[11px]">Launch a session to begin logging</p>
+                  </div>
+                </div>
               )}
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredMeetings.map((m) => {
-              const isExpanded = expandedMeetingId === m.id;
-              return (
-                <div key={m.id} className={cn(
-                  "group relative flex flex-col rounded-2xl border bg-card p-5 shadow-sm hover:shadow-md transition-all",
-                  isExpanded ? "ring-2 ring-primary/20 border-primary/30" : "hover:border-primary/20"
-                )}>
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="space-y-1">
-                      <h4 className="font-bold text-base group-hover:text-primary transition-colors">
-                        {m.room_name || `Room ${m.room_id.slice(0, 8)}`}
-                      </h4>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <HugeiconsIcon icon={Calendar01Icon} size={14} />
-                          {new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {m.duration_seconds && (
-                          <span className="flex items-center gap-1">
-                            <HugeiconsIcon icon={Clock01Icon} size={14} />
-                            {formatDuration(m.duration_seconds)}
-                          </span>
-                        )}
-                        {m.size_bytes && (
-                          <span className="flex items-center gap-1">
-                            <HugeiconsIcon icon={Database01Icon} size={14} />
-                            {formatBytes(m.size_bytes)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className={cn(
-                      "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-                      m.status === "ready" ? "bg-primary/10 border-primary/20 text-primary" : 
-                      m.status === "deleted" ? "bg-muted text-muted-foreground border-border" :
-                      "bg-orange-500/10 border-orange-500/20 text-orange-600"
-                    )}>
-                      {m.status}
-                    </div>
-                  </div>
-
-                  {/* Intelligence Layer */}
-                  <div className="flex-1 space-y-4 mb-6 transition-all duration-300">
-                    {m.transcript_summary ? (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                          <HugeiconsIcon icon={File02Icon} size={12} />
-                          Summary
-                        </div>
-                        <p className={cn(
-                          "text-sm text-muted-foreground leading-relaxed",
-                          !isExpanded && "line-clamp-2"
-                        )}>
-                          {m.transcript_summary}
-                        </p>
-                      </div>
-                    ) : m.status !== "deleted" && (
-                      <div className="py-2 px-3 rounded-xl bg-muted/30 border border-dashed text-xs text-muted-foreground italic">
-                        No summary available yet.
-                      </div>
-                    )}
-
-                    {m.transcript_action_items && m.transcript_action_items.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                          <HugeiconsIcon icon={CheckmarkCircle01Icon} size={12} />
-                          Key Actions
-                        </div>
-                        <ul className="space-y-1.5">
-                          {(isExpanded ? m.transcript_action_items : m.transcript_action_items.slice(0, 2)).map((item, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-xs text-foreground/80">
-                              <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" />
-                              <span className={cn(!isExpanded && "line-clamp-1")}>{item}</span>
-                            </li>
-                          ))}
-                          {!isExpanded && m.transcript_action_items.length > 2 && (
-                            <li className="text-[10px] font-medium text-primary pl-3.5">
-                              + {m.transcript_action_items.length - 2} more items
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-between pt-4 border-t mt-auto">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={m.status === "deleted" || m.status !== "ready"}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold hover:bg-secondary/80 transition-colors disabled:opacity-30"
-                        onClick={async () => {
-                          try {
-                            await downloadRecording(m.id, state.token);
-                            toast.success("Download started");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : String(e));
-                          }
-                        }}
-                      >
-                        <HugeiconsIcon icon={Download01Icon} size={14} />
-                        Download
-                      </button>
-                      <button
-                        type="button"
-                        disabled={m.status === "deleted" || m.status !== "ready"}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold hover:bg-secondary/80 transition-colors disabled:opacity-30"
-                        onClick={async () => {
-                          try {
-                          await createShareLink(m.id, state.token);
-                          toast.success("Share link copied to clipboard");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : String(e));
-                          }
-                        }}
-                      >
-                        <HugeiconsIcon icon={Share01Icon} size={14} />
-                        Share
-                      </button>
-                    </div>
-                    
-                    <button 
-                      onClick={() => setExpandedMeetingId(isExpanded ? null : m.id)}
-                      className="flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-primary transition-colors group/link"
-                    >
-                      {isExpanded ? "Show Less" : "View Details"}
-                      <HugeiconsIcon icon={ArrowRight01Icon} size={14} className={cn(
-                        "transition-transform",
-                        isExpanded ? "-rotate-90" : "group-hover/link:translate-x-0.5"
-                      )} />
-                    </button>
-                  </div>
-
-                  {m.status === "deleted" && (
-                    <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px] rounded-2xl flex items-center justify-center pointer-events-none">
-                      <div className="bg-muted px-4 py-1 rounded-full border shadow-sm text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                        Purged
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {filteredMeetings.length === 0 && (
-              <div className="col-span-full py-20 text-center space-y-4">
-                <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                  <HugeiconsIcon icon={Video01Icon} size={32} />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-lg">No meetings found</h3>
-                  <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                    {search ? "No results match your search query. Try different keywords." : "Start your first meeting to see it here on the dashboard."}
-                  </p>
-                </div>
-                {search && (
-                   <button 
-                    onClick={() => setSearch("")}
-                    className="text-sm font-bold text-primary hover:underline"
-                   >
-                    Clear search
-                   </button>
-                )}
-              </div>
-            )}
+            </div>
           </div>
         </div>
 			</main>
 
-      <footer className="py-12 px-6 border-t">
-        <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-6 text-muted-foreground text-xs font-medium">
-          <div className="flex items-center gap-2">
-            <HugeiconsIcon icon={ZapIcon} size={14} className="text-primary" />
-            <span>&copy; {new Date().getFullYear()} Chalk Education. All rights reserved.</span>
+      <footer className="py-16 px-12 border-t border-border/50 bg-secondary/10">
+        <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-10 text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+          <div className="flex items-center gap-3">
+            <HugeiconsIcon icon={ZapIcon} size={16} className="text-primary animate-pulse" />
+            <span>&copy; {new Date().getFullYear()} Chalk Edge Network</span>
           </div>
-          <div className="flex items-center gap-6">
-            <a href="#" className="hover:text-foreground transition-colors">Terms</a>
-            <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
-            <a href="#" className="hover:text-foreground transition-colors">Status</a>
-            <a href="#" className="hover:text-foreground transition-colors">Help</a>
+          <div className="flex items-center gap-10">
+            <a href="#" className="hover:text-primary transition-all">Support</a>
+            <a href="#" className="hover:text-primary transition-all">Security</a>
+            <a href="#" className="hover:text-primary transition-all">Status</a>
           </div>
         </div>
       </footer>

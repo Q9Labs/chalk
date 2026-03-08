@@ -171,7 +171,7 @@ export function useWhatsNew(options: UseWhatsNewOptions = {}): UseWhatsNewReturn
 					throw new Error(`Failed to fetch: ${response.status}`);
 				}
 
-				const json = await response.json();
+				const json = (await response.json()) as { releases?: WhatsNewData[] };
 				setAllReleases(json.releases ?? []);
 			} catch (err) {
 				if (err instanceof Error && err.name !== "AbortError") {
