@@ -130,29 +130,44 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
 			<div className="rounded-2xl border bg-card p-4 space-y-3">
 				<div className="grid grid-cols-1 md:grid-cols-4 gap-2">
 					<input
+						id="scheduled-class-title"
+						name="classTitle"
 						type="text"
+						autoComplete="off"
+						spellCheck={false}
 						value={className}
 						onChange={(e) => setClassName(e.target.value)}
 						placeholder="Class title"
 						className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
 					/>
 					<input
+						id="scheduled-class-start"
+						name="classStartAt"
 						type="datetime-local"
+						autoComplete="off"
 						value={startAtLocal}
 						onChange={(e) => setStartAtLocal(e.target.value)}
 						className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
 					/>
 					<input
+						id="scheduled-class-duration"
+						name="classDurationMinutes"
 						type="number"
 						min={1}
+						autoComplete="off"
+						inputMode="numeric"
 						value={durationMinutes}
 						onChange={(e) => setDurationMinutes(e.target.value)}
 						placeholder="Duration (min)"
 						className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
 					/>
 					<input
+						id="scheduled-class-early-join"
+						name="allowEarlyJoinMinutes"
 						type="number"
 						min={0}
+						autoComplete="off"
+						inputMode="numeric"
 						value={allowEarlyJoinMinutes}
 						onChange={(e) => setAllowEarlyJoinMinutes(e.target.value)}
 						placeholder="Early join (min)"

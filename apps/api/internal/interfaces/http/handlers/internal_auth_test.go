@@ -242,6 +242,31 @@ func TestInternalAuthResolveMagicLinkAppURL(t *testing.T) {
 	})
 }
 
+func TestInternalAuthBuildMagicLinkVerificationURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	handler := &InternalAuthHandler{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/internal/auth/start", nil)
+	req.Host = "chalk-api.q9labs.ai"
+	req.Header.Set("X-Forwarded-Proto", "https")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	got := handler.buildMagicLinkVerificationURL(
+		c,
+		"token-123",
+		"http://localhost:3070/auth/callback",
+	)
+
+	require.Equal(
+		t,
+		"https://chalk-api.q9labs.ai/api/v1/internal/auth/verify?callback_url=http%3A%2F%2Flocalhost%3A3070%2Fauth%2Fcallback&token=token-123",
+		got,
+	)
+}
+
 func TestInternalAuthCookieSameSite(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

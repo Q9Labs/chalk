@@ -94,6 +94,9 @@
   .premium-button {
     @apply relative overflow-hidden transition-all duration-300 hover:shadow-heavy active:scale-[0.98] rounded-full;
   }
+  
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
 @layer base {

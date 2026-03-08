@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Web: local route/type stability** — restored the `/room/end` route export, aligned route search validation with current TanStack router expectations, and fixed icon/button typing so web builds and typechecks pass cleanly again.
+- **Internal auth: localhost magic-link flow** — magic links now verify through the API before redirecting back to the app, callback finalization accepts both client-verify and server-redirect flows, and localhost web now prefers local API/WS config instead of accidentally falling back to production endpoints.
 
 ## [0.0.71] - 2026-03-08
 

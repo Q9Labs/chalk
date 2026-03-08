@@ -55,10 +55,10 @@ function App() {
 			{/* Soft Floating Header */}
 			<header className="sticky top-0 z-50 w-full flex justify-center py-6 pointer-events-none">
 				<div className="container mx-auto px-6 max-w-6xl pointer-events-auto">
-          <div className="glass-panel px-8 h-16 rounded-full flex items-center justify-between">
-            <ChalkLogo className="text-foreground" />
+          <div className="glass-hud px-8 h-16 rounded-full flex items-center justify-between border border-white/10 shadow-2xl backdrop-blur-2xl">
+            <ChalkLogo />
             <nav className="hidden md:flex items-center gap-10">
-              <a href="/docs" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Docs</a>
+              <a href="/docs" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Documentation</a>
               <a href="/dashboard" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Dashboard</a>
             </nav>
             <div className="flex items-center gap-4">
@@ -69,7 +69,7 @@ function App() {
               >
                 <HugeiconsIcon icon={theme === "dark" ? Sun01Icon : Moon02Icon} size={18} />
               </button>
-              <Button size="sm" onClick={handleStartMeeting} className="premium-button font-bold px-6 shadow-primary/20">
+              <Button size="sm" onClick={handleStartMeeting} className="rounded-full px-6 font-bold shadow-primary/20 hover:shadow-xl active:scale-95 transition-all">
                 Join Now
               </Button>
             </div>
@@ -86,11 +86,6 @@ function App() {
           </div>
 
 					<div className="container relative z-10 mx-auto px-6 max-w-5xl space-y-12">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-secondary/80 border border-border/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground animate-in fade-in slide-in-from-bottom-2 duration-1000">
-              <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-              Edge Network Status: Optimal
-            </div>
-
             <h1 className="text-6xl sm:text-8xl lg:text-[7.5rem] font-black tracking-tight leading-[0.9] text-foreground animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-100">
               Video calls, <br />
               <span className="text-primary italic">refined.</span>
@@ -101,12 +96,20 @@ function App() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-10 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
-              <Button size="lg" className="h-16 px-12 rounded-full text-lg font-black shadow-2xl shadow-primary/30 premium-button group" onClick={handleStartMeeting}>
-                Start Meeting
-                <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              <Button size="lg" className="h-16 px-12 rounded-full text-lg font-black shadow-2xl shadow-primary/30 group relative overflow-hidden" onClick={handleStartMeeting}>
+                <div className="absolute inset-0 bg-primary/20 animate-pulse" />
+                <span className="relative flex items-center gap-2">
+                  Start Meeting
+                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </span>
               </Button>
               <div className="relative group">
                 <Input
+                  id="meeting-code"
+                  name="meetingCode"
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
                   placeholder="Meeting Code..."
                   value={meetingCode}
                   onChange={(e) => setMeetingCode(e.target.value)}
@@ -142,7 +145,7 @@ function App() {
 									desc: "End-to-end encrypted. We never store your media or session data. Ever."
 								}
 							].map((f, i) => (
-								<div key={i} className="bg-card p-12 rounded-[2.5rem] shadow-soft hover:shadow-heavy transition-all duration-500 group">
+								<div key={i} className="bg-card p-12 rounded-[2.5rem] border border-border/50 shadow-sm hover:shadow-2xl transition-all duration-500 group">
 									<div className="h-16 w-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-8 group-hover:scale-110 group-hover:rotate-6 transition-transform">
 										{f.icon}
 									</div>
@@ -161,7 +164,7 @@ function App() {
 							Ready to connect?
 						</h2>
             <p className="text-xl text-muted-foreground font-medium">Join thousands of teams meeting on the edge.</p>
-						<Button size="lg" className="h-20 px-16 rounded-full text-xl font-black shadow-2xl shadow-primary/30 premium-button" onClick={handleStartMeeting}>
+						<Button size="lg" className="h-20 px-16 rounded-full text-xl font-black shadow-2xl shadow-primary/30" onClick={handleStartMeeting}>
 							Launch Your Room
 						</Button>
             <div className="flex flex-wrap justify-center gap-12 pt-16 text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/50">

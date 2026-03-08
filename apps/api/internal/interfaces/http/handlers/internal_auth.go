@@ -125,8 +125,8 @@ func (h *InternalAuthHandler) Start(c *gin.Context) {
 		return
 	}
 
-	appURL := h.resolveMagicLinkAppURL(req.CallbackURL)
-	link := appURL + "/auth/callback?token=" + magicToken
+	callbackURL := h.resolveMagicLinkCallbackURL(req.CallbackURL)
+	link := h.buildMagicLinkVerificationURL(c, magicToken, callbackURL)
 
 	if err := h.resendClient.SendMagicLink(c.Request.Context(), emailAddr, link); err != nil {
 		_ = h.redis.Del(c.Request.Context(), key)
@@ -143,29 +143,62 @@ type verifyInternalAuthRequest struct {
 
 // POST /api/v1/internal/auth/verify
 func (h *InternalAuthHandler) Verify(c *gin.Context) {
+	if c.Request.Method == http.MethodGet {
+		h.verifyBrowserRedirect(c)
+		return
+	}
+
 	var req verifyInternalAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if h.redis == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis not configured"})
+	tenant, status, message := h.completeMagicLinkVerification(c, req.Token)
+	if status != 0 {
+		c.JSON(status, gin.H{"error": message})
 		return
 	}
 
-	key := magicLinkRedisKey(req.Token)
+	c.JSON(http.StatusOK, gin.H{
+		"ok":        true,
+		"tenant_id": tenant.ID,
+	})
+}
+
+func (h *InternalAuthHandler) verifyBrowserRedirect(c *gin.Context) {
+	token := strings.TrimSpace(c.Query("token"))
+	callbackURL := h.resolveMagicLinkCallbackURL(c.Query("callback_url"))
+
+	if token == "" {
+		c.Redirect(http.StatusSeeOther, appendURLQuery(callbackURL, "error", "Missing token"))
+		return
+	}
+
+	_, status, message := h.completeMagicLinkVerification(c, token)
+	if status != 0 {
+		c.Redirect(http.StatusSeeOther, appendURLQuery(callbackURL, "error", message))
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, callbackURL)
+}
+
+func (h *InternalAuthHandler) completeMagicLinkVerification(c *gin.Context, token string) (*db.Tenant, int, string) {
+	if h.redis == nil {
+		return nil, http.StatusInternalServerError, "redis not configured"
+	}
+
+	key := magicLinkRedisKey(token)
 	emailAddr, err := h.redis.Get(c.Request.Context(), key)
 	if err != nil || emailAddr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
-		return
+		return nil, http.StatusBadRequest, "invalid or expired token"
 	}
 	_ = h.redis.Del(c.Request.Context(), key) // single-use
 
 	user, err := h.getOrCreateUser(c.Request.Context(), emailAddr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
-		return
+		return nil, http.StatusInternalServerError, "failed to create user"
 	}
 
 	// If this browser has an unclaimed internal tenant, bind it to the user.
@@ -176,14 +209,12 @@ func (h *InternalAuthHandler) Verify(c *gin.Context) {
 	// Ensure user has a workspace tenant (hard 1:1 enforced in DB for internal).
 	tenant, err := h.ensureInternalTenantForUser(c.Request.Context(), user.ID)
 	if err != nil || tenant == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve tenant"})
-		return
+		return nil, http.StatusInternalServerError, "failed to resolve tenant"
 	}
 
 	refresh, err := randomToken(48)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
-		return
+		return nil, http.StatusInternalServerError, "failed to create session"
 	}
 
 	sessionTTL := 30 * 24 * time.Hour
@@ -199,18 +230,14 @@ func (h *InternalAuthHandler) Verify(c *gin.Context) {
 		UserAgent:        strPtr(c.Request.UserAgent()),
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
-		return
+		return nil, http.StatusInternalServerError, "failed to create session"
 	}
 
 	h.setCookie(c, internalSessionCookieName, refresh, time.Now().Add(sessionTTL))
 	// Clear claim cookie after successful login.
 	h.clearCookie(c, internalClaimCookieName)
 
-	c.JSON(http.StatusOK, gin.H{
-		"ok":        true,
-		"tenant_id": tenant.ID,
-	})
+	return tenant, 0, ""
 }
 
 // GET /api/v1/internal/auth/access-token
@@ -489,8 +516,10 @@ func (h *InternalAuthHandler) resolveMagicLinkCallbackURL(requestedCallbackURL s
 	return appURL + "/auth/callback"
 }
 
-func (h *InternalAuthHandler) buildMagicLinkVerificationURL(_ *gin.Context, token, callbackURL string) string {
-	return appendURLQuery(callbackURL, "token", token)
+func (h *InternalAuthHandler) buildMagicLinkVerificationURL(c *gin.Context, token, callbackURL string) string {
+	verifyURL := requestOrigin(c.Request) + "/api/v1/internal/auth/verify"
+	verifyURL = appendURLQuery(verifyURL, "token", token)
+	return appendURLQuery(verifyURL, "callback_url", callbackURL)
 }
 
 func (h *InternalAuthHandler) resolveMagicLinkAppURL(requestedCallbackURL string) string {
@@ -568,6 +597,24 @@ func appendURLQuery(rawURL, key, value string) string {
 	query.Set(key, value)
 	parsed.RawQuery = query.Encode()
 	return parsed.String()
+}
+
+func requestOrigin(r *http.Request) string {
+	scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+
+	return scheme + "://" + host
 }
 
 func pgUUID(id uuid.UUID) pgtype.UUID {

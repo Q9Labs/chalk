@@ -18,7 +18,11 @@ import { DebugDialog } from "../components/DebugDialog";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { createWebTokenProvider, getApiUrl } from "../lib/internalAuth";
+import {
+	createWebTokenProvider,
+	getApiUrl,
+	isLocalHost,
+} from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -84,11 +88,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 function RootComponent() {
 	// API URL for backend - use env var or default to production
 	const apiUrl = getApiUrl();
+	const apiHost = useMemo(() => new URL(apiUrl).hostname, [apiUrl]);
+	const isLocalApi = useMemo(() => isLocalHost(apiHost), [apiHost]);
 	// WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
 	// Note: Production uses separate subdomain because API Gateway doesn't support
 	// mixing HTTP and WebSocket APIs on the same custom domain
+	const configuredWsUrl = import.meta.env.VITE_WS_URL;
 	const wsUrl =
-		import.meta.env.VITE_WS_URL ||
+		(!isLocalApi && configuredWsUrl) ||
 		(apiUrl
 			? (() => {
 					const api = new URL(apiUrl);
@@ -103,7 +110,7 @@ function RootComponent() {
 			: undefined);
 
 	// Token provider: handles API key → JWT exchange and auto-refresh
-	const apiKey = import.meta.env.VITE_CHALK_API_KEY;
+	const apiKey = isLocalApi ? undefined : import.meta.env.VITE_CHALK_API_KEY;
 	const tokenProvider = useMemo(
 		() =>
 			apiKey

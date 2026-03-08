@@ -1,5 +1,31 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { verifyMagicLink } from "./internalAuth";
+import { resolveApiUrl, verifyMagicLink } from "./internalAuth";
+
+describe("resolveApiUrl", () => {
+	it("prefers localhost api when localhost is running with prod config", () => {
+		expect(resolveApiUrl("https://chalk-api.q9labs.ai", "localhost")).toBe(
+			"http://localhost:8080",
+		);
+	});
+
+	it("prefers localhost api when localhost has no explicit api url", () => {
+		expect(resolveApiUrl(undefined, "127.0.0.1")).toBe(
+			"http://localhost:8080",
+		);
+	});
+
+	it("keeps explicit local overrides", () => {
+		expect(resolveApiUrl("http://localhost:9090", "localhost")).toBe(
+			"http://localhost:9090",
+		);
+	});
+
+	it("keeps prod api on hosted origins", () => {
+		expect(resolveApiUrl("https://chalk-api.q9labs.ai", "chalk.q9labs.ai")).toBe(
+			"https://chalk-api.q9labs.ai",
+		);
+	});
+});
 
 describe("verifyMagicLink", () => {
 	afterEach(() => {

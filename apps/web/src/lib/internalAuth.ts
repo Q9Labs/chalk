@@ -10,9 +10,36 @@ type JoinContextV1 = {
 const JOIN_CONTEXT_KEY = "chalk_join_context_v1";
 const verifiedMagicLinks = new Set<string>();
 const inFlightMagicLinkVerifications = new Map<string, Promise<void>>();
+const PROD_API_URL = "https://chalk-api.q9labs.ai";
+const LOCAL_API_URL = "http://localhost:8080";
+
+export function isLocalHost(hostname: string | undefined) {
+	if (!hostname) return false;
+	const normalized = hostname.trim().toLowerCase();
+	return (
+		normalized === "localhost" ||
+		normalized === "127.0.0.1" ||
+		normalized === "::1" ||
+		normalized === "[::1]" ||
+		normalized.endsWith(".localhost")
+	);
+}
+
+export function resolveApiUrl(configuredApiUrl?: string, currentHostname?: string) {
+	const normalizedConfigured = configuredApiUrl?.trim();
+	if (isLocalHost(currentHostname)) {
+		if (!normalizedConfigured || normalizedConfigured === PROD_API_URL) {
+			return LOCAL_API_URL;
+		}
+	}
+	return normalizedConfigured || PROD_API_URL;
+}
 
 export function getApiUrl() {
-	return import.meta.env.VITE_API_URL || "https://chalk-api.q9labs.ai";
+	return resolveApiUrl(
+		import.meta.env.VITE_API_URL,
+		typeof window === "undefined" ? undefined : window.location.hostname,
+	);
 }
 
 export function getJoinContext(): JoinContextV1 | null {

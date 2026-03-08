@@ -1,8 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import z from "zod";
-import { ConferenceClient, type RoomResource } from "@q9labs/chalk-core";
-import { fetchInternalAccessToken, getApiUrl, startMagicLink, createWebTokenProvider } from "../lib/internalAuth";
+import { fetchInternalAccessToken, getApiUrl, startMagicLink } from "../lib/internalAuth";
 import { cn } from "../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { 
@@ -10,10 +9,8 @@ import {
   Calendar01Icon, 
   Clock01Icon, 
   File02Icon, 
-  ZapIcon, 
   Search01Icon,
   Database01Icon,
-  AlertCircleIcon,
   ArrowRight01Icon,
   CheckmarkCircle01Icon,
   InformationCircleIcon,
@@ -22,10 +19,8 @@ import {
 } from "@hugeicons/core-free-icons";
 import { useTheme } from "../context/theme";
 import { toast, Toaster } from "sonner";
-import { ScheduledClassesPanel } from "../features/classes/components/ScheduledClassesPanel";
 import { Badge, Button } from "@q9labs/chalk-ui";
 import { ChalkLogo } from "../components/ChalkLogo";
-import { MeetingCardIllustration } from "../components/MeetingCardIllustration";
 
 export const Route = createFileRoute("/dashboard")({
 	component: DashboardPage,
@@ -75,15 +70,8 @@ function formatDuration(seconds: number) {
 
 function DashboardPage() {
 	const apiUrl = useMemo(() => getApiUrl(), []);
-	const sdkClient = useMemo(
-		() =>
-			new ConferenceClient({
-				apiUrl,
-				tokenProvider: createWebTokenProvider(apiUrl),
-			}),
-		[apiUrl],
-	);
   const { theme, toggleTheme } = useTheme();
+  const mainRef = useRef<HTMLElement>(null);
 	const [state, setState] = useState<
 		| { kind: "loading" }
 		| { kind: "login" }
@@ -94,27 +82,7 @@ function DashboardPage() {
 	const [email, setEmail] = useState("");
 	const [emailSent, setEmailSent] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
-	const [classRooms, setClassRooms] = useState<RoomResource[]>([]);
-	const [classesLoading, setClassesLoading] = useState(false);
-	const [classesError, setClassesError] = useState<string | null>(null);
-
-	const refreshClasses = useCallback(async () => {
-		setClassesLoading(true);
-		setClassesError(null);
-		try {
-			const response = await sdkClient.listRooms({
-				status: ["scheduled", "active"],
-				limit: 100,
-				offset: 0,
-			});
-			setClassRooms(response.rooms);
-		} catch (err) {
-			setClassesError(err instanceof Error ? err.message : "Failed to load classes");
-		} finally {
-			setClassesLoading(false);
-		}
-	}, [sdkClient]);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -147,8 +115,20 @@ function DashboardPage() {
 		if (state.kind !== "ready") {
 			return;
 		}
-		void refreshClasses();
-	}, [refreshClasses, state.kind]);
+
+		const timeoutId = window.setTimeout(() => {
+			if (!mainRef.current) {
+				return;
+			}
+			mainRef.current.scrollTo({
+				left: 500 - window.innerWidth / 2 + 160,
+				top: 500 - window.innerHeight / 2,
+				behavior: "smooth",
+			});
+		}, 500);
+
+		return () => window.clearTimeout(timeoutId);
+	}, [state.kind]);
 
 	async function sendLink() {
 		setEmailSent(null);
@@ -176,17 +156,25 @@ function DashboardPage() {
 		const res = await fetch(`${apiUrl}/api/v1/recordings/${recordingId}/download`, {
 			headers: { Authorization: `Bearer ${token}` },
 		});
-		const data = (await res.json()) as any;
+		const data = (await res.json()) as {
+			download_url?: string;
+			message?: string;
+		};
 		if (res.status === 410) {
-			throw new Error(data?.message || "recording has expired");
+			throw new Error(data.message || "recording has expired");
 		}
 		if (!res.ok) throw new Error(`download failed (${res.status})`);
-		const url = data?.download_url;
-		if (typeof url !== "string" || !url) {
-			throw new Error(data?.message || "recording is not ready yet");
+		if (!data.download_url) {
+			throw new Error(data.message || "recording is not ready yet");
 		}
-		window.open(url, "_blank", "noopener,noreferrer");
+		window.open(data.download_url, "_blank", "noopener,noreferrer");
 	}
+
+  const selectedMeeting = useMemo(() => {
+    if (state.kind !== "ready") return null;
+    return state.data.meetings.find(m => m.id === selectedMeetingId);
+  }, [state, selectedMeetingId]);
+  const readyState = state.kind === "ready" ? state : null;
 
   const stats = useMemo(() => {
     if (state.kind !== "ready") return null;
@@ -194,54 +182,16 @@ function DashboardPage() {
     const totalMeetings = state.data.total;
     const totalActionItems = meetings.reduce((acc, m) => acc + (m.transcript_action_items?.length || 0), 0);
     const totalSize = meetings.reduce((acc, m) => acc + (m.size_bytes || 0), 0);
-    
-    const now = new Date();
-    const expiringSoon = meetings.filter(m => {
-      const created = new Date(m.created_at);
-      const diffDays = (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
-      return diffDays > 6 && diffDays < 7 && m.status !== "deleted";
-    }).length;
-
-    return { totalMeetings, totalActionItems, totalSize, expiringSoon };
+    return { totalMeetings, totalActionItems, totalSize };
   }, [state]);
-
-  const filteredMeetings = useMemo(() => {
-    if (state.kind !== "ready") return [];
-    if (!search) return state.data.meetings;
-    const s = search.toLowerCase();
-    return state.data.meetings.filter(m => 
-      (m.room_name || m.room_id).toLowerCase().includes(s) ||
-      m.transcript_summary?.toLowerCase().includes(s) ||
-      m.transcript_action_items?.some(ai => ai.toLowerCase().includes(s))
-    );
-  }, [state, search]);
 
 	if (state.kind === "loading") {
 		return (
 			<div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="portal-grid fixed inset-0 opacity-10" />
 				<div className="flex flex-col items-center gap-6">
-          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-					<p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground animate-pulse">Syncing Hub...</p>
-				</div>
-			</div>
-		);
-	}
-
-	if (state.kind === "error") {
-		return (
-			<div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
-				<div className="max-w-md space-y-8 bg-card p-12 rounded-[2.5rem] shadow-soft">
-          <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
-            <HugeiconsIcon icon={AlertCircleIcon} size={32} />
-          </div>
-					<h1 className="text-2xl font-black tracking-tight">Access Error</h1>
-					<p className="text-muted-foreground font-medium">{state.message}</p>
-          <Button 
-            onClick={() => window.location.reload()}
-            className="rounded-full px-10 h-12 font-bold"
-          >
-            Try Again
-          </Button>
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+					<p className="text-[10px] font-black uppercase tracking-[0.4em] text-primary animate-pulse">Syncing Portal</p>
 				</div>
 			</div>
 		);
@@ -249,280 +199,315 @@ function DashboardPage() {
 
 	if (state.kind === "login") {
 		return (
-			<div className="min-h-screen bg-background flex items-center justify-center p-6">
-				<div className="w-full max-w-lg bg-card p-12 lg:p-16 rounded-[3rem] shadow-soft space-y-12">
-					<div className="space-y-4 text-center">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mb-6">
-              <HugeiconsIcon icon={ZapIcon} size={32} />
-            </div>
-						<h1 className="text-4xl font-black tracking-tight leading-none text-foreground">Welcome Back</h1>
-						<p className="text-lg text-muted-foreground font-medium">
-							Sign in to manage your edge records.
+			<div className="min-h-screen bg-background flex items-center justify-center p-6 relative overflow-auto">
+        <div className="portal-grid fixed inset-0 opacity-10" />
+        {/* Decorative lusters */}
+        <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px]" />
+        
+				<div className="w-full max-w-md bg-card p-10 lg:p-12 rounded-[2.5rem] shadow-heavy border border-border/50 relative z-10 space-y-10">
+					<div className="space-y-3 text-center">
+            <ChalkLogo className="justify-center mb-6 scale-110" />
+						<h1 className="text-3xl font-black tracking-tight text-foreground">Sign in to Chalk</h1>
+						<p className="text-muted-foreground font-medium">
+							Authorized access only for edge records.
 						</p>
 					</div>
 
 					<div className="space-y-6">
-						<div className="space-y-3">
-							<label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-4">Authorized Email</label>
-							<input
-								className="w-full rounded-2xl border bg-secondary/50 px-6 py-4 text-lg font-bold transition-all focus:ring-8 focus:ring-primary/5 focus:border-primary outline-none"
-								placeholder="you@company.com"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
+            <div className="space-y-2">
+              <label
+                htmlFor="dashboard-email"
+                className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1"
+              >
+                Email address
+              </label>
+              <input
+                id="dashboard-email"
+                name="email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full rounded-2xl border border-border bg-secondary/30 px-6 py-4 text-base font-bold transition-all focus:ring-8 focus:ring-primary/5 focus:border-primary outline-none placeholder:text-muted-foreground/30"
+                placeholder="name@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && email.trim() && sendLink()}
-							/>
-						</div>
-
-	            <Button
-	              onClick={sendLink}
-	              size="lg"
-	              className="w-full h-16 rounded-2xl font-black text-lg shadow-xl shadow-primary/20 premium-button"
-	              disabled={!email.trim()}
-	            >
-              Get Access Link
+              />
+            </div>
+            <Button 
+              onClick={sendLink} 
+              size="lg" 
+              disabled={!email.trim()}
+              className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:shadow-2xl transition-all"
+            >
+              Get Sign-in Link
             </Button>
-
+            
             {emailSent && (
-              <div className="flex gap-4 p-6 rounded-2xl bg-primary/5 text-sm text-primary font-bold items-center border border-primary/10 animate-in fade-in zoom-in-95">
-                <HugeiconsIcon icon={InformationCircleIcon} size={20} className="shrink-0" />
-                <p>{emailSent}</p>
+              <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10 flex items-center gap-3 animate-in fade-in zoom-in-95">
+                <HugeiconsIcon icon={InformationCircleIcon} size={20} className="text-primary shrink-0" />
+                <p className="text-xs text-primary font-bold">{emailSent}</p>
               </div>
             )}
 					</div>
+
+          <div className="pt-6 border-t border-border/50 text-center">
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-50">
+              Ephemeral Security Protocol v1.0
+            </p>
+          </div>
 				</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="flex flex-col min-h-screen bg-background">
+		<div className="flex flex-col h-screen bg-background overflow-hidden relative selection:bg-primary/20">
       <Toaster position="top-right" theme={theme} />
       
-      {/* Refined Navigation Header */}
-      <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-xl border-b border-border/50">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-8">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="hover:opacity-80 transition-opacity">
-              <ChalkLogo />
-            </Link>
-            <div className="h-4 w-px bg-border hidden sm:block" />
-            <h2 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest hidden sm:block">Personal Hub</h2>
-          </div>
-          
+      {/* Background Canvas Layer */}
+      <div className="absolute inset-0 portal-grid opacity-10 pointer-events-none" />
+      
+      {/* HUD: Top Bar */}
+      <header className="relative z-50 flex h-20 items-center justify-between px-10 border-b border-white/5 bg-background/50 backdrop-blur-xl">
+        <div className="flex items-center gap-8">
+          <Link to="/" className="hover:scale-105 transition-transform">
+            <ChalkLogo className="scale-90" />
+          </Link>
+          <div className="h-4 w-px bg-white/10" />
           <div className="flex items-center gap-6">
-            <div className="relative hidden md:block group">
-              <HugeiconsIcon icon={Search01Icon} size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <div className="relative group">
+              <HugeiconsIcon icon={Search01Icon} size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <input 
+                id="dashboard-search"
+                name="dashboard-search"
                 type="text" 
-                placeholder="Find a session..." 
-                className="h-11 w-72 rounded-xl border bg-secondary/50 pl-14 pr-6 text-sm font-bold focus:bg-background focus:ring-8 focus:ring-primary/5 outline-none transition-all"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="FIND_NODE" 
+                className="h-10 w-64 rounded-full border border-white/5 bg-white/5 pl-11 pr-4 text-[10px] font-black uppercase tracking-widest focus:bg-white/10 outline-none transition-all"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <button
-							onClick={toggleTheme}
-							className="p-3 rounded-xl hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all"
-						>
-							<HugeiconsIcon icon={theme === "dark" ? Sun01Icon : Moon02Icon} size={20} />
-						</button>
-            <Link to="/" className="hidden sm:flex h-11 items-center justify-center rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all gap-2">
-              <HugeiconsIcon icon={Video01Icon} size={18} />
-              <span>New Meeting</span>
-            </Link>
           </div>
+        </div>
+        
+        <div className="flex items-center gap-6">
+          <button onClick={toggleTheme} className="p-2 text-muted-foreground hover:text-foreground transition-all">
+            <HugeiconsIcon icon={theme === "dark" ? Sun01Icon : Moon02Icon} size={20} />
+          </button>
+          <Link to="/" className="h-10 px-6 rounded-full bg-primary text-[10px] font-black uppercase tracking-widest shadow-xl glow-node flex items-center gap-2">
+            <HugeiconsIcon icon={Video01Icon} size={14} />
+            Initialize Room
+          </Link>
         </div>
       </header>
 
-			<main className="mx-auto w-full max-w-7xl p-8 lg:p-12 space-y-12 flex-1">
-				{/* Soft Analytics Header */}
-	        {stats && (
-	          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-	            {[
-	              { label: "Sessions", val: stats.totalMeetings, icon: Video01Icon },
-	              { label: "Tasks", val: stats.totalActionItems, icon: CheckmarkCircle01Icon },
-	              { label: "Storage", val: formatBytes(stats.totalSize), icon: Database01Icon },
-	              { label: "At Risk", val: stats.expiringSoon, icon: AlertCircleIcon, warn: stats.expiringSoon > 0 }
-	            ].map((s, i) => (
-	              <div key={i} className={cn(
-	                "bg-card p-8 rounded-[2rem] shadow-soft space-y-3 transition-all hover:translate-y-[-4px]",
-                s.warn && "bg-destructive/[0.02] border border-destructive/10"
-              )}>
-	                <div className="flex items-center justify-between text-muted-foreground">
-	                  <span className="text-[11px] font-black uppercase tracking-widest">{s.label}</span>
-	                  <div className={cn("p-2 rounded-lg bg-secondary/80", s.warn && "bg-destructive/10 text-destructive")}>
-	                    <HugeiconsIcon icon={s.icon} size={20} />
-	                  </div>
-	                </div>
-                <div className={cn("text-3xl font-black tracking-tight tabular-nums", s.warn && "text-destructive")}>{s.val}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-				{/* Records View */}
-        <div className="space-y-10">
-          <ScheduledClassesPanel
-            client={sdkClient}
-            rooms={classRooms}
-            isLoading={classesLoading}
-            error={classesError}
-            onRefresh={refreshClasses}
-          />
-
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* HUD: Sidebar Stats */}
+        <aside className="w-80 border-r border-white/5 bg-background/30 backdrop-blur-2xl p-8 space-y-12 overflow-y-auto z-40 shadow-2xl">
           <div className="space-y-8">
-            <div className="flex items-center justify-between">
-              <h3 className="text-3xl font-black tracking-tight flex items-center gap-4 text-foreground">
-                Recent Records
-                {search && <Badge variant="secondary" className="font-bold text-[10px] rounded-full px-3">{filteredMeetings.length} MATCHES</Badge>}
-              </h3>
+            <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">System_Overview</h2>
+            {stats && (
+              <div className="grid gap-6">
+                {[
+                  { label: "Active_Nodes", val: stats.totalMeetings, icon: Video01Icon },
+                  { label: "Intelligence", val: stats.totalActionItems, icon: CheckmarkCircle01Icon },
+                  { label: "Data_Volume", val: formatBytes(stats.totalSize), icon: Database01Icon }
+                ].map((s, i) => (
+                  <div key={i} className="glass-hud p-6 rounded-3xl space-y-2 group hover:scale-[1.02] transition-all">
+                    <div className="flex items-center justify-between opacity-50">
+                      <span className="text-[9px] font-black uppercase tracking-widest">{s.label}</span>
+                      <HugeiconsIcon icon={s.icon} size={16} className="group-hover:text-primary transition-colors" />
+                    </div>
+                    <div className="text-3xl font-black tracking-tight tabular-nums">{s.val}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-6 pt-12 border-t border-white/5">
+            <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground opacity-50">Protocols</h2>
+            <nav className="grid gap-4">
+              <a href="/docs" className="text-[10px] font-black uppercase tracking-widest hover:text-primary transition-colors flex items-center gap-3 group">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary group-hover:animate-ping" /> Documentation
+              </a>
+              <a href="#" className="text-[10px] font-black uppercase tracking-widest hover:text-primary transition-colors flex items-center gap-3 opacity-50">
+                <div className="w-1.5 h-1.5 rounded-full bg-white/20" /> API Ledger
+              </a>
+            </nav>
+          </div>
+        </aside>
+
+        {/* Main Canvas: Spatial Node Map */}
+        <main ref={mainRef} className="flex-1 relative overflow-auto bg-black/20 canvas-pan scrollbar-hide">
+          <div className="min-w-[2000px] min-h-[2000px] relative p-40">
+            {/* Ambient Heatmap Layer */}
+            <div className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-10">
+              <div className="absolute top-[400px] left-[400px] w-[600px] h-[600px] bg-primary/20 rounded-full blur-[150px] animate-pulse" />
+              <div className="absolute top-[600px] left-[800px] w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[120px]" />
             </div>
 
-            <div className="grid grid-cols-1 gap-6">
-              {filteredMeetings.map((m) => {
-                const isExpanded = expandedMeetingId === m.id;
+            {/* Dynamic Connections (SVG Lines) */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+              <defs>
+                <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {state.kind === 'ready' && state.data.meetings.slice(0, 20).map((_, i) => {
+                const angle = i * (360 / Math.min(state.data.meetings.length, 20)) * (Math.PI / 180);
+                const dist = 350 + (i % 3) * 100;
                 return (
-                  <div key={m.id} className={cn(
-                    "bg-card group relative p-10 rounded-[2.5rem] shadow-soft transition-all duration-500 overflow-hidden",
-                    isExpanded ? "ring-1 ring-primary/20 border-primary/10" : "hover:shadow-heavy"
-                  )}>
-                    <MeetingCardIllustration active={m.status === 'ready'} />
-                    <div className="relative z-10">
-                      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
-                      <div className="space-y-4 flex-1">
-                        <div className="flex flex-wrap items-center gap-4">
-                          <h4 className="text-2xl font-black tracking-tight leading-none group-hover:text-primary transition-colors">
-                            {m.room_name || `Room ${m.room_id.slice(0, 8)}`}
-                          </h4>
-                          <Badge variant={m.status === "ready" ? "default" : "secondary"} className="rounded-full px-3 text-[10px] font-black uppercase tracking-widest shadow-sm">
-                            {m.status}
-                          </Badge>
-                        </div>
-                        
-	                        <div className="flex flex-wrap items-center gap-6 text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
-	                          <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50">
-	                            <HugeiconsIcon icon={Calendar01Icon} size={14} className="text-primary" />
-	                            {new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-	                          </span>
-	                          {m.duration_seconds && (
-	                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50">
-	                              <HugeiconsIcon icon={Clock01Icon} size={14} className="text-primary" />
-	                              {formatDuration(m.duration_seconds)}
-	                            </span>
-	                          )}
-	                          {m.size_bytes && (
-	                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50">
-	                              <HugeiconsIcon icon={Database01Icon} size={14} className="text-primary" />
-	                              {formatBytes(m.size_bytes)}
-	                            </span>
-	                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 w-full lg:w-auto">
-                        <button
-                          disabled={m.status === "deleted" || m.status !== "ready"}
-                          className="flex-1 lg:flex-none h-12 px-6 rounded-xl bg-primary/10 text-primary text-[11px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all disabled:opacity-30"
-                          onClick={() => downloadRecording(m.id, state.token).then(() => toast.success("Sync complete")).catch(e => toast.error(e.message))}
-                        >
-                          Download
-                        </button>
-                        <button
-                          disabled={m.status === "deleted" || m.status !== "ready"}
-                          className="flex-1 lg:flex-none h-12 px-6 rounded-xl bg-secondary text-[11px] font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-all disabled:opacity-30"
-                          onClick={() => createShareLink(m.id, state.token).then(() => toast.success("Link copied")).catch(e => toast.error(e.message))}
-                        >
-                          Share
-                        </button>
-                        <button 
-                          onClick={() => setExpandedMeetingId(isExpanded ? null : m.id)}
-                          className="p-3.5 rounded-xl bg-secondary/50 text-muted-foreground hover:text-primary transition-all"
-                        >
-                          <HugeiconsIcon icon={ArrowRight01Icon} size={20} className={cn("transition-transform duration-500", isExpanded && "rotate-90")} />
-                        </button>
-                      </div>
-                    </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="pt-10 mt-10 border-t border-border/50 animate-in fade-in slide-in-from-top-4 duration-500 space-y-10">
-	                        {m.transcript_summary ? (
-	                          <div className="space-y-4">
-	                            <div className="text-[11px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
-	                              <HugeiconsIcon icon={File02Icon} size={16} />
-	                              Executive Summary
-	                            </div>
-                            <p className="text-xl text-muted-foreground leading-relaxed font-medium max-w-4xl">
-                              {m.transcript_summary}
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="p-8 rounded-2xl bg-secondary/30 text-muted-foreground text-sm font-bold border border-dashed text-center uppercase tracking-widest">
-                            No transcript summary generated for this session.
-                          </div>
-                        )}
-
-	                        {m.transcript_action_items && m.transcript_action_items.length > 0 && (
-	                          <div className="space-y-6">
-	                            <div className="text-[11px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
-	                              <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} />
-	                              Action Items
-	                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {m.transcript_action_items.map((item, idx) => (
-                                <div key={idx} className="p-5 rounded-2xl bg-secondary/30 flex items-center gap-5 border border-border/50">
-                                  <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-black shrink-0">
-                                    {idx + 1}
-                                  </div>
-                                  <span className="text-base font-bold text-foreground/80 leading-tight">{item}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {m.status === "deleted" && (
-                      <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] rounded-[2.5rem] flex items-center justify-center pointer-events-none z-20">
-                        <div className="bg-destructive/10 text-destructive px-8 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest border border-destructive/20 shadow-xl rotate-[-2deg]">
-                          Purged from Edge
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <line 
+                    key={i}
+                    x1="500" y1="500"
+                    x2={500 + Math.cos(angle) * dist}
+                    y2={500 + Math.sin(angle) * dist}
+                    stroke="url(#lineGrad)"
+                    strokeWidth="1"
+                    strokeDasharray="4 4"
+                    className="animate-[dash_20s_linear_infinite]"
+                  />
                 );
               })}
+            </svg>
 
-	              {filteredMeetings.length === 0 && (
-	                <div className="py-32 text-center space-y-6 bg-card rounded-[3rem] shadow-soft border border-dashed border-border/50">
-	                  <div className="mx-auto w-20 h-20 rounded-3xl bg-secondary/50 flex items-center justify-center text-muted-foreground/30">
-	                    <HugeiconsIcon icon={Video01Icon} size={40} />
-	                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-black tracking-tight">Records Empty</h3>
-                    <p className="text-lg text-muted-foreground font-medium uppercase tracking-widest text-[11px]">Launch a session to begin logging</p>
+            {/* Central Node: The Core */}
+            <div className="absolute top-[500px] left-[500px] -translate-x-1/2 -translate-y-1/2 z-20">
+              <div className="w-32 h-32 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center backdrop-blur-md">
+                <div className="w-24 h-24 rounded-full bg-primary/20 border-4 border-primary flex items-center justify-center glow-node animate-pulse shadow-[0_0_50px_rgba(27,182,166,0.4)]">
+                  <ChalkLogo showText={false} className="scale-150" />
+                </div>
+              </div>
+            </div>
+
+            {/* Meeting Nodes */}
+            {state.kind === 'ready' && state.data.meetings.map((m, i) => {
+              const angle = i * (360 / Math.min(state.data.meetings.length, 30)) * (Math.PI / 180);
+              const dist = 350 + (i % 3) * 100;
+              const x = 500 + Math.cos(angle) * dist;
+              const y = 500 + Math.sin(angle) * dist;
+              const isSelected = selectedMeetingId === m.id;
+
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedMeetingId(m.id)}
+                  className={cn(
+                    "absolute -translate-x-1/2 -translate-y-1/2 z-30 transition-all duration-700 group",
+                    isSelected ? "scale-150 z-40" : "hover:scale-110"
+                  )}
+                  style={{ left: x, top: y }}
+                >
+                  <div className={cn(
+                    "w-16 h-16 rounded-[2rem] glass-hud flex items-center justify-center transition-all duration-500 relative",
+                    isSelected ? "border-primary bg-primary/30 glow-node scale-110" : "group-hover:border-primary/50"
+                  )}>
+                    {/* Activity Indicator */}
+                    {m.status === 'ready' && (
+                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-4 border-background animate-pulse shadow-lg" />
+                    )}
+                    <HugeiconsIcon
+                      icon={Video01Icon}
+                      size={24}
+                      className={cn(isSelected ? "text-white" : "text-muted-foreground group-hover:text-primary transition-colors")}
+                    />
+                  </div>
+                  <div className={cn(
+                    "absolute top-full mt-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-2 rounded-full glass-hud text-[10px] font-black uppercase tracking-widest transition-all",
+                    isSelected ? "opacity-100 translate-y-0 scale-75" : "opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 scale-75"
+                  )}>
+                    {m.room_name || `NODE_${m.room_id.slice(0, 6)}`}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </main>
+
+        {/* Floating Intel HUD (Right Side) */}
+        {selectedMeeting && readyState && (
+          <div className="absolute right-10 top-32 w-[450px] max-h-[75vh] glass-hud rounded-[3.5rem] p-12 z-50 overflow-y-auto animate-in slide-in-from-right-20 fade-in duration-700 shadow-[0_0_120px_rgba(0,0,0,0.6)] border-white/20">
+            <button onClick={() => setSelectedMeetingId(null)} className="absolute top-10 right-10 p-2 rounded-full hover:bg-white/10 transition-all text-muted-foreground hover:text-foreground">
+              <HugeiconsIcon icon={ArrowRight01Icon} size={24} className="rotate-180" />
+            </button>
+            
+            <div className="space-y-12">
+              <div className="space-y-6">
+                <Badge className={cn(
+                  "rounded-full px-4 py-1 text-[10px] font-black uppercase tracking-[0.2em] border shadow-sm",
+                  selectedMeeting.status === 'ready' ? "bg-primary/20 text-primary border-primary/30" : "bg-white/5 text-muted-foreground border-white/10"
+                )}>{selectedMeeting.status}</Badge>
+                <h3 className="text-4xl font-black tracking-tighter uppercase italic leading-none">{selectedMeeting.room_name || 'UNNAMED_SESSION'}</h3>
+                <div className="flex gap-8 text-[11px] font-black text-muted-foreground uppercase tracking-widest opacity-60">
+                  <span className="flex items-center gap-2.5"><HugeiconsIcon icon={Calendar01Icon} size={14} className="text-primary" /> {new Date(selectedMeeting.created_at).toLocaleDateString()}</span>
+                  <span className="flex items-center gap-2.5"><HugeiconsIcon icon={Clock01Icon} size={14} className="text-primary" /> {formatDuration(selectedMeeting.duration_seconds || 0)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-6 pt-10 border-t border-white/5">
+                <div className="text-[10px] font-black text-primary uppercase tracking-[0.5em] flex items-center gap-3">
+                  <HugeiconsIcon icon={File02Icon} size={16} /> Intel_Summary
+                </div>
+                <p className="text-xl font-bold text-foreground/90 leading-relaxed italic">
+                  "{selectedMeeting.transcript_summary || 'Analysis in progress for this session node.'}"
+                </p>
+              </div>
+
+              {selectedMeeting.transcript_action_items && selectedMeeting.transcript_action_items.length > 0 && (
+                <div className="space-y-8 pt-10 border-t border-white/5">
+                  <div className="text-[10px] font-black text-primary uppercase tracking-[0.5em] flex items-center gap-3">
+                    <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} /> Action_Ledger
+                  </div>
+                  <div className="grid gap-4">
+                    {selectedMeeting.transcript_action_items.map((item, idx) => (
+                      <div key={idx} className="p-5 rounded-2xl bg-white/[0.03] border border-white/5 text-sm font-bold text-foreground/80 flex items-start gap-4 hover:bg-white/[0.05] transition-all">
+                        <div className="w-5 h-5 rounded-lg bg-primary/20 text-primary flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{idx + 1}</div>
+                        <span className="uppercase tracking-tight leading-tight">{item}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
+
+              <div className="pt-12 flex gap-5">
+                <Button
+                  size="lg"
+                  className="flex-1 h-16 rounded-full font-black uppercase tracking-widest text-[11px] glow-node shadow-2xl"
+                  disabled={selectedMeeting.status !== "ready"}
+                  onClick={() =>
+                    downloadRecording(selectedMeeting.id, readyState.token)
+                      .then(() => toast.success("Download ready"))
+                      .catch((error) => toast.error(error.message))
+                  }
+                >
+                  Download Session
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="flex-1 h-16 rounded-full font-black uppercase tracking-widest text-[11px] glass-hud"
+                  disabled={selectedMeeting.status !== "ready"}
+                  onClick={() =>
+                    createShareLink(selectedMeeting.id, readyState.token)
+                      .then(() => toast.success("Link copied"))
+                      .catch((error) => toast.error(error.message))
+                  }
+                >
+                  Access Link
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-			</main>
-
-      <footer className="py-16 px-12 border-t border-border/50 bg-secondary/10">
-        <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-10 text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <HugeiconsIcon icon={ZapIcon} size={16} className="text-primary animate-pulse" />
-            <span>&copy; {new Date().getFullYear()} Chalk Edge Network</span>
-          </div>
-          <div className="flex items-center gap-10">
-            <a href="#" className="hover:text-primary transition-all">Support</a>
-            <a href="#" className="hover:text-primary transition-all">Security</a>
-            <a href="#" className="hover:text-primary transition-all">Status</a>
-          </div>
-        </div>
-      </footer>
+        )}
+      </div>
 		</div>
 	);
 }
