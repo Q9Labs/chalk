@@ -1,65 +1,94 @@
-import { describe, expect, it, vi } from "bun:test";
-import { render } from "@testing-library/react";
-import { ScreenAnnotationsLayer } from "../../components/composite/screen-annotations/ScreenAnnotationsLayer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { fireEvent, render } from "@testing-library/react";
 
-const requestSync = vi.fn();
-const startSession = vi.fn();
-const noop = vi.fn();
-const items: [] = [];
-const cursors: [] = [];
-const annotationsState = {
+const createParticipantsState = () => ({
+  localParticipant: { id: "local", role: "host" as const },
+});
+
+const createScreenShareState = () => ({
+  isActive: true,
+  isStarting: false,
+  isLocalSharing: true,
+  sharerParticipantId: "local",
+  videoTrack: null,
+  audioTrack: null,
+  start: vi.fn(),
+  stop: vi.fn(),
+  toggle: vi.fn(),
+});
+
+const createAnnotationsState = () => ({
   accessMode: "all" as const,
-  canDraw: true,
-  clear: noop,
-  close: noop,
-  cursors,
-  isOpen: true,
-  isSessionActive: true,
-  items,
-  open: noop,
-  sharerParticipantId: "local-participant",
-  startSession,
-  replaceItems: noop,
-  requestSync,
-  sendCursor: noop,
-  setAccessMode: noop,
-};
+  canDraw: false,
+  clear: vi.fn(),
+  close: vi.fn(),
+  cursors: [],
+  isOpen: false,
+  isSessionActive: false,
+  items: [],
+  lastSeq: 0,
+  open: vi.fn(),
+  replaceItems: vi.fn(),
+  requestSync: vi.fn(),
+  sendCursor: vi.fn(),
+  setAccessMode: vi.fn(),
+  shareSessionId: null,
+  sharerParticipantId: null,
+  startSession: vi.fn(),
+  toggle: vi.fn(),
+});
+
+let participantsState = createParticipantsState();
+let screenShareState = createScreenShareState();
+let annotationsState = createAnnotationsState();
 
 vi.mock("../../hooks/participants/useParticipants", () => ({
-  useParticipants: () => ({
-    localParticipant: {
-      id: "local-participant",
-      role: "host",
-    },
-  }),
+  useParticipants: () => participantsState,
 }));
 
 vi.mock("../../hooks/stream/useScreenShare", () => ({
-  useScreenShare: () => ({
-    isActive: true,
-    isLocalSharing: true,
-  }),
+  useScreenShare: () => screenShareState,
 }));
 
 vi.mock("../../hooks/features/useScreenAnnotations", () => ({
   useScreenAnnotations: () => annotationsState,
 }));
 
-vi.mock("../../components/composite/screen-annotations/ScreenAnnotationsSvg", () => ({
-  ScreenAnnotationsSvg: () => <div data-testid="annotations-svg" />,
-}));
-
-vi.mock("../../components/composite/screen-annotations/ScreenAnnotationsToolbar", () => ({
-  ScreenAnnotationsToolbar: () => <div data-testid="annotations-toolbar" />,
-}));
+import { ScreenAnnotationsLayer } from "../../components/composite/screen-annotations/ScreenAnnotationsLayer";
 
 describe("ScreenAnnotationsLayer", () => {
-  it("does not request sync for an already-active local annotation session", () => {
-    requestSync.mockClear();
-    startSession.mockClear();
-    render(<ScreenAnnotationsLayer enabled={true} />);
+  beforeEach(() => {
+    participantsState = createParticipantsState();
+    screenShareState = createScreenShareState();
+    annotationsState = createAnnotationsState();
+  });
 
-    expect(requestSync).not.toHaveBeenCalled();
-    expect(startSession).not.toHaveBeenCalled();
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("starts the local annotation session immediately when the sharer opens the toolbar", () => {
+    const { getByText } = render(<ScreenAnnotationsLayer enabled />);
+
+    fireEvent.click(getByText("Annotate"));
+
+    expect(annotationsState.startSession).toHaveBeenCalledTimes(1);
+    expect(annotationsState.requestSync).not.toHaveBeenCalled();
+    expect(annotationsState.open).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not request sync while the local sharer already owns the active session", () => {
+    annotationsState = {
+      ...annotationsState,
+      canDraw: true,
+      isOpen: true,
+      isSessionActive: true,
+      shareSessionId: "share-1",
+      sharerParticipantId: "local",
+    };
+
+    render(<ScreenAnnotationsLayer enabled />);
+
+    expect(annotationsState.requestSync).not.toHaveBeenCalled();
   });
 });
