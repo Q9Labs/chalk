@@ -465,8 +465,17 @@ function MeetingRoomBase({
 					enableWhiteboard={enableWhiteboard}
 					enableTranscription={enableTranscription}
 					enableChat={enableChat}
+					audioInputDevices={audioInputDevices}
+					audioOutputDevices={audioOutputDevices}
+					videoInputDevices={videoInputDevices}
+					selectedAudioInput={selectedAudioInput ?? settings.audio.selectedInput}
+					selectedAudioOutput={selectedAudioOutput ?? settings.audio.selectedOutput}
+					selectedVideoInput={selectedVideoInput ?? settings.video.selectedInput}
 					onToggleMute={onToggleMute}
 					onToggleVideo={onToggleVideo}
+					onAudioInputChange={handleAudioInputPreference}
+					onAudioOutputChange={handleAudioOutputPreference}
+					onVideoInputChange={handleVideoInputPreference}
 					onToggleScreenShare={onToggleScreenShare}
 					onToggleRecording={onToggleRecording}
 					onToggleHandRaise={onToggleHandRaise}

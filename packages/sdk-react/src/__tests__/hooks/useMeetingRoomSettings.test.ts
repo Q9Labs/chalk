@@ -73,4 +73,34 @@ describe("useMeetingRoomSettings", () => {
 		expect(result.current.settings.appearance.showFilmstrip).toBe(false);
 		expect(result.current.settings.appearance.layout).toBe("spotlight");
 	});
+
+	it("drops malformed stored settings and falls back to defaults", () => {
+		localStorage.setItem(
+			"chalk-meeting-settings",
+			JSON.stringify({
+				version: 2,
+				audio: "bad-shape",
+				appearance: {
+					layout: "broken-layout",
+				},
+				experience: null,
+			}),
+		);
+
+		const { result } = renderHook(() =>
+			useMeetingRoomSettings({
+				defaults: {
+					appearance: {
+						layout: "grid",
+						theme: "system",
+					},
+				},
+			}),
+		);
+
+		expect(result.current.settings.audio.outputVolume).toBe(100);
+		expect(result.current.settings.audio.selectedInput).toBeUndefined();
+		expect(result.current.settings.appearance.layout).toBe("grid");
+		expect(result.current.settings.experience.showInviteToast).toBe(true);
+	});
 });

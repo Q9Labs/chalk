@@ -27,12 +27,124 @@ export interface MeetingRoomSettings {
 	};
 }
 
+interface StoredMeetingRoomSettings {
+	version: number;
+	audio?: Partial<MeetingRoomSettings["audio"]>;
+	video?: Partial<MeetingRoomSettings["video"]>;
+	appearance?: Partial<MeetingRoomSettings["appearance"]>;
+	experience?: Partial<MeetingRoomSettings["experience"]>;
+}
+
 interface UseMeetingRoomSettingsOptions {
-	defaults?: Partial<Omit<MeetingRoomSettings, "version">>;
+	defaults?: Omit<StoredMeetingRoomSettings, "version">;
 }
 
 const SETTINGS_KEY = "chalk-meeting-settings";
 const SETTINGS_VERSION = 2;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function withDefined<T extends Record<string, unknown>>(value: T) {
+	return Object.fromEntries(
+		Object.entries(value).filter(([, entry]) => entry !== undefined),
+	) as Partial<T>;
+}
+
+function sanitizeStoredSettings(
+	value: unknown,
+): StoredMeetingRoomSettings | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	const version = value.version;
+	if (version !== SETTINGS_VERSION) {
+		return null;
+	}
+
+	const audio = isRecord(value.audio) ? value.audio : undefined;
+	const video = isRecord(value.video) ? value.video : undefined;
+	const appearance = isRecord(value.appearance) ? value.appearance : undefined;
+	const experience = isRecord(value.experience) ? value.experience : undefined;
+
+	return {
+		version,
+		audio: audio
+			? withDefined({
+					selectedInput:
+						typeof audio.selectedInput === "string"
+							? audio.selectedInput
+							: undefined,
+					selectedOutput:
+						typeof audio.selectedOutput === "string"
+							? audio.selectedOutput
+							: undefined,
+					outputVolume:
+						typeof audio.outputVolume === "number"
+							? audio.outputVolume
+							: undefined,
+					noiseSuppression:
+						typeof audio.noiseSuppression === "boolean"
+							? audio.noiseSuppression
+							: undefined,
+				})
+			: undefined,
+		video: video
+			? withDefined({
+					selectedInput:
+						typeof video.selectedInput === "string"
+							? video.selectedInput
+							: undefined,
+				})
+			: undefined,
+		appearance: appearance
+			? withDefined({
+					theme:
+						appearance.theme === "light" ||
+						appearance.theme === "dark" ||
+						appearance.theme === "system"
+							? appearance.theme
+							: undefined,
+					layout:
+						appearance.layout === "grid" ||
+						appearance.layout === "spotlight" ||
+						appearance.layout === "sidebar"
+							? appearance.layout
+							: undefined,
+					showFilmstrip:
+						typeof appearance.showFilmstrip === "boolean"
+							? appearance.showFilmstrip
+							: undefined,
+					reducedMotion:
+						typeof appearance.reducedMotion === "boolean"
+							? appearance.reducedMotion
+							: undefined,
+				})
+			: undefined,
+		experience: experience
+			? withDefined({
+					showInviteToast:
+						typeof experience.showInviteToast === "boolean"
+							? experience.showInviteToast
+							: undefined,
+					defaultOpenChat:
+						typeof experience.defaultOpenChat === "boolean"
+							? experience.defaultOpenChat
+							: undefined,
+					defaultOpenParticipants:
+						typeof experience.defaultOpenParticipants === "boolean"
+							? experience.defaultOpenParticipants
+							: undefined,
+					defaultOpenTranscription:
+						typeof experience.defaultOpenTranscription === "boolean"
+							? experience.defaultOpenTranscription
+							: undefined,
+				})
+			: undefined,
+	};
+}
 
 const createDefaultSettings = (
 	defaults?: UseMeetingRoomSettingsOptions["defaults"],
@@ -64,7 +176,7 @@ const createDefaultSettings = (
 
 const mergeSettings = (
 	base: MeetingRoomSettings,
-	stored: Partial<MeetingRoomSettings> | null,
+	stored: StoredMeetingRoomSettings | null,
 ): MeetingRoomSettings => {
 	if (!stored || stored.version !== SETTINGS_VERSION) {
 		return base;
@@ -98,9 +210,14 @@ export function useMeetingRoomSettings({
 
 			return mergeSettings(
 				baseSettings,
-				JSON.parse(stored) as Partial<MeetingRoomSettings>,
+				sanitizeStoredSettings(JSON.parse(stored)),
 			);
 		} catch {
+			try {
+				localStorage.removeItem(SETTINGS_KEY);
+			} catch {
+				// Ignore storage cleanup failures.
+			}
 			return baseSettings;
 		}
 	});

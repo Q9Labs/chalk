@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'bun:test';
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, within } from '@testing-library/react';
 import { MeetingRoom } from '../../components/full/MeetingRoom';
 
 // Mock everything
@@ -130,9 +130,10 @@ describe('MeetingRoom', () => {
     );
 
     fireEvent.click(getByRole('button', { name: 'Settings' }));
+    const dialog = getByRole('dialog', { name: 'Meeting settings' });
     expect(getByLabelText('Search settings')).toBeDefined();
-    fireEvent.click(getByText('Microphone 1'));
-    fireEvent.click(getByText('Microphone 2'));
+    fireEvent.click(within(dialog).getByText('Microphone 1'));
+    fireEvent.click(within(dialog).getByText('Microphone 2'));
     expect(onAudioInputChange).toHaveBeenCalledWith('mic-2');
   });
 });
