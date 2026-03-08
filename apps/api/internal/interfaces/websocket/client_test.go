@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -439,6 +440,153 @@ func TestClient_handleMessage_WhiteboardClose(t *testing.T) {
 	assert.NotPanics(t, func() {
 		client.handleMessage(msg)
 	})
+}
+
+func TestClient_handleMessage_AnnotationSessionStart(t *testing.T) {
+	hub := newTestHub()
+	roomID := uuid.New()
+	participantID := uuid.New()
+	client := NewClient(nil, hub, roomID, participantID, uuid.New())
+	hub.SetParticipantMetadata(participantID, domain.ParticipantMetadata{
+		DisplayName: "Sharer",
+		Role:        "participant",
+		JoinedAt:    time.Now(),
+	})
+
+	msg := &Message{
+		Type: MessageTypeAnnotationSessionStart,
+		Payload: json.RawMessage(`{
+			"share_session_id":"share-1",
+			"sharer_participant_id":"` + participantID.String() + `",
+			"access_mode":"all"
+		}`),
+	}
+
+	client.handleMessage(msg)
+
+	snapshot, ok := hub.GetScreenAnnotationSnapshot(roomID)
+	require.True(t, ok)
+	assert.Equal(t, "share-1", snapshot.ShareSessionID)
+	assert.Equal(t, participantID, snapshot.SharerParticipantID)
+}
+
+func TestClient_handleMessage_AnnotationUpdate_ForbiddenWhenAccessOff(t *testing.T) {
+	hub := newTestHub()
+	roomID := uuid.New()
+	sharerID := uuid.New()
+	participantID := uuid.New()
+	client := NewClient(nil, hub, roomID, participantID, uuid.New())
+	hub.SetParticipantMetadata(participantID, domain.ParticipantMetadata{
+		DisplayName: "Participant",
+		Role:        "participant",
+		JoinedAt:    time.Now(),
+	})
+	hub.StartScreenAnnotationSession(roomID, AnnotationSessionStartPayload{
+		ShareSessionID:      "share-1",
+		SharerParticipantID: sharerID,
+		AccessMode:          AnnotationAccessModeOff,
+	})
+
+	msg := &Message{
+		Type: MessageTypeAnnotationUpdate,
+		Payload: json.RawMessage(`{
+			"share_session_id":"share-1",
+			"sharer_participant_id":"` + sharerID.String() + `",
+			"sync_all":false,
+			"items":[],
+			"seq":1
+		}`),
+	}
+
+	client.handleMessage(msg)
+
+	select {
+	case raw := <-client.send:
+		var envelope Message
+		require.NoError(t, json.Unmarshal(raw, &envelope))
+		assert.Equal(t, MessageTypeError, envelope.Type)
+
+		var payload ErrorPayload
+		require.NoError(t, json.Unmarshal(envelope.Payload, &payload))
+		assert.Equal(t, "forbidden", payload.Code)
+	default:
+		t.Fatal("expected forbidden error message")
+	}
+}
+
+func TestClient_handleMessage_AnnotationUpdate_StaleSessionHealsWithSnapshot(t *testing.T) {
+	hub := newTestHub()
+	roomID := uuid.New()
+	sharerID := uuid.New()
+	client := NewClient(nil, hub, roomID, sharerID, uuid.New())
+	hub.SetParticipantMetadata(sharerID, domain.ParticipantMetadata{
+		DisplayName: "Sharer",
+		Role:        "participant",
+		JoinedAt:    time.Now(),
+	})
+	hub.StartScreenAnnotationSession(roomID, AnnotationSessionStartPayload{
+		ShareSessionID:      "share-current",
+		SharerParticipantID: sharerID,
+		AccessMode:          AnnotationAccessModeAll,
+	})
+
+	msg := &Message{
+		Type: MessageTypeAnnotationUpdate,
+		Payload: json.RawMessage(`{
+			"share_session_id":"share-stale",
+			"sharer_participant_id":"` + sharerID.String() + `",
+			"sync_all":false,
+			"items":[],
+			"seq":1
+		}`),
+	}
+
+	client.handleMessage(msg)
+
+	select {
+	case raw := <-client.send:
+		var envelope Message
+		require.NoError(t, json.Unmarshal(raw, &envelope))
+		assert.Equal(t, MessageTypeAnnotationSnapshot, envelope.Type)
+
+		var payload AnnotationSnapshotPayload
+		require.NoError(t, json.Unmarshal(envelope.Payload, &payload))
+		assert.Equal(t, "share-current", payload.ShareSessionID)
+	default:
+		t.Fatal("expected annotation snapshot")
+	}
+}
+
+func TestClient_handleMessage_AnnotationAccessSet_HostOnly(t *testing.T) {
+	hub := newTestHub()
+	roomID := uuid.New()
+	sharerID := uuid.New()
+	hostID := uuid.New()
+	hostClient := NewClient(nil, hub, roomID, hostID, uuid.New())
+	hub.SetParticipantMetadata(hostID, domain.ParticipantMetadata{
+		DisplayName: "Host",
+		Role:        "host",
+		JoinedAt:    time.Now(),
+	})
+	hub.StartScreenAnnotationSession(roomID, AnnotationSessionStartPayload{
+		ShareSessionID:      "share-1",
+		SharerParticipantID: sharerID,
+		AccessMode:          AnnotationAccessModeAll,
+	})
+
+	msg := &Message{
+		Type: MessageTypeAnnotationAccessSet,
+		Payload: json.RawMessage(`{
+			"share_session_id":"share-1",
+			"access_mode":"sharer_only"
+		}`),
+	}
+
+	hostClient.handleMessage(msg)
+
+	state := hub.getOrRestoreScreenAnnotationState(roomID)
+	require.NotNil(t, state)
+	assert.Equal(t, AnnotationAccessModeSharerOnly, state.AccessMode)
 }
 
 func TestClient_handleMessage_UnknownType(t *testing.T) {

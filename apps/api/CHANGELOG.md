@@ -7,6 +7,7 @@
 - **Debug diagnostics endpoints**: Add `GET /api/v1/debug/auth` (token/server/build introspection) and `HEAD /api/v1/debug/ping` (latency probe) for client System Health.
 - **Room scheduling endpoint**: Add `POST /api/v1/rooms/schedule` to create scheduled rooms with `scheduled_start_at`, optional `scheduled_end_at`, and per-room `allow_early_join_minutes`.
 - **Durable room chat endpoints**: Add room-scoped chat attachment upload/download endpoints plus durable message/read-receipt persistence for in-room chat.
+- **Screen annotation room state**: Add websocket `annotation.*` protocol handlers, persisted `rooms.screen_annotation_state`, and host/sharer access enforcement for live shared-screen annotations.
 
 ### Changed
 

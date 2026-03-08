@@ -391,6 +391,20 @@ func (c *Client) handleMessage(msg *Message) {
 		c.handleWhiteboardOpen()
 	case MessageTypeWhiteboardClose:
 		c.handleWhiteboardClose()
+	case MessageTypeAnnotationSessionStart:
+		c.handleAnnotationSessionStart(msg)
+	case MessageTypeAnnotationSessionEnd:
+		c.handleAnnotationSessionEnd(msg)
+	case MessageTypeAnnotationSync:
+		c.handleAnnotationSync(msg)
+	case MessageTypeAnnotationUpdate:
+		c.handleAnnotationUpdate(msg)
+	case MessageTypeAnnotationClear:
+		c.handleAnnotationClear(msg)
+	case MessageTypeAnnotationCursor:
+		c.handleAnnotationCursor(msg)
+	case MessageTypeAnnotationAccessSet:
+		c.handleAnnotationAccessSet(msg)
 	case MessageTypeTranscript:
 		c.handleTranscript(msg)
 	default:
@@ -471,10 +485,10 @@ func (c *Client) handleChatRead(msg *Message) {
 		messageIDs := make([]uuid.UUID, 0, len(update.MessageIDs))
 		messageIDs = append(messageIDs, update.MessageIDs...)
 		readMsg, _ := NewMessage(MessageTypeChatRead, ChatReadPayloadOut{
-			MessageIDs:     messageIDs,
-			ParticipantID:  update.ReaderParticipant,
-			DisplayName:    update.ReaderName,
-			ReadAt:         update.ReadAt,
+			MessageIDs:    messageIDs,
+			ParticipantID: update.ReaderParticipant,
+			DisplayName:   update.ReaderName,
+			ReadAt:        update.ReadAt,
 		})
 		readData, _ := json.Marshal(readMsg)
 		c.hub.FanoutChatReadUpdate(c.roomID, update.SenderIdentityKey, readData)
@@ -556,6 +570,31 @@ func (c *Client) requireWhiteboardDrawAccess() bool {
 	}
 	c.sendErrorMessage("forbidden", "You do not have whiteboard draw permissions")
 	return false
+}
+
+func (c *Client) requireAnnotationState(shareSessionID string) (*ScreenAnnotationState, bool) {
+	state := c.hub.getOrRestoreScreenAnnotationState(c.roomID)
+	if state == nil || state.ShareSessionID == "" {
+		c.sendAnnotationSessionEnded(shareSessionID)
+		return nil, false
+	}
+	if shareSessionID != "" && shareSessionID != state.ShareSessionID {
+		c.sendAnnotationSnapshot()
+		return nil, false
+	}
+	return state, true
+}
+
+func (c *Client) requireAnnotationDrawAccess(shareSessionID string) (*ScreenAnnotationState, bool) {
+	state, ok := c.requireAnnotationState(shareSessionID)
+	if !ok {
+		return nil, false
+	}
+	if c.hub.CanParticipantAnnotate(c.roomID, c.participantID) {
+		return state, true
+	}
+	c.sendErrorMessage("forbidden", "You do not have screen annotation permissions")
+	return nil, false
 }
 
 // handleWhiteboardUpdate processes a whiteboard update and broadcasts it
@@ -769,6 +808,205 @@ func (c *Client) handleWhiteboardClose() {
 
 	msgData, _ := json.Marshal(closedMsg)
 	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
+}
+
+func (c *Client) handleAnnotationSessionStart(msg *Message) {
+	var payload AnnotationSessionStartPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse annotation session start")
+		return
+	}
+	if payload.ShareSessionID == "" || payload.SharerParticipantID == uuid.Nil {
+		c.sendErrorMessage("invalid_payload", "share_session_id and sharer_participant_id are required")
+		return
+	}
+	if payload.SharerParticipantID != c.participantID {
+		c.sendErrorMessage("forbidden", "Only the sharer can start screen annotations")
+		return
+	}
+
+	started := c.hub.StartScreenAnnotationSession(c.roomID, payload)
+	startedMsg, _ := NewMessage(MessageTypeAnnotationSessionStarted, started)
+	msgData, _ := json.Marshal(startedMsg)
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
+}
+
+func (c *Client) handleAnnotationSessionEnd(msg *Message) {
+	var payload AnnotationSessionEndPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse annotation session end")
+		return
+	}
+	state, ok := c.requireAnnotationState(payload.ShareSessionID)
+	if !ok {
+		return
+	}
+	if c.participantID != state.SharerParticipantID && !c.hub.isHostParticipant(c.participantID) {
+		c.sendErrorMessage("forbidden", "Only the sharer or host can end screen annotations")
+		return
+	}
+	if !c.hub.EndScreenAnnotationSession(c.roomID, payload.ShareSessionID) {
+		c.sendAnnotationSnapshot()
+		return
+	}
+
+	endedMsg, _ := NewMessage(MessageTypeAnnotationSessionEnded, AnnotationSessionEndedPayload{
+		ShareSessionID: payload.ShareSessionID,
+		Timestamp:      time.Now(),
+	})
+	msgData, _ := json.Marshal(endedMsg)
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
+}
+
+func (c *Client) handleAnnotationSync(msg *Message) {
+	var payload AnnotationSessionEndPayload
+	_ = msg.UnmarshalPayload(&payload)
+	if payload.ShareSessionID != "" {
+		if _, ok := c.requireAnnotationState(payload.ShareSessionID); !ok {
+			return
+		}
+	}
+	c.sendAnnotationSnapshot()
+}
+
+func (c *Client) handleAnnotationUpdate(msg *Message) {
+	var payload AnnotationUpdatePayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse annotation update")
+		return
+	}
+	if payload.ShareSessionID == "" || payload.SharerParticipantID == uuid.Nil {
+		c.sendErrorMessage("invalid_payload", "share_session_id and sharer_participant_id are required")
+		return
+	}
+	if _, ok := c.requireAnnotationDrawAccess(payload.ShareSessionID); !ok {
+		return
+	}
+	if !c.hub.UpdateScreenAnnotationState(c.roomID, payload) {
+		c.sendAnnotationSnapshot()
+		return
+	}
+
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+	dataMsg, _ := NewMessage(MessageTypeAnnotationData, AnnotationDataPayload{
+		ShareSessionID:      payload.ShareSessionID,
+		SharerParticipantID: payload.SharerParticipantID,
+		ParticipantID:       c.participantID,
+		DisplayName:         meta.DisplayName,
+		SyncAll:             payload.SyncAll,
+		Items:               payload.Items,
+		Seq:                 payload.Seq,
+		Timestamp:           time.Now(),
+	})
+	msgData, _ := json.Marshal(dataMsg)
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, c.participantID.String())
+}
+
+func (c *Client) handleAnnotationClear(msg *Message) {
+	var payload AnnotationClearPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse annotation clear")
+		return
+	}
+	state, ok := c.requireAnnotationDrawAccess(payload.ShareSessionID)
+	if !ok {
+		return
+	}
+
+	seq := time.Now().UnixMilli()
+	if !c.hub.ClearScreenAnnotationState(c.roomID, payload.ShareSessionID, seq) {
+		c.sendAnnotationSnapshot()
+		return
+	}
+
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+	dataMsg, _ := NewMessage(MessageTypeAnnotationData, AnnotationDataPayload{
+		ShareSessionID:      state.ShareSessionID,
+		SharerParticipantID: state.SharerParticipantID,
+		ParticipantID:       c.participantID,
+		DisplayName:         meta.DisplayName,
+		SyncAll:             true,
+		Items:               json.RawMessage("[]"),
+		Seq:                 seq,
+		Timestamp:           time.Now(),
+	})
+	msgData, _ := json.Marshal(dataMsg)
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
+}
+
+func (c *Client) handleAnnotationCursor(msg *Message) {
+	var payload AnnotationCursorSendPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		return
+	}
+	if _, ok := c.requireAnnotationDrawAccess(payload.ShareSessionID); !ok {
+		return
+	}
+
+	meta := c.hub.GetParticipantMetadata(c.participantID)
+	cursorMsg, _ := NewMessage(MessageTypeAnnotationCursor, AnnotationCursorPayload{
+		ShareSessionID: payload.ShareSessionID,
+		ParticipantID:  c.participantID,
+		DisplayName:    meta.DisplayName,
+		Tool:           payload.Tool,
+		X:              payload.X,
+		Y:              payload.Y,
+		Timestamp:      time.Now(),
+	})
+	msgData, _ := json.Marshal(cursorMsg)
+	c.hub.FanoutToRoomVolatile(c.roomID, msgData, c.participantID.String())
+}
+
+func (c *Client) handleAnnotationAccessSet(msg *Message) {
+	if !c.hub.isHostParticipant(c.participantID) {
+		c.sendErrorMessage("forbidden", "Only hosts can change annotation access")
+		return
+	}
+
+	var payload AnnotationAccessSetPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse annotation access")
+		return
+	}
+	if _, ok := c.requireAnnotationState(payload.ShareSessionID); !ok {
+		return
+	}
+
+	accessMode, ok := c.hub.SetScreenAnnotationAccessMode(c.roomID, payload.ShareSessionID, payload.AccessMode)
+	if !ok {
+		c.sendAnnotationSnapshot()
+		return
+	}
+
+	changeMsg, _ := NewMessage(MessageTypeAnnotationAccessChanged, AnnotationAccessChangedPayload{
+		ShareSessionID: payload.ShareSessionID,
+		AccessMode:     accessMode,
+		ChangedBy:      c.participantID,
+		Timestamp:      time.Now(),
+	})
+	msgData, _ := json.Marshal(changeMsg)
+	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
+}
+
+func (c *Client) sendAnnotationSnapshot() {
+	payload, ok := c.hub.GetScreenAnnotationSnapshot(c.roomID)
+	if !ok {
+		c.sendAnnotationSessionEnded("")
+		return
+	}
+
+	snapshot, _ := NewMessage(MessageTypeAnnotationSnapshot, payload)
+	data, _ := json.Marshal(snapshot)
+	c.SendReliable(data)
+}
+
+func (c *Client) sendAnnotationSessionEnded(shareSessionID string) {
+	ended, _ := NewMessage(MessageTypeAnnotationSessionEnded, AnnotationSessionEndedPayload{
+		ShareSessionID: shareSessionID,
+		Timestamp:      time.Now(),
+	})
+	data, _ := json.Marshal(ended)
+	c.SendReliable(data)
 }
 
 // handleTranscript persists a transcript from the client SDK

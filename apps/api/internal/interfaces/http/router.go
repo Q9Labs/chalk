@@ -101,6 +101,7 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	wsHub := websocket.NewHub(cfg.RedisClient, slog.Default())
 	wsHub.SetWhiteboardStateStore(&whiteboardStateStoreAdapter{queries: queries})
+	wsHub.SetScreenAnnotationStateStore(&screenAnnotationStateStoreAdapter{queries: queries})
 	go wsHub.Run(context.Background())
 
 	roomState := redis.NewRoomState(cfg.RedisClient)
@@ -200,6 +201,18 @@ func (a *whiteboardStateStoreAdapter) Load(ctx context.Context, roomID uuid.UUID
 	return a.queries.GetRoomWhiteboardState(ctx, roomID)
 }
 
+type screenAnnotationStateStoreAdapter struct {
+	queries *db.Queries
+}
+
+func (a *screenAnnotationStateStoreAdapter) Save(ctx context.Context, roomID uuid.UUID, state []byte) error {
+	return a.queries.UpdateRoomScreenAnnotationState(ctx, roomID, state)
+}
+
+func (a *screenAnnotationStateStoreAdapter) Load(ctx context.Context, roomID uuid.UUID) ([]byte, error) {
+	return a.queries.GetRoomScreenAnnotationState(ctx, roomID)
+}
+
 func (r *Router) setupRoutes() {
 	health := handlers.NewHealthHandler(r.pool)
 	r.engine.GET("/health", health.Check)
@@ -258,6 +271,7 @@ func (r *Router) setupRoutes() {
 			roomsGroup.POST("/:id/participants", participants.Add)
 			roomsGroup.POST("/:id/participants/bulk", authMw.RequireHost(), participants.BulkAdd)
 			roomsGroup.GET("/:id/participants", participants.List)
+			roomsGroup.PATCH("/:id/participants/:pid", participants.Update)
 			roomsGroup.DELETE("/:id/participants/:pid", authMw.RequireHost(), participants.Remove)
 			roomsGroup.POST("/:id/participants/:pid/token", authMw.RequireHost(), participants.RefreshToken)
 			chatFiles := handlers.NewChatFilesHandler(r.chatService)
