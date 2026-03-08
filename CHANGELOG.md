@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Internal auth: localhost session continuity** — production auth cookies now use `SameSite=None; Secure` and magic-link callback origin parsing accepts loopback/`.localhost` hosts, so localhost dashboard login can finish against the hosted API without bouncing back to hosted-only auth flow.
 - **Infra: R2 browser uploads/downloads CORS** — configure `cloudflare_r2_bucket_cors` on recordings bucket with browser-safe rules (`GET/HEAD/PUT`, wildcard headers/origins by default, preflight cache TTL) so whiteboard/image presigned URL uploads no longer fail preflight (`No 'Access-Control-Allow-Origin' header`).
 - **SDK-React/Whiteboard: image sync progress UX** — add live whiteboard file-sync states (`uploading`, `awaiting remote upload`, `downloading`, `error`) and a top-center status pill so the 3–5s peer propagation window feels in-progress instead of failed.
 - **Internal auth: localhost magic-link callback support** — internal auth start now accepts a safe callback override (configured app origin + localhost) and `apps/web` sends its current callback URL, so local dev login links open the local app callback instead of forcing hosted-only flow.

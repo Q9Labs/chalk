@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -396,7 +397,8 @@ func (h *InternalAuthHandler) tryClaimTenant(ctx context.Context, claimSecret st
 }
 
 func (h *InternalAuthHandler) setCookie(c *gin.Context, name, value string, expiresAt time.Time) {
-	secure := h.cfg != nil && h.cfg.Server.Env == "production"
+	secure := h.cookieSecure()
+	c.SetSameSite(h.cookieSameSite())
 	c.SetCookie(
 		name,
 		value,
@@ -409,7 +411,8 @@ func (h *InternalAuthHandler) setCookie(c *gin.Context, name, value string, expi
 }
 
 func (h *InternalAuthHandler) clearCookie(c *gin.Context, name string) {
-	secure := h.cfg != nil && h.cfg.Server.Env == "production"
+	secure := h.cookieSecure()
+	c.SetSameSite(h.cookieSameSite())
 	c.SetCookie(name, "", -1, "/", h.cookieDomain(), secure, true)
 }
 
@@ -418,6 +421,17 @@ func (h *InternalAuthHandler) cookieDomain() string {
 		return ""
 	}
 	return h.cfg.Auth.CookieDomain
+}
+
+func (h *InternalAuthHandler) cookieSecure() bool {
+	return h.cfg != nil && h.cfg.Server.Env == "production"
+}
+
+func (h *InternalAuthHandler) cookieSameSite() http.SameSite {
+	if h.cookieSecure() {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
 }
 
 func internalTenantByOwnerRedisKey(ownerUserID uuid.UUID) string {
@@ -470,6 +484,15 @@ func randomToken(bytesLen int) (string, error) {
 
 func strPtr(s string) *string { return &s }
 
+func (h *InternalAuthHandler) resolveMagicLinkCallbackURL(requestedCallbackURL string) string {
+	appURL := h.resolveMagicLinkAppURL(requestedCallbackURL)
+	return appURL + "/auth/callback"
+}
+
+func (h *InternalAuthHandler) buildMagicLinkVerificationURL(_ *gin.Context, token, callbackURL string) string {
+	return appendURLQuery(callbackURL, "token", token)
+}
+
 func (h *InternalAuthHandler) resolveMagicLinkAppURL(requestedCallbackURL string) string {
 	defaultAppURL := "http://localhost:3070"
 	if h.cfg != nil && h.cfg.Auth.InternalAppURL != "" {
@@ -499,8 +522,7 @@ func (h *InternalAuthHandler) isAllowedMagicLinkOrigin(origin string) bool {
 		return false
 	}
 
-	host := strings.ToLower(parsed.Hostname())
-	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+	return isLocalMagicLinkHost(parsed.Hostname())
 }
 
 func normalizedOrigin(rawURL string) (string, bool) {
@@ -521,6 +543,31 @@ func normalizedOrigin(rawURL string) (string, bool) {
 	}
 
 	return parsed.Scheme + "://" + parsed.Host, true
+}
+
+func isLocalMagicLinkHost(host string) bool {
+	normalizedHost := strings.ToLower(strings.TrimSpace(host))
+	if normalizedHost == "" {
+		return false
+	}
+	if normalizedHost == "localhost" || strings.HasSuffix(normalizedHost, ".localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(normalizedHost)
+	return ip != nil && ip.IsLoopback()
+}
+
+func appendURLQuery(rawURL, key, value string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	query := parsed.Query()
+	query.Set(key, value)
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func pgUUID(id uuid.UUID) pgtype.UUID {

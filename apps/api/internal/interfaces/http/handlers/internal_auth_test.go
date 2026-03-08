@@ -221,6 +221,16 @@ func TestInternalAuthResolveMagicLinkAppURL(t *testing.T) {
 		require.Equal(t, "http://localhost:3000", got)
 	})
 
+	t.Run("accepts localhost subdomain callback for dev ui", func(t *testing.T) {
+		got := handler.resolveMagicLinkAppURL("http://chalk.localhost:3000/auth/callback")
+		require.Equal(t, "http://chalk.localhost:3000", got)
+	})
+
+	t.Run("accepts loopback ipv6 callback for dev ui", func(t *testing.T) {
+		got := handler.resolveMagicLinkAppURL("http://[::1]:3000/auth/callback")
+		require.Equal(t, "http://[::1]:3000", got)
+	})
+
 	t.Run("rejects non-allowlisted domain", func(t *testing.T) {
 		got := handler.resolveMagicLinkAppURL("https://evil.example.com/auth/callback")
 		require.Equal(t, "https://app.chalk.q9labs.ai", got)
@@ -229,5 +239,51 @@ func TestInternalAuthResolveMagicLinkAppURL(t *testing.T) {
 	t.Run("rejects invalid callback URL", func(t *testing.T) {
 		got := handler.resolveMagicLinkAppURL("javascript:alert(1)")
 		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+	})
+}
+
+func TestInternalAuthCookieSameSite(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("uses SameSite None for production auth cookies", func(t *testing.T) {
+		handler := &InternalAuthHandler{
+			cfg: &config.Config{
+				Server: config.ServerConfig{Env: "production"},
+				Auth:   config.AuthConfig{CookieDomain: ".q9labs.ai"},
+			},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = req
+
+		handler.setCookie(c, internalSessionCookieName, "session-token", time.Now().Add(time.Hour))
+
+		cookies := w.Result().Cookies()
+		require.Len(t, cookies, 1)
+		require.Equal(t, http.SameSiteNoneMode, cookies[0].SameSite)
+		require.True(t, cookies[0].Secure)
+		require.Equal(t, "q9labs.ai", cookies[0].Domain)
+	})
+
+	t.Run("uses SameSite Lax for local auth cookies", func(t *testing.T) {
+		handler := &InternalAuthHandler{
+			cfg: &config.Config{
+				Server: config.ServerConfig{Env: "development"},
+			},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = req
+
+		handler.setCookie(c, internalSessionCookieName, "session-token", time.Now().Add(time.Hour))
+
+		cookies := w.Result().Cookies()
+		require.Len(t, cookies, 1)
+		require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
+		require.False(t, cookies[0].Secure)
 	})
 }
