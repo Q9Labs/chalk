@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'bun:test';
-import { render, fireEvent } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'bun:test';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { DeviceSelector } from '../../components/composite/DeviceSelector';
 
 describe('DeviceSelector', () => {
@@ -31,5 +31,39 @@ describe('DeviceSelector', () => {
       <DeviceSelector type="audioinput" devices={devices} onChange={() => {}} />
     );
     expect(getByRole('status')).toBeDefined();
+  });
+
+  afterEach(() => {
+    delete (window.HTMLMediaElement.prototype as HTMLMediaElement & {
+      setSinkId?: (sinkId: string) => Promise<void>;
+    }).setSinkId;
+  });
+
+  it('plays a routed test tone for audio output', async () => {
+    const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const setSinkId = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'setSinkId', {
+      configurable: true,
+      value: setSinkId,
+    });
+
+    const { container, getByLabelText } = render(
+      <DeviceSelector
+        type="audiooutput"
+        devices={[
+          { deviceId: 'spk-1', kind: 'audiooutput', label: 'Speaker 1', groupId: 'g1', toJSON: () => ({}) },
+        ]}
+        selectedDeviceId="spk-1"
+        onChange={() => {}}
+      />
+    );
+
+    fireEvent.click(getByLabelText('Test speakers'));
+
+    await waitFor(() => {
+      expect(playSpy).toHaveBeenCalledTimes(1);
+      expect(setSinkId).toHaveBeenCalledWith('spk-1');
+    });
+    expect(container.querySelector('audio')?.getAttribute('src')).toContain('data:audio/wav;base64,');
   });
 });

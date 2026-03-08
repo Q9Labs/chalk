@@ -25,6 +25,30 @@ import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 
 type SectionId = "audio" | "video" | "appearance" | "experience";
+type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;
+
+const EMPTY_DEVICE_GROUPS = {
+	audioinput: [] as SelectableDevice[],
+	audiooutput: [] as SelectableDevice[],
+	videoinput: [] as SelectableDevice[],
+};
+
+function mergeDevices(
+	...deviceGroups: ReadonlyArray<readonly SelectableDevice[]>
+) {
+	const devicesById = new Map<string, SelectableDevice>();
+
+	for (const deviceGroup of deviceGroups) {
+		for (const device of deviceGroup) {
+			const existingDevice = devicesById.get(device.deviceId);
+			if (!existingDevice || (!existingDevice.label && device.label)) {
+				devicesById.set(device.deviceId, device);
+			}
+		}
+	}
+
+	return Array.from(devicesById.values());
+}
 
 interface SettingsDialogProps {
 	isOpen: boolean;
@@ -145,9 +169,22 @@ export const SettingsDialog = React.memo(
 		const disableMotion = prefersReducedMotion || reducedMotion;
 		const [activeSection, setActiveSection] = useState<SectionId>("audio");
 		const [searchQuery, setSearchQuery] = useState("");
+		const [detectedDevices, setDetectedDevices] = useState(EMPTY_DEVICE_GROUPS);
 		const themeVariables = useMemo(
 			() => getParticipantThemeVariables(participantColorSeed),
 			[participantColorSeed],
+		);
+		const effectiveAudioInputDevices = useMemo(
+			() => mergeDevices(audioInputDevices, detectedDevices.audioinput),
+			[audioInputDevices, detectedDevices.audioinput],
+		);
+		const effectiveAudioOutputDevices = useMemo(
+			() => mergeDevices(audioOutputDevices, detectedDevices.audiooutput),
+			[audioOutputDevices, detectedDevices.audiooutput],
+		);
+		const effectiveVideoInputDevices = useMemo(
+			() => mergeDevices(videoInputDevices, detectedDevices.videoinput),
+			[detectedDevices.videoinput, videoInputDevices],
 		);
 
 		const filteredSections = useMemo(() => {
@@ -171,6 +208,50 @@ export const SettingsDialog = React.memo(
 			}
 		}, [activeSection, filteredSections]);
 
+		useEffect(() => {
+			if (!isOpen) {
+				return;
+			}
+
+			const mediaDevices = navigator.mediaDevices;
+			if (!mediaDevices?.enumerateDevices) {
+				return;
+			}
+
+			let isCancelled = false;
+
+			const syncDevices = async () => {
+				try {
+					const devices = await mediaDevices.enumerateDevices();
+					if (isCancelled) {
+						return;
+					}
+
+					setDetectedDevices({
+						audioinput: devices.filter(
+							(device) => device.kind === "audioinput",
+						),
+						audiooutput: devices.filter(
+							(device) => device.kind === "audiooutput",
+						),
+						videoinput: devices.filter(
+							(device) => device.kind === "videoinput",
+						),
+					});
+				} catch {
+					// Keep prop-driven device lists if enumeration fails.
+				}
+			};
+
+			void syncDevices();
+			mediaDevices.addEventListener?.("devicechange", syncDevices);
+
+			return () => {
+				isCancelled = true;
+				mediaDevices.removeEventListener?.("devicechange", syncDevices);
+			};
+		}, [isOpen]);
+
 		const renderSectionContent = () => {
 			switch (activeSection) {
 				case "audio":
@@ -182,7 +263,7 @@ export const SettingsDialog = React.memo(
 							>
 								<DeviceSelector
 									type="audioinput"
-									devices={audioInputDevices}
+									devices={effectiveAudioInputDevices}
 									selectedDeviceId={settings.audio.selectedInput}
 									onChange={(deviceId) =>
 										onUpdateAudio({ selectedInput: deviceId })
@@ -206,7 +287,7 @@ export const SettingsDialog = React.memo(
 							>
 								<DeviceSelector
 									type="audiooutput"
-									devices={audioOutputDevices}
+									devices={effectiveAudioOutputDevices}
 									selectedDeviceId={settings.audio.selectedOutput}
 									onChange={(deviceId) =>
 										onUpdateAudio({ selectedOutput: deviceId })
@@ -236,7 +317,7 @@ export const SettingsDialog = React.memo(
 						>
 							<DeviceSelector
 								type="videoinput"
-								devices={videoInputDevices}
+								devices={effectiveVideoInputDevices}
 								selectedDeviceId={settings.video.selectedInput}
 								onChange={(deviceId) =>
 									onUpdateVideo({ selectedInput: deviceId })

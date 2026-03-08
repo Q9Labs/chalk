@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **SDK-React: persistent room preferences** — saved room settings now re-apply device choices when available, preserve layout/theme/filmstrip defaults between visits, and scale remote playback volume consistently inside the meeting room.
+- **SDK-React: settings device discovery and speaker test** — in-room settings now fall back to `navigator.mediaDevices.enumerateDevices()` when controller lists arrive empty, keep device pickers fresh on `devicechange`, and the speaker test button now plays an audible routed tone instead of only animating the icon.
 
 ## [0.0.72] - 2026-03-08
 
