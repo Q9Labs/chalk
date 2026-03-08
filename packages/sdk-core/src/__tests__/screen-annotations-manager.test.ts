@@ -91,4 +91,22 @@ describe("ScreenAnnotationsManager", () => {
       canDraw: true,
     });
   });
+
+  it("keeps the toolbar open when a late session-ended arrives during sync", () => {
+    const room = new MockRoom();
+    const manager = new ScreenAnnotationsManager();
+    manager.attachRoom(room as any);
+
+    manager.open();
+    room.emit("annotation.session.ended", {
+      shareSessionId: "",
+      endedAt: new Date(),
+    });
+
+    expect(manager.getState()).toMatchObject({
+      isOpen: true,
+      isSessionActive: false,
+      canDraw: false,
+    });
+  });
 });

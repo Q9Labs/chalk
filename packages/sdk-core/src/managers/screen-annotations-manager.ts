@@ -140,7 +140,7 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
 
     this.roomUnsubscribers.push(
       room.on("annotation.session.ended", (session) => {
-        this.resetSession(false);
+        this.resetSession(this.getState().isOpen);
         this.events.emit("session:ended", session);
       }),
     );

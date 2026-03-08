@@ -1,5 +1,6 @@
 import type { AnnotationAccessMode, ScreenAnnotationTool } from "@q9labs/chalk-core";
 import { memo } from "react";
+import { Edit02Icon } from "../../../utils/icons";
 import { cn } from "../../../utils/cn";
 
 const DRAW_TOOLS: Array<{ tool: ScreenAnnotationTool; label: string }> = [
@@ -65,9 +66,16 @@ export const ScreenAnnotationsToolbar = memo(
       }
 
       return (
-        <div className="absolute left-3 top-12 z-30">
-          <button type="button" className={baseButtonClass} onClick={onOpen}>
-            Annotate
+        <div className="absolute bottom-5 left-5 z-30">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-full border border-cyan-300/28 bg-zinc-950/88 px-4 py-3 text-sm font-semibold text-cyan-50 shadow-2xl shadow-black/35 backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-zinc-900 hover:text-white"
+            onClick={onOpen}
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-500/18 text-cyan-200">
+              <Edit02Icon size={18} />
+            </span>
+            <span>Annotate</span>
           </button>
         </div>
       );
