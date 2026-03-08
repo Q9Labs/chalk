@@ -25,6 +25,7 @@ function MeetingRoomBase({
 	canManageParticipants = false,
 	onToggleParticipantMute,
 	onRemoveParticipant,
+	onUpdateDisplayName,
 	activeReactions = [],
 	isMuted = false,
 	isVideoEnabled = false,
@@ -422,6 +423,7 @@ function MeetingRoomBase({
 					canManageParticipants={canManageParticipants}
 					onToggleParticipantMute={onToggleParticipantMute}
 					onRemoveParticipant={onRemoveParticipant}
+					onUpdateDisplayName={onUpdateDisplayName}
 					onAddPeople={handleAddPeople}
 					chatMessages={chatMessages}
 					onSendMessage={onSendMessage}

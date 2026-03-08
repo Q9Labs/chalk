@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Web/SDK: instant room start + in-meeting self rename** — added `/new` instant-room creation with auto-join into the room flow, and wired participant self-renames through the SDK plus the API websocket contract so name changes propagate live inside the participants panel.
 - **Web/Internal auth: prod navigation + magic-link callback targeting** — landing-page header links now route through TanStack navigation, `/documentation` now aliases docs, and internal auth magic links now default to redirecting verified users to `/dashboard` instead of hard-wiring `/auth/callback`.
 - **SDK-React: persistent room preferences** — saved room settings now re-apply device choices when available, preserve layout/theme/filmstrip defaults between visits, and scale remote playback volume consistently inside the meeting room.
 - **SDK-React: settings device discovery and speaker test** — in-room settings now fall back to `navigator.mediaDevices.enumerateDevices()` when controller lists arrive empty, keep device pickers fresh on `devicechange`, and the speaker test button now plays an audible routed tone instead of only animating the icon.

@@ -68,6 +68,7 @@ export interface MeetingRoomProps {
   canManageParticipants?: boolean;
   onToggleParticipantMute?: (participantId: string) => void;
   onRemoveParticipant?: (participantId: string) => void;
+  onUpdateDisplayName?: (displayName: string) => void;
   activeReactions?: readonly ActiveReaction[];
   isMuted?: boolean;
   isVideoEnabled?: boolean;

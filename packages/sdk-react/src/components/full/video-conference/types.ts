@@ -99,6 +99,7 @@ export interface VideoConferenceProps {
 	roomId: string;
 	roomName?: string;
 	userName: string;
+	autoJoin?: boolean;
 	role?: "host" | "participant";
 	metadata?: Record<string, unknown>;
 	features?: Features;

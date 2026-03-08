@@ -246,6 +246,41 @@ export const removeParticipant = async (apiClient: APIClient, currentSession: Co
   }
 };
 
+export const updateOwnDisplayName = async (
+	apiClient: APIClient,
+	currentSession: ConferenceSession | null,
+	displayName: string,
+): Promise<void> => {
+	const ctx = wideEvents.start("participant.update_self_name");
+	const trimmedDisplayName = displayName.trim();
+	ctx.set("input", {
+		hasSession: currentSession !== null,
+		displayNameLength: trimmedDisplayName.length,
+	});
+
+	try {
+		if (!currentSession) {
+			throw new Error("Not connected to a room");
+		}
+		if (!trimmedDisplayName) {
+			throw new Error("Display name cannot be empty");
+		}
+
+		const response = await apiClient.updateParticipant(currentSession.id, "me", {
+			displayName: trimmedDisplayName,
+		});
+		if (!response.success) {
+			throw new Error(response.error?.message ?? "Failed to update display name");
+		}
+
+		currentSession.updateLocalParticipantDisplayName(trimmedDisplayName);
+		ctx.complete("success");
+	} catch (error) {
+		ctx.complete("error", error);
+		throw error;
+	}
+};
+
 export const disconnectCurrentRoom = (currentSession: ConferenceSession | null, currentWsClient: WSClient | null, trackLeave: () => void): { nextSession: ConferenceSession | null; nextWsClient: WSClient | null } => {
   const ctx = wideEvents.start("room.leave");
 

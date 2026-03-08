@@ -10,6 +10,7 @@ interface MeetingRoomPanelsProps {
   canManageParticipants: boolean;
   onToggleParticipantMute?: (participantId: string) => void;
   onRemoveParticipant?: (participantId: string) => void;
+  onUpdateDisplayName?: (displayName: string) => void;
   onAddPeople: () => void;
   chatMessages: ChatMessage[];
   onSendMessage?: (content: string) => void;
@@ -23,7 +24,7 @@ interface MeetingRoomPanelsProps {
 
 const NOOP = () => {};
 
-export function MeetingRoomPanels({ isMobile, activePanel, onClosePanel, allParticipants, canManageParticipants, onToggleParticipantMute, onRemoveParticipant, onAddPeople, chatMessages, onSendMessage, onSendMessageWithAttachments, onResolveChatAttachmentUrl, transcripts, participantVolumes, onParticipantVolumeChange, localParticipantColorSeed }: MeetingRoomPanelsProps) {
+export function MeetingRoomPanels({ isMobile, activePanel, onClosePanel, allParticipants, canManageParticipants, onToggleParticipantMute, onRemoveParticipant, onUpdateDisplayName, onAddPeople, chatMessages, onSendMessage, onSendMessageWithAttachments, onResolveChatAttachmentUrl, transcripts, participantVolumes, onParticipantVolumeChange, localParticipantColorSeed }: MeetingRoomPanelsProps) {
   const localParticipantId = allParticipants.find((participant) => participant.isLocal)?.id;
 
   return (
@@ -37,6 +38,7 @@ export function MeetingRoomPanels({ isMobile, activePanel, onClosePanel, allPart
               canManageParticipants={canManageParticipants}
               onMuteParticipant={onToggleParticipantMute}
               onRemoveParticipant={onRemoveParticipant}
+              onUpdateDisplayName={onUpdateDisplayName}
               onClose={onClosePanel}
               variant="sidebar"
               onAddPeople={onAddPeople}
@@ -61,6 +63,7 @@ export function MeetingRoomPanels({ isMobile, activePanel, onClosePanel, allPart
             canManageParticipants={canManageParticipants}
             onMuteParticipant={onToggleParticipantMute}
             onRemoveParticipant={onRemoveParticipant}
+            onUpdateDisplayName={onUpdateDisplayName}
             variant="mobile"
             onAddPeople={onAddPeople}
             participantVolumes={participantVolumes}

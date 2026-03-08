@@ -26,6 +26,7 @@ export interface ParticipantListProps {
 	onRemoveParticipant?: (id: string) => void;
 	onMakeHost?: (id: string) => void;
 	onMakeCoHost?: (id: string) => void;
+	onUpdateDisplayName?: (name: string) => void;
 	onAddPeople?: () => void;
 	canManageParticipants?: boolean;
 	searchable?: boolean;
@@ -46,6 +47,7 @@ export const ParticipantList = React.memo(({
 	onRemoveParticipant,
 	onMakeHost,
 	onMakeCoHost,
+	onUpdateDisplayName,
 	onAddPeople,
 	participantVolumes,
 	onParticipantVolumeChange,
@@ -105,6 +107,7 @@ export const ParticipantList = React.memo(({
 						onRemoveParticipant={onRemoveParticipant}
 						onMakeHost={onMakeHost}
 						onMakeCoHost={onMakeCoHost}
+						onUpdateDisplayName={onUpdateDisplayName}
 						participantVolumes={participantVolumes}
 						onParticipantVolumeChange={onParticipantVolumeChange}
 						menuOpen={activeMenuId === participant.id}

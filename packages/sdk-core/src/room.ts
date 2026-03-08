@@ -433,6 +433,26 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     this.interactionActions.unmuteParticipant(participantId);
   }
 
+  updateLocalParticipantDisplayName(displayName: string): void {
+    const trimmedDisplayName = displayName.trim();
+    const localParticipant = this.sessionStore.getLocalParticipant();
+    if (!localParticipant || !trimmedDisplayName) {
+      return;
+    }
+
+    const updatedParticipant: Participant = {
+      ...localParticipant,
+      displayName: trimmedDisplayName,
+    };
+
+    this.sessionStore.setLocalParticipant(updatedParticipant);
+    this.sessionStore.setParticipant(updatedParticipant.id, updatedParticipant);
+    this.emit("participant.updated", {
+      participantId: updatedParticipant.id,
+      participant: updatedParticipant,
+    });
+  }
+
   canDrawWhiteboard(participantId?: string): boolean {
     return this.whiteboardActions.canDrawWhiteboard(participantId);
   }

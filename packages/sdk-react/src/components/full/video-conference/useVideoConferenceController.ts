@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useChalkSession } from "../../../context/chalk-provider";
 import { useChat } from "../../../hooks/features/useChat";
@@ -36,7 +36,7 @@ const DISCONNECT_GRACE_MS = 8000;
 const EMPTY_FEATURES: Features = {};
 const EMPTY_DEFAULTS: NonNullable<VideoConferenceProps["defaults"]> = {};
 
-export function useVideoConferenceController({ roomId, roomName, userName, role, metadata, features, defaults, sounds = true, onJoin, onLeave, onEnd, onError, onAddPeople, whiteboard: whiteboardOptions, className }: VideoConferenceProps): VideoConferenceControllerState {
+export function useVideoConferenceController({ roomId, roomName, userName, autoJoin = false, role, metadata, features, defaults, sounds = true, onJoin, onLeave, onEnd, onError, onAddPeople, whiteboard: whiteboardOptions, className }: VideoConferenceProps): VideoConferenceControllerState {
   const resolvedFeatures = features ?? EMPTY_FEATURES;
   const resolvedDefaults = defaults ?? EMPTY_DEFAULTS;
 
@@ -44,12 +44,14 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const [error, setError] = useState<string | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  const autoJoinStartedRef = useRef(false);
 
   const effectiveRoomName = roomName ?? roomId;
 
   const { join, leave, isJoining } = useConnection();
   const { isConnected, status } = useRoom();
-  const { participants, localParticipant, participantCount } = useParticipants();
+  const { participants, localParticipant, participantCount, updateDisplayName } =
+    useParticipants();
   const { activeSpeaker } = useActiveSpeaker();
   const media = useMedia();
   const screenShare = useScreenShare();
@@ -226,6 +228,32 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const selectedMicrophone = media.selectedMicrophone ?? lobbySelectedMicrophone;
 
   useEffect(() => {
+    if (!autoJoin || phase !== "lobby" || autoJoinStartedRef.current) {
+      return;
+    }
+
+    autoJoinStartedRef.current = true;
+    void handleJoin({
+      displayName: userName,
+      videoEnabled: resolvedDefaults.videoEnabled ?? true,
+      audioEnabled: resolvedDefaults.audioEnabled ?? true,
+      selectedVideoDevice: lobbySelectedCamera ?? undefined,
+      selectedAudioInput: lobbySelectedMicrophone ?? undefined,
+      selectedAudioOutput: lobbySelectedSpeaker ?? undefined,
+    });
+  }, [
+    autoJoin,
+    handleJoin,
+    lobbySelectedCamera,
+    lobbySelectedMicrophone,
+    lobbySelectedSpeaker,
+    phase,
+    resolvedDefaults.audioEnabled,
+    resolvedDefaults.videoEnabled,
+    userName,
+  ]);
+
+  useEffect(() => {
     if (phase !== "meeting") {
       return;
     }
@@ -307,6 +335,7 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       handleSendMessageWithAttachments,
       resolveChatAttachmentUrl: getAttachmentDownloadUrl,
       handleChatOpen,
+      handleUpdateDisplayName: updateDisplayName,
       defaultChatOpen: resolvedDefaults.chatOpen ?? activePanel === "chat",
       defaultParticipantsOpen: resolvedDefaults.participantsOpen ?? activePanel === "participants",
       audioInputDevices: microphones,
