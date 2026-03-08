@@ -1,10 +1,15 @@
-import { describe, it, expect, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { render, fireEvent } from '@testing-library/react';
 import { ControlButton } from '../../components/atomic/ControlButton';
 
 describe('ControlButton', () => {
   const icon = <span>Icon</span>;
   const label = 'Toggle Video';
+  const vibrateSpy = vi.spyOn(navigator, 'vibrate');
+
+  beforeEach(() => {
+    vibrateSpy.mockClear();
+  });
 
   it('renders correctly', () => {
     const { getByRole, getByText } = render(<ControlButton icon={icon} label={label} />);
@@ -19,6 +24,15 @@ describe('ControlButton', () => {
     const button = getByRole('button', { name: label });
     fireEvent.click(button);
     expect(onClick).toHaveBeenCalledTimes(1);
+    expect(vibrateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('can disable haptics per button', () => {
+    const { getByRole } = render(
+      <ControlButton icon={icon} label={label} haptic={false} />
+    );
+    fireEvent.click(getByRole('button', { name: label }));
+    expect(vibrateSpy).not.toHaveBeenCalled();
   });
 
   it('renders label text when showLabel is true', () => {
@@ -47,5 +61,6 @@ describe('ControlButton', () => {
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
+    expect(vibrateSpy).not.toHaveBeenCalled();
   });
 });

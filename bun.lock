@@ -142,7 +142,7 @@
     },
     "packages/chalk-whiteboard": {
       "name": "@q9labs/chalk-whiteboard",
-      "version": "0.0.68",
+      "version": "0.0.72",
       "dependencies": {
         "@excalidraw/excalidraw": "^0.18.0",
       },
@@ -158,7 +158,7 @@
     },
     "packages/sdk-core": {
       "name": "@q9labs/chalk-core",
-      "version": "0.0.68",
+      "version": "0.0.72",
       "dependencies": {
         "@cloudflare/realtimekit": "^1.2.2",
         "@effect/schema": "^0.75.5",
@@ -177,7 +177,7 @@
     },
     "packages/sdk-react": {
       "name": "@q9labs/chalk-react",
-      "version": "0.0.68",
+      "version": "0.0.72",
       "dependencies": {
         "@base-ui/react": "^1.0.0-alpha.11",
         "@cloudflare/realtimekit": "^1.2.2",
@@ -192,6 +192,7 @@
         "sonner": "^2.0.3",
         "tailwind-merge": "^3.4.0",
         "tw-animate-css": "^1.3.0",
+        "web-haptics": "^0.0.6",
       },
       "devDependencies": {
         "@tailwindcss/vite": "^4.1.18",
@@ -227,7 +228,7 @@
     },
     "packages/sdk-react-native": {
       "name": "@q9labs/chalk-react-native",
-      "version": "0.0.68",
+      "version": "0.0.72",
       "dependencies": {
         "@lineiconshq/free-icons": "^1.0.4",
         "@lineiconshq/react-native-lineicons": "^0.0.3",
@@ -279,7 +280,7 @@
     },
     "packages/ui": {
       "name": "@q9labs/chalk-ui",
-      "version": "0.0.68",
+      "version": "0.0.72",
       "dependencies": {
         "@base-ui/react": "^1.0.0",
         "@q9labs/chalk-core": "workspace:^",
@@ -4099,6 +4100,8 @@
     "wcwidth": ["wcwidth@1.0.1", "", { "dependencies": { "defaults": "^1.0.3" } }, "sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg=="],
 
     "web": ["web@workspace:apps/web"],
+
+    "web-haptics": ["web-haptics@0.0.6", "", { "peerDependencies": { "react": ">=18", "react-dom": ">=18", "svelte": ">=4", "vue": ">=3" }, "optionalPeers": ["react", "react-dom", "svelte", "vue"] }, "sha512-eCzcf1LDi20+Fr0x9V3OkX92k0gxEQXaHajmhXHitsnk6SxPeshv8TBtBRqxyst8HI1uf2FyFVE7QS3jo1gkrw=="],
 
     "web-namespaces": ["web-namespaces@2.0.1", "", {}, "sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ=="],
 

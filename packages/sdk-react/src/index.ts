@@ -92,6 +92,9 @@ export type { WhiteboardCursor, WhiteboardUpdate } from "@q9labs/chalk-core";
 export * as hooks from "./hooks";
 // Direct hook exports for convenience
 export {
+	type ChalkHapticInput,
+	type ChalkHapticPreset,
+	type ChalkHapticTriggerOptions,
 	type AnnouncementPoliteness,
 	createMeetingShortcuts,
 	DEFAULT_MEETING_TOUR_STEPS,
@@ -105,6 +108,8 @@ export {
 	type UseChatReturn,
 	type UseConnectionReturn,
 	type UseDevicesReturn,
+	type UseHapticsOptions,
+	type UseHapticsReturn,
 	type UseInteractionsReturn,
 	type UseKeyboardShortcutsOptions,
 	type UseKeyboardShortcutsReturn,
@@ -134,6 +139,7 @@ export {
 	useConnection,
 	useDevices,
 	useInteractions,
+	useHaptics,
 	useIsDesktop,
 	useIsMobile,
 	useIsTablet,

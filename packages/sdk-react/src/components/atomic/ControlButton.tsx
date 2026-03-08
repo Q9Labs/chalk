@@ -1,4 +1,6 @@
 import React from "react";
+import type { ChalkHapticInput } from "../../hooks/ui/useHaptics";
+import { useHaptics } from "../../hooks/ui/useHaptics";
 import { cn } from "../../utils/cn";
 import { Tooltip } from "./Tooltip";
 
@@ -13,6 +15,7 @@ interface ControlButtonProps {
 	noBorder?: boolean;
 	onClick?: () => void;
 	className?: string;
+	haptic?: ChalkHapticInput | false;
 	/** Custom styles when active (overrides default active styles) */
 	activeClassName?: string;
 	"data-tour"?: string;
@@ -31,15 +34,28 @@ export const ControlButton = React.memo(
 		noBorder = false,
 		onClick,
 		className,
+		haptic = "selection",
 		activeClassName,
 		"data-tour": dataTour,
 		ref,
 	}: ControlButtonProps) => {
+		const { trigger } = useHaptics({
+			enabled: !disabled && haptic !== false,
+		});
+
+		const handleClick = React.useCallback(() => {
+			if (haptic !== false) {
+				void trigger(haptic);
+			}
+
+			onClick?.();
+		}, [haptic, onClick, trigger]);
+
 		const button = (
 			<button
 				ref={ref}
 				type="button"
-				onClick={onClick}
+				onClick={handleClick}
 				disabled={disabled}
 				data-tour={dataTour}
 				className={cn(

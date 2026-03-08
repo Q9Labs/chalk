@@ -1,10 +1,15 @@
-import { describe, it, expect, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { render, fireEvent } from '@testing-library/react';
 import { IconButton } from '../../components/atomic/IconButton';
 
 describe('IconButton', () => {
   const icon = <span>Icon</span>;
   const label = 'Close';
+  const vibrateSpy = vi.spyOn(navigator, 'vibrate');
+
+  beforeEach(() => {
+    vibrateSpy.mockClear();
+  });
 
   it('renders correctly', () => {
     const { getByRole, getByText } = render(<IconButton icon={icon} aria-label={label} />);
@@ -17,6 +22,15 @@ describe('IconButton', () => {
     const { getByRole } = render(<IconButton icon={icon} aria-label={label} onClick={onClick} />);
     fireEvent.click(getByRole('button', { name: label }));
     expect(onClick).toHaveBeenCalledTimes(1);
+    expect(vibrateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('can disable haptics per button', () => {
+    const { getByRole } = render(
+      <IconButton icon={icon} aria-label={label} haptic={false} />
+    );
+    fireEvent.click(getByRole('button', { name: label }));
+    expect(vibrateSpy).not.toHaveBeenCalled();
   });
 
   it('applies variant classes', () => {
@@ -34,5 +48,6 @@ describe('IconButton', () => {
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
+    expect(vibrateSpy).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,8 @@ global.MediaStreamTrack = vi.fn().mockImplementation(() => ({
 })) as any;
 
 describe('MeetingRoom', () => {
+  const vibrateSpy = vi.spyOn(navigator, 'vibrate');
+
   beforeEach(() => {
     localStorage.clear();
   });
@@ -87,6 +89,25 @@ describe('MeetingRoom', () => {
     } finally {
       window.matchMedia = originalMatchMedia;
     }
+  });
+
+  it('fires haptics for mute keyboard shortcuts', () => {
+    const onToggleMute = vi.fn();
+
+    render(
+      <MeetingRoom
+        roomName="Test Room"
+        localParticipant={localParticipant}
+        participants={participants}
+        enableTour={false}
+        onToggleMute={onToggleMute}
+      />
+    );
+
+    fireEvent.keyDown(window, { key: 'm' });
+
+    expect(onToggleMute).toHaveBeenCalledTimes(1);
+    expect(vibrateSpy).toHaveBeenCalled();
   });
 
   it('shows support code in connection overlay', () => {

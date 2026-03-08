@@ -1,8 +1,14 @@
-import { describe, it, expect, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { render, fireEvent } from '@testing-library/react';
 import { ReactionPicker } from '../../components/composite/ReactionPicker';
 
 describe('ReactionPicker', () => {
+  const vibrateSpy = vi.spyOn(navigator, 'vibrate');
+
+  beforeEach(() => {
+    vibrateSpy.mockClear();
+  });
+
   it('renders when open', () => {
     const { getByLabelText } = render(
       <ReactionPicker isOpen={true} onClose={() => {}} onSelect={() => {}} />
@@ -34,5 +40,17 @@ describe('ReactionPicker', () => {
       <ReactionPicker isOpen={false} onClose={() => {}} onSelect={() => {}} />
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it('triggers haptics when close is tapped', () => {
+    const onClose = vi.fn();
+    const { getByLabelText } = render(
+      <ReactionPicker isOpen={true} onClose={onClose} onSelect={() => {}} />
+    );
+
+    fireEvent.click(getByLabelText('Close'));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(vibrateSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,6 @@
 import type React from "react";
 
+import { useHaptics } from "../../../hooks/ui/useHaptics";
 import { cn } from "../../../utils/cn";
 
 interface PreJoinJoinPanelProps {
@@ -19,6 +20,10 @@ export function PreJoinJoinPanel({
 	onDisplayNameChange,
 	onJoin,
 }: PreJoinJoinPanelProps): React.JSX.Element {
+	const { trigger } = useHaptics({
+		enabled: canJoin && !isLoading,
+	});
+
 	return (
 		<div className="flex flex-col items-start text-left space-y-6 w-full max-w-sm lg:justify-self-end">
 			<div className="space-y-2 text-left">
@@ -53,7 +58,10 @@ export function PreJoinJoinPanel({
 
 				<button
 					type="button"
-					onClick={onJoin}
+					onClick={() => {
+						void trigger("success");
+						onJoin();
+					}}
 					disabled={!canJoin || isLoading}
 					className={cn(
 						"relative w-full h-12 rounded-full font-semibold text-base text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group",

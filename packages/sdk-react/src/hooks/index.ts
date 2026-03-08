@@ -67,6 +67,14 @@ export {
 } from "./stream/useScreenShare";
 
 // UI
+export {
+	type ChalkHapticInput,
+	type ChalkHapticPreset,
+	type ChalkHapticTriggerOptions,
+	type UseHapticsOptions,
+	type UseHapticsReturn,
+	useHaptics,
+} from "./ui/useHaptics";
 export { type UseLayoutReturn, useLayout } from "./ui/useLayout";
 export {
 	type UseNotificationsReturn,

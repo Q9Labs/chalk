@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
+import { useHaptics } from "../../../hooks/ui/useHaptics";
+
 interface UseMeetingRoomLifecycleOptions {
   enableTour: boolean;
   showTourOnFirstVisit: boolean;
@@ -18,6 +20,7 @@ const LEAVE_ANIMATION_MS = 600;
 export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defaultChatOpen, onChatOpen, onToggleMute, onToggleVideo, onLeave, onTourComplete, setShowTour, setIsExiting }: UseMeetingRoomLifecycleOptions) {
   const leaveTimeoutRef = useRef<number | null>(null);
   const hasMarkedDefaultChatReadRef = useRef(false);
+  const { trigger } = useHaptics();
 
   const clearLeaveTimeout = useCallback(() => {
     if (leaveTimeoutRef.current !== null) {
@@ -74,9 +77,11 @@ export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defa
       }
       switch (event.key.toLowerCase()) {
         case "m":
+          void trigger("selection");
           onToggleMute?.();
           break;
         case "v":
+          void trigger("selection");
           onToggleVideo?.();
           break;
         default:
@@ -88,7 +93,7 @@ export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defa
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onToggleMute, onToggleVideo]);
+  }, [onToggleMute, onToggleVideo, trigger]);
 
   useEffect(() => clearLeaveTimeout, [clearLeaveTimeout]);
 

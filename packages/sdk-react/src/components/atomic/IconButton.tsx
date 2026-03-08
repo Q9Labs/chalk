@@ -1,4 +1,6 @@
 import React from 'react';
+import type { ChalkHapticInput } from "../../hooks/ui/useHaptics";
+import { useHaptics } from "../../hooks/ui/useHaptics";
 import { cn } from '../../utils/cn';
 
 interface IconButtonProps {
@@ -7,6 +9,7 @@ interface IconButtonProps {
   variant?: 'default' | 'ghost' | 'outline';
   onClick?: () => void;
   disabled?: boolean;
+  haptic?: ChalkHapticInput | false;
   'aria-label': string;
   className?: string;
 }
@@ -31,16 +34,29 @@ export const IconButton = React.memo(React.forwardRef<HTMLButtonElement, IconBut
       variant = 'default',
       onClick,
       disabled = false,
+      haptic = "selection",
       'aria-label': ariaLabel,
       className,
     },
     ref
   ) => {
+    const { trigger } = useHaptics({
+      enabled: !disabled && haptic !== false,
+    });
+
+    const handleClick = React.useCallback(() => {
+      if (haptic !== false) {
+        void trigger(haptic);
+      }
+
+      onClick?.();
+    }, [haptic, onClick, trigger]);
+
     return (
       <button
         ref={ref}
         type="button"
-        onClick={onClick}
+        onClick={handleClick}
         disabled={disabled}
         className={cn(
           'inline-flex items-center justify-center rounded-md transition-colors duration-200',

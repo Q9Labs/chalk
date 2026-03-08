@@ -103,6 +103,8 @@ try {
 // Minimal clipboard mock for components that call navigator.clipboard.writeText()
 // @ts-ignore
 globalThis.navigator.clipboard ??= { writeText: async () => {} };
+// @ts-ignore
+globalThis.navigator.vibrate ??= () => true;
 
 // Minimal mediaDevices mock for pre-join flows in tests
 // @ts-ignore

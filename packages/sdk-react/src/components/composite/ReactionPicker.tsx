@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { useHaptics } from '../../hooks/ui/useHaptics';
 import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 import { Cancel01Icon } from '../../utils/icons';
@@ -50,6 +51,7 @@ export const ReactionPicker = React.memo(({
   className,
 }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const { trigger } = useHaptics();
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('smileys');
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
@@ -61,9 +63,10 @@ export const ReactionPicker = React.memo(({
   }, [isOpen, recentReactions.length]);
 
   const handleSelect = useCallback((emoji: string) => {
+    void trigger('success');
     onSelect(emoji);
     onClose();
-  }, [onSelect, onClose]);
+  }, [onClose, onSelect, trigger]);
 
   // Handle escape key
   useEffect(() => {
@@ -114,7 +117,10 @@ export const ReactionPicker = React.memo(({
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
           <h3 className="text-sm font-semibold text-popover-foreground">Reactions</h3>
           <button
-            onClick={onClose}
+            onClick={() => {
+              void trigger('selection');
+              onClose();
+            }}
             className="p-1 rounded-lg text-muted-foreground hover:text-popover-foreground hover:bg-accent transition-colors"
             aria-label="Close"
           >
@@ -127,7 +133,10 @@ export const ReactionPicker = React.memo(({
           {categories.map(([key, category]) => (
             <button
               key={key}
-              onClick={() => setActiveCategory(key)}
+              onClick={() => {
+                void trigger('selection');
+                setActiveCategory(key);
+              }}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
                 activeCategory === key
