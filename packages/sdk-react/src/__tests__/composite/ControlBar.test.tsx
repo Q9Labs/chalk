@@ -1,8 +1,14 @@
-import { describe, it, expect, vi } from 'bun:test';
-import { render, fireEvent } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'bun:test';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { ControlBar } from '../../components/composite/ControlBar';
 
+const originalEnumerateDevices = navigator.mediaDevices.enumerateDevices;
+
 describe('ControlBar', () => {
+  afterEach(() => {
+    navigator.mediaDevices.enumerateDevices = originalEnumerateDevices;
+  });
+
   it('renders all default buttons', () => {
     const { getByLabelText } = render(<ControlBar />);
     expect(getByLabelText('Mute')).toBeDefined();
@@ -30,5 +36,54 @@ describe('ControlBar', () => {
     expect(getByLabelText('Mute')).toBeDefined();
     expect(getByLabelText('Leave')).toBeDefined();
     expect(queryByLabelText('Stop Video')).toBeNull();
+  });
+
+  it('renders dock device pickers and elevated settings/reactions controls', () => {
+    const { getByText, getByLabelText } = render(
+      <ControlBar
+        variant="dock"
+        audioInputDevices={[{ deviceId: 'mic-1', kind: 'audioinput', label: 'Microphone 1' }]}
+        audioOutputDevices={[{ deviceId: 'spk-1', kind: 'audiooutput', label: 'Speaker 1' }]}
+        videoInputDevices={[{ deviceId: 'cam-1', kind: 'videoinput', label: 'Camera 1' }]}
+        selectedAudioInput="mic-1"
+        selectedAudioOutput="spk-1"
+        selectedVideoInput="cam-1"
+        onAudioInputChange={() => {}}
+        onAudioOutputChange={() => {}}
+        onVideoInputChange={() => {}}
+      />
+    );
+
+    expect(getByText('Microphone 1')).toBeDefined();
+    expect(getByText('Speaker 1')).toBeDefined();
+    expect(getByText('Camera 1')).toBeDefined();
+    expect(getByLabelText('Settings').className).toContain('shadow-md');
+    expect(getByLabelText('Reactions').className).toContain('shadow-md');
+  });
+
+  it('hydrates dock device pickers from browser enumeration when props are empty', async () => {
+    navigator.mediaDevices.enumerateDevices = vi.fn().mockResolvedValue([
+      { deviceId: 'mic-1', kind: 'audioinput', label: 'Desk Mic' },
+      { deviceId: 'spk-1', kind: 'audiooutput', label: 'Desk Speakers' },
+      { deviceId: 'cam-1', kind: 'videoinput', label: 'Desk Cam' },
+    ] as MediaDeviceInfo[]);
+
+    const { getByText } = render(
+      <ControlBar
+        variant="dock"
+        selectedAudioInput="mic-1"
+        selectedAudioOutput="spk-1"
+        selectedVideoInput="cam-1"
+        onAudioInputChange={() => {}}
+        onAudioOutputChange={() => {}}
+        onVideoInputChange={() => {}}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByText('Desk Mic')).toBeDefined();
+      expect(getByText('Desk Speakers')).toBeDefined();
+      expect(getByText('Desk Cam')).toBeDefined();
+    });
   });
 });

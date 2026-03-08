@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useChalkSession } from "../../../context/chalk-provider";
 import { useChat } from "../../../hooks/features/useChat";
@@ -224,6 +224,18 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
 
   const selectedCamera = media.selectedCamera ?? lobbySelectedCamera;
   const selectedMicrophone = media.selectedMicrophone ?? lobbySelectedMicrophone;
+
+  useEffect(() => {
+    if (phase !== "meeting") {
+      return;
+    }
+
+    void refreshDevices().catch((error) => {
+      pushIncidentBreadcrumb("media", "In-meeting device refresh failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, [phase, pushIncidentBreadcrumb, refreshDevices]);
 
   const handleMeetingRoomCameraChange = useCallback(
     (deviceId: string) => {

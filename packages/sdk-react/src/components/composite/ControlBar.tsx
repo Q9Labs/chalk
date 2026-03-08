@@ -1,5 +1,5 @@
 import type { MediaDevice } from "@q9labs/chalk-core";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import {
 	CallEnd01Icon,
@@ -95,6 +95,33 @@ interface InlineDevicePickerProps {
 	placeholder: string;
 }
 
+const EMPTY_DETECTED_DEVICES = {
+	audioinput: [] as MediaDevice[],
+	audiooutput: [] as MediaDevice[],
+	videoinput: [] as MediaDevice[],
+};
+
+function mergeDevices(
+	...deviceGroups: ReadonlyArray<readonly MediaDevice[] | undefined>
+) {
+	const devicesById = new Map<string, MediaDevice>();
+
+	for (const deviceGroup of deviceGroups) {
+		if (!deviceGroup) {
+			continue;
+		}
+
+		for (const device of deviceGroup) {
+			const existingDevice = devicesById.get(device.deviceId);
+			if (!existingDevice || (!existingDevice.label && device.label)) {
+				devicesById.set(device.deviceId, device);
+			}
+		}
+	}
+
+	return Array.from(devicesById.values());
+}
+
 function InlineDevicePicker({
 	label,
 	devices = [],
@@ -102,7 +129,7 @@ function InlineDevicePicker({
 	onChange,
 	placeholder,
 }: InlineDevicePickerProps) {
-	if (!onChange || devices.length === 0) {
+	if (!onChange) {
 		return null;
 	}
 
@@ -120,10 +147,33 @@ function InlineDevicePicker({
 				onChange={(event) => onChange(event.target.value)}
 				size="sm"
 				placeholder={placeholder}
-				className="w-[160px] border-black/10 bg-white/90 text-sm dark:border-white/10 dark:bg-zinc-950/90"
+				className="w-[120px] border-black/10 bg-white/90 text-sm dark:border-white/10 dark:bg-zinc-950/90"
 			/>
 		</div>
 	);
+}
+
+function withSelectedDeviceFallback(
+	devices: readonly MediaDevice[] | undefined,
+	selectedDeviceId: string | undefined,
+	fallbackLabel: string,
+	kind: MediaDevice["kind"],
+) {
+	if (devices && devices.length > 0) {
+		return devices;
+	}
+
+	if (!selectedDeviceId) {
+		return [];
+	}
+
+	return [
+		{
+			deviceId: selectedDeviceId,
+			label: fallbackLabel,
+			kind,
+		},
+	];
 }
 
 const formatDuration = (seconds: number) => {
@@ -182,6 +232,7 @@ export const ControlBar = React.memo(
 		className,
 	}: ControlBarProps) => {
 		const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+		const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
 		const defaultButtons: ControlBarButton[] = [
 			"mic",
 			"video",
@@ -197,6 +248,64 @@ export const ControlBar = React.memo(
 		];
 
 		const buttonsToRender = buttons ?? defaultButtons;
+		useEffect(() => {
+			if (variant !== "dock") {
+				return;
+			}
+
+			const mediaDevices = navigator.mediaDevices;
+			if (!mediaDevices?.enumerateDevices) {
+				return;
+			}
+
+			let isCancelled = false;
+
+			const syncDevices = async () => {
+				try {
+					const devices = (await mediaDevices.enumerateDevices()) as MediaDevice[];
+					if (isCancelled) {
+						return;
+					}
+
+					setDetectedDevices({
+						audioinput: devices.filter((device) => device.kind === "audioinput"),
+						audiooutput: devices.filter((device) => device.kind === "audiooutput"),
+						videoinput: devices.filter((device) => device.kind === "videoinput"),
+					});
+				} catch {
+					if (!isCancelled) {
+						setDetectedDevices(EMPTY_DETECTED_DEVICES);
+					}
+				}
+			};
+
+			void syncDevices();
+			mediaDevices.addEventListener?.("devicechange", syncDevices);
+
+			return () => {
+				isCancelled = true;
+				mediaDevices.removeEventListener?.("devicechange", syncDevices);
+			};
+		}, [variant]);
+
+		const effectiveAudioInputDevices = withSelectedDeviceFallback(
+			mergeDevices(audioInputDevices, detectedDevices.audioinput),
+			selectedAudioInput,
+			"Current microphone",
+			"audioinput",
+		);
+		const effectiveAudioOutputDevices = withSelectedDeviceFallback(
+			mergeDevices(audioOutputDevices, detectedDevices.audiooutput),
+			selectedAudioOutput,
+			"Current speaker",
+			"audiooutput",
+		);
+		const effectiveVideoInputDevices = withSelectedDeviceFallback(
+			mergeDevices(videoInputDevices, detectedDevices.videoinput),
+			selectedVideoInput,
+			"Current camera",
+			"videoinput",
+		);
 		const showLeave = buttonsToRender.includes("leave");
 		const mediaButtons = buttonsToRender.filter((b) =>
 			b === "mic" ||
@@ -345,7 +454,8 @@ export const ControlBar = React.memo(
 							icon={<SmileIcon />}
 							label="Reactions"
 							onClick={onOpenReactions}
-							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+							active={true}
+							activeClassName="bg-white dark:bg-zinc-900 shadow-md hover:bg-zinc-50 dark:hover:bg-zinc-800 text-foreground"
 							showLabel={showLabels}
 						/>
 					);
@@ -368,7 +478,8 @@ export const ControlBar = React.memo(
 							icon={<Settings01Icon size={20} />}
 							label="Settings"
 							onClick={onOpenSettings}
-							noBorder
+							active={true}
+							activeClassName="bg-white dark:bg-zinc-900 shadow-md hover:bg-zinc-50 dark:hover:bg-zinc-800 text-foreground"
 							showLabel={showLabels}
 						/>
 					);
@@ -399,10 +510,10 @@ export const ControlBar = React.memo(
 						<ControlButton
 							key="thumbsup"
 							icon={<ThumbsUpIcon size={20} className="text-[#FFD700]" />}
-							activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+							active={true}
+							activeClassName="bg-white dark:bg-zinc-900 shadow-md hover:bg-zinc-50 dark:hover:bg-zinc-800 text-foreground"
 							label="Reactions"
 							onClick={onOpenReactions}
-							noBorder
 						/>
 					);
 				default:
@@ -517,14 +628,14 @@ export const ControlBar = React.memo(
 								{renderButton("mic")}
 								<InlineDevicePicker
 									label="Mic"
-									devices={audioInputDevices}
+									devices={effectiveAudioInputDevices}
 									value={selectedAudioInput}
 									onChange={onAudioInputChange}
 									placeholder="Select microphone"
 								/>
 								<InlineDevicePicker
 									label="Speaker"
-									devices={audioOutputDevices}
+									devices={effectiveAudioOutputDevices}
 									value={selectedAudioOutput}
 									onChange={onAudioOutputChange}
 									placeholder="Select speaker"
@@ -535,7 +646,7 @@ export const ControlBar = React.memo(
 								{renderButton("video")}
 								<InlineDevicePicker
 									label="Cam"
-									devices={videoInputDevices}
+									devices={effectiveVideoInputDevices}
 									value={selectedVideoInput}
 									onChange={onVideoInputChange}
 									placeholder="Select camera"

@@ -104,6 +104,36 @@ describe('MeetingRoom', () => {
     expect(getByText('CHK-20260302-121212-001')).toBeDefined();
   });
 
+  it('renders inline device selectors in the desktop dock', () => {
+    const { getByText } = render(
+      <MeetingRoom
+        roomName="Test Room"
+        localParticipant={localParticipant}
+        participants={participants}
+        enableTour={false}
+        audioInputDevices={[
+          { deviceId: 'mic-1', kind: 'audioinput', label: 'Microphone 1' },
+        ]}
+        audioOutputDevices={[
+          { deviceId: 'spk-1', kind: 'audiooutput', label: 'Speaker 1' },
+        ]}
+        videoInputDevices={[
+          { deviceId: 'cam-1', kind: 'videoinput', label: 'Camera 1' },
+        ]}
+        selectedAudioInput="mic-1"
+        selectedAudioOutput="spk-1"
+        selectedVideoInput="cam-1"
+        onAudioInputChange={() => {}}
+        onAudioOutputChange={() => {}}
+        onVideoInputChange={() => {}}
+      />
+    );
+
+    expect(getByText('Microphone 1')).toBeDefined();
+    expect(getByText('Speaker 1')).toBeDefined();
+    expect(getByText('Camera 1')).toBeDefined();
+  });
+
   it('opens the settings dialog and changes microphone preference', () => {
     const onAudioInputChange = vi.fn();
     const { getByLabelText, getByRole, getByText } = render(
