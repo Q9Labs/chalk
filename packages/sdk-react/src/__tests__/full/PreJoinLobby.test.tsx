@@ -1,6 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from 'bun:test';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { PreJoinLobby } from '../../components/full/PreJoinLobby';
+import { SharedPictureInPictureProvider } from '../../components/full/picture-in-picture/PictureInPictureContext';
 
 // @ts-ignore
 window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
@@ -34,6 +35,23 @@ describe('PreJoinLobby', () => {
     expect(getByText('Big Meeting')).toBeDefined();
     expect(getByPlaceholderText('Enter your name')).toBeDefined();
     expect(getByText('Ask to join')).toBeDefined();
+  });
+
+  it('renders with shared picture-in-picture enabled without re-render loops', async () => {
+    const { getByText } = render(
+      <SharedPictureInPictureProvider enabled>
+        <PreJoinLobby
+          onJoin={() => {}}
+          roomName="Big Meeting"
+          initialVideoEnabled={false}
+          initialAudioEnabled={false}
+          enablePictureInPicture
+        />
+      </SharedPictureInPictureProvider>
+    );
+
+    await act(async () => {});
+    expect(getByText('Big Meeting')).toBeDefined();
   });
 
   it('labels camera and microphone selector controls', async () => {

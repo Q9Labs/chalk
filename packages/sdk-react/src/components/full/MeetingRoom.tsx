@@ -178,11 +178,14 @@ function MeetingRoomBase({
 	const sharedPictureInPicture = useSharedPictureInPicture();
 	const registerSharedPictureInPicture = sharedPictureInPicture?.register;
 	const pictureInPictureOwnerId = useId();
-	const { source: pictureInPictureSource, previewSource } =
-		buildMeetingPictureInPictureSource({
-			participants: allParticipants,
-			localParticipant,
-		});
+	const { source: pictureInPictureSource, previewSource } = useMemo(
+		() =>
+			buildMeetingPictureInPictureSource({
+				participants: allParticipants,
+				localParticipant,
+			}),
+		[allParticipants, localParticipant],
+	);
 	const pictureInPictureOptions = useMemo(
 		() => ({
 			phase: "meeting" as const,

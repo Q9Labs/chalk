@@ -1,6 +1,11 @@
 import { beforeEach, describe, it, expect, vi } from 'bun:test';
-import { fireEvent, render, within } from '@testing-library/react';
+import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import { MeetingRoom } from '../../components/full/MeetingRoom';
+import { SharedPictureInPictureProvider } from '../../components/full/picture-in-picture/PictureInPictureContext';
+
+vi.mock('../../components/composite/ParticipantList/ParticipantOptionsMenu', () => ({
+  ParticipantOptionsMenu: () => null,
+}));
 
 // Mock everything
 // @ts-ignore
@@ -13,12 +18,15 @@ global.MediaStreamTrack = vi.fn().mockImplementation(() => ({
   enabled: true,
   stop: vi.fn(),
 })) as any;
+const originalDocumentPictureInPicture = window.documentPictureInPicture;
 
 describe('MeetingRoom', () => {
   const vibrateSpy = vi.spyOn(navigator, 'vibrate');
 
   beforeEach(() => {
     localStorage.clear();
+    vibrateSpy.mockClear();
+    window.documentPictureInPicture = originalDocumentPictureInPicture;
   });
 
   const localParticipant = {
@@ -41,6 +49,21 @@ describe('MeetingRoom', () => {
     );
     expect(getByText('Test Room')).toBeDefined();
     expect(getByLabelText('Meeting controls')).toBeDefined();
+  });
+
+  it('renders with shared picture-in-picture enabled without re-render loops', () => {
+    const { getByText } = render(
+      <SharedPictureInPictureProvider enabled>
+        <MeetingRoom
+          roomName="Test Room"
+          localParticipant={localParticipant}
+          participants={participants}
+          enablePictureInPicture
+        />
+      </SharedPictureInPictureProvider>
+    );
+
+    expect(getByText('Test Room')).toBeDefined();
   });
 
   it('shows chat panel when defaultChatOpen is true', () => {
@@ -126,7 +149,7 @@ describe('MeetingRoom', () => {
   });
 
   it('renders inline device selectors in the desktop dock', () => {
-    const { getByText } = render(
+    const { container, getByText } = render(
       <MeetingRoom
         roomName="Test Room"
         localParticipant={localParticipant}

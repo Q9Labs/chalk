@@ -107,17 +107,27 @@ function PreJoinLobbyBase({
 	const sharedPictureInPicture = useSharedPictureInPicture();
 	const registerSharedPictureInPicture = sharedPictureInPicture?.register;
 	const pictureInPictureOwnerId = useId();
-	const pictureInPictureOptions = useMemo(
-		() => ({
-			phase: "prejoin" as const,
-			roomName,
-			displayName: ui.displayName,
-			source: buildPreJoinPictureInPictureSource({
+	const pictureInPictureSource = useMemo(
+		() =>
+			buildPreJoinPictureInPictureSource({
 				displayName: ui.displayName,
 				videoTrack: activeVideoTrack,
 				isAudioEnabled: ui.isAudioEnabled,
 				isVideoEnabled: ui.isVideoEnabled,
 			}),
+		[
+			ui.displayName,
+			activeVideoTrack,
+			ui.isAudioEnabled,
+			ui.isVideoEnabled,
+		],
+	);
+	const pictureInPictureOptions = useMemo(
+		() => ({
+			phase: "prejoin" as const,
+			roomName,
+			displayName: ui.displayName,
+			source: pictureInPictureSource,
 			controls: {
 				isMuted: !ui.isAudioEnabled,
 				isVideoEnabled: ui.isVideoEnabled,
@@ -128,7 +138,7 @@ function PreJoinLobbyBase({
 		[
 			roomName,
 			ui.displayName,
-			activeVideoTrack,
+			pictureInPictureSource,
 			ui.isAudioEnabled,
 			ui.isVideoEnabled,
 			ui.toggleAudio,
