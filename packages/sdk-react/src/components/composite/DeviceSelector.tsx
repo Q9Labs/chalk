@@ -5,9 +5,11 @@ import { cn } from '../../utils/cn';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 import { getParticipantThemeVariables } from '../../utils/colorGenerator';
 
+type SelectableDevice = Pick<MediaDeviceInfo, 'deviceId' | 'kind' | 'label'>;
+
 export interface DeviceSelectorProps {
   type: 'audioinput' | 'audiooutput' | 'videoinput';
-  devices: MediaDeviceInfo[];
+  devices: readonly SelectableDevice[];
   selectedDeviceId?: string;
   onChange: (deviceId: string) => void;
   label?: string;
@@ -35,9 +37,9 @@ export const DeviceSelector = React.memo(({
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
-  const options = devices.map(d => ({
-    label: d.label || `${type} ${devices.indexOf(d) + 1}`,
-    value: d.deviceId
+  const options = devices.map((device, index) => ({
+    label: device.label || `${type} ${index + 1}`,
+    value: device.deviceId
   }));
 
   const playTestSound = () => {

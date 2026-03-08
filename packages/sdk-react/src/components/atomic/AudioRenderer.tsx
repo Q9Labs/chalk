@@ -180,8 +180,9 @@ export function AudioRenderer({
 
       applyAudioOutputDevice(audioEl);
 
-      // Update volume (per-participant override takes precedence)
-      audioEl.volume = getParticipantVolume ? getParticipantVolume(id) : volume;
+      // Update volume (per-participant override multiplied by global volume)
+      const baseVolume = getParticipantVolume ? getParticipantVolume(id) : 1;
+      audioEl.volume = Math.max(0, Math.min(1, baseVolume * volume));
 
       // Check if we need to attach a new track
       const currentStream = audioEl.srcObject as MediaStream | null;
@@ -284,8 +285,9 @@ export function AudioRenderer({
 
       applyAudioOutputDevice(audioEl);
 
-      // Per-participant override uses participant id (not ss- key)
-      audioEl.volume = getParticipantVolume ? getParticipantVolume(id) : volume;
+      // Update volume (per-participant override multiplied by global volume)
+      const baseVolume = getParticipantVolume ? getParticipantVolume(id) : 1;
+      audioEl.volume = Math.max(0, Math.min(1, baseVolume * volume));
 
       const currentStream = audioEl.srcObject as MediaStream | null;
       const currentTrack = currentStream?.getAudioTracks()[0];

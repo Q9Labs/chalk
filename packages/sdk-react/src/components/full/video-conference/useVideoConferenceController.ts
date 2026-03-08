@@ -31,7 +31,6 @@ import { useMeetingStats } from "./useMeetingStats";
 import { useVideoConferenceMeetingRoomProps } from "./useVideoConferenceMeetingRoomProps";
 import { useSessionEvents } from "./useSessionEvents";
 import { buildVideoConferenceViewState, type VideoConferenceControllerState } from "./view-state";
-import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
 
 const DISCONNECT_GRACE_MS = 8000;
 const EMPTY_FEATURES: Features = {};
@@ -47,8 +46,6 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const [isExiting, setIsExiting] = useState(false);
 
   const effectiveRoomName = roomName ?? roomId;
-
-  const { settings, updateAudioSettings, updateVideoSettings, updateAppearanceSettings, updateNotificationSettings } = useMeetingRoomSettings();
 
   const { join, leave, isJoining } = useConnection();
   const { isConnected, status } = useRoom();
@@ -325,11 +322,6 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       handleRetryConnection,
       connectionSupportCode: supportCode ?? undefined,
       className: cn(className, isExiting && "chalk-animate-exit"),
-      settings,
-      onUpdateAudioSettings: updateAudioSettings,
-      onUpdateVideoSettings: updateVideoSettings,
-      onUpdateAppearanceSettings: updateAppearanceSettings,
-      onUpdateNotificationSettings: updateNotificationSettings,
     },
   });
 

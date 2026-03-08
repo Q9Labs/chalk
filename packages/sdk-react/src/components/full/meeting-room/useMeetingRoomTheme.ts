@@ -24,6 +24,18 @@ export function useMeetingRoomTheme({ theme }: UseMeetingRoomThemeOptions) {
   }, []);
 
   useEffect(() => {
+    if (theme !== "system") {
+      applyThemeToDocument(theme);
+      setIsDarkMode(theme === "dark");
+    } else {
+      setIsDarkMode(
+        resolveThemeFromDocument({
+          defaultTheme: "light",
+          allowSystem: true,
+        }) === "dark",
+      );
+    }
+
     return subscribeToThemeChanges(
       (nextTheme) => {
         setIsDarkMode(nextTheme === "dark");

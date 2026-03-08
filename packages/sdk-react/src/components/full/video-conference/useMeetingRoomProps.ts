@@ -56,11 +56,6 @@ export interface UseMeetingRoomPropsParams {
 	handleRetryConnection: NonNullable<MeetingRoomProps["onRetryConnection"]>;
 	connectionSupportCode: MeetingRoomProps["connectionSupportCode"];
 	className: MeetingRoomProps["className"];
-	settings: MeetingRoomProps["settings"];
-	onUpdateAudioSettings: MeetingRoomProps["onUpdateAudioSettings"];
-	onUpdateVideoSettings: MeetingRoomProps["onUpdateVideoSettings"];
-	onUpdateAppearanceSettings: MeetingRoomProps["onUpdateAppearanceSettings"];
-	onUpdateNotificationSettings: MeetingRoomProps["onUpdateNotificationSettings"];
 }
 
 export function useMeetingRoomProps({
@@ -116,11 +111,6 @@ export function useMeetingRoomProps({
 	handleRetryConnection,
 	connectionSupportCode,
 	className,
-	settings,
-	onUpdateAudioSettings,
-	onUpdateVideoSettings,
-	onUpdateAppearanceSettings,
-	onUpdateNotificationSettings,
 }: UseMeetingRoomPropsParams): MeetingRoomProps {
 	const { chat, recording, screenShare, handRaise, reactions, whiteboard, tour } =
 		featureFlags;
@@ -186,11 +176,6 @@ export function useMeetingRoomProps({
 			onRetryConnection: handleRetryConnection,
 			connectionSupportCode,
 			className,
-			settings,
-			onUpdateAudioSettings,
-			onUpdateVideoSettings,
-			onUpdateAppearanceSettings,
-			onUpdateNotificationSettings,
 		}),
 		[
 			roomName,
@@ -251,11 +236,6 @@ export function useMeetingRoomProps({
 			handleRetryConnection,
 			connectionSupportCode,
 			className,
-			settings,
-			onUpdateAudioSettings,
-			onUpdateVideoSettings,
-			onUpdateAppearanceSettings,
-			onUpdateNotificationSettings,
 		],
 	);
 }

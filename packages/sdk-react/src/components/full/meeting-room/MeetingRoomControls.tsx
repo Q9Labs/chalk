@@ -1,4 +1,3 @@
-import type { MediaDevice } from "@q9labs/chalk-core";
 import { cn } from "../../../utils/cn";
 import { ControlBar, MobileControlSheet, ReactionPicker } from "../../composite";
 import type { MeetingPanel } from "./types";
@@ -27,17 +26,8 @@ interface MeetingRoomControlsProps {
   enableWhiteboard: boolean;
   enableTranscription: boolean;
   enableChat: boolean;
-  audioInputDevices?: readonly MediaDevice[];
-  audioOutputDevices?: readonly MediaDevice[];
-  videoInputDevices?: readonly MediaDevice[];
-  selectedAudioInput?: string;
-  selectedAudioOutput?: string;
-  selectedVideoInput?: string;
   onToggleMute?: () => void;
   onToggleVideo?: () => void;
-  onAudioInputChange?: (deviceId: string) => void;
-  onAudioOutputChange?: (deviceId: string) => void;
-  onVideoInputChange?: (deviceId: string) => void;
   onToggleScreenShare?: () => void;
   onToggleRecording?: () => void;
   onToggleHandRaise?: () => void;
@@ -74,17 +64,8 @@ export function MeetingRoomControls({
   enableWhiteboard,
   enableTranscription,
   enableChat,
-  audioInputDevices,
-  audioOutputDevices,
-  videoInputDevices,
-  selectedAudioInput,
-  selectedAudioOutput,
-  selectedVideoInput,
   onToggleMute,
   onToggleVideo,
-  onAudioInputChange,
-  onAudioOutputChange,
-  onVideoInputChange,
   onToggleScreenShare,
   onToggleRecording,
   onToggleHandRaise,
@@ -177,17 +158,8 @@ export function MeetingRoomControls({
             isChatOpen={activePanel === "chat"}
             isParticipantsOpen={activePanel === "participants"}
             isTranscriptionEnabled={activePanel === "transcription"}
-            audioInputDevices={audioInputDevices}
-            audioOutputDevices={audioOutputDevices}
-            videoInputDevices={videoInputDevices}
-            selectedAudioInput={selectedAudioInput}
-            selectedAudioOutput={selectedAudioOutput}
-            selectedVideoInput={selectedVideoInput}
             onToggleMute={onToggleMute}
             onToggleVideo={onToggleVideo}
-            onAudioInputChange={onAudioInputChange}
-            onAudioOutputChange={onAudioOutputChange}
-            onVideoInputChange={onVideoInputChange}
             onToggleScreenShare={enableScreenShare ? onToggleScreenShare : undefined}
             onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
             onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}

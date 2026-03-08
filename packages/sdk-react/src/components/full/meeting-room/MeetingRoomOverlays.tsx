@@ -21,6 +21,7 @@ interface MeetingRoomOverlaysProps {
   allParticipants: Participant[];
   getParticipantVolume?: (participantId: string) => number;
   selectedAudioOutput?: string;
+  volume?: number;
 }
 
 export function MeetingRoomOverlays({
@@ -40,6 +41,7 @@ export function MeetingRoomOverlays({
   allParticipants,
   getParticipantVolume,
   selectedAudioOutput,
+  volume = 1,
 }: MeetingRoomOverlaysProps) {
   const meetingLink = typeof window !== "undefined" ? window.location.href : "";
 
@@ -53,7 +55,7 @@ export function MeetingRoomOverlays({
 
       <InviteToast isVisible={showInviteToast && !showTour} onDismiss={() => setShowInviteToast(false)} meetingLink={meetingLink} className={cn(isMobile && "top-4 bottom-auto left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm")} />
 
-      <AudioRenderer participants={allParticipants} getParticipantVolume={getParticipantVolume} audioOutputDeviceId={selectedAudioOutput} />
+      <AudioRenderer participants={allParticipants} getParticipantVolume={getParticipantVolume} audioOutputDeviceId={selectedAudioOutput} volume={volume} />
     </>
   );
 }

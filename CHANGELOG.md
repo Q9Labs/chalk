@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **SDK-React: in-room media device switching** — the desktop meeting control bar now includes inline dropdowns for microphone input, speaker output, and camera device selection beside the existing mic/video controls.
+- **SDK-React: in-room settings dialog** — meeting rooms now ship a searchable settings modal with left-rail navigation for audio, video, appearance, and entry preferences, backed by browser-local persistence.
 
 ### Changed
 
 ### Fixed
+
+- **SDK-React: persistent room preferences** — saved room settings now re-apply device choices when available, preserve layout/theme/filmstrip defaults between visits, and scale remote playback volume consistently inside the meeting room.
 
 ## [0.0.72] - 2026-03-08
 

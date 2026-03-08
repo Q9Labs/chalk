@@ -7,6 +7,7 @@ interface UseMeetingRoomUiStateOptions {
   defaultParticipantsOpen: boolean;
   defaultTranscriptionOpen: boolean;
   defaultLayout: MeetingLayout;
+  defaultFilmstripOpen?: boolean;
   showInviteToastOnJoin: boolean;
   onChatOpen?: () => void;
 }
@@ -18,7 +19,7 @@ function resolveDefaultPanel({ defaultChatOpen, defaultParticipantsOpen, default
   return null;
 }
 
-export function useMeetingRoomUiState({ defaultChatOpen, defaultParticipantsOpen, defaultTranscriptionOpen, defaultLayout, showInviteToastOnJoin, onChatOpen }: UseMeetingRoomUiStateOptions) {
+export function useMeetingRoomUiState({ defaultChatOpen, defaultParticipantsOpen, defaultTranscriptionOpen, defaultLayout, defaultFilmstripOpen = true, showInviteToastOnJoin, onChatOpen }: UseMeetingRoomUiStateOptions) {
   const [activePanel, setActivePanel] = useState<MeetingPanel | null>(() =>
     resolveDefaultPanel({
       defaultChatOpen,
@@ -27,13 +28,14 @@ export function useMeetingRoomUiState({ defaultChatOpen, defaultParticipantsOpen
     }),
   );
   const [layout, setLayout] = useState<MeetingLayout>(defaultLayout);
-  const [isFilmstripOpen, setIsFilmstripOpen] = useState(true);
+  const [isFilmstripOpen, setIsFilmstripOpen] = useState(defaultFilmstripOpen);
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showInviteToast, setShowInviteToast] = useState(showInviteToastOnJoin);
   const [showTour, setShowTour] = useState(false);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (activePanel === "chat") {
@@ -68,5 +70,7 @@ export function useMeetingRoomUiState({ defaultChatOpen, defaultParticipantsOpen
     isExiting,
     setIsExiting,
     togglePanel,
+    isSettingsOpen,
+    setIsSettingsOpen,
   };
 }

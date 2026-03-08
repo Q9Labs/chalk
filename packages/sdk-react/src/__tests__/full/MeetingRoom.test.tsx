@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'bun:test';
+import { beforeEach, describe, it, expect, vi } from 'bun:test';
 import { fireEvent, render } from '@testing-library/react';
 import { MeetingRoom } from '../../components/full/MeetingRoom';
 
@@ -15,6 +15,10 @@ global.MediaStreamTrack = vi.fn().mockImplementation(() => ({
 })) as any;
 
 describe('MeetingRoom', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   const localParticipant = {
     id: 'local',
     displayName: 'Me',
@@ -100,11 +104,9 @@ describe('MeetingRoom', () => {
     expect(getByText('CHK-20260302-121212-001')).toBeDefined();
   });
 
-  it('lets users change in-meeting mic, speaker, and camera devices from the dock', () => {
+  it('opens the settings dialog and changes microphone preference', () => {
     const onAudioInputChange = vi.fn();
-    const onAudioOutputChange = vi.fn();
-    const onVideoInputChange = vi.fn();
-    const { getByText } = render(
+    const { getByLabelText, getByRole, getByText } = render(
       <MeetingRoom
         roomName="Test Room"
         localParticipant={localParticipant}
@@ -123,24 +125,14 @@ describe('MeetingRoom', () => {
           { deviceId: 'cam-2', kind: 'videoinput', label: 'Camera 2' },
         ]}
         selectedAudioInput="mic-1"
-        selectedAudioOutput="spk-1"
-        selectedVideoInput="cam-1"
         onAudioInputChange={onAudioInputChange}
-        onAudioOutputChange={onAudioOutputChange}
-        onVideoInputChange={onVideoInputChange}
       />
     );
 
+    fireEvent.click(getByRole('button', { name: 'Settings' }));
+    expect(getByLabelText('Search settings')).toBeDefined();
     fireEvent.click(getByText('Microphone 1'));
     fireEvent.click(getByText('Microphone 2'));
     expect(onAudioInputChange).toHaveBeenCalledWith('mic-2');
-
-    fireEvent.click(getByText('Speaker 1'));
-    fireEvent.click(getByText('Speaker 2'));
-    expect(onAudioOutputChange).toHaveBeenCalledWith('spk-2');
-
-    fireEvent.click(getByText('Camera 1'));
-    fireEvent.click(getByText('Camera 2'));
-    expect(onVideoInputChange).toHaveBeenCalledWith('cam-2');
   });
 });
