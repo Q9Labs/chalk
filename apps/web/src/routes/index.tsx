@@ -1,7 +1,7 @@
 import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Input } from "@q9labs/chalk-ui";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
 	ArrowRight,
 	Globe,
@@ -58,8 +58,8 @@ function App() {
           <div className="glass-hud px-8 h-16 rounded-full flex items-center justify-between border border-white/10 shadow-2xl backdrop-blur-2xl">
             <ChalkLogo />
             <nav className="hidden md:flex items-center gap-10">
-              <a href="/docs" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Documentation</a>
-              <a href="/dashboard" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Dashboard</a>
+              <Link to="/documentation" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Documentation</Link>
+              <Link to="/dashboard" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Dashboard</Link>
             </nav>
             <div className="flex items-center gap-4">
               <button
@@ -180,7 +180,7 @@ function App() {
 				<div className="container mx-auto max-w-6xl flex flex-col md:flex-row justify-between items-center gap-12">
 					<ChalkLogo className="text-foreground/50" />
 					<nav className="flex gap-12 text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-						<a href="/docs" className="hover:text-primary transition-colors">Documentation</a>
+						<Link to="/documentation" className="hover:text-primary transition-colors">Documentation</Link>
 						<a href="/privacy" className="hover:text-primary transition-colors">Privacy</a>
 						<a href="/terms" className="hover:text-primary transition-colors">Terms</a>
 					</nav>

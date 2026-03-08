@@ -89,7 +89,7 @@ export async function startMagicLink(apiUrl: string, email: string) {
 	const callbackUrl =
 		typeof window === "undefined"
 			? undefined
-			: `${window.location.origin}/auth/callback`;
+			: `${window.location.origin}/dashboard`;
 
 	const res = await fetch(`${apiUrl}/api/v1/internal/auth/start`, {
 		method: "POST",

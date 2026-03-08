@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveApiUrl, verifyMagicLink } from "./internalAuth";
+import { resolveApiUrl, startMagicLink, verifyMagicLink } from "./internalAuth";
 
 describe("resolveApiUrl", () => {
 	it("prefers localhost api when localhost is running with prod config", () => {
@@ -75,5 +75,31 @@ describe("verifyMagicLink", () => {
 		).resolves.toBeUndefined();
 
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("startMagicLink", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("requests dashboard as the default callback url", async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({}),
+		});
+		vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
+
+		await startMagicLink("https://chalk-api.q9labs.ai", "hasan@q9labs.ai");
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			"https://chalk-api.q9labs.ai/api/v1/internal/auth/start",
+			expect.objectContaining({
+				body: JSON.stringify({
+					email: "hasan@q9labs.ai",
+					callback_url: "http://localhost:3000/dashboard",
+				}),
+			}),
+		);
 	});
 });

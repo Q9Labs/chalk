@@ -513,7 +513,36 @@ func strPtr(s string) *string { return &s }
 
 func (h *InternalAuthHandler) resolveMagicLinkCallbackURL(requestedCallbackURL string) string {
 	appURL := h.resolveMagicLinkAppURL(requestedCallbackURL)
-	return appURL + "/auth/callback"
+	defaultCallbackURL := appURL + "/dashboard"
+
+	trimmed := strings.TrimSpace(requestedCallbackURL)
+	if trimmed == "" {
+		return defaultCallbackURL
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return defaultCallbackURL
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return defaultCallbackURL
+	}
+	if parsed.Host == "" {
+		return defaultCallbackURL
+	}
+
+	origin := parsed.Scheme + "://" + parsed.Host
+	if !h.isAllowedMagicLinkOrigin(origin) {
+		return defaultCallbackURL
+	}
+
+	parsed.User = nil
+	parsed.Fragment = ""
+	if strings.TrimSpace(parsed.Path) == "" || parsed.Path == "/" {
+		parsed.Path = "/dashboard"
+	}
+
+	return parsed.String()
 }
 
 func (h *InternalAuthHandler) buildMagicLinkVerificationURL(c *gin.Context, token, callbackURL string) string {

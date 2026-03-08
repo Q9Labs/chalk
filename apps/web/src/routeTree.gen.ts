@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DocumentationRouteImport } from './routes/documentation'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
@@ -26,6 +27,11 @@ import { Route as DocsAuthenticationRouteImport } from './routes/docs/authentica
 import { Route as DocsApiReferenceRouteImport } from './routes/docs/api-reference'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
+const DocumentationRoute = DocumentationRouteImport.update({
+  id: '/documentation',
+  path: '/documentation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoRoute = DemoRouteImport.update({
   id: '/demo',
   path: '/demo',
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/demo': typeof DemoRoute
+  '/documentation': typeof DocumentationRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/demo': typeof DemoRoute
+  '/documentation': typeof DocumentationRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/demo': typeof DemoRoute
+  '/documentation': typeof DocumentationRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/demo'
+    | '/documentation'
     | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/demo'
+    | '/documentation'
     | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/demo'
+    | '/documentation'
     | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   DemoRoute: typeof DemoRoute
+  DocumentationRoute: typeof DocumentationRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   DocsApiReferenceRoute: typeof DocsApiReferenceRoute
   DocsAuthenticationRoute: typeof DocsAuthenticationRoute
@@ -240,6 +253,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/documentation': {
+      id: '/documentation'
+      path: '/documentation'
+      fullPath: '/documentation'
+      preLoaderRoute: typeof DocumentationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo': {
       id: '/demo'
       path: '/demo'
@@ -359,6 +379,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   DemoRoute: DemoRoute,
+  DocumentationRoute: DocumentationRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   DocsApiReferenceRoute: DocsApiReferenceRoute,
   DocsAuthenticationRoute: DocsAuthenticationRoute,

@@ -201,19 +201,19 @@ func TestInternalAuthResolveMagicLinkAppURL(t *testing.T) {
 	handler := &InternalAuthHandler{
 		cfg: &config.Config{
 			Auth: config.AuthConfig{
-				InternalAppURL: "https://app.chalk.q9labs.ai",
+				InternalAppURL: "https://chalk.q9labs.ai",
 			},
 		},
 	}
 
 	t.Run("uses configured app url by default", func(t *testing.T) {
 		got := handler.resolveMagicLinkAppURL("")
-		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+		require.Equal(t, "https://chalk.q9labs.ai", got)
 	})
 
 	t.Run("accepts configured origin callback", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("https://app.chalk.q9labs.ai/auth/callback")
-		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+		got := handler.resolveMagicLinkAppURL("https://chalk.q9labs.ai/dashboard")
+		require.Equal(t, "https://chalk.q9labs.ai", got)
 	})
 
 	t.Run("accepts localhost callback for dev ui", func(t *testing.T) {
@@ -233,12 +233,47 @@ func TestInternalAuthResolveMagicLinkAppURL(t *testing.T) {
 
 	t.Run("rejects non-allowlisted domain", func(t *testing.T) {
 		got := handler.resolveMagicLinkAppURL("https://evil.example.com/auth/callback")
-		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+		require.Equal(t, "https://chalk.q9labs.ai", got)
 	})
 
 	t.Run("rejects invalid callback URL", func(t *testing.T) {
 		got := handler.resolveMagicLinkAppURL("javascript:alert(1)")
-		require.Equal(t, "https://app.chalk.q9labs.ai", got)
+		require.Equal(t, "https://chalk.q9labs.ai", got)
+	})
+}
+
+func TestInternalAuthResolveMagicLinkCallbackURL(t *testing.T) {
+	handler := &InternalAuthHandler{
+		cfg: &config.Config{
+			Auth: config.AuthConfig{
+				InternalAppURL: "https://chalk.q9labs.ai",
+			},
+		},
+	}
+
+	t.Run("defaults to dashboard when callback is missing", func(t *testing.T) {
+		got := handler.resolveMagicLinkCallbackURL("")
+		require.Equal(t, "https://chalk.q9labs.ai/dashboard", got)
+	})
+
+	t.Run("preserves allowlisted hosted callback path", func(t *testing.T) {
+		got := handler.resolveMagicLinkCallbackURL("https://chalk.q9labs.ai/dashboard?tab=recent")
+		require.Equal(t, "https://chalk.q9labs.ai/dashboard?tab=recent", got)
+	})
+
+	t.Run("preserves localhost callback path", func(t *testing.T) {
+		got := handler.resolveMagicLinkCallbackURL("http://localhost:3070/auth/callback?next=%2Fdashboard")
+		require.Equal(t, "http://localhost:3070/auth/callback?next=%2Fdashboard", got)
+	})
+
+	t.Run("normalizes root callback to dashboard", func(t *testing.T) {
+		got := handler.resolveMagicLinkCallbackURL("https://chalk.q9labs.ai")
+		require.Equal(t, "https://chalk.q9labs.ai/dashboard", got)
+	})
+
+	t.Run("falls back to default dashboard for non-allowlisted callback", func(t *testing.T) {
+		got := handler.resolveMagicLinkCallbackURL("https://evil.example.com/dashboard")
+		require.Equal(t, "https://chalk.q9labs.ai/dashboard", got)
 	})
 }
 
@@ -257,12 +292,12 @@ func TestInternalAuthBuildMagicLinkVerificationURL(t *testing.T) {
 	got := handler.buildMagicLinkVerificationURL(
 		c,
 		"token-123",
-		"http://localhost:3070/auth/callback",
+		"https://chalk.q9labs.ai/dashboard",
 	)
 
 	require.Equal(
 		t,
-		"https://chalk-api.q9labs.ai/api/v1/internal/auth/verify?callback_url=http%3A%2F%2Flocalhost%3A3070%2Fauth%2Fcallback&token=token-123",
+		"https://chalk-api.q9labs.ai/api/v1/internal/auth/verify?callback_url=https%3A%2F%2Fchalk.q9labs.ai%2Fdashboard&token=token-123",
 		got,
 	)
 }
