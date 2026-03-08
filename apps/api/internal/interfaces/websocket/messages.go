@@ -19,6 +19,7 @@ const (
 	MessageTypeParticipantMute   MessageType = "participant.mute"
 	MessageTypeParticipantUnmute MessageType = "participant.unmute"
 	MessageTypeChatMessage       MessageType = "chat.message"
+	MessageTypeChatRead          MessageType = "chat.read"
 	MessageTypeReaction          MessageType = "reaction"
 	MessageTypeHandRaised        MessageType = "hand.raised"
 	MessageTypeHandLowered       MessageType = "hand.lowered"
@@ -113,6 +114,22 @@ type ChatMessagePayload struct {
 	DisplayName   string    `json:"display_name"`
 	Content       string    `json:"content"`
 	Timestamp     time.Time `json:"timestamp"`
+	Attachments   []ChatAttachmentPayload `json:"attachments,omitempty"`
+	ReadBy        []ChatReadReceiptPayload `json:"read_by,omitempty"`
+}
+
+type ChatAttachmentPayload struct {
+	ID        uuid.UUID `json:"id"`
+	FileName  string    `json:"file_name"`
+	MimeType  string    `json:"mime_type"`
+	SizeBytes int64     `json:"size_bytes"`
+	Kind      string    `json:"kind"`
+}
+
+type ChatReadReceiptPayload struct {
+	ParticipantID uuid.UUID `json:"participant_id"`
+	DisplayName   string    `json:"display_name"`
+	ReadAt        time.Time `json:"read_at"`
 }
 
 // ReactionPayload contains an emoji reaction
@@ -156,6 +173,7 @@ type RoomSnapshotPayload struct {
 	IsRecording  bool                 `json:"is_recording"`
 	RecordingID  *uuid.UUID           `json:"recording_id,omitempty"`
 	LastSeq      int64                `json:"last_seq"`
+	Messages     []ChatMessagePayload `json:"messages,omitempty"`
 }
 
 // RoomSyncPayload is sent by client to request a room snapshot
@@ -183,7 +201,19 @@ type ErrorPayload struct {
 
 // ChatSendPayload is sent by client to send a chat message
 type ChatSendPayload struct {
-	Content string `json:"content"`
+	Content       string      `json:"content"`
+	AttachmentIDs []uuid.UUID `json:"attachment_ids,omitempty"`
+}
+
+type ChatReadPayload struct {
+	ReadThroughMessageID uuid.UUID `json:"read_through_message_id"`
+}
+
+type ChatReadPayloadOut struct {
+	MessageIDs    []uuid.UUID `json:"message_ids"`
+	ParticipantID uuid.UUID   `json:"participant_id"`
+	DisplayName   string      `json:"display_name"`
+	ReadAt        time.Time   `json:"read_at"`
 }
 
 // ReactionSendPayload is sent by client to send a reaction

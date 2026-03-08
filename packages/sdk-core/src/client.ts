@@ -274,6 +274,40 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     return presignWhiteboardDownloadOp(this.apiClient, roomId, fileId);
   }
 
+  async presignChatAttachmentsUpload(
+    roomId: string,
+    files: Array<{ fileName: string; mimeType: string; sizeBytes: number }>,
+  ): Promise<Array<{
+    attachmentId: string;
+    uploadUrl: string;
+    expiresAtMs: number;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    kind: "image" | "document" | "file";
+  }>> {
+    const response = await this.apiClient.presignChatAttachmentsUpload(roomId, files);
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message ?? "Failed to presign chat attachment upload");
+    }
+    return response.data.files;
+  }
+
+  async presignChatAttachmentDownload(roomId: string, attachmentId: string): Promise<{ downloadUrl: string; expiresAtMs: number }> {
+    const response = await this.apiClient.presignChatAttachmentDownload(roomId, attachmentId);
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message ?? "Failed to presign chat attachment download");
+    }
+    return response.data;
+  }
+
+  async uploadChatAttachment(roomId: string, attachmentId: string, file: File): Promise<void> {
+    const response = await this.apiClient.uploadChatAttachment(roomId, attachmentId, file);
+    if (!response.success) {
+      throw new Error(response.error?.message ?? "Failed to upload chat attachment");
+    }
+  }
+
   get session(): ConferenceSession | null {
     return this.currentSession;
   }

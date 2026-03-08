@@ -28,7 +28,16 @@ export function isLocalHost(hostname: string | undefined) {
 export function resolveApiUrl(configuredApiUrl?: string, currentHostname?: string) {
 	const normalizedConfigured = configuredApiUrl?.trim();
 	if (isLocalHost(currentHostname)) {
-		if (!normalizedConfigured || normalizedConfigured === PROD_API_URL) {
+		if (!normalizedConfigured) {
+			return LOCAL_API_URL;
+		}
+
+		try {
+			const configuredHost = new URL(normalizedConfigured).hostname;
+			if (!isLocalHost(configuredHost)) {
+				return LOCAL_API_URL;
+			}
+		} catch {
 			return LOCAL_API_URL;
 		}
 	}

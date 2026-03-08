@@ -37,6 +37,8 @@ function MeetingRoomBase({
   chatMessages = [],
   unreadChatCount = 0,
   onSendMessage,
+  onSendMessageWithAttachments,
+  onResolveChatAttachmentUrl,
   onChatOpen,
   enableChat = true,
   enableRecording = true,
@@ -177,6 +179,8 @@ function MeetingRoomBase({
           onAddPeople={handleAddPeople}
           chatMessages={chatMessages}
           onSendMessage={onSendMessage}
+          onSendMessageWithAttachments={onSendMessageWithAttachments}
+          onResolveChatAttachmentUrl={onResolveChatAttachmentUrl}
           transcripts={transcripts}
           participantVolumes={participantVolumes}
           onParticipantVolumeChange={onParticipantVolumeChange}

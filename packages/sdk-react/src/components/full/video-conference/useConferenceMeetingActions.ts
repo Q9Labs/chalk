@@ -42,6 +42,7 @@ export interface UseConferenceMeetingActionsParams {
 	interactions: InteractionsLike;
 	incrementHandRaiseCount: () => void;
 	sendChatMessage: (content: string) => void;
+	sendChatMessageWithAttachments: (content: string, files: File[]) => Promise<void>;
 }
 
 export interface UseConferenceMeetingActionsReturn {
@@ -56,6 +57,7 @@ export interface UseConferenceMeetingActionsReturn {
 	handleToggleHandRaise: () => void;
 	handleSendReaction: (emoji: string) => void;
 	handleSendMessage: (content: string) => void;
+	handleSendMessageWithAttachments: (content: string, files: File[]) => Promise<void>;
 }
 
 export function useConferenceMeetingActions({
@@ -77,6 +79,7 @@ export function useConferenceMeetingActions({
 	interactions,
 	incrementHandRaiseCount,
 	sendChatMessage,
+	sendChatMessageWithAttachments,
 }: UseConferenceMeetingActionsParams): UseConferenceMeetingActionsReturn {
 	const handleLeave = useCallback(() => {
 		setShowLeaveConfirm(true);
@@ -171,6 +174,11 @@ export function useConferenceMeetingActions({
 		[sendChatMessage],
 	);
 
+	const handleSendMessageWithAttachments = useCallback(
+		(content: string, files: File[]) => sendChatMessageWithAttachments(content, files),
+		[sendChatMessageWithAttachments],
+	);
+
 	return {
 		handleLeave,
 		initiateLeave,
@@ -183,5 +191,6 @@ export function useConferenceMeetingActions({
 		handleToggleHandRaise,
 		handleSendReaction,
 		handleSendMessage,
+		handleSendMessageWithAttachments,
 	};
 }

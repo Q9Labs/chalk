@@ -445,13 +445,13 @@ describe("ConferenceSession", () => {
 		it("should send message via sendMessage", () => {
 			room.sendMessage("Hello room!");
 
-			expect(mockWSClient.sendChatMessage).toHaveBeenCalledWith("Hello room!");
+			expect(mockWSClient.sendChatMessage).toHaveBeenCalledWith("Hello room!", []);
 		});
 
 		it("should trim message content", () => {
 			room.sendMessage("  Hello  ");
 
-			expect(mockWSClient.sendChatMessage).toHaveBeenCalledWith("Hello");
+			expect(mockWSClient.sendChatMessage).toHaveBeenCalledWith("Hello", []);
 		});
 
 		it("should not send empty messages", () => {

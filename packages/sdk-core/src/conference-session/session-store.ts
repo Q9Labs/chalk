@@ -21,6 +21,7 @@ export interface ConferenceSessionStore {
   getParticipants: () => Map<string, Participant>;
   getPeerIdMap: () => Map<string, string>;
   getMessages: () => ChatMessage[];
+  setMessages: (messages: ChatMessage[]) => void;
   getTranscripts: () => Transcript[];
   getLocalParticipant: () => Participant | null;
   getActiveSpeaker: () => Participant | null;
@@ -91,6 +92,7 @@ export const createConferenceSessionStore = (bindings: ConferenceSessionStoreBin
     getParticipants,
     getPeerIdMap,
     getMessages,
+    setMessages: bindings.setMessages,
     getTranscripts,
     getLocalParticipant,
     getActiveSpeaker,

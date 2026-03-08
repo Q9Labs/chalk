@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	chatdomain "github.com/Q9Labs/chalk/internal/domain/chat"
 	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/infrastructure/logging"
 	"github.com/google/uuid"
@@ -36,6 +37,12 @@ type ParticipantService interface {
 // RoomStateSource provides authoritative cross-instance participant metadata.
 type RoomStateSource interface {
 	GetParticipants(ctx context.Context, roomID uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error)
+}
+
+type ChatService interface {
+	ListRoomMessages(ctx context.Context, roomID, requesterParticipantID uuid.UUID) ([]chatdomain.Message, error)
+	CreateMessage(ctx context.Context, roomID, senderParticipantID uuid.UUID, content string, attachmentIDs []uuid.UUID) (*chatdomain.Message, error)
+	MarkReadThrough(ctx context.Context, roomID, participantID uuid.UUID, readThroughMessageID uuid.UUID) ([]chatdomain.ReadUpdate, error)
 }
 
 // TranscriptInput matches the domain service input
@@ -68,6 +75,7 @@ type Hub struct {
 	transcriptService  TranscriptService
 	participantService ParticipantService
 	roomStateSource    RoomStateSource
+	chatService        ChatService
 
 	whiteboardPersistTimers map[uuid.UUID]*time.Timer
 
@@ -132,6 +140,10 @@ func (h *Hub) SetParticipantService(ps ParticipantService) {
 // SetRoomStateSource sets the room-state source used for authoritative room snapshots.
 func (h *Hub) SetRoomStateSource(source RoomStateSource) {
 	h.roomStateSource = source
+}
+
+func (h *Hub) SetChatService(service ChatService) {
+	h.chatService = service
 }
 
 // SetWhiteboardStateStore sets the persistence layer for whiteboard state.
@@ -268,7 +280,7 @@ func (h *Hub) registerClient(client *Client) {
 
 	h.mu.Unlock()
 
-	snapshot := h.GetRoomSnapshot(client.roomID)
+	snapshot := h.GetRoomSnapshot(client.roomID, client.participantID, true)
 
 	snapshotMsg, _ := NewMessage(MessageTypeRoomSnapshot, snapshot)
 	snapshotData, _ := json.Marshal(snapshotMsg)
@@ -416,8 +428,22 @@ func (h *Hub) BroadcastToRoom(roomID uuid.UUID, message []byte, excludeParticipa
 	h.BroadcastToRoomReliable(roomID, message, excludeParticipantID)
 }
 
+func (h *Hub) FanoutChatReadUpdate(roomID uuid.UUID, senderIdentityKey string, message []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	roomClients := h.rooms[roomID]
+	for participantID, client := range roomClients {
+		meta := h.participantMeta[participantID]
+		if meta.IdentityKey != senderIdentityKey {
+			continue
+		}
+		client.SendReliable(message)
+	}
+}
+
 func (h *Hub) fanoutRoomSnapshotReliable(roomID uuid.UUID) {
-	snapshot := h.GetRoomSnapshot(roomID)
+	snapshot := h.GetRoomSnapshot(roomID, uuid.Nil, false)
 	snapshotMsg, err := NewMessage(MessageTypeRoomSnapshot, snapshot)
 	if err != nil {
 		h.logger.Error("failed to encode room snapshot",
@@ -540,19 +566,27 @@ func (h *Hub) SetRoomRecordingState(roomID uuid.UUID, isRecording bool, recordin
 	}
 }
 
-// GetRoomSnapshot returns the current state of a room
-func (h *Hub) GetRoomSnapshot(roomID uuid.UUID) RoomSnapshotPayload {
+// GetRoomSnapshot returns the current state of a room.
+// Direct client snapshots can opt into durable chat history; room-wide fanout snapshots stay lean.
+func (h *Hub) GetRoomSnapshot(roomID, requesterParticipantID uuid.UUID, includeMessages bool) RoomSnapshotPayload {
 	h.mu.RLock()
 	snapshot := h.getRoomSnapshotLocked(roomID)
 	h.mu.RUnlock()
 
-	if h.roomStateSource == nil {
-		return snapshot
-	}
-
 	ctx := h.ctx
 	if ctx == nil {
 		ctx = context.Background()
+	}
+
+	attachMessages := func(current RoomSnapshotPayload) RoomSnapshotPayload {
+		if includeMessages && h.chatService != nil && requesterParticipantID != uuid.Nil {
+			current.Messages = h.buildChatSnapshot(ctx, roomID, requesterParticipantID)
+		}
+		return current
+	}
+
+	if h.roomStateSource == nil {
+		return attachMessages(snapshot)
 	}
 
 	participants, err := h.roomStateSource.GetParticipants(ctx, roomID)
@@ -563,10 +597,10 @@ func (h *Hub) GetRoomSnapshot(roomID uuid.UUID) RoomSnapshotPayload {
 			"room_id", roomID,
 			"error", err.Error(),
 		)
-		return snapshot
+		return attachMessages(snapshot)
 	}
 	if len(participants) == 0 {
-		return snapshot
+		return attachMessages(snapshot)
 	}
 
 	resolvedParticipants := make([]ParticipantPayload, 0, len(participants))
@@ -582,7 +616,8 @@ func (h *Hub) GetRoomSnapshot(roomID uuid.UUID) RoomSnapshotPayload {
 
 	snapshot.Participants = resolvedParticipants
 	snapshot.LastSeq = time.Now().UnixMilli()
-	return snapshot
+
+	return attachMessages(snapshot)
 }
 
 func (h *Hub) getRoomSnapshotLocked(roomID uuid.UUID) RoomSnapshotPayload {
@@ -613,6 +648,65 @@ func (h *Hub) getRoomSnapshotLocked(roomID uuid.UUID) RoomSnapshotPayload {
 	}
 
 	return snapshot
+}
+
+func (h *Hub) buildChatSnapshot(ctx context.Context, roomID, requesterParticipantID uuid.UUID) []ChatMessagePayload {
+	if h.chatService == nil {
+		return nil
+	}
+
+	messages, err := h.chatService.ListRoomMessages(ctx, roomID, requesterParticipantID)
+	if err != nil {
+		h.logger.Warn("failed to load room chat snapshot",
+			"event", "ws.snapshot.chat_error",
+			"room_id", roomID,
+			"participant_id", requesterParticipantID,
+			"error", err.Error(),
+		)
+		return nil
+	}
+
+	payloads := make([]ChatMessagePayload, 0, len(messages))
+	for _, message := range messages {
+		payloads = append(payloads, chatMessageToPayload(message))
+	}
+	return payloads
+}
+
+func chatMessageToPayload(message chatdomain.Message) ChatMessagePayload {
+	payload := ChatMessagePayload{
+		ID:            message.ID,
+		ParticipantID: message.SenderParticipantID,
+		DisplayName:   message.SenderDisplayName,
+		Content:       message.Content,
+		Timestamp:     message.CreatedAt,
+	}
+
+	if len(message.Attachments) > 0 {
+		payload.Attachments = make([]ChatAttachmentPayload, 0, len(message.Attachments))
+		for _, attachment := range message.Attachments {
+			payload.Attachments = append(payload.Attachments, ChatAttachmentPayload{
+				ID:        attachment.ID,
+				FileName:  attachment.FileName,
+				MimeType:  attachment.MimeType,
+				SizeBytes: attachment.SizeBytes,
+				Kind:      attachment.Kind,
+			})
+		}
+	}
+
+	if len(message.ReadBy) > 0 {
+		payload.ReadBy = make([]ChatReadReceiptPayload, 0, len(message.ReadBy))
+		for _, receipt := range message.ReadBy {
+			payload.ReadBy = append(payload.ReadBy, ChatReadReceiptPayload{
+				ParticipantID: receipt.ParticipantID,
+				DisplayName:   receipt.ParticipantName,
+				ReadAt:        receipt.ReadAt,
+			})
+		}
+	}
+
+	return payload
 }
 
 // SubscribeToRoom subscribes to Redis channel for a room and broadcasts messages to local clients

@@ -48,6 +48,12 @@ export interface ConferenceSessionEvents {
   "participant.updated": { participantId: string; participant: Participant };
   "speaker.active.changed": Participant | null;
   "chat.message": ChatMessage;
+  "chat.read": {
+    messageIds: string[];
+    participantId: string;
+    displayName: string;
+    readAt: Date;
+  };
   reaction: Reaction;
   "hand.raised": { participantId: string };
   "hand.lowered": { participantId: string };

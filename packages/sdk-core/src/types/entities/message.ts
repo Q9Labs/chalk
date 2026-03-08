@@ -28,6 +28,20 @@ export interface MessageReaction {
  * });
  * ```
  */
+export interface ChatAttachment {
+	readonly id: string;
+	fileName: string;
+	mimeType: string;
+	sizeBytes: number;
+	kind: "image" | "document" | "file";
+}
+
+export interface ChatReadReceipt {
+	participantId: string;
+	displayName: string;
+	readAt: Date;
+}
+
 export interface ChatMessage {
 	/** Unique message identifier (UUID) */
 	readonly id: string;
@@ -43,6 +57,12 @@ export interface ChatMessage {
 
 	/** When the message was sent */
 	timestamp: Date;
+
+	/** Attached files for this message */
+	attachments?: ChatAttachment[];
+
+	/** Sender-visible read receipts */
+	readBy?: ChatReadReceipt[];
 
 	/** Emoji reactions on this message */
 	reactions: MessageReaction[];

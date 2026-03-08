@@ -3,7 +3,24 @@ import { AlertCircleIcon, Calendar01Icon, Clock01Icon, Share01Icon, Video01Icon 
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { RefreshCcw } from "lucide-react";
+import { GmailIcon } from "../../../components/GmailIcon";
+import { 
+  Badge, 
+  Button, 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle,
+  Input,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@q9labs/chalk-ui";
 
 type ScheduledClassesPanelProps = {
 	client: ConferenceClient;
@@ -24,18 +41,14 @@ function toCountdown(targetMs: number, nowMs: number) {
 }
 
 function toClassStartMs(room: RoomResource) {
-	if (!room.scheduledStartAt) {
-		return null;
-	}
+	if (!room.scheduledStartAt) return null;
 	const startMs = new Date(room.scheduledStartAt).getTime();
 	return Number.isFinite(startMs) ? startMs : null;
 }
 
 function toJoinAllowedAtMs(room: RoomResource) {
 	const startMs = toClassStartMs(room);
-	if (startMs === null) {
-		return null;
-	}
+	if (startMs === null) return null;
 	const earlyJoinMs = Math.max(0, room.allowEarlyJoinMinutes ?? 0) * 60_000;
 	return startMs - earlyJoinMs;
 }
@@ -46,6 +59,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
 	const [durationMinutes, setDurationMinutes] = useState("60");
 	const [allowEarlyJoinMinutes, setAllowEarlyJoinMinutes] = useState("10");
 	const [isCreating, setIsCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 	const [nowMs, setNowMs] = useState(Date.now());
 
 	useEffect(() => {
@@ -66,17 +80,17 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
 	async function createScheduledClass() {
 		const trimmedName = className.trim();
 		if (!trimmedName) {
-			toast.error("Class title is required");
+			toast.error("Please enter a title for your class");
 			return;
 		}
 
 		const startDate = new Date(startAtLocal);
 		if (!Number.isFinite(startDate.getTime())) {
-			toast.error("Pick a valid class start date/time");
+			toast.error("Please pick a starting date and time");
 			return;
 		}
 		if (startDate.getTime() <= Date.now()) {
-			toast.error("Class start must be in the future");
+			toast.error("Class start time must be in the future");
 			return;
 		}
 
@@ -92,10 +106,11 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
 				scheduledEndAt: scheduledEndAt.toISOString(),
 				allowEarlyJoinMinutes: earlyJoin,
 			});
-			toast.success("Class scheduled");
+			toast.success("Class successfully scheduled");
 			setClassName("");
 			setStartAtLocal("");
 			void onRefresh();
+      setShowForm(false);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : "Failed to schedule class");
 		} finally {
@@ -103,195 +118,227 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
 		}
 	}
 
-	async function copyInvite(roomId: string) {
+	async function copyInvite(room: RoomResource) {
 		try {
-			const response = await client.createJoinToken(roomId);
+			const response = await client.createJoinToken(room.id);
 			const inviteUrl = `${window.location.origin}/j/${response.joinToken}`;
-			await navigator.clipboard.writeText(inviteUrl);
-			toast.success("Invite link copied");
+      
+      const timeStr = room.scheduledStartAt 
+        ? ` at ${new Date(room.scheduledStartAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` 
+        : "";
+      
+      const message = `Join the session "${room.name || 'Untitled Class'}"${timeStr}\n\nJoin link: ${inviteUrl}`;
+      
+			await navigator.clipboard.writeText(message);
+			toast.success("Invitation link copied");
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : "Failed to create invite link");
+		}
+	}
+
+	async function sendGmailInvite(room: RoomResource) {
+		try {
+			const response = await client.createJoinToken(room.id);
+			const inviteUrl = `${window.location.origin}/j/${response.joinToken}`;
+			
+			const timeStr = room.scheduledStartAt 
+				? new Date(room.scheduledStartAt).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })
+				: "now";
+
+			const subject = encodeURIComponent(`Invitation: ${room.name || 'Chalk Session'}`);
+			const body = encodeURIComponent(
+        `Hi there,\n\nYou're invited to a Chalk session.\n\nTopic: ${room.name || 'Untitled session'}\nTime: ${timeStr}\n\nJoin with Chalk\n${inviteUrl}\n\n—\nSent via Chalk`
+      );
+			
+			window.open(`https://mail.google.com/mail/?view=cm&fs=1&tf=1&su=${subject}&body=${body}`, "_blank", "noopener,noreferrer");
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : "Failed to create invite link");
 		}
 	}
 
 	return (
-		<section className="space-y-4">
-			<div className="flex items-center justify-between">
-				<h3 className="text-lg font-semibold">Scheduled Classes</h3>
-				<button
-					type="button"
-					onClick={() => void onRefresh()}
-					className="inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-bold hover:bg-muted transition-colors"
-				>
-					Refresh
-				</button>
+		<div className="space-y-6">
+			<div className="flex items-center justify-between px-1">
+        <div className="space-y-0.5">
+				  <h3 className="text-lg font-bold tracking-tight text-foreground">Scheduled Classes</h3>
+          <p className="text-sm text-muted-foreground">Plan and manage your upcoming live sessions</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void onRefresh()}
+            className="h-9 w-9 rounded-lg"
+          >
+            <RefreshCcw size={18} />
+          </Button>
+          <Button
+            onClick={() => setShowForm(true)}
+            variant="default"
+            size="sm"
+            className="h-9 font-semibold"
+          >
+            New Class
+          </Button>
+        </div>
 			</div>
+      
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-[500px]">
+          <DialogClose />
+          <DialogHeader>
+            <DialogTitle>Schedule a New Class</DialogTitle>
+            <DialogDescription>Fill in the details below to initialize your live session.</DialogDescription>
+          </DialogHeader>
+          
+          <div className="p-6 pt-0 space-y-5">
+            <div className="space-y-2">
+              <label className="text-[13px] font-bold text-foreground pl-0.5">Class Title</label>
+              <Input
+                type="text"
+                autoComplete="off"
+                value={className}
+                onChange={(e) => setClassName(e.target.value)}
+                placeholder="e.g. Mathematics 101"
+                className="h-11 border-border focus-visible:ring-primary/20"
+              />
+            </div>
 
-			<div className="rounded-2xl border bg-card p-4 space-y-3">
-				<div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-					<input
-						id="scheduled-class-title"
-						name="classTitle"
-						type="text"
-						autoComplete="off"
-						spellCheck={false}
-						value={className}
-						onChange={(e) => setClassName(e.target.value)}
-						placeholder="Class title"
-						className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-					/>
-					<input
-						id="scheduled-class-start"
-						name="classStartAt"
-						type="datetime-local"
-						autoComplete="off"
-						value={startAtLocal}
-						onChange={(e) => setStartAtLocal(e.target.value)}
-						className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-					/>
-					<input
-						id="scheduled-class-duration"
-						name="classDurationMinutes"
-						type="number"
-						min={1}
-						autoComplete="off"
-						inputMode="numeric"
-						value={durationMinutes}
-						onChange={(e) => setDurationMinutes(e.target.value)}
-						placeholder="Duration (min)"
-						className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-					/>
-					<input
-						id="scheduled-class-early-join"
-						name="allowEarlyJoinMinutes"
-						type="number"
-						min={0}
-						autoComplete="off"
-						inputMode="numeric"
-						value={allowEarlyJoinMinutes}
-						onChange={(e) => setAllowEarlyJoinMinutes(e.target.value)}
-						placeholder="Early join (min)"
-						className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-					/>
-				</div>
-				<div className="flex justify-end">
-					<button
-						type="button"
-						disabled={isCreating}
-						onClick={() => void createScheduledClass()}
-						className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-bold text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50"
-					>
-						{isCreating ? "Scheduling..." : "Schedule Class"}
-					</button>
-				</div>
-			</div>
+            <div className="space-y-2">
+              <label className="text-[13px] font-bold text-foreground pl-0.5">Start Date & Time</label>
+              <Input
+                type="datetime-local"
+                value={startAtLocal}
+                onChange={(e) => setStartAtLocal(e.target.value)}
+                className="h-11 border-border focus-visible:ring-primary/20 block"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[13px] font-bold text-foreground pl-0.5">Duration (mins)</label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(e.target.value)}
+                  className="h-11 border-border focus-visible:ring-primary/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[13px] font-bold text-foreground pl-0.5">Early Join (mins)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={allowEarlyJoinMinutes}
+                  onChange={(e) => setAllowEarlyJoinMinutes(e.target.value)}
+                  className="h-11 border-border focus-visible:ring-primary/20"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="bg-muted/30 border-t border-border mt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setShowForm(false)}
+              className="font-semibold"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={isCreating}
+              onClick={() => void createScheduledClass()}
+              className="h-10 px-8 font-black shadow-lg shadow-primary/20"
+            >
+              {isCreating ? "Scheduling..." : "Create Class"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
 			{error && (
-				<div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive flex items-start gap-2">
-					<HugeiconsIcon icon={AlertCircleIcon} size={16} className="shrink-0 mt-0.5" />
-					<span>{error}</span>
+				<div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive flex items-center gap-3">
+					<HugeiconsIcon icon={AlertCircleIcon} size={20} className="shrink-0" />
+					<p className="font-medium">{error}</p>
 				</div>
 			)}
 
 			{isLoading ? (
-				<div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">Loading classes...</div>
+				<div className="grid grid-cols-1 gap-4">
+          {[1, 2].map(i => (
+            <Card key={i} className="h-32 border-border/50 bg-muted/20 animate-pulse shadow-none" />
+          ))}
+        </div>
 			) : classRooms.length === 0 ? (
-				<div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">
-					No scheduled classes yet.
+				<div className="border border-dashed border-border rounded-xl p-12 text-center bg-muted/10">
+					<p className="text-sm text-muted-foreground font-medium italic">No classes scheduled. Create one to get started.</p>
 				</div>
 			) : (
-				<div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+				<div className="grid grid-cols-1 gap-4">
 					{classRooms.map((room) => {
-						const startAtMs = toClassStartMs(room);
 						const joinAllowedAtMs = toJoinAllowedAtMs(room);
-						const isTooEarly =
-							room.status === "scheduled" &&
-							joinAllowedAtMs !== null &&
-							nowMs < joinAllowedAtMs;
-						const canEnter =
-							room.status === "active" ||
-							(room.status === "scheduled" && !isTooEarly);
+						const isTooEarly = room.status === "scheduled" && joinAllowedAtMs !== null && nowMs < joinAllowedAtMs;
+						const canEnter = room.status === "active" || (room.status === "scheduled" && !isTooEarly);
 
 						return (
-							<div key={room.id} className="rounded-2xl border bg-card p-4 space-y-3">
-								<div className="flex items-start justify-between gap-3">
-									<div>
-										<h4 className="font-semibold">{room.name || room.id}</h4>
-										<div className="text-xs text-muted-foreground mt-1 flex items-center gap-3">
-											{room.scheduledStartAt && (
-												<span className="inline-flex items-center gap-1">
-													<HugeiconsIcon icon={Calendar01Icon} size={14} />
-													{new Date(room.scheduledStartAt).toLocaleString(undefined, {
-														month: "short",
-														day: "numeric",
-														hour: "2-digit",
-														minute: "2-digit",
-													})}
-												</span>
-											)}
-											<span className="inline-flex items-center gap-1">
-												<HugeiconsIcon icon={Clock01Icon} size={14} />
-												Early join: {room.allowEarlyJoinMinutes ?? 0}m
-											</span>
-										</div>
-									</div>
-									<div
-										className={cn(
-											"px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-											room.status === "active"
-												? "bg-primary/10 border-primary/20 text-primary"
-												: isTooEarly
-													? "bg-orange-500/10 border-orange-500/20 text-orange-600"
-													: "bg-green-500/10 border-green-500/20 text-green-600",
-										)}
-									>
-										{room.status === "active"
-											? "Live now"
-											: isTooEarly && joinAllowedAtMs
-												? `Opens in ${toCountdown(joinAllowedAtMs, nowMs)}`
-												: "Join window open"}
-									</div>
-								</div>
-
-								<div className="flex items-center justify-between gap-2 pt-1">
-									<button
-										type="button"
-										onClick={() => void copyInvite(room.id)}
-										className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold hover:bg-secondary/80 transition-colors"
-									>
-										<HugeiconsIcon icon={Share01Icon} size={14} />
-										Copy Invite
-									</button>
-									<button
-										type="button"
-										disabled={!canEnter}
-										onClick={() => window.open(`/room/${encodeURIComponent(room.id)}`, "_blank", "noopener,noreferrer")}
-										className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-colors disabled:opacity-40"
-									>
-										<HugeiconsIcon icon={Video01Icon} size={14} />
-										{room.status === "active" ? "Join Live" : "Open Room"}
-									</button>
-								</div>
-								{isTooEarly && joinAllowedAtMs && startAtMs && (
-									<p className="text-[11px] text-muted-foreground">
-										Meeting time not reached. Participants can join{" "}
-										{new Date(joinAllowedAtMs).toLocaleTimeString([], {
-											hour: "2-digit",
-											minute: "2-digit",
-										})}
-										, class starts{" "}
-										{new Date(startAtMs).toLocaleTimeString([], {
-											hour: "2-digit",
-											minute: "2-digit",
-										})}
-										.
-									</p>
-								)}
-							</div>
+							<Card key={room.id} className="border-border shadow-sm hover:border-primary/30 transition-all overflow-hidden group">
+								<CardHeader className="p-5 pb-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="text-[15px] font-bold truncate">{room.name || `Session ${room.id.slice(0, 6)}`}</CardTitle>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-[12px] text-muted-foreground font-medium">
+                        <span className="flex items-center gap-1.5"><HugeiconsIcon icon={Calendar01Icon} size={14} />{new Date(room.scheduledStartAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="flex items-center gap-1.5"><HugeiconsIcon icon={Clock01Icon} size={14} />Join {room.allowEarlyJoinMinutes ?? 0}m early</span>
+                      </div>
+                    </div>
+                    <Badge variant={room.status === 'active' ? 'default' : isTooEarly ? 'secondary' : 'outline'} className="rounded-md font-bold text-[10px] h-5 px-1.5">
+                      {room.status === 'active' ? 'LIVE' : isTooEarly ? 'WAITING' : 'OPEN'}
+                    </Badge>
+                  </div>
+								</CardHeader>
+								<CardContent className="p-5 pt-0 space-y-4">
+                  <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copyInvite(room)}
+                      className="flex-1 h-9 font-semibold text-xs border-border hover:bg-muted"
+                    >
+                      <HugeiconsIcon icon={Share01Icon} size={14} className="mr-1.5" />
+                      Copy Invite
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void sendGmailInvite(room)}
+                      className="h-9 w-9 p-0 border-border hover:bg-muted shrink-0 flex items-center justify-center group/gmail"
+                      aria-label="Send invite via Gmail"
+                    >
+                      <GmailIcon size={16} className="group-hover/gmail:scale-110 transition-transform" />
+                    </Button>
+                    <Button
+                      disabled={!canEnter}
+                      onClick={() => window.open(`/room/${encodeURIComponent(room.id)}`, "_blank", "noopener,noreferrer")}
+                      size="sm"
+                      className="flex-1 h-9 font-bold text-xs"
+                    >
+                      <HugeiconsIcon icon={Video01Icon} size={14} className="mr-1.5" />
+                      {room.status === "active" ? "Join Now" : "Enter Room"}
+                    </Button>
+                  </div>
+                  {isTooEarly && joinAllowedAtMs && (
+                    <div className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/5 border border-orange-500/10 rounded-md p-2 text-center animate-pulse">
+                      Session opens in {toCountdown(joinAllowedAtMs, nowMs)}
+                    </div>
+                  )}
+								</CardContent>
+							</Card>
 						);
 					})}
 				</div>
 			)}
-		</section>
+		</div>
 	);
 }

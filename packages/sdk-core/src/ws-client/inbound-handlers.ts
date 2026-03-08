@@ -51,6 +51,14 @@ export const createInboundHandlers = (deps: {
 		"chat.message": (payload) => {
 			deps.emit("chat.message", toChatMessage(payload));
 		},
+		"chat.read": (payload) => {
+			deps.emit("chat.read", {
+				messageIds: payload.messageIds as string[],
+				participantId: payload.participantId,
+				displayName: payload.displayName,
+				readAt: new Date(payload.readAt),
+			});
+		},
 		reaction: (payload) => {
 			deps.emit("reaction", toReaction(payload));
 		},

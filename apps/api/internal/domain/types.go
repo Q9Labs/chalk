@@ -12,6 +12,7 @@ import (
 // Used across room, participant, and recording services.
 type ParticipantMetadata struct {
 	DisplayName string    `json:"display_name"`
+	IdentityKey string    `json:"identity_key,omitempty"`
 	Role        string    `json:"role"`
 	JoinedAt    time.Time `json:"joined_at"`
 }

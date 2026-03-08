@@ -1,9 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
-
-/* Scan package sources for Tailwind classes (monorepo only) */
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
 @source "../../../packages/sdk-react/src/**/*.{ts,tsx}";
 
@@ -13,50 +12,82 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: #fafafa;
-  --foreground: #09090b;
-  --card: #ffffff;
-  --card-foreground: #09090b;
-  --popover: #ffffff;
-  --popover-foreground: #09090b;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
   --primary: #1bb6a6;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
-  --accent-foreground: #18181b;
-  --destructive: #ef4444;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
-  --ring: #1bb6a6;
-  --radius: 1.25rem;
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.967 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.967 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
 }
 
 .dark {
-  --background: #050505;
-  --foreground: #fafafa;
+  --background: #030303;
+  --foreground: oklch(0.985 0 0);
   --card: #09090b;
-  --card-foreground: #fafafa;
+  --card-foreground: oklch(0.985 0 0);
   --popover: #09090b;
-  --popover-foreground: #fafafa;
+  --popover-foreground: oklch(0.985 0 0);
   --primary: #1bb6a6;
   --primary-foreground: #ffffff;
   --secondary: #18181b;
-  --secondary-foreground: #fafafa;
+  --secondary-foreground: oklch(0.985 0 0);
   --muted: #18181b;
-  --muted-foreground: #a1a1aa;
+  --muted-foreground: oklch(0.708 0 0);
   --accent: #18181b;
-  --accent-foreground: #fafafa;
-  --destructive: #7f1d1d;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #1bb6a6;
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: #1c1c1f;
+  --input: #1c1c1f;
+  --ring: oklch(0.551 0.027 264.364);
+}
+
+/* Nord Theme (Middle-ground Dark/Blueish) */
+@theme inline {
+  --color-nord-bg: #2E3440;
+  --color-nord-fg: #ECEFF4;
+}
+
+.nord {
+  --background: #2E3440;
+  --foreground: #ECEFF4;
+  --card: #3B4252;
+  --card-foreground: #ECEFF4;
+  --popover: #3B4252;
+  --popover-foreground: #ECEFF4;
+  --primary: #88C0D0;
+  /* Frost highlight */
+  --primary-foreground: #2E3440;
+  --secondary: #434C5E;
+  --secondary-foreground: #E5E9F0;
+  --muted: #4C566A;
+  --muted-foreground: #D8DEE9;
+  --accent: #434C5E;
+  --accent-foreground: #ECEFF4;
+  --destructive: #BF616A;
+  --destructive-foreground: #ECEFF4;
+  --border: #4C566A;
+  --input: #434C5E;
+  --ring: #81A1C1;
 }
 
 @theme inline {
-  --font-sans: 'Figtree Variable', sans-serif;
+  --font-app: 'Figtree Variable', sans-serif;
+  --font-display: 'Sora', sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -75,35 +106,14 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  
-  --shadow-soft: 0 2px 4px rgba(0,0,0,0.02), 0 10px 20px rgba(0,0,0,0.04);
-  --shadow-heavy: 0 20px 40px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.02);
-}
-
-@layer utilities {
-  .fluid-gradient {
-    background: radial-gradient(circle at top left, var(--color-primary) 0%, transparent 40%),
-                radial-gradient(circle at bottom right, #3b82f6 0%, transparent 40%);
-    opacity: 0.08;
-  }
-  
-  .glass-panel {
-    @apply bg-white/70 dark:bg-black/40 backdrop-blur-2xl border border-white/20 dark:border-white/5 shadow-soft;
-  }
-
-  .premium-button {
-    @apply relative overflow-hidden transition-all duration-300 hover:shadow-heavy active:scale-[0.98] rounded-full;
-  }
-  
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
-    @apply font-sans bg-background text-foreground antialiased selection:bg-primary/20;
+    @apply bg-background text-foreground antialiased;
   }
 }

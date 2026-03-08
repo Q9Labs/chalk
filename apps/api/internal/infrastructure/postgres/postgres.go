@@ -445,6 +445,85 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 	ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 	CREATE INDEX IF NOT EXISTS idx_recordings_deleted_at ON recordings(deleted_at);
+
+	-- ============================================================================
+	-- MIGRATION 010: Join hot-path indexes
+	-- ============================================================================
+	CREATE INDEX IF NOT EXISTS idx_rooms_tenant_name_created_at
+	    ON rooms (tenant_id, name, created_at DESC);
+
+	CREATE INDEX IF NOT EXISTS idx_participants_room_external_user_created_at
+	    ON participants (room_id, external_user_id, created_at DESC);
+
+	-- ============================================================================
+	-- MIGRATION 011: Room scheduling
+	-- ============================================================================
+	ALTER TABLE rooms
+	  ADD COLUMN IF NOT EXISTS scheduled_start_at TIMESTAMPTZ,
+	  ADD COLUMN IF NOT EXISTS scheduled_end_at TIMESTAMPTZ,
+	  ADD COLUMN IF NOT EXISTS allow_early_join_minutes INT NOT NULL DEFAULT 0;
+
+	ALTER TABLE rooms DROP CONSTRAINT IF EXISTS rooms_status_check;
+	ALTER TABLE rooms
+	  ADD CONSTRAINT rooms_status_check
+	  CHECK (status IN ('scheduled', 'active', 'ended'));
+
+	ALTER TABLE rooms DROP CONSTRAINT IF EXISTS rooms_allow_early_join_minutes_nonnegative;
+	ALTER TABLE rooms
+	  ADD CONSTRAINT rooms_allow_early_join_minutes_nonnegative
+	  CHECK (allow_early_join_minutes >= 0);
+
+	CREATE INDEX IF NOT EXISTS idx_rooms_tenant_scheduled_start
+	  ON rooms(tenant_id, scheduled_start_at DESC)
+	  WHERE status = 'scheduled';
+
+	-- ============================================================================
+	-- MIGRATION 012: Durable chat
+	-- ============================================================================
+	CREATE TABLE IF NOT EXISTS chat_messages (
+	    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
+	    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+	    sender_participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+	    sender_identity_key TEXT NOT NULL,
+	    sender_display_name VARCHAR(255) NOT NULL DEFAULT '',
+	    content TEXT NOT NULL DEFAULT '',
+	    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_chat_messages_room_created_at
+	    ON chat_messages (room_id, created_at ASC, id ASC);
+
+	CREATE TABLE IF NOT EXISTS chat_attachments (
+	    id UUID PRIMARY KEY DEFAULT chalk_uuid_v4(),
+	    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+	    message_id UUID REFERENCES chat_messages(id) ON DELETE CASCADE,
+	    uploaded_by_participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+	    file_name VARCHAR(255) NOT NULL,
+	    mime_type VARCHAR(255) NOT NULL,
+	    size_bytes BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 26214400),
+	    kind VARCHAR(20) NOT NULL CHECK (kind IN ('image', 'document', 'file')),
+	    storage_key VARCHAR(500) NOT NULL UNIQUE,
+	    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'attached')),
+	    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_chat_attachments_room_created_at
+	    ON chat_attachments (room_id, created_at ASC, id ASC);
+
+	CREATE INDEX IF NOT EXISTS idx_chat_attachments_message_id
+	    ON chat_attachments (message_id);
+
+	CREATE TABLE IF NOT EXISTS chat_message_reads (
+	    message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+	    reader_participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+	    reader_identity_key TEXT NOT NULL,
+	    reader_display_name VARCHAR(255) NOT NULL DEFAULT '',
+	    read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	    PRIMARY KEY (message_id, reader_identity_key)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_chat_message_reads_participant_read_at
+	    ON chat_message_reads (reader_participant_id, read_at DESC);
 	`
 	_, err := p.Exec(ctx, schema)
 	if err != nil {

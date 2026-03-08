@@ -24,6 +24,8 @@ export interface UseMeetingRoomPropsParams {
 	chatMessages: NonNullable<MeetingRoomProps["chatMessages"]>;
 	unreadChatCount: NonNullable<MeetingRoomProps["unreadChatCount"]>;
 	handleSendMessage: NonNullable<MeetingRoomProps["onSendMessage"]>;
+	handleSendMessageWithAttachments: NonNullable<MeetingRoomProps["onSendMessageWithAttachments"]>;
+	resolveChatAttachmentUrl: NonNullable<MeetingRoomProps["onResolveChatAttachmentUrl"]>;
 	handleChatOpen: NonNullable<MeetingRoomProps["onChatOpen"]>;
 	meetingLayout: NonNullable<MeetingRoomProps["defaultLayout"]>;
 	defaultChatOpen: NonNullable<MeetingRoomProps["defaultChatOpen"]>;
@@ -69,6 +71,8 @@ export function useMeetingRoomProps({
 	chatMessages,
 	unreadChatCount,
 	handleSendMessage,
+	handleSendMessageWithAttachments,
+	resolveChatAttachmentUrl,
 	handleChatOpen,
 	meetingLayout,
 	defaultChatOpen,
@@ -117,6 +121,8 @@ export function useMeetingRoomProps({
 			chatMessages,
 			unreadChatCount,
 			onSendMessage: handleSendMessage,
+			onSendMessageWithAttachments: handleSendMessageWithAttachments,
+			onResolveChatAttachmentUrl: resolveChatAttachmentUrl,
 			onChatOpen: handleChatOpen,
 			enableChat: chat,
 			enableRecording: recording,
@@ -174,6 +180,8 @@ export function useMeetingRoomProps({
 			chatMessages,
 			unreadChatCount,
 			handleSendMessage,
+			handleSendMessageWithAttachments,
+			resolveChatAttachmentUrl,
 			handleChatOpen,
 			meetingLayout,
 			defaultChatOpen,

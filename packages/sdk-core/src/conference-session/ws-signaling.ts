@@ -12,7 +12,9 @@ interface WsSignalingDeps {
   getParticipants: () => Map<string, Participant>;
   getLocalParticipant: () => Participant | null;
   getCurrentRecording: () => { id: string } | null;
+  getMessages: () => ChatMessage[];
   appendMessage: (message: ChatMessage) => void;
+  setMessages: (messages: ChatMessage[]) => void;
   setWhiteboardPermission: (participantId: string, canDraw: boolean) => void;
   setCurrentRecording: (recording: { id: string } | null) => void;
   emitRoomSyncReady: (source: "rtk.snapshot" | "ws.snapshot", participantCount: number) => void;
@@ -94,6 +96,31 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): (() =>
     deps.emit("chat.message", data as ChatMessage);
   });
 
+  subscribe("chat.read", (data) => {
+    const updatedMessages = deps.getMessages().map((message) => {
+      if (!data.messageIds.includes(message.id)) {
+        return message;
+      }
+
+      const nextReadBy = [
+        ...(message.readBy ?? []).filter((receipt) => receipt.participantId !== data.participantId),
+        {
+          participantId: data.participantId,
+          displayName: data.displayName,
+          readAt: data.readAt,
+        },
+      ].sort((left, right) => left.readAt.getTime() - right.readAt.getTime());
+
+      return {
+        ...message,
+        readBy: nextReadBy,
+      };
+    });
+
+    deps.setMessages(updatedMessages);
+    deps.emit("chat.read", data as ConferenceSessionEvents["chat.read"]);
+  });
+
   subscribe("reaction", (data) => {
     const participants = deps.getParticipants();
     const participant =
@@ -167,6 +194,10 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): (() =>
 
   subscribe("room.snapshot", (snapshot) => {
     deps.emitRoomSyncReady("ws.snapshot", snapshot.participants.length);
+
+    if (snapshot.messages) {
+      deps.setMessages(snapshot.messages as ChatMessage[]);
+    }
 
     if (deps.hasRtkClient()) {
       if (snapshot.isRecording && snapshot.recordingId) {

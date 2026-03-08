@@ -11,10 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+## [0.0.72] - 2026-03-08
+
+### Added
+
+- **Room chat: durable history, attachments, and read receipts** — room chat now persists across reconnects, supports private file/image/document sharing up to `25 MB` per file, and shows sender-only read receipts when other participants open chat.
+
+### Changed
+
 - **Web: homepage and dashboard visual refresh** — refreshed the local web app shell with shared Chalk branding, new edge-network/meeting illustrations, and a more polished landing/dashboard presentation.
+- **Web/SDK local dev resolution** — local web now resolves Chalk SDK packages straight from source during dev so fresh SDK fixes are reflected without stale package output.
 
 ### Fixed
 
+- **Room chat: browser upload reliability** — chat attachments now upload through the API before landing in R2, avoiding direct browser-to-R2 CORS failures while keeping files private.
+- **Room chat: local message ownership** — chat bubbles now correctly identify the local sender for receipt/status rendering even when media participant ids and auth/user ids differ.
 - **Web: local route/type stability** — restored the `/room/end` route export, aligned route search validation with current TanStack router expectations, and fixed icon/button typing so web builds and typechecks pass cleanly again.
 - **Web: dashboard icon/runtime cleanup** — routed Hugeicons dashboard glyphs through `HugeiconsIcon`, removed invalid button sizing, and tightened meeting selection state so the local dashboard no longer throws invalid-element/TypeScript errors during dev.
 - **Internal auth: localhost magic-link flow** — magic links now verify through the API before redirecting back to the app, callback finalization accepts both client-verify and server-redirect flows, and localhost web now prefers local API/WS config instead of accidentally falling back to production endpoints.

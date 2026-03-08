@@ -1,3 +1,4 @@
+export * from "./dialog";
 export * from "./alert-dialog";
 export * from "./badge";
 export * from "./button";

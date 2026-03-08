@@ -17,6 +17,8 @@ export interface UseChatReturn {
 	unreadCount: number;
 	/** Send a message */
 	sendMessage: (content: string) => void;
+	/** Send a message with uploaded attachments */
+	sendMessageWithAttachments: (content: string, files: File[]) => Promise<void>;
 	/** React to a message */
 	reactToMessage: (messageId: string, emoji: ReactionEmoji) => void;
 	/** Mark chat as read (resets unread count) */
@@ -25,6 +27,8 @@ export interface UseChatReturn {
 	markAsHidden: () => void;
 	/** Get a message by ID */
 	getMessage: (id: string) => ChatMessage | undefined;
+	/** Resolve a private download URL for an attachment */
+	getAttachmentDownloadUrl: (attachmentId: string) => Promise<string>;
 }
 
 /**
@@ -70,6 +74,12 @@ export function useChat(): UseChatReturn {
 		[chat],
 	);
 
+	const sendMessageWithAttachments = useCallback(
+		(content: string, files: File[]): Promise<void> =>
+			chat.sendMessageWithAttachments(content, files),
+		[chat],
+	);
+
 	const reactToMessage = useCallback(
 		(messageId: string, emoji: ReactionEmoji): void =>
 			chat.reactToMessage(messageId, emoji),
@@ -85,6 +95,11 @@ export function useChat(): UseChatReturn {
 		[chat],
 	);
 
+	const getAttachmentDownloadUrl = useCallback(
+		(attachmentId: string): Promise<string> => chat.getAttachmentDownloadUrl(attachmentId),
+		[chat],
+	);
+
 	return useMemo(
 		(): UseChatReturn => ({
 			messages: state.messages,
@@ -92,18 +107,22 @@ export function useChat(): UseChatReturn {
 			count: state.count,
 			unreadCount: state.unreadCount,
 			sendMessage,
+			sendMessageWithAttachments,
 			reactToMessage,
 			markAsRead,
 			markAsHidden,
 			getMessage,
+			getAttachmentDownloadUrl,
 		}),
 		[
 			state,
 			sendMessage,
+			sendMessageWithAttachments,
 			reactToMessage,
 			markAsRead,
 			markAsHidden,
 			getMessage,
+			getAttachmentDownloadUrl,
 		],
 	);
 }

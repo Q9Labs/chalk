@@ -62,17 +62,25 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
     }
   };
 
-  const sendMessage = (content: string): void => {
+  const sendMessage = (content: string, attachmentIds?: string[]): void => {
     if (!content.trim()) {
-      return;
+      if (!attachmentIds || attachmentIds.length === 0) {
+        return;
+      }
     }
 
     const trimmed = content.trim();
+    const normalizedAttachmentIds = attachmentIds?.filter(Boolean) ?? [];
+
+    if (!trimmed && normalizedAttachmentIds.length === 0) {
+      return;
+    }
+
     const wsClient = deps.getWsClient();
     const rtkClient = deps.getRtkClient();
 
     if (wsClient) {
-      wsClient.sendChatMessage(trimmed);
+      wsClient.sendChatMessage(trimmed, normalizedAttachmentIds);
     } else if (rtkClient) {
       try {
         rtkClient.chat?.sendTextMessage(trimmed);
@@ -87,9 +95,18 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
         senderName: localParticipant?.displayName ?? "You",
         content: trimmed,
         timestamp: new Date(),
+        attachments: [],
+        readBy: [],
       };
       deps.emitChatMessage(localMessage);
     }
+  };
+
+  const markChatRead = (readThroughMessageId: string): void => {
+    if (!readThroughMessageId) {
+      return;
+    }
+    deps.getWsClient()?.sendChatRead(readThroughMessageId);
   };
 
   const sendReaction = (emoji: ReactionEmoji): void => {
@@ -169,5 +186,6 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
     lowerHand,
     muteParticipant,
     unmuteParticipant,
+    markChatRead,
   };
 };

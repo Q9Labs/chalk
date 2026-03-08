@@ -12,6 +12,7 @@ export * from './InviteToast';
 export * from './MessageBubble';
 export * from './TypingIndicator';
 export * from './PinnedMessageBanner';
+export * from './chat-types';
 
 // Tour
 export * from './TourOverlay';

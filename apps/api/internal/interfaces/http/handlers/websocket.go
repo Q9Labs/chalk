@@ -357,6 +357,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 			}
 			h.hub.SetParticipantMetadata(participantID, domain.ParticipantMetadata{
 				DisplayName: displayName,
+				IdentityKey: firstNonEmptyString(p.ExternalUserID, participantID.String()),
 				Role:        p.Role,
 				JoinedAt:    joinedAt,
 			})
@@ -384,4 +385,11 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 
 	// Wait for client to close
 	client.Wait()
+}
+
+func firstNonEmptyString(value *string, fallback string) string {
+	if value != nil && strings.TrimSpace(*value) != "" {
+		return strings.TrimSpace(*value)
+	}
+	return fallback
 }

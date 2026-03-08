@@ -53,7 +53,14 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const { activeSpeaker } = useActiveSpeaker();
   const media = useMedia();
   const screenShare = useScreenShare();
-  const { messages, sendMessage: sendChatMessage, unreadCount, markAsRead } = useChat();
+  const {
+    messages,
+    sendMessage: sendChatMessage,
+    sendMessageWithAttachments: sendChatMessageWithAttachments,
+    getAttachmentDownloadUrl,
+    unreadCount,
+    markAsRead,
+  } = useChat();
   const recording = useRecording();
   const interactions = useInteractions();
   const whiteboard = useWhiteboard();
@@ -166,7 +173,7 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
     roomIdRef,
   });
 
-  const { handleLeave, initiateLeave, handleRejoin, handleGoHome, handleToggleMute, handleToggleVideo, handleToggleScreenShare, handleToggleRecording, handleToggleHandRaise, handleSendReaction, handleSendMessage } = useConferenceMeetingActions({
+  const { handleLeave, initiateLeave, handleRejoin, handleGoHome, handleToggleMute, handleToggleVideo, handleToggleScreenShare, handleToggleRecording, handleToggleHandRaise, handleSendReaction, handleSendMessage, handleSendMessageWithAttachments } = useConferenceMeetingActions({
     clearDisconnectGraceTimeout,
     setShowLeaveConfirm,
     setIsExiting,
@@ -185,6 +192,7 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
     interactions,
     incrementHandRaiseCount,
     sendChatMessage,
+    sendChatMessageWithAttachments,
   });
 
   const { connectionState } = useConferenceConnectionState({
@@ -245,6 +253,8 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       featureFlags,
       unreadChatCount: unreadCount,
       handleSendMessage,
+      handleSendMessageWithAttachments,
+      resolveChatAttachmentUrl: getAttachmentDownloadUrl,
       handleChatOpen,
       defaultChatOpen: resolvedDefaults.chatOpen ?? activePanel === "chat",
       defaultParticipantsOpen: resolvedDefaults.participantsOpen ?? activePanel === "participants",

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/config"
 	domainAuth "github.com/Q9Labs/chalk/internal/domain/auth"
+	chatdomain "github.com/Q9Labs/chalk/internal/domain/chat"
 	"github.com/Q9Labs/chalk/internal/domain/participant"
 	"github.com/Q9Labs/chalk/internal/domain/recording"
 	"github.com/Q9Labs/chalk/internal/domain/room"
@@ -53,6 +54,7 @@ type Router struct {
 	transcriptService               *transcript.Service
 	postMeetingTranscriptionService *postmeetingtranscription.Service
 	postMeetingService              *webhook.PostMeetingService
+	chatService                     *chatdomain.Service
 }
 
 type RouterConfig struct {
@@ -108,6 +110,7 @@ func NewRouter(cfg RouterConfig) *Router {
 	roomService := room.NewService(queries, cfg.CFClient, roomState, wsHub, &recordingStopperAdapter{svc: recordingService})
 	participantService := participant.NewService(queries, cfg.CFClient, roomState, jwtService, wsHub, cfg.RedisClient)
 	transcriptService := transcript.NewService(queries)
+	chatService := chatdomain.NewService(cfg.Pool, cfg.StorageR2)
 
 	// GitHub client for What's New feature
 	githubClient := github.NewClient(
@@ -135,6 +138,7 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	// Wire participant service to WebSocket hub for marking participants as left on disconnect
 	wsHub.SetParticipantService(participantService)
+	wsHub.SetChatService(chatService)
 
 	r := &Router{
 		engine:                          engine,
@@ -157,6 +161,7 @@ func NewRouter(cfg RouterConfig) *Router {
 		transcriptService:               transcriptService,
 		postMeetingTranscriptionService: cfg.PostMeetingTranscriptionService,
 		postMeetingService:              cfg.PostMeetingService,
+		chatService:                     chatService,
 	}
 
 	r.setupRoutes()
@@ -255,6 +260,10 @@ func (r *Router) setupRoutes() {
 			roomsGroup.GET("/:id/participants", participants.List)
 			roomsGroup.DELETE("/:id/participants/:pid", authMw.RequireHost(), participants.Remove)
 			roomsGroup.POST("/:id/participants/:pid/token", authMw.RequireHost(), participants.RefreshToken)
+			chatFiles := handlers.NewChatFilesHandler(r.chatService)
+			roomsGroup.POST("/:id/chat/attachments/presign-upload", chatFiles.PresignUpload)
+			roomsGroup.POST("/:id/chat/attachments/upload", chatFiles.Upload)
+			roomsGroup.POST("/:id/chat/attachments/presign-download", chatFiles.PresignDownload)
 
 			// Whiteboard files (R2 presigned URLs)
 			whiteboardFiles := handlers.NewWhiteboardFilesHandler(r.storageR2)

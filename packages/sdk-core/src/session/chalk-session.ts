@@ -166,6 +166,30 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     this.interactions = new InteractionManager();
     this.ui = new UIManager();
     this.whiteboard = new WhiteboardManager();
+    this.chat.configureTransport({
+      presignUpload: async (files) => {
+        const roomId = this.room.getState().roomId;
+        if (!roomId) {
+          throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+        }
+        return this.client.presignChatAttachmentsUpload(roomId, files);
+      },
+      uploadAttachment: async (attachmentId, file) => {
+        const roomId = this.room.getState().roomId;
+        if (!roomId) {
+          throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+        }
+        return this.client.uploadChatAttachment(roomId, attachmentId, file);
+      },
+      presignDownload: async (attachmentId) => {
+        const roomId = this.room.getState().roomId;
+        if (!roomId) {
+          throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+        }
+        const response = await this.client.presignChatAttachmentDownload(roomId, attachmentId);
+        return response.downloadUrl;
+      },
+    });
 
     // Emit session init event
     const initCtx = wideEvents.start("session.init");

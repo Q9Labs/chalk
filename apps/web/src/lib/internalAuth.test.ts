@@ -20,6 +20,12 @@ describe("resolveApiUrl", () => {
 		);
 	});
 
+	it("overrides any remote api host on localhost", () => {
+		expect(resolveApiUrl("https://staging-api.q9labs.ai", "localhost")).toBe(
+			"http://localhost:8080",
+		);
+	});
+
 	it("keeps prod api on hosted origins", () => {
 		expect(resolveApiUrl("https://chalk-api.q9labs.ai", "chalk.q9labs.ai")).toBe(
 			"https://chalk-api.q9labs.ai",

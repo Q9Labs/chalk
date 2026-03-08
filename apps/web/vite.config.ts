@@ -6,6 +6,7 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import viteTsConfigPaths from "vite-tsconfig-paths";
 import { execSync } from "child_process";
+import { fileURLToPath, URL } from "node:url";
 import pkg from "./package.json";
 
 const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
@@ -23,6 +24,24 @@ const config = defineConfig({
 		port: 3070,
 	},
 	resolve: {
+		alias: [
+			{
+				find: /^@q9labs\/chalk-core$/,
+				replacement: fileURLToPath(new URL("../../packages/sdk-core/src/index.ts", import.meta.url)),
+			},
+			{
+				find: /^@q9labs\/chalk-react$/,
+				replacement: fileURLToPath(new URL("../../packages/sdk-react/src/index.ts", import.meta.url)),
+			},
+			{
+				find: /^@q9labs\/chalk-react\/styles\.css$/,
+				replacement: fileURLToPath(new URL("../../packages/sdk-react/src/styles/styles.css", import.meta.url)),
+			},
+			{
+				find: /^@q9labs\/chalk-ui$/,
+				replacement: fileURLToPath(new URL("../../packages/ui/src/index.ts", import.meta.url)),
+			},
+		],
 		dedupe: [
 			"react",
 			"react-dom",

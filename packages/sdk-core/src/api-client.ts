@@ -143,19 +143,41 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 				};
 			}
 
-			const rawData = await response.json();
-			const data = snakeToCamel<T>(rawData);
+			const contentType = response.headers.get("content-type") ?? "";
+			const rawText = await response.text();
+			let rawData: unknown = undefined;
+
+			if (rawText) {
+				if (contentType.includes("application/json")) {
+					rawData = JSON.parse(rawText);
+				} else {
+					try {
+						rawData = JSON.parse(rawText);
+					} catch {
+						rawData = rawText;
+					}
+				}
+			}
+
+			const data =
+				rawData && typeof rawData === "object"
+					? snakeToCamel<T>(rawData as T)
+					: (undefined as T | undefined);
 
 			if (!response.ok) {
-				const errorData = rawData as {
-					code?: string;
-					message?: string;
-					error?: string; // Go API returns "error" field
-					details?: Record<string, unknown>;
-				};
+				const errorData =
+					rawData && typeof rawData === "object"
+						? (rawData as {
+								code?: string;
+								message?: string;
+								error?: string;
+								details?: Record<string, unknown>;
+							})
+						: undefined;
+				const fallbackMessage = rawText.trim() || `Request failed with status ${response.status}`;
 				const errorMessage =
-					errorData.message ?? errorData.error ?? "An unknown error occurred";
-				const errorCode = errorData.code ?? `HTTP_${response.status}`;
+					errorData?.message ?? errorData?.error ?? fallbackMessage;
+				const errorCode = errorData?.code ?? `HTTP_${response.status}`;
 				ctx.set("response", responseMeta);
 				ctx.complete("error", { code: errorCode, message: errorMessage });
 				return {
@@ -163,7 +185,7 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 					error: {
 						code: errorCode,
 						message: errorMessage,
-						details: errorData.details,
+						details: errorData?.details,
 					},
 				};
 			}
@@ -545,5 +567,124 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 			`/api/v1/rooms/${roomId}/whiteboard/files/presign-download`,
 			{ fileId },
 		);
+	}
+
+	async presignChatAttachmentsUpload(
+		roomId: string,
+		files: Array<{ fileName: string; mimeType: string; sizeBytes: number }>,
+	): Promise<
+		ApiResponse<{
+			files: Array<{
+				attachmentId: string;
+				uploadUrl: string;
+				expiresAtMs: number;
+				fileName: string;
+				mimeType: string;
+				sizeBytes: number;
+				kind: "image" | "document" | "file";
+			}>;
+		}>
+	> {
+		return this.request<{
+			files: Array<{
+				attachmentId: string;
+				uploadUrl: string;
+				expiresAtMs: number;
+				fileName: string;
+				mimeType: string;
+				sizeBytes: number;
+				kind: "image" | "document" | "file";
+			}>;
+		}>(
+			"POST",
+			`/api/v1/rooms/${roomId}/chat/attachments/presign-upload`,
+			{ files },
+		);
+	}
+
+	async presignChatAttachmentDownload(
+		roomId: string,
+		attachmentId: string,
+	): Promise<ApiResponse<{ downloadUrl: string; expiresAtMs: number }>> {
+		return this.request<{ downloadUrl: string; expiresAtMs: number }>(
+			"POST",
+			`/api/v1/rooms/${roomId}/chat/attachments/presign-download`,
+			{ attachmentId },
+		);
+	}
+
+	async uploadChatAttachment(
+		roomId: string,
+		attachmentId: string,
+		file: File,
+	): Promise<ApiResponse<void>> {
+		const ctx = wideEvents.start("api.request");
+		ctx.set("request", {
+			method: "POST",
+			path: `/api/v1/rooms/${roomId}/chat/attachments/upload`,
+			hasBody: true,
+		});
+
+		const headers: Record<string, string> = {};
+		if (this.token) {
+			headers["Authorization"] = `Bearer ${this.token}`;
+		} else if (this.apiKey) {
+			headers["X-API-Key"] = this.apiKey;
+		}
+
+		const formData = new FormData();
+		formData.append("attachment_id", attachmentId);
+		formData.append("file", file);
+
+		try {
+			const response = await fetch(`${this.apiUrl}/api/v1/rooms/${roomId}/chat/attachments/upload`, {
+				method: "POST",
+				headers,
+				body: formData,
+			});
+			const responseMeta = {
+				statusCode: response.status,
+				requestId: response.headers.get("x-request-id"),
+				traceId: response.headers.get("x-chalk-trace-id"),
+				cfRay: response.headers.get("cf-ray"),
+			};
+
+			if (response.ok) {
+				ctx.set("response", responseMeta);
+				ctx.complete("success");
+				return { success: true, data: undefined };
+			}
+
+			const rawText = await response.text();
+			let errorMessage = rawText.trim() || `Request failed with status ${response.status}`;
+			try {
+				const parsed = JSON.parse(rawText) as { message?: string; error?: string };
+				errorMessage = parsed.message ?? parsed.error ?? errorMessage;
+			} catch {
+				// plain text fallback
+			}
+
+			ctx.set("response", responseMeta);
+			ctx.complete("error", { code: `HTTP_${response.status}`, message: errorMessage });
+			return {
+				success: false,
+				error: {
+					code: `HTTP_${response.status}`,
+					message: errorMessage,
+				},
+			};
+		} catch (error) {
+			ctx.complete("error", {
+				code: "NETWORK_ERROR",
+				message: error instanceof Error ? error.message : "Network error",
+			});
+			return {
+				success: false,
+				error: {
+					code: "NETWORK_ERROR",
+					message: error instanceof Error ? error.message : "Network error",
+				},
+			};
+		}
 	}
 }

@@ -45,7 +45,7 @@ function App() {
 	};
 
 	return (
-		<div className="flex min-h-screen flex-col bg-background selection:bg-primary/20 overflow-x-hidden">
+		<div className="font-app flex min-h-screen flex-col bg-background selection:bg-primary/20 overflow-x-hidden">
       {/* Premium Background Atmosphere */}
       <div className="fixed inset-0 pointer-events-none -z-10">
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/10 rounded-full blur-[140px]" />

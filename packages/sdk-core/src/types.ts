@@ -496,6 +496,28 @@ export interface MediaConstraints {
 /**
  * A chat message in the room
  */
+export interface ChatAttachment {
+	/** Unique attachment identifier */
+	id: string;
+	/** Original file name */
+	fileName: string;
+	/** Attachment MIME type */
+	mimeType: string;
+	/** Attachment size in bytes */
+	sizeBytes: number;
+	/** Classified attachment kind */
+	kind: "image" | "document" | "file";
+}
+
+export interface ChatReadReceipt {
+	/** Participant ID of the reader */
+	participantId: string;
+	/** Display name of the reader */
+	displayName: string;
+	/** When the message was read */
+	readAt: Date;
+}
+
 export interface ChatMessage {
 	/** Unique message identifier */
 	id: string;
@@ -507,6 +529,10 @@ export interface ChatMessage {
 	content: string;
 	/** When the message was sent */
 	timestamp: Date;
+	/** Attached files for this message */
+	attachments?: ChatAttachment[];
+	/** Sender-visible read receipts */
+	readBy?: ChatReadReceipt[];
 }
 
 // ============================================================================
@@ -644,6 +670,7 @@ export type ChalkEventType =
 	| "track.unsubscribed"
 	| "speaker.active.changed"
 	| "chat.message"
+	| "chat.read"
 	| "reaction"
 	| "hand.raised"
 	| "hand.lowered"
@@ -908,6 +935,8 @@ export interface SessionSnapshot {
 	recordingId?: string;
 	/** Last sequence number for event ordering */
 	lastSeq: number;
+	/** Durable chat history for the room */
+	messages?: ChatMessage[];
 }
 
 /**

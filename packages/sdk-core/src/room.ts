@@ -263,6 +263,8 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
       getCurrentRecording: () => this.sessionStore.getCurrentRecording(),
       appendMessage: (message) => this.sessionStore.appendMessage(message),
+      getMessages: () => this.sessionStore.getMessages(),
+      setMessages: (messages) => this.sessionStore.setMessages(messages),
       setWhiteboardPermission: (participantId, canDraw) => {
         this.sessionStore.setWhiteboardPermission(participantId, canDraw);
       },
@@ -383,8 +385,12 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     return this.deviceController.selectMicrophone(deviceId);
   }
 
-  sendMessage(content: string): void {
-    this.interactionActions.sendMessage(content);
+  sendMessage(content: string, attachmentIds?: string[]): void {
+    this.interactionActions.sendMessage(content, attachmentIds);
+  }
+
+  markChatRead(readThroughMessageId: string): void {
+    this.interactionActions.markChatRead(readThroughMessageId);
   }
 
   sendReaction(emoji: ReactionEmoji): void {

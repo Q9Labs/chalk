@@ -1,4 +1,4 @@
-import type { Participant } from "@q9labs/chalk-core";
+import type { ChatAttachment, ChatReadReceipt, Participant } from "@q9labs/chalk-core";
 import { useMemo } from "react";
 
 interface ChatMessageLike {
@@ -7,6 +7,8 @@ interface ChatMessageLike {
 	senderName: string;
 	content: string;
 	timestamp: Date;
+	attachments?: ChatAttachment[];
+	readBy?: ChatReadReceipt[];
 }
 
 interface MediaLike {
@@ -75,6 +77,8 @@ export interface UseMeetingRoomViewModelReturn {
 		content: string;
 		timestamp: Date;
 		isLocal: boolean;
+		attachments?: ChatAttachment[];
+		readBy?: ChatReadReceipt[];
 	}>;
 	meetingLayout: "grid" | "spotlight" | "sidebar";
 	selectedAudioOutput?: string;
@@ -150,16 +154,26 @@ export function useMeetingRoomViewModel({
 	);
 
 	const chatMessages = useMemo(
-		() =>
-			messages.map((message) => ({
+		() => {
+			const localChatSenderId =
+				participants.find((participant) => participant.isLocal)?.userId ??
+				localParticipantId;
+
+			return messages.map((message) => ({
 				id: message.id,
 				senderId: message.senderId,
 				senderName: message.senderName,
 				content: message.content,
 				timestamp: message.timestamp,
-				isLocal: message.senderId === localParticipantId,
-			})),
-		[messages, localParticipantId],
+				isLocal:
+					message.senderId === localParticipantId ||
+					(localChatSenderId !== undefined &&
+						message.senderId === localChatSenderId),
+				attachments: message.attachments ?? [],
+				readBy: message.readBy ?? [],
+			}));
+		},
+		[messages, localParticipantId, participants],
 	);
 
 	const meetingLayout = useMemo((): "grid" | "spotlight" | "sidebar" => {

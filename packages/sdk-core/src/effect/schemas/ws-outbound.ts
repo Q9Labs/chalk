@@ -14,8 +14,14 @@ import { Schema } from "@effect/schema";
  */
 export const ChatSendPayload = Schema.Struct({
   content: Schema.String,
+  attachmentIds: Schema.optional(Schema.Array(Schema.String)),
 });
 export type ChatSendPayload = Schema.Schema.Type<typeof ChatSendPayload>;
+
+export const ChatReadPayload = Schema.Struct({
+  readThroughMessageId: Schema.String,
+});
+export type ChatReadPayload = Schema.Schema.Type<typeof ChatReadPayload>;
 
 /**
  * reaction.send payload
@@ -94,6 +100,7 @@ export type RoomSyncPayload = Schema.Schema.Type<typeof RoomSyncPayload>;
 export const WSOutboundPayloadSchemas = {
   "room.sync": RoomSyncPayload,
   "chat.send": ChatSendPayload,
+  "chat.read": ChatReadPayload,
   "reaction.send": ReactionSendPayload,
   "hand.raise": Schema.Void,
   "hand.lower": Schema.Void,

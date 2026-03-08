@@ -8,8 +8,15 @@ export class WSClient extends WSClientBase {
     this.send({ type: "room.sync", payload: { lastSeq: lastSeq ?? this.now() } });
   }
 
-  sendChatMessage(content: string): void {
-    this.send({ type: "chat.send", payload: { content } });
+  sendChatMessage(content: string, attachmentIds?: string[]): void {
+    this.send({
+      type: "chat.send",
+      payload: attachmentIds && attachmentIds.length > 0 ? { content, attachmentIds } : { content },
+    });
+  }
+
+  sendChatRead(readThroughMessageId: string): void {
+    this.send({ type: "chat.read", payload: { readThroughMessageId } });
   }
 
   sendReaction(emoji: string): void {

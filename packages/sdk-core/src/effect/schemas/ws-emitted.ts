@@ -89,6 +89,12 @@ export const WSEventSchemas = {
 		requestedBy: Schema.optional(Schema.String),
 	}),
 	"chat.message": ChatMessageSchema,
+	"chat.read": Schema.declare((input): input is {
+		messageIds: string[];
+		participantId: string;
+		displayName: string;
+		readAt: Date;
+	} => isObject(input)),
 	reaction: ReactionSchema,
 	"hand.raised": Schema.Struct({ participantId: Schema.String }),
 	"hand.lowered": Schema.Struct({ participantId: Schema.String }),

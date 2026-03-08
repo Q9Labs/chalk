@@ -27,6 +27,18 @@ export interface ChatMessage {
   senderName: string;
   content: string;
   timestamp: Date;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    kind: "image" | "document" | "file";
+  }>;
+  readBy?: Array<{
+    participantId: string;
+    displayName: string;
+    readAt: Date;
+  }>;
   isLocal?: boolean;
 }
 
@@ -70,6 +82,8 @@ export interface MeetingRoomProps {
   chatMessages?: ChatMessage[];
   unreadChatCount?: number;
   onSendMessage?: (content: string) => void;
+  onSendMessageWithAttachments?: (content: string, files: File[]) => Promise<void>;
+  onResolveChatAttachmentUrl?: (attachmentId: string) => Promise<string>;
   onChatOpen?: () => void;
   enableChat?: boolean;
   enableRecording?: boolean;

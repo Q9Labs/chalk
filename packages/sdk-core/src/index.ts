@@ -201,12 +201,14 @@ export type {
 // Types from original types.ts
 export type {
 	ApiResponse,
+	ChatAttachment,
 	ConferenceClientConfig,
 	CreateJoinTokenResponse,
 	ChalkError,
 	ChalkEventType,
 	ExchangeJoinTokenResponse,
 	ChatMessage,
+	ChatReadReceipt,
 	ListRoomsOptions,
 	ListRoomsResponse,
 	CreateRoomResponse,

@@ -38,6 +38,7 @@ export const toSnapshot = (payload: RoomSnapshotPayload): SessionSnapshot => ({
   isRecording: payload.isRecording,
   recordingId: payload.recordingId,
   lastSeq: payload.lastSeq,
+  messages: payload.messages?.map(toChatMessage),
 });
 
 export const toChatMessage = (payload: ChatMessagePayload): ChatMessage => ({
@@ -46,6 +47,18 @@ export const toChatMessage = (payload: ChatMessagePayload): ChatMessage => ({
   senderName: payload.displayName,
   content: payload.content,
   timestamp: new Date(payload.timestamp),
+  attachments: payload.attachments?.map((attachment) => ({
+    id: attachment.id,
+    fileName: attachment.fileName,
+    mimeType: attachment.mimeType,
+    sizeBytes: attachment.sizeBytes,
+    kind: attachment.kind,
+  })),
+  readBy: payload.readBy?.map((receipt) => ({
+    participantId: receipt.participantId,
+    displayName: receipt.displayName,
+    readAt: new Date(receipt.readAt),
+  })),
 });
 
 export const toReaction = (payload: ReactionPayload): Reaction => ({

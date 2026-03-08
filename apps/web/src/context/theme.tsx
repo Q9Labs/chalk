@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "dark" | "light";
+type Theme = "dark" | "light" | "nord";
 
 const ThemeContext = createContext<{
 	theme: Theme;
 	toggleTheme: () => void;
+	setTheme: (theme: Theme) => void;
 } | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -12,17 +13,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
 	useEffect(() => {
 		const root = window.document.documentElement;
-		root.classList.remove("light", "dark");
-		root.classList.add(theme);
+		root.classList.remove("light", "dark", "nord");
+		
+    if (theme === "nord") {
+      root.classList.add("dark", "nord"); // Nord is practically a dark theme variant
+    } else {
+      root.classList.add(theme);
+    }
+    
 		root.setAttribute("data-chalk-theme", theme);
 	}, [theme]);
 
 	const toggleTheme = () => {
-		setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+		setTheme((prev) => {
+      if (prev === "dark") return "light";
+      if (prev === "light") return "nord";
+      return "dark";
+    });
 	};
 
 	return (
-		<ThemeContext.Provider value={{ theme, toggleTheme }}>
+		<ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
 			{children}
 		</ThemeContext.Provider>
 	);

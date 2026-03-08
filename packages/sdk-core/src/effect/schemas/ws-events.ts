@@ -110,8 +110,40 @@ export const ChatMessagePayload = Schema.Struct({
   displayName: Schema.String,
   content: Schema.String,
   timestamp: Schema.String,
+  attachments: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        fileName: Schema.String,
+        mimeType: Schema.String,
+        sizeBytes: Schema.Number,
+        kind: Schema.Union(
+          Schema.Literal("image"),
+          Schema.Literal("document"),
+          Schema.Literal("file"),
+        ),
+      }),
+    ),
+  ),
+  readBy: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        participantId: Schema.String,
+        displayName: Schema.String,
+        readAt: Schema.String,
+      }),
+    ),
+  ),
 });
 export type ChatMessagePayload = Schema.Schema.Type<typeof ChatMessagePayload>;
+
+export const ChatReadPayload = Schema.Struct({
+  messageIds: Schema.Array(Schema.String),
+  participantId: Schema.String,
+  displayName: Schema.String,
+  readAt: Schema.String,
+});
+export type ChatReadPayload = Schema.Schema.Type<typeof ChatReadPayload>;
 
 /**
  * reaction event payload
@@ -167,6 +199,7 @@ export const RoomSnapshotPayload = Schema.Struct({
   isRecording: Schema.Boolean,
   recordingId: Schema.optional(Schema.String),
   lastSeq: Schema.Number,
+  messages: Schema.optional(Schema.Array(ChatMessagePayload)),
 });
 export type RoomSnapshotPayload = Schema.Schema.Type<typeof RoomSnapshotPayload>;
 
@@ -286,6 +319,7 @@ export const WSPayloadSchemas = {
   "participant.mute": ParticipantControlPayload,
   "participant.unmute": ParticipantControlPayload,
   "chat.message": ChatMessagePayload,
+  "chat.read": ChatReadPayload,
   reaction: ReactionPayload,
   "hand.raised": HandPayload,
   "hand.lowered": HandPayload,

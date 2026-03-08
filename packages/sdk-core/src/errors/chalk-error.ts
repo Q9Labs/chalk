@@ -112,6 +112,12 @@ export enum ChalkErrorCode {
 
   /** Server error */
   SERVER_ERROR = 'SERVER_ERROR',
+
+  /** Invalid request or state */
+  INVALID_REQUEST = 'INVALID_REQUEST',
+
+  /** Network level error */
+  NETWORK_ERROR = 'NETWORK_ERROR',
 }
 
 /**

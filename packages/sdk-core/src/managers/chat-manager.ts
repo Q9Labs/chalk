@@ -8,8 +8,24 @@
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
-import type { ChatMessage, ReactionEmoji } from "../types";
+import type { ChatAttachment, ChatMessage, ReactionEmoji } from "../types";
 import { TypedEventEmitter } from "../utils/typed-emitter";
+
+interface ChatAttachmentUploadSpec {
+  attachmentId: string;
+  uploadUrl: string;
+  expiresAtMs: number;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: ChatAttachment["kind"];
+}
+
+interface ChatTransport {
+  presignUpload: (files: Array<{ fileName: string; mimeType: string; sizeBytes: number }>) => Promise<ChatAttachmentUploadSpec[]>;
+  uploadAttachment: (attachmentId: string, file: File) => Promise<void>;
+  presignDownload: (attachmentId: string) => Promise<string>;
+}
 
 /** Chat manager state */
 export interface ChatState {
@@ -35,8 +51,6 @@ export interface ChatManagerEvents {
 
 /**
  * Manages chat messages and reactions
- *
- * Chat is ephemeral - messages are cleared when the meeting ends.
  */
 export class ChatManager extends StateContainer<ChatState> {
   private readonly events = new TypedEventEmitter<ChatManagerEvents>();
@@ -45,6 +59,7 @@ export class ChatManager extends StateContainer<ChatState> {
   private messages: ChatMessage[] = [];
   private unreadCount = 0;
   private isChatVisible = false;
+  private transport: ChatTransport | null = null;
 
   constructor(_debug = false) {
     super({
@@ -53,6 +68,10 @@ export class ChatManager extends StateContainer<ChatState> {
       count: 0,
       unreadCount: 0,
     });
+  }
+
+  configureTransport(transport: ChatTransport): void {
+    this.transport = transport;
   }
 
   /** Subscribe to chat events */
@@ -82,17 +101,21 @@ export class ChatManager extends StateContainer<ChatState> {
   private syncFromRoom(): void {
     if (!this.room) return;
 
-    this.messages = this.room.messages.map((m) => this.normalizeMessage(m));
+    this.messages = this.room.messages.map((message) => this.normalizeMessage(message));
     this.updateState();
   }
 
-  private normalizeMessage(m: ChatMessage): ChatMessage {
+  private normalizeMessage(message: ChatMessage): ChatMessage {
     return {
-      id: m.id,
-      content: m.content,
-      senderId: m.senderId,
-      senderName: m.senderName,
-      timestamp: m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp),
+      ...message,
+      timestamp: message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp),
+      attachments: (message.attachments ?? []).map((attachment) => ({
+        ...attachment,
+      })),
+      readBy: (message.readBy ?? []).map((receipt) => ({
+        ...receipt,
+        readAt: receipt.readAt instanceof Date ? receipt.readAt : new Date(receipt.readAt),
+      })),
     };
   }
 
@@ -104,13 +127,20 @@ export class ChatManager extends StateContainer<ChatState> {
         const normalized = this.normalizeMessage(message);
         this.messages.push(normalized);
 
-        // Increment unread if chat is not visible
         if (!this.isChatVisible) {
           this.unreadCount++;
+        } else if (this.room && normalized.senderId !== this.room.localParticipant?.id) {
+          this.room.markChatRead(normalized.id);
         }
 
         this.updateState();
         this.events.emit("message", { message: normalized });
+      }),
+    );
+
+    this.roomUnsubscribers.push(
+      this.room.on("chat.read", () => {
+        this.syncFromRoom();
       }),
     );
   }
@@ -136,35 +166,88 @@ export class ChatManager extends StateContainer<ChatState> {
     this.room.sendMessage(content);
   }
 
+  async sendMessageWithAttachments(content: string, files: File[]): Promise<void> {
+    if (!this.room) {
+      throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+    }
+    if (!this.transport) {
+      throw new ChalkError(ChalkErrorCode.INVALID_REQUEST, "Chat attachment transport unavailable");
+    }
+    if (files.length === 0) {
+      this.sendMessage(content);
+      return;
+    }
+
+    const uploadSpecs = await this.transport.presignUpload(
+      files.map((file) => ({
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      })),
+    );
+
+    for (let index = 0; index < uploadSpecs.length; index++) {
+      const spec = uploadSpecs[index];
+      if (!spec) continue;
+      
+      const file = files[index];
+      if (!file) continue;
+
+      await this.transport.uploadAttachment(spec.attachmentId, file);
+    }
+
+    this.room.sendMessage(content, uploadSpecs.map((spec) => spec.attachmentId));
+  }
+
+  async getAttachmentDownloadUrl(attachmentId: string): Promise<string> {
+    if (!this.transport) {
+      throw new ChalkError(ChalkErrorCode.INVALID_REQUEST, "Chat attachment transport unavailable");
+    }
+    return this.transport.presignDownload(attachmentId);
+  }
+
   /** React to a message with an emoji */
   reactToMessage(messageId: string, emoji: ReactionEmoji): void {
     if (!this.room) {
       throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
     }
 
-    // Find the message
     const message = this.messages.find((m) => m.id === messageId);
     if (!message) return;
 
     const localId = this.room.localParticipant?.id;
     if (!localId) return;
 
-    // TODO: Send reaction to server when API supports it
-    // For now, just emit the event locally
     this.updateState();
     this.events.emit("reaction", { messageId, emoji, participantId: localId });
   }
 
-  /** Mark chat as visible (resets unread count) */
+  /** Mark chat as visible (resets unread count and syncs read-through) */
   markAsRead(): void {
     this.isChatVisible = true;
     this.unreadCount = 0;
     this.updateState();
+
+    const readThroughMessageId = this.latestRemoteMessageId();
+    if (readThroughMessageId && this.room) {
+      this.room.markChatRead(readThroughMessageId);
+    }
   }
 
   /** Mark chat as hidden (starts counting unread) */
   markAsHidden(): void {
     this.isChatVisible = false;
+  }
+
+  private latestRemoteMessageId(): string | null {
+    const localParticipantId = this.room?.localParticipant?.id;
+    for (let index = this.messages.length - 1; index >= 0; index--) {
+      const message = this.messages[index];
+      if (message && message.senderId !== localParticipantId) {
+        return message.id;
+      }
+    }
+    return null;
   }
 
   /** Clear all messages (used when meeting ends) */

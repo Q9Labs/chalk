@@ -358,6 +358,8 @@ func (c *Client) handleMessage(msg *Message) {
 		c.handleRoomSync(msg)
 	case MessageTypeChatSend:
 		c.handleChatMessage(msg)
+	case MessageTypeChatRead:
+		c.handleChatRead(msg)
 	case MessageTypeReactionSnd:
 		c.handleReaction(msg)
 	case MessageTypeHandRaise:
@@ -407,7 +409,7 @@ func (c *Client) handleRoomSync(msg *Message) {
 	var payload RoomSyncPayload
 	_ = msg.UnmarshalPayload(&payload) // best-effort; payload optional
 
-	snapshot := c.hub.GetRoomSnapshot(c.roomID)
+	snapshot := c.hub.GetRoomSnapshot(c.roomID, c.participantID, true)
 	snapshotMsg, _ := NewMessage(MessageTypeRoomSnapshot, snapshot)
 	snapshotData, _ := json.Marshal(snapshotMsg)
 	c.SendReliable(snapshotData)
@@ -421,22 +423,62 @@ func (c *Client) handleChatMessage(msg *Message) {
 	}
 
 	if payload.Content == "" {
-		c.sendErrorMessage("invalid_payload", "Content cannot be empty")
+		if len(payload.AttachmentIDs) == 0 {
+			c.sendErrorMessage("invalid_payload", "Content cannot be empty")
+			return
+		}
+	}
+
+	if c.hub.chatService == nil {
+		c.sendErrorMessage("server_error", "Chat service unavailable")
 		return
 	}
 
-	meta := c.hub.GetParticipantMetadata(c.participantID)
+	chatMessage, err := c.hub.chatService.CreateMessage(c.hub.ctx, c.roomID, c.participantID, payload.Content, payload.AttachmentIDs)
+	if err != nil {
+		c.sendErrorMessage("invalid_payload", err.Error())
+		return
+	}
 
-	chatMsg, _ := NewMessage(MessageTypeChatMessage, ChatMessagePayload{
-		ID:            uuid.New(),
-		ParticipantID: c.participantID,
-		DisplayName:   meta.DisplayName,
-		Content:       payload.Content,
-		Timestamp:     time.Now(),
-	})
-
+	chatMsg, _ := NewMessage(MessageTypeChatMessage, chatMessageToPayload(*chatMessage))
 	msgData, _ := json.Marshal(chatMsg)
 	c.hub.FanoutToRoomReliable(c.roomID, msgData, "")
+}
+
+func (c *Client) handleChatRead(msg *Message) {
+	var payload ChatReadPayload
+	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.sendErrorMessage("invalid_payload", "Failed to parse chat read payload")
+		return
+	}
+
+	if payload.ReadThroughMessageID == uuid.Nil {
+		c.sendErrorMessage("invalid_payload", "read_through_message_id is required")
+		return
+	}
+
+	if c.hub.chatService == nil {
+		return
+	}
+
+	updates, err := c.hub.chatService.MarkReadThrough(c.hub.ctx, c.roomID, c.participantID, payload.ReadThroughMessageID)
+	if err != nil {
+		c.sendErrorMessage("server_error", "Failed to mark chat as read")
+		return
+	}
+
+	for _, update := range updates {
+		messageIDs := make([]uuid.UUID, 0, len(update.MessageIDs))
+		messageIDs = append(messageIDs, update.MessageIDs...)
+		readMsg, _ := NewMessage(MessageTypeChatRead, ChatReadPayloadOut{
+			MessageIDs:     messageIDs,
+			ParticipantID:  update.ReaderParticipant,
+			DisplayName:    update.ReaderName,
+			ReadAt:         update.ReadAt,
+		})
+		readData, _ := json.Marshal(readMsg)
+		c.hub.FanoutChatReadUpdate(c.roomID, update.SenderIdentityKey, readData)
+	}
 }
 
 // handleReaction processes a reaction and broadcasts it

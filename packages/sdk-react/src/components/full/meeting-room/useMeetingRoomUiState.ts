@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { MeetingLayout, MeetingPanel } from "./types";
 
@@ -35,17 +35,17 @@ export function useMeetingRoomUiState({ defaultChatOpen, defaultParticipantsOpen
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
 
+  useEffect(() => {
+    if (activePanel === "chat") {
+      onChatOpen?.();
+    }
+  }, [activePanel, onChatOpen]);
+
   const togglePanel = useCallback(
     (panel: MeetingPanel) => {
-      setActivePanel((current) => {
-        const nextPanel = current === panel ? null : panel;
-        if (nextPanel === "chat") {
-          onChatOpen?.();
-        }
-        return nextPanel;
-      });
+      setActivePanel((current) => (current === panel ? null : panel));
     },
-    [onChatOpen],
+    [],
   );
 
   return {

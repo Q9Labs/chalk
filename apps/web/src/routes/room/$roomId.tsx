@@ -21,7 +21,11 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
-import { getJoinContext } from "../../lib/internalAuth";
+import { getApiUrl, getJoinContext } from "../../lib/internalAuth";
+import { ChalkLogo } from "../../components/ChalkLogo";
+import { cn } from "../../lib/utils";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Calendar01Icon, Clock01Icon } from "@hugeicons/core-free-icons";
 
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
@@ -41,20 +45,127 @@ function RoomPage() {
   const navigate = useNavigate();
 
   const [storedUserName, setStoredUserName] = useState<string>("");
+  const [roomData, setRoomData] = useState<any>(null);
+  const [isCheckingRoom, setIsCheckingRoom] = useState(true);
+  const [now, setNow] = useState(Date.now());
+  const [defaults, setDefaults] = useState({ audioEnabled: true, videoEnabled: true });
 
-  // Load username from sessionStorage after mount
   useEffect(() => {
-    const savedName = sessionStorage.getItem("chalk_display_name");
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch Public Room Metadata to check schedule
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const url = getApiUrl();
+        const res = await fetch(`${url}/api/v1/public/rooms/${roomId}`);
+        if (!res.ok) throw new Error("Room not found");
+        const data = await res.json();
+        if (!cancelled) {
+          setRoomData(data);
+          setIsCheckingRoom(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          // Fallback to let the SDK handle errors if public fetch fails
+          setIsCheckingRoom(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
+
+  // Load username and defaults from storage after mount
+  useEffect(() => {
+    const savedName = localStorage.getItem("chalk_default_name") || sessionStorage.getItem("chalk_display_name");
     if (savedName) {
       setStoredUserName(savedName);
     }
+    
+    const muteDefault = localStorage.getItem("chalk_join_muted") === "true";
+    const noVideoDefault = localStorage.getItem("chalk_join_no_video") === "true";
+    setDefaults({
+      audioEnabled: !muteDefault,
+      videoEnabled: !noVideoDefault,
+    });
   }, []);
 
   const joinCtx = typeof window === "undefined" ? null : getJoinContext();
   const role = joinCtx ? "participant" : "host";
 
+  if (isCheckingRoom) {
+    return (
+      <div className="h-screen w-screen bg-background flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Waiting Room Logic
+  const startMs = roomData?.scheduled_start_at ? new Date(roomData.scheduled_start_at).getTime() : null;
+  const earlyJoinMinutes = roomData?.allow_early_join_minutes || 0;
+  const joinAllowedAtMs = startMs ? startMs - earlyJoinMinutes * 60_000 : null;
+
+  if (joinAllowedAtMs && now < joinAllowedAtMs) {
+    const timeUntilOpenMs = joinAllowedAtMs - now;
+    const isImminent = timeUntilOpenMs < 60_000; // Less than 1 minute
+
+    const days = Math.floor(timeUntilOpenMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeUntilOpenMs / (1000 * 60 * 60)) % 24);
+    const minutes = Math.floor((timeUntilOpenMs / 1000 / 60) % 60);
+    const seconds = Math.floor((timeUntilOpenMs / 1000) % 60);
+
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 relative overflow-hidden selection:bg-primary/20 text-white">
+        <div className="absolute inset-0 z-0">
+          <div className="absolute top-[20%] left-[10%] w-[50vw] h-[50vw] bg-primary/10 rounded-full blur-[150px]" />
+        </div>
+
+        <div className="relative z-10 w-full max-w-2xl text-center space-y-12 animate-in fade-in duration-1000">
+          <div>
+            <div className="inline-flex h-8 px-3 items-center justify-center rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest mb-8 backdrop-blur-md">
+              <div className="w-2 h-2 rounded-full bg-primary animate-pulse mr-2" />
+              Opening Soon
+            </div>
+            
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight text-balance mb-4 leading-tight">
+              {roomData?.name || roomName || "Scheduled Session"}
+            </h1>
+            
+            <div className="flex items-center justify-center gap-6 text-sm font-semibold text-white/50 uppercase tracking-widest mt-6">
+              <span className="flex items-center gap-2"><HugeiconsIcon icon={Calendar01Icon} size={16} /> {startMs ? new Date(startMs).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : ""}</span>
+              <span className="flex items-center gap-2"><HugeiconsIcon icon={Clock01Icon} size={16} /> {startMs ? new Date(startMs).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+            </div>
+          </div>
+
+          <div className="py-8">
+            <div className={cn(
+              "font-mono font-bold tracking-tighter flex justify-center gap-4 transition-all duration-500",
+              isImminent ? "text-primary text-8xl md:text-9xl" : "text-white/90 text-7xl md:text-8xl"
+            )}>
+              {days > 0 && <span>{String(days).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl mr-2">d</span></span>}
+              {(days > 0 || hours > 0) && <span>{String(hours).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl mr-2">h</span></span>}
+              <span>{String(minutes).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl mr-2">m</span></span>
+              <span>{String(seconds).padStart(2, '0')}<span className="text-white/20 opacity-50 text-4xl">s</span></span>
+            </div>
+            <p className="mt-6 text-sm font-medium text-white/40 uppercase tracking-[0.2em]">Until waiting room opens</p>
+          </div>
+
+          <div className="pt-8 flex flex-col items-center">
+            <ChalkLogo className="opacity-30 mix-blend-screen scale-75" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen w-screen relative">
+    <div className="h-screen w-screen relative bg-background">
       {/*@ts-ignore*/}
       <VideoConference
         roomId={roomId}
@@ -80,9 +191,9 @@ function RoomPage() {
           tour: false,
         }}
         defaults={{
-          videoEnabled: false,
+          videoEnabled: defaults.videoEnabled,
           layout: "grid",
-          audioEnabled: false,
+          audioEnabled: defaults.audioEnabled,
         }}
         className="h-full w-full"
       />
