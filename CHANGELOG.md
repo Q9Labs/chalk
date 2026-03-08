@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SDK-React: Document Picture-in-Picture** — add Document PiP support for pre-join and in-room views, with a `usePictureInPicture` hook and controls to open/close the floating window on supported browsers.
 - **SDK-React: in-room media device switching** — the desktop meeting control bar now includes inline dropdowns for microphone input, speaker output, and camera device selection beside the existing mic/video controls.
 - **SDK-React: in-room settings dialog** — meeting rooms now ship a searchable settings modal with left-rail navigation for audio, video, appearance, and entry preferences, backed by browser-local persistence.
 - **SDK-React: browser haptics support** — add a new `useHaptics` hook backed by `web-haptics` and wire tactile feedback into core meeting controls, reaction picker actions, and pre-join UI actions on supported browsers.

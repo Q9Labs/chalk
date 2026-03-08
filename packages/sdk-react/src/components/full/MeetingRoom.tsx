@@ -1,12 +1,15 @@
 import type React from "react";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef } from "react";
 
 import { SettingsDialog } from "../composite/SettingsDialog";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
 import { useDraggable } from "../../hooks/ui/useDraggable";
+import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { buildMeetingPictureInPictureSource } from "./picture-in-picture";
+import { useSharedPictureInPicture } from "./picture-in-picture/PictureInPictureContext";
 import { MeetingRoomControls } from "./meeting-room/MeetingRoomControls";
 import { MeetingRoomOverlays } from "./meeting-room/MeetingRoomOverlays";
 import { MeetingRoomPanels } from "./meeting-room/MeetingRoomPanels";
@@ -36,6 +39,9 @@ function MeetingRoomBase({
 	meetingDuration = 0,
 	canRecord = false,
 	transcripts = [],
+	enablePictureInPicture = false,
+	isPictureInPictureActive,
+	isPictureInPictureSupported,
 	chatMessages = [],
 	unreadChatCount = 0,
 	onSendMessage,
@@ -65,6 +71,7 @@ function MeetingRoomBase({
 	onToggleRecording,
 	onToggleHandRaise,
 	onToggleWhiteboard,
+	onTogglePictureInPicture,
 	onSendReaction,
 	onToggleTranscription,
 	onLeave,
@@ -166,6 +173,104 @@ function MeetingRoomBase({
 			enableWhiteboard,
 			isWhiteboardOpen,
 		});
+	const hasExternalPictureInPicture =
+		typeof onTogglePictureInPicture === "function";
+	const sharedPictureInPicture = useSharedPictureInPicture();
+	const registerSharedPictureInPicture = sharedPictureInPicture?.register;
+	const pictureInPictureOwnerId = useId();
+	const { source: pictureInPictureSource, previewSource } =
+		buildMeetingPictureInPictureSource({
+			participants: allParticipants,
+			localParticipant,
+		});
+	const pictureInPictureOptions = useMemo(
+		() => ({
+			phase: "meeting" as const,
+			roomName,
+			displayName: localParticipant.displayName,
+			source: pictureInPictureSource,
+			previewSource,
+			controls: {
+				isMuted,
+				isVideoEnabled,
+				isScreenSharing,
+				isHandRaised,
+				isWhiteboardOpen,
+				enableScreenShare,
+				enableHandRaise,
+				enableWhiteboard,
+				enableReactions,
+				onToggleMute,
+				onToggleVideo,
+				onToggleScreenShare,
+				onToggleHandRaise,
+				onToggleWhiteboard,
+				onOpenReactions: () => ui.setIsReactionPickerOpen(true),
+				onLeave,
+			},
+		}),
+		[
+			roomName,
+			localParticipant.displayName,
+			pictureInPictureSource,
+			previewSource,
+			isMuted,
+			isVideoEnabled,
+			isScreenSharing,
+			isHandRaised,
+			isWhiteboardOpen,
+			enableScreenShare,
+			enableHandRaise,
+			enableWhiteboard,
+			enableReactions,
+			onToggleMute,
+			onToggleVideo,
+			onToggleScreenShare,
+			onToggleHandRaise,
+			onToggleWhiteboard,
+			ui.setIsReactionPickerOpen,
+			onLeave,
+		],
+	);
+
+	useEffect(() => {
+		if (
+			!registerSharedPictureInPicture ||
+			hasExternalPictureInPicture ||
+			!enablePictureInPicture
+		) {
+			return;
+		}
+
+		registerSharedPictureInPicture(pictureInPictureOwnerId, pictureInPictureOptions);
+
+		return () => {
+			registerSharedPictureInPicture(pictureInPictureOwnerId, null);
+		};
+	}, [
+		enablePictureInPicture,
+		hasExternalPictureInPicture,
+		pictureInPictureOptions,
+		pictureInPictureOwnerId,
+		registerSharedPictureInPicture,
+	]);
+
+	const internalPictureInPicture = usePictureInPicture({
+		enabled:
+			enablePictureInPicture &&
+			!hasExternalPictureInPicture &&
+			!sharedPictureInPicture,
+		...pictureInPictureOptions,
+	});
+	const pictureInPicture = hasExternalPictureInPicture
+		? {
+				isActive: Boolean(isPictureInPictureActive),
+				isSupported: Boolean(isPictureInPictureSupported),
+				toggle: onTogglePictureInPicture,
+			}
+		: sharedPictureInPicture
+			? sharedPictureInPicture
+			: internalPictureInPicture;
 	const participantColorSeed =
 		localParticipant.displayName || localParticipant.id;
 
@@ -462,6 +567,9 @@ function MeetingRoomBase({
 					enableRecording={enableRecording}
 					enableHandRaise={enableHandRaise}
 					enableReactions={enableReactions}
+					enablePictureInPicture={enablePictureInPicture}
+					isPictureInPictureSupported={pictureInPicture.isSupported}
+					isPictureInPictureActive={pictureInPicture.isActive}
 					enableWhiteboard={enableWhiteboard}
 					enableTranscription={enableTranscription}
 					enableChat={enableChat}
@@ -480,6 +588,7 @@ function MeetingRoomBase({
 					onToggleRecording={onToggleRecording}
 					onToggleHandRaise={onToggleHandRaise}
 					onToggleWhiteboard={onToggleWhiteboard}
+					onTogglePictureInPicture={pictureInPicture.toggle}
 					onToggleTranscription={onToggleTranscription}
 					onSendReaction={onSendReaction}
 					onLeave={onLeave}

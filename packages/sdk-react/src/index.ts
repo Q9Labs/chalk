@@ -115,6 +115,8 @@ export {
 	type UseKeyboardShortcutsReturn,
 	type UseLayoutReturn,
 	type UseMediaReturn,
+	type UsePictureInPictureOptions,
+	type UsePictureInPictureReturn,
 	type UseNotificationsReturn,
 	type UsePanelsReturn,
 	type UseParticipantsReturn,
@@ -152,6 +154,7 @@ export {
 	useNotifications,
 	usePanels,
 	// Participants
+	usePictureInPicture,
 	useParticipants,
 	usePrefersDarkMode,
 	usePrefersReducedMotion,

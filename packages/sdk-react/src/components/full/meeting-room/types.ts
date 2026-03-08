@@ -74,6 +74,9 @@ export interface MeetingRoomProps {
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
+  enablePictureInPicture?: boolean;
+  isPictureInPictureActive?: boolean;
+  isPictureInPictureSupported?: boolean;
   isWhiteboardOpen?: boolean;
   isRecording?: boolean;
   recordingDuration?: number;
@@ -97,6 +100,7 @@ export interface MeetingRoomProps {
   enableReactions?: boolean;
   enableWhiteboard?: boolean;
   enableTranscription?: boolean;
+  onTogglePictureInPicture?: () => Promise<void> | void;
   enableTour?: boolean;
   defaultLayout?: MeetingLayout;
   defaultChatOpen?: boolean;

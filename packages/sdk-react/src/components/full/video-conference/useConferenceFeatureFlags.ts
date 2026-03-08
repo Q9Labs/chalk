@@ -15,6 +15,7 @@ export interface ConferenceFeatureFlags {
 	chat: boolean;
 	recording: boolean;
 	screenShare: boolean;
+	pictureInPicture: boolean;
 	whiteboard: boolean;
 	reactions: boolean;
 	handRaise: boolean;
@@ -37,6 +38,7 @@ export function useConferenceFeatureFlags({
 	localParticipant,
 	participantCount,
 	isRecording,
+		pictureInPicture: pictureInPictureFeature,
 }: UseConferenceFeatureFlagsParams): ConferenceFeatureFlags {
 	const {
 		chat: chatFeature,
@@ -51,6 +53,7 @@ export function useConferenceFeatureFlags({
 
 	return useMemo(() => {
 		const ctx: FeatureContext = {
+			pictureInPicture: resolveFeature(pictureInPictureFeature, ctx),
 			participants,
 			localParticipant,
 			participantCount,
@@ -63,6 +66,7 @@ export function useConferenceFeatureFlags({
 			whiteboard: resolveFeature(whiteboardFeature, ctx),
 			reactions: resolveFeature(reactionsFeature, ctx),
 			handRaise: resolveFeature(handRaiseFeature, ctx),
+		pictureInPictureFeature,
 			tour: resolveFeature(tourFeature, ctx),
 			pictureInPicture: resolveFeature(pictureInPictureFeature, ctx),
 		};

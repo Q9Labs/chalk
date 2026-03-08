@@ -56,6 +56,9 @@ export interface UseMeetingRoomPropsParams {
 	handleRetryConnection: NonNullable<MeetingRoomProps["onRetryConnection"]>;
 	connectionSupportCode: MeetingRoomProps["connectionSupportCode"];
 	className: MeetingRoomProps["className"];
+	isPictureInPictureSupported?: MeetingRoomProps["isPictureInPictureSupported"];
+	isPictureInPictureActive?: MeetingRoomProps["isPictureInPictureActive"];
+	handleTogglePictureInPicture?: MeetingRoomProps["onTogglePictureInPicture"];
 }
 
 export function useMeetingRoomProps({
@@ -107,12 +110,15 @@ export function useMeetingRoomProps({
 	getParticipantVolume,
 	selectedAudioOutput,
 	selectedVideoInput,
+	isPictureInPictureSupported,
+	isPictureInPictureActive,
+	handleTogglePictureInPicture,
 	connectionState,
 	handleRetryConnection,
 	connectionSupportCode,
 	className,
 }: UseMeetingRoomPropsParams): MeetingRoomProps {
-	const { chat, recording, screenShare, handRaise, reactions, whiteboard, tour } =
+	const { chat, recording, screenShare, handRaise, reactions, whiteboard, pictureInPicture, tour } =
 		featureFlags;
 
 	return useMemo(
@@ -147,6 +153,7 @@ export function useMeetingRoomProps({
 			enableReactions: reactions,
 			enableWhiteboard: whiteboard,
 			enableTour: tour,
+			enablePictureInPicture: pictureInPicture,
 			defaultLayout: meetingLayout,
 			defaultChatOpen,
 			defaultParticipantsOpen,
@@ -158,6 +165,7 @@ export function useMeetingRoomProps({
 			onToggleScreenShare: handleToggleScreenShare,
 			onToggleRecording: handleToggleRecording,
 			onToggleHandRaise: handleToggleHandRaise,
+			onTogglePictureInPicture: handleTogglePictureInPicture,
 			onToggleWhiteboard: handleToggleWhiteboard,
 			onSendReaction: handleSendReaction,
 			onLeave: handleLeave,
@@ -171,6 +179,8 @@ export function useMeetingRoomProps({
 			onParticipantVolumeChange,
 			getParticipantVolume,
 			selectedAudioOutput,
+			isPictureInPictureSupported,
+			isPictureInPictureActive,
 			selectedVideoInput,
 			connectionState,
 			onRetryConnection: handleRetryConnection,
@@ -198,6 +208,7 @@ export function useMeetingRoomProps({
 			recording,
 			screenShare,
 			handRaise,
+			pictureInPicture,
 			reactions,
 			whiteboard,
 			tour,
@@ -217,6 +228,7 @@ export function useMeetingRoomProps({
 			handleVideoInputChange,
 			handleToggleScreenShare,
 			handleToggleRecording,
+			handleTogglePictureInPicture,
 			handleToggleHandRaise,
 			handleToggleWhiteboard,
 			handleSendReaction,
@@ -234,6 +246,8 @@ export function useMeetingRoomProps({
 			selectedVideoInput,
 			connectionState,
 			handleRetryConnection,
+			isPictureInPictureSupported,
+			isPictureInPictureActive,
 			connectionSupportCode,
 			className,
 		],
