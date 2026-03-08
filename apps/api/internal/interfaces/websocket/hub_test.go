@@ -346,7 +346,7 @@ func TestHubGetRoomSnapshot(t *testing.T) {
 
 	hub.SetRoomRecordingState(roomID, true, &recordingID)
 
-	snapshot := hub.GetRoomSnapshot(roomID)
+	snapshot := hub.GetRoomSnapshot(roomID, uuid.Nil, false)
 
 	assert.Equal(t, roomID, snapshot.RoomID)
 	assert.Len(t, snapshot.Participants, 2)
@@ -362,7 +362,7 @@ func TestHubGetRoomSnapshotEmptyRoom(t *testing.T) {
 
 	roomID := uuid.New()
 
-	snapshot := hub.GetRoomSnapshot(roomID)
+	snapshot := hub.GetRoomSnapshot(roomID, uuid.Nil, false)
 
 	assert.Equal(t, roomID, snapshot.RoomID)
 	assert.Len(t, snapshot.Participants, 0)
@@ -389,7 +389,7 @@ func TestHubGetRoomSnapshotUsesRoomStateSource(t *testing.T) {
 		},
 	})
 
-	snapshot := hub.GetRoomSnapshot(roomID)
+	snapshot := hub.GetRoomSnapshot(roomID, uuid.Nil, false)
 	assert.Equal(t, roomID, snapshot.RoomID)
 	assert.Len(t, snapshot.Participants, 1)
 	assert.Equal(t, participantID, snapshot.Participants[0].ID)
