@@ -212,7 +212,7 @@ function RootComponent() {
 							className="text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer select-none"
 							title="System Information"
 						>
-							v{__APP_VERSION__} ({__COMMIT_HASH__})
+							sdk v{__SDK_REACT_VERSION__} · web v{__WEB_APP_VERSION__}
 						</button>
 					</div>
 

@@ -8,6 +8,7 @@ import viteTsConfigPaths from "vite-tsconfig-paths";
 import { execSync } from "child_process";
 import { fileURLToPath, URL } from "node:url";
 import pkg from "./package.json";
+import sdkReactPkg from "../../packages/sdk-react/package.json";
 
 const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
 const buildTime = new Date().toISOString();
@@ -19,6 +20,8 @@ const config = defineConfig({
 		__COMMIT_HASH__: JSON.stringify(commitHash),
 		__BUILD_TIME__: JSON.stringify(buildTime),
 		__APP_VERSION__: JSON.stringify((pkg as any).version || "0.0.0"),
+		__WEB_APP_VERSION__: JSON.stringify((pkg as any).version || "0.0.0"),
+		__SDK_REACT_VERSION__: JSON.stringify((sdkReactPkg as any).version || "0.0.0"),
 	},
 	server: {
 		port: 3070,
