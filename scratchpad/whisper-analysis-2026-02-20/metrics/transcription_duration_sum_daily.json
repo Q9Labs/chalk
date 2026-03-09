@@ -1,47 +1,47 @@
 {
-    "Label": "TranscriptionDurationMs",
-    "Datapoints": [
-        {
-            "Timestamp": "2026-02-13T05:00:00+05:00",
-            "Average": 21953.6625,
-            "Sum": 5268879.0,
-            "Unit": "Milliseconds"
-        },
-        {
-            "Timestamp": "2026-02-16T05:00:00+05:00",
-            "Average": 34801.91071428572,
-            "Sum": 1948907.0,
-            "Unit": "Milliseconds"
-        },
-        {
-            "Timestamp": "2026-02-19T05:00:00+05:00",
-            "Average": 62804.318181818184,
-            "Sum": 1381695.0,
-            "Unit": "Milliseconds"
-        },
-        {
-            "Timestamp": "2026-02-15T05:00:00+05:00",
-            "Average": 1852.0,
-            "Sum": 5556.0,
-            "Unit": "Milliseconds"
-        },
-        {
-            "Timestamp": "2026-02-18T05:00:00+05:00",
-            "Average": 51823.5,
-            "Sum": 1243764.0,
-            "Unit": "Milliseconds"
-        },
-        {
-            "Timestamp": "2026-02-14T05:00:00+05:00",
-            "Average": 68453.56,
-            "Sum": 1711339.0,
-            "Unit": "Milliseconds"
-        },
-        {
-            "Timestamp": "2026-02-17T05:00:00+05:00",
-            "Average": 43208.25714285715,
-            "Sum": 1512289.0,
-            "Unit": "Milliseconds"
-        }
-    ]
+  "Label": "TranscriptionDurationMs",
+  "Datapoints": [
+    {
+      "Timestamp": "2026-02-13T05:00:00+05:00",
+      "Average": 21953.6625,
+      "Sum": 5268879.0,
+      "Unit": "Milliseconds"
+    },
+    {
+      "Timestamp": "2026-02-16T05:00:00+05:00",
+      "Average": 34801.91071428572,
+      "Sum": 1948907.0,
+      "Unit": "Milliseconds"
+    },
+    {
+      "Timestamp": "2026-02-19T05:00:00+05:00",
+      "Average": 62804.318181818184,
+      "Sum": 1381695.0,
+      "Unit": "Milliseconds"
+    },
+    {
+      "Timestamp": "2026-02-15T05:00:00+05:00",
+      "Average": 1852.0,
+      "Sum": 5556.0,
+      "Unit": "Milliseconds"
+    },
+    {
+      "Timestamp": "2026-02-18T05:00:00+05:00",
+      "Average": 51823.5,
+      "Sum": 1243764.0,
+      "Unit": "Milliseconds"
+    },
+    {
+      "Timestamp": "2026-02-14T05:00:00+05:00",
+      "Average": 68453.56,
+      "Sum": 1711339.0,
+      "Unit": "Milliseconds"
+    },
+    {
+      "Timestamp": "2026-02-17T05:00:00+05:00",
+      "Average": 43208.25714285715,
+      "Sum": 1512289.0,
+      "Unit": "Milliseconds"
+    }
+  ]
 }

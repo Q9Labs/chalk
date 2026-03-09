@@ -1,30 +1,23 @@
-import { useState } from "react"
-import { createFileRoute } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
-import { api } from "@/lib/api"
-import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Skeleton } from "@/components/ui/skeleton"
-import { JsonViewer } from "@/components/json-viewer"
-import { format } from "date-fns"
+import { useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { JsonViewer } from "@/components/json-viewer";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/audit-logs")({
   component: AuditLogsPage,
-})
+});
 
 function AuditLogsPage() {
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "audit-logs"],
     queryFn: () => api.listAuditLogs(),
-  })
+  });
 
   if (isLoading) {
     return (
@@ -36,10 +29,10 @@ function AuditLogsPage() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
-  const logs = data ?? []
+  const logs = data ?? [];
 
   return (
     <div className="space-y-6">
@@ -59,22 +52,16 @@ function AuditLogsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-	            {logs.map((log) => (
-	              <>
-	                <TableRow
-	                  key={log.id}
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => setExpanded(expanded === log.id ? null : log.id)}
-                >
+            {logs.map((log) => (
+              <>
+                <TableRow key={log.id} className="cursor-pointer hover:bg-accent" onClick={() => setExpanded(expanded === log.id ? null : log.id)}>
                   <TableCell>
                     <Badge variant="outline" className="font-mono text-xs">
                       {log.action}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs">{log.actor_id || "—"}</TableCell>
-                  <TableCell className="text-xs">
-                    {log.resource_type ? `${log.resource_type}` : "—"}
-                  </TableCell>
+                  <TableCell className="text-xs">{log.resource_type ? `${log.resource_type}` : "—"}</TableCell>
                   <TableCell>{log.tenant_name || "—"}</TableCell>
                   <TableCell className="text-xs font-mono">{log.ip_address || "—"}</TableCell>
                   <TableCell>{format(new Date(log.created_at), "PPp")}</TableCell>
@@ -95,5 +82,5 @@ function AuditLogsPage() {
         </Table>
       )}
     </div>
-  )
+  );
 }

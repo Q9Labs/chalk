@@ -9,8 +9,8 @@ import { cleanup } from "@testing-library/react";
 // @ts-ignore
 expect.extend(matchers);
 
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost',
+const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
+  url: "http://localhost",
 });
 // @ts-ignore
 globalThis.window = dom.window;
@@ -67,37 +67,37 @@ globalThis.getComputedStyle ??= dom.window.getComputedStyle?.bind(dom.window);
 // Bun exposes a Jest-compatible global, but `jest.advanceTimersByTime()` throws unless fake timers are enabled.
 // @testing-library/react calls this opportunistically during `waitFor`, so guard it.
 const patchJestAdvanceTimers = (jestLike: any) => {
-	if (!jestLike?.advanceTimersByTime || jestLike.__chalkPatchedAdvanceTimers) return;
-	const originalAdvanceTimersByTime = jestLike.advanceTimersByTime.bind(jestLike);
-	jestLike.advanceTimersByTime = (ms: number) => {
-		try {
-			return originalAdvanceTimersByTime(ms);
-		} catch {
-			// Ignore when fake timers aren't active.
-		}
-	};
-	jestLike.__chalkPatchedAdvanceTimers = true;
+  if (!jestLike?.advanceTimersByTime || jestLike.__chalkPatchedAdvanceTimers) return;
+  const originalAdvanceTimersByTime = jestLike.advanceTimersByTime.bind(jestLike);
+  jestLike.advanceTimersByTime = (ms: number) => {
+    try {
+      return originalAdvanceTimersByTime(ms);
+    } catch {
+      // Ignore when fake timers aren't active.
+    }
+  };
+  jestLike.__chalkPatchedAdvanceTimers = true;
 };
 
 // Patch current and also patch if the runtime assigns `globalThis.jest` later.
 // @ts-ignore
 patchJestAdvanceTimers(globalThis.jest);
 try {
-	// @ts-ignore
-	let currentJest = globalThis.jest;
-	// @ts-ignore
-	Object.defineProperty(globalThis, 'jest', {
-		configurable: true,
-		get() {
-			return currentJest;
-		},
-		set(next) {
-			currentJest = next;
-			patchJestAdvanceTimers(next);
-		},
-	});
+  // @ts-ignore
+  let currentJest = globalThis.jest;
+  // @ts-ignore
+  Object.defineProperty(globalThis, "jest", {
+    configurable: true,
+    get() {
+      return currentJest;
+    },
+    set(next) {
+      currentJest = next;
+      patchJestAdvanceTimers(next);
+    },
+  });
 } catch {
-	// Best-effort only.
+  // Best-effort only.
 }
 
 // Minimal clipboard mock for components that call navigator.clipboard.writeText()
@@ -113,9 +113,9 @@ globalThis.navigator.mediaDevices ??= {};
 globalThis.navigator.mediaDevices.enumerateDevices ??= async () => [];
 // @ts-ignore
 globalThis.navigator.mediaDevices.getUserMedia ??= async () => ({
-	getTracks: () => [],
-	getAudioTracks: () => [],
-	getVideoTracks: () => [],
+  getTracks: () => [],
+  getAudioTracks: () => [],
+  getVideoTracks: () => [],
 });
 // @ts-ignore
 globalThis.navigator.mediaDevices.addEventListener ??= () => {};
@@ -125,52 +125,52 @@ globalThis.navigator.mediaDevices.removeEventListener ??= () => {};
 // Observers used by @base-ui/react components
 // @ts-ignore
 globalThis.ResizeObserver ??= class {
-	observe() {}
-	unobserve() {}
-	disconnect() {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
 };
 // @ts-ignore
 globalThis.IntersectionObserver ??= class {
-	observe() {}
-	unobserve() {}
-	disconnect() {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
 };
 
 // Used by NotificationStack theme detection.
 // @ts-ignore
 globalThis.MutationObserver ??= class {
-	constructor(_cb: any) {}
-	observe() {}
-	disconnect() {}
-	takeRecords() {
-		return [];
-	}
+  constructor(_cb: any) {}
+  observe() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
 };
 
 // AudioContext used by pre-join audio level metering
 // @ts-ignore
 globalThis.AudioContext ??= class {
-	state: "running" | "suspended" | "closed" = "running";
-	resume() {
-		this.state = "running";
-		return Promise.resolve();
-	}
-	createMediaStreamSource() {
-		return { connect: () => {} };
-	}
-	createAnalyser() {
-		return {
-			fftSize: 256,
-			smoothingTimeConstant: 0.5,
-			frequencyBinCount: 128,
-			getByteFrequencyData: () => {},
-			connect: () => {},
-		};
-	}
-	close() {
-		this.state = "closed";
-		return Promise.resolve();
-	}
+  state: "running" | "suspended" | "closed" = "running";
+  resume() {
+    this.state = "running";
+    return Promise.resolve();
+  }
+  createMediaStreamSource() {
+    return { connect: () => {} };
+  }
+  createAnalyser() {
+    return {
+      fftSize: 256,
+      smoothingTimeConstant: 0.5,
+      frequencyBinCount: 128,
+      getByteFrequencyData: () => {},
+      connect: () => {},
+    };
+  }
+  close() {
+    this.state = "closed";
+    return Promise.resolve();
+  }
 };
 
 // Mock localStorage
@@ -178,9 +178,15 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => { store[key] = value.toString(); },
-    clear: () => { store = {}; },
-    removeItem: (key: string) => { delete store[key]; },
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
+    },
+    clear: () => {
+      store = {};
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
     length: Object.keys(store).length,
     key: (index: number) => Object.keys(store)[index] || null,
   };
@@ -194,7 +200,7 @@ globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
 // @ts-ignore
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 
-Object.defineProperty(dom.window, 'matchMedia', {
+Object.defineProperty(dom.window, "matchMedia", {
   writable: true,
   value: (query: any) => ({
     matches: false,
@@ -209,17 +215,17 @@ Object.defineProperty(dom.window, 'matchMedia', {
 });
 
 afterEach(() => {
-	// Ensure fake timers never leak between test files.
-	// This avoids @testing-library/react thinking Jest fake timers are enabled.
-	try {
-		vi.useRealTimers();
-	} catch {
-		// ignore
-	}
-	// @ts-ignore
-	delete (setTimeout as any)._isMockFunction;
-	// @ts-ignore
-	delete (setTimeout as any).clock;
+  // Ensure fake timers never leak between test files.
+  // This avoids @testing-library/react thinking Jest fake timers are enabled.
+  try {
+    vi.useRealTimers();
+  } catch {
+    // ignore
+  }
+  // @ts-ignore
+  delete (setTimeout as any)._isMockFunction;
+  // @ts-ignore
+  delete (setTimeout as any).clock;
 
-	cleanup();
+  cleanup();
 });

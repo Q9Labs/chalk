@@ -13,6 +13,7 @@ Non-goal: MCP integration. We are not using Excalidraw MCP for Chalk.
 **LLM plans, client executes, existing whiteboard sync stays unchanged.**
 
 That means:
+
 - The model never directly mutates the canvas.
 - The client applies deterministic actions via `ExcalidrawImperativeAPI`.
 - Chalk’s current whiteboard sync broadcasts the resulting edits like any other local user edit.
@@ -73,9 +74,11 @@ User            Client(UI+Executor)            Planner(LLM)            Excalidra
 Decision: implement in **React SDK** (not demo app code).
 
 Primary integration point:
+
 - `packages/sdk-react/src/components/full/WhiteboardPanel.tsx`
 
 Rationale:
+
 - It already owns the `ExcalidrawImperativeAPI` ref.
 - It already wires onChange + sync (v1 and v2 paths).
 - Agent can be a simple overlay that only renders when whiteboard is open.
@@ -85,12 +88,15 @@ Rationale:
 ## Permissions + UX (Decisions)
 
 Permissions:
+
 - Agent is usable by anyone with `canDraw === true`.
 
 UX:
+
 - Apply immediately (no preview).
 
 Implication:
+
 - We must enforce guardrails (caps + allowlist) because we’ve intentionally removed the “human review” step.
 
 ---
@@ -110,6 +116,7 @@ Action =
 ### Patch Allowlist (Safety + Stability)
 
 Executor must filter patches to a strict set (example):
+
 - geometry: `x`, `y`, `width`, `height`, `angle`
 - styling: `strokeColor`, `backgroundColor`, `opacity`, `strokeWidth`, `roughness`, `fillStyle`
 - text: `text`, `fontSize`, `fontFamily`, `textAlign`, `verticalAlign`
@@ -120,6 +127,7 @@ Hard rule: reject/strip anything outside the allowlist.
 ### Caps (Prevent Model “Explosions”)
 
 Example caps (tune later):
+
 - max create elements per prompt: 50
 - max updates per prompt: 50
 - max deletes per prompt: 200
@@ -142,6 +150,7 @@ whiteboardContext = {
 ```
 
 Notes:
+
 - `visibleElements` should be capped (e.g. 60) and text truncated (e.g. 200 chars).
 - If we can cheaply include “current tool” or “theme”, do it, but not required.
 
@@ -150,6 +159,7 @@ Notes:
 ## Executor Responsibilities (Client)
 
 Executor is intentionally boring:
+
 - validate action schema
 - enforce caps
 - filter patch allowlist
@@ -160,6 +170,7 @@ Executor is intentionally boring:
 No LLM calls here.
 
 Undo story (MVP):
+
 - optionally keep a small local stack of snapshots (elements array) before apply.
 - this is local-only; syncing “undo” across participants is a bigger feature (skip initially).
 
@@ -168,11 +179,13 @@ Undo story (MVP):
 ## Planner Responsibilities (LLM)
 
 Planner is the “brains”, but it’s still constrained:
+
 - return `actions[]` only, no free-form element JSON mutation outside our contract
 - be conservative (few elements, readable sizes, avoid clutter)
 - prefer editing existing elements when possible (use IDs from context)
 
 Where planner runs:
+
 - recommended: Chalk backend endpoint (keeps keys private), returning `actions[]`
 - executor still runs client-side (requirement satisfied)
 
@@ -183,17 +196,20 @@ Where planner runs:
 We keep responsibilities clean:
 
 `packages/chalk-whiteboard`:
+
 - sync engines (legacy + v2 collab)
 - Excalidraw element types/utilities for sync
 - (optional later) pure helpers for agent patch filtering (no React, no network)
 
 `packages/sdk-react`:
+
 - agent UI overlay in `WhiteboardPanel`
 - collecting `whiteboardContext` from `ExcalidrawImperativeAPI`
 - calling planner endpoint
 - executing validated actions via `updateScene`
 
 Rule of thumb:
+
 - If it touches React, it stays in `sdk-react`.
 - If it’s pure Excalidraw element math/filtering, it can move to `chalk-whiteboard` later, but only when we need reuse.
 
@@ -233,4 +249,3 @@ Rake: demo-app-only implementation          -> no; sdk-react WhiteboardPanel
    - do we prefer creating shapes+text vs Excalidraw “label binding” patterns.
 5. Multi-user concurrency:
    - when multiple people run prompts, we rely on existing Excalidraw versioning/sync conflict behavior.
-

@@ -3,6 +3,7 @@
 Decision: build `apps/ios` + `apps/android` first. Extract SDKs later once UX + stability proven.
 
 Companion docs:
+
 - Deep baseline + protocol notes: `apps/native/FINDINGS.md`
 - App requirements + acceptance criteria: `apps/native/REQUIREMENTS.md`
 
@@ -16,16 +17,19 @@ Companion docs:
 ## UI (custom, not implemented here)
 
 Design references (provided by you):
+
 - `apps/native/lobby-mobile.png`
 - `apps/native/meeting-mobile.png`
 
 UI implementer contract:
+
 - Treat the PNGs as the source of truth for layout, spacing, typography, and control placement.
 - Implement in native UI frameworks (SwiftUI/UIKit, Android Compose/View). No business logic in UI layer.
 - UI must only bind to MeetingKit view-model state + invoke MeetingKit actions (no direct WS/HTTP/RTK calls).
 - UI must surface errors with a clear retry path (join failure, WS disconnect, RTK init/join failure).
 
 UI requirements (MVP screens):
+
 - Lobby (pre-join)
   - Inputs: display name, optional room code/id (if not deep-linked)
   - Device preview: local camera tile + mic level (best-effort)
@@ -48,6 +52,7 @@ UI requirements (MVP screens):
   - Left/ended state; actions: rejoin, back to lobby, report issue (optional)
 
 UI requirements (interaction specifics):
+
 - Panels: open/close must preserve meeting state; never leave the room.
 - Recording: show always-on indicator when active; require confirm on stop (host-only).
 - Screenshare: start/stop affordance; clear "sharing" state; handle "permission revoked" gracefully.
@@ -86,10 +91,11 @@ RealtimeKit handles A/V transport. Our backend still owns the room “product”
 chat, whiteboard sync, participant state sync, reactions, hand raise, recording control/state, transcript persistence.
 
 Native apps must replicate the proven web flow:
-1) HTTP `addParticipant` → receive `accessToken` (API/WS) + `rtcToken` (RTK).
-2) Connect Chalk WebSocket `/ws` using `Sec-WebSocket-Protocol: chalk, token.<accessToken>` (preferred).
-3) Init/join RTK meeting using `rtcToken`.
-4) Use Chalk WS events as source of truth for non-media features; use RTK events/tracks for media + screenshare.
+
+1. HTTP `addParticipant` → receive `accessToken` (API/WS) + `rtcToken` (RTK).
+2. Connect Chalk WebSocket `/ws` using `Sec-WebSocket-Protocol: chalk, token.<accessToken>` (preferred).
+3. Init/join RTK meeting using `rtcToken`.
+4. Use Chalk WS events as source of truth for non-media features; use RTK events/tracks for media + screenshare.
 
 Details + message catalogs live in `apps/native/FINDINGS.md`.
 
@@ -117,24 +123,27 @@ Details + message catalogs live in `apps/native/FINDINGS.md`.
 
 ## Milestones (apps-first → SDK later)
 
-1) iOS app: join/leave + video/audio + multi-participant tiles
-2) Android app: join/leave + video/audio + multi-participant tiles
-3) Screenshare on both platforms (iOS extension + Android projection)
-4) Recording control + recording status UX + download URL flow
-5) Hardening: background/foreground, interruptions, reconnection, device routing
-6) Extract “Core” modules into SDKs + ship wrappers (later)
+1. iOS app: join/leave + video/audio + multi-participant tiles
+2. Android app: join/leave + video/audio + multi-participant tiles
+3. Screenshare on both platforms (iOS extension + Android projection)
+4. Recording control + recording status UX + download URL flow
+5. Hardening: background/foreground, interruptions, reconnection, device routing
+6. Extract “Core” modules into SDKs + ship wrappers (later)
 
 ## Cloudflare RealtimeKit Docs (starting points)
 
 Recording:
+
 - Recording guide (workflow, retention, status updates): https://developers.cloudflare.com/realtime/realtimekit/recording-guide/
 - Start recording: https://developers.cloudflare.com/realtime/realtimekit/recording-guide/start-recording/
 
 Screen sharing:
+
 - Screensharing basics (enable/disable + events): https://docs.realtime.cloudflare.com/guides/capabilities/screensharing/basics
 - iOS screenshare (ReplayKit extension): https://docs.realtime.cloudflare.com/ios-core/local-user/screen-share-guide
 
 Platform quickstarts:
+
 - Getting started (REST APIs + SDKs): https://docs.realtime.cloudflare.com/getting-started
 - Android quickstart: https://docs.realtime.cloudflare.com/android
 - Android Core quickstart (headless/data layer): https://docs.realtime.cloudflare.com/android-core

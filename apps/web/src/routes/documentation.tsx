@@ -2,15 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 export const Route = createFileRoute("/documentation")({
-	component: DocumentationRedirectPage,
+  component: DocumentationRedirectPage,
 });
 
 function DocumentationRedirectPage() {
-	const navigate = useNavigate();
+  const navigate = useNavigate();
 
-	useEffect(() => {
-		void navigate({ to: "/docs", replace: true });
-	}, [navigate]);
+  useEffect(() => {
+    void navigate({ to: "/docs", replace: true });
+  }, [navigate]);
 
-	return null;
+  return null;
 }

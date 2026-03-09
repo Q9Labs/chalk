@@ -18,106 +18,106 @@
 export enum ChalkErrorCode {
   // Connection errors
   /** Initial connection to server failed */
-  CONNECTION_FAILED = 'CONNECTION_FAILED',
+  CONNECTION_FAILED = "CONNECTION_FAILED",
 
   /** Connection was lost unexpectedly */
-  CONNECTION_LOST = 'CONNECTION_LOST',
+  CONNECTION_LOST = "CONNECTION_LOST",
 
   /** Reconnection attempts exhausted */
-  RECONNECT_FAILED = 'RECONNECT_FAILED',
+  RECONNECT_FAILED = "RECONNECT_FAILED",
 
   /** WebSocket error occurred */
-  WEBSOCKET_ERROR = 'WEBSOCKET_ERROR',
+  WEBSOCKET_ERROR = "WEBSOCKET_ERROR",
 
   // Authentication errors
   /** Authentication failed (invalid credentials) */
-  AUTH_FAILED = 'AUTH_FAILED',
+  AUTH_FAILED = "AUTH_FAILED",
 
   /** JWT token has expired */
-  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+  TOKEN_EXPIRED = "TOKEN_EXPIRED",
 
   /** Token refresh failed */
-  TOKEN_REFRESH_FAILED = 'TOKEN_REFRESH_FAILED',
+  TOKEN_REFRESH_FAILED = "TOKEN_REFRESH_FAILED",
 
   /** Invalid API key format or not found */
-  INVALID_API_KEY = 'INVALID_API_KEY',
+  INVALID_API_KEY = "INVALID_API_KEY",
 
   /** Insufficient permissions for operation */
-  PERMISSION_DENIED = 'PERMISSION_DENIED',
+  PERMISSION_DENIED = "PERMISSION_DENIED",
 
   // Media errors
   /** User denied camera/microphone permission */
-  MEDIA_PERMISSION_DENIED = 'MEDIA_PERMISSION_DENIED',
+  MEDIA_PERMISSION_DENIED = "MEDIA_PERMISSION_DENIED",
 
   /** Requested device not found */
-  DEVICE_NOT_FOUND = 'DEVICE_NOT_FOUND',
+  DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND",
 
   /** Device is in use by another application */
-  DEVICE_IN_USE = 'DEVICE_IN_USE',
+  DEVICE_IN_USE = "DEVICE_IN_USE",
 
   /** Screen share was cancelled by user */
-  SCREEN_SHARE_CANCELLED = 'SCREEN_SHARE_CANCELLED',
+  SCREEN_SHARE_CANCELLED = "SCREEN_SHARE_CANCELLED",
 
   /** Screen share failed to start */
-  SCREEN_SHARE_FAILED = 'SCREEN_SHARE_FAILED',
+  SCREEN_SHARE_FAILED = "SCREEN_SHARE_FAILED",
 
   /** Media constraints not satisfiable */
-  OVERCONSTRAINED = 'OVERCONSTRAINED',
+  OVERCONSTRAINED = "OVERCONSTRAINED",
 
   // ConferenceSession errors
   /** ConferenceSession does not exist */
-  ROOM_NOT_FOUND = 'ROOM_NOT_FOUND',
+  ROOM_NOT_FOUND = "ROOM_NOT_FOUND",
 
   /** ConferenceSession has reached maximum participants */
-  ROOM_FULL = 'ROOM_FULL',
+  ROOM_FULL = "ROOM_FULL",
 
   /** Already connected to a room */
-  ALREADY_IN_ROOM = 'ALREADY_IN_ROOM',
+  ALREADY_IN_ROOM = "ALREADY_IN_ROOM",
 
   /** Not currently in a room */
-  NOT_IN_ROOM = 'NOT_IN_ROOM',
+  NOT_IN_ROOM = "NOT_IN_ROOM",
 
   /** ConferenceSession has ended */
-  ROOM_ENDED = 'ROOM_ENDED',
+  ROOM_ENDED = "ROOM_ENDED",
 
   // Recording errors
   /** Recording failed to start */
-  RECORDING_FAILED = 'RECORDING_FAILED',
+  RECORDING_FAILED = "RECORDING_FAILED",
 
   /** Recording already in progress */
-  RECORDING_IN_PROGRESS = 'RECORDING_IN_PROGRESS',
+  RECORDING_IN_PROGRESS = "RECORDING_IN_PROGRESS",
 
   /** No active recording to stop */
-  NO_ACTIVE_RECORDING = 'NO_ACTIVE_RECORDING',
+  NO_ACTIVE_RECORDING = "NO_ACTIVE_RECORDING",
 
   // Webhook errors
   /** Webhook signature verification failed */
-  WEBHOOK_SIGNATURE_INVALID = 'WEBHOOK_SIGNATURE_INVALID',
+  WEBHOOK_SIGNATURE_INVALID = "WEBHOOK_SIGNATURE_INVALID",
 
   /** Webhook timestamp outside tolerance window */
-  WEBHOOK_TIMESTAMP_EXPIRED = 'WEBHOOK_TIMESTAMP_EXPIRED',
+  WEBHOOK_TIMESTAMP_EXPIRED = "WEBHOOK_TIMESTAMP_EXPIRED",
 
   /** Webhook payload validation failed */
-  WEBHOOK_PAYLOAD_INVALID = 'WEBHOOK_PAYLOAD_INVALID',
+  WEBHOOK_PAYLOAD_INVALID = "WEBHOOK_PAYLOAD_INVALID",
 
   // Generic errors
   /** Unknown error occurred */
-  UNKNOWN = 'UNKNOWN',
+  UNKNOWN = "UNKNOWN",
 
   /** Invalid parameters provided */
-  INVALID_PARAMS = 'INVALID_PARAMS',
+  INVALID_PARAMS = "INVALID_PARAMS",
 
   /** Request rate limited */
-  RATE_LIMITED = 'RATE_LIMITED',
+  RATE_LIMITED = "RATE_LIMITED",
 
   /** Server error */
-  SERVER_ERROR = 'SERVER_ERROR',
+  SERVER_ERROR = "SERVER_ERROR",
 
   /** Invalid request or state */
-  INVALID_REQUEST = 'INVALID_REQUEST',
+  INVALID_REQUEST = "INVALID_REQUEST",
 
   /** Network level error */
-  NETWORK_ERROR = 'NETWORK_ERROR',
+  NETWORK_ERROR = "NETWORK_ERROR",
 }
 
 /**
@@ -159,10 +159,10 @@ export class ChalkError extends Error {
       recoverable?: boolean;
       details?: Record<string, unknown>;
       cause?: Error;
-    }
+    },
   ) {
     super(message, { cause: options?.cause });
-    this.name = 'ChalkError';
+    this.name = "ChalkError";
     this.code = code;
     this.recoverable = options?.recoverable ?? false;
     this.details = options?.details;
@@ -178,42 +178,18 @@ export class ChalkError extends Error {
    */
   static fromDOMException(err: DOMException): ChalkError {
     switch (err.name) {
-      case 'NotAllowedError':
-        return new ChalkError(
-          ChalkErrorCode.MEDIA_PERMISSION_DENIED,
-          'Permission denied for media device',
-          { cause: err, recoverable: true }
-        );
-      case 'NotFoundError':
-        return new ChalkError(
-          ChalkErrorCode.DEVICE_NOT_FOUND,
-          'Media device not found',
-          { cause: err }
-        );
-      case 'NotReadableError':
-        return new ChalkError(
-          ChalkErrorCode.DEVICE_IN_USE,
-          'Media device is in use by another application',
-          { cause: err, recoverable: true }
-        );
-      case 'OverconstrainedError':
-        return new ChalkError(
-          ChalkErrorCode.OVERCONSTRAINED,
-          'Media constraints cannot be satisfied',
-          { cause: err, details: { constraint: (err as OverconstrainedError).constraint } }
-        );
-      case 'AbortError':
-        return new ChalkError(
-          ChalkErrorCode.SCREEN_SHARE_CANCELLED,
-          'Screen share was cancelled',
-          { cause: err }
-        );
+      case "NotAllowedError":
+        return new ChalkError(ChalkErrorCode.MEDIA_PERMISSION_DENIED, "Permission denied for media device", { cause: err, recoverable: true });
+      case "NotFoundError":
+        return new ChalkError(ChalkErrorCode.DEVICE_NOT_FOUND, "Media device not found", { cause: err });
+      case "NotReadableError":
+        return new ChalkError(ChalkErrorCode.DEVICE_IN_USE, "Media device is in use by another application", { cause: err, recoverable: true });
+      case "OverconstrainedError":
+        return new ChalkError(ChalkErrorCode.OVERCONSTRAINED, "Media constraints cannot be satisfied", { cause: err, details: { constraint: (err as OverconstrainedError).constraint } });
+      case "AbortError":
+        return new ChalkError(ChalkErrorCode.SCREEN_SHARE_CANCELLED, "Screen share was cancelled", { cause: err });
       default:
-        return new ChalkError(
-          ChalkErrorCode.UNKNOWN,
-          err.message,
-          { cause: err }
-        );
+        return new ChalkError(ChalkErrorCode.UNKNOWN, err.message, { cause: err });
     }
   }
 
@@ -223,45 +199,21 @@ export class ChalkError extends Error {
   static fromHttpError(status: number, message?: string): ChalkError {
     switch (status) {
       case 401:
-        return new ChalkError(
-          ChalkErrorCode.AUTH_FAILED,
-          message ?? 'Authentication failed',
-          { recoverable: true }
-        );
+        return new ChalkError(ChalkErrorCode.AUTH_FAILED, message ?? "Authentication failed", { recoverable: true });
       case 403:
-        return new ChalkError(
-          ChalkErrorCode.PERMISSION_DENIED,
-          message ?? 'Permission denied'
-        );
+        return new ChalkError(ChalkErrorCode.PERMISSION_DENIED, message ?? "Permission denied");
       case 404:
-        return new ChalkError(
-          ChalkErrorCode.ROOM_NOT_FOUND,
-          message ?? 'Resource not found'
-        );
+        return new ChalkError(ChalkErrorCode.ROOM_NOT_FOUND, message ?? "Resource not found");
       case 409:
-        return new ChalkError(
-          ChalkErrorCode.ALREADY_IN_ROOM,
-          message ?? 'Conflict'
-        );
+        return new ChalkError(ChalkErrorCode.ALREADY_IN_ROOM, message ?? "Conflict");
       case 429:
-        return new ChalkError(
-          ChalkErrorCode.RATE_LIMITED,
-          message ?? 'Rate limited',
-          { recoverable: true }
-        );
+        return new ChalkError(ChalkErrorCode.RATE_LIMITED, message ?? "Rate limited", { recoverable: true });
       case 500:
       case 502:
       case 503:
-        return new ChalkError(
-          ChalkErrorCode.SERVER_ERROR,
-          message ?? 'Server error',
-          { recoverable: true }
-        );
+        return new ChalkError(ChalkErrorCode.SERVER_ERROR, message ?? "Server error", { recoverable: true });
       default:
-        return new ChalkError(
-          ChalkErrorCode.UNKNOWN,
-          message ?? `HTTP error ${status}`
-        );
+        return new ChalkError(ChalkErrorCode.UNKNOWN, message ?? `HTTP error ${status}`);
     }
   }
 

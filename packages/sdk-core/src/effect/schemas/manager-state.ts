@@ -14,13 +14,7 @@ import { Schema } from "@effect/schema";
 // ============================================================================
 
 /** ConferenceSession connection status */
-export const RoomStatusSchema = Schema.Literal(
-  "connecting",
-  "connected",
-  "reconnecting",
-  "disconnected",
-  "failed"
-);
+export const RoomStatusSchema = Schema.Literal("connecting", "connected", "reconnecting", "disconnected", "failed");
 
 /** ConferenceSession state schema */
 export const RoomStateSchema = Schema.Struct({
@@ -57,13 +51,7 @@ export const RoomErrorEvent = Schema.Struct({
   error: Schema.Unknown,
 });
 
-export const RoomEventSchema = Schema.Union(
-  RoomConnectedEvent,
-  RoomDisconnectedEvent,
-  RoomStatusChangedEvent,
-  RoomEndedEvent,
-  RoomErrorEvent
-);
+export const RoomEventSchema = Schema.Union(RoomConnectedEvent, RoomDisconnectedEvent, RoomStatusChangedEvent, RoomEndedEvent, RoomErrorEvent);
 
 // ============================================================================
 // Participant Manager Schemas
@@ -73,10 +61,7 @@ export const RoomEventSchema = Schema.Union(
 export const ParticipantRoleSchema = Schema.Literal("host", "participant");
 
 /** MediaStreamTrack schema (opaque type for browser API) */
-const MediaStreamTrackSchema = Schema.declare(
-  (input): input is MediaStreamTrack =>
-    typeof MediaStreamTrack !== "undefined" && input instanceof MediaStreamTrack
-);
+const MediaStreamTrackSchema = Schema.declare((input): input is MediaStreamTrack => typeof MediaStreamTrack !== "undefined" && input instanceof MediaStreamTrack);
 
 /** Participant schema (minimal for state) */
 export const ParticipantSchema = Schema.Struct({
@@ -128,12 +113,7 @@ export const ActiveSpeakerChangedEvent = Schema.Struct({
   participant: Schema.NullOr(ParticipantSchema),
 });
 
-export const ParticipantEventSchema = Schema.Union(
-  ParticipantJoinedEvent,
-  ParticipantLeftEvent,
-  ParticipantUpdatedEvent,
-  ActiveSpeakerChangedEvent
-);
+export const ParticipantEventSchema = Schema.Union(ParticipantJoinedEvent, ParticipantLeftEvent, ParticipantUpdatedEvent, ActiveSpeakerChangedEvent);
 
 // ============================================================================
 // Media Manager Schemas
@@ -157,7 +137,7 @@ export const VideoBackgroundEffectSchema = Schema.Union(
   Schema.Struct({
     mode: Schema.Literal("image"),
     imageUrl: Schema.String,
-  })
+  }),
 );
 
 /** Media state schema */
@@ -198,12 +178,7 @@ export const MediaErrorEvent = Schema.Struct({
   error: Schema.Unknown,
 });
 
-export const MediaEventSchema = Schema.Union(
-  VideoChangedEvent,
-  AudioChangedEvent,
-  DevicesChangedEvent,
-  MediaErrorEvent
-);
+export const MediaEventSchema = Schema.Union(VideoChangedEvent, AudioChangedEvent, DevicesChangedEvent, MediaErrorEvent);
 
 // ============================================================================
 // Inferred Types (single source of truth)

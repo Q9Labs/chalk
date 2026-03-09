@@ -7,14 +7,14 @@ export const CHALK_THEME = {
   colors: {
     // Core backgrounds
     background: "#0A0A0C", // --chalk-bg-stage (dark)
-    surface: "#141418",    // --chalk-bg-tile (dark)
+    surface: "#141418", // --chalk-bg-tile (dark)
     surfaceHighlight: "#27272a", // Slightly lighter surface
-    
+
     // Semantic colors
-    primary: "#2dd4bf",    // Teal-400 (approx for oklch(0.70 0.12 183))
-    secondary: "#27272a",  // Zinc-800
+    primary: "#2dd4bf", // Teal-400 (approx for oklch(0.70 0.12 183))
+    secondary: "#27272a", // Zinc-800
     destructive: "#ef4444", // Red-500
-    
+
     // Text colors
     text: {
       primary: "#ffffff",
@@ -39,15 +39,15 @@ export const CHALK_THEME = {
       pillBorder: "rgba(255, 255, 255, 0.12)", // --chalk-pill-border (dark)
       border: "rgba(255, 255, 255, 0.12)",
       overlay: "rgba(0, 0, 0, 0.6)",
-    }
+    },
   },
-  
+
   borderRadius: {
-    sm: 4,     // --chalk-border-radius-sm
-    md: 8,     // --chalk-border-radius-md
-    lg: 12,    // Used in tiles
-    xl: 16,    // --chalk-border-radius-xl
-    full: 9999,// --chalk-border-radius-full
+    sm: 4, // --chalk-border-radius-sm
+    md: 8, // --chalk-border-radius-md
+    lg: 12, // Used in tiles
+    xl: 16, // --chalk-border-radius-xl
+    full: 9999, // --chalk-border-radius-full
   },
 
   spacing: {
@@ -66,8 +66,8 @@ export const CHALK_THEME = {
       md: 16,
       lg: 20,
       xl: 24,
-    }
-  }
+    },
+  },
 } as const;
 
 export type ChalkTheme = typeof CHALK_THEME;

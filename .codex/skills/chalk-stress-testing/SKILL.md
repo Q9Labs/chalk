@@ -49,6 +49,7 @@ K6_SWEEP_COOLDOWN_SECONDS=60 \
 ```
 
 Notes:
+
 - `K6_SHORT=true` is used for each sweep step; `run-sweep.sh` triggers “long confirm” only at configured points.
 - The sweep does **not** change infra sizing. Failures are data.
 
@@ -74,4 +75,3 @@ When stress tooling changes, update this file in lockstep:
 - Terraform path/module rename → update provision/destroy commands.
 
 Rule: if someone can’t run a sweep from scratch in <10 minutes, the skill is stale.
-

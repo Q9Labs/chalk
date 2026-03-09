@@ -108,21 +108,13 @@ export function useTranscripts(): UseTranscriptsReturn {
     (format: "txt" | "srt" | "vtt" | "json"): string => {
       switch (format) {
         case "txt":
-          return transcripts
-            .map(
-              (t) =>
-                `[${t.timestamp.toLocaleTimeString()}] ${t.speakerName}: ${t.text}`
-            )
-            .join("\n");
+          return transcripts.map((t) => `[${t.timestamp.toLocaleTimeString()}] ${t.speakerName}: ${t.text}`).join("\n");
 
         case "srt":
           return transcripts
             .map((t, i) => {
               const start = formatTimestamp(t.timestamp, "srt");
-              const end = formatTimestamp(
-                new Date(t.timestamp.getTime() + 3000),
-                "srt"
-              );
+              const end = formatTimestamp(new Date(t.timestamp.getTime() + 3000), "srt");
               return `${i + 1}\n${start} --> ${end}\n${t.speakerName}: ${t.text}\n`;
             })
             .join("\n");
@@ -132,10 +124,7 @@ export function useTranscripts(): UseTranscriptsReturn {
           const content = transcripts
             .map((t) => {
               const start = formatTimestamp(t.timestamp, "vtt");
-              const end = formatTimestamp(
-                new Date(t.timestamp.getTime() + 3000),
-                "vtt"
-              );
+              const end = formatTimestamp(new Date(t.timestamp.getTime() + 3000), "vtt");
               return `${start} --> ${end}\n<v ${t.speakerName}>${t.text}\n`;
             })
             .join("\n");
@@ -154,14 +143,14 @@ export function useTranscripts(): UseTranscriptsReturn {
               confidence: t.confidence,
             })),
             null,
-            2
+            2,
           );
 
         default:
           return "";
       }
     },
-    [transcripts]
+    [transcripts],
   );
 
   const copyToClipboard = useCallback(async (): Promise<void> => {
@@ -192,20 +181,16 @@ export function useTranscripts(): UseTranscriptsReturn {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     },
-    [exportTranscripts]
+    [exportTranscripts],
   );
 
   const searchTranscripts = useCallback(
     (query: string): Transcript[] => {
       if (!query.trim()) return transcripts;
       const lowerQuery = query.toLowerCase();
-      return transcripts.filter(
-        (t) =>
-          t.text.toLowerCase().includes(lowerQuery) ||
-          t.speakerName.toLowerCase().includes(lowerQuery)
-      );
+      return transcripts.filter((t) => t.text.toLowerCase().includes(lowerQuery) || t.speakerName.toLowerCase().includes(lowerQuery));
     },
-    [transcripts]
+    [transcripts],
   );
 
   return useMemo(
@@ -218,7 +203,7 @@ export function useTranscripts(): UseTranscriptsReturn {
       copyToClipboard,
       downloadTranscript,
     }),
-    [transcripts, isAvailable, clearTranscripts, exportTranscripts, searchTranscripts, copyToClipboard, downloadTranscript]
+    [transcripts, isAvailable, clearTranscripts, exportTranscripts, searchTranscripts, copyToClipboard, downloadTranscript],
   );
 }
 

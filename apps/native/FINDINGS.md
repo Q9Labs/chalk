@@ -2,9 +2,10 @@
 
 Living doc. Write findings. Correct freely. No shame; only accuracy.
 
-Goal: build `apps/ios` + `apps/android` (custom UI) that replicate the *behavioral* flow proven in web (`sdk-core` + `sdk-react`), while moving runtime to native (Swift/Kotlin).
+Goal: build `apps/ios` + `apps/android` (custom UI) that replicate the _behavioral_ flow proven in web (`sdk-core` + `sdk-react`), while moving runtime to native (Swift/Kotlin).
 
 Companion docs:
+
 - Spec + user stories + UI references: `apps/native/SPEC.md`
 - App requirements (what we must implement): `apps/native/REQUIREMENTS.md`
 - Risk spike research (screenshare): `apps/native/RESEARCH_SCREENSHARE.md`
@@ -22,6 +23,7 @@ Companion docs:
 ## System Split (source of truth)
 
 Cloudflare RealtimeKit (RTK):
+
 - Media transport: audio/video between participants
 - Media state + tracks: local/remote audioTrack/videoTrack/screenShareTrack
 - Screenshare enable/disable (local) + remote screenshare events
@@ -29,6 +31,7 @@ Cloudflare RealtimeKit (RTK):
 - Transcripts (SDK emits interim/final; we persist finals to our backend)
 
 Chalk Backend (HTTP + WebSocket):
+
 - Authentication, tenants, rooms, participant records
 - Join flow: issues `accessToken` (our API+WS) and `rtcToken` (RTK)
 - Room state sync + participant presence (`room.snapshot`, `participant.*`)
@@ -43,6 +46,7 @@ Chalk Backend (HTTP + WebSocket):
 ### 1) Acquire token(s)
 
 Typical:
+
 1. App authenticates user with your app backend (not Chalk).
 2. App backend calls Chalk API to create/join room + add participant.
 3. Chalk API returns:
@@ -55,6 +59,7 @@ Implementation reference: `packages/sdk-core/src/api-client.ts` (`addParticipant
 ### 2) Connect Chalk WebSocket (`/ws`)
 
 Backend prefers token via WebSocket subprotocol header:
+
 - Client offers subprotocols: `["chalk", "token.<accessToken>"]`
 - Server accepts subprotocol `chalk`, but still parses the offered list to extract `token.<...>`
 
@@ -62,15 +67,17 @@ Server reference: `apps/api/internal/interfaces/http/handlers/websocket.go` (tok
 Client reference: `packages/sdk-core/src/ws-client/base.ts` (protocols array).
 
 On connect server sends:
+
 - `connected` (registration payload)
 - `room.snapshot` (participants, recording state, `lastSeq`)
-and broadcasts `participant.joined` to others.
+  and broadcasts `participant.joined` to others.
 
 ### 3) Connect RealtimeKit with `rtcToken`
 
 Init RTK client with `rtcToken`, then `join()`.
 
 Reference:
+
 - Web/TS: `packages/sdk-core/src/client.ts` (`RealtimeKitClient.init()` + `join` retry)
 - RN: `packages/sdk-react-native/src/ChalkProvider.tsx` (RTK hook + `join`)
 
@@ -135,6 +142,7 @@ Client schemas: `packages/sdk-core/src/effect/schemas/ws-events.ts`, `packages/s
 ### Server → client message types
 
 Core:
+
 - `connected` (registration)
 - `room.snapshot`, `room.sync`, `room.updated`
 - `participant.joined`, `participant.left`, `participant.updated`
@@ -144,32 +152,38 @@ Core:
 - `error`, `ping`, `pong`
 
 Whiteboard:
+
 - `whiteboard.snapshot`, `whiteboard.data`, `whiteboard.cursor`
 - `whiteboard.opened`, `whiteboard.closed`
 - `permission.changed`
 
 Transcript:
+
 - `transcript.ack`
 
 ### Client → server message types
 
 Core:
+
 - `chat.send`, `reaction.send`
 - `hand.raise`, `hand.lower`
 - `participant.mute`, `participant.unmute`
 - `ping`, `pong`
 
 Whiteboard:
+
 - `whiteboard.update`, `whiteboard.sync`, `whiteboard.clear`, `whiteboard.cursor`
 - `whiteboard.open`, `whiteboard.close`
 - `permission.grant`, `permission.revoke`
 
 Transcript:
+
 - `transcript`
 
 ### Heartbeats + reconnect
 
 Client behavior (baseline):
+
 - Sends `ping` on interval; expects `pong` within timeout; reconnects with backoff
 - On reconnect attempts, refresh token if `tokenProvider` exists; otherwise continue with existing token
 
@@ -178,10 +192,12 @@ Reference: `packages/sdk-core/src/ws-client/base.ts` + `packages/sdk-core/src/ws
 ### Whiteboard protocol notes (v1 vs v2)
 
 Outbound `whiteboard.update` is union:
+
 - v1: `{ elements, files?, appState?, seq }`
 - v2: `{ schemaVersion: 2, sceneId, syncAll, elements, seq }`
 
 Server state/persist logic:
+
 - `apps/api/internal/interfaces/websocket/whiteboard_state.go`
 - `apps/api/internal/interfaces/websocket/whiteboard_state_persist.go`
 
@@ -190,10 +206,12 @@ Server state/persist logic:
 Decision: Excalidraw runs in a WebView. Native owns WS + presign HTTP and bridges JSON messages.
 
 Source of truth:
+
 - Web host: `apps/native/whiteboard-web/src/host.tsx` (`window.__chalkNativeOnMessage` + outbound `ChalkNativeBridge.postMessage`)
 - Collab engine: `packages/chalk-whiteboard/src/collab/engine.ts` + `packages/chalk-whiteboard/src/collab/files.ts`
 
 Android implementation (prototype):
+
 - WebView bridge UI: `apps/android/app/src/main/java/ai/q9labs/chalk/nativeapp/ui/WhiteboardWebView.kt`
 - Envelope encoder: `apps/android/meetingkit/src/main/java/ai/q9labs/chalk/meetingkit/ChalkWhiteboardWebViewCodec.kt`
 
@@ -202,10 +220,12 @@ Known risk: WebView file origin + presigned URL `fetch()` relies on bucket CORS 
 ## Critical ID Mapping (don’t hand-wave)
 
 We must align identity across:
+
 - Chalk participant record (`participantId` from join response / WS)
 - RTK participant identity (used for tracks, active speaker, transcripts)
 
 Baseline mapping approach (sdk-core):
+
 - Extracts RTK stable id from `userId` / `clientSpecificId` / `customParticipantId` and falls back to RTK peer `id`.
 - Uses that stable id as `Participant.id` in app state.
 

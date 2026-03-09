@@ -7,20 +7,20 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
 export interface UseParticipantsReturn {
-	/** All participants including local */
-	participants: readonly Participant[];
-	/** The local participant */
-	localParticipant: Participant | null;
-	/** Remote participants only */
-	remoteParticipants: readonly Participant[];
-	/** Current active speaker */
-	activeSpeaker: Participant | null;
-	/** Total participant count */
-	participantCount: number;
-	/** Get a participant by ID */
-	getParticipant: (id: string) => Participant | undefined;
-	/** Update local participant display name */
-	updateDisplayName: (name: string) => Promise<void>;
+  /** All participants including local */
+  participants: readonly Participant[];
+  /** The local participant */
+  localParticipant: Participant | null;
+  /** Remote participants only */
+  remoteParticipants: readonly Participant[];
+  /** Current active speaker */
+  activeSpeaker: Participant | null;
+  /** Total participant count */
+  participantCount: number;
+  /** Get a participant by ID */
+  getParticipant: (id: string) => Participant | undefined;
+  /** Update local participant display name */
+  updateDisplayName: (name: string) => Promise<void>;
 }
 
 /**
@@ -46,35 +46,29 @@ export interface UseParticipantsReturn {
  * ```
  */
 export function useParticipants(): UseParticipantsReturn {
-	const session = useSession();
-	const { participants: manager } = session;
+  const session = useSession();
+  const { participants: manager } = session;
 
-	const [state, setState] = useState<ParticipantState>(() => manager.getState());
+  const [state, setState] = useState<ParticipantState>(() => manager.getState());
 
-	useEffect(() => {
-		return manager.subscribe(setState);
-	}, [manager]);
+  useEffect(() => {
+    return manager.subscribe(setState);
+  }, [manager]);
 
-	const getParticipant = useMemo(
-		() => (id: string) => manager.getParticipant(id),
-		[manager],
-	);
+  const getParticipant = useMemo(() => (id: string) => manager.getParticipant(id), [manager]);
 
-	const updateDisplayName = useMemo(
-		() => (name: string) => session.updateOwnDisplayName(name),
-		[session],
-	);
+  const updateDisplayName = useMemo(() => (name: string) => session.updateOwnDisplayName(name), [session]);
 
-	return useMemo(
-		(): UseParticipantsReturn => ({
-			participants: state.participants,
-			localParticipant: state.localParticipant,
-			remoteParticipants: manager.remoteParticipants,
-			activeSpeaker: state.activeSpeaker,
-			participantCount: state.count,
-			getParticipant,
-			updateDisplayName,
-		}),
-		[state, manager, getParticipant, updateDisplayName],
-	);
+  return useMemo(
+    (): UseParticipantsReturn => ({
+      participants: state.participants,
+      localParticipant: state.localParticipant,
+      remoteParticipants: manager.remoteParticipants,
+      activeSpeaker: state.activeSpeaker,
+      participantCount: state.count,
+      getParticipant,
+      updateDisplayName,
+    }),
+    [state, manager, getParticipant, updateDisplayName],
+  );
 }

@@ -4,97 +4,91 @@
  * Falls back to raw react-native-webrtc when RealtimeKit is not available
  */
 
-import type {
-	MediaStream,
-	RTCPeerConnection,
-} from "@cloudflare/react-native-webrtc";
+import type { MediaStream, RTCPeerConnection } from "@cloudflare/react-native-webrtc";
 import { NativeModules, PermissionsAndroid, Platform } from "react-native";
 import { logger } from "../logger";
 
 // Detect iOS simulator - on simulator, enumerateDevices() crashes with nil object insertion
 // Use multiple detection methods for reliability
 const isIOSSimulator =
-	Platform.OS === "ios" &&
-	// Check for simulator-specific environment variable
-	((Platform.constants as Record<string, unknown>)?.isTesting === true ||
-		// Check PlatformConstants for simulator flag (available in newer RN)
-		(NativeModules.PlatformConstants as Record<string, unknown>)
-			?.isSimulator === true ||
-		// Fallback: in __DEV__ mode on iOS, assume simulator to be safe
-		// Real device testing should use release builds
-		__DEV__);
+  Platform.OS === "ios" &&
+  // Check for simulator-specific environment variable
+  ((Platform.constants as Record<string, unknown>)?.isTesting === true ||
+    // Check PlatformConstants for simulator flag (available in newer RN)
+    (NativeModules.PlatformConstants as Record<string, unknown>)?.isSimulator === true ||
+    // Fallback: in __DEV__ mode on iOS, assume simulator to be safe
+    // Real device testing should use release builds
+    __DEV__);
 
 // Dynamic import to handle cases where native module isn't initialized
-let mediaDevices:
-	| typeof import("@cloudflare/react-native-webrtc").mediaDevices
-	| null = null;
+let mediaDevices: typeof import("@cloudflare/react-native-webrtc").mediaDevices | null = null;
 try {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	mediaDevices = require("@cloudflare/react-native-webrtc").mediaDevices;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  mediaDevices = require("@cloudflare/react-native-webrtc").mediaDevices;
 } catch {
-	// Native module not available (e.g., running in simulator without full setup)
+  // Native module not available (e.g., running in simulator without full setup)
 }
 
 // RealtimeKit client type definition
 // The actual import is dynamic to allow fallback when package is not available
 interface RealtimeKitSelf {
-	videoEnabled: boolean;
-	audioEnabled: boolean;
-	screenShareEnabled?: boolean;
-	enableVideo: () => Promise<void>;
-	disableVideo: () => Promise<void>;
-	enableAudio: () => Promise<void>;
-	disableAudio: () => Promise<void>;
-	enableScreenShare: () => Promise<void>;
-	disableScreenShare: () => Promise<void>;
+  videoEnabled: boolean;
+  audioEnabled: boolean;
+  screenShareEnabled?: boolean;
+  enableVideo: () => Promise<void>;
+  disableVideo: () => Promise<void>;
+  enableAudio: () => Promise<void>;
+  disableAudio: () => Promise<void>;
+  enableScreenShare: () => Promise<void>;
+  disableScreenShare: () => Promise<void>;
 }
 
 interface RealtimeKitClientInstance {
-	self: RealtimeKitSelf;
-	join: () => Promise<void>;
-	leave: () => Promise<void>;
+  self: RealtimeKitSelf;
+  join: () => Promise<void>;
+  leave: () => Promise<void>;
 }
 
 interface RealtimeKitInitOptions {
-	authToken: string;
-	defaults?: {
-		audio?: boolean;
-		video?: boolean;
-	};
+  authToken: string;
+  defaults?: {
+    audio?: boolean;
+    video?: boolean;
+  };
 }
 
 // Dynamic import helper for RealtimeKit
 let RealtimeKitClient: {
-	init: (options: RealtimeKitInitOptions) => Promise<RealtimeKitClientInstance>;
+  init: (options: RealtimeKitInitOptions) => Promise<RealtimeKitClientInstance>;
 } | null = null;
 
 function unwrapDefaultExport<T>(mod: T | { default?: T } | null | undefined): T | null {
-	if (!mod) return null;
-	// Some RN/Metro builds expose ESM default via `.default`, others export the value directly.
-	const maybeDefault = (mod as { default?: T }).default;
-	return (maybeDefault ?? (mod as T)) || null;
+  if (!mod) return null;
+  // Some RN/Metro builds expose ESM default via `.default`, others export the value directly.
+  const maybeDefault = (mod as { default?: T }).default;
+  return (maybeDefault ?? (mod as T)) || null;
 }
 
 try {
-	// Attempt to load RealtimeKit - this may fail if not installed
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	RealtimeKitClient = unwrapDefaultExport(
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		require("@cloudflare/realtimekit-react-native"),
-	);
+  // Attempt to load RealtimeKit - this may fail if not installed
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  RealtimeKitClient = unwrapDefaultExport(
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@cloudflare/realtimekit-react-native"),
+  );
 } catch {
-	// RealtimeKit not available, will use fallback mode
+  // RealtimeKit not available, will use fallback mode
 }
 
 export interface MediaDeviceInfo {
-	deviceId: string;
-	label: string;
-	kind: "audioinput" | "audiooutput" | "videoinput";
+  deviceId: string;
+  label: string;
+  kind: "audioinput" | "audiooutput" | "videoinput";
 }
 
 export interface RTCManagerInitOptions {
-	audio?: boolean;
-	video?: boolean;
+  audio?: boolean;
+  video?: boolean;
 }
 
 /**
@@ -105,760 +99,740 @@ export interface RTCManagerInitOptions {
  * Fallback mode: Uses raw react-native-webrtc when RealtimeKit is not available
  */
 export class RTCManager {
-	private rtkClient: RealtimeKitClientInstance | null = null;
-	private localStream: MediaStream | null = null;
-	private peerConnections: Map<string, RTCPeerConnection> = new Map();
-	private cameraFacingMode: "user" | "environment" = "user";
-	private isUsingRealtimeKit = false;
-	private isScreenSharing = false;
-
-	/**
-	 * Initialize with RealtimeKit auth token
-	 * This is the preferred initialization method when using RealtimeKit
-	 */
-	async initializeWithToken(
-		authToken: string,
-		options?: RTCManagerInitOptions,
-	): Promise<void> {
-		const startTime = Date.now();
-
-		logger.info({
-			event: "rtc.init.start",
-			options: {
-				audio: options?.audio ?? true,
-				video: options?.video ?? true,
-			},
-		});
-
-		const hasPermissions = await this.requestPermissions();
-		if (!hasPermissions) {
-			logger.error({
-				event: "rtc.init.error",
-				duration_ms: Date.now() - startTime,
-				outcome: "error",
-				error: { message: "Media permissions denied", type: "PermissionError" },
-			});
-			throw new Error("Media permissions denied");
-		}
-
-		if (!RealtimeKitClient) {
-			logger.error({
-				event: "rtc.init.error",
-				duration_ms: Date.now() - startTime,
-				outcome: "error",
-				error: { message: "RealtimeKit not available", type: "ModuleError" },
-			});
-			throw new Error(
-				"RealtimeKit is not available. Install @cloudflare/realtimekit-react-native",
-			);
-		}
-
-		this.rtkClient = await RealtimeKitClient.init({
-			authToken,
-			defaults: {
-				audio: options?.audio ?? true,
-				video: options?.video ?? true,
-			},
-		});
-
-		this.isUsingRealtimeKit = true;
-
-		logger.info({
-			event: "rtc.init.complete",
-			duration_ms: Date.now() - startTime,
-			outcome: "success",
-			mode: "realtimekit",
-		});
-	}
-
-	/**
-	 * Join room via RealtimeKit
-	 */
-	async joinSession(): Promise<void> {
-		if (!this.rtkClient) {
-			throw new Error("RTCManager not initialized with RealtimeKit");
-		}
-		await this.rtkClient.join();
-	}
-
-	/**
-	 * Leave room
-	 */
-	async leaveRoom(): Promise<void> {
-		if (this.rtkClient) {
-			await this.rtkClient.leave();
-		}
-	}
-
-	/**
-	 * Get the RealtimeKit client instance
-	 */
-	getRtkClient(): RealtimeKitClientInstance | null {
-		return this.rtkClient;
-	}
-
-	/**
-	 * Check if using RealtimeKit mode
-	 */
-	isRealtimeKitMode(): boolean {
-		return this.isUsingRealtimeKit && this.rtkClient !== null;
-	}
-
-	/**
-	 * Request camera and microphone permissions
-	 * iOS permissions are handled via Info.plist
-	 */
-	async requestPermissions(): Promise<boolean> {
-		logger.info({
-			event: "rtc.permissions.request",
-			platform: Platform.OS,
-		});
-
-		if (Platform.OS === "android") {
-			try {
-				const permissions = [
-					PermissionsAndroid.PERMISSIONS.CAMERA,
-					PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-				];
-
-				const granted = await PermissionsAndroid.requestMultiple(permissions);
-
-				const cameraGranted =
-					granted[PermissionsAndroid.PERMISSIONS.CAMERA] === "granted";
-				const audioGranted =
-					granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === "granted";
-				const allGranted = cameraGranted && audioGranted;
-
-				logger.info({
-					event: "rtc.permissions.result",
-					outcome: allGranted ? "success" : "denied",
-					permissions: {
-						camera: cameraGranted ? "granted" : "denied",
-						microphone: audioGranted ? "granted" : "denied",
-					},
-				});
-
-				return allGranted;
-			} catch (err) {
-				const error = err instanceof Error ? err : new Error(String(err));
-				logger.error({
-					event: "rtc.permissions.error",
-					outcome: "error",
-					error: { message: error.message, type: error.name },
-				});
-				return false;
-			}
-		}
-
-		// iOS permissions handled via Info.plist
-		logger.info({
-			event: "rtc.permissions.result",
-			outcome: "success",
-			permissions: {
-				camera: "granted",
-				microphone: "granted",
-			},
-			note: "iOS permissions via Info.plist",
-		});
-		return true;
-	}
-
-	/**
-	 * Toggle video using RealtimeKit or fallback
-	 */
-	async toggleVideo(): Promise<boolean> {
-		const previousState = this.rtkClient?.self?.videoEnabled ?? false;
-
-		// RealtimeKit mode
-		if (this.rtkClient) {
-			if (this.rtkClient.self.videoEnabled) {
-				await this.rtkClient.self.disableVideo();
-				logger.info({
-					event: "rtc.video.toggle",
-					enabled: false,
-					previousState: true,
-					mode: "realtimekit",
-				});
-				return false;
-			}
-			await this.rtkClient.self.enableVideo();
-			logger.info({
-				event: "rtc.video.toggle",
-				enabled: true,
-				previousState: false,
-				mode: "realtimekit",
-			});
-			return true;
-		}
-
-		// Fallback mode
-		if (this.localStream) {
-			const videoTracks = this.localStream.getVideoTracks();
-			if (videoTracks.length > 0) {
-				const track = videoTracks[0] as unknown as { enabled: boolean };
-				track.enabled = !track.enabled;
-				logger.info({
-					event: "rtc.video.toggle",
-					enabled: track.enabled,
-					previousState,
-					mode: "fallback",
-				});
-				return track.enabled;
-			}
-		}
-
-		logger.info({
-			event: "rtc.video.toggle",
-			enabled: false,
-			previousState,
-			mode: "none",
-			note: "No stream available",
-		});
-		return false;
-	}
-
-	/**
-	 * Toggle audio using RealtimeKit or fallback
-	 */
-	async toggleAudio(): Promise<boolean> {
-		const previousState = this.rtkClient?.self?.audioEnabled ?? false;
-
-		// RealtimeKit mode
-		if (this.rtkClient) {
-			if (this.rtkClient.self.audioEnabled) {
-				await this.rtkClient.self.disableAudio();
-				logger.info({
-					event: "rtc.audio.toggle",
-					enabled: false,
-					previousState: true,
-					mode: "realtimekit",
-				});
-				return false;
-			}
-			await this.rtkClient.self.enableAudio();
-			logger.info({
-				event: "rtc.audio.toggle",
-				enabled: true,
-				previousState: false,
-				mode: "realtimekit",
-			});
-			return true;
-		}
-
-		// Fallback mode
-		if (this.localStream) {
-			const audioTracks = this.localStream.getAudioTracks();
-			if (audioTracks.length > 0) {
-				const track = audioTracks[0] as unknown as { enabled: boolean };
-				track.enabled = !track.enabled;
-				logger.info({
-					event: "rtc.audio.toggle",
-					enabled: track.enabled,
-					previousState,
-					mode: "fallback",
-				});
-				return track.enabled;
-			}
-		}
-
-		logger.info({
-			event: "rtc.audio.toggle",
-			enabled: false,
-			previousState,
-			mode: "none",
-			note: "No stream available",
-		});
-		return false;
-	}
-
-	/**
-	 * Start screen sharing via RealtimeKit
-	 * Note: Screen sharing requires additional native setup on iOS/Android
-	 */
-	async startScreenShare(): Promise<boolean> {
-		logger.info({
-			event: "rtc.screenshare.start",
-			hasRtkClient: !!this.rtkClient,
-		});
-
-		if (!this.rtkClient) {
-			logger.info({
-				event: "rtc.screenshare.start",
-				outcome: "skipped",
-				reason: "no_rtk_client",
-			});
-			return false;
-		}
-
-		try {
-			await this.rtkClient.self.enableScreenShare();
-			this.isScreenSharing = true;
-			logger.info({
-				event: "rtc.screenshare.started",
-				outcome: "success",
-			});
-			return true;
-		} catch (err) {
-			const error = err instanceof Error ? err : new Error(String(err));
-			logger.error({
-				event: "rtc.screenshare.error",
-				outcome: "error",
-				error: { message: error.message, type: error.name },
-			});
-			return false;
-		}
-	}
-
-	/**
-	 * Stop screen sharing
-	 */
-	async stopScreenShare(): Promise<void> {
-		logger.info({
-			event: "rtc.screenshare.stop",
-			wasSharing: this.isScreenSharing,
-		});
-
-		if (this.rtkClient) {
-			try {
-				await this.rtkClient.self.disableScreenShare();
-				this.isScreenSharing = false;
-				logger.info({
-					event: "rtc.screenshare.stopped",
-					outcome: "success",
-				});
-			} catch (err) {
-				const error = err instanceof Error ? err : new Error(String(err));
-				logger.error({
-					event: "rtc.screenshare.error",
-					outcome: "error",
-					error: { message: error.message, type: error.name },
-				});
-			}
-		}
-	}
-
-	/**
-	 * Check if screen sharing is active
-	 */
-	getIsScreenSharing(): boolean {
-		if (this.rtkClient) {
-			return this.rtkClient.self.screenShareEnabled ?? this.isScreenSharing;
-		}
-		return this.isScreenSharing;
-	}
-
-	/**
-	 * Get the local media stream with video and/or audio
-	 * Used in fallback mode when RealtimeKit is not available
-	 */
-	async getLocalStream(
-		video: boolean = true,
-		audio: boolean = true,
-	): Promise<MediaStream> {
-		const startTime = Date.now();
-
-		logger.info({
-			event: "rtc.stream.get.start",
-			constraints: { video, audio },
-			cameraFacing: this.cameraFacingMode,
-		});
-
-		if (!mediaDevices) {
-			logger.error({
-				event: "rtc.stream.get.error",
-				duration_ms: Date.now() - startTime,
-				outcome: "error",
-				error: { message: "WebRTC not available", type: "ModuleError" },
-			});
-			throw new Error("WebRTC not available on this device");
-		}
-
-		const constraints = {
-			audio: audio
-				? {
-						echoCancellation: true,
-						noiseSuppression: true,
-						autoGainControl: true,
-					}
-				: false,
-			video: video
-				? {
-						facingMode: this.cameraFacingMode,
-						width: { ideal: 1280 },
-						height: { ideal: 720 },
-					}
-				: false,
-		};
-
-		try {
-			this.localStream = await mediaDevices.getUserMedia(constraints);
-
-			logger.info({
-				event: "rtc.stream.get.complete",
-				duration_ms: Date.now() - startTime,
-				outcome: "success",
-				tracks: {
-					video: this.localStream.getVideoTracks().length,
-					audio: this.localStream.getAudioTracks().length,
-				},
-			});
-
-			return this.localStream;
-		} catch (err) {
-			const error = err instanceof Error ? err : new Error(String(err));
-			logger.error({
-				event: "rtc.stream.get.error",
-				duration_ms: Date.now() - startTime,
-				outcome: "error",
-				error: { message: error.message, type: error.name },
-			});
-			throw err;
-		}
-	}
-
-	/**
-	 * Get all available media devices
-	 * Note: On iOS simulator, native enumerateDevices crashes so we return mock devices
-	 */
-	async enumerateDevices(): Promise<MediaDeviceInfo[]> {
-		// Return mock devices on simulator to avoid native crash
-		if (!mediaDevices || isIOSSimulator) {
-			const mockDevices = [
-				{
-					deviceId: "mock-camera-front",
-					label: "Front Camera",
-					kind: "videoinput" as const,
-				},
-				{
-					deviceId: "mock-camera-back",
-					label: "Back Camera",
-					kind: "videoinput" as const,
-				},
-				{
-					deviceId: "mock-mic",
-					label: "Built-in Microphone",
-					kind: "audioinput" as const,
-				},
-				{
-					deviceId: "mock-speaker",
-					label: "Built-in Speaker",
-					kind: "audiooutput" as const,
-				},
-			];
-
-			logger.info({
-				event: "rtc.devices.enumerate",
-				outcome: "mock",
-				reason: isIOSSimulator ? "ios_simulator" : "no_media_devices",
-				deviceCount: mockDevices.length,
-			});
-
-			return mockDevices;
-		}
-
-		try {
-			const devices = await mediaDevices.enumerateDevices();
-
-			logger.info({
-				event: "rtc.devices.enumerate",
-				outcome: "success",
-				deviceCount: devices.length,
-				devices: {
-					videoinput: devices.filter((d) => d.kind === "videoinput").length,
-					audioinput: devices.filter((d) => d.kind === "audioinput").length,
-					audiooutput: devices.filter((d) => d.kind === "audiooutput").length,
-				},
-			});
-
-			return devices as MediaDeviceInfo[];
-		} catch (err) {
-			const error = err instanceof Error ? err : new Error(String(err));
-			logger.error({
-				event: "rtc.devices.enumerate.error",
-				outcome: "error",
-				error: { message: error.message, type: error.name },
-			});
-			return [];
-		}
-	}
-
-	/**
-	 * Get list of camera devices
-	 */
-	async getCameras(): Promise<MediaDeviceInfo[]> {
-		const devices = await this.enumerateDevices();
-		return devices.filter((d) => d.kind === "videoinput");
-	}
-
-	/**
-	 * Get list of microphone devices
-	 */
-	async getMicrophones(): Promise<MediaDeviceInfo[]> {
-		const devices = await this.enumerateDevices();
-		return devices.filter((d) => d.kind === "audioinput");
-	}
-
-	/**
-	 * Get list of speaker devices
-	 */
-	async getSpeakers(): Promise<MediaDeviceInfo[]> {
-		const devices = await this.enumerateDevices();
-		return devices.filter((d) => d.kind === "audiooutput");
-	}
-
-	/**
-	 * Switch between front and back camera
-	 */
-	async switchCamera(): Promise<void> {
-		const previousFacing = this.cameraFacingMode;
-
-		logger.info({
-			event: "rtc.camera.switch.start",
-			previousFacing,
-			targetFacing: previousFacing === "user" ? "environment" : "user",
-		});
-
-		if (!this.localStream) {
-			logger.error({
-				event: "rtc.camera.switch.error",
-				outcome: "error",
-				error: { message: "No local stream available", type: "StateError" },
-			});
-			throw new Error("No local stream available");
-		}
-
-		try {
-			const videoTrack = this.localStream.getVideoTracks()[0];
-			if (videoTrack) {
-				// Call the native method if available
-				if (
-					(videoTrack as unknown as { _switchCamera?: () => void })
-						._switchCamera
-				) {
-					(
-						videoTrack as unknown as { _switchCamera: () => void }
-					)._switchCamera();
-					this.cameraFacingMode =
-						this.cameraFacingMode === "user" ? "environment" : "user";
-
-					logger.info({
-						event: "rtc.camera.switch.complete",
-						outcome: "success",
-						method: "native",
-						newFacing: this.cameraFacingMode,
-					});
-				} else {
-					// Fallback: stop current stream and get new one
-					await this.stopVideo();
-					this.cameraFacingMode =
-						this.cameraFacingMode === "user" ? "environment" : "user";
-					await this.startVideo();
-
-					logger.info({
-						event: "rtc.camera.switch.complete",
-						outcome: "success",
-						method: "fallback",
-						newFacing: this.cameraFacingMode,
-					});
-				}
-			}
-		} catch (err) {
-			const error = err instanceof Error ? err : new Error(String(err));
-			logger.error({
-				event: "rtc.camera.switch.error",
-				outcome: "error",
-				error: { message: error.message, type: error.name },
-			});
-			throw err;
-		}
-	}
-
-	/**
-	 * Get current camera facing mode
-	 */
-	getCameraFacingMode(): "user" | "environment" {
-		return this.cameraFacingMode;
-	}
-
-	/**
-	 * Start video on local stream (fallback mode)
-	 */
-	async startVideo(): Promise<void> {
-		if (!mediaDevices) {
-			return;
-		}
-
-		if (!this.localStream) {
-			this.localStream = await this.getLocalStream(true, true);
-			return;
-		}
-
-		const videoTrack = this.localStream.getVideoTracks()[0];
-		if (videoTrack) {
-			(videoTrack as unknown as { enabled: boolean }).enabled = true;
-		} else {
-			// No video track exists, get a new stream
-			const constraints = {
-				video: {
-					facingMode: this.cameraFacingMode,
-					width: { ideal: 1280 },
-					height: { ideal: 720 },
-				},
-				audio: false,
-			};
-
-			try {
-				const stream = await mediaDevices.getUserMedia(constraints);
-				const newVideoTrack = stream.getVideoTracks()[0];
-				if (newVideoTrack) {
-					this.localStream.addTrack(newVideoTrack);
-				}
-			} catch (err) {
-				throw err;
-			}
-		}
-	}
-
-	/**
-	 * Stop video on local stream (fallback mode)
-	 */
-	async stopVideo(): Promise<void> {
-		if (this.localStream) {
-			const videoTracks = this.localStream.getVideoTracks();
-			for (const track of videoTracks) {
-				const t = track as { enabled: boolean };
-				t.enabled = false;
-				this.localStream?.removeTrack(track as MediaStream);
-			}
-		}
-	}
-
-	/**
-	 * Toggle video enabled state (fallback mode)
-	 * @deprecated Use toggleVideo() instead
-	 */
-	toggleVideoLegacy(enabled: boolean): void {
-		if (this.localStream) {
-			for (const track of this.localStream.getVideoTracks()) {
-				const t = track as unknown as { enabled: boolean };
-				t.enabled = enabled;
-			}
-		}
-	}
-
-	/**
-	 * Start audio on local stream (fallback mode)
-	 */
-	async startAudio(): Promise<void> {
-		if (!mediaDevices) {
-			return;
-		}
-
-		if (!this.localStream) {
-			this.localStream = await this.getLocalStream(false, true);
-			return;
-		}
-
-		const audioTrack = this.localStream.getAudioTracks()[0];
-		if (audioTrack) {
-			(audioTrack as unknown as { enabled: boolean }).enabled = true;
-		} else {
-			// No audio track exists, get a new stream
-			const constraints = {
-				audio: {
-					echoCancellation: true,
-					noiseSuppression: true,
-					autoGainControl: true,
-				},
-				video: false,
-			};
-
-			try {
-				const stream = await mediaDevices.getUserMedia(constraints);
-				const newAudioTrack = stream.getAudioTracks()[0];
-				if (newAudioTrack) {
-					this.localStream.addTrack(newAudioTrack);
-				}
-			} catch (err) {
-				throw err;
-			}
-		}
-	}
-
-	/**
-	 * Stop audio on local stream (fallback mode)
-	 */
-	async stopAudio(): Promise<void> {
-		if (this.localStream) {
-			const audioTracks = this.localStream.getAudioTracks();
-			for (const track of audioTracks) {
-				const t = track as { enabled: boolean };
-				t.enabled = false;
-				this.localStream?.removeTrack(track as MediaStream);
-			}
-		}
-	}
-
-	/**
-	 * Toggle audio enabled state (fallback mode)
-	 * @deprecated Use toggleAudio() instead
-	 */
-	toggleAudioLegacy(enabled: boolean): void {
-		if (this.localStream) {
-			for (const track of this.localStream.getAudioTracks()) {
-				const t = track as unknown as { enabled: boolean };
-				t.enabled = enabled;
-			}
-		}
-	}
-
-	/**
-	 * Get the current local stream
-	 */
-	getLocalStreamInstance(): MediaStream | null {
-		return this.localStream;
-	}
-
-	/**
-	 * Clean up resources
-	 */
-	cleanup(): void {
-		logger.info({
-			event: "rtc.cleanup.start",
-			hasRtkClient: !!this.rtkClient,
-			hasLocalStream: !!this.localStream,
-			peerConnectionCount: this.peerConnections.size,
-		});
-
-		// Clean up RealtimeKit
-		if (this.rtkClient) {
-			this.rtkClient.leave().catch(() => {
-				// Silently ignore error
-			});
-			this.rtkClient = null;
-		}
-
-		// Clean up local stream
-		if (this.localStream) {
-			for (const track of this.localStream.getTracks()) {
-				const t = track as { stop: () => void };
-				t.stop();
-			}
-			this.localStream = null;
-		}
-
-		// Clean up peer connections
-		for (const pc of this.peerConnections.values()) {
-			pc.close();
-		}
-		this.peerConnections.clear();
-
-		this.isUsingRealtimeKit = false;
-		this.isScreenSharing = false;
-
-		logger.info({
-			event: "rtc.cleanup.complete",
-			outcome: "success",
-		});
-	}
+  private rtkClient: RealtimeKitClientInstance | null = null;
+  private localStream: MediaStream | null = null;
+  private peerConnections: Map<string, RTCPeerConnection> = new Map();
+  private cameraFacingMode: "user" | "environment" = "user";
+  private isUsingRealtimeKit = false;
+  private isScreenSharing = false;
+
+  /**
+   * Initialize with RealtimeKit auth token
+   * This is the preferred initialization method when using RealtimeKit
+   */
+  async initializeWithToken(authToken: string, options?: RTCManagerInitOptions): Promise<void> {
+    const startTime = Date.now();
+
+    logger.info({
+      event: "rtc.init.start",
+      options: {
+        audio: options?.audio ?? true,
+        video: options?.video ?? true,
+      },
+    });
+
+    const hasPermissions = await this.requestPermissions();
+    if (!hasPermissions) {
+      logger.error({
+        event: "rtc.init.error",
+        duration_ms: Date.now() - startTime,
+        outcome: "error",
+        error: { message: "Media permissions denied", type: "PermissionError" },
+      });
+      throw new Error("Media permissions denied");
+    }
+
+    if (!RealtimeKitClient) {
+      logger.error({
+        event: "rtc.init.error",
+        duration_ms: Date.now() - startTime,
+        outcome: "error",
+        error: { message: "RealtimeKit not available", type: "ModuleError" },
+      });
+      throw new Error("RealtimeKit is not available. Install @cloudflare/realtimekit-react-native");
+    }
+
+    this.rtkClient = await RealtimeKitClient.init({
+      authToken,
+      defaults: {
+        audio: options?.audio ?? true,
+        video: options?.video ?? true,
+      },
+    });
+
+    this.isUsingRealtimeKit = true;
+
+    logger.info({
+      event: "rtc.init.complete",
+      duration_ms: Date.now() - startTime,
+      outcome: "success",
+      mode: "realtimekit",
+    });
+  }
+
+  /**
+   * Join room via RealtimeKit
+   */
+  async joinSession(): Promise<void> {
+    if (!this.rtkClient) {
+      throw new Error("RTCManager not initialized with RealtimeKit");
+    }
+    await this.rtkClient.join();
+  }
+
+  /**
+   * Leave room
+   */
+  async leaveRoom(): Promise<void> {
+    if (this.rtkClient) {
+      await this.rtkClient.leave();
+    }
+  }
+
+  /**
+   * Get the RealtimeKit client instance
+   */
+  getRtkClient(): RealtimeKitClientInstance | null {
+    return this.rtkClient;
+  }
+
+  /**
+   * Check if using RealtimeKit mode
+   */
+  isRealtimeKitMode(): boolean {
+    return this.isUsingRealtimeKit && this.rtkClient !== null;
+  }
+
+  /**
+   * Request camera and microphone permissions
+   * iOS permissions are handled via Info.plist
+   */
+  async requestPermissions(): Promise<boolean> {
+    logger.info({
+      event: "rtc.permissions.request",
+      platform: Platform.OS,
+    });
+
+    if (Platform.OS === "android") {
+      try {
+        const permissions = [PermissionsAndroid.PERMISSIONS.CAMERA, PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+
+        const granted = await PermissionsAndroid.requestMultiple(permissions);
+
+        const cameraGranted = granted[PermissionsAndroid.PERMISSIONS.CAMERA] === "granted";
+        const audioGranted = granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === "granted";
+        const allGranted = cameraGranted && audioGranted;
+
+        logger.info({
+          event: "rtc.permissions.result",
+          outcome: allGranted ? "success" : "denied",
+          permissions: {
+            camera: cameraGranted ? "granted" : "denied",
+            microphone: audioGranted ? "granted" : "denied",
+          },
+        });
+
+        return allGranted;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        logger.error({
+          event: "rtc.permissions.error",
+          outcome: "error",
+          error: { message: error.message, type: error.name },
+        });
+        return false;
+      }
+    }
+
+    // iOS permissions handled via Info.plist
+    logger.info({
+      event: "rtc.permissions.result",
+      outcome: "success",
+      permissions: {
+        camera: "granted",
+        microphone: "granted",
+      },
+      note: "iOS permissions via Info.plist",
+    });
+    return true;
+  }
+
+  /**
+   * Toggle video using RealtimeKit or fallback
+   */
+  async toggleVideo(): Promise<boolean> {
+    const previousState = this.rtkClient?.self?.videoEnabled ?? false;
+
+    // RealtimeKit mode
+    if (this.rtkClient) {
+      if (this.rtkClient.self.videoEnabled) {
+        await this.rtkClient.self.disableVideo();
+        logger.info({
+          event: "rtc.video.toggle",
+          enabled: false,
+          previousState: true,
+          mode: "realtimekit",
+        });
+        return false;
+      }
+      await this.rtkClient.self.enableVideo();
+      logger.info({
+        event: "rtc.video.toggle",
+        enabled: true,
+        previousState: false,
+        mode: "realtimekit",
+      });
+      return true;
+    }
+
+    // Fallback mode
+    if (this.localStream) {
+      const videoTracks = this.localStream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        const track = videoTracks[0] as unknown as { enabled: boolean };
+        track.enabled = !track.enabled;
+        logger.info({
+          event: "rtc.video.toggle",
+          enabled: track.enabled,
+          previousState,
+          mode: "fallback",
+        });
+        return track.enabled;
+      }
+    }
+
+    logger.info({
+      event: "rtc.video.toggle",
+      enabled: false,
+      previousState,
+      mode: "none",
+      note: "No stream available",
+    });
+    return false;
+  }
+
+  /**
+   * Toggle audio using RealtimeKit or fallback
+   */
+  async toggleAudio(): Promise<boolean> {
+    const previousState = this.rtkClient?.self?.audioEnabled ?? false;
+
+    // RealtimeKit mode
+    if (this.rtkClient) {
+      if (this.rtkClient.self.audioEnabled) {
+        await this.rtkClient.self.disableAudio();
+        logger.info({
+          event: "rtc.audio.toggle",
+          enabled: false,
+          previousState: true,
+          mode: "realtimekit",
+        });
+        return false;
+      }
+      await this.rtkClient.self.enableAudio();
+      logger.info({
+        event: "rtc.audio.toggle",
+        enabled: true,
+        previousState: false,
+        mode: "realtimekit",
+      });
+      return true;
+    }
+
+    // Fallback mode
+    if (this.localStream) {
+      const audioTracks = this.localStream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const track = audioTracks[0] as unknown as { enabled: boolean };
+        track.enabled = !track.enabled;
+        logger.info({
+          event: "rtc.audio.toggle",
+          enabled: track.enabled,
+          previousState,
+          mode: "fallback",
+        });
+        return track.enabled;
+      }
+    }
+
+    logger.info({
+      event: "rtc.audio.toggle",
+      enabled: false,
+      previousState,
+      mode: "none",
+      note: "No stream available",
+    });
+    return false;
+  }
+
+  /**
+   * Start screen sharing via RealtimeKit
+   * Note: Screen sharing requires additional native setup on iOS/Android
+   */
+  async startScreenShare(): Promise<boolean> {
+    logger.info({
+      event: "rtc.screenshare.start",
+      hasRtkClient: !!this.rtkClient,
+    });
+
+    if (!this.rtkClient) {
+      logger.info({
+        event: "rtc.screenshare.start",
+        outcome: "skipped",
+        reason: "no_rtk_client",
+      });
+      return false;
+    }
+
+    try {
+      await this.rtkClient.self.enableScreenShare();
+      this.isScreenSharing = true;
+      logger.info({
+        event: "rtc.screenshare.started",
+        outcome: "success",
+      });
+      return true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      logger.error({
+        event: "rtc.screenshare.error",
+        outcome: "error",
+        error: { message: error.message, type: error.name },
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Stop screen sharing
+   */
+  async stopScreenShare(): Promise<void> {
+    logger.info({
+      event: "rtc.screenshare.stop",
+      wasSharing: this.isScreenSharing,
+    });
+
+    if (this.rtkClient) {
+      try {
+        await this.rtkClient.self.disableScreenShare();
+        this.isScreenSharing = false;
+        logger.info({
+          event: "rtc.screenshare.stopped",
+          outcome: "success",
+        });
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        logger.error({
+          event: "rtc.screenshare.error",
+          outcome: "error",
+          error: { message: error.message, type: error.name },
+        });
+      }
+    }
+  }
+
+  /**
+   * Check if screen sharing is active
+   */
+  getIsScreenSharing(): boolean {
+    if (this.rtkClient) {
+      return this.rtkClient.self.screenShareEnabled ?? this.isScreenSharing;
+    }
+    return this.isScreenSharing;
+  }
+
+  /**
+   * Get the local media stream with video and/or audio
+   * Used in fallback mode when RealtimeKit is not available
+   */
+  async getLocalStream(video: boolean = true, audio: boolean = true): Promise<MediaStream> {
+    const startTime = Date.now();
+
+    logger.info({
+      event: "rtc.stream.get.start",
+      constraints: { video, audio },
+      cameraFacing: this.cameraFacingMode,
+    });
+
+    if (!mediaDevices) {
+      logger.error({
+        event: "rtc.stream.get.error",
+        duration_ms: Date.now() - startTime,
+        outcome: "error",
+        error: { message: "WebRTC not available", type: "ModuleError" },
+      });
+      throw new Error("WebRTC not available on this device");
+    }
+
+    const constraints = {
+      audio: audio
+        ? {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          }
+        : false,
+      video: video
+        ? {
+            facingMode: this.cameraFacingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          }
+        : false,
+    };
+
+    try {
+      this.localStream = await mediaDevices.getUserMedia(constraints);
+
+      logger.info({
+        event: "rtc.stream.get.complete",
+        duration_ms: Date.now() - startTime,
+        outcome: "success",
+        tracks: {
+          video: this.localStream.getVideoTracks().length,
+          audio: this.localStream.getAudioTracks().length,
+        },
+      });
+
+      return this.localStream;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      logger.error({
+        event: "rtc.stream.get.error",
+        duration_ms: Date.now() - startTime,
+        outcome: "error",
+        error: { message: error.message, type: error.name },
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Get all available media devices
+   * Note: On iOS simulator, native enumerateDevices crashes so we return mock devices
+   */
+  async enumerateDevices(): Promise<MediaDeviceInfo[]> {
+    // Return mock devices on simulator to avoid native crash
+    if (!mediaDevices || isIOSSimulator) {
+      const mockDevices = [
+        {
+          deviceId: "mock-camera-front",
+          label: "Front Camera",
+          kind: "videoinput" as const,
+        },
+        {
+          deviceId: "mock-camera-back",
+          label: "Back Camera",
+          kind: "videoinput" as const,
+        },
+        {
+          deviceId: "mock-mic",
+          label: "Built-in Microphone",
+          kind: "audioinput" as const,
+        },
+        {
+          deviceId: "mock-speaker",
+          label: "Built-in Speaker",
+          kind: "audiooutput" as const,
+        },
+      ];
+
+      logger.info({
+        event: "rtc.devices.enumerate",
+        outcome: "mock",
+        reason: isIOSSimulator ? "ios_simulator" : "no_media_devices",
+        deviceCount: mockDevices.length,
+      });
+
+      return mockDevices;
+    }
+
+    try {
+      const devices = await mediaDevices.enumerateDevices();
+
+      logger.info({
+        event: "rtc.devices.enumerate",
+        outcome: "success",
+        deviceCount: devices.length,
+        devices: {
+          videoinput: devices.filter((d) => d.kind === "videoinput").length,
+          audioinput: devices.filter((d) => d.kind === "audioinput").length,
+          audiooutput: devices.filter((d) => d.kind === "audiooutput").length,
+        },
+      });
+
+      return devices as MediaDeviceInfo[];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      logger.error({
+        event: "rtc.devices.enumerate.error",
+        outcome: "error",
+        error: { message: error.message, type: error.name },
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Get list of camera devices
+   */
+  async getCameras(): Promise<MediaDeviceInfo[]> {
+    const devices = await this.enumerateDevices();
+    return devices.filter((d) => d.kind === "videoinput");
+  }
+
+  /**
+   * Get list of microphone devices
+   */
+  async getMicrophones(): Promise<MediaDeviceInfo[]> {
+    const devices = await this.enumerateDevices();
+    return devices.filter((d) => d.kind === "audioinput");
+  }
+
+  /**
+   * Get list of speaker devices
+   */
+  async getSpeakers(): Promise<MediaDeviceInfo[]> {
+    const devices = await this.enumerateDevices();
+    return devices.filter((d) => d.kind === "audiooutput");
+  }
+
+  /**
+   * Switch between front and back camera
+   */
+  async switchCamera(): Promise<void> {
+    const previousFacing = this.cameraFacingMode;
+
+    logger.info({
+      event: "rtc.camera.switch.start",
+      previousFacing,
+      targetFacing: previousFacing === "user" ? "environment" : "user",
+    });
+
+    if (!this.localStream) {
+      logger.error({
+        event: "rtc.camera.switch.error",
+        outcome: "error",
+        error: { message: "No local stream available", type: "StateError" },
+      });
+      throw new Error("No local stream available");
+    }
+
+    try {
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        // Call the native method if available
+        if ((videoTrack as unknown as { _switchCamera?: () => void })._switchCamera) {
+          (videoTrack as unknown as { _switchCamera: () => void })._switchCamera();
+          this.cameraFacingMode = this.cameraFacingMode === "user" ? "environment" : "user";
+
+          logger.info({
+            event: "rtc.camera.switch.complete",
+            outcome: "success",
+            method: "native",
+            newFacing: this.cameraFacingMode,
+          });
+        } else {
+          // Fallback: stop current stream and get new one
+          await this.stopVideo();
+          this.cameraFacingMode = this.cameraFacingMode === "user" ? "environment" : "user";
+          await this.startVideo();
+
+          logger.info({
+            event: "rtc.camera.switch.complete",
+            outcome: "success",
+            method: "fallback",
+            newFacing: this.cameraFacingMode,
+          });
+        }
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      logger.error({
+        event: "rtc.camera.switch.error",
+        outcome: "error",
+        error: { message: error.message, type: error.name },
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Get current camera facing mode
+   */
+  getCameraFacingMode(): "user" | "environment" {
+    return this.cameraFacingMode;
+  }
+
+  /**
+   * Start video on local stream (fallback mode)
+   */
+  async startVideo(): Promise<void> {
+    if (!mediaDevices) {
+      return;
+    }
+
+    if (!this.localStream) {
+      this.localStream = await this.getLocalStream(true, true);
+      return;
+    }
+
+    const videoTrack = this.localStream.getVideoTracks()[0];
+    if (videoTrack) {
+      (videoTrack as unknown as { enabled: boolean }).enabled = true;
+    } else {
+      // No video track exists, get a new stream
+      const constraints = {
+        video: {
+          facingMode: this.cameraFacingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      };
+
+      try {
+        const stream = await mediaDevices.getUserMedia(constraints);
+        const newVideoTrack = stream.getVideoTracks()[0];
+        if (newVideoTrack) {
+          this.localStream.addTrack(newVideoTrack);
+        }
+      } catch (err) {
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * Stop video on local stream (fallback mode)
+   */
+  async stopVideo(): Promise<void> {
+    if (this.localStream) {
+      const videoTracks = this.localStream.getVideoTracks();
+      for (const track of videoTracks) {
+        const t = track as { enabled: boolean };
+        t.enabled = false;
+        this.localStream?.removeTrack(track as MediaStream);
+      }
+    }
+  }
+
+  /**
+   * Toggle video enabled state (fallback mode)
+   * @deprecated Use toggleVideo() instead
+   */
+  toggleVideoLegacy(enabled: boolean): void {
+    if (this.localStream) {
+      for (const track of this.localStream.getVideoTracks()) {
+        const t = track as unknown as { enabled: boolean };
+        t.enabled = enabled;
+      }
+    }
+  }
+
+  /**
+   * Start audio on local stream (fallback mode)
+   */
+  async startAudio(): Promise<void> {
+    if (!mediaDevices) {
+      return;
+    }
+
+    if (!this.localStream) {
+      this.localStream = await this.getLocalStream(false, true);
+      return;
+    }
+
+    const audioTrack = this.localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      (audioTrack as unknown as { enabled: boolean }).enabled = true;
+    } else {
+      // No audio track exists, get a new stream
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      };
+
+      try {
+        const stream = await mediaDevices.getUserMedia(constraints);
+        const newAudioTrack = stream.getAudioTracks()[0];
+        if (newAudioTrack) {
+          this.localStream.addTrack(newAudioTrack);
+        }
+      } catch (err) {
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * Stop audio on local stream (fallback mode)
+   */
+  async stopAudio(): Promise<void> {
+    if (this.localStream) {
+      const audioTracks = this.localStream.getAudioTracks();
+      for (const track of audioTracks) {
+        const t = track as { enabled: boolean };
+        t.enabled = false;
+        this.localStream?.removeTrack(track as MediaStream);
+      }
+    }
+  }
+
+  /**
+   * Toggle audio enabled state (fallback mode)
+   * @deprecated Use toggleAudio() instead
+   */
+  toggleAudioLegacy(enabled: boolean): void {
+    if (this.localStream) {
+      for (const track of this.localStream.getAudioTracks()) {
+        const t = track as unknown as { enabled: boolean };
+        t.enabled = enabled;
+      }
+    }
+  }
+
+  /**
+   * Get the current local stream
+   */
+  getLocalStreamInstance(): MediaStream | null {
+    return this.localStream;
+  }
+
+  /**
+   * Clean up resources
+   */
+  cleanup(): void {
+    logger.info({
+      event: "rtc.cleanup.start",
+      hasRtkClient: !!this.rtkClient,
+      hasLocalStream: !!this.localStream,
+      peerConnectionCount: this.peerConnections.size,
+    });
+
+    // Clean up RealtimeKit
+    if (this.rtkClient) {
+      this.rtkClient.leave().catch(() => {
+        // Silently ignore error
+      });
+      this.rtkClient = null;
+    }
+
+    // Clean up local stream
+    if (this.localStream) {
+      for (const track of this.localStream.getTracks()) {
+        const t = track as { stop: () => void };
+        t.stop();
+      }
+      this.localStream = null;
+    }
+
+    // Clean up peer connections
+    for (const pc of this.peerConnections.values()) {
+      pc.close();
+    }
+    this.peerConnections.clear();
+
+    this.isUsingRealtimeKit = false;
+    this.isScreenSharing = false;
+
+    logger.info({
+      event: "rtc.cleanup.complete",
+      outcome: "success",
+    });
+  }
 }

@@ -16,38 +16,35 @@ The React SDK includes `@q9labs/chalk-core` as a dependency.
 Import the CSS stylesheet for built-in components:
 
 ```tsx
-import '@q9labs/chalk-react/styles.css'
+import "@q9labs/chalk-react/styles.css";
 ```
 
 ## Verify Installation
 
 ```tsx
-import { ChalkProvider, VideoConference } from '@q9labs/chalk-react'
-import '@q9labs/chalk-react/styles.css'
+import { ChalkProvider, VideoConference } from "@q9labs/chalk-react";
+import "@q9labs/chalk-react/styles.css";
 
 function App() {
   // Token obtained from your backend (see Authentication guide)
-  const token = 'eyJ...'
+  const token = "eyJ...";
 
   return (
     <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={token}>
-      <VideoConference
-        roomId="my-room"
-        userName="Alice"
-      />
+      <VideoConference roomId="my-room" userName="Alice" />
     </ChalkProvider>
-  )
+  );
 }
 ```
 
 ## ChalkProvider Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `apiUrl` | `string` | Chalk API base URL |
-| `token` | `string` | JWT token from participant join |
-| `posthog` | `ChalkSessionConfig["posthog"]` | Optional PostHog session replay integration (start/stop + lifecycle events) |
-| `children` | `ReactNode` | Your app components |
+| Prop       | Type                            | Description                                                                 |
+| ---------- | ------------------------------- | --------------------------------------------------------------------------- |
+| `apiUrl`   | `string`                        | Chalk API base URL                                                          |
+| `token`    | `string`                        | JWT token from participant join                                             |
+| `posthog`  | `ChalkSessionConfig["posthog"]` | Optional PostHog session replay integration (start/stop + lifecycle events) |
+| `children` | `ReactNode`                     | Your app components                                                         |
 
 ## Next Steps
 

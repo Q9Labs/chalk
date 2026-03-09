@@ -21,19 +21,15 @@ bun add @q9labs/chalk-react
 ```
 
 ```tsx
-import { ChalkProvider, VideoConference } from '@q9labs/chalk-react'
-import '@q9labs/chalk-react/styles.css'
+import { ChalkProvider, VideoConference } from "@q9labs/chalk-react";
+import "@q9labs/chalk-react/styles.css";
 
 function App() {
   return (
     <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={jwt}>
-      <VideoConference
-        roomId="room-123"
-        userName="Alice"
-        role="host"
-      />
+      <VideoConference roomId="room-123" userName="Alice" role="host" />
     </ChalkProvider>
-  )
+  );
 }
 ```
 

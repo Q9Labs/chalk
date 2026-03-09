@@ -1,6 +1,7 @@
 # Whisper Worker Ops Guide
 
 ## Overview
+
 - Service: whisper transcription worker (CPU/GPU; faster-whisper)
 - Queue key: `transcription:jobs`
 - Result key: `transcription:result:{job_id}` (TTL 24h)
@@ -14,6 +15,7 @@
   - Runtime (GPU nodes): `GpuUtilizationPercent`, `GpuMemoryUtilizationPercent`, `GpuDeviceCount`
 
 ## Deploy (Prod Lean)
+
 1. Make code/infra changes in `infrastructure/whisper-worker` and/or `infrastructure/terraform`.
 2. Run gate locally:
    - `bun run lint`
@@ -31,6 +33,7 @@
    - `aws --profile q9labs --region us-east-1 autoscaling start-instance-refresh --auto-scaling-group-name <asg> --preferences MinHealthyPercentage=0,InstanceWarmup=300`
 
 ## Runtime Env Vars
+
 - `REDIS_URL` from Secrets Manager (auth token). Injected via user-data.
 - `AXIOM_TOKEN` from Secrets Manager `chalk/<env>/axiom` (seeded by SSM `/chalk/prod/axiom-token`).
 - `AXIOM_DATASET` set by Terraform (`chalk-api-prod`).
@@ -54,6 +57,7 @@
 - Transcript logging is disabled in prod (no raw transcript in Axiom logs).
 
 ## Observability
+
 - Axiom events:
   - `worker.start`
   - `whisper.queue_depth`
@@ -65,6 +69,7 @@
 - Axiom ingest failures no longer block jobs; events fall back to stdout JSON.
 
 ## Quick Health Checks (SSM)
+
 - Container status:
   - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"`
 - Logs:
@@ -78,6 +83,7 @@
   - `docker exec whisper-worker python -c 'import os, axiom_py; c=axiom_py.Client(); ds=os.environ.get("AXIOM_DATASET",""); print(c.ingest_events(ds, [{"event":"axiom-smoke"}]))'`
 
 ## Troubleshooting
+
 - `metrics.publish_failed` + Axiom 404:
   - Dataset name mismatch. Confirm `AXIOM_DATASET` and dataset exists in Axiom.
 - Axiom 403:
@@ -91,5 +97,6 @@
   - Validate `AXIOM_TOKEN` and `REDIS_URL` from Secrets Manager.
 
 ## Notes
+
 - Do not log full `audio_url`. Only scheme/host is recorded.
 - High-cardinality `job_id` is expected in Axiom.

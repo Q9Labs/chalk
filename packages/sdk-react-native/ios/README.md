@@ -16,18 +16,23 @@ Manages audio routing, session configuration, and interruption handling for vide
 ### Exported Methods
 
 #### `configureForCall(): Promise<{configured: bool, category: string, mode: string}>`
+
 Configures audio session for VoIP with PlayAndRecord category and VoiceChat mode. Sets up observers for route changes and interruptions.
 
 #### `setOutputRoute(route: 'speaker' | 'earpiece' | 'bluetooth'): Promise<{route: string, success: bool}>`
+
 Routes audio output to specified device. Throws if Bluetooth requested but unavailable.
 
 #### `getAvailableRoutes(): Promise<{available: string[], hasHeadphones: bool, hasBluetoothDevices: bool}>`
+
 Returns list of available output routes and connection status.
 
 #### `getCurrentRoute(): Promise<{current: string, outputs: Array<{port: string, name: string}>}>`
+
 Returns currently active output route and all connected outputs.
 
 #### `setSpeakerphone(enabled: bool): Promise<{speakerEnabled: bool, success: bool}>`
+
 Toggles speakerphone mode.
 
 ### Events
@@ -50,7 +55,7 @@ pod 'ChalkReactNative', :path => '../packages/sdk-react-native/ios'
 ## Usage (React Native)
 
 ```typescript
-import { NativeModules, NativeEventEmitter } from 'react-native';
+import { NativeModules, NativeEventEmitter } from "react-native";
 
 const AudioSession = NativeModules.AudioSessionModule;
 const audioEmitter = new NativeEventEmitter(AudioSession);
@@ -59,12 +64,12 @@ const audioEmitter = new NativeEventEmitter(AudioSession);
 await AudioSession.configureForCall();
 
 // Listen for route changes
-audioEmitter.addListener('onRouteChange', (event) => {
-  console.log('Route changed to:', event.route);
+audioEmitter.addListener("onRouteChange", (event) => {
+  console.log("Route changed to:", event.route);
 });
 
 // Set output route
-await AudioSession.setOutputRoute('speaker');
+await AudioSession.setOutputRoute("speaker");
 
 // Get available routes
 const routes = await AudioSession.getAvailableRoutes();

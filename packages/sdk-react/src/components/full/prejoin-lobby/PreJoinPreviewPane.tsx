@@ -6,130 +6,96 @@ import { cn } from "../../../utils/cn";
 import { getParticipantColor } from "../../../utils/colorGenerator";
 
 interface PreJoinPreviewPaneProps {
-	videoRef: RefObject<HTMLVideoElement | null>;
-	displayName: string;
-	isVideoEnabled: boolean;
-	isAudioEnabled: boolean;
-	audioLevel: number;
-	normalizedAudioLevel: number;
-	participantGradient: string;
-	controls: React.ReactNode;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  displayName: string;
+  isVideoEnabled: boolean;
+  isAudioEnabled: boolean;
+  audioLevel: number;
+  normalizedAudioLevel: number;
+  participantGradient: string;
+  controls: React.ReactNode;
 }
 
-export function PreJoinPreviewPane({
-	videoRef,
-	displayName,
-	isVideoEnabled,
-	isAudioEnabled,
-	audioLevel,
-	normalizedAudioLevel,
-	participantGradient,
-	controls,
-}: PreJoinPreviewPaneProps): React.JSX.Element {
-	const participantColors = getParticipantColor(displayName);
+export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAudioEnabled, audioLevel, normalizedAudioLevel, participantGradient, controls }: PreJoinPreviewPaneProps): React.JSX.Element {
+  const participantColors = getParticipantColor(displayName);
 
-	return (
-		<div className="w-full relative" style={{ '--primary': participantColors.primary } as React.CSSProperties}>
-			<div
-				className="absolute -inset-1 rounded-3xl opacity-30 blur-xl"
-				style={{ background: participantGradient }}
-			/>
-			<div
-				className="absolute -inset-0.5 rounded-2xl opacity-20 blur-md"
-				style={{ background: participantGradient }}
-			/>
+  return (
+    <div className="w-full relative" style={{ "--primary": participantColors.primary } as React.CSSProperties}>
+      <div className="absolute -inset-1 rounded-3xl opacity-30 blur-xl" style={{ background: participantGradient }} />
+      <div className="absolute -inset-0.5 rounded-2xl opacity-20 blur-md" style={{ background: participantGradient }} />
 
-			<div
-				className="relative w-full aspect-video rounded-2xl overflow-hidden bg-[var(--chalk-bg-tile)]"
-				style={{
-					backgroundImage: participantGradient,
-					boxShadow: "var(--chalk-shadow-lg), inset 0 1px 0 rgba(255,255,255,0.1)",
-				}}
-			>
-				<video
-					ref={videoRef}
-					autoPlay
-					playsInline
-					muted
-					className={cn(
-						"absolute inset-0 w-full h-full object-cover pointer-events-none",
-						isVideoEnabled ? "opacity-100" : "opacity-0",
-					)}
-					style={{ transform: "scaleX(-1)" }}
-				/>
+      <div
+        className="relative w-full aspect-video rounded-2xl overflow-hidden bg-[var(--chalk-bg-tile)]"
+        style={{
+          backgroundImage: participantGradient,
+          boxShadow: "var(--chalk-shadow-lg), inset 0 1px 0 rgba(255,255,255,0.1)",
+        }}
+      >
+        <video ref={videoRef} autoPlay playsInline muted className={cn("absolute inset-0 w-full h-full object-cover pointer-events-none", isVideoEnabled ? "opacity-100" : "opacity-0")} style={{ transform: "scaleX(-1)" }} />
 
-				<div className="absolute top-4 left-4 z-20">
-					<div
-						className="flex items-center gap-3 px-3 py-2 rounded-full"
-						style={{
-							background: "var(--chalk-lobby-glass-bg)",
-							borderColor: "var(--chalk-lobby-glass-border)",
-							backdropFilter: "blur(16px)",
-							border: "1px solid var(--chalk-lobby-glass-border)",
-						}}
-					>
-						<div
-							className={cn(
-								"w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors",
-								isAudioEnabled
-									? "bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]"
-									: "bg-muted-foreground/40",
-							)}
-						/>
-						<span className="text-sm font-medium text-(--foreground)">
-							{displayName || "You"}
-						</span>
+        <div className="absolute top-4 left-4 z-20">
+          <div
+            className="flex items-center gap-3 px-3 py-2 rounded-full"
+            style={{
+              background: "var(--chalk-lobby-glass-bg)",
+              borderColor: "var(--chalk-lobby-glass-border)",
+              backdropFilter: "blur(16px)",
+              border: "1px solid var(--chalk-lobby-glass-border)",
+            }}
+          >
+            <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors", isAudioEnabled ? "bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]" : "bg-muted-foreground/40")} />
+            <span className="text-sm font-medium text-(--foreground)">{displayName || "You"}</span>
 
-						{isAudioEnabled && (
-							<div className="w-16 h-1.5 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
-								<div
-									className="h-full bg-[var(--primary)] rounded-full"
-									style={{
-										width: `${normalizedAudioLevel}%`,
-										transition: "width 50ms ease-out",
-									}}
-								/>
-							</div>
-						)}
-					</div>
-				</div>
+            {isAudioEnabled && (
+              <div className="w-16 h-1.5 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[var(--primary)] rounded-full"
+                  style={{
+                    width: `${normalizedAudioLevel}%`,
+                    transition: "width 50ms ease-out",
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
 
-				{!isVideoEnabled && (
-					<div className="absolute inset-0 flex items-center justify-center">
-						{isAudioEnabled && audioLevel > 0.05 && (
-							<div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-								<div
-									className="absolute rounded-full bg-primary/20 animate-ping"
-									style={{
-										width: 120 + audioLevel * 100,
-										height: 120 + audioLevel * 100,
-										animationDuration: "1.5s",
-									}}
-								/>
-								<div
-									className="absolute rounded-full bg-primary/10 animate-ping"
-									style={{
-										width: 160 + audioLevel * 150,
-										height: 160 + audioLevel * 150,
-										animationDuration: "2s",
-										animationDelay: "0.2s",
-									}}
-								/>
-							</div>
-						)}
-						<Avatar
-							name={displayName}
-							size="2xl"
-							className="opacity-90 relative z-10 transition-transform duration-75"
-							style={{
-								transform: `scale(${1 + audioLevel * 0.1})`,
-							}}
-						/>
-					</div>
-				)}
+        {!isVideoEnabled && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            {isAudioEnabled && audioLevel > 0.05 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div
+                  className="absolute rounded-full bg-primary/20 animate-ping"
+                  style={{
+                    width: 120 + audioLevel * 100,
+                    height: 120 + audioLevel * 100,
+                    animationDuration: "1.5s",
+                  }}
+                />
+                <div
+                  className="absolute rounded-full bg-primary/10 animate-ping"
+                  style={{
+                    width: 160 + audioLevel * 150,
+                    height: 160 + audioLevel * 150,
+                    animationDuration: "2s",
+                    animationDelay: "0.2s",
+                  }}
+                />
+              </div>
+            )}
+            <Avatar
+              name={displayName}
+              size="2xl"
+              className="opacity-90 relative z-10 transition-transform duration-75"
+              style={{
+                transform: `scale(${1 + audioLevel * 0.1})`,
+              }}
+            />
+          </div>
+        )}
 
-				{controls}
-			</div>
-		</div>
-	);
+        {controls}
+      </div>
+    </div>
+  );
 }

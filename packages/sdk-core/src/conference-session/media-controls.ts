@@ -3,10 +3,7 @@ import { ChalkErrorCode, type ChalkError, type Participant, type ScreenShareOpti
 import type { VideoBackgroundEffect } from "../types/entities/media.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import { withPatchedGetDisplayMedia } from "../utils/get-display-media-fallback.ts";
-import {
-  createConferenceSessionVideoBackgroundController,
-  isConferenceSessionVideoBackgroundSupported,
-} from "./video-background-controller.ts";
+import { createConferenceSessionVideoBackgroundController, isConferenceSessionVideoBackgroundSupported } from "./video-background-controller.ts";
 
 interface MediaControllerDeps {
   getRtkClient: () => RealtimeKitClient | undefined;
@@ -214,9 +211,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     }
   };
 
-  const applyBackgroundEffect = async (
-    effect: VideoBackgroundEffect,
-  ): Promise<boolean> => {
+  const applyBackgroundEffect = async (effect: VideoBackgroundEffect): Promise<boolean> => {
     const rtkClient = deps.getRtkClient();
     const localParticipant = deps.getLocalParticipant();
 

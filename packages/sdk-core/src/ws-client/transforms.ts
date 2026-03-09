@@ -109,17 +109,13 @@ export const toWhiteboardClosed = (payload: WhiteboardClosedPayload) => ({
   timestamp: toDate(payload.timestamp),
 });
 
-export const toAnnotationSessionStarted = (
-  payload: AnnotationSessionStartedPayload,
-) => ({
+export const toAnnotationSessionStarted = (payload: AnnotationSessionStartedPayload) => ({
   shareSessionId: payload.shareSessionId,
   sharerParticipantId: payload.sharerParticipantId,
   accessMode: payload.accessMode,
 });
 
-export const toAnnotationSessionEnded = (
-  payload: AnnotationSessionEndedPayload,
-) => ({
+export const toAnnotationSessionEnded = (payload: AnnotationSessionEndedPayload) => ({
   shareSessionId: payload.shareSessionId,
   endedAt: toDate(payload.timestamp),
 });
@@ -140,9 +136,7 @@ export const toAnnotationCursor = (payload: AnnotationCursorPayload) => ({
   timestamp: toDate(payload.timestamp),
 });
 
-export const toAnnotationAccessChanged = (
-  payload: AnnotationAccessChangedPayload,
-) => ({
+export const toAnnotationAccessChanged = (payload: AnnotationAccessChangedPayload) => ({
   ...payload,
   timestamp: toDate(payload.timestamp),
 });

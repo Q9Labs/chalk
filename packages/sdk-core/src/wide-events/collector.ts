@@ -31,137 +31,133 @@ import type { WideEvent, WideEventConfig } from "./types";
  * ```
  */
 export class WideEventCollector {
-	private _config: WideEventConfig = {
-		enabled: false,
-		includeDebugInfo: false,
-	};
-	private _sessionId: string;
-	private _roomId: string | null = null;
-	private _participantId: string | null = null;
-	private _activeContext: WideEventContext | null = null;
-	private _emitter: ((event: WideEvent) => void) | null = null;
+  private _config: WideEventConfig = {
+    enabled: false,
+    includeDebugInfo: false,
+  };
+  private _sessionId: string;
+  private _roomId: string | null = null;
+  private _participantId: string | null = null;
+  private _activeContext: WideEventContext | null = null;
+  private _emitter: ((event: WideEvent) => void) | null = null;
 
-	constructor() {
-		this._sessionId = generateSessionId();
-	}
+  constructor() {
+    this._sessionId = generateSessionId();
+  }
 
-	/**
-	 * Configure the collector
-	 */
-	configure(config: WideEventConfig): void {
-		this._config = { ...this._config, ...config };
+  /**
+   * Configure the collector
+   */
+  configure(config: WideEventConfig): void {
+    this._config = { ...this._config, ...config };
 
-		if (config.sessionId) {
-			this._sessionId = config.sessionId;
-		}
+    if (config.sessionId) {
+      this._sessionId = config.sessionId;
+    }
 
-		this._emitter = createEmitter(this._config);
-	}
+    this._emitter = createEmitter(this._config);
+  }
 
-	/**
-	 * Get current configuration
-	 */
-	get config(): WideEventConfig {
-		return this._config;
-	}
+  /**
+   * Get current configuration
+   */
+  get config(): WideEventConfig {
+    return this._config;
+  }
 
-	/**
-	 * Get current session ID
-	 */
-	get sessionId(): string {
-		return this._sessionId;
-	}
+  /**
+   * Get current session ID
+   */
+  get sessionId(): string {
+    return this._sessionId;
+  }
 
-	/**
-	 * Get current room ID
-	 */
-	get roomId(): string | null {
-		return this._roomId;
-	}
+  /**
+   * Get current room ID
+   */
+  get roomId(): string | null {
+    return this._roomId;
+  }
 
-	/**
-	 * Set current room ID (for event context)
-	 */
-	setRoomId(roomId: string | null): void {
-		this._roomId = roomId;
-	}
+  /**
+   * Set current room ID (for event context)
+   */
+  setRoomId(roomId: string | null): void {
+    this._roomId = roomId;
+  }
 
-	/**
-	 * Get current participant ID
-	 */
-	get participantId(): string | null {
-		return this._participantId;
-	}
+  /**
+   * Get current participant ID
+   */
+  get participantId(): string | null {
+    return this._participantId;
+  }
 
-	/**
-	 * Set current participant ID (for event context)
-	 */
-	setParticipantId(participantId: string | null): void {
-		this._participantId = participantId;
-	}
+  /**
+   * Set current participant ID (for event context)
+   */
+  setParticipantId(participantId: string | null): void {
+    this._participantId = participantId;
+  }
 
-	/**
-	 * Check if wide events are enabled
-	 */
-	get isEnabled(): boolean {
-		return this._config.enabled ?? false;
-	}
+  /**
+   * Check if wide events are enabled
+   */
+  get isEnabled(): boolean {
+    return this._config.enabled ?? false;
+  }
 
-	/**
-	 * Start a new event context
-	 */
-	start(eventType: string): WideEventContext {
-		const ctx = new WideEventContext(eventType, this);
-		this._activeContext = ctx;
-		return ctx;
-	}
+  /**
+   * Start a new event context
+   */
+  start(eventType: string): WideEventContext {
+    const ctx = new WideEventContext(eventType, this);
+    this._activeContext = ctx;
+    return ctx;
+  }
 
-	/**
-	 * Get the currently active context (if any)
-	 */
-	get activeContext(): WideEventContext | null {
-		return this._activeContext;
-	}
+  /**
+   * Get the currently active context (if any)
+   */
+  get activeContext(): WideEventContext | null {
+    return this._activeContext;
+  }
 
-	/**
-	 * Enrich the active context with additional data
-	 * Useful for Effect-based code that can't easily pass context
-	 */
-	enrichActiveContext(key: string, value: unknown): void {
-		if (this._activeContext && !this._activeContext.isCompleted) {
-			this._activeContext.set(key, value);
-		}
-	}
+  /**
+   * Enrich the active context with additional data
+   * Useful for Effect-based code that can't easily pass context
+   */
+  enrichActiveContext(key: string, value: unknown): void {
+    if (this._activeContext && !this._activeContext.isCompleted) {
+      this._activeContext.set(key, value);
+    }
+  }
 
-	/**
-	 * Emit a completed event
-	 */
-	emit(event: WideEvent): void {
-		if (!this._config.enabled && !this._config.handler) return;
+  /**
+   * Emit a completed event
+   */
+  emit(event: WideEvent): void {
+    if (!this._config.enabled && !this._config.handler) return;
 
-		if (this._emitter) {
-			this._emitter(event);
-		}
+    if (this._emitter) {
+      this._emitter(event);
+    }
 
-		// Clear active context if it matches
-		if (
-			this._activeContext &&
-			this._activeContext.isCompleted &&
-			event.eventId === (this._activeContext as unknown as { eventId: string }).eventId
-		) {
-			this._activeContext = null;
-		}
-	}
+    // Clear active context if it matches
+    if (this._activeContext && this._activeContext.isCompleted && event.eventId === (this._activeContext as unknown as { eventId: string }).eventId) {
+      this._activeContext = null;
+    }
+  }
 
-	/**
-	 * Reset collector state (for testing or reconnection)
-	 */
-	reset(): void {
-		this._roomId = null;
-		this._participantId = null;
-		this._activeContext = null;
-		this._sessionId = generateSessionId();
-	}
+  /**
+   * Reset collector state (for testing or reconnection)
+   */
+  reset(): void {
+    this._roomId = null;
+    this._participantId = null;
+    this._activeContext = null;
+    this._sessionId = generateSessionId();
+  }
 }
 
 /**

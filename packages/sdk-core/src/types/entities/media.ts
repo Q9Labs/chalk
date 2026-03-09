@@ -20,10 +20,7 @@ export type VideoBackgroundMode = (typeof VIDEO_BACKGROUND_MODES)[number];
 /**
  * Runtime video background effect applied to the local published camera track.
  */
-export type VideoBackgroundEffect =
-	| { mode: "none" }
-	| { mode: "blur"; blurStrength?: number }
-	| { mode: "image"; imageUrl: string };
+export type VideoBackgroundEffect = { mode: "none" } | { mode: "blur"; blurStrength?: number } | { mode: "image"; imageUrl: string };
 
 /**
  * Information about an available media device
@@ -38,14 +35,14 @@ export type VideoBackgroundEffect =
  * ```
  */
 export interface MediaDevice {
-	/** Unique device identifier for selection */
-	deviceId: string;
+  /** Unique device identifier for selection */
+  deviceId: string;
 
-	/** Human-readable device name */
-	label: string;
+  /** Human-readable device name */
+  label: string;
 
-	/** Type of device */
-	kind: MediaDeviceKind;
+  /** Type of device */
+  kind: MediaDeviceKind;
 }
 
 /**
@@ -62,43 +59,43 @@ export type TrackSource = "camera" | "microphone" | "screen" | "screen_audio";
  * Represents a media track (audio or video)
  */
 export interface Track {
-	/** Unique track identifier */
-	readonly id: string;
+  /** Unique track identifier */
+  readonly id: string;
 
-	/** Type of track (audio/video) */
-	kind: TrackKind;
+  /** Type of track (audio/video) */
+  kind: TrackKind;
 
-	/** Source of the track */
-	source: TrackSource;
+  /** Source of the track */
+  source: TrackSource;
 
-	/** Whether the track is currently enabled */
-	enabled: boolean;
+  /** Whether the track is currently enabled */
+  enabled: boolean;
 
-	/** Underlying browser MediaStreamTrack */
-	mediaStreamTrack: MediaStreamTrack | null;
+  /** Underlying browser MediaStreamTrack */
+  mediaStreamTrack: MediaStreamTrack | null;
 }
 
 /**
  * Screen share options
  */
 export interface ScreenShareOptions {
-	/** Open annotation mode after the local share starts */
-	withAnnotations?: boolean;
+  /** Open annotation mode after the local share starts */
+  withAnnotations?: boolean;
 
-	/** Include system audio in the share (browser support varies) */
-	withAudio?: boolean;
+  /** Include system audio in the share (browser support varies) */
+  withAudio?: boolean;
 
-	/** Preferred display surface (monitor, window, browser) */
-	preferredDisplaySurface?: "monitor" | "window" | "browser";
+  /** Preferred display surface (monitor, window, browser) */
+  preferredDisplaySurface?: "monitor" | "window" | "browser";
 }
 
 /**
  * Audio level information for a participant
  */
 export interface AudioLevel {
-	/** Participant ID */
-	participantId: string;
+  /** Participant ID */
+  participantId: string;
 
-	/** Audio level (0.0 to 1.0) */
-	level: number;
+  /** Audio level (0.0 to 1.0) */
+  level: number;
 }

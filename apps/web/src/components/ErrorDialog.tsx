@@ -1,12 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { cn } from "@q9labs/chalk-ui";
-import { 
-  AlertCircleIcon,
-  CopyIcon, 
-  CheckIcon,
-  XIcon,
-  ChevronRightIcon
-} from "lucide-react";
+import { AlertCircleIcon, CopyIcon, CheckIcon, XIcon, ChevronRightIcon } from "lucide-react";
 
 export interface ErrorDialogProps {
   /** Whether the dialog is open */
@@ -24,13 +18,7 @@ export interface ErrorDialogProps {
 /**
  * Global error dialog for displaying system or API errors with debug info
  */
-export const ErrorDialog: React.FC<ErrorDialogProps> = ({
-  isOpen,
-  onClose,
-  message,
-  traceId,
-  className,
-}) => {
+export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, message, traceId, className }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopyTrace = () => {
@@ -53,30 +41,17 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm bg-background/80",
-        className
-      )}
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="error-title"
-      aria-describedby="error-desc"
-    >
-      <div
-        className="w-full max-w-md overflow-hidden rounded-xl shadow-2xl bg-card border border-destructive/20 flex flex-col animate-in fade-in zoom-in-95 duration-200"
-      >
+    <div className={cn("fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm bg-background/80", className)} role="alertdialog" aria-modal="true" aria-labelledby="error-title" aria-describedby="error-desc">
+      <div className="w-full max-w-md overflow-hidden rounded-xl shadow-2xl bg-card border border-destructive/20 flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <AlertCircleIcon size={20} className="text-destructive" />
-            <span id="error-title" className="font-semibold text-card-foreground">An error occurred</span>
+            <span id="error-title" className="font-semibold text-card-foreground">
+              An error occurred
+            </span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-md hover:bg-muted text-muted-foreground transition-colors"
-            aria-label="Close dialog"
-          >
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-muted text-muted-foreground transition-colors" aria-label="Close dialog">
             <XIcon size={18} />
           </button>
         </div>
@@ -90,16 +65,8 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({
           {traceId && (
             <div className="mt-6 p-3 rounded-lg bg-muted/50 border border-border">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Trace ID
-                </span>
-                <button
-                  onClick={handleCopyTrace}
-                  className={cn(
-                    "text-[10px] font-medium flex items-center gap-1 transition-colors",
-                    copied ? "text-green-500" : "text-primary hover:underline"
-                  )}
-                >
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Trace ID</span>
+                <button onClick={handleCopyTrace} className={cn("text-[10px] font-medium flex items-center gap-1 transition-colors", copied ? "text-green-500" : "text-primary hover:underline")}>
                   {copied ? (
                     <>
                       <CheckIcon size={10} /> Copied
@@ -111,19 +78,14 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({
                   )}
                 </button>
               </div>
-              <code className="text-[11px] font-mono text-muted-foreground break-all select-all">
-                {traceId}
-              </code>
+              <code className="text-[11px] font-mono text-muted-foreground break-all select-all">{traceId}</code>
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border bg-muted/30 flex items-center justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
-          >
+          <button onClick={onClose} className="px-6 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all">
             Close
           </button>
         </div>

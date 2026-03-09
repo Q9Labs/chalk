@@ -7,18 +7,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
 export interface UseRoomReturn {
-	/** Current room ID (null if not connected) */
-	roomId: string | null;
-	/** Room name */
-	roomName: string | null;
-	/** Connection status */
-	status: string;
-	/** Whether currently connected */
-	isConnected: boolean;
-	/** Whether join is in progress */
-	isJoining: boolean;
-	/** Host participant ID */
-	hostId: string | null;
+  /** Current room ID (null if not connected) */
+  roomId: string | null;
+  /** Room name */
+  roomName: string | null;
+  /** Connection status */
+  status: string;
+  /** Whether currently connected */
+  isConnected: boolean;
+  /** Whether join is in progress */
+  isJoining: boolean;
+  /** Host participant ID */
+  hostId: string | null;
 }
 
 /**
@@ -38,24 +38,24 @@ export interface UseRoomReturn {
  * ```
  */
 export function useRoom(): UseRoomReturn {
-	const session = useSession();
-	const { room } = session;
+  const session = useSession();
+  const { room } = session;
 
-	const [state, setState] = useState<RoomState>(() => room.getState());
+  const [state, setState] = useState<RoomState>(() => room.getState());
 
-	useEffect(() => {
-		return room.subscribe(setState);
-	}, [room]);
+  useEffect(() => {
+    return room.subscribe(setState);
+  }, [room]);
 
-	return useMemo(
-		(): UseRoomReturn => ({
-			roomId: state.roomId,
-			roomName: state.roomName,
-			status: state.status,
-			isConnected: state.status === "connected",
-			isJoining: state.isJoining,
-			hostId: state.hostId,
-		}),
-		[state],
-	);
+  return useMemo(
+    (): UseRoomReturn => ({
+      roomId: state.roomId,
+      roomName: state.roomName,
+      status: state.status,
+      isConnected: state.status === "connected",
+      isJoining: state.isJoining,
+      hostId: state.hostId,
+    }),
+    [state],
+  );
 }

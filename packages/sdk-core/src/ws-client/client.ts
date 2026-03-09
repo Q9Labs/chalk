@@ -87,11 +87,7 @@ export class WSClient extends WSClientBase {
     this.send({ type: "whiteboard.close" });
   }
 
-  sendAnnotationSessionStart(payload: {
-    shareSessionId: string;
-    sharerParticipantId: string;
-    accessMode: "all" | "sharer_only" | "off";
-  }): void {
+  sendAnnotationSessionStart(payload: { shareSessionId: string; sharerParticipantId: string; accessMode: "all" | "sharer_only" | "off" }): void {
     this.send({ type: "annotation.session.start", payload });
   }
 
@@ -106,13 +102,7 @@ export class WSClient extends WSClientBase {
     });
   }
 
-  sendAnnotationUpdate(payload: {
-    shareSessionId: string;
-    sharerParticipantId: string;
-    syncAll: boolean;
-    items: unknown[];
-    seq?: number;
-  }): void {
+  sendAnnotationUpdate(payload: { shareSessionId: string; sharerParticipantId: string; syncAll: boolean; items: unknown[]; seq?: number }): void {
     this.send({
       type: "annotation.update",
       payload: {
@@ -129,19 +119,11 @@ export class WSClient extends WSClientBase {
     this.send({ type: "annotation.clear", payload });
   }
 
-  sendAnnotationCursor(payload: {
-    shareSessionId: string;
-    tool: "pen" | "highlighter" | "rectangle" | "ellipse" | "line" | "arrow" | "text";
-    x: number;
-    y: number;
-  }): void {
+  sendAnnotationCursor(payload: { shareSessionId: string; tool: "pen" | "highlighter" | "rectangle" | "ellipse" | "line" | "arrow" | "text"; x: number; y: number }): void {
     this.send({ type: "annotation.cursor", payload });
   }
 
-  setAnnotationAccessMode(payload: {
-    shareSessionId: string;
-    accessMode: "all" | "sharer_only" | "off";
-  }): void {
+  setAnnotationAccessMode(payload: { shareSessionId: string; accessMode: "all" | "sharer_only" | "off" }): void {
     this.send({ type: "annotation.access.set", payload });
   }
 

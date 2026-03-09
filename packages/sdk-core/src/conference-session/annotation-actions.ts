@@ -1,8 +1,4 @@
-import type {
-  AnnotationAccessMode,
-  ScreenAnnotationItem,
-  ScreenAnnotationTool,
-} from "../types/entities/annotations.ts";
+import type { AnnotationAccessMode, ScreenAnnotationItem, ScreenAnnotationTool } from "../types/entities/annotations.ts";
 import type { Participant } from "../types.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import type { WSClient } from "../ws-client.ts";
@@ -15,14 +11,8 @@ interface AnnotationActionsDeps {
   getCurrentSharerParticipantId: () => string | null;
 }
 
-export const createConferenceSessionAnnotationActions = (
-  deps: AnnotationActionsDeps,
-) => {
-  const logAnnotationEvent = (
-    eventType: string,
-    outcome: "success" | "error",
-    data: Record<string, unknown>,
-  ): void => {
+export const createConferenceSessionAnnotationActions = (deps: AnnotationActionsDeps) => {
+  const logAnnotationEvent = (eventType: string, outcome: "success" | "error", data: Record<string, unknown>): void => {
     const ctx = wideEvents.start(eventType);
     ctx.merge(data);
     if (outcome === "success") {
@@ -32,16 +22,12 @@ export const createConferenceSessionAnnotationActions = (
 
     ctx.complete("error", {
       code: typeof data.code === "string" ? data.code : "ANNOTATION_EVENT_ERROR",
-      message:
-        typeof data.message === "string"
-          ? data.message
-          : "Screen annotation event failed",
+      message: typeof data.message === "string" ? data.message : "Screen annotation event failed",
     });
   };
 
   const canDrawAnnotations = (participantId?: string): boolean => {
-    const resolvedParticipantId =
-      participantId ?? deps.getLocalParticipant()?.id ?? null;
+    const resolvedParticipantId = participantId ?? deps.getLocalParticipant()?.id ?? null;
     if (!resolvedParticipantId) {
       return false;
     }
@@ -58,10 +44,7 @@ export const createConferenceSessionAnnotationActions = (
     return deps.getCurrentSharerParticipantId() === resolvedParticipantId;
   };
 
-  const startAnnotationSession = (
-    shareSessionId: string,
-    accessMode?: AnnotationAccessMode,
-  ): void => {
+  const startAnnotationSession = (shareSessionId: string, accessMode?: AnnotationAccessMode): void => {
     const localParticipant = deps.getLocalParticipant();
     if (!localParticipant) {
       logAnnotationEvent("annotation.session.start", "error", {
@@ -88,8 +71,7 @@ export const createConferenceSessionAnnotationActions = (
   };
 
   const endAnnotationSession = (shareSessionId?: string): void => {
-    const resolvedShareSessionId =
-      shareSessionId ?? deps.getCurrentShareSessionId();
+    const resolvedShareSessionId = shareSessionId ?? deps.getCurrentShareSessionId();
     if (!resolvedShareSessionId) {
       logAnnotationEvent("annotation.session.end", "error", {
         reason: "missing_share_session_id",
@@ -119,13 +101,7 @@ export const createConferenceSessionAnnotationActions = (
     deps.getWsClient()?.requestAnnotationSync(shareSessionId);
   };
 
-  const sendAnnotationUpdate = (payload: {
-    shareSessionId: string;
-    sharerParticipantId: string;
-    syncAll: boolean;
-    items: ScreenAnnotationItem[];
-    seq?: number;
-  }): void => {
+  const sendAnnotationUpdate = (payload: { shareSessionId: string; sharerParticipantId: string; syncAll: boolean; items: ScreenAnnotationItem[]; seq?: number }): void => {
     logAnnotationEvent("annotation.update.send", "success", {
       shareSessionId: payload.shareSessionId,
       sharerParticipantId: payload.sharerParticipantId,
@@ -136,12 +112,7 @@ export const createConferenceSessionAnnotationActions = (
     deps.getWsClient()?.sendAnnotationUpdate(payload);
   };
 
-  const sendAnnotationCursor = (payload: {
-    shareSessionId: string;
-    tool: ScreenAnnotationTool;
-    x: number;
-    y: number;
-  }): void => {
+  const sendAnnotationCursor = (payload: { shareSessionId: string; tool: ScreenAnnotationTool; x: number; y: number }): void => {
     logAnnotationEvent("annotation.cursor.send", "success", {
       shareSessionId: payload.shareSessionId,
       tool: payload.tool,
@@ -152,8 +123,7 @@ export const createConferenceSessionAnnotationActions = (
   };
 
   const clearAnnotations = (shareSessionId?: string): void => {
-    const resolvedShareSessionId =
-      shareSessionId ?? deps.getCurrentShareSessionId();
+    const resolvedShareSessionId = shareSessionId ?? deps.getCurrentShareSessionId();
     if (!resolvedShareSessionId) {
       logAnnotationEvent("annotation.clear", "error", {
         reason: "missing_share_session_id",
@@ -172,18 +142,12 @@ export const createConferenceSessionAnnotationActions = (
     });
   };
 
-  const setAnnotationAccessMode = (
-    accessMode: AnnotationAccessMode,
-    shareSessionId?: string,
-  ): void => {
+  const setAnnotationAccessMode = (accessMode: AnnotationAccessMode, shareSessionId?: string): void => {
     const localParticipant = deps.getLocalParticipant();
-    const resolvedShareSessionId =
-      shareSessionId ?? deps.getCurrentShareSessionId();
+    const resolvedShareSessionId = shareSessionId ?? deps.getCurrentShareSessionId();
     if (!localParticipant || !resolvedShareSessionId) {
       logAnnotationEvent("annotation.access.set", "error", {
-        reason: !localParticipant
-          ? "missing_local_participant"
-          : "missing_share_session_id",
+        reason: !localParticipant ? "missing_local_participant" : "missing_share_session_id",
         shareSessionId: resolvedShareSessionId ?? null,
         accessMode,
         code: "ANNOTATION_ACCESS_PREREQUISITE_MISSING",

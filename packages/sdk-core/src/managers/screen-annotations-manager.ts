@@ -8,16 +8,7 @@
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import type { ConferenceSession } from "../room";
 import { StateContainer } from "../state/state-container";
-import type {
-  AnnotationAccessMode,
-  ScreenAnnotationAccessChange,
-  ScreenAnnotationCursor,
-  ScreenAnnotationItem,
-  ScreenAnnotationSession,
-  ScreenAnnotationSnapshot,
-  ScreenAnnotationTool,
-  ScreenAnnotationUpdate,
-} from "../types/entities/annotations.ts";
+import type { AnnotationAccessMode, ScreenAnnotationAccessChange, ScreenAnnotationCursor, ScreenAnnotationItem, ScreenAnnotationSession, ScreenAnnotationSnapshot, ScreenAnnotationTool, ScreenAnnotationUpdate } from "../types/entities/annotations.ts";
 import { TypedEventEmitter } from "../utils/typed-emitter";
 import { wideEvents } from "../wide-events/index.ts";
 
@@ -65,10 +56,7 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
     });
   }
 
-  on<K extends keyof ScreenAnnotationsManagerEvents>(
-    event: K,
-    handler: (data: ScreenAnnotationsManagerEvents[K]) => void,
-  ): () => void {
+  on<K extends keyof ScreenAnnotationsManagerEvents>(event: K, handler: (data: ScreenAnnotationsManagerEvents[K]) => void): () => void {
     return this.events.on(event, handler);
   }
 
@@ -90,10 +78,7 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
     this.roomUnsubscribers = [];
   }
 
-  private emitTelemetry(
-    eventType: string,
-    data: Record<string, unknown> = {},
-  ): void {
+  private emitTelemetry(eventType: string, data: Record<string, unknown> = {}): void {
     if (!wideEvents.isEnabled) {
       return;
     }
@@ -117,10 +102,7 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
   private syncDerivedState(): void {
     const state = this.getState();
     this.setState({
-      canDraw:
-        Boolean(this.room) &&
-        state.isSessionActive &&
-        this.room!.canDrawAnnotations(),
+      canDraw: Boolean(this.room) && state.isSessionActive && this.room!.canDrawAnnotations(),
     });
   }
 
@@ -283,11 +265,7 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
     this.setState({ isOpen: !this.getState().isOpen });
   }
 
-  startSession(
-    shareSessionId: string,
-    sharerParticipantId: string,
-    accessMode: AnnotationAccessMode = DEFAULT_ACCESS_MODE,
-  ): void {
+  startSession(shareSessionId: string, sharerParticipantId: string, accessMode: AnnotationAccessMode = DEFAULT_ACCESS_MODE): void {
     if (!this.room) {
       throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
     }
@@ -331,8 +309,7 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
       throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
     }
 
-    const resolvedShareSessionId =
-      shareSessionId ?? this.getState().shareSessionId ?? undefined;
+    const resolvedShareSessionId = shareSessionId ?? this.getState().shareSessionId ?? undefined;
     this.emitTelemetry("annotations.session.end", {
       requestedShareSessionId: resolvedShareSessionId ?? null,
       transport: "manager",

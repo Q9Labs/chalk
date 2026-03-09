@@ -37,7 +37,7 @@ export type {
   WhiteboardOpenedPayload,
   WhiteboardClosedPayload,
   PermissionChangedPayload,
-} from './server-events';
+} from "./server-events";
 
 // Client events (Client → Server)
 export type {
@@ -58,10 +58,7 @@ export type {
   PermissionGrantPayload,
   PermissionRevokePayload,
   WsMessage,
-} from './client-events';
+} from "./client-events";
 
 // Message type maps for wire protocol
-export {
-  serverMessageTypeMap,
-  clientMessageTypeMap,
-} from './client-events';
+export { serverMessageTypeMap, clientMessageTypeMap } from "./client-events";

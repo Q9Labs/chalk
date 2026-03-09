@@ -126,8 +126,7 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       getRtkClient: () => this.rtkClient,
       getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
       emitError: (error) => this.emit("error", error),
-      reapplyBackgroundEffect: () =>
-        this.mediaController.reapplyBackgroundEffect(),
+      reapplyBackgroundEffect: () => this.mediaController.reapplyBackgroundEffect(),
     });
 
     this.interactionActions = createConferenceSessionInteractionActions({
@@ -507,10 +506,7 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     return this.annotationActions.canDrawAnnotations(participantId);
   }
 
-  startAnnotationSession(
-    shareSessionId: string,
-    accessMode?: ScreenAnnotationAccessMode,
-  ): void {
+  startAnnotationSession(shareSessionId: string, accessMode?: ScreenAnnotationAccessMode): void {
     this.annotationActions.startAnnotationSession(shareSessionId, accessMode);
   }
 
@@ -522,22 +518,11 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     this.annotationActions.requestAnnotationSync();
   }
 
-  sendAnnotationUpdate(payload: {
-    shareSessionId: string;
-    sharerParticipantId: string;
-    syncAll: boolean;
-    items: ScreenAnnotationItem[];
-    seq?: number;
-  }): void {
+  sendAnnotationUpdate(payload: { shareSessionId: string; sharerParticipantId: string; syncAll: boolean; items: ScreenAnnotationItem[]; seq?: number }): void {
     this.annotationActions.sendAnnotationUpdate(payload);
   }
 
-  sendAnnotationCursor(payload: {
-    shareSessionId: string;
-    tool: ScreenAnnotationTool;
-    x: number;
-    y: number;
-  }): void {
+  sendAnnotationCursor(payload: { shareSessionId: string; tool: ScreenAnnotationTool; x: number; y: number }): void {
     this.annotationActions.sendAnnotationCursor(payload);
   }
 
@@ -545,17 +530,11 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     this.annotationActions.clearAnnotations(shareSessionId);
   }
 
-  setAnnotationAccessMode(
-    accessMode: ScreenAnnotationAccessMode,
-    shareSessionId?: string,
-  ): void {
+  setAnnotationAccessMode(accessMode: ScreenAnnotationAccessMode, shareSessionId?: string): void {
     this.annotationActions.setAnnotationAccessMode(accessMode, shareSessionId);
   }
 
-  _setAnnotationSession(
-    shareSessionId: string | null,
-    sharerParticipantId: string | null,
-  ): void {
+  _setAnnotationSession(shareSessionId: string | null, sharerParticipantId: string | null): void {
     this._annotationShareSessionId = shareSessionId;
     this._annotationSharerParticipantId = sharerParticipantId;
   }

@@ -9,11 +9,11 @@
  * Reaction on a chat message
  */
 export interface MessageReaction {
-	/** Emoji character */
-	emoji: string;
+  /** Emoji character */
+  emoji: string;
 
-	/** Participant IDs who reacted with this emoji */
-	participantIds: string[];
+  /** Participant IDs who reacted with this emoji */
+  participantIds: string[];
 }
 
 /**
@@ -29,73 +29,63 @@ export interface MessageReaction {
  * ```
  */
 export interface ChatAttachment {
-	readonly id: string;
-	fileName: string;
-	mimeType: string;
-	sizeBytes: number;
-	kind: "image" | "document" | "file";
+  readonly id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: "image" | "document" | "file";
 }
 
 export interface ChatReadReceipt {
-	participantId: string;
-	displayName: string;
-	readAt: Date;
+  participantId: string;
+  displayName: string;
+  readAt: Date;
 }
 
 export interface ChatMessage {
-	/** Unique message identifier (UUID) */
-	readonly id: string;
+  /** Unique message identifier (UUID) */
+  readonly id: string;
 
-	/** Message content (plain text) */
-	content: string;
+  /** Message content (plain text) */
+  content: string;
 
-	/** Participant ID of the sender */
-	senderId: string;
+  /** Participant ID of the sender */
+  senderId: string;
 
-	/** Display name of the sender */
-	senderName: string;
+  /** Display name of the sender */
+  senderName: string;
 
-	/** When the message was sent */
-	timestamp: Date;
+  /** When the message was sent */
+  timestamp: Date;
 
-	/** Attached files for this message */
-	attachments?: ChatAttachment[];
+  /** Attached files for this message */
+  attachments?: ChatAttachment[];
 
-	/** Sender-visible read receipts */
-	readBy?: ChatReadReceipt[];
+  /** Sender-visible read receipts */
+  readBy?: ChatReadReceipt[];
 
-	/** Emoji reactions on this message */
-	reactions: MessageReaction[];
+  /** Emoji reactions on this message */
+  reactions: MessageReaction[];
 }
 
 /**
  * Emoji reaction sent by a participant (floating reaction, not on a message)
  */
 export interface Reaction {
-	/** Participant ID who sent the reaction */
-	participantId: string;
+  /** Participant ID who sent the reaction */
+  participantId: string;
 
-	/** Display name of the participant */
-	participantName: string;
+  /** Display name of the participant */
+  participantName: string;
 
-	/** Emoji character */
-	emoji: string;
+  /** Emoji character */
+  emoji: string;
 
-	/** When the reaction was sent */
-	timestamp: Date;
+  /** When the reaction was sent */
+  timestamp: Date;
 }
 
 /**
  * Available reaction emojis
  */
-export type ReactionEmoji =
-	| "👍"
-	| "👎"
-	| "❤️"
-	| "🎉"
-	| "😂"
-	| "😮"
-	| "😢"
-	| "🤔"
-	| "👏"
-	| "🙌";
+export type ReactionEmoji = "👍" | "👎" | "❤️" | "🎉" | "😂" | "😮" | "😢" | "🤔" | "👏" | "🙌";

@@ -20,12 +20,12 @@ POST /api/v1/tenants
 }
 ```
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `name` | string | Yes | - | Tenant display name |
-| `max_concurrent_rooms` | int | No | 100 | Maximum rooms running simultaneously |
-| `max_participants_per_room` | int | No | 10 | Maximum participants per room |
-| `max_recording_duration_minutes` | int | No | 120 | Maximum recording duration in minutes |
+| Field                            | Type   | Required | Default | Description                           |
+| -------------------------------- | ------ | -------- | ------- | ------------------------------------- |
+| `name`                           | string | Yes      | -       | Tenant display name                   |
+| `max_concurrent_rooms`           | int    | No       | 100     | Maximum rooms running simultaneously  |
+| `max_participants_per_room`      | int    | No       | 10      | Maximum participants per room         |
+| `max_recording_duration_minutes` | int    | No       | 120     | Maximum recording duration in minutes |
 
 ### Response
 
@@ -176,10 +176,7 @@ PATCH merges with existing config — only provided fields are updated.
   "transcription_language": "es-ES",
   "transcription_profanity_filter": true,
   "transcription_keywords": ["chemistry", "equation", "formula"],
-  "allowed_origins": [
-    "https://app.acme.edu",
-    "https://learn.acme.edu"
-  ],
+  "allowed_origins": ["https://app.acme.edu", "https://learn.acme.edu"],
   "post_meeting_webhook": {
     "enabled": true,
     "url": "https://api.acme.edu/webhooks/chalk",
@@ -203,20 +200,20 @@ PATCH merges with existing config — only provided fields are updated.
 
 ### Config Fields
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `force_recording` | bool | false | Force recording for all rooms |
-| `auto_start_recording` | bool | false | Start recording when room begins |
-| `allow_early_join` | bool | true | Allow joining before scheduled time |
-| `empty_room_timeout_minutes` | int | 30 | Minutes before empty room closes |
-| `recording_retention_days` | int | 30 | Days to retain recordings |
-| `duplicate_participant_policy` | string | "reject" | How to handle duplicate participants |
-| `transcription_enabled` | bool | true | Enable live transcription |
-| `transcription_language` | string | "en-US" | Transcription language code |
-| `transcription_profanity_filter` | bool | false | Filter profanity in transcripts |
-| `transcription_keywords` | string[] | [] | Keywords for transcription accuracy |
-| `allowed_origins` | string[] | [] | CORS origins (max 20, valid URLs only) |
-| `post_meeting_webhook` | object | null | Post-meeting webhook configuration |
+| Field                            | Type     | Default  | Description                            |
+| -------------------------------- | -------- | -------- | -------------------------------------- |
+| `force_recording`                | bool     | false    | Force recording for all rooms          |
+| `auto_start_recording`           | bool     | false    | Start recording when room begins       |
+| `allow_early_join`               | bool     | true     | Allow joining before scheduled time    |
+| `empty_room_timeout_minutes`     | int      | 30       | Minutes before empty room closes       |
+| `recording_retention_days`       | int      | 30       | Days to retain recordings              |
+| `duplicate_participant_policy`   | string   | "reject" | How to handle duplicate participants   |
+| `transcription_enabled`          | bool     | true     | Enable live transcription              |
+| `transcription_language`         | string   | "en-US"  | Transcription language code            |
+| `transcription_profanity_filter` | bool     | false    | Filter profanity in transcripts        |
+| `transcription_keywords`         | string[] | []       | Keywords for transcription accuracy    |
+| `allowed_origins`                | string[] | []       | CORS origins (max 20, valid URLs only) |
+| `post_meeting_webhook`           | object   | null     | Post-meeting webhook configuration     |
 
 ### Allowed Origins
 
@@ -226,20 +223,20 @@ PATCH merges with existing config — only provided fields are updated.
 
 ### Post-Meeting Webhook Object
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | bool | Enable webhook delivery |
-| `url` | string | Webhook endpoint URL |
-| `secret` | string | Signature verification secret |
-| `include_recording` | bool | Include recording URL |
-| `include_transcript` | bool | Include transcript data |
-| `include_summary` | bool | Include AI summary |
-| `include_action_items` | bool | Include extracted action items |
-| `transcription.provider` | string | Transcription provider |
-| `transcription.api_key` | string | Provider API key |
-| `ai.provider` | string | AI provider for summaries |
-| `ai.api_key` | string | AI provider API key |
-| `ai.model` | string | AI model to use |
+| Field                    | Type   | Description                    |
+| ------------------------ | ------ | ------------------------------ |
+| `enabled`                | bool   | Enable webhook delivery        |
+| `url`                    | string | Webhook endpoint URL           |
+| `secret`                 | string | Signature verification secret  |
+| `include_recording`      | bool   | Include recording URL          |
+| `include_transcript`     | bool   | Include transcript data        |
+| `include_summary`        | bool   | Include AI summary             |
+| `include_action_items`   | bool   | Include extracted action items |
+| `transcription.provider` | string | Transcription provider         |
+| `transcription.api_key`  | string | Provider API key               |
+| `ai.provider`            | string | AI provider for summaries      |
+| `ai.api_key`             | string | AI provider API key            |
+| `ai.model`               | string | AI model to use                |
 
 ### Response
 
@@ -258,10 +255,7 @@ PATCH merges with existing config — only provided fields are updated.
       "transcription_language": "es-ES",
       "transcription_profanity_filter": true,
       "transcription_keywords": ["chemistry", "equation", "formula"],
-      "allowed_origins": [
-        "https://app.acme.edu",
-        "https://learn.acme.edu"
-      ]
+      "allowed_origins": ["https://app.acme.edu", "https://learn.acme.edu"]
     },
     "updated_at": "2026-01-06T12:00:00Z"
   }

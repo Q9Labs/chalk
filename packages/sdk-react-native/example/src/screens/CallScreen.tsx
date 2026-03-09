@@ -1,20 +1,10 @@
-import React, {useEffect, useState, useMemo} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView} from 'react-native';
-import {
-  useChalk,
-  useRoom,
-  useMedia,
-  useParticipants,
-  useInteractions,
-  useLocalStream,
-  ParticipantTile,
-  AudioSession,
-  type ReactionEmoji,
-} from '@q9labs/chalk-react-native';
-import type {Participant} from '@q9labs/chalk-core';
+import React, { useEffect, useState, useMemo } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView } from "react-native";
+import { useChalk, useRoom, useMedia, useParticipants, useInteractions, useLocalStream, ParticipantTile, AudioSession, type ReactionEmoji } from "@q9labs/chalk-react-native";
+import type { Participant } from "@q9labs/chalk-core";
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
-const {Lineicons} = require('@lineiconshq/react-native-lineicons') as {Lineicons: any};
-const freeIcons = require('@lineiconshq/free-icons') as Record<string, any>;
+const { Lineicons } = require("@lineiconshq/react-native-lineicons") as { Lineicons: any };
+const freeIcons = require("@lineiconshq/free-icons") as Record<string, any>;
 /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 
 interface CallScreenProps {
@@ -32,50 +22,35 @@ function chunk<T>(arr: T[], size: number): T[][] {
 }
 
 // Icon components using LineIcons
-function MicIcon({muted}: {muted: boolean}) {
+function MicIcon({ muted }: { muted: boolean }) {
   return (
     <View style={iconStyles.container}>
-      <Lineicons
-        icon={freeIcons.Microphone1Stroke}
-        size={24}
-        color={muted ? 'rgba(255,255,255,0.5)' : '#fff'}
-        strokeWidth={1.5}
-      />
+      <Lineicons icon={freeIcons.Microphone1Stroke} size={24} color={muted ? "rgba(255,255,255,0.5)" : "#fff"} strokeWidth={1.5} />
       {muted && <View style={iconStyles.slash} />}
     </View>
   );
 }
 
-function CamIcon({off}: {off: boolean}) {
+function CamIcon({ off }: { off: boolean }) {
   return (
     <View style={iconStyles.container}>
-      <Lineicons
-        icon={freeIcons.CameraMovie1Stroke}
-        size={24}
-        color={off ? 'rgba(255,255,255,0.5)' : '#fff'}
-        strokeWidth={1.5}
-      />
+      <Lineicons icon={freeIcons.CameraMovie1Stroke} size={24} color={off ? "rgba(255,255,255,0.5)" : "#fff"} strokeWidth={1.5} />
       {off && <View style={iconStyles.slash} />}
     </View>
   );
 }
 
-function HandIcon({raised}: {raised: boolean}) {
+function HandIcon({ raised }: { raised: boolean }) {
   return (
     <View style={iconStyles.container}>
-      <Lineicons
-        icon={freeIcons.HandStopStroke}
-        size={24}
-        color={raised ? '#FFD700' : '#fff'}
-        strokeWidth={1.5}
-      />
+      <Lineicons icon={freeIcons.HandStopStroke} size={24} color={raised ? "#FFD700" : "#fff"} strokeWidth={1.5} />
     </View>
   );
 }
 
 function EndCallIcon() {
   return (
-    <View style={[iconStyles.container, {transform: [{rotate: '135deg'}]}]}>
+    <View style={[iconStyles.container, { transform: [{ rotate: "135deg" }] }]}>
       <Lineicons icon={freeIcons.PhoneStroke} size={24} color="#fff" strokeWidth={1.5} />
     </View>
   );
@@ -84,18 +59,13 @@ function EndCallIcon() {
 function SwitchCameraIcon() {
   return (
     <View style={iconStyles.container}>
-      <Lineicons
-        icon={freeIcons.RefreshCircle1ClockwiseStroke}
-        size={20}
-        color="#fff"
-        strokeWidth={1.5}
-      />
+      <Lineicons icon={freeIcons.RefreshCircle1ClockwiseStroke} size={20} color="#fff" strokeWidth={1.5} />
     </View>
   );
 }
 
 // Floating reaction component
-function FloatingReaction({emoji, onComplete}: {emoji: string; onComplete: () => void}) {
+function FloatingReaction({ emoji, onComplete }: { emoji: string; onComplete: () => void }) {
   const [animation] = useState(new Animated.Value(0));
 
   useEffect(() => {
@@ -122,24 +92,20 @@ function FloatingReaction({emoji, onComplete}: {emoji: string; onComplete: () =>
   });
 
   return (
-    <Animated.View
-      style={[
-        styles.floatingReaction,
-        {transform: [{translateY}, {scale}], opacity},
-      ]}>
+    <Animated.View style={[styles.floatingReaction, { transform: [{ translateY }, { scale }], opacity }]}>
       <Text style={styles.floatingEmoji}>{emoji}</Text>
     </Animated.View>
   );
 }
 
-export function CallScreen({roomId, onLeave}: CallScreenProps) {
-  const {leaveRoom, rtcManager, joinRoom} = useChalk();
-  const {room, isConnected, status} = useRoom();
-  const {isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio} = useMedia();
-  const {localParticipant, remoteParticipants} = useParticipants();
-  const {isHandRaised, toggleHand, sendReaction, activeReactions} = useInteractions();
-  const {stream, startStream, isActive} = useLocalStream();
-  const [floatingReactions, setFloatingReactions] = useState<{id: string; emoji: string}[]>([]);
+export function CallScreen({ roomId, onLeave }: CallScreenProps) {
+  const { leaveRoom, rtcManager, joinRoom } = useChalk();
+  const { room, isConnected, status } = useRoom();
+  const { isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio } = useMedia();
+  const { localParticipant, remoteParticipants } = useParticipants();
+  const { isHandRaised, toggleHand, sendReaction, activeReactions } = useInteractions();
+  const { stream, startStream, isActive } = useLocalStream();
+  const [floatingReactions, setFloatingReactions] = useState<{ id: string; emoji: string }[]>([]);
 
   // Build local participant with stream for video grid
   const localWithStream = useMemo<Participant | null>(() => {
@@ -165,14 +131,14 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
   // Join the room when component mounts
   useEffect(() => {
     if (!room) {
-      joinRoom(roomId, {displayName: 'Mobile User'});
+      joinRoom(roomId, { displayName: "Mobile User" });
     }
   }, [roomId, room, joinRoom]);
 
   // Start local stream when entering call
   useEffect(() => {
     if (!isActive) {
-      startStream({video: true, audio: true});
+      startStream({ video: true, audio: true });
     }
   }, [isActive, startStream]);
 
@@ -180,12 +146,12 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
   useEffect(() => {
     if (activeReactions.length > 0) {
       const latest = activeReactions[activeReactions.length - 1];
-      setFloatingReactions(prev => [...prev, {id: latest.id, emoji: latest.emoji}]);
+      setFloatingReactions((prev) => [...prev, { id: latest.id, emoji: latest.emoji }]);
     }
   }, [activeReactions]);
 
   const removeFloatingReaction = (id: string) => {
-    setFloatingReactions(prev => prev.filter(r => r.id !== id));
+    setFloatingReactions((prev) => prev.filter((r) => r.id !== id));
   };
 
   const handleLeave = async () => {
@@ -203,20 +169,20 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
     }
   };
 
-  const REACTIONS: {emoji: ReactionEmoji; label: string}[] = [
-    {emoji: '👍', label: 'Like'},
-    {emoji: '❤️', label: 'Love'},
-    {emoji: '😂', label: 'Laugh'},
-    {emoji: '🎉', label: 'Celebrate'},
-    {emoji: '🤔', label: 'Think'},
+  const REACTIONS: { emoji: ReactionEmoji; label: string }[] = [
+    { emoji: "👍", label: "Like" },
+    { emoji: "❤️", label: "Love" },
+    { emoji: "😂", label: "Laugh" },
+    { emoji: "🎉", label: "Celebrate" },
+    { emoji: "🤔", label: "Think" },
   ];
 
   // Derive status text from connection state
   const getStatusText = () => {
-    if (isConnected) return 'Live';
-    if (status === 'connecting') return 'Connecting';
-    if (status === 'disconnected') return 'Demo Mode';
-    return status || 'Demo Mode';
+    if (isConnected) return "Live";
+    if (status === "connecting") return "Connecting";
+    if (status === "disconnected") return "Demo Mode";
+    return status || "Demo Mode";
   };
 
   return (
@@ -224,164 +190,114 @@ export function CallScreen({roomId, onLeave}: CallScreenProps) {
       <View style={styles.container}>
         {/* Floating Reactions */}
         <View style={styles.floatingContainer}>
-        {floatingReactions.map(reaction => (
-          <FloatingReaction
-            key={reaction.id}
-            emoji={reaction.emoji}
-            onComplete={() => removeFloatingReaction(reaction.id)}
-          />
-        ))}
-      </View>
-
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.roomLabel}>ROOM</Text>
-          <Text style={styles.roomName} numberOfLines={1}>
-            {roomId.replace('test-', '')}
-          </Text>
-        </View>
-        <View style={styles.statusBadge}>
-          <View style={[styles.statusDot, isConnected && styles.statusConnected]} />
-          <Text style={styles.statusText}>{getStatusText()}</Text>
-        </View>
-      </View>
-
-      {/* Video Grid Area */}
-      <View style={styles.videoGrid}>
-        {/* Participant count badge */}
-        <View style={styles.participantBadge}>
-          <Text style={styles.participantCount}>{allParticipants.length}</Text>
-          <Text style={styles.participantLabel}>
-            {allParticipants.length === 1 ? 'participant' : 'participants'}
-          </Text>
-        </View>
-
-        {/* Video tiles for all participants */}
-        {allParticipants.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Waiting for participants...</Text>
-          </View>
-        ) : allParticipants.length === 1 ? (
-          // Single participant - full screen
-          <View style={styles.singleTile}>
-            <ParticipantTile
-              participant={allParticipants[0]!}
-              mirror={allParticipants[0]?.isLocal}
-              style={styles.fullTile}
-            />
-            {/* Switch camera button for local video */}
-            {allParticipants[0]?.isLocal && (
-              <TouchableOpacity
-                style={styles.switchCameraButton}
-                onPress={handleSwitchCamera}
-                activeOpacity={0.7}>
-                <SwitchCameraIcon />
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : allParticipants.length <= 4 ? (
-          // 2-4 participants - 2x2 grid
-          <View style={styles.gridContainer}>
-            <View style={styles.gridRow}>
-              {allParticipants.slice(0, 2).map((p) => (
-                <ParticipantTile
-                  key={p.id}
-                  participant={p}
-                  mirror={p.isLocal}
-                  style={styles.gridTile}
-                />
-              ))}
-            </View>
-            {allParticipants.length > 2 && (
-              <View style={styles.gridRow}>
-                {allParticipants.slice(2, 4).map((p) => (
-                  <ParticipantTile
-                    key={p.id}
-                    participant={p}
-                    mirror={p.isLocal}
-                    style={styles.gridTile}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-        ) : (
-          // 5+ participants - scrollable grid
-          <ScrollView style={styles.scrollGrid} contentContainerStyle={styles.scrollContent}>
-            {chunk(allParticipants, 2).map((row, i) => (
-              <View key={i} style={styles.gridRow}>
-                {row.map((p) => (
-                  <ParticipantTile
-                    key={p.id}
-                    participant={p}
-                    mirror={p.isLocal}
-                    style={styles.scrollTile}
-                  />
-                ))}
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
-
-      {/* Quick Reactions Bar */}
-      <View style={styles.reactionsBar}>
-        <Text style={styles.reactionsLabel}>React</Text>
-        <View style={styles.reactionsRow}>
-          {REACTIONS.map(({emoji}) => (
-            <TouchableOpacity
-              key={emoji}
-              style={styles.reactionButton}
-              onPress={() => sendReaction(emoji)}
-              activeOpacity={0.7}>
-              <Text style={styles.reactionEmoji}>{emoji}</Text>
-            </TouchableOpacity>
+          {floatingReactions.map((reaction) => (
+            <FloatingReaction key={reaction.id} emoji={reaction.emoji} onComplete={() => removeFloatingReaction(reaction.id)} />
           ))}
         </View>
+
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.roomLabel}>ROOM</Text>
+            <Text style={styles.roomName} numberOfLines={1}>
+              {roomId.replace("test-", "")}
+            </Text>
+          </View>
+          <View style={styles.statusBadge}>
+            <View style={[styles.statusDot, isConnected && styles.statusConnected]} />
+            <Text style={styles.statusText}>{getStatusText()}</Text>
+          </View>
+        </View>
+
+        {/* Video Grid Area */}
+        <View style={styles.videoGrid}>
+          {/* Participant count badge */}
+          <View style={styles.participantBadge}>
+            <Text style={styles.participantCount}>{allParticipants.length}</Text>
+            <Text style={styles.participantLabel}>{allParticipants.length === 1 ? "participant" : "participants"}</Text>
+          </View>
+
+          {/* Video tiles for all participants */}
+          {allParticipants.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Waiting for participants...</Text>
+            </View>
+          ) : allParticipants.length === 1 ? (
+            // Single participant - full screen
+            <View style={styles.singleTile}>
+              <ParticipantTile participant={allParticipants[0]!} mirror={allParticipants[0]?.isLocal} style={styles.fullTile} />
+              {/* Switch camera button for local video */}
+              {allParticipants[0]?.isLocal && (
+                <TouchableOpacity style={styles.switchCameraButton} onPress={handleSwitchCamera} activeOpacity={0.7}>
+                  <SwitchCameraIcon />
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : allParticipants.length <= 4 ? (
+            // 2-4 participants - 2x2 grid
+            <View style={styles.gridContainer}>
+              <View style={styles.gridRow}>
+                {allParticipants.slice(0, 2).map((p) => (
+                  <ParticipantTile key={p.id} participant={p} mirror={p.isLocal} style={styles.gridTile} />
+                ))}
+              </View>
+              {allParticipants.length > 2 && (
+                <View style={styles.gridRow}>
+                  {allParticipants.slice(2, 4).map((p) => (
+                    <ParticipantTile key={p.id} participant={p} mirror={p.isLocal} style={styles.gridTile} />
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            // 5+ participants - scrollable grid
+            <ScrollView style={styles.scrollGrid} contentContainerStyle={styles.scrollContent}>
+              {chunk(allParticipants, 2).map((row, i) => (
+                <View key={i} style={styles.gridRow}>
+                  {row.map((p) => (
+                    <ParticipantTile key={p.id} participant={p} mirror={p.isLocal} style={styles.scrollTile} />
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* Quick Reactions Bar */}
+        <View style={styles.reactionsBar}>
+          <Text style={styles.reactionsLabel}>React</Text>
+          <View style={styles.reactionsRow}>
+            {REACTIONS.map(({ emoji }) => (
+              <TouchableOpacity key={emoji} style={styles.reactionButton} onPress={() => sendReaction(emoji)} activeOpacity={0.7}>
+                <Text style={styles.reactionEmoji}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Control Bar */}
+        <View style={styles.controlBar}>
+          <TouchableOpacity style={[styles.controlButton, !isAudioEnabled && styles.controlOff]} onPress={toggleAudio} activeOpacity={0.8}>
+            <MicIcon muted={!isAudioEnabled} />
+            <Text style={styles.controlLabel}>{isAudioEnabled ? "Mute" : "Unmute"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.controlButton, !isVideoEnabled && styles.controlOff]} onPress={toggleVideo} activeOpacity={0.8}>
+            <CamIcon off={!isVideoEnabled} />
+            <Text style={styles.controlLabel}>{isVideoEnabled ? "Stop" : "Start"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.controlButton, isHandRaised && styles.controlActive]} onPress={toggleHand} activeOpacity={0.8}>
+            <HandIcon raised={isHandRaised} />
+            <Text style={styles.controlLabel}>{isHandRaised ? "Lower" : "Raise"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.endCallButton} onPress={handleLeave} activeOpacity={0.8}>
+            <EndCallIcon />
+            <Text style={styles.endCallLabel}>Leave</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      {/* Control Bar */}
-      <View style={styles.controlBar}>
-        <TouchableOpacity
-          style={[styles.controlButton, !isAudioEnabled && styles.controlOff]}
-          onPress={toggleAudio}
-          activeOpacity={0.8}>
-          <MicIcon muted={!isAudioEnabled} />
-          <Text style={styles.controlLabel}>
-            {isAudioEnabled ? 'Mute' : 'Unmute'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, !isVideoEnabled && styles.controlOff]}
-          onPress={toggleVideo}
-          activeOpacity={0.8}>
-          <CamIcon off={!isVideoEnabled} />
-          <Text style={styles.controlLabel}>
-            {isVideoEnabled ? 'Stop' : 'Start'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, isHandRaised && styles.controlActive]}
-          onPress={toggleHand}
-          activeOpacity={0.8}>
-          <HandIcon raised={isHandRaised} />
-          <Text style={styles.controlLabel}>
-            {isHandRaised ? 'Lower' : 'Raise'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.endCallButton}
-          onPress={handleLeave}
-          activeOpacity={0.8}>
-          <EndCallIcon />
-          <Text style={styles.endCallLabel}>Leave</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
     </AudioSession>
   );
 }
@@ -390,65 +306,65 @@ const iconStyles = StyleSheet.create({
   container: {
     width: 28,
     height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   slash: {
-    position: 'absolute',
+    position: "absolute",
     width: 2,
     height: 32,
-    backgroundColor: '#FF3B30',
-    transform: [{rotate: '45deg'}],
+    backgroundColor: "#FF3B30",
+    transform: [{ rotate: "45deg" }],
   },
 });
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0f0f',
+    backgroundColor: "#0f0f0f",
   },
   floatingContainer: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 200,
     left: 0,
     right: 0,
-    alignItems: 'center',
+    alignItems: "center",
     zIndex: 100,
   },
   floatingReaction: {
-    position: 'absolute',
+    position: "absolute",
   },
   floatingEmoji: {
     fontSize: 48,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: "rgba(255,255,255,0.1)",
   },
   headerLeft: {
     flex: 1,
   },
   roomLabel: {
-    color: 'rgba(255,255,255,0.4)',
+    color: "rgba(255,255,255,0.4)",
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 1,
     marginBottom: 2,
   },
   roomName: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
@@ -457,36 +373,36 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#FF9500',
+    backgroundColor: "#FF9500",
     marginRight: 6,
   },
   statusConnected: {
-    backgroundColor: '#30D158',
+    backgroundColor: "#30D158",
   },
   statusText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: "rgba(255,255,255,0.7)",
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   videoGrid: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyText: {
-    color: 'rgba(255,255,255,0.5)',
+    color: "rgba(255,255,255,0.5)",
     fontSize: 16,
   },
   singleTile: {
     flex: 1,
-    width: '100%',
-    position: 'relative',
+    width: "100%",
+    position: "relative",
   },
   fullTile: {
     flex: 1,
@@ -494,12 +410,12 @@ const styles = StyleSheet.create({
   },
   gridContainer: {
     flex: 1,
-    width: '100%',
+    width: "100%",
     gap: 8,
   },
   gridRow: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   gridTile: {
@@ -508,7 +424,7 @@ const styles = StyleSheet.create({
   },
   scrollGrid: {
     flex: 1,
-    width: '100%',
+    width: "100%",
   },
   scrollContent: {
     gap: 8,
@@ -520,99 +436,99 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   switchCameraButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 12,
     right: 12,
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   participantBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     left: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     zIndex: 10,
   },
   participantCount: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   participantLabel: {
-    color: 'rgba(255,255,255,0.6)',
+    color: "rgba(255,255,255,0.6)",
     fontSize: 12,
   },
   reactionsBar: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: "rgba(255,255,255,0.1)",
   },
   reactionsLabel: {
-    color: 'rgba(255,255,255,0.4)',
+    color: "rgba(255,255,255,0.4)",
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 0.5,
     marginBottom: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   reactionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 12,
   },
   reactionButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: "rgba(255,255,255,0.1)",
   },
   reactionEmoji: {
     fontSize: 22,
   },
   controlBar: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "flex-start",
     paddingVertical: 20,
     paddingBottom: 44,
     gap: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   controlButton: {
-    alignItems: 'center',
+    alignItems: "center",
     width: 64,
   },
   controlOff: {},
   controlActive: {},
   controlLabel: {
-    color: 'rgba(255,255,255,0.6)',
+    color: "rgba(255,255,255,0.6)",
     fontSize: 11,
     marginTop: 6,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   endCallButton: {
-    alignItems: 'center',
+    alignItems: "center",
     width: 64,
   },
   endCallLabel: {
-    color: '#FF3B30',
+    color: "#FF3B30",
     fontSize: 11,
     marginTop: 6,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

@@ -4,17 +4,17 @@ on:
   push:
     branches: [master]
     paths:
-      - 'apps/web/**'
-      - 'packages/**'
-      - '.github/workflows/web.yml'
+      - "apps/web/**"
+      - "packages/**"
+      - ".github/workflows/web.yml"
   pull_request:
     paths:
-      - 'apps/web/**'
-      - 'packages/**'
+      - "apps/web/**"
+      - "packages/**"
   workflow_dispatch:
     inputs:
       force_deploy:
-        description: 'Force deploy even without changes'
+        description: "Force deploy even without changes"
         required: false
         type: boolean
         default: false

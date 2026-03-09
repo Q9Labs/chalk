@@ -63,11 +63,9 @@ export abstract class StateContainer<TState extends object> {
    * Update state and notify listeners.
    * Accepts partial state or updater function.
    */
-  protected setState(
-    updater: Partial<TState> | ((prev: TState) => Partial<TState>)
-  ): void {
+  protected setState(updater: Partial<TState> | ((prev: TState) => Partial<TState>)): void {
     const prevState = this.state;
-    const updates = typeof updater === 'function' ? updater(prevState) : updater;
+    const updates = typeof updater === "function" ? updater(prevState) : updater;
     this.state = { ...prevState, ...updates };
     this.listeners.forEach((listener) => {
       try {

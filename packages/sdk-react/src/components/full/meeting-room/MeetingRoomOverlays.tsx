@@ -53,10 +53,7 @@ export function MeetingRoomOverlays({
   selectedAudioOutput,
   volume = 1,
 }: MeetingRoomOverlaysProps) {
-  const meetingLink =
-    typeof window !== "undefined"
-      ? getMeetingShareLink(window.location.href)
-      : "";
+  const meetingLink = typeof window !== "undefined" ? getMeetingShareLink(window.location.href) : "";
 
   return (
     <>

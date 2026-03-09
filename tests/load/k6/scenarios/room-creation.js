@@ -19,117 +19,113 @@ const preAllocatedVUs = Math.max(50, Math.round(activeUsers * 0.1 * rateMultipli
 const maxVUs = Math.max(preAllocatedVUs * 2, Math.round(activeUsers * 0.2 * rateMultiplier));
 const minRoomsCreated = isShort ? 100 : 500;
 const stages = isShort
-	? [
-			{ duration: "15s", target: rampRate },
-			{ duration: "30s", target: peakRate },
-			{ duration: "1m", target: peakRate },
-			{ duration: "15s", target: 0 },
-		]
-	: [
-			{ duration: "30s", target: rampRate }, // Ramp up
-			{ duration: "2m", target: peakRate }, // Ramp to peak
-			{ duration: "5m", target: peakRate }, // Hold at peak
-			{ duration: "30s", target: 0 }, // Ramp down
-		];
+  ? [
+      { duration: "15s", target: rampRate },
+      { duration: "30s", target: peakRate },
+      { duration: "1m", target: peakRate },
+      { duration: "15s", target: 0 },
+    ]
+  : [
+      { duration: "30s", target: rampRate }, // Ramp up
+      { duration: "2m", target: peakRate }, // Ramp to peak
+      { duration: "5m", target: peakRate }, // Hold at peak
+      { duration: "30s", target: 0 }, // Ramp down
+    ];
 
 let loggedErrors = 0;
 
 export const options = {
-	scenarios: {
-		room_storm: {
-			executor: "ramping-arrival-rate",
-			startRate,
-			timeUnit: "1s",
-			preAllocatedVUs,
-			maxVUs,
-			stages,
-		},
-	},
-	setupTimeout: "5m",
-	thresholds: {
-		http_req_failed: ["rate<0.1"],
-		room_create_time: ["p(95)<1000"],
-		rooms_created: [`count>${minRoomsCreated}`],
-	},
+  scenarios: {
+    room_storm: {
+      executor: "ramping-arrival-rate",
+      startRate,
+      timeUnit: "1s",
+      preAllocatedVUs,
+      maxVUs,
+      stages,
+    },
+  },
+  setupTimeout: "5m",
+  thresholds: {
+    http_req_failed: ["rate<0.1"],
+    room_create_time: ["p(95)<1000"],
+    rooms_created: [`count>${minRoomsCreated}`],
+  },
 };
 
 export function setup() {
-	const token = getAuthToken();
-	if (__ENV.ROOM_CREATE_CLEANUP === "true") {
-		const headers = { Authorization: `Bearer ${token}` };
+  const token = getAuthToken();
+  if (__ENV.ROOM_CREATE_CLEANUP === "true") {
+    const headers = { Authorization: `Bearer ${token}` };
 
-		// Cleanup any active rooms to avoid tenant limit failures
-		for (let i = 0; i < 50; i += 1) {
-			const listRes = http.get(`${BASE_URL}/api/v1/rooms?limit=100&offset=0`, {
-				headers,
-			});
-			if (listRes.status !== 200) {
-				break;
-			}
+    // Cleanup any active rooms to avoid tenant limit failures
+    for (let i = 0; i < 50; i += 1) {
+      const listRes = http.get(`${BASE_URL}/api/v1/rooms?limit=100&offset=0`, {
+        headers,
+      });
+      if (listRes.status !== 200) {
+        break;
+      }
 
-			const listBody = listRes.json();
-			const rooms = listBody && listBody.rooms ? listBody.rooms : [];
-			if (rooms.length === 0) {
-				break;
-			}
+      const listBody = listRes.json();
+      const rooms = listBody && listBody.rooms ? listBody.rooms : [];
+      if (rooms.length === 0) {
+        break;
+      }
 
-			for (const room of rooms) {
-				if (room && room.id) {
-					http.post(`${BASE_URL}/api/v1/rooms/${room.id}/end`, null, {
-						headers,
-					});
-				}
-			}
-		}
-	}
+      for (const room of rooms) {
+        if (room && room.id) {
+          http.post(`${BASE_URL}/api/v1/rooms/${room.id}/end`, null, {
+            headers,
+          });
+        }
+      }
+    }
+  }
 
-	return { token };
+  return { token };
 }
 
 export default function (data) {
-	const start = Date.now();
+  const start = Date.now();
 
-	const res = http.post(
-		`${BASE_URL}/api/v1/rooms`,
-		JSON.stringify({
-			name: `stress-room-${__VU}-${__ITER}-${Date.now()}`,
-		}),
-		{
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${data.token}`,
-			},
-		},
-	);
+  const res = http.post(
+    `${BASE_URL}/api/v1/rooms`,
+    JSON.stringify({
+      name: `stress-room-${__VU}-${__ITER}-${Date.now()}`,
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${data.token}`,
+      },
+    },
+  );
 
-	roomCreateTime.add(Date.now() - start);
+  roomCreateTime.add(Date.now() - start);
 
-	if (check(res, { "room created": (r) => r.status === 201 })) {
-		roomsCreated.add(1);
-		const body = res.json();
-		if (body && body.id) {
-			const endStart = Date.now();
-			const endRes = http.post(
-				`${BASE_URL}/api/v1/rooms/${body.id}/end`,
-				null,
-				{
-					headers: {
-						Authorization: `Bearer ${data.token}`,
-					},
-				},
-			);
-			roomEndTime.add(Date.now() - endStart);
-			if (check(endRes, { "room ended": (r) => r.status === 200 })) {
-				roomsEnded.add(1);
-			} else if (loggedErrors < 5) {
-				loggedErrors += 1;
-				console.log(`Room end failed: ${endRes.status} - ${endRes.body}`);
-			}
-		}
-	} else {
-		if (loggedErrors < 5) {
-			loggedErrors += 1;
-			console.log(`Room creation failed: ${res.status} - ${res.body}`);
-		}
-	}
+  if (check(res, { "room created": (r) => r.status === 201 })) {
+    roomsCreated.add(1);
+    const body = res.json();
+    if (body && body.id) {
+      const endStart = Date.now();
+      const endRes = http.post(`${BASE_URL}/api/v1/rooms/${body.id}/end`, null, {
+        headers: {
+          Authorization: `Bearer ${data.token}`,
+        },
+      });
+      roomEndTime.add(Date.now() - endStart);
+      if (check(endRes, { "room ended": (r) => r.status === 200 })) {
+        roomsEnded.add(1);
+      } else if (loggedErrors < 5) {
+        loggedErrors += 1;
+        console.log(`Room end failed: ${endRes.status} - ${endRes.body}`);
+      }
+    }
+  } else {
+    if (loggedErrors < 5) {
+      loggedErrors += 1;
+      console.log(`Room creation failed: ${res.status} - ${res.body}`);
+    }
+  }
 }

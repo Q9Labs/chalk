@@ -1,434 +1,434 @@
 {
-    "queryLanguage": "CWLI",
-    "results": [
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:40:18.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:40:13,182 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwcbkwAGmXyWsAAAAFIgASiTxq3HxzMwk8atx8czOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:39:17.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:39:13,001 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAflwWcgAGmXyQsAAABNIgASjK6anHxzMwyumpx8czOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:38:17.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:38:12,831 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1dYKgAGmXyNgAAAAXIgASjrlKbHxzMw65Smx8czOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:37:17.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:37:12,655 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBBokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpk0yoYAAAAAiUYyDwAGmXyHEAAABGIgASiKwKLHxzMwisCix8czOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:36:17.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:36:12,472 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAfltzNgAGmXyHMAAABNIgASir657HxzMwq+uex8czOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:35:17.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:35:12,307 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1aeOgAGmXyCEAAAAXIgASjLlpvHxzMwy5abx8czOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:34:17.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:34:12,134 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpDh9uQAAAAA/CXMHgAGmXyBQAAAB0IgASjrwZfHxzMw68GXx8czOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:33:16.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:33:11,967 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC873DWgAGmXx8MAAAB2IgASii5ZPHxzMwouWTx8czOAFAZEjeDlCYBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:32:16.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:32:11,799 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBRokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpWnHRsAAAACJuUpPQAGmXx6UAAAAbIgASjDkJDHxzMww5CQx8czOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:31:16.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:31:11,620 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpDh9uQAAAAA/CQ1JwAGmXx0cAAAB0IgASjju4zHxzMw47uMx8czOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:30:16.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:30:11,447 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQABokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBofs9W4AAAACCyITzwAGmXxwAAAABuIgASiD54jHxzMwg+eIx8czOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:29:16.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:29:11,280 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87vMgQAGmXxrwAAAB2IgASijkoXHxzMwo5KFx8czOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:28:16.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:28:11,114 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1USBAAGmXxpkAAAAXIgASjCvYHHxzMwwr2Bx8czOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:27:15.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:27:11,036 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "Cp0BCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI1GhgCBpZQTfYAAAAC87rZOQAGmXxj0AAAB2IgASibjPrGxzMw++D9xsczOAJAyAFI+Q9QswcgAhABGAE="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:26:15.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:26:10,873 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "Cp0BCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI1GhgCBpZQTfYAAAAC87rZOQAGmXxj0AAAB2IgASibjPrGxzMw++D9xsczOAJAyAFI+Q9QswcgAhAAGAE="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:25:15.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:25:10,701 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAfliE/gAGmXxboAAABNIgASi7t/bGxzMwu7f2xsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:24:15.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:24:10,539 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87nUYgAGmXxbYAAAB2IgASjb4vLGxzMw2+LyxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:23:15.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:23:10,361 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87jToQAGmXxTIAAAB2IgASj7je/GxzMw+43vxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:22:15.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:22:10,192 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwKx4wAGmXxQ8AAAAFIgASiauevGxzMwmrnrxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:21:14.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:21:10,027 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAfld20QAGmXxLYAAABNIgASjS3OfGxzMw0tznxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:20:14.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:20:09,862 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBRokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpWnHRsAAAACJuGu8gAGmXxIkAAAAbIgASjzh+TGxzMw84fkxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:19:14.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:19:09,689 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAflb1ewAGmXxCIAAABNIgASiTs+DGxzMwk7PgxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:18:14.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:18:09,524 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1K0UwAGmXxDwAAAAXIgASiz3tzGxzMws97cxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:17:14.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:17:09,368 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpDh9uQAAAAA/B1HqgAGmXw9QAAAB0IgASjSidnGxzMw0onZxsczOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:16:14.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:16:09,208 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87YVaAAGmXw8AAAAB2IgASjytNXGxzMw8rTVxsczOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:15:14.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:15:09,019 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1Hz6AAGmXw4MAAAAXIgASiS4NHGxzMwkuDRxsczOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:14:13.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:14:08,885 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwD4CQAGmXw2IAAAAFIgASjKg87GxzMwyoPOxsczOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:13:13.195"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:13:08,665 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwBsHgAGmXwtoAAAAFIgASjrrsrGxzMw667KxsczOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:12:13.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:12:08,498 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQABokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBofs9W4AAAACCxtI4QAGmXwvsAAABuIgASiK2sbGxzMwitrGxsczOAFAZEjfDlCZBiACEAAYAQ=="
-            }
-        ],
-        [
-            {
-                "field": "@timestamp",
-                "value": "2026-02-20 02:11:13.194"
-            },
-            {
-                "field": "@message",
-                "value": "2026-02-20 02:11:08,328 - whisper-worker - INFO - whisper.queue_depth"
-            },
-            {
-                "field": "@ptr",
-                "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBBokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpk0yoYAAAAAiTzsmgAGmXwl8AAABGIgASiqhcPGxzMwqoXDxsczOAFAZEjgDlCaBiACEAAYAQ=="
-            }
-        ]
+  "queryLanguage": "CWLI",
+  "results": [
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:40:18.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:40:13,182 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwcbkwAGmXyWsAAAAFIgASiTxq3HxzMwk8atx8czOAFAZEjgDlCaBiACEAAYAQ=="
+      }
     ],
-    "statistics": {
-        "recordsMatched": 3023.0,
-        "recordsScanned": 3023.0,
-        "estimatedRecordsSkipped": 0.0,
-        "bytesScanned": 305888.0,
-        "estimatedBytesSkipped": 0.0,
-        "logGroupsScanned": 1.0
-    },
-    "status": "Complete"
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:39:17.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:39:13,001 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAflwWcgAGmXyQsAAABNIgASjK6anHxzMwyumpx8czOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:38:17.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:38:12,831 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1dYKgAGmXyNgAAAAXIgASjrlKbHxzMw65Smx8czOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:37:17.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:37:12,655 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBBokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpk0yoYAAAAAiUYyDwAGmXyHEAAABGIgASiKwKLHxzMwisCix8czOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:36:17.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:36:12,472 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAfltzNgAGmXyHMAAABNIgASir657HxzMwq+uex8czOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:35:17.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:35:12,307 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1aeOgAGmXyCEAAAAXIgASjLlpvHxzMwy5abx8czOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:34:17.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:34:12,134 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpDh9uQAAAAA/CXMHgAGmXyBQAAAB0IgASjrwZfHxzMw68GXx8czOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:33:16.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:33:11,967 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC873DWgAGmXx8MAAAB2IgASii5ZPHxzMwouWTx8czOAFAZEjeDlCYBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:32:16.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:32:11,799 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBRokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpWnHRsAAAACJuUpPQAGmXx6UAAAAbIgASjDkJDHxzMww5CQx8czOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:31:16.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:31:11,620 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpDh9uQAAAAA/CQ1JwAGmXx0cAAAB0IgASjju4zHxzMw47uMx8czOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:30:16.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:30:11,447 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQABokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBofs9W4AAAACCyITzwAGmXxwAAAABuIgASiD54jHxzMwg+eIx8czOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:29:16.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:29:11,280 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87vMgQAGmXxrwAAAB2IgASijkoXHxzMwo5KFx8czOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:28:16.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:28:11,114 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1USBAAGmXxpkAAAAXIgASjCvYHHxzMwwr2Bx8czOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:27:15.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:27:11,036 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "Cp0BCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI1GhgCBpZQTfYAAAAC87rZOQAGmXxj0AAAB2IgASibjPrGxzMw++D9xsczOAJAyAFI+Q9QswcgAhABGAE="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:26:15.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:26:10,873 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "Cp0BCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI1GhgCBpZQTfYAAAAC87rZOQAGmXxj0AAAB2IgASibjPrGxzMw++D9xsczOAJAyAFI+Q9QswcgAhAAGAE="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:25:15.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:25:10,701 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAfliE/gAGmXxboAAABNIgASi7t/bGxzMwu7f2xsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:24:15.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:24:10,539 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87nUYgAGmXxbYAAAB2IgASjb4vLGxzMw2+LyxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:23:15.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:23:10,361 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87jToQAGmXxTIAAAB2IgASj7je/GxzMw+43vxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:22:15.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:22:10,192 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwKx4wAGmXxQ8AAAAFIgASiauevGxzMwmrnrxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:21:14.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:21:10,027 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAfld20QAGmXxLYAAABNIgASjS3OfGxzMw0tznxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:20:14.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:20:09,862 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBRokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpWnHRsAAAACJuGu8gAGmXxIkAAAAbIgASjzh+TGxzMw84fkxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:19:14.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:19:09,689 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeR1h0AAAAAflb1ewAGmXxCIAAABNIgASiTs+DGxzMwk7PgxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:18:14.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:18:09,524 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1K0UwAGmXxDwAAAAXIgASiz3tzGxzMws97cxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:17:14.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:17:09,368 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpDh9uQAAAAA/B1HqgAGmXw9QAAAB0IgASjSidnGxzMw0onZxsczOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:16:14.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:16:09,208 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBhokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpZQTfYAAAAC87YVaAAGmXw8AAAAB2IgASjytNXGxzMw8rTVxsczOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:15:14.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:15:09,019 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQARokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpeh8/cAAAAAH1Hz6AAGmXw4MAAAAXIgASiS4NHGxzMwkuDRxsczOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:14:13.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:14:08,885 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwD4CQAGmXw2IAAAAFIgASjKg87GxzMwyoPOxsczOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:13:13.195"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:13:08,665 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQAxokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpadpqUAAAAASwBsHgAGmXwtoAAAAFIgASjrrsrGxzMw667KxsczOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:12:13.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:12:08,498 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQABokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBofs9W4AAAACCxtI4QAGmXwvsAAABuIgASiK2sbGxzMwitrGxsczOAFAZEjfDlCZBiACEAAYAQ=="
+      }
+    ],
+    [
+      {
+        "field": "@timestamp",
+        "value": "2026-02-20 02:11:13.194"
+      },
+      {
+        "field": "@message",
+        "value": "2026-02-20 02:11:08,328 - whisper-worker - INFO - whisper.queue_depth"
+      },
+      {
+        "field": "@ptr",
+        "value": "CpwBCmIKKDY4ODgxOTE0MTg5MjovYXdzL2VjMi9jaGFsay13aGlzcGVyLXByb2QQBBokN2I5Nzk0ODEtNTk2Zi00MDA0LWJkODctN2JkMGI1ZmE4NGZhIg4I2OCD9cYzEL/YtsfHMxI0GhgCBpk0yoYAAAAAiTzsmgAGmXwl8AAABGIgASiqhcPGxzMwqoXDxsczOAFAZEjgDlCaBiACEAAYAQ=="
+      }
+    ]
+  ],
+  "statistics": {
+    "recordsMatched": 3023.0,
+    "recordsScanned": 3023.0,
+    "estimatedRecordsSkipped": 0.0,
+    "bytesScanned": 305888.0,
+    "estimatedBytesSkipped": 0.0,
+    "logGroupsScanned": 1.0
+  },
+  "status": "Complete"
 }

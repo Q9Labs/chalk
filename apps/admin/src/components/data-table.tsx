@@ -1,13 +1,6 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function DataTable<T extends Record<string, unknown>>({
   data,
@@ -18,13 +11,13 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   emptyMessage = "No data found.",
 }: {
-  data: T[]
-  columns: { key: string; header: string; render?: (row: T) => React.ReactNode }[]
-  isLoading?: boolean
-  onLoadMore?: () => void
-  hasMore?: boolean
-  onRowClick?: (row: T) => void
-  emptyMessage?: string
+  data: T[];
+  columns: { key: string; header: string; render?: (row: T) => React.ReactNode }[];
+  isLoading?: boolean;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  onRowClick?: (row: T) => void;
+  emptyMessage?: string;
 }) {
   if (isLoading && data.length === 0) {
     return (
@@ -33,15 +26,11 @@ export function DataTable<T extends Record<string, unknown>>({
           <Skeleton key={i} className="h-12 w-full" />
         ))}
       </div>
-    )
+    );
   }
 
   if (data.length === 0) {
-    return (
-      <div className="text-center py-10 text-muted-foreground">
-        {emptyMessage}
-      </div>
-    )
+    return <div className="text-center py-10 text-muted-foreground">{emptyMessage}</div>;
   }
 
   return (
@@ -56,17 +45,9 @@ export function DataTable<T extends Record<string, unknown>>({
         </TableHeader>
         <TableBody>
           {data.map((row, i) => (
-            <TableRow
-              key={(row.id as string) || i}
-              className={onRowClick ? "cursor-pointer hover:bg-accent" : ""}
-              onClick={() => onRowClick?.(row)}
-            >
+            <TableRow key={(row.id as string) || i} className={onRowClick ? "cursor-pointer hover:bg-accent" : ""} onClick={() => onRowClick?.(row)}>
               {columns.map((col) => (
-                <TableCell key={col.key}>
-                  {col.render
-                    ? col.render(row)
-                    : String(row[col.key] ?? "—")}
-                </TableCell>
+                <TableCell key={col.key}>{col.render ? col.render(row) : String(row[col.key] ?? "—")}</TableCell>
               ))}
             </TableRow>
           ))}
@@ -80,5 +61,5 @@ export function DataTable<T extends Record<string, unknown>>({
         </div>
       )}
     </div>
-  )
+  );
 }

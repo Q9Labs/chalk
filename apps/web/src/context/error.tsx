@@ -31,12 +31,7 @@ export function ErrorProvider({ children }: { children: React.ReactNode }) {
   return (
     <ErrorContext.Provider value={{ showError, hideError }}>
       {children}
-      <ErrorDialog
-        isOpen={state.isOpen}
-        onClose={hideError}
-        message={state.message}
-        traceId={state.traceId}
-      />
+      <ErrorDialog isOpen={state.isOpen} onClose={hideError} message={state.message} traceId={state.traceId} />
     </ErrorContext.Provider>
   );
 }

@@ -2,11 +2,7 @@
  * useScreenAnnotations - Screen annotations from ScreenAnnotationsManager
  */
 
-import type {
-  AnnotationAccessMode,
-  ScreenAnnotationItem,
-  ScreenAnnotationsState,
-} from "@q9labs/chalk-core";
+import type { AnnotationAccessMode, ScreenAnnotationItem, ScreenAnnotationsState } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
@@ -23,11 +19,7 @@ export interface UseScreenAnnotationsReturn {
   open: () => void;
   close: () => void;
   toggle: () => void;
-  startSession: (
-    shareSessionId: string,
-    sharerParticipantId: string,
-    accessMode?: AnnotationAccessMode,
-  ) => void;
+  startSession: (shareSessionId: string, sharerParticipantId: string, accessMode?: AnnotationAccessMode) => void;
   replaceItems: (items: ScreenAnnotationItem[]) => void;
   clear: () => void;
   sendCursor: (x: number, y: number, tool: import("@q9labs/chalk-core").ScreenAnnotationTool) => void;
@@ -39,38 +31,19 @@ export function useScreenAnnotations(): UseScreenAnnotationsReturn {
   const session = useSession();
   const { annotations } = session;
 
-  const [state, setState] = useState<ScreenAnnotationsState>(() =>
-    annotations.getState(),
-  );
+  const [state, setState] = useState<ScreenAnnotationsState>(() => annotations.getState());
 
   useEffect(() => annotations.subscribe(setState), [annotations]);
 
   const open = useCallback(() => annotations.open(), [annotations]);
   const close = useCallback(() => annotations.close(), [annotations]);
   const toggle = useCallback(() => annotations.toggle(), [annotations]);
-  const startSession = useCallback(
-    (
-      shareSessionId: string,
-      sharerParticipantId: string,
-      accessMode?: AnnotationAccessMode,
-    ) => annotations.startSession(shareSessionId, sharerParticipantId, accessMode),
-    [annotations],
-  );
-  const replaceItems = useCallback(
-    (items: ScreenAnnotationItem[]) => annotations.replaceItems(items),
-    [annotations],
-  );
+  const startSession = useCallback((shareSessionId: string, sharerParticipantId: string, accessMode?: AnnotationAccessMode) => annotations.startSession(shareSessionId, sharerParticipantId, accessMode), [annotations]);
+  const replaceItems = useCallback((items: ScreenAnnotationItem[]) => annotations.replaceItems(items), [annotations]);
   const clear = useCallback(() => annotations.clear(), [annotations]);
-  const sendCursor = useCallback(
-    (x: number, y: number, tool: import("@q9labs/chalk-core").ScreenAnnotationTool) =>
-      annotations.sendCursor(x, y, tool),
-    [annotations],
-  );
+  const sendCursor = useCallback((x: number, y: number, tool: import("@q9labs/chalk-core").ScreenAnnotationTool) => annotations.sendCursor(x, y, tool), [annotations]);
   const requestSync = useCallback(() => annotations.requestSync(), [annotations]);
-  const setAccessMode = useCallback(
-    (accessMode: AnnotationAccessMode) => annotations.setAccessMode(accessMode),
-    [annotations],
-  );
+  const setAccessMode = useCallback((accessMode: AnnotationAccessMode) => annotations.setAccessMode(accessMode), [annotations]);
 
   return useMemo(
     () => ({

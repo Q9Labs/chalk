@@ -121,7 +121,7 @@ Ensure your app's manifest includes required permissions:
 ### Import the Module
 
 ```typescript
-import { NativeModules, DeviceEventEmitter } from 'react-native';
+import { NativeModules, DeviceEventEmitter } from "react-native";
 
 const { AudioSessionModule } = NativeModules;
 
@@ -132,23 +132,22 @@ export const audioSession = AudioSessionModule;
 ### Create a Hook
 
 ```typescript
-import { useEffect, useCallback } from 'react';
-import { NativeModules, DeviceEventEmitter } from 'react-native';
+import { useEffect, useCallback } from "react";
+import { NativeModules, DeviceEventEmitter } from "react-native";
 
 const { AudioSessionModule } = NativeModules;
 
 export function useAudioSession() {
   useEffect(() => {
     // Configure audio when component mounts
-    AudioSessionModule.configureForCall()
-      .catch(error => console.error('Failed to configure audio', error));
+    AudioSessionModule.configureForCall().catch((error) => console.error("Failed to configure audio", error));
 
     return () => {
       // Cleanup handled by native module
     };
   }, []);
 
-  const setRoute = useCallback(async (route: 'speaker' | 'earpiece' | 'bluetooth') => {
+  const setRoute = useCallback(async (route: "speaker" | "earpiece" | "bluetooth") => {
     try {
       await AudioSessionModule.setOutputRoute(route);
     } catch (error) {
@@ -160,7 +159,7 @@ export function useAudioSession() {
     try {
       return await AudioSessionModule.getAvailableRoutes();
     } catch (error) {
-      console.error('Failed to get available routes', error);
+      console.error("Failed to get available routes", error);
       return [];
     }
   }, []);
@@ -169,7 +168,7 @@ export function useAudioSession() {
     try {
       return await AudioSessionModule.getCurrentRoute();
     } catch (error) {
-      console.error('Failed to get current route', error);
+      console.error("Failed to get current route", error);
       return null;
     }
   }, []);
@@ -185,15 +184,12 @@ export function useAudioSession() {
 ### Listen to Events
 
 ```typescript
-import { useEffect } from 'react';
-import { DeviceEventEmitter } from 'react-native';
+import { useEffect } from "react";
+import { DeviceEventEmitter } from "react-native";
 
 export function useAudioRouteListener(onRouteChange: (route: string) => void) {
   useEffect(() => {
-    const subscription = DeviceEventEmitter.addListener(
-      'audioRouteChanged',
-      (event) => onRouteChange(event.route)
-    );
+    const subscription = DeviceEventEmitter.addListener("audioRouteChanged", (event) => onRouteChange(event.route));
 
     return () => subscription.remove();
   }, [onRouteChange]);
@@ -201,10 +197,7 @@ export function useAudioRouteListener(onRouteChange: (route: string) => void) {
 
 export function useAudioFocusListener(onFocusChange: (state: string) => void) {
   useEffect(() => {
-    const subscription = DeviceEventEmitter.addListener(
-      'audioFocusChanged',
-      (event) => onFocusChange(event.focusState)
-    );
+    const subscription = DeviceEventEmitter.addListener("audioFocusChanged", (event) => onFocusChange(event.focusState));
 
     return () => subscription.remove();
   }, [onFocusChange]);
@@ -223,6 +216,7 @@ npm run android  # or yarn android / bun run android
 ### Debug
 
 Enable logging in Android Studio:
+
 1. Connect device or start emulator
 2. Run `adb logcat | grep AudioSessionModule` in terminal
 3. Check logs while testing audio routes
@@ -234,6 +228,7 @@ Enable logging in Android Studio:
 **Error:** `NativeModules.AudioSessionModule is undefined`
 
 **Solution:**
+
 1. Verify ChalkPackage is registered in MainApplication
 2. Rebuild: `./gradlew clean && npm run android`
 3. Clear Metro cache: `npm start -- --reset-cache`
@@ -243,6 +238,7 @@ Enable logging in Android Studio:
 **Error:** `BLUETOOTH_NOT_AVAILABLE` when calling `setOutputRoute('bluetooth')`
 
 **Solution:**
+
 1. Ensure Bluetooth permission is granted (runtime on API 31+)
 2. Pair device via Settings > Bluetooth
 3. Check if device supports Bluetooth SCO
@@ -253,6 +249,7 @@ Enable logging in Android Studio:
 **Error:** `SecurityException` when requesting audio focus
 
 **Solution:**
+
 1. Add permissions to app's AndroidManifest.xml
 2. Request BLUETOOTH_CONNECT at runtime on API 31+
 3. Verify app has permissions via Settings > Apps
@@ -262,6 +259,7 @@ Enable logging in Android Studio:
 **Error:** Kotlin plugin or React Native version mismatch
 
 **Solution:**
+
 1. Verify Kotlin version in `android/build.gradle`
 2. Ensure React Native version matches in dependencies
 3. Run `./gradlew --refresh-dependencies`
@@ -301,6 +299,7 @@ If using ProGuard or R8, add to `android/app/proguard-rules.pro`:
 ## Support
 
 For issues or questions:
+
 1. Check Android logcat output
 2. Verify permissions are granted
 3. Test with actual device (emulator Bluetooth support is limited)

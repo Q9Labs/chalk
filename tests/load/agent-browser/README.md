@@ -1,6 +1,7 @@
 # Agent Browser Join Stress
 
 Join many Chalk rooms via `agent-browser` and measure:
+
 - join latency distribution
 - success/error rate
 - failure reasons with per-attempt evidence
@@ -12,6 +13,7 @@ bash tests/scripts/run-agent-browser-join-stress.sh
 ```
 
 Defaults:
+
 - `--count 100`
 - `--concurrency 2` (laptop-safe)
 - `--artifact-mode failures-only`
@@ -55,6 +57,7 @@ Each run writes to:
 `tests/results/agent-browser-join/<timestamp>/`
 
 Main artifacts:
+
 - `summary.json`
 - `report.md`
 - `results.ndjson`
@@ -71,6 +74,7 @@ Chaos suite output directory:
 `tests/results/agent-browser-chaos/<timestamp>/`
 
 Artifacts per scenario:
+
 - `summary.json`
 - `report.md`
 - `<scenario>/snapshot.txt`
@@ -80,12 +84,14 @@ Artifacts per scenario:
 - `<scenario>/final.png`
 
 Per-attempt correlation fields in `results.ndjson`:
+
 - `attempt`, `session` (agent-browser daemon session), `startedAt`, `finishedAt`
 - `roomUrl`, `roomSlug`, `browserSessionId`
 - `correlation.requestId` (`x-request-id`), `correlation.traceId` (`x-chalk-trace-id`), `correlation.cfRay`
 - `correlation.apiRequestPath`, `correlation.apiStatusCode`, `correlation.roomId`
 
 Correlate attempt -> backend trace:
+
 1. From `correlation-map.ndjson`, copy `apiRequestId` and/or `apiTraceId` for the slow attempt.
 2. Query API logs for `event=participant.join_room` and the same `request_id`/`trace_id`.
 3. Use backend fields:

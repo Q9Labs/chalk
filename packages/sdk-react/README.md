@@ -23,10 +23,7 @@ export default function RootLayout({ children }) {
   return (
     <html>
       <body>
-        <ChalkProvider
-          apiUrl="https://your-api.example.com"
-          tokenProvider={async () => "your-jwt-token"}
-        >
+        <ChalkProvider apiUrl="https://your-api.example.com" tokenProvider={async () => "your-jwt-token"}>
           {children}
         </ChalkProvider>
       </body>
@@ -38,12 +35,7 @@ export default function RootLayout({ children }) {
 ```js
 // next.config.mjs
 const nextConfig = {
-  transpilePackages: [
-    "@q9labs/chalk-ui",
-    "@q9labs/chalk-react",
-    "@q9labs/chalk-core",
-    "@q9labs/chalk-whiteboard",
-  ],
+  transpilePackages: ["@q9labs/chalk-ui", "@q9labs/chalk-react", "@q9labs/chalk-core", "@q9labs/chalk-whiteboard"],
 };
 export default nextConfig;
 ```
@@ -57,10 +49,7 @@ import { ChalkProvider } from "@q9labs/chalk-react";
 
 export default function App({ Component, pageProps }) {
   return (
-    <ChalkProvider
-      apiUrl="https://your-api.example.com"
-      tokenProvider={async () => "your-jwt-token"}
-    >
+    <ChalkProvider apiUrl="https://your-api.example.com" tokenProvider={async () => "your-jwt-token"}>
       <Component {...pageProps} />
     </ChalkProvider>
   );

@@ -19,7 +19,7 @@ Chalk uses a secure backend-to-frontend authentication flow:
 3. **The SDK** handles WebRTC connections, token refresh, and real-time features
 
 <Callout type="warning" title="Security First">
-Never expose your API key to the client. All token exchange happens server-side in your `pages/api/*` routes.
+  Never expose your API key to the client. All token exchange happens server-side in your `pages/api/*` routes.
 </Callout>
 
 ---
@@ -40,67 +40,61 @@ Create an API route that exchanges your API key for user tokens:
 
 ```typescript
 // pages/api/chalk/token.ts
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiRequest, NextApiResponse } from "next";
 
-const CHALK_API_URL = process.env.CHALK_API_URL
-const CHALK_API_KEY = process.env.CHALK_API_KEY
+const CHALK_API_URL = process.env.CHALK_API_URL;
+const CHALK_API_KEY = process.env.CHALK_API_KEY;
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { roomId, displayName } = req.body
+  const { roomId, displayName } = req.body;
 
   try {
     // 1. Exchange API key for JWT
     const authRes = await fetch(`${CHALK_API_URL}/api/v1/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: CHALK_API_KEY })
-    })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: CHALK_API_KEY }),
+    });
 
     if (!authRes.ok) {
-      throw new Error('Failed to authenticate with Chalk API')
+      throw new Error("Failed to authenticate with Chalk API");
     }
 
-    const { access_token } = await authRes.json()
+    const { access_token } = await authRes.json();
 
     // 2. Create or join room as participant
-    const roomRes = await fetch(
-      `${CHALK_API_URL}/api/v1/rooms/${roomId}/participants`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${access_token}`
-        },
-        body: JSON.stringify({
-          display_name: displayName,
-          role: 'participant'
-        })
-      }
-    )
+    const roomRes = await fetch(`${CHALK_API_URL}/api/v1/rooms/${roomId}/participants`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${access_token}`,
+      },
+      body: JSON.stringify({
+        display_name: displayName,
+        role: "participant",
+      }),
+    });
 
     if (!roomRes.ok) {
-      throw new Error('Failed to join room')
+      throw new Error("Failed to join room");
     }
 
-    const data = await roomRes.json()
+    const data = await roomRes.json();
 
     // 3. Return tokens to client
     res.json({
       roomId,
       participantId: data.participant.id,
       authToken: data.auth_token,
-      accessToken: data.access_token
-    })
+      accessToken: data.access_token,
+    });
   } catch (error) {
-    console.error('Chalk token error:', error)
-    res.status(500).json({ error: 'Failed to get Chalk tokens' })
+    console.error("Chalk token error:", error);
+    res.status(500).json({ error: "Failed to get Chalk tokens" });
   }
 }
 ```
@@ -120,18 +114,16 @@ Wrap your app with `ChalkProvider` in `_app.tsx`:
 
 ```tsx
 // pages/_app.tsx
-import { ChalkProvider } from '@q9labs/chalk-react'
-import '@q9labs/chalk-react/styles.css'
-import type { AppProps } from 'next/app'
+import { ChalkProvider } from "@q9labs/chalk-react";
+import "@q9labs/chalk-react/styles.css";
+import type { AppProps } from "next/app";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
-    <ChalkProvider
-      apiUrl={process.env.NEXT_PUBLIC_CHALK_API_URL}
-    >
+    <ChalkProvider apiUrl={process.env.NEXT_PUBLIC_CHALK_API_URL}>
       <Component {...pageProps} />
     </ChalkProvider>
-  )
+  );
 }
 ```
 
@@ -143,54 +135,54 @@ Create a dynamic room page that uses the SDK:
 
 ```tsx
 // pages/room/[id].tsx
-import { useRouter } from 'next/router'
-import { useEffect, useState } from 'react'
-import { VideoConference } from '@q9labs/chalk-react'
+import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
+import { VideoConference } from "@q9labs/chalk-react";
 
 export default function RoomPage() {
-  const router = useRouter()
-  const { id: roomId } = router.query
+  const router = useRouter();
+  const { id: roomId } = router.query;
   const [tokens, setTokens] = useState<{
-    authToken: string
-    accessToken: string
-  } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+    authToken: string;
+    accessToken: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!roomId) return
+    if (!roomId) return;
 
     async function joinRoom() {
       try {
-        const res = await fetch('/api/chalk/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/chalk/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId,
-            displayName: 'Test User' // Replace with actual user name
-          })
-        })
+            displayName: "Test User", // Replace with actual user name
+          }),
+        });
 
-        if (!res.ok) throw new Error('Failed to get tokens')
+        if (!res.ok) throw new Error("Failed to get tokens");
 
-        const data = await res.json()
+        const data = await res.json();
         setTokens({
           authToken: data.authToken,
-          accessToken: data.accessToken
-        })
+          accessToken: data.accessToken,
+        });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to join')
+        setError(err instanceof Error ? err.message : "Failed to join");
       }
     }
 
-    joinRoom()
-  }, [roomId])
+    joinRoom();
+  }, [roomId]);
 
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <p className="text-red-500">{error}</p>
       </div>
-    )
+    );
   }
 
   if (!tokens) {
@@ -198,18 +190,14 @@ export default function RoomPage() {
       <div className="flex items-center justify-center min-h-screen">
         <p>Connecting...</p>
       </div>
-    )
+    );
   }
 
   return (
     <div className="h-screen">
-      <VideoConference
-        roomId={roomId as string}
-        authToken={tokens.authToken}
-        userName="Test User"
-      />
+      <VideoConference roomId={roomId as string} authToken={tokens.authToken} userName="Test User" />
     </div>
-  )
+  );
 }
 ```
 
@@ -230,7 +218,7 @@ npm run dev
 4. You should see yourself in the video conference!
 
 <Callout type="success" title="You did it!">
-You now have a working Chalk video conferencing integration. Open the same room in another browser tab to test multi-participant functionality.
+  You now have a working Chalk video conferencing integration. Open the same room in another browser tab to test multi-participant functionality.
 </Callout>
 
 ---
@@ -263,6 +251,4 @@ Now that you have the basics working, explore these guides:
 - Implement the refresh token flow (see [Authentication](/docs/authentication))
 - Access tokens expire after 15 minutes by design
 
-<Callout type="info">
-Need help? Contact your account manager or check the [API Reference](/docs/api-reference) for detailed endpoint documentation.
-</Callout>
+<Callout type="info">Need help? Contact your account manager or check the [API Reference](/docs/api-reference) for detailed endpoint documentation.</Callout>

@@ -1,14 +1,14 @@
-import { describe, it, expect, vi } from 'bun:test';
-import { act, render } from '@testing-library/react';
-import { ReactionBubble } from '../../components/atomic/ReactionBubble';
+import { describe, it, expect, vi } from "bun:test";
+import { act, render } from "@testing-library/react";
+import { ReactionBubble } from "../../components/atomic/ReactionBubble";
 
-describe('ReactionBubble', () => {
-  it('renders emoji', () => {
+describe("ReactionBubble", () => {
+  it("renders emoji", () => {
     const { getByText } = render(<ReactionBubble emoji="🔥" />);
-    expect(getByText('🔥')).toBeDefined();
+    expect(getByText("🔥")).toBeDefined();
   });
 
-  it('calls onComplete after duration', async () => {
+  it("calls onComplete after duration", async () => {
     const onComplete = vi.fn();
     vi.useFakeTimers();
 
@@ -22,17 +22,17 @@ describe('ReactionBubble', () => {
     vi.useRealTimers();
   });
 
-  it('hides after duration', async () => {
+  it("hides after duration", async () => {
     vi.useFakeTimers();
 
     const { queryByText } = render(<ReactionBubble emoji="🔥" duration={100} />);
-    expect(queryByText('🔥')).toBeDefined();
+    expect(queryByText("🔥")).toBeDefined();
 
     await act(async () => {
       vi.advanceTimersByTime(150);
     });
 
-    expect(queryByText('🔥')).toBeNull();
+    expect(queryByText("🔥")).toBeNull();
     vi.useRealTimers();
   });
 });

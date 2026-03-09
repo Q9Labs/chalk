@@ -1,20 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useChalkSession } from '../context/chalk-provider';
-import { SOUND_DATA } from '../assets/sound-data';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useChalkSession } from "../context/chalk-provider";
+import { SOUND_DATA } from "../assets/sound-data";
 
-export type SoundEffect =
-  | 'join'
-  | 'leave'
-  | 'message'
-  | 'handRaise'
-  | 'reaction'
-  | 'nudge'
-  | 'recordingStart'
-  | 'recordingStop'
-  | 'click'
-  | 'error'
-  | 'transcriptionReady'
-  | 'tourStep';
+export type SoundEffect = "join" | "leave" | "message" | "handRaise" | "reaction" | "nudge" | "recordingStart" | "recordingStop" | "click" | "error" | "transcriptionReady" | "tourStep";
 
 export interface UseSoundEffectsOptions {
   enabled?: boolean;
@@ -45,55 +33,51 @@ export interface UseSoundEffectsReturn {
 }
 
 const SOUND_FILES: Record<SoundEffect, string> = {
-  join: 'join.mp3',
-  leave: 'leave.mp3',
-  message: 'message.mp3',
-  handRaise: 'hand-raise.mp3',
-  reaction: 'reaction.mp3',
-  nudge: 'nudge.mp3',
-  recordingStart: 'recording-start.mp3',
-  recordingStop: 'recording-stop.mp3',
-  click: 'click.mp3',
-  error: 'error.mp3',
+  join: "join.mp3",
+  leave: "leave.mp3",
+  message: "message.mp3",
+  handRaise: "hand-raise.mp3",
+  reaction: "reaction.mp3",
+  nudge: "nudge.mp3",
+  recordingStart: "recording-start.mp3",
+  recordingStop: "recording-stop.mp3",
+  click: "click.mp3",
+  error: "error.mp3",
   // Map missing sounds to existing ones (no dedicated files)
-  transcriptionReady: 'message.mp3',
-  tourStep: 'click.mp3',
+  transcriptionReady: "message.mp3",
+  tourStep: "click.mp3",
 };
 
 export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundEffectsReturn {
-  const {
-    enabled: initialEnabled = true,
-    volume: initialVolume = 0.5,
-    basePath,
-    autoSubscribe = false,
-  } = options;
+  const { enabled: initialEnabled = true, volume: initialVolume = 0.5, basePath, autoSubscribe = false } = options;
 
   const { session } = useChalkSession();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [volume, setVolume] = useState(initialVolume);
   const audioCache = useRef<Map<SoundEffect, HTMLAudioElement>>(new Map());
 
-  const play = useCallback((sound: SoundEffect) => {
-    if (!enabled || typeof window === 'undefined') return;
+  const play = useCallback(
+    (sound: SoundEffect) => {
+      if (!enabled || typeof window === "undefined") return;
 
-    // Use custom basePath if provided, otherwise use bundled data URLs
-    const soundSrc = basePath
-      ? `${basePath}/${SOUND_FILES[sound]}`
-      : SOUND_DATA[sound];
+      // Use custom basePath if provided, otherwise use bundled data URLs
+      const soundSrc = basePath ? `${basePath}/${SOUND_FILES[sound]}` : SOUND_DATA[sound];
 
-    let audio = audioCache.current.get(sound);
+      let audio = audioCache.current.get(sound);
 
-    if (!audio || (basePath && !audio.src.startsWith(basePath))) {
-      audio = new Audio(soundSrc);
-      audioCache.current.set(sound, audio);
-    }
+      if (!audio || (basePath && !audio.src.startsWith(basePath))) {
+        audio = new Audio(soundSrc);
+        audioCache.current.set(sound, audio);
+      }
 
-    audio.volume = Math.max(0, Math.min(1, volume));
-    audio.currentTime = 0;
-    audio.play().catch(() => {
-      // Silently fail if autoplay blocked
-    });
-  }, [enabled, volume, basePath]);
+      audio.volume = Math.max(0, Math.min(1, volume));
+      audio.currentTime = 0;
+      audio.play().catch(() => {
+        // Silently fail if autoplay blocked
+      });
+    },
+    [enabled, volume, basePath],
+  );
 
   // Auto-subscribe to session events
   useEffect(() => {
@@ -103,92 +87,92 @@ export function useSoundEffects(options: UseSoundEffectsOptions = {}): UseSoundE
 
     // Play join sound on connected
     unsubscribers.push(
-      session.on('connected', () => {
-        play('join');
-      })
+      session.on("connected", () => {
+        play("join");
+      }),
     );
 
     // Play leave sound on disconnected
     unsubscribers.push(
-      session.on('disconnected', () => {
-        play('leave');
-      })
+      session.on("disconnected", () => {
+        play("leave");
+      }),
     );
 
     // Subscribe to participant manager events
     unsubscribers.push(
-      session.participants.on('participant:joined', () => {
-        play('join');
-      })
+      session.participants.on("participant:joined", () => {
+        play("join");
+      }),
     );
 
     unsubscribers.push(
-      session.participants.on('participant:left', () => {
-        play('leave');
-      })
+      session.participants.on("participant:left", () => {
+        play("leave");
+      }),
     );
 
     // Subscribe to chat manager events
     const localId = session.participants.getState().localParticipant?.id;
     unsubscribers.push(
-      session.chat.on('message', ({ message }) => {
+      session.chat.on("message", ({ message }) => {
         if (message.senderId !== localId) {
-          play('message');
+          play("message");
         }
-      })
+      }),
     );
 
     // Subscribe to interaction manager events
     unsubscribers.push(
-      session.interactions.on('hand:raised', () => {
-        play('handRaise');
-      })
+      session.interactions.on("hand:raised", () => {
+        play("handRaise");
+      }),
     );
 
     unsubscribers.push(
-      session.interactions.on('reaction', () => {
-        play('reaction');
-      })
+      session.interactions.on("reaction", () => {
+        play("reaction");
+      }),
     );
 
     // Subscribe to recording manager events
     unsubscribers.push(
-      session.recording.on('started', () => {
-        play('recordingStart');
-      })
+      session.recording.on("started", () => {
+        play("recordingStart");
+      }),
     );
 
     unsubscribers.push(
-      session.recording.on('stopped', () => {
-        play('recordingStop');
-      })
+      session.recording.on("stopped", () => {
+        play("recordingStop");
+      }),
     );
 
     // Subscribe to error events
     unsubscribers.push(
-      session.on('error', () => {
-        play('error');
-      })
+      session.on("error", () => {
+        play("error");
+      }),
     );
 
     return () => {
-      unsubscribers.forEach(unsub => unsub());
+      unsubscribers.forEach((unsub) => unsub());
     };
   }, [autoSubscribe, session, enabled, play]);
 
   return {
-    playJoin: useCallback(() => play('join'), [play]),
-    playLeave: useCallback(() => play('leave'), [play]),
-    playMessage: useCallback(() => play('message'), [play]),
-    playHandRaise: useCallback(() => play('handRaise'), [play]),
-    playReaction: useCallback(() => play('reaction'), [play]),
-    playNudge: useCallback(() => play('nudge'), [play]),
-    playRecordingStart: useCallback(() => play('recordingStart'), [play]),
-    playRecordingStop: useCallback(() => play('recordingStop'), [play]),
-    playClick: useCallback(() => play('click'), [play]),
-    playError: useCallback(() => play('error'), [play]),
-    playTranscriptionReady: useCallback(() => play('transcriptionReady'), [play]),
-    playTourStep: useCallback(() => play('tourStep'), [play]),
+    playJoin: useCallback(() => play("join"), [play]),
+    playLeave: useCallback(() => play("leave"), [play]),
+    playMessage: useCallback(() => play("message"), [play]),
+    playHandRaise: useCallback(() => play("handRaise"), [play]),
+    playReaction: useCallback(() => play("reaction"), [play]),
+    playNudge: useCallback(() => play("nudge"), [play]),
+    playRecordingStart: useCallback(() => play("recordingStart"), [play]),
+    playRecordingStop: useCallback(() => play("recordingStop"), [play]),
+    playClick: useCallback(() => play("click"), [play]),
+    playError: useCallback(() => play("error"), [play]),
+    playTranscriptionReady: useCallback(() => play("transcriptionReady"), [play]),
+    playTourStep: useCallback(() => play("tourStep"), [play]),
     play,
     setEnabled,
     setVolume,

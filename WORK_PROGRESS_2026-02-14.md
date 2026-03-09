@@ -150,7 +150,7 @@
 7. Logging/tracing tightening:
    - add pubsub fields: `message_id`, `origin_instance_id`, `delivery`, `payload_bytes`
    - log subscribe start/stop per room, publish errors, decode errors
-   - add `instance_id` to all WS logs (connect/disconnect/error/app_error/presence/ws.metrics/ws.redis.*)
+   - add `instance_id` to all WS logs (connect/disconnect/error/app_error/presence/ws.metrics/ws.redis.\*)
    - add `message_id` where available to `websocket.disconnect` (if close triggered by pubsub backpressure) + any “broadcast” wide events we add
 8. Code hygiene (surgical):
    - fix obvious duplication/typos in `hub.go`/`client.go` while editing (no drive-by refactors)

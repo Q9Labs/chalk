@@ -19,9 +19,7 @@ function NewRoomPage() {
 
     void (async () => {
       try {
-        const roomId = `instant-meeting-${Date.now().toString(36)}-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`;
+        const roomId = `instant-meeting-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         await navigate({
           to: "/room/$roomId",
           params: { roomId },
@@ -29,9 +27,7 @@ function NewRoomPage() {
           replace: true,
         });
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to create meeting",
-        );
+        setError(err instanceof Error ? err.message : "Failed to create meeting");
       }
     })();
   }, [navigate]);
@@ -41,27 +37,17 @@ function NewRoomPage() {
       <div className="w-full max-w-md rounded-3xl border border-border/60 bg-card/80 p-8 text-center shadow-2xl backdrop-blur">
         {error ? (
           <>
-            <h1 className="text-2xl font-semibold text-card-foreground">
-              Couldn&apos;t start meeting
-            </h1>
+            <h1 className="text-2xl font-semibold text-card-foreground">Couldn&apos;t start meeting</h1>
             <p className="mt-3 text-sm text-muted-foreground">{error}</p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-            >
+            <button type="button" onClick={() => window.location.reload()} className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90">
               Try again
             </button>
           </>
         ) : (
           <>
             <div className="mx-auto h-11 w-11 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <h1 className="mt-6 text-2xl font-semibold text-card-foreground">
-              Starting your room
-            </h1>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Creating a fresh room and joining automatically.
-            </p>
+            <h1 className="mt-6 text-2xl font-semibold text-card-foreground">Starting your room</h1>
+            <p className="mt-3 text-sm text-muted-foreground">Creating a fresh room and joining automatically.</p>
           </>
         )}
       </div>

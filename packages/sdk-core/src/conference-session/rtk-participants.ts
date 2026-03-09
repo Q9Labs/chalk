@@ -45,11 +45,7 @@ const ensureRemoteParticipant = (deps: RtkSignalingDeps, rtkParticipant: unknown
   return participant;
 };
 
-const reconcileJoinedParticipants = (
-  deps: RtkSignalingDeps,
-  participantsApi: RtkParticipantsApi,
-  options: { pruneStaleRemotes?: boolean } = {},
-): void => {
+const reconcileJoinedParticipants = (deps: RtkSignalingDeps, participantsApi: RtkParticipantsApi, options: { pruneStaleRemotes?: boolean } = {}): void => {
   const joinedParticipants = collectJoinedParticipants(participantsApi);
   deps.emitRoomSyncReady("rtk.snapshot", joinedParticipants.length + (deps.getLocalParticipant() ? 1 : 0));
   const joinedRemoteIds = new Set<string>();
@@ -180,8 +176,7 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
               transport: "rtk",
               roomId: deps.roomId,
               reconnectAttempts: RTK_RECONNECT_DELAYS_MS.length,
-              lastError:
-                error instanceof Error ? error.message : String(error),
+              lastError: error instanceof Error ? error.message : String(error),
             },
           } as ChalkError);
         }

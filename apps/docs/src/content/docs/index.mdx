@@ -16,7 +16,7 @@ hero:
       icon: external
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid } from "@astrojs/starlight/components";
 
 ## Features
 
@@ -42,26 +42,20 @@ bun add @q9labs/chalk-react
 ```
 
 ```tsx
-import { ChalkProvider, VideoConference } from '@q9labs/chalk-react'
-import '@q9labs/chalk-react/styles.css'
+import { ChalkProvider, VideoConference } from "@q9labs/chalk-react";
+import "@q9labs/chalk-react/styles.css";
 
 function App() {
   return (
     <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={jwt}>
-      <VideoConference
-        roomId="room-123"
-        userName="Alice"
-        role="host"
-        features={{ recording: true, whiteboard: true }}
-        onEnd={(data) => console.log('Meeting ended:', data.duration)}
-      />
+      <VideoConference roomId="room-123" userName="Alice" role="host" features={{ recording: true, whiteboard: true }} onEnd={(data) => console.log("Meeting ended:", data.duration)} />
     </ChalkProvider>
-  )
+  );
 }
 ```
 
 ## Package
 
-| Package | Description |
-|---------|-------------|
+| Package               | Description                                      |
+| --------------------- | ------------------------------------------------ |
 | `@q9labs/chalk-react` | React SDK with turnkey VideoConference component |

@@ -53,12 +53,14 @@ Complete Android native module implementation for `@q9labs/chalk-react-native` p
 ## Key Features Implemented
 
 ### Audio Session Management
+
 - ✅ Audio focus requests (API 26+ with AudioFocusRequest, fallback for earlier APIs)
 - ✅ VoIP mode configuration (MODE_IN_COMMUNICATION)
 - ✅ Audio attributes for voice communication
 - ✅ Cleanup on destroy
 
 ### Output Routing
+
 - ✅ Speaker routing
 - ✅ Earpiece routing
 - ✅ Bluetooth SCO handling
@@ -66,17 +68,20 @@ Complete Android native module implementation for `@q9labs/chalk-react-native` p
 - ✅ Current route querying
 
 ### Bluetooth Support
+
 - ✅ Bluetooth availability checking
 - ✅ SCO (Synchronous Connection Oriented) start/stop
 - ✅ A2DP detection
 - ✅ Graceful fallback when unavailable
 
 ### Event Emission
+
 - ✅ Route change events (audioRouteChanged)
 - ✅ Audio focus change events (audioFocusChanged)
 - ✅ DeviceEventManagerModule integration
 
 ### Error Handling
+
 - ✅ Try-catch blocks for all operations
 - ✅ Promise rejection with descriptive errors
 - ✅ Availability checks before operations
@@ -100,44 +105,50 @@ stopBluetoothSco()          // Stop Bluetooth audio
 
 ```javascript
 // Route changed
-audioRouteChanged: { route: 'speaker'|'earpiece'|'bluetooth'|'wired' }
+audioRouteChanged: {
+  route: "speaker" | "earpiece" | "bluetooth" | "wired";
+}
 
 // Audio focus changed
-audioFocusChanged: { 
-  focusState: 'gained'|'lost'|'lostTransient'|'lostTransientCanDuck'
+audioFocusChanged: {
+  focusState: "gained" | "lost" | "lostTransient" | "lostTransientCanDuck";
 }
 ```
 
 ## Compatibility
 
-| Aspect | Details |
-|--------|---------|
-| Min SDK | 24 (Android 7.0) |
-| Target SDK | 34 (Android 14) |
-| Kotlin | 1.9.22 |
-| Java | 17 |
-| React Native | 0.70.0+ |
-| AudioFocusRequest | API 26+ |
+| Aspect            | Details                               |
+| ----------------- | ------------------------------------- |
+| Min SDK           | 24 (Android 7.0)                      |
+| Target SDK        | 34 (Android 14)                       |
+| Kotlin            | 1.9.22                                |
+| Java              | 17                                    |
+| React Native      | 0.70.0+                               |
+| AudioFocusRequest | API 26+                               |
 | BLUETOOTH_CONNECT | API 31+ (requires runtime permission) |
 
 ## Implementation Highlights
 
 ### Modern API Support
+
 - Uses AudioFocusRequest for API 26+ (recommended approach)
 - Fallback to deprecated requestAudioFocus for API 24-25
 - Proper @Suppress annotations for deprecation warnings
 
 ### Error Resilience
+
 - Silent failures in non-critical operations (event emission, cleanup)
 - Detailed error codes for application-level failures
 - Graceful degradation (e.g., Bluetooth fallback)
 
 ### Resource Management
+
 - Lazy initialization of AudioManager
 - Proper cleanup in onCatalystInstanceDestroy()
 - No leaked listeners or focus requests
 
 ### Type Safety
+
 - Full Kotlin implementation (no Java interop issues)
 - Proper Promise handling for async operations
 - WritableMap conversion utility for event emission

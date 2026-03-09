@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { cn } from '../../utils/cn';
-import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
-import { getParticipantColor } from '../../utils/colorGenerator';
+import React, { useEffect, useState, useMemo } from "react";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { getParticipantColor } from "../../utils/colorGenerator";
 
 interface ReactionBubbleProps {
   emoji: string;
@@ -11,8 +11,8 @@ interface ReactionBubbleProps {
   className?: string;
 }
 
-const CELEBRATION_EMOJIS = ['🎉', '🎊', '🥳', '🎈', '🏆', '🥇', '⭐', '🌟', '✨', '💫', '🔥', '💥', '💯', '🎆', '🎇'];
-const BASE_PARTICLE_COLORS = ['#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#22c55e'];
+const CELEBRATION_EMOJIS = ["🎉", "🎊", "🥳", "🎈", "🏆", "🥇", "⭐", "🌟", "✨", "💫", "🔥", "💥", "💯", "🎆", "🎇"];
+const BASE_PARTICLE_COLORS = ["#14b8a6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4", "#22c55e"];
 
 // Generate random animation properties for natural movement
 const generateAnimationProps = () => ({
@@ -43,20 +43,14 @@ const generateParticles = (primaryColor: string) => {
   });
 };
 
-export const ReactionBubble = React.memo(({
-  emoji,
-  participantName,
-  onComplete,
-  duration: baseDuration = 3000,
-  className,
-}: ReactionBubbleProps) => {
+export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, duration: baseDuration = 3000, className }: ReactionBubbleProps) => {
   const [isVisible, setIsVisible] = useState(true);
   const prefersReducedMotion = usePrefersReducedMotion();
 
-  const participantColors = useMemo(() => getParticipantColor(participantName || 'unknown'), [participantName]);
+  const participantColors = useMemo(() => getParticipantColor(participantName || "unknown"), [participantName]);
   const isCelebration = CELEBRATION_EMOJIS.includes(emoji);
   const animProps = useMemo(() => generateAnimationProps(), []);
-  const particles = useMemo(() => isCelebration ? generateParticles(participantColors.primary) : [], [isCelebration, participantColors.primary]);
+  const particles = useMemo(() => (isCelebration ? generateParticles(participantColors.primary) : []), [isCelebration, participantColors.primary]);
   const timeoutMs = baseDuration;
   const floatDurationMs = prefersReducedMotion ? baseDuration : animProps.duration;
 
@@ -72,69 +66,50 @@ export const ReactionBubble = React.memo(({
   if (!isVisible) return null;
 
   const animationStyle = prefersReducedMotion
-    ? { '--primary': participantColors.primary } as React.CSSProperties
-    : {
-        '--primary': participantColors.primary,
-        '--float-offset-x': `${animProps.offsetX}px`,
-        '--float-travel-y': `${animProps.travelY}px`,
-        '--float-rotation': `${animProps.rotation}deg`,
-        '--float-scale': animProps.scale,
-        '--float-duration': `${floatDurationMs}ms`,
+    ? ({ "--primary": participantColors.primary } as React.CSSProperties)
+    : ({
+        "--primary": participantColors.primary,
+        "--float-offset-x": `${animProps.offsetX}px`,
+        "--float-travel-y": `${animProps.travelY}px`,
+        "--float-rotation": `${animProps.rotation}deg`,
+        "--float-scale": animProps.scale,
+        "--float-duration": `${floatDurationMs}ms`,
         animationDelay: `${animProps.delay}ms`,
-      } as React.CSSProperties;
+      } as React.CSSProperties);
 
   return (
-    <div
-      className={cn(
-        'pointer-events-none relative w-16 h-16 flex items-center justify-center',
-        !prefersReducedMotion && 'chalk-animate-reaction-float',
-        className
-      )}
-      style={animationStyle}
-      role="presentation"
-      aria-hidden="true"
-    >
+    <div className={cn("pointer-events-none relative w-16 h-16 flex items-center justify-center", !prefersReducedMotion && "chalk-animate-reaction-float", className)} style={animationStyle} role="presentation" aria-hidden="true">
       {/* Particle effects for celebration */}
-      {isCelebration && !prefersReducedMotion && particles.map((particle) => (
-        <div
-          key={particle.id}
-          className="absolute rounded-full"
-          style={{
-            width: particle.size,
-            height: particle.size,
-            backgroundColor: particle.color,
-            left: '50%',
-            top: '50%',
-            marginLeft: -particle.size / 2,
-            marginTop: -particle.size / 2,
-            animation: `chalk-particle-explode ${particle.duration}ms ease-out ${particle.delay}ms forwards`,
-            '--particle-x': `${particle.x}px`,
-            '--particle-y': `${particle.y}px`,
-          } as React.CSSProperties}
-        />
-      ))}
+      {isCelebration &&
+        !prefersReducedMotion &&
+        particles.map((particle) => (
+          <div
+            key={particle.id}
+            className="absolute rounded-full"
+            style={
+              {
+                width: particle.size,
+                height: particle.size,
+                backgroundColor: particle.color,
+                left: "50%",
+                top: "50%",
+                marginLeft: -particle.size / 2,
+                marginTop: -particle.size / 2,
+                animation: `chalk-particle-explode ${particle.duration}ms ease-out ${particle.delay}ms forwards`,
+                "--particle-x": `${particle.x}px`,
+                "--particle-y": `${particle.y}px`,
+              } as React.CSSProperties
+            }
+          />
+        ))}
 
       {/* Main emoji */}
-      <div
-        className={cn(
-          'relative z-10 text-5xl',
-          !prefersReducedMotion && 'chalk-animate-reaction-bounce-in',
-          !prefersReducedMotion && 'chalk-animate-reaction-wiggle'
-        )}
-      >
-        {emoji}
-      </div>
+      <div className={cn("relative z-10 text-5xl", !prefersReducedMotion && "chalk-animate-reaction-bounce-in", !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
 
       {/* Participant name badge */}
       {participantName && (
         <div
-          className={cn(
-            'absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap',
-            'px-2 py-0.5 rounded-full text-xs font-medium',
-            'text-white backdrop-blur-sm',
-            'border border-white/10',
-            !prefersReducedMotion && 'animate-in fade-in duration-300'
-          )}
+          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap", "px-2 py-0.5 rounded-full text-xs font-medium", "text-white backdrop-blur-sm", "border border-white/10", !prefersReducedMotion && "animate-in fade-in duration-300")}
           style={{ backgroundColor: `${participantColors.primary}E6` }} // 90% opacity hex
         >
           {participantName}
@@ -144,4 +119,4 @@ export const ReactionBubble = React.memo(({
   );
 });
 
-ReactionBubble.displayName = 'ReactionBubble';
+ReactionBubble.displayName = "ReactionBubble";

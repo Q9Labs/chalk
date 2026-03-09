@@ -27,7 +27,24 @@ interface MeetingRoomStageProps {
   localParticipantColorSeed?: string;
 }
 
-export function MeetingRoomStage({ isMobile, layout, isStageMode, isSplit, screenSharer, allParticipants, isFilmstripOpen, onToggleFilmstrip, enableAnnotations, enableWhiteboard, isWhiteboardOpen, theme, onWhiteboardExcalidrawApiReady, activeReactions, isExiting, localParticipantColorSeed }: MeetingRoomStageProps) {
+export function MeetingRoomStage({
+  isMobile,
+  layout,
+  isStageMode,
+  isSplit,
+  screenSharer,
+  allParticipants,
+  isFilmstripOpen,
+  onToggleFilmstrip,
+  enableAnnotations,
+  enableWhiteboard,
+  isWhiteboardOpen,
+  theme,
+  onWhiteboardExcalidrawApiReady,
+  activeReactions,
+  isExiting,
+  localParticipantColorSeed,
+}: MeetingRoomStageProps) {
   return (
     <div className={cn("flex-1 h-full min-w-0 relative flex rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]", isStageMode && layout === "sidebar" ? "flex-row" : "flex-col", isExiting && "chalk-animate-void-exit")}>
       {isStageMode ? (

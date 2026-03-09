@@ -67,20 +67,20 @@ Content-Type: application/json
 
 ### Configuration Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `enabled` | boolean | Yes | Enable/disable webhook delivery |
-| `url` | string | Yes | Your webhook endpoint (HTTPS required in production) |
-| `secret` | string | Yes | Secret for signature verification (prefix with `whsec_`) |
-| `include_recording` | boolean | No | Include recording download URL in payload |
-| `include_transcript` | boolean | No | Include full transcript text and segments |
-| `include_summary` | boolean | No | Include AI-generated meeting summary |
-| `include_action_items` | boolean | No | Include extracted action items |
-| `transcription.provider` | string | No | Transcription provider: `groq` or `whisper` |
-| `transcription.api_key` | string | No | BYOK API key for transcription provider |
-| `ai.provider` | string | No | AI provider: `openrouter` |
-| `ai.api_key` | string | No | BYOK API key for AI provider |
-| `ai.model` | string | No | AI model (e.g., `anthropic/claude-3-opus`) |
+| Field                    | Type    | Required | Description                                              |
+| ------------------------ | ------- | -------- | -------------------------------------------------------- |
+| `enabled`                | boolean | Yes      | Enable/disable webhook delivery                          |
+| `url`                    | string  | Yes      | Your webhook endpoint (HTTPS required in production)     |
+| `secret`                 | string  | Yes      | Secret for signature verification (prefix with `whsec_`) |
+| `include_recording`      | boolean | No       | Include recording download URL in payload                |
+| `include_transcript`     | boolean | No       | Include full transcript text and segments                |
+| `include_summary`        | boolean | No       | Include AI-generated meeting summary                     |
+| `include_action_items`   | boolean | No       | Include extracted action items                           |
+| `transcription.provider` | string  | No       | Transcription provider: `groq` or `whisper`              |
+| `transcription.api_key`  | string  | No       | BYOK API key for transcription provider                  |
+| `ai.provider`            | string  | No       | AI provider: `openrouter`                                |
+| `ai.api_key`             | string  | No       | BYOK API key for AI provider                             |
+| `ai.model`               | string  | No       | AI model (e.g., `anthropic/claude-3-opus`)               |
 
 ## Incoming Webhooks (from Cloudflare)
 
@@ -94,10 +94,10 @@ POST /api/v1/webhooks/cloudflare/recording-ready
 
 ### Headers
 
-| Header | Description |
-|--------|-------------|
+| Header                   | Description                                             |
+| ------------------------ | ------------------------------------------------------- |
 | `X-Cloudflare-Signature` | HMAC-SHA256 signature of the request body (hex-encoded) |
-| `Content-Type` | `application/json` |
+| `Content-Type`           | `application/json`                                      |
 
 ### Payload
 
@@ -129,13 +129,13 @@ When `post_meeting_webhook.enabled` is `true`, Chalk sends webhook events to you
 
 ### Headers
 
-| Header | Description |
-|--------|-------------|
+| Header              | Description                                    |
+| ------------------- | ---------------------------------------------- |
 | `X-Chalk-Signature` | HMAC-SHA256 signature (format: `sha256=<hex>`) |
-| `X-Chalk-Timestamp` | Unix timestamp when the webhook was generated |
-| `X-Chalk-Event` | Event type: `meeting.recording_ready` |
-| `Content-Type` | `application/json` |
-| `User-Agent` | `Chalk-Webhook/1.0` |
+| `X-Chalk-Timestamp` | Unix timestamp when the webhook was generated  |
+| `X-Chalk-Event`     | Event type: `meeting.recording_ready`          |
+| `Content-Type`      | `application/json`                             |
+| `User-Agent`        | `Chalk-Webhook/1.0`                            |
 
 ### Payload Structure
 
@@ -195,11 +195,7 @@ When `post_meeting_webhook.enabled` is `true`, Chalk sends webhook events to you
     ]
   },
   "summary": "The team discussed Q1 roadmap priorities. Key decisions: approved the new onboarding flow design, moved launch date to February 15th. John committed to finalizing API documentation by Friday.",
-  "action_items": [
-    "John: Finalize API documentation by Friday",
-    "Sarah: Schedule design review for new onboarding flow",
-    "Team: Review updated timeline in project board"
-  ],
+  "action_items": ["John: Finalize API documentation by Friday", "Sarah: Schedule design review for new onboarding flow", "Team: Review updated timeline in project board"],
   "errors": []
 }
 ```
@@ -208,17 +204,17 @@ When `post_meeting_webhook.enabled` is `true`, Chalk sends webhook events to you
 
 Fields are included based on your `post_meeting_webhook` configuration:
 
-| Field | Included When | Description |
-|-------|---------------|-------------|
-| `event` | Always | Event type: `meeting.recording_ready` |
-| `timestamp` | Always | ISO 8601 timestamp of webhook generation |
-| `meeting` | Always | Meeting metadata |
-| `participants` | Always | Participant list with metadata + external IDs |
-| `recording` | `include_recording: true` | Recording details with download URL |
-| `transcript` | `include_transcript: true` | Full transcript with segments |
-| `summary` | `include_summary: true` | AI-generated meeting summary |
-| `action_items` | `include_action_items: true` | Extracted action items array |
-| `errors` | On failures | Graceful degradation error details |
+| Field          | Included When                | Description                                   |
+| -------------- | ---------------------------- | --------------------------------------------- |
+| `event`        | Always                       | Event type: `meeting.recording_ready`         |
+| `timestamp`    | Always                       | ISO 8601 timestamp of webhook generation      |
+| `meeting`      | Always                       | Meeting metadata                              |
+| `participants` | Always                       | Participant list with metadata + external IDs |
+| `recording`    | `include_recording: true`    | Recording details with download URL           |
+| `transcript`   | `include_transcript: true`   | Full transcript with segments                 |
+| `summary`      | `include_summary: true`      | AI-generated meeting summary                  |
+| `action_items` | `include_action_items: true` | Extracted action items array                  |
+| `errors`       | On failures                  | Graceful degradation error details            |
 
 `participants` entries include `metadata` from join (e.g., `VideoConference` `metadata` prop), plus `external_id` (derived from `metadata.externalId` or `metadata.external_id`) and `external_user_id` (if supplied via API).
 
@@ -261,6 +257,7 @@ HMAC-SHA256(secret, "{timestamp}.{payload}")
 ```
 
 Where:
+
 - `secret` is your configured webhook secret
 - `timestamp` is the value from `X-Chalk-Timestamp` header
 - `payload` is the raw JSON request body
@@ -268,14 +265,9 @@ Where:
 ### TypeScript
 
 ```typescript
-import crypto from 'crypto';
+import crypto from "crypto";
 
-function verifyChalkWebhook(
-  payload: string,
-  signature: string,
-  timestamp: string,
-  secret: string
-): boolean {
+function verifyChalkWebhook(payload: string, signature: string, timestamp: string, secret: string): boolean {
   // Validate timestamp freshness (5 minute tolerance)
   const age = Math.floor(Date.now() / 1000) - parseInt(timestamp, 10);
   if (Math.abs(age) > 300) {
@@ -283,15 +275,9 @@ function verifyChalkWebhook(
   }
 
   const signedPayload = `${timestamp}.${payload}`;
-  const expectedSignature = 'sha256=' + crypto
-    .createHmac('sha256', secret)
-    .update(signedPayload)
-    .digest('hex');
+  const expectedSignature = "sha256=" + crypto.createHmac("sha256", secret).update(signedPayload).digest("hex");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
 }
 ```
 
@@ -359,65 +345,51 @@ func VerifyChalkWebhook(payload []byte, signature, timestamp, secret string) boo
 ### Express.js Middleware
 
 ```typescript
-import express from 'express';
-import crypto from 'crypto';
+import express from "express";
+import crypto from "crypto";
 
 const WEBHOOK_SECRET = process.env.CHALK_WEBHOOK_SECRET!;
 
-function verifyChalkWebhook(
-  payload: string,
-  signature: string,
-  timestamp: string
-): boolean {
+function verifyChalkWebhook(payload: string, signature: string, timestamp: string): boolean {
   const age = Math.floor(Date.now() / 1000) - parseInt(timestamp, 10);
   if (Math.abs(age) > 300) return false;
 
-  const expected = 'sha256=' + crypto
-    .createHmac('sha256', WEBHOOK_SECRET)
-    .update(`${timestamp}.${payload}`)
-    .digest('hex');
+  const expected = "sha256=" + crypto.createHmac("sha256", WEBHOOK_SECRET).update(`${timestamp}.${payload}`).digest("hex");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expected)
-  );
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
 // Middleware
-app.post(
-  '/webhooks/chalk',
-  express.raw({ type: 'application/json' }),
-  (req, res) => {
-    const signature = req.headers['x-chalk-signature'] as string;
-    const timestamp = req.headers['x-chalk-timestamp'] as string;
-    const payload = req.body.toString();
+app.post("/webhooks/chalk", express.raw({ type: "application/json" }), (req, res) => {
+  const signature = req.headers["x-chalk-signature"] as string;
+  const timestamp = req.headers["x-chalk-timestamp"] as string;
+  const payload = req.body.toString();
 
-    if (!signature || !timestamp) {
-      return res.status(400).json({ error: 'Missing headers' });
-    }
-
-    if (!verifyChalkWebhook(payload, signature, timestamp)) {
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
-
-    const event = JSON.parse(payload);
-
-    // Process the webhook
-    console.log(`Meeting ${event.meeting.id} recording ready`);
-
-    if (event.transcript) {
-      // Store transcript
-      console.log(`Transcript: ${event.transcript.word_count} words`);
-    }
-
-    if (event.action_items?.length) {
-      // Create tasks from action items
-      console.log(`Action items: ${event.action_items.length}`);
-    }
-
-    res.status(200).json({ received: true });
+  if (!signature || !timestamp) {
+    return res.status(400).json({ error: "Missing headers" });
   }
-);
+
+  if (!verifyChalkWebhook(payload, signature, timestamp)) {
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+
+  const event = JSON.parse(payload);
+
+  // Process the webhook
+  console.log(`Meeting ${event.meeting.id} recording ready`);
+
+  if (event.transcript) {
+    // Store transcript
+    console.log(`Transcript: ${event.transcript.word_count} words`);
+  }
+
+  if (event.action_items?.length) {
+    // Create tasks from action items
+    console.log(`Action items: ${event.action_items.length}`);
+  }
+
+  res.status(200).json({ received: true });
+});
 ```
 
 ## Response Requirements
@@ -427,27 +399,27 @@ Your webhook endpoint must:
 1. **Return 2xx status** within 30 seconds for successful processing
 2. **Return non-2xx** to trigger retry (except 4xx which is permanent failure)
 
-| Response | Behavior |
-|----------|----------|
-| `2xx` | Success, delivery marked complete |
-| `4xx` (except 429) | Permanent failure, no retry |
-| `429` | Rate limited, retry with backoff |
-| `5xx` | Temporary failure, retry |
-| Timeout (>30s) | Retry |
-| Network error | Retry |
+| Response           | Behavior                          |
+| ------------------ | --------------------------------- |
+| `2xx`              | Success, delivery marked complete |
+| `4xx` (except 429) | Permanent failure, no retry       |
+| `429`              | Rate limited, retry with backoff  |
+| `5xx`              | Temporary failure, retry          |
+| Timeout (>30s)     | Retry                             |
+| Network error      | Retry                             |
 
 ## Retry Policy
 
 Failed deliveries retry with exponential backoff:
 
-| Attempt | Delay After Failure | Cumulative Time |
-|---------|---------------------|-----------------|
-| 1 | Immediate | 0 |
-| 2 | 1 minute | 1m |
-| 3 | 5 minutes | 6m |
-| 4 | 15 minutes | 21m |
-| 5 | 1 hour | 1h 21m |
-| 6 (final) | 4 hours | 5h 21m |
+| Attempt   | Delay After Failure | Cumulative Time |
+| --------- | ------------------- | --------------- |
+| 1         | Immediate           | 0               |
+| 2         | 1 minute            | 1m              |
+| 3         | 5 minutes           | 6m              |
+| 4         | 15 minutes          | 21m             |
+| 5         | 1 hour              | 1h 21m          |
+| 6 (final) | 4 hours             | 5h 21m          |
 
 After 5 failed attempts, the delivery is marked as permanently failed.
 
@@ -456,6 +428,7 @@ After 5 failed attempts, the delivery is marked as permanently failed.
 ### Always Verify Signatures
 
 Never process a webhook without verifying the signature. This prevents:
+
 - Forged requests from malicious actors
 - Replay attacks using captured requests
 
@@ -471,7 +444,7 @@ Reject webhooks with timestamps older than 5 minutes to prevent replay attacks:
 const MAX_AGE_SECONDS = 300; // 5 minutes
 const age = Math.floor(Date.now() / 1000) - parseInt(timestamp, 10);
 if (Math.abs(age) > MAX_AGE_SECONDS) {
-  return res.status(401).json({ error: 'Webhook expired' });
+  return res.status(401).json({ error: "Webhook expired" });
 }
 ```
 
@@ -495,25 +468,25 @@ const key = `${event.meeting.id}:${event.recording?.id}`;
 if (await redis.exists(`webhook:processed:${key}`)) {
   return res.status(200).json({ received: true, duplicate: true });
 }
-await redis.setex(`webhook:processed:${key}`, 86400, '1');
+await redis.setex(`webhook:processed:${key}`, 86400, "1");
 
 // Process webhook...
 ```
 
 ## Events Reference
 
-| Event | Description | Trigger |
-|-------|-------------|---------|
+| Event                     | Description                                          | Trigger                           |
+| ------------------------- | ---------------------------------------------------- | --------------------------------- |
 | `meeting.recording_ready` | Recording processed with optional transcript/summary | Post-meeting processing completes |
 
 ### Future Events (Planned)
 
-| Event | Description |
-|-------|-------------|
-| `meeting.started` | Meeting begins |
-| `meeting.ended` | Meeting ends (without recording) |
-| `participant.joined` | Participant joins meeting |
-| `participant.left` | Participant leaves meeting |
+| Event                     | Description                      |
+| ------------------------- | -------------------------------- |
+| `meeting.started`         | Meeting begins                   |
+| `meeting.ended`           | Meeting ends (without recording) |
+| `participant.joined`      | Participant joins meeting        |
+| `participant.left`        | Participant leaves meeting       |
 | `transcription.completed` | Live transcription segment ready |
 
 ## Troubleshooting

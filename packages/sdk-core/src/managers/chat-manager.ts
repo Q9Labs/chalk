@@ -189,14 +189,17 @@ export class ChatManager extends StateContainer<ChatState> {
     for (let index = 0; index < uploadSpecs.length; index++) {
       const spec = uploadSpecs[index];
       if (!spec) continue;
-      
+
       const file = files[index];
       if (!file) continue;
 
       await this.transport.uploadAttachment(spec.attachmentId, file);
     }
 
-    this.room.sendMessage(content, uploadSpecs.map((spec) => spec.attachmentId));
+    this.room.sendMessage(
+      content,
+      uploadSpecs.map((spec) => spec.attachmentId),
+    );
   }
 
   async getAttachmentDownloadUrl(attachmentId: string): Promise<string> {

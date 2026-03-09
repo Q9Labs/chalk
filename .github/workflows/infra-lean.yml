@@ -4,19 +4,19 @@ on:
   push:
     branches: [master]
     paths:
-      - 'infrastructure/terraform/environments/prod-lean/**'
-      - 'infrastructure/terraform/modules/ec2-api-lean/**'
-      - 'infrastructure/terraform/modules/ec2-whisper-lean/**'
-      - '.github/workflows/infra-lean.yml'
+      - "infrastructure/terraform/environments/prod-lean/**"
+      - "infrastructure/terraform/modules/ec2-api-lean/**"
+      - "infrastructure/terraform/modules/ec2-whisper-lean/**"
+      - ".github/workflows/infra-lean.yml"
   pull_request:
     paths:
-      - 'infrastructure/terraform/environments/prod-lean/**'
-      - 'infrastructure/terraform/modules/ec2-api-lean/**'
-      - 'infrastructure/terraform/modules/ec2-whisper-lean/**'
+      - "infrastructure/terraform/environments/prod-lean/**"
+      - "infrastructure/terraform/modules/ec2-api-lean/**"
+      - "infrastructure/terraform/modules/ec2-whisper-lean/**"
   workflow_dispatch:
     inputs:
       action:
-        description: 'Terraform action'
+        description: "Terraform action"
         required: true
         type: choice
         options:
@@ -30,10 +30,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TF_VERSION: '1.9'
+  TF_VERSION: "1.9"
   AWS_REGION: us-east-1
-  TF_INPUT: 'false'
-  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: "false"
+  TF_IN_AUTOMATION: "true"
   TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
 
 permissions:

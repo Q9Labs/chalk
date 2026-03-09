@@ -1,26 +1,26 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
-import { api } from "@/lib/api"
-import { StatCard } from "@/components/stat-card"
-import { Skeleton } from "@/components/ui/skeleton"
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { StatCard } from "@/components/stat-card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/")({
   component: OverviewPage,
-})
+});
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B"
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB", "TB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 function OverviewPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "overview"],
     queryFn: api.getOverview,
-  })
+  });
 
   if (isLoading) {
     return (
@@ -32,14 +32,14 @@ function OverviewPage() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
-  const overview = data?.overview
-  const webhookStats = data?.webhook_stats
-  const storageStats = data?.storage_stats as { storage_provider: string; total_bytes: number; recording_count: number }[] | undefined
+  const overview = data?.overview;
+  const webhookStats = data?.webhook_stats;
+  const storageStats = data?.storage_stats as { storage_provider: string; total_bytes: number; recording_count: number }[] | undefined;
 
-  const totalStorage = Number(overview?.total_storage_bytes ?? 0)
+  const totalStorage = Number(overview?.total_storage_bytes ?? 0);
 
   return (
     <div className="space-y-6">
@@ -71,16 +71,11 @@ function OverviewPage() {
           <h2 className="text-lg font-semibold mb-3">Storage Breakdown</h2>
           <div className="grid gap-4 md:grid-cols-3">
             {storageStats.map((s) => (
-              <StatCard
-                key={s.storage_provider}
-                title={s.storage_provider}
-                value={formatBytes(s.total_bytes)}
-                description={`${s.recording_count} recordings`}
-              />
+              <StatCard key={s.storage_provider} title={s.storage_provider} value={formatBytes(s.total_bytes)} description={`${s.recording_count} recordings`} />
             ))}
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -8,12 +8,7 @@
 /**
  * Status of a recording
  */
-export type RecordingStatus =
-	| "recording"
-	| "processing"
-	| "ready"
-	| "archived"
-	| "deleted";
+export type RecordingStatus = "recording" | "processing" | "ready" | "archived" | "deleted";
 
 /**
  * Storage provider for recordings
@@ -38,36 +33,36 @@ export type StorageProvider = "r2" | "s3_glacier";
  * ```
  */
 export interface Recording {
-	/** Unique recording identifier (UUID) */
-	readonly id: string;
+  /** Unique recording identifier (UUID) */
+  readonly id: string;
 
-	/** ConferenceSession that was recorded */
-	roomId: string;
+  /** ConferenceSession that was recorded */
+  roomId: string;
 
-	/** Current status */
-	status: RecordingStatus;
+  /** Current status */
+  status: RecordingStatus;
 
-	/** Cloudflare recording ID */
-	cloudflareRecordingId?: string;
+  /** Cloudflare recording ID */
+  cloudflareRecordingId?: string;
 
-	/** Storage provider */
-	storageProvider?: StorageProvider;
+  /** Storage provider */
+  storageProvider?: StorageProvider;
 
-	/** Path to stored recording file */
-	storagePath?: string;
+  /** Path to stored recording file */
+  storagePath?: string;
 
-	/** File size in bytes (available after processing) */
-	sizeBytes?: number;
+  /** File size in bytes (available after processing) */
+  sizeBytes?: number;
 
-	/** Duration in seconds (available after processing) */
-	durationSeconds?: number;
+  /** Duration in seconds (available after processing) */
+  durationSeconds?: number;
 
-	/** When recording started */
-	startedAt?: Date;
+  /** When recording started */
+  startedAt?: Date;
 
-	/** When recording stopped */
-	endedAt?: Date;
+  /** When recording stopped */
+  endedAt?: Date;
 
-	/** When recording was archived to long-term storage */
-	archivedAt?: Date;
+  /** When recording was archived to long-term storage */
+  archivedAt?: Date;
 }

@@ -64,22 +64,14 @@ export type WhiteboardCursorPayload = Schema.Schema.Type<typeof WhiteboardCursor
 export const AnnotationSessionStartPayload = Schema.Struct({
   shareSessionId: Schema.String,
   sharerParticipantId: Schema.String,
-  accessMode: Schema.Union(
-    Schema.Literal("all"),
-    Schema.Literal("sharer_only"),
-    Schema.Literal("off"),
-  ),
+  accessMode: Schema.Union(Schema.Literal("all"), Schema.Literal("sharer_only"), Schema.Literal("off")),
 });
-export type AnnotationSessionStartPayload = Schema.Schema.Type<
-  typeof AnnotationSessionStartPayload
->;
+export type AnnotationSessionStartPayload = Schema.Schema.Type<typeof AnnotationSessionStartPayload>;
 
 export const AnnotationSessionEndPayload = Schema.Struct({
   shareSessionId: Schema.String,
 });
-export type AnnotationSessionEndPayload = Schema.Schema.Type<
-  typeof AnnotationSessionEndPayload
->;
+export type AnnotationSessionEndPayload = Schema.Schema.Type<typeof AnnotationSessionEndPayload>;
 
 export const AnnotationSyncPayload = Schema.Struct({
   shareSessionId: Schema.optional(Schema.String),
@@ -102,15 +94,7 @@ export type AnnotationClearPayload = Schema.Schema.Type<typeof AnnotationClearPa
 
 export const AnnotationCursorPayload = Schema.Struct({
   shareSessionId: Schema.String,
-  tool: Schema.Union(
-    Schema.Literal("pen"),
-    Schema.Literal("highlighter"),
-    Schema.Literal("rectangle"),
-    Schema.Literal("ellipse"),
-    Schema.Literal("line"),
-    Schema.Literal("arrow"),
-    Schema.Literal("text"),
-  ),
+  tool: Schema.Union(Schema.Literal("pen"), Schema.Literal("highlighter"), Schema.Literal("rectangle"), Schema.Literal("ellipse"), Schema.Literal("line"), Schema.Literal("arrow"), Schema.Literal("text")),
   x: Schema.Number,
   y: Schema.Number,
 });
@@ -118,15 +102,9 @@ export type AnnotationCursorPayload = Schema.Schema.Type<typeof AnnotationCursor
 
 export const AnnotationAccessSetPayload = Schema.Struct({
   shareSessionId: Schema.String,
-  accessMode: Schema.Union(
-    Schema.Literal("all"),
-    Schema.Literal("sharer_only"),
-    Schema.Literal("off"),
-  ),
+  accessMode: Schema.Union(Schema.Literal("all"), Schema.Literal("sharer_only"), Schema.Literal("off")),
 });
-export type AnnotationAccessSetPayload = Schema.Schema.Type<
-  typeof AnnotationAccessSetPayload
->;
+export type AnnotationAccessSetPayload = Schema.Schema.Type<typeof AnnotationAccessSetPayload>;
 
 /**
  * permission.grant / permission.revoke payload

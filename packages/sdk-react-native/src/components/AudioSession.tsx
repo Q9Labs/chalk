@@ -4,29 +4,22 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
-import {
-	DeviceEventEmitter,
-	NativeEventEmitter,
-	NativeModules,
-	Platform,
-} from "react-native";
+import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from "react-native";
 
 interface AudioSessionModuleType {
-	configureForCall: () => Promise<void>;
-	setOutputRoute: (route: string) => Promise<void>;
-	getAvailableRoutes: () => Promise<string[]>;
-	getCurrentRoute: () => Promise<string>;
-	setSpeakerphone: (enabled: boolean) => Promise<void>;
+  configureForCall: () => Promise<void>;
+  setOutputRoute: (route: string) => Promise<void>;
+  getAvailableRoutes: () => Promise<string[]>;
+  getCurrentRoute: () => Promise<string>;
+  setSpeakerphone: (enabled: boolean) => Promise<void>;
 }
 
-const AudioSessionModule = NativeModules.AudioSessionModule as
-	| AudioSessionModuleType
-	| undefined;
+const AudioSessionModule = NativeModules.AudioSessionModule as AudioSessionModuleType | undefined;
 
 interface AudioSessionProps {
-	/** Whether audio should be routed to speaker (loud speaker) */
-	useSpeaker?: boolean;
-	children?: React.ReactNode;
+  /** Whether audio should be routed to speaker (loud speaker) */
+  useSpeaker?: boolean;
+  children?: React.ReactNode;
 }
 
 /**
@@ -46,28 +39,25 @@ interface AudioSessionProps {
  * }
  * ```
  */
-export function AudioSession({
-	useSpeaker = false,
-	children,
-}: AudioSessionProps) {
-	useEffect(() => {
-		configureAudioSession(useSpeaker);
-	}, [useSpeaker]);
+export function AudioSession({ useSpeaker = false, children }: AudioSessionProps) {
+  useEffect(() => {
+    configureAudioSession(useSpeaker);
+  }, [useSpeaker]);
 
-	return <>{children}</>;
+  return <>{children}</>;
 }
 
 async function configureAudioSession(useSpeaker: boolean): Promise<void> {
-	if (!AudioSessionModule) {
-		return;
-	}
+  if (!AudioSessionModule) {
+    return;
+  }
 
-	try {
-		await AudioSessionModule.configureForCall();
-		await AudioSessionModule.setSpeakerphone(useSpeaker);
-	} catch {
-		// Silently ignore error
-	}
+  try {
+    await AudioSessionModule.configureForCall();
+    await AudioSessionModule.setSpeakerphone(useSpeaker);
+  } catch {
+    // Silently ignore error
+  }
 }
 
 /**
@@ -75,121 +65,115 @@ async function configureAudioSession(useSpeaker: boolean): Promise<void> {
  * Use this in your call screen components
  */
 export function useSpeakerphone() {
-	const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
 
-	const toggle = useCallback(async () => {
-		const newState = !isSpeakerOn;
+  const toggle = useCallback(async () => {
+    const newState = !isSpeakerOn;
 
-		if (!AudioSessionModule) {
-			setIsSpeakerOn(newState);
-			return;
-		}
+    if (!AudioSessionModule) {
+      setIsSpeakerOn(newState);
+      return;
+    }
 
-		try {
-			await AudioSessionModule.setSpeakerphone(newState);
-			setIsSpeakerOn(newState);
-		} catch {
-			// Silently ignore error
-		}
-	}, [isSpeakerOn]);
+    try {
+      await AudioSessionModule.setSpeakerphone(newState);
+      setIsSpeakerOn(newState);
+    } catch {
+      // Silently ignore error
+    }
+  }, [isSpeakerOn]);
 
-	const setSpeaker = useCallback(async (enabled: boolean) => {
-		if (!AudioSessionModule) {
-			setIsSpeakerOn(enabled);
-			return;
-		}
+  const setSpeaker = useCallback(async (enabled: boolean) => {
+    if (!AudioSessionModule) {
+      setIsSpeakerOn(enabled);
+      return;
+    }
 
-		try {
-			await AudioSessionModule.setSpeakerphone(enabled);
-			setIsSpeakerOn(enabled);
-		} catch {
-			// Silently ignore error
-		}
-	}, []);
+    try {
+      await AudioSessionModule.setSpeakerphone(enabled);
+      setIsSpeakerOn(enabled);
+    } catch {
+      // Silently ignore error
+    }
+  }, []);
 
-	return { isSpeakerOn, toggle, setSpeaker };
+  return { isSpeakerOn, toggle, setSpeaker };
 }
 
 /**
  * Hook to check if Bluetooth audio is available and manage Bluetooth routing
  */
 export function useBluetoothAudio() {
-	const [isBluetoothAvailable, setIsBluetoothAvailable] = useState(false);
-	const [isBluetoothConnected, setIsBluetoothConnected] = useState(false);
+  const [isBluetoothAvailable, setIsBluetoothAvailable] = useState(false);
+  const [isBluetoothConnected, setIsBluetoothConnected] = useState(false);
 
-	useEffect(() => {
-		if (!AudioSessionModule) {
-			return;
-		}
+  useEffect(() => {
+    if (!AudioSessionModule) {
+      return;
+    }
 
-		// Check initial state
-		checkBluetoothStatus();
+    // Check initial state
+    checkBluetoothStatus();
 
-		// Subscribe to route change events
-		const eventEmitter =
-			Platform.OS === "ios"
-				? new NativeEventEmitter(NativeModules.AudioSessionModule)
-				: DeviceEventEmitter;
+    // Subscribe to route change events
+    const eventEmitter = Platform.OS === "ios" ? new NativeEventEmitter(NativeModules.AudioSessionModule) : DeviceEventEmitter;
 
-		const subscription = eventEmitter.addListener(
-			"onRouteChange",
-			(event: { route: string; availableRoutes?: string[] }) => {
-				setIsBluetoothConnected(event.route === "bluetooth");
-				if (event.availableRoutes) {
-					setIsBluetoothAvailable(event.availableRoutes.includes("bluetooth"));
-				}
-			},
-		);
+    const subscription = eventEmitter.addListener("onRouteChange", (event: { route: string; availableRoutes?: string[] }) => {
+      setIsBluetoothConnected(event.route === "bluetooth");
+      if (event.availableRoutes) {
+        setIsBluetoothAvailable(event.availableRoutes.includes("bluetooth"));
+      }
+    });
 
-		return () => subscription.remove();
-	}, []);
+    return () => subscription.remove();
+  }, []);
 
-	async function checkBluetoothStatus() {
-		if (!AudioSessionModule) {
-			return;
-		}
+  async function checkBluetoothStatus() {
+    if (!AudioSessionModule) {
+      return;
+    }
 
-		try {
-			const routes = await AudioSessionModule.getAvailableRoutes();
-			const currentRoute = await AudioSessionModule.getCurrentRoute();
+    try {
+      const routes = await AudioSessionModule.getAvailableRoutes();
+      const currentRoute = await AudioSessionModule.getCurrentRoute();
 
-			setIsBluetoothAvailable(routes.includes("bluetooth"));
-			setIsBluetoothConnected(currentRoute === "bluetooth");
-		} catch {
-			// Silently ignore error
-		}
-	}
+      setIsBluetoothAvailable(routes.includes("bluetooth"));
+      setIsBluetoothConnected(currentRoute === "bluetooth");
+    } catch {
+      // Silently ignore error
+    }
+  }
 
-	const connectBluetooth = useCallback(async () => {
-		if (!AudioSessionModule) {
-			return;
-		}
+  const connectBluetooth = useCallback(async () => {
+    if (!AudioSessionModule) {
+      return;
+    }
 
-		try {
-			await AudioSessionModule.setOutputRoute("bluetooth");
-			setIsBluetoothConnected(true);
-		} catch {
-			// Silently ignore error
-		}
-	}, []);
+    try {
+      await AudioSessionModule.setOutputRoute("bluetooth");
+      setIsBluetoothConnected(true);
+    } catch {
+      // Silently ignore error
+    }
+  }, []);
 
-	const disconnectBluetooth = useCallback(async () => {
-		if (!AudioSessionModule) {
-			return;
-		}
+  const disconnectBluetooth = useCallback(async () => {
+    if (!AudioSessionModule) {
+      return;
+    }
 
-		try {
-			await AudioSessionModule.setOutputRoute("speaker");
-			setIsBluetoothConnected(false);
-		} catch {
-			// Silently ignore error
-		}
-	}, []);
+    try {
+      await AudioSessionModule.setOutputRoute("speaker");
+      setIsBluetoothConnected(false);
+    } catch {
+      // Silently ignore error
+    }
+  }, []);
 
-	return {
-		isBluetoothAvailable,
-		isBluetoothConnected,
-		connectBluetooth,
-		disconnectBluetooth,
-	};
+  return {
+    isBluetoothAvailable,
+    isBluetoothConnected,
+    connectBluetooth,
+    disconnectBluetooth,
+  };
 }

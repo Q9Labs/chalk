@@ -9,6 +9,7 @@
 All test files have been created and are ready to use:
 
 ### k6 Test Scripts
+
 - [x] `tests/load/k6/config.js` - Shared config (BASE_URL, WS_URL, thresholds, tenant info)
 - [x] `tests/load/k6/helpers/auth.js` - Token generation (getAuthToken, refreshToken)
 - [x] `tests/load/k6/helpers/websocket.js` - WS message types matching API's messages.go
@@ -19,21 +20,25 @@ All test files have been created and are ready to use:
 - [x] `tests/load/k6/scenarios/ws-storm.js` - Message flood rate limit test (scaled by `K6_ACTIVE_USERS`, default 3000)
 
 ### Artillery WebSocket Scenarios
+
 - [x] `tests/load/artillery/config.yml` - Base configuration
 - [x] `tests/load/artillery/websocket-chat.yml` - Chat message load test
 - [x] `tests/load/artillery/websocket-whiteboard.yml` - Whiteboard sync scenarios
 - [x] `tests/load/artillery/functions.js` - Custom JS helpers
 
 ### Go WebRTC Load Client
+
 - [x] `tests/load/webrtc-client/go.mod` - Go 1.22 with pion/webrtc, prometheus
 - [x] `tests/load/webrtc-client/main.go` - CLI with Prometheus metrics endpoint
 
 ### Terraform Infrastructure
+
 - [x] `tests/infrastructure/terraform/stress-test/main.tf` - Full AWS setup
 - [x] `tests/infrastructure/terraform/stress-test/variables.tf` - Config variables
 - [x] `tests/infrastructure/terraform/stress-test/outputs.tf` - Endpoint outputs
 
 ### Execution Scripts
+
 - [x] `tests/scripts/setup-test-env.sh` - Provision infrastructure + create tenant
 - [x] `tests/scripts/run-tests.sh` - Execute k6 scenarios with auto-result logging
 - [x] `tests/scripts/cleanup.sh` - Destroy infrastructure
@@ -42,6 +47,7 @@ All test files have been created and are ready to use:
 - [x] `tests/scripts/generate-summary.sh` - Summary report generator
 
 ### Results Framework
+
 - [x] `tests/results/STRESS_TEST_RESULTS.md` - Persistent results file (initialized)
 
 ---
@@ -49,6 +55,7 @@ All test files have been created and are ready to use:
 ## Next Steps (Phase 2: Execution)
 
 ### Prerequisites
+
 1. **AWS credentials configured** - `aws configure` or `AWS_PROFILE=q9labs`
 2. **Terraform state bucket exists** - `chalk-terraform-state` in us-east-1
 3. **k6 installed locally** - `brew install k6`
@@ -57,6 +64,7 @@ All test files have been created and are ready to use:
 6. **AWS CLI installed** - for ECR/ECS operations
 
 ### Day 1: Infrastructure Setup
+
 ```bash
 # 1. Review and customize Terraform variables
 cd tests/infrastructure/terraform/stress-test
@@ -74,6 +82,7 @@ AWS_PROFILE=q9labs ./tests/scripts/setup-test-env.sh
 ```
 
 ### Day 1: Smoke Test
+
 ```bash
 # Run baseline verification
 K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh smoke
@@ -83,6 +92,7 @@ K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh smoke
 ```
 
 ### Day 2-3: Load Tests
+
 ```bash
 # Room creation storm (scaled by K6_ACTIVE_USERS)
 K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh room-creation
@@ -95,6 +105,7 @@ K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh participant-chu
 ```
 
 ### Day 4-5: Stress Tests
+
 ```bash
 # Large room (scaled by K6_ACTIVE_USERS)
 K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh large-room
@@ -104,6 +115,7 @@ K6_SHORT=false K6_ACTIVE_USERS=3000 ./tests/scripts/run-tests.sh ws-storm
 ```
 
 ### Day 6: Spike Testing (Manual)
+
 ```bash
 # Custom k6 run with spike pattern
 k6 run \
@@ -116,6 +128,7 @@ k6 run \
 ```
 
 ### Day 7-8: Endurance Testing
+
 ```bash
 # Extended duration run (4+ hours)
 k6 run \
@@ -130,6 +143,7 @@ k6 run \
 ```
 
 ### Day 8: Cleanup & Report
+
 ```bash
 # Generate summary
 ./tests/scripts/generate-summary.sh
@@ -146,30 +160,33 @@ cat tests/results/STRESS_TEST_RESULTS.md
 
 ## Acceptance Criteria
 
-| Metric | Threshold | Test Scenario |
-|--------|-----------|---------------|
-| Room creation p95 | < 1s | room-creation |
-| Participant join p95 | < 2s | participant-churn |
-| Chat broadcast p95 | < 500ms | large-room |
-| Large room (100+) broadcast p95 | < 1s | large-room |
-| Rate limiter accuracy | 100% | ws-storm |
-| Error rate | < 1% | all scenarios |
-| Memory growth (4hr) | < 20% | endurance |
+| Metric                          | Threshold | Test Scenario     |
+| ------------------------------- | --------- | ----------------- |
+| Room creation p95               | < 1s      | room-creation     |
+| Participant join p95            | < 2s      | participant-churn |
+| Chat broadcast p95              | < 500ms   | large-room        |
+| Large room (100+) broadcast p95 | < 1s      | large-room        |
+| Rate limiter accuracy           | 100%      | ws-storm          |
+| Error rate                      | < 1%      | all scenarios     |
+| Memory growth (4hr)             | < 20%     | endurance         |
 
 ---
 
 ## Monitoring During Tests
 
 ### CloudWatch Dashboard
+
 URL output from Terraform: `cloudwatch_dashboard_url`
 
 Widgets:
+
 - ECS CPU & Memory utilization
 - Aurora connections & ACU scaling
 - Redis CPU & memory
 - ALB request count & p95 latency
 
 ### Manual Checks
+
 ```bash
 # Tail API logs
 aws logs tail /chalk-stress/api --follow
@@ -198,24 +215,29 @@ aws cloudwatch get-metric-statistics \
 ### Common Issues
 
 **k6: "connection refused"**
+
 - Check API endpoint is correct in `.env`
 - Verify ECS tasks are running
 - Check security group allows traffic
 
 **Terraform: "VPC not found"**
+
 - Update `data.aws_vpc.main` tags in main.tf to match your VPC
 
 **High error rate**
+
 - Check CloudWatch logs for specific errors
 - May need to increase Aurora ACU max or ECS task count
 
 **Rate limiting not working**
+
 - Verify Redis is connected (check API logs)
 - Check `ws-storm` threshold expects >40% rate limited
 
 ### Adjusting Test Parameters
 
 Edit scenario files directly:
+
 - `stages` array for ramp patterns
 - `vus` / `duration` for simple tests
 - `thresholds` for pass/fail criteria

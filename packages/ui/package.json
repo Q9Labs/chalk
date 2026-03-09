@@ -1,29 +1,29 @@
 {
   "name": "@q9labs/chalk-ui",
   "version": "0.0.72",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "style": "./dist/styles.css",
   "repository": {
     "type": "git",
     "url": "https://github.com/Q9Labs/chalk.git",
     "directory": "packages/ui"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
-  },
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./styles.css": "./dist/styles.css"
-  },
+  "style": "./dist/styles.css",
   "files": [
     "dist"
   ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @chalk/core && bun run build:types && bun run build:css",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",

@@ -7,12 +7,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
 export interface UseActiveSpeakerReturn {
-	/** Current active speaker (null if none) */
-	activeSpeaker: Participant | null;
-	/** Whether local user is speaking */
-	isLocalSpeaking: boolean;
-	/** Active speaker's ID */
-	activeSpeakerId: string | null;
+  /** Current active speaker (null if none) */
+  activeSpeaker: Participant | null;
+  /** Whether local user is speaking */
+  isLocalSpeaking: boolean;
+  /** Active speaker's ID */
+  activeSpeakerId: string | null;
 }
 
 /**
@@ -36,21 +36,21 @@ export interface UseActiveSpeakerReturn {
  * ```
  */
 export function useActiveSpeaker(): UseActiveSpeakerReturn {
-	const session = useSession();
-	const { participants: manager } = session;
+  const session = useSession();
+  const { participants: manager } = session;
 
-	const [state, setState] = useState<ParticipantState>(() => manager.getState());
+  const [state, setState] = useState<ParticipantState>(() => manager.getState());
 
-	useEffect(() => {
-		return manager.subscribe(setState);
-	}, [manager]);
+  useEffect(() => {
+    return manager.subscribe(setState);
+  }, [manager]);
 
-	return useMemo((): UseActiveSpeakerReturn => {
-		const activeSpeaker = state.activeSpeaker;
-		return {
-			activeSpeaker,
-			isLocalSpeaking: activeSpeaker?.isLocal ?? false,
-			activeSpeakerId: activeSpeaker?.id ?? null,
-		};
-	}, [state.activeSpeaker]);
+  return useMemo((): UseActiveSpeakerReturn => {
+    const activeSpeaker = state.activeSpeaker;
+    return {
+      activeSpeaker,
+      isLocalSpeaking: activeSpeaker?.isLocal ?? false,
+      activeSpeakerId: activeSpeaker?.id ?? null,
+    };
+  }, [state.activeSpeaker]);
 }

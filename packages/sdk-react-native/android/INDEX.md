@@ -80,12 +80,12 @@ stopBluetoothSco(): Promise<boolean>
 
 ```javascript
 // Emitted when audio route changes
-DeviceEventEmitter.addListener('audioRouteChanged', (event) => {
+DeviceEventEmitter.addListener("audioRouteChanged", (event) => {
   console.log(event.route); // 'speaker', 'earpiece', 'bluetooth', 'wired'
 });
 
 // Emitted when audio focus changes
-DeviceEventEmitter.addListener('audioFocusChanged', (event) => {
+DeviceEventEmitter.addListener("audioFocusChanged", (event) => {
   // event.focusState: 'gained', 'lost', 'lostTransient', 'lostTransientCanDuck'
 });
 ```
@@ -101,13 +101,13 @@ DeviceEventEmitter.addListener('audioFocusChanged', (event) => {
 
 ## Requirements
 
-| Component | Requirement |
-|-----------|-------------|
-| Min SDK | 24 (Android 7.0) |
-| Target SDK | 34 (Android 14) |
-| Kotlin | 1.9.22+ |
-| React Native | 0.70.0+ |
-| Java | 17 |
+| Component    | Requirement      |
+| ------------ | ---------------- |
+| Min SDK      | 24 (Android 7.0) |
+| Target SDK   | 34 (Android 14)  |
+| Kotlin       | 1.9.22+          |
+| React Native | 0.70.0+          |
+| Java         | 17               |
 
 ## Permissions
 
@@ -126,21 +126,20 @@ Required in `AndroidManifest.xml`:
 ### Initialize Audio on Call Start
 
 ```javascript
-import { NativeModules } from 'react-native';
+import { NativeModules } from "react-native";
 
 const { AudioSessionModule } = NativeModules;
 
 // In your call component
 useEffect(() => {
-  AudioSessionModule.configureForCall()
-    .catch(error => console.error('Audio config failed', error));
+  AudioSessionModule.configureForCall().catch((error) => console.error("Audio config failed", error));
 }, []);
 ```
 
 ### Switch to Speaker
 
 ```javascript
-await AudioSessionModule.setOutputRoute('speaker');
+await AudioSessionModule.setOutputRoute("speaker");
 ```
 
 ### Check Available Routes
@@ -153,9 +152,9 @@ const routes = await AudioSessionModule.getAvailableRoutes();
 ### Listen to Route Changes
 
 ```javascript
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter } from "react-native";
 
-DeviceEventEmitter.addListener('audioRouteChanged', (event) => {
+DeviceEventEmitter.addListener("audioRouteChanged", (event) => {
   setCurrentRoute(event.route);
 });
 ```
@@ -163,16 +162,19 @@ DeviceEventEmitter.addListener('audioRouteChanged', (event) => {
 ## Troubleshooting
 
 ### Bluetooth Not Available
+
 - Verify device is paired in Settings
 - Check runtime permissions on API 31+
 - Bluetooth SCO availability is device-specific
 
 ### No Sound
+
 - Verify `configureForCall()` was called
 - Check volume is not muted
 - Verify audio route is correctly set
 
 ### Module Not Found
+
 - Confirm ChalkPackage is registered in MainApplication
 - Rebuild: `./gradlew clean && npm run android`
 
@@ -197,6 +199,7 @@ android/
 ## Support
 
 For issues:
+
 1. Check logcat: `adb logcat | grep AudioSessionModule`
 2. Review [INTEGRATION.md](./INTEGRATION.md) troubleshooting section
 3. Verify permissions and module registration

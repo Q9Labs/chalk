@@ -24,11 +24,12 @@ git tag -l 'v*' | sort -V | tail -1
 
 1. **Categorize changes** (show as table):
 
-| User-Facing (`<!-- whats-new -->`) | Technical (outside tags)                         |
-| ---------------------------------- | ------------------------------------------------ |
+| User-Facing (`<!-- whats-new -->`) | Technical (outside tags)                          |
+| ---------------------------------- | ------------------------------------------------- |
 | Added, Changed, Fixed              | Developer Experience, Refactoring, Infrastructure |
 
 **User-facing tone rules:**
+
 - Write for non-technical end users (teachers, students, admins)
 - Describe **what changed for the user**, not how it was fixed
 - NO: implementation details, API names, hook names, SSR, framework-specific terms
@@ -53,14 +54,14 @@ git tag -l 'v*' | sort -V | tail -1
 > Modern, clean, tech aesthetic, grainy, illustrative. No text, no people, no icons.
 > Aspect ratio 4:3 landscape.
 
-| Theme               | Palette               |
-| ------------------- | --------------------- |
-| Video, Meetings     | teal, cyan, emerald   |
-| Transcription       | blue, indigo, violet  |
-| Recording, Export   | coral, peach, gold    |
-| Collaboration       | purple, magenta, pink |
-| Performance         | lime, mint, emerald   |
-| UI, Design          | teal, purple, cyan    |
+| Theme             | Palette               |
+| ----------------- | --------------------- |
+| Video, Meetings   | teal, cyan, emerald   |
+| Transcription     | blue, indigo, violet  |
+| Recording, Export | coral, peach, gold    |
+| Collaboration     | purple, magenta, pink |
+| Performance       | lime, mint, emerald   |
+| UI, Design        | teal, purple, cyan    |
 
 5. **AskUserQuestion** (after showing above):
    - Version: confirm or override
@@ -68,6 +69,7 @@ git tag -l 'v*' | sort -V | tail -1
    - Image key: "Skip" or "Provide key" (user pastes in Other field)
 
 R2 upload command (show before asking):
+
 ```bash
 aws s3 cp hero.png s3://chalk-recordings/whats-new/vX.X.X/hero.png \
   --endpoint-url https://5281943bd26d5bdcf4c3915606cd6bfb.r2.cloudflarestorage.com
@@ -83,6 +85,7 @@ Spawn `model="haiku"`, `subagent_type="code-writer"` with this exact prompt stru
 Execute release vX.X.X - [CODENAME]
 
 ## Inputs
+
 - **version**: `X.X.X`
 - **title**: `vX.X.X - [CODENAME]`
 - **imageKey**: `[KEY or empty]`
@@ -94,6 +97,7 @@ Execute release vX.X.X - [CODENAME]
 <!-- image: [IMAGE_KEY] -->
 
 <!-- whats-new -->
+
 ## Features
 
 - **[Feature Name]** — [1-sentence plain-language description, no code/framework terms]
@@ -116,7 +120,9 @@ Execute release vX.X.X - [CODENAME]
 ## Steps
 
 ### 1. Edit package.json (5 files)
+
 Change `"version": "[OLD]"` to `"version": "[NEW]"` in:
+
 - `packages/sdk-core/package.json`
 - `packages/sdk-react/package.json`
 - `packages/sdk-react-native/package.json`
@@ -124,7 +130,9 @@ Change `"version": "[OLD]"` to `"version": "[NEW]"` in:
 - `packages/chalk-whiteboard/package.json`
 
 ### 2. Edit CHANGELOG.md
+
 Replace `## [Unreleased]` section with:
+
 ```
 ## [Unreleased]
 
@@ -138,6 +146,7 @@ Replace `## [Unreleased]` section with:
 ```
 
 ### 3. Git
+
 ```bash
 git add packages/*/package.json CHANGELOG.md
 git commit -m "chore: release vX.X.X"
@@ -146,11 +155,13 @@ git push origin master && git push origin vX.X.X
 ```
 
 ### 4. GitHub Release
+
 ```bash
 gh release create vX.X.X --verify-tag --title "[TITLE]" --notes-file [SCRATCHPAD]/release-notes.md
 ```
 
 ### 5. Verify
+
 ```bash
 gh run list --workflow=sdk.yml --limit=1
 gh run watch [RUN_ID] --exit-status
@@ -163,9 +174,9 @@ Report: release URL + workflow status
 
 ## Troubleshooting
 
-| Issue                    | Solution                                               |
-| ------------------------ | ------------------------------------------------------ |
-| Tag already exists       | `git tag -d vX.X.X && git push origin :vX.X.X`         |
-| 403 on npm publish       | Check `NPM_TOKEN` secret has `packages:write`          |
-| Workflow success, no pkg | Check logs — `continue-on-error: true` masks errors    |
-| Release not in What's New| Clear Redis: `redis-cli DEL whats-new:latest`          |
+| Issue                     | Solution                                            |
+| ------------------------- | --------------------------------------------------- |
+| Tag already exists        | `git tag -d vX.X.X && git push origin :vX.X.X`      |
+| 403 on npm publish        | Check `NPM_TOKEN` secret has `packages:write`       |
+| Workflow success, no pkg  | Check logs — `continue-on-error: true` masks errors |
+| Release not in What's New | Clear Redis: `redis-cli DEL whats-new:latest`       |

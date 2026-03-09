@@ -12,17 +12,17 @@ import { wideEvents } from "@q9labs/chalk-core";
 
 /** Logger interface (now a no-op) */
 export interface Logger {
-	debug: (message: string, data?: unknown) => void;
-	info: (message: string, data?: unknown) => void;
-	warn: (message: string, data?: unknown) => void;
-	error: (message: string, data?: unknown) => void;
+  debug: (message: string, data?: unknown) => void;
+  info: (message: string, data?: unknown) => void;
+  warn: (message: string, data?: unknown) => void;
+  error: (message: string, data?: unknown) => void;
 }
 
 export interface UseLoggerReturn {
-	/** Component-scoped logger instance (no-op, use wide events) */
-	log: Logger;
-	/** Whether debug logging is enabled globally */
-	isEnabled: boolean;
+  /** Component-scoped logger instance (no-op, use wide events) */
+  log: Logger;
+  /** Whether debug logging is enabled globally */
+  isEnabled: boolean;
 }
 
 /**
@@ -34,15 +34,15 @@ export interface UseLoggerReturn {
  * @returns Logger instance (no-op) and enabled state
  */
 export function useLogger(_component: string): UseLoggerReturn {
-	const log = useMemo(
-		(): Logger => ({
-			debug: () => {},
-			info: () => {},
-			warn: () => {},
-			error: () => {},
-		}),
-		[],
-	);
+  const log = useMemo(
+    (): Logger => ({
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    }),
+    [],
+  );
 
-	return { log, isEnabled: wideEvents.isEnabled };
+  return { log, isEnabled: wideEvents.isEnabled };
 }

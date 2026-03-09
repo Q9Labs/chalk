@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useState } from 'react';
-import { Cancel01Icon, Copy01Icon, UserGroupIcon, Tick01Icon } from '../../utils/icons';
-import { cn } from '../../utils/cn';
-import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import { memo, useCallback, useEffect, useState } from "react";
+import { Cancel01Icon, Copy01Icon, UserGroupIcon, Tick01Icon } from "../../utils/icons";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 
 export interface InviteToastProps {
   isVisible: boolean;
@@ -12,13 +12,7 @@ export interface InviteToastProps {
   className?: string;
 }
 
-export const InviteToast = memo<InviteToastProps>(({
-  isVisible,
-  onDismiss,
-  meetingLink,
-  autoDismissDelay = 8000,
-  className,
-}) => {
+export const InviteToast = memo<InviteToastProps>(({ isVisible, onDismiss, meetingLink, autoDismissDelay = 8000, className }) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [copied, setCopied] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
@@ -38,11 +32,11 @@ export const InviteToast = memo<InviteToastProps>(({
       setTimeout(handleDismiss, 1000);
     } catch {
       // Fallback for older browsers
-      const textArea = document.createElement('textarea');
+      const textArea = document.createElement("textarea");
       textArea.value = meetingLink;
       document.body.appendChild(textArea);
       textArea.select();
-      document.execCommand('copy');
+      document.execCommand("copy");
       document.body.removeChild(textArea);
       setCopied(true);
       setTimeout(handleDismiss, 1000);
@@ -65,16 +59,7 @@ export const InviteToast = memo<InviteToastProps>(({
   if (!isVisible) return null;
 
   return (
-    <div
-      className={cn(
-        'fixed bottom-24 left-4 z-50 max-w-sm',
-        !prefersReducedMotion && !isExiting && 'animate-in slide-in-from-left-4 fade-in duration-300',
-        !prefersReducedMotion && isExiting && 'animate-out slide-out-to-left-4 fade-out duration-200',
-        className
-      )}
-      role="status"
-      aria-live="polite"
-    >
+    <div className={cn("fixed bottom-24 left-4 z-50 max-w-sm", !prefersReducedMotion && !isExiting && "animate-in slide-in-from-left-4 fade-in duration-300", !prefersReducedMotion && isExiting && "animate-out slide-out-to-left-4 fade-out duration-200", className)} role="status" aria-live="polite">
       <div className="bg-card/95 backdrop-blur-xl rounded-xl shadow-2xl border border-border/50 overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 p-4 pb-3">
@@ -87,11 +72,7 @@ export const InviteToast = memo<InviteToastProps>(({
               <p className="text-sm text-muted-foreground">Share this link to invite others</p>
             </div>
           </div>
-          <button
-            onClick={handleDismiss}
-            className="p-1 rounded-md text-muted-foreground hover:text-card-foreground hover:bg-muted/50 transition-colors"
-            aria-label="Dismiss"
-          >
+          <button onClick={handleDismiss} className="p-1 rounded-md text-muted-foreground hover:text-card-foreground hover:bg-muted/50 transition-colors" aria-label="Dismiss">
             <Cancel01Icon size={16} />
           </button>
         </div>
@@ -99,23 +80,13 @@ export const InviteToast = memo<InviteToastProps>(({
         {/* Link preview */}
         <div className="px-4 pb-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border/50">
-            <span className="text-sm text-muted-foreground truncate flex-1 font-mono">
-              {meetingLink.replace(/^https?:\/\//, '')}
-            </span>
+            <span className="text-sm text-muted-foreground truncate flex-1 font-mono">{meetingLink.replace(/^https?:\/\//, "")}</span>
           </div>
         </div>
 
         {/* Action */}
         <div className="px-4 pb-4">
-          <button
-            onClick={handleCopy}
-            className={cn(
-              'w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all',
-              copied
-                ? 'bg-green-600/20 text-green-400 border border-green-600/30'
-                : 'bg-primary text-primary-foreground hover:opacity-90'
-            )}
-          >
+          <button onClick={handleCopy} className={cn("w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all", copied ? "bg-green-600/20 text-green-400 border border-green-600/30" : "bg-primary text-primary-foreground hover:opacity-90")}>
             {copied ? (
               <>
                 <Tick01Icon size={18} />
@@ -134,4 +105,4 @@ export const InviteToast = memo<InviteToastProps>(({
   );
 });
 
-InviteToast.displayName = 'InviteToast';
+InviteToast.displayName = "InviteToast";

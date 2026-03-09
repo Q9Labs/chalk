@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Message01Icon, SentIcon, PlusSignIcon, CancelCircleIcon, FileTextIcon } from '../../utils/icons';
-import { MessageBubble } from './MessageBubble';
-import { cn } from '../../utils/cn';
-import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
-import { Button } from '../ui';
-import { getParticipantThemeVariables } from '../../utils/colorGenerator';
-import type { ChatAttachment, ChatMessage, ChatReadReceipt } from './chat-types';
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import { Message01Icon, SentIcon, PlusSignIcon, CancelCircleIcon, FileTextIcon } from "../../utils/icons";
+import { MessageBubble } from "./MessageBubble";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { Button } from "../ui";
+import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt } from "./chat-types";
 
 export type { ChatAttachment, ChatMessage, ChatReadReceipt };
 
@@ -21,18 +21,18 @@ export interface ChatPanelProps {
   className?: string;
   title?: string;
   /** Variant for different layouts */
-  variant?: 'sidebar' | 'mobile';
+  variant?: "sidebar" | "mobile";
   participantColorSeed?: string;
 }
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 
 const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 };
 
 // Group messages by sender within a time window (2 minutes)
@@ -46,8 +46,7 @@ const groupMessages = (messages: ChatMessage[]) => {
 
     // Check if this message belongs to the same group
     const isSameSender = lastGroup && lastGroup.senderId === msg.senderId;
-    const isWithinTimeWindow = lastMsg &&
-      (new Date(msg.timestamp).getTime() - new Date(lastMsg.timestamp).getTime()) < TIME_WINDOW;
+    const isWithinTimeWindow = lastMsg && new Date(msg.timestamp).getTime() - new Date(lastMsg.timestamp).getTime() < TIME_WINDOW;
 
     if (isSameSender && isWithinTimeWindow) {
       lastGroup.messages.push(msg);
@@ -59,30 +58,17 @@ const groupMessages = (messages: ChatMessage[]) => {
   return groups;
 };
 
-export const ChatPanel = React.memo(({
-  messages,
-  onSendMessage,
-  onSendMessageWithAttachments,
-  onResolveAttachmentUrl,
-  localParticipantId,
-  onClose,
-  disabled = false,
-  placeholder = "Type a message...",
-  title = "Chat",
-  variant = 'sidebar',
-  participantColorSeed,
-  className
-}: ChatPanelProps) => {
+export const ChatPanel = React.memo(({ messages, onSendMessage, onSendMessageWithAttachments, onResolveAttachmentUrl, localParticipantId, onClose, disabled = false, placeholder = "Type a message...", title = "Chat", variant = "sidebar", participantColorSeed, className }: ChatPanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [isAtBottom, setIsAtBottom] = useState(true);
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
@@ -90,7 +76,7 @@ export const ChatPanel = React.memo(({
 
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({
-      behavior: smooth && !prefersReducedMotion ? 'smooth' : 'auto'
+      behavior: smooth && !prefersReducedMotion ? "smooth" : "auto",
     });
   };
 
@@ -115,25 +101,25 @@ export const ChatPanel = React.memo(({
         try {
           setUploading(true);
           await onSendMessageWithAttachments(trimmedContent, selectedFiles);
-          setInputValue('');
+          setInputValue("");
           setSelectedFiles([]);
           setAttachmentError(null);
         } catch (error) {
-          console.error('Failed to send message with attachments:', error);
-          setAttachmentError(error instanceof Error ? error.message : 'Failed to upload files. Please try again.');
+          console.error("Failed to send message with attachments:", error);
+          setAttachmentError(error instanceof Error ? error.message : "Failed to upload files. Please try again.");
         } finally {
           setUploading(false);
         }
       } else {
         onSendMessage(trimmedContent);
-        setInputValue('');
+        setInputValue("");
       }
       setTimeout(() => scrollToBottom(), 100);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -146,7 +132,7 @@ export const ChatPanel = React.memo(({
     const validFiles: File[] = [];
     const oversizedFiles: string[] = [];
 
-    files.forEach(file => {
+    files.forEach((file) => {
       if (file.size > MAX_FILE_SIZE) {
         oversizedFiles.push(file.name);
       } else {
@@ -155,18 +141,18 @@ export const ChatPanel = React.memo(({
     });
 
     if (oversizedFiles.length > 0) {
-      const fileLabel = oversizedFiles.map((name) => `"${name}"`).join(', ');
+      const fileLabel = oversizedFiles.map((name) => `"${name}"`).join(", ");
       setAttachmentError(`${fileLabel} exceed the max 25 MB per file limit.`);
     } else {
       setAttachmentError(null);
     }
 
-    setSelectedFiles(prev => [...prev, ...validFiles]);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setSelectedFiles((prev) => [...prev, ...validFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     if (selectedFiles.length === 1) {
       setAttachmentError(null);
     }
@@ -174,28 +160,18 @@ export const ChatPanel = React.memo(({
 
   return (
     <div
-      className={cn(
-        "flex flex-col h-full w-full",
-        "bg-transparent text-card-foreground",
-        !prefersReducedMotion && variant !== 'mobile' && "animate-in slide-in-from-right-5 duration-300",
-        className
-      )}
+      className={cn("flex flex-col h-full w-full", "bg-transparent text-card-foreground", !prefersReducedMotion && variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)}
       data-tour="chat-panel"
       role="complementary"
       aria-label="Chat panel"
       style={themeVariables as React.CSSProperties}
     >
-      {variant === 'sidebar' && (
+      {variant === "sidebar" && (
         <div className="flex items-center justify-between px-6 py-5">
           <h2 className="text-2xl font-bold text-card-foreground">{title}</h2>
           <div className="flex items-center gap-2">
             {onClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-muted text-muted-foreground hover:text-foreground"
-                aria-label="Close chat"
-              >
+              <button type="button" onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-muted text-muted-foreground hover:text-foreground" aria-label="Close chat">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -206,32 +182,21 @@ export const ChatPanel = React.memo(({
         </div>
       )}
 
-      <div
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        className={cn(
-          "flex-1 overflow-y-auto py-4",
-          "[scrollbar-width:thin] [scrollbar-color:var(--border)_transparent]"
-        )}
-      >
+      <div ref={messagesContainerRef} onScroll={handleScroll} className={cn("flex-1 overflow-y-auto py-4", "[scrollbar-width:thin] [scrollbar-color:var(--border)_transparent]")}>
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6">
             <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-primary/10 text-primary">
               <Message01Icon className="w-8 h-8" />
             </div>
             <h3 className="font-medium mb-1 text-card-foreground">No messages yet</h3>
-            <p className="text-sm max-w-[200px] text-muted-foreground">
-              Send a message to start the conversation
-            </p>
+            <p className="text-sm max-w-[200px] text-muted-foreground">Send a message to start the conversation</p>
           </div>
         ) : (
           <div>
             {messageGroups.map((group, groupIndex) => (
               <div key={`group-${groupIndex}`}>
                 {group.messages.map((msg, msgIndex) => {
-                  const isLocalMessage =
-                    msg.isLocal ??
-                    (localParticipantId !== undefined && msg.senderId === localParticipantId);
+                  const isLocalMessage = msg.isLocal ?? (localParticipantId !== undefined && msg.senderId === localParticipantId);
 
                   return (
                     <MessageBubble
@@ -259,11 +224,7 @@ export const ChatPanel = React.memo(({
       </div>
 
       {!isAtBottom && messages.length > 0 && (
-        <Button
-          onClick={() => scrollToBottom()}
-          size="sm"
-          className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-        >
+        <Button onClick={() => scrollToBottom()} size="sm" className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground">
           New messages
         </Button>
       )}
@@ -273,21 +234,13 @@ export const ChatPanel = React.memo(({
         {selectedFiles.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
             {selectedFiles.map((file, index) => {
-              const isImage = file.type.startsWith('image/');
+              const isImage = file.type.startsWith("image/");
               return (
                 <div key={`${file.name}-${index}`} className="relative group">
-                  <div className={cn(
-                    "flex items-center gap-2 p-2 rounded-xl border bg-muted/30 border-border/50",
-                    isImage ? "pr-3" : "px-3"
-                  )}>
+                  <div className={cn("flex items-center gap-2 p-2 rounded-xl border bg-muted/30 border-border/50", isImage ? "pr-3" : "px-3")}>
                     {isImage ? (
                       <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-border/30">
-                        <img 
-                          src={URL.createObjectURL(file)} 
-                          alt="preview" 
-                          className="w-full h-full object-cover"
-                          onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
-                        />
+                        <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)} />
                       </div>
                     ) : (
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10 text-primary shrink-0">
@@ -299,10 +252,7 @@ export const ChatPanel = React.memo(({
                       <p className="text-[10px] text-muted-foreground">{formatFileSize(file.size)}</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => removeFile(index)}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-transform"
-                  >
+                  <button onClick={() => removeFile(index)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-transform">
                     <CancelCircleIcon className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -311,27 +261,11 @@ export const ChatPanel = React.memo(({
           </div>
         )}
 
-        {attachmentError && (
-          <div className="mb-3 p-2 px-3 rounded-lg bg-destructive/10 text-destructive text-[11px] font-medium animate-in fade-in duration-200">
-            {attachmentError}
-          </div>
-        )}
+        {attachmentError && <div className="mb-3 p-2 px-3 rounded-lg bg-destructive/10 text-destructive text-[11px] font-medium animate-in fade-in duration-200">{attachmentError}</div>}
 
         <div className="flex items-center gap-3">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            multiple
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex-shrink-0 w-11 h-11 rounded-full bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted/80"
-            aria-label="Add attachment"
-          >
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple />
+          <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} className="flex-shrink-0 w-11 h-11 rounded-full bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted/80" aria-label="Add attachment">
             <PlusSignIcon className="w-5 h-5" />
           </Button>
 
@@ -342,15 +276,8 @@ export const ChatPanel = React.memo(({
               onKeyDown={handleKeyDown}
               placeholder={placeholder || "Write message..."}
               disabled={disabled || uploading}
-              className={cn(
-                "w-full py-3 px-5 resize-none outline-none rounded-2xl text-sm",
-                "bg-muted/50 backdrop-blur-sm",
-                "text-foreground",
-                "placeholder:text-muted-foreground",
-                "focus:ring-2 focus:ring-primary/50 focus:bg-muted/70",
-                "transition-all"
-              )}
-              style={{ minHeight: '44px', maxHeight: '120px' }}
+              className={cn("w-full py-3 px-5 resize-none outline-none rounded-2xl text-sm", "bg-muted/50 backdrop-blur-sm", "text-foreground", "placeholder:text-muted-foreground", "focus:ring-2 focus:ring-primary/50 focus:bg-muted/70", "transition-all")}
+              style={{ minHeight: "44px", maxHeight: "120px" }}
               rows={1}
             />
           </div>
@@ -359,17 +286,10 @@ export const ChatPanel = React.memo(({
             onClick={handleSend}
             disabled={(!inputValue.trim() && selectedFiles.length === 0) || disabled || uploading}
             size="icon"
-            className={cn(
-              "flex-shrink-0 w-11 h-11 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25",
-              uploading && "opacity-70 cursor-not-allowed"
-            )}
+            className={cn("flex-shrink-0 w-11 h-11 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25", uploading && "opacity-70 cursor-not-allowed")}
             aria-label="Send message"
           >
-            {uploading ? (
-              <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-            ) : (
-              <SentIcon className="w-5 h-5 ml-0.5" />
-            )}
+            {uploading ? <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> : <SentIcon className="w-5 h-5 ml-0.5" />}
           </Button>
         </div>
       </div>
@@ -377,4 +297,4 @@ export const ChatPanel = React.memo(({
   );
 });
 
-ChatPanel.displayName = 'ChatPanel';
+ChatPanel.displayName = "ChatPanel";

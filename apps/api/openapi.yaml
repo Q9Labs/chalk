@@ -4,7 +4,7 @@ info:
   description: |
     Ultra low-latency, low-bandwidth optimized, real-time video conferencing platform
     built on Cloudflare RealtimeKit.
-    
+
     **Primary Use Case:** Education (virtual classrooms, tutoring, lectures)
   version: 1.0.0
   contact:
@@ -50,7 +50,7 @@ paths:
       tags: []
       security: []
       responses:
-        '200':
+        "200":
           description: Service is healthy
           content:
             application/json:
@@ -84,18 +84,18 @@ paths:
       security:
         - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Debug auth response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DebugAuthResponse'
-        '401':
+                $ref: "#/components/schemas/DebugAuthResponse"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/debug/ping:
     head:
@@ -106,7 +106,7 @@ paths:
         - Debug
       security: []
       responses:
-        '204':
+        "204":
           description: No Content
 
   # ============================================================================
@@ -127,32 +127,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenRequest'
+              $ref: "#/components/schemas/TokenRequest"
       responses:
-        '200':
+        "200":
           description: Token pair generated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
-        '400':
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
           description: Invalid request body
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Invalid API key
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/auth/refresh:
     post:
@@ -167,32 +167,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RefreshRequest'
+              $ref: "#/components/schemas/RefreshRequest"
       responses:
-        '200':
+        "200":
           description: New token pair generated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
-        '400':
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
           description: Invalid request body
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Invalid or expired refresh token
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   # ============================================================================
   # TENANT ENDPOINTS
@@ -212,26 +212,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTenantRequest'
+              $ref: "#/components/schemas/CreateTenantRequest"
       responses:
-        '201':
+        "201":
           description: Tenant created successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateTenantResponse'
-        '400':
+                $ref: "#/components/schemas/CreateTenantResponse"
+        "400":
           description: Invalid request body
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/tenants/{id}:
     get:
@@ -243,32 +243,32 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - $ref: '#/components/parameters/TenantId'
+        - $ref: "#/components/parameters/TenantId"
       responses:
-        '200':
+        "200":
           description: Tenant details
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tenant'
-        '400':
+                $ref: "#/components/schemas/Tenant"
+        "400":
           description: Invalid tenant ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Tenant not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
     patch:
       summary: Update tenant
@@ -279,38 +279,38 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - $ref: '#/components/parameters/TenantId'
+        - $ref: "#/components/parameters/TenantId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateTenantRequest'
+              $ref: "#/components/schemas/UpdateTenantRequest"
       responses:
-        '200':
+        "200":
           description: Tenant updated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tenant'
-        '400':
+                $ref: "#/components/schemas/Tenant"
+        "400":
           description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
     delete:
       summary: Delete tenant
@@ -321,28 +321,28 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - $ref: '#/components/parameters/TenantId'
+        - $ref: "#/components/parameters/TenantId"
       responses:
-        '204':
+        "204":
           description: Tenant deleted successfully
-        '400':
+        "400":
           description: Invalid tenant ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/tenants/{id}/rotate-key:
     post:
@@ -356,32 +356,32 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - $ref: '#/components/parameters/TenantId'
+        - $ref: "#/components/parameters/TenantId"
       responses:
-        '200':
+        "200":
           description: API key rotated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RotateApiKeyResponse'
-        '400':
+                $ref: "#/components/schemas/RotateApiKeyResponse"
+        "400":
           description: Invalid tenant ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   # ============================================================================
   # ROOM ENDPOINTS
@@ -400,32 +400,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateRoomRequest'
+              $ref: "#/components/schemas/CreateRoomRequest"
       responses:
-        '201':
+        "201":
           description: Room created successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Room'
-        '400':
+                $ref: "#/components/schemas/Room"
+        "400":
           description: Invalid request body
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/rooms/schedule:
     post:
@@ -441,32 +441,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ScheduleRoomRequest'
+              $ref: "#/components/schemas/ScheduleRoomRequest"
       responses:
-        '201':
+        "201":
           description: Room scheduled successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Room'
-        '400':
+                $ref: "#/components/schemas/Room"
+        "400":
           description: Invalid request body
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
     get:
       summary: List rooms
@@ -475,27 +475,27 @@ paths:
       tags:
         - Rooms
       parameters:
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Offset'
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
-        '200':
+        "200":
           description: List of rooms
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListRoomsResponse'
-        '401':
+                $ref: "#/components/schemas/ListRoomsResponse"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/rooms/{id}:
     get:
@@ -505,32 +505,32 @@ paths:
       tags:
         - Rooms
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
       responses:
-        '200':
+        "200":
           description: Room details with participant count
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RoomWithParticipantCount'
-        '400':
+                $ref: "#/components/schemas/RoomWithParticipantCount"
+        "400":
           description: Invalid room ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Room not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
     patch:
       summary: Update room
@@ -539,38 +539,38 @@ paths:
       tags:
         - Rooms
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateRoomRequest'
+              $ref: "#/components/schemas/UpdateRoomRequest"
       responses:
-        '200':
+        "200":
           description: Room updated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Room'
-        '400':
+                $ref: "#/components/schemas/Room"
+        "400":
           description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
     delete:
       summary: Delete room
@@ -579,28 +579,28 @@ paths:
       tags:
         - Rooms
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
       responses:
-        '204':
+        "204":
           description: Room deleted successfully
-        '400':
+        "400":
           description: Invalid room ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/rooms/{id}/end:
     post:
@@ -612,32 +612,32 @@ paths:
       tags:
         - Rooms
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
       responses:
-        '200':
+        "200":
           description: Room ended successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Room'
-        '400':
+                $ref: "#/components/schemas/Room"
+        "400":
           description: Invalid room ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   # ============================================================================
   # PARTICIPANT ENDPOINTS
@@ -652,38 +652,38 @@ paths:
       tags:
         - Participants
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddParticipantRequest'
+              $ref: "#/components/schemas/AddParticipantRequest"
       responses:
-        '201':
+        "201":
           description: Participant added successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AddParticipantResponse'
-        '400':
+                $ref: "#/components/schemas/AddParticipantResponse"
+        "400":
           description: Invalid request or room not active
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
     get:
       summary: List participants
@@ -692,38 +692,38 @@ paths:
       tags:
         - Participants
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
         - name: active
           in: query
           description: Filter for active participants only
           schema:
             type: string
-            enum: ['true', 'false']
+            enum: ["true", "false"]
       responses:
-        '200':
+        "200":
           description: List of participants
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListParticipantsResponse'
-        '400':
+                $ref: "#/components/schemas/ListParticipantsResponse"
+        "400":
           description: Invalid room ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/rooms/{id}/participants/{pid}:
     delete:
@@ -733,41 +733,41 @@ paths:
       tags:
         - Participants
       parameters:
-        - $ref: '#/components/parameters/RoomId'
-        - $ref: '#/components/parameters/ParticipantId'
+        - $ref: "#/components/parameters/RoomId"
+        - $ref: "#/components/parameters/ParticipantId"
       responses:
-        '200':
+        "200":
           description: Participant removed successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Participant'
-        '204':
+                $ref: "#/components/schemas/Participant"
+        "204":
           description: Participant removed (no content returned)
-        '400':
+        "400":
           description: Invalid room or participant ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Participant not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/rooms/{id}/participants/{pid}/token:
     post:
@@ -779,39 +779,39 @@ paths:
       tags:
         - Participants
       parameters:
-        - $ref: '#/components/parameters/RoomId'
-        - $ref: '#/components/parameters/ParticipantId'
+        - $ref: "#/components/parameters/RoomId"
+        - $ref: "#/components/parameters/ParticipantId"
       responses:
-        '200':
+        "200":
           description: Token refreshed successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RefreshParticipantTokenResponse'
-        '400':
+                $ref: "#/components/schemas/RefreshParticipantTokenResponse"
+        "400":
           description: Invalid room or participant ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Participant not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   # ============================================================================
   # ROOM RECORDING ENDPOINTS
@@ -824,44 +824,44 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
       responses:
-        '201':
+        "201":
           description: Recording started successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Recording'
-        '400':
+                $ref: "#/components/schemas/Recording"
+        "400":
           description: Invalid room ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Room not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '409':
+                $ref: "#/components/schemas/Error"
+        "409":
           description: Recording already in progress
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/rooms/{id}/recordings/stop:
     post:
@@ -871,38 +871,38 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/RoomId'
+        - $ref: "#/components/parameters/RoomId"
       responses:
-        '200':
+        "200":
           description: Recording stopped successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Recording'
-        '400':
+                $ref: "#/components/schemas/Recording"
+        "400":
           description: Invalid room ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No active recording found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/rooms/{id}/recordings/{rid}/archive:
     post:
@@ -912,39 +912,39 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/RoomId'
-        - $ref: '#/components/parameters/RecordingId'
+        - $ref: "#/components/parameters/RoomId"
+        - $ref: "#/components/parameters/RecordingId"
       responses:
-        '200':
+        "200":
           description: Recording archived successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArchiveRecordingResponse'
-        '400':
+                $ref: "#/components/schemas/ArchiveRecordingResponse"
+        "400":
           description: Invalid ID or recording not ready for archive
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Recording not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   # ============================================================================
   # STANDALONE RECORDING ENDPOINTS
@@ -957,27 +957,27 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Offset'
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
-        '200':
+        "200":
           description: List of recordings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListRecordingsResponse'
-        '401':
+                $ref: "#/components/schemas/ListRecordingsResponse"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/recordings/{id}:
     get:
@@ -987,38 +987,38 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/RecordingIdPath'
+        - $ref: "#/components/parameters/RecordingIdPath"
       responses:
-        '200':
+        "200":
           description: Recording details with room info
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RecordingWithRoomInfo'
-        '400':
+                $ref: "#/components/schemas/RecordingWithRoomInfo"
+        "400":
           description: Invalid recording ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Recording not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
     delete:
       summary: Delete recording
@@ -1027,38 +1027,38 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/RecordingIdPath'
+        - $ref: "#/components/parameters/RecordingIdPath"
       responses:
-        '200':
+        "200":
           description: Recording deleted successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeleteRecordingResponse'
-        '400':
+                $ref: "#/components/schemas/DeleteRecordingResponse"
+        "400":
           description: Invalid recording ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Recording not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/recordings/{id}/download:
     get:
@@ -1070,38 +1070,38 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/RecordingIdPath'
+        - $ref: "#/components/parameters/RecordingIdPath"
       responses:
-        '200':
+        "200":
           description: Download URL or processing status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DownloadRecordingResponse'
-        '400':
+                $ref: "#/components/schemas/DownloadRecordingResponse"
+        "400":
           description: Invalid recording ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Recording not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/recordings/{id}/archive:
     post:
@@ -1111,38 +1111,38 @@ paths:
       tags:
         - Recordings
       parameters:
-        - $ref: '#/components/parameters/RecordingIdPath'
+        - $ref: "#/components/parameters/RecordingIdPath"
       responses:
-        '200':
+        "200":
           description: Recording archived successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArchiveRecordingResponse'
-        '400':
+                $ref: "#/components/schemas/ArchiveRecordingResponse"
+        "400":
           description: Invalid ID or recording not ready for archive
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Recording not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   # ============================================================================
   # WEBHOOK ENDPOINTS
@@ -1162,32 +1162,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RecordingReadyWebhook'
+              $ref: "#/components/schemas/RecordingReadyWebhook"
       responses:
-        '200':
+        "200":
           description: Recording processed successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookRecordingResponse'
-        '400':
+                $ref: "#/components/schemas/WebhookRecordingResponse"
+        "400":
           description: Invalid webhook payload
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Recording not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/webhooks/local/post-meeting:
     post:
@@ -1204,38 +1204,38 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PostMeetingWebhookPayload'
+              $ref: "#/components/schemas/PostMeetingWebhookPayload"
       responses:
-        '200':
+        "200":
           description: Webhook received
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookAckResponse'
-        '400':
+                $ref: "#/components/schemas/WebhookAckResponse"
+        "400":
           description: Invalid webhook payload
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Signature verification failed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: Room or tenant not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
 components:
   securitySchemes:
@@ -1445,7 +1445,7 @@ components:
           nullable: true
           example: host
         permissions:
-          $ref: '#/components/schemas/DebugPermissions'
+          $ref: "#/components/schemas/DebugPermissions"
         scopes:
           type: array
           items:
@@ -1539,12 +1539,12 @@ components:
           type: string
           format: date-time
           description: Creation timestamp
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
         updated_at:
           type: string
           format: date-time
           description: Last update timestamp
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
 
     CreateTenantRequest:
       type: object
@@ -1575,7 +1575,7 @@ components:
         - api_key
       properties:
         tenant:
-          $ref: '#/components/schemas/Tenant'
+          $ref: "#/components/schemas/Tenant"
         api_key:
           type: string
           description: |
@@ -1676,7 +1676,7 @@ components:
           format: date-time
           nullable: true
           description: Scheduled room start timestamp
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
         scheduled_end_at:
           type: string
           format: date-time
@@ -1692,7 +1692,7 @@ components:
           format: date-time
           nullable: true
           description: When the room was started
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
         ended_at:
           type: string
           format: date-time
@@ -1703,16 +1703,16 @@ components:
           type: string
           format: date-time
           description: Creation timestamp
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
         updated_at:
           type: string
           format: date-time
           description: Last update timestamp
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
 
     RoomWithParticipantCount:
       allOf:
-        - $ref: '#/components/schemas/Room'
+        - $ref: "#/components/schemas/Room"
         - type: object
           properties:
             participant_count:
@@ -1771,13 +1771,13 @@ components:
           type: string
           format: date-time
           description: Scheduled room start timestamp (UTC recommended)
-          example: '2026-03-10T14:00:00Z'
+          example: "2026-03-10T14:00:00Z"
         scheduled_end_at:
           type: string
           format: date-time
           nullable: true
           description: Optional scheduled room end timestamp
-          example: '2026-03-10T15:00:00Z'
+          example: "2026-03-10T15:00:00Z"
         allow_early_join_minutes:
           type: integer
           minimum: 0
@@ -1807,7 +1807,7 @@ components:
         rooms:
           type: array
           items:
-            $ref: '#/components/schemas/RoomWithParticipantCount'
+            $ref: "#/components/schemas/RoomWithParticipantCount"
         total:
           type: integer
           description: Total number of rooms
@@ -1869,7 +1869,7 @@ components:
           format: date-time
           nullable: true
           description: When the participant joined
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
         left_at:
           type: string
           format: date-time
@@ -1880,7 +1880,7 @@ components:
           type: string
           format: date-time
           description: Creation timestamp
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
 
     AddParticipantRequest:
       type: object
@@ -1920,7 +1920,7 @@ components:
         - auth_token
       properties:
         participant:
-          $ref: '#/components/schemas/Participant'
+          $ref: "#/components/schemas/Participant"
         access_token:
           type: string
           description: JWT access token for API calls
@@ -1950,7 +1950,7 @@ components:
         participants:
           type: array
           items:
-            $ref: '#/components/schemas/Participant'
+            $ref: "#/components/schemas/Participant"
 
     RefreshParticipantTokenResponse:
       type: object
@@ -2047,13 +2047,13 @@ components:
           format: date-time
           nullable: true
           description: When recording started
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
         ended_at:
           type: string
           format: date-time
           nullable: true
           description: When recording ended
-          example: '2024-01-15T11:30:00Z'
+          example: "2024-01-15T11:30:00Z"
         archived_at:
           type: string
           format: date-time
@@ -2064,11 +2064,11 @@ components:
           type: string
           format: date-time
           description: Creation timestamp
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
 
     RecordingWithRoomInfo:
       allOf:
-        - $ref: '#/components/schemas/Recording'
+        - $ref: "#/components/schemas/Recording"
         - type: object
           properties:
             room_name:
@@ -2092,7 +2092,7 @@ components:
         recordings:
           type: array
           items:
-            $ref: '#/components/schemas/Recording'
+            $ref: "#/components/schemas/Recording"
         limit:
           type: integer
           description: Requested limit
@@ -2246,7 +2246,7 @@ components:
           type: string
           format: date-time
           description: UTC timestamp for the event
-          example: '2026-01-31T00:00:00Z'
+          example: "2026-01-31T00:00:00Z"
         meeting:
           type: object
           required:
@@ -2358,7 +2358,7 @@ components:
           type: string
           format: date-time
           description: When the message was created
-          example: '2024-01-15T10:30:00Z'
+          example: "2024-01-15T10:30:00Z"
 
     # =========================================================================
     # TOKEN SCHEMAS

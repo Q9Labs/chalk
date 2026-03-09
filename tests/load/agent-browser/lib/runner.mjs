@@ -1,12 +1,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import {
-  parseConsoleSignals,
-  parseErrorsSignals,
-  parseEvalOutput,
-  parseResourceSignals,
-} from "./parsers.mjs";
+import { parseConsoleSignals, parseErrorsSignals, parseEvalOutput, parseResourceSignals } from "./parsers.mjs";
 
 export async function requireAgentBrowser() {
   const probe = await new Promise((resolvePromise) => {
@@ -131,12 +126,7 @@ export async function runAttempt({ attempt, workerId, options, outDir, runLabel,
     const parsedConsoleSignals = parseConsoleSignals(consoleRes.stdout);
     record.roomUrl = (urlRes.stdout ?? "").trim() || record.pollState?.url || null;
     record.roomSlug = extractRoomSlug(record.roomUrl) ?? extractRoomSlug(record.pollState?.url ?? null);
-    record.browserSessionId = firstNonEmpty(
-      parsedConsoleSignals?.chalk?.["room.join"]?.sessionId,
-      parsedConsoleSignals?.chalk?.["api.request"]?.sessionId,
-      parsedConsoleSignals?.chalk?.["websocket.connect"]?.sessionId,
-      null,
-    );
+    record.browserSessionId = firstNonEmpty(parsedConsoleSignals?.chalk?.["room.join"]?.sessionId, parsedConsoleSignals?.chalk?.["api.request"]?.sessionId, parsedConsoleSignals?.chalk?.["websocket.connect"]?.sessionId, null);
     record.correlation = buildCorrelation(record, parsedConsoleSignals);
 
     if (shouldCaptureDetailed) {

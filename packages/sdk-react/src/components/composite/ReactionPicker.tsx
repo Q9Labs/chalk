@@ -1,101 +1,88 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { useHaptics } from '../../hooks/ui/useHaptics';
-import { cn } from '../../utils/cn';
-import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
-import { Cancel01Icon } from '../../utils/icons';
-import { getParticipantThemeVariables } from '../../utils/colorGenerator';
+import React, { useMemo, useState, useCallback, useEffect } from "react";
+import { useHaptics } from "../../hooks/ui/useHaptics";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { Cancel01Icon } from "../../utils/icons";
+import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 
 export interface ReactionPickerProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (emoji: string) => void;
   recentReactions?: string[];
-  position?: 'top' | 'bottom';
+  position?: "top" | "bottom";
   participantColorSeed?: string;
   className?: string;
 }
 
 const EMOJI_CATEGORIES = {
-  recent: { label: 'Recent', emojis: [] as string[] },
+  recent: { label: "Recent", emojis: [] as string[] },
   smileys: {
-    label: '😀',
-    emojis: ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😋', '😛', '🤪', '🤨', '🧐', '🤓', '😎', '🥳', '😏', '😒', '🙄', '😬', '😮', '😯', '😲', '😳', '🥺', '😢', '😭', '😤', '😠', '🤯', '😱', '🥶', '🥵'],
+    label: "😀",
+    emojis: ["😀", "😃", "😄", "😁", "😅", "😂", "🤣", "😊", "😇", "🙂", "😉", "😌", "😍", "🥰", "😘", "😋", "😛", "🤪", "🤨", "🧐", "🤓", "😎", "🥳", "😏", "😒", "🙄", "😬", "😮", "😯", "😲", "😳", "🥺", "😢", "😭", "😤", "😠", "🤯", "😱", "🥶", "🥵"],
   },
   gestures: {
-    label: '👋',
-    emojis: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '💪', '🦾'],
+    label: "👋",
+    emojis: ["👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "👇", "☝️", "👍", "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝", "🙏", "💪", "🦾"],
   },
   hearts: {
-    label: '❤️',
-    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❤️‍🔥', '❤️‍🩹', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '♥️', '😍', '🥰', '😘', '😻'],
+    label: "❤️",
+    emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❤️‍🔥", "❤️‍🩹", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "♥️", "😍", "🥰", "😘", "😻"],
   },
   celebration: {
-    label: '🎉',
-    emojis: ['🎉', '🎊', '🥳', '🎈', '🎁', '🎀', '🏆', '🥇', '🏅', '⭐', '🌟', '✨', '💫', '🔥', '💥', '💯', '🙌', '👏', '🤩', '🥂', '🍾', '🎆', '🎇', '🪅', '🎯'],
+    label: "🎉",
+    emojis: ["🎉", "🎊", "🥳", "🎈", "🎁", "🎀", "🏆", "🥇", "🏅", "⭐", "🌟", "✨", "💫", "🔥", "💥", "💯", "🙌", "👏", "🤩", "🥂", "🍾", "🎆", "🎇", "🪅", "🎯"],
   },
   objects: {
-    label: '💡',
-    emojis: ['💡', '📌', '📍', '🔔', '🔕', '📢', '📣', '💬', '💭', '🗯️', '✅', '❌', '❓', '❗', '💤', '💢', '💦', '💨', '🕐', '⏰', '📅', '📆', '🔒', '🔓', '🔑'],
+    label: "💡",
+    emojis: ["💡", "📌", "📍", "🔔", "🔕", "📢", "📣", "💬", "💭", "🗯️", "✅", "❌", "❓", "❗", "💤", "💢", "💦", "💨", "🕐", "⏰", "📅", "📆", "🔒", "🔓", "🔑"],
   },
 } as const;
 
 type CategoryKey = keyof typeof EMOJI_CATEGORIES;
 
-export const ReactionPicker = React.memo(({
-  isOpen,
-  onClose,
-  onSelect,
-  recentReactions = [],
-  position = 'top',
-  participantColorSeed,
-  className,
-}: ReactionPickerProps) => {
+export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReactions = [], position = "top", participantColorSeed, className }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger } = useHaptics();
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>('smileys');
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>("smileys");
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
   // Reset to smileys when closed
   useEffect(() => {
     if (!isOpen) {
-      setActiveCategory(recentReactions.length > 0 ? 'recent' : 'smileys');
+      setActiveCategory(recentReactions.length > 0 ? "recent" : "smileys");
     }
   }, [isOpen, recentReactions.length]);
 
-  const handleSelect = useCallback((emoji: string) => {
-    void trigger('success');
-    onSelect(emoji);
-    onClose();
-  }, [onClose, onSelect, trigger]);
+  const handleSelect = useCallback(
+    (emoji: string) => {
+      void trigger("success");
+      onSelect(emoji);
+      onClose();
+    },
+    [onClose, onSelect, trigger],
+  );
 
   // Handle escape key
   useEffect(() => {
-    if (!isOpen || typeof window === 'undefined') return;
+    if (!isOpen || typeof window === "undefined") return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === "Escape") onClose();
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const categories = Object.entries(EMOJI_CATEGORIES).filter(
-    ([key]) => key !== 'recent' || recentReactions.length > 0
-  ) as [CategoryKey, typeof EMOJI_CATEGORIES[CategoryKey]][];
+  const categories = Object.entries(EMOJI_CATEGORIES).filter(([key]) => key !== "recent" || recentReactions.length > 0) as [CategoryKey, (typeof EMOJI_CATEGORIES)[CategoryKey]][];
 
-  const currentEmojis = activeCategory === 'recent'
-    ? recentReactions
-    : EMOJI_CATEGORIES[activeCategory].emojis;
+  const currentEmojis = activeCategory === "recent" ? recentReactions : EMOJI_CATEGORIES[activeCategory].emojis;
 
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
 
       {/* Picker Panel */}
       <div
@@ -105,9 +92,9 @@ export const ReactionPicker = React.memo(({
           "border border-border",
           "ring-1 ring-white/5",
           !prefersReducedMotion && "animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200",
-          position === 'top' ? "bottom-full mb-3" : "top-full mt-3",
+          position === "top" ? "bottom-full mb-3" : "top-full mt-3",
           "left-1/2 -translate-x-1/2",
-          className
+          className,
         )}
         role="dialog"
         aria-label="Reaction picker"
@@ -118,7 +105,7 @@ export const ReactionPicker = React.memo(({
           <h3 className="text-sm font-semibold text-popover-foreground">Reactions</h3>
           <button
             onClick={() => {
-              void trigger('selection');
+              void trigger("selection");
               onClose();
             }}
             className="p-1 rounded-lg text-muted-foreground hover:text-popover-foreground hover:bg-accent transition-colors"
@@ -134,18 +121,13 @@ export const ReactionPicker = React.memo(({
             <button
               key={key}
               onClick={() => {
-                void trigger('selection');
+                void trigger("selection");
                 setActiveCategory(key);
               }}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                activeCategory === key
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                  : "text-muted-foreground hover:text-popover-foreground hover:bg-accent"
-              )}
-              aria-label={key === 'recent' ? 'Recent reactions' : `${category.label} category`}
+              className={cn("px-3 py-1.5 rounded-lg text-sm font-medium transition-all", activeCategory === key ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "text-muted-foreground hover:text-popover-foreground hover:bg-accent")}
+              aria-label={key === "recent" ? "Recent reactions" : `${category.label} category`}
             >
-              {key === 'recent' ? '🕐' : category.label}
+              {key === "recent" ? "🕐" : category.label}
             </button>
           ))}
         </div>
@@ -157,13 +139,7 @@ export const ReactionPicker = React.memo(({
               <button
                 key={`${emoji}-${index}`}
                 onClick={() => handleSelect(emoji)}
-                className={cn(
-                  "w-9 h-9 flex items-center justify-center rounded-lg text-xl",
-                  "transition-all duration-150",
-                  "hover:bg-primary/20 hover:scale-110",
-                  "active:scale-95",
-                  !prefersReducedMotion && "hover:animate-pulse"
-                )}
+                className={cn("w-9 h-9 flex items-center justify-center rounded-lg text-xl", "transition-all duration-150", "hover:bg-primary/20 hover:scale-110", "active:scale-95", !prefersReducedMotion && "hover:animate-pulse")}
                 aria-label={`React with ${emoji}`}
               >
                 {emoji}
@@ -183,4 +159,4 @@ export const ReactionPicker = React.memo(({
   );
 });
 
-ReactionPicker.displayName = 'ReactionPicker';
+ReactionPicker.displayName = "ReactionPicker";

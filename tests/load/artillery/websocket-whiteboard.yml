@@ -34,13 +34,13 @@ scenarios:
                 payload:
                   elements:
                     - type: "rectangle"
-                      x: {{ $randomNumber(0,1000) }}
-                      y: {{ $randomNumber(0,1000) }}
+                      x: { { $randomNumber(0, 1000) } }
+                      y: { { $randomNumber(0, 1000) } }
                       width: 120
                       height: 80
                   files: {}
                   app_state: {}
-                  seq: {{ $loopCount }}
+                  seq: { { $loopCount } }
           - think: 0.2
         count: 100
 
@@ -50,7 +50,7 @@ scenarios:
               json:
                 type: "whiteboard.cursor"
                 payload:
-                  x: {{ $randomNumber(0,1920) }}
-                  y: {{ $randomNumber(0,1080) }}
+                  x: { { $randomNumber(0, 1920) } }
+                  y: { { $randomNumber(0, 1080) } }
           - think: 0.05
         count: 200

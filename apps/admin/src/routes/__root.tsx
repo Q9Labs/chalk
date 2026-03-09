@@ -1,8 +1,8 @@
-import { Outlet, createRootRoute } from "@tanstack/react-router"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { Separator } from "@/components/ui/separator"
+import { Outlet, createRootRoute } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { Separator } from "@/components/ui/separator";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -11,11 +11,11 @@ const queryClient = new QueryClient({
       retry: 1,
     },
   },
-})
+});
 
 export const Route = createRootRoute({
   component: RootLayout,
-})
+});
 
 function RootLayout() {
   return (
@@ -34,5 +34,5 @@ function RootLayout() {
         </SidebarInset>
       </SidebarProvider>
     </QueryClientProvider>
-  )
+  );
 }

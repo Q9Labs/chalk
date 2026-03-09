@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { cn } from '../../utils/cn';
-import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import React, { useEffect, useState } from "react";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 
 export interface TourHighlightProps {
   targetSelector: string;
@@ -10,13 +10,7 @@ export interface TourHighlightProps {
   className?: string;
 }
 
-export const TourHighlight = React.memo<TourHighlightProps>(({
-  targetSelector,
-  padding = 4,
-  borderRadius = 8,
-  onClickOutside,
-  className,
-}) => {
+export const TourHighlight = React.memo<TourHighlightProps>(({ targetSelector, padding = 4, borderRadius = 8, onClickOutside, className }) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [rect, setRect] = useState<DOMRect | null>(null);
 
@@ -32,12 +26,12 @@ export const TourHighlight = React.memo<TourHighlightProps>(({
     };
 
     updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
 
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
     };
   }, [targetSelector]);
 
@@ -47,11 +41,7 @@ export const TourHighlight = React.memo<TourHighlightProps>(({
     const handleClick = (e: MouseEvent) => {
       const x = e.clientX;
       const y = e.clientY;
-      const inside = 
-        x >= (rect.left - padding) && 
-        x <= (rect.right + padding) && 
-        y >= (rect.top - padding) && 
-        y <= (rect.bottom + padding);
+      const inside = x >= rect.left - padding && x <= rect.right + padding && y >= rect.top - padding && y <= rect.bottom + padding;
 
       if (!inside) {
         e.preventDefault();
@@ -60,32 +50,27 @@ export const TourHighlight = React.memo<TourHighlightProps>(({
       }
     };
 
-    document.addEventListener('click', handleClick, true);
-    return () => document.removeEventListener('click', handleClick, true);
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
   }, [rect, padding, onClickOutside]);
 
   if (!rect) return null;
 
   return (
     <div
-      className={cn(
-        'fixed ease-out pointer-events-none',
-        !prefersReducedMotion && 'transition-all duration-300 chalk-animate-highlight',
-        'border-2 border-accent',
-        className
-      )}
+      className={cn("fixed ease-out pointer-events-none", !prefersReducedMotion && "transition-all duration-300 chalk-animate-highlight", "border-2 border-accent", className)}
       style={{
         top: rect.top - padding,
         left: rect.left - padding,
-        width: rect.width + (padding * 2),
-        height: rect.height + (padding * 2),
+        width: rect.width + padding * 2,
+        height: rect.height + padding * 2,
         borderRadius,
-        boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.7)',
-        zIndex: 9999
+        boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.7)",
+        zIndex: 9999,
       }}
       aria-hidden="true"
     />
   );
 });
 
-TourHighlight.displayName = 'TourHighlight';
+TourHighlight.displayName = "TourHighlight";

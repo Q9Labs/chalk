@@ -47,29 +47,19 @@ function getReadableTextColor(hexColor: string): string {
   const green = Number.parseInt(hex.slice(2, 4), 16) / 255;
   const blue = Number.parseInt(hex.slice(4, 6), 16) / 255;
 
-  const linearize = (channel: number) =>
-    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  const linearize = (channel: number) => (channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
 
-  const luminance =
-    0.2126 * linearize(red) +
-    0.7152 * linearize(green) +
-    0.0722 * linearize(blue);
+  const luminance = 0.2126 * linearize(red) + 0.7152 * linearize(green) + 0.0722 * linearize(blue);
 
   return luminance > 0.5 ? "#0f172a" : "#f8fafc";
 }
 
-export function getParticipantSeed(options: {
-  displayName?: string | null;
-  participantId?: string | null;
-  routeRoomId?: string | null;
-}) {
+export function getParticipantSeed(options: { displayName?: string | null; participantId?: string | null; routeRoomId?: string | null }) {
   return options.displayName || options.participantId || options.routeRoomId || undefined;
 }
 
 export function getParticipantThemeVariables(participantSeed?: string): React.CSSProperties {
-  const palette = ((participantSeed
-    ? PARTICIPANT_PALETTES[hashString(participantSeed) % PARTICIPANT_PALETTES.length]
-    : PARTICIPANT_PALETTES[0]) ?? PARTICIPANT_PALETTES[0]) as ParticipantPalette;
+  const palette = ((participantSeed ? PARTICIPANT_PALETTES[hashString(participantSeed) % PARTICIPANT_PALETTES.length] : PARTICIPANT_PALETTES[0]) ?? PARTICIPANT_PALETTES[0]) as ParticipantPalette;
   const primary = palette.primary;
 
   return {

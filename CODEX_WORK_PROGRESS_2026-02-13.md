@@ -30,6 +30,7 @@ Notes: scoped to Codex changes only. No secrets/tokens. Timestamp timezone: PKT.
 7. Web app changes:
    - remove browser API key dependency
    - add `/auth/callback` + `/dashboard` + `/share/:token` + join-token flow handling
+
 - 14:54 PKT: Start implementation: internal auth endpoints, join/share token endpoints, dashboard API.
 - 15:32 PKT: Wired new routes in `apps/api/internal/interfaces/http/router.go`: internal magic-link auth, internal meetings, public join-token exchange, public share link, host-only join-token + share-token creation. Tightened `/rooms` management endpoints to host-only (create/list/update/delete/end + bulk participants + refresh token + recordings sync).
 - 15:34 PKT: Fixed sqlc/pgtype mismatches in `apps/api/internal/interfaces/http/handlers/internal_auth.go`. `apps/api go test ./...` passing.

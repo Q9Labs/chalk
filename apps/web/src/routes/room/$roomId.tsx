@@ -12,11 +12,7 @@
  * - Keyboard shortcut 'W' to toggle whiteboard
  */
 
-import {
-  useInteractions,
-  useWhiteboard,
-  VideoConference,
-} from "@q9labs/chalk-react";
+import { useInteractions, useWhiteboard, VideoConference } from "@q9labs/chalk-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import z from "zod";
@@ -32,11 +28,7 @@ function getStoredUserName() {
     return "";
   }
 
-  return (
-    localStorage.getItem("chalk_default_name") ||
-    sessionStorage.getItem("chalk_display_name") ||
-    ""
-  );
+  return localStorage.getItem("chalk_default_name") || sessionStorage.getItem("chalk_display_name") || "";
 }
 
 function getStoredJoinDefaults() {
@@ -70,9 +62,7 @@ function RoomPage() {
   const { roomName, autoJoin } = Route.useSearch();
   const navigate = useNavigate();
 
-  const [storedUserName, setStoredUserName] = useState<string>(() =>
-    getStoredUserName(),
-  );
+  const [storedUserName, setStoredUserName] = useState<string>(() => getStoredUserName());
   const [roomData, setRoomData] = useState<any>(null);
   const [isCheckingRoom, setIsCheckingRoom] = useState(true);
   const [now, setNow] = useState(Date.now());
@@ -126,9 +116,7 @@ function RoomPage() {
   }
 
   // Waiting Room Logic
-  const startMs = roomData?.scheduled_start_at
-    ? new Date(roomData.scheduled_start_at).getTime()
-    : null;
+  const startMs = roomData?.scheduled_start_at ? new Date(roomData.scheduled_start_at).getTime() : null;
   const earlyJoinMinutes = roomData?.allow_early_join_minutes || 0;
   const joinAllowedAtMs = startMs ? startMs - earlyJoinMinutes * 60_000 : null;
 
@@ -154,9 +142,7 @@ function RoomPage() {
               Opening Soon
             </div>
 
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight text-balance mb-4 leading-tight">
-              {roomData?.name || roomName || "Scheduled Session"}
-            </h1>
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight text-balance mb-4 leading-tight">{roomData?.name || roomName || "Scheduled Session"}</h1>
 
             <div className="flex items-center justify-center gap-6 text-sm font-semibold text-white/50 uppercase tracking-widest mt-6">
               <span className="flex items-center gap-2">
@@ -182,44 +168,29 @@ function RoomPage() {
           </div>
 
           <div className="py-8">
-            <div
-              className={cn(
-                "font-mono font-bold tracking-tighter flex justify-center gap-4 transition-all duration-500",
-                isImminent
-                  ? "text-primary text-8xl md:text-9xl"
-                  : "text-white/90 text-7xl md:text-8xl",
-              )}
-            >
+            <div className={cn("font-mono font-bold tracking-tighter flex justify-center gap-4 transition-all duration-500", isImminent ? "text-primary text-8xl md:text-9xl" : "text-white/90 text-7xl md:text-8xl")}>
               {days > 0 && (
                 <span>
                   {String(days).padStart(2, "0")}
-                  <span className="text-white/20 opacity-50 text-4xl mr-2">
-                    d
-                  </span>
+                  <span className="text-white/20 opacity-50 text-4xl mr-2">d</span>
                 </span>
               )}
               {(days > 0 || hours > 0) && (
                 <span>
                   {String(hours).padStart(2, "0")}
-                  <span className="text-white/20 opacity-50 text-4xl mr-2">
-                    h
-                  </span>
+                  <span className="text-white/20 opacity-50 text-4xl mr-2">h</span>
                 </span>
               )}
               <span>
                 {String(minutes).padStart(2, "0")}
-                <span className="text-white/20 opacity-50 text-4xl mr-2">
-                  m
-                </span>
+                <span className="text-white/20 opacity-50 text-4xl mr-2">m</span>
               </span>
               <span>
                 {String(seconds).padStart(2, "0")}
                 <span className="text-white/20 opacity-50 text-4xl">s</span>
               </span>
             </div>
-            <p className="mt-6 text-sm font-medium text-white/40 uppercase tracking-[0.2em]">
-              Until waiting room opens
-            </p>
+            <p className="mt-6 text-sm font-medium text-white/40 uppercase tracking-[0.2em]">Until waiting room opens</p>
           </div>
 
           <div className="pt-8 flex flex-col items-center">
@@ -284,10 +255,7 @@ function WhiteboardKeyboardShortcut() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "w" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (
-          e.target instanceof HTMLInputElement ||
-          e.target instanceof HTMLTextAreaElement
-        ) {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
           return;
         }
         toggle();

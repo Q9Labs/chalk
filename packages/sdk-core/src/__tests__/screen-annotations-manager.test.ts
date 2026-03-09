@@ -34,19 +34,13 @@ class MockRoom extends EventEmitter {
     return this.annotationSharerParticipantId === resolvedParticipantId;
   }
 
-  startAnnotationSession(
-    shareSessionId: string,
-    accessMode: AnnotationAccessMode = "all",
-  ): void {
+  startAnnotationSession(shareSessionId: string, accessMode: AnnotationAccessMode = "all"): void {
     this.startCalls.push({ shareSessionId, accessMode });
   }
 
   requestAnnotationSync(): void {}
 
-  _setAnnotationSession(
-    shareSessionId: string | null,
-    sharerParticipantId: string | null,
-  ): void {
+  _setAnnotationSession(shareSessionId: string | null, sharerParticipantId: string | null): void {
     void shareSessionId;
     this.annotationSharerParticipantId = sharerParticipantId;
   }
@@ -135,11 +129,7 @@ describe("ScreenAnnotationsManager", () => {
     manager.startSession("share-3", "local", "all");
     manager.requestSync();
 
-    expect(events.map((event) => event.eventType)).toEqual([
-      "annotations.open",
-      "annotations.session.start",
-      "annotations.sync.request",
-    ]);
+    expect(events.map((event) => event.eventType)).toEqual(["annotations.open", "annotations.session.start", "annotations.sync.request"]);
     expect(events[1]?.data).toMatchObject({
       requestedShareSessionId: "share-3",
       requestedSharerParticipantId: "local",

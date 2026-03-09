@@ -1,87 +1,122 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Logo Preview - Q9Labs & Chalk</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      padding: 3rem;
-      background: #f5f5f5;
-    }
-    .container { max-width: 1200px; margin: 0 auto; }
-    h1 { margin-bottom: 2rem; color: #333; }
-    .section {
-      background: white;
-      padding: 2rem;
-      margin-bottom: 2rem;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    h2 { margin-bottom: 1.5rem; color: #666; font-size: 1.2rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
-    .preview {
-      padding: 2rem;
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-    .preview.dark { background: #1a1a1a; }
-    .preview.light { background: #fff; border: 1px solid #e0e0e0; }
-    .preview img { max-width: 100%; height: auto; }
-    .label { font-size: 0.875rem; color: #999; text-align: center; margin-top: 0.5rem; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Logo Preview</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Logo Preview - Q9Labs & Chalk</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        padding: 3rem;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin-bottom: 2rem;
+        color: #333;
+      }
+      .section {
+        background: white;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      h2 {
+        margin-bottom: 1.5rem;
+        color: #666;
+        font-size: 1.2rem;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+      }
+      .preview {
+        padding: 2rem;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .preview.dark {
+        background: #1a1a1a;
+      }
+      .preview.light {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+      }
+      .preview img {
+        max-width: 100%;
+        height: auto;
+      }
+      .label {
+        font-size: 0.875rem;
+        color: #999;
+        text-align: center;
+        margin-top: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Logo Preview</h1>
 
-    <div class="section">
-      <h2>Q9Labs</h2>
-      <div class="grid">
-        <div>
-          <div class="preview dark">
-            <img src="q9labs-logo.svg" alt="Q9Labs Logo">
-            <div class="label">Full Logo - For Dark BG</div>
+      <div class="section">
+        <h2>Q9Labs</h2>
+        <div class="grid">
+          <div>
+            <div class="preview dark">
+              <img src="q9labs-logo.svg" alt="Q9Labs Logo" />
+              <div class="label">Full Logo - For Dark BG</div>
+            </div>
+          </div>
+          <div>
+            <div class="preview light">
+              <img src="q9labs-logo-light.svg" alt="Q9Labs Logo Light" />
+              <div class="label" style="color: #666">Full Logo - For Light BG</div>
+            </div>
           </div>
         </div>
-        <div>
-          <div class="preview light">
-            <img src="q9labs-logo-light.svg" alt="Q9Labs Logo Light">
-            <div class="label" style="color: #666;">Full Logo - For Light BG</div>
+        <div class="grid" style="margin-top: 2rem">
+          <div>
+            <div class="preview dark">
+              <img src="q9labs-icon.svg" alt="Q9Labs Icon" style="width: 120px; margin: 0 auto" />
+              <div class="label">Icon Only</div>
+            </div>
           </div>
         </div>
       </div>
-      <div class="grid" style="margin-top: 2rem;">
-        <div>
-          <div class="preview dark">
-            <img src="q9labs-icon.svg" alt="Q9Labs Icon" style="width: 120px; margin: 0 auto;">
-            <div class="label">Icon Only</div>
+
+      <div class="section">
+        <h2>Chalk</h2>
+        <div class="grid">
+          <div>
+            <div class="preview light">
+              <img src="chalk-logo.svg" alt="Chalk Logo" />
+              <div class="label" style="color: #666">Full Logo</div>
+            </div>
+          </div>
+          <div>
+            <div class="preview light">
+              <img src="chalk-icon.svg" alt="Chalk Icon" style="width: 120px; margin: 0 auto" />
+              <div class="label" style="color: #666">Icon Only</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-
-    <div class="section">
-      <h2>Chalk</h2>
-      <div class="grid">
-        <div>
-          <div class="preview light">
-            <img src="chalk-logo.svg" alt="Chalk Logo">
-            <div class="label" style="color: #666;">Full Logo</div>
-          </div>
-        </div>
-        <div>
-          <div class="preview light">
-            <img src="chalk-icon.svg" alt="Chalk Icon" style="width: 120px; margin: 0 auto;">
-            <div class="label" style="color: #666;">Icon Only</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</body>
+  </body>
 </html>

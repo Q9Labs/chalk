@@ -23,9 +23,9 @@ Status: hard-deleted from repo.
 
 ## Delete sequencing (safe)
 
-1) Ensure native docs are complete:
+1. Ensure native docs are complete:
    - `apps/native/FINDINGS.md`, `apps/native/REQUIREMENTS.md`, `apps/native/SPEC.md`
-2) Update root scripts that reference RN apps.
-3) Delete `apps/mobile` and `apps/mobile2` directories.
-4) `bun run lint` + `bun run check-types` + `bun run test` at repo root.
-5) (Optional) Copy any last needed config into `apps/native/*` docs.
+2. Update root scripts that reference RN apps.
+3. Delete `apps/mobile` and `apps/mobile2` directories.
+4. `bun run lint` + `bun run check-types` + `bun run test` at repo root.
+5. (Optional) Copy any last needed config into `apps/native/*` docs.

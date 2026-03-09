@@ -14,18 +14,12 @@ import type { ConferenceSession } from "../../room";
 /**
  * Service holding the shared ConferenceSession reference
  */
-export class RoomInstanceService extends Context.Tag("@chalk/RoomInstanceService")<
-  RoomInstanceService,
-  Ref.Ref<ConferenceSession | null>
->() {}
+export class RoomInstanceService extends Context.Tag("@chalk/RoomInstanceService")<RoomInstanceService, Ref.Ref<ConferenceSession | null>>() {}
 
 /**
  * Create a RoomInstanceService layer
  */
-export const RoomInstanceServiceLive = Layer.effect(
-  RoomInstanceService,
-  Ref.make<ConferenceSession | null>(null)
-);
+export const RoomInstanceServiceLive = Layer.effect(RoomInstanceService, Ref.make<ConferenceSession | null>(null));
 
 /**
  * Helper: Get current ConferenceSession or fail

@@ -98,7 +98,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.69] - 2026-03-07
 
-
 ### Added
 
 - **Infra: Lean control-plane stack** — add `prod-lean` Terraform environment for EC2 `t4g.micro` + PlanetScale Postgres + Upstash Redis + Cloudflare R2, with SSM-backed runtime env management.

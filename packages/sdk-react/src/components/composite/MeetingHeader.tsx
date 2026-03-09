@@ -1,15 +1,15 @@
-import React from 'react';
-import { Settings01Icon, LayoutGridIcon, Maximize01Icon, ColumnIcon, UserGroupIcon } from '../../utils/icons';
-import { cn } from '../../utils/cn';
-import { StatusBadge } from '../atomic/StatusBadge';
+import React from "react";
+import { Settings01Icon, LayoutGridIcon, Maximize01Icon, ColumnIcon, UserGroupIcon } from "../../utils/icons";
+import { cn } from "../../utils/cn";
+import { StatusBadge } from "../atomic/StatusBadge";
 
 export interface MeetingHeaderProps {
   roomName: string;
   duration?: number;
   isRecording?: boolean;
   isTranscribing?: boolean;
-  layout?: 'grid' | 'spotlight' | 'sidebar';
-  onLayoutChange?: (layout: 'grid' | 'spotlight' | 'sidebar') => void;
+  layout?: "grid" | "spotlight" | "sidebar";
+  onLayoutChange?: (layout: "grid" | "spotlight" | "sidebar") => void;
   onInvite?: () => void;
   onSettings?: () => void;
   className?: string;
@@ -21,41 +21,20 @@ const formatDuration = (seconds: number): string => {
   const s = seconds % 60;
 
   if (h > 0) {
-    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   }
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 };
 
-export const MeetingHeader = React.memo<MeetingHeaderProps>(({
-  roomName,
-  duration = 0,
-  isRecording = false,
-  isTranscribing = false,
-  layout = 'grid',
-  onLayoutChange,
-  onInvite,
-  onSettings,
-  className,
-}) => {
+export const MeetingHeader = React.memo<MeetingHeaderProps>(({ roomName, duration = 0, isRecording = false, isTranscribing = false, layout = "grid", onLayoutChange, onInvite, onSettings, className }) => {
   return (
-    <header
-      className={cn(
-        'flex items-center justify-between px-5 py-2.5 transition-opacity duration-300',
-        className
-      )}
-      role="banner"
-    >
+    <header className={cn("flex items-center justify-between px-5 py-2.5 transition-opacity duration-300", className)} role="banner">
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <h1 className="text-sm font-medium truncate text-foreground/90">
-          {roomName}
-        </h1>
+        <h1 className="text-sm font-medium truncate text-foreground/90">{roomName}</h1>
       </div>
 
       <div className="flex flex-1 justify-center">
-        <div className={cn(
-          "px-3 py-1.5 rounded-full text-sm font-medium tabular-nums flex items-center gap-2",
-          "bg-secondary/50 text-foreground"
-        )}>
+        <div className={cn("px-3 py-1.5 rounded-full text-sm font-medium tabular-nums flex items-center gap-2", "bg-secondary/50 text-foreground")}>
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           {formatDuration(duration)}
         </div>
@@ -66,73 +45,32 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
         {isTranscribing && <StatusBadge status="transcribing" />}
 
         {onInvite && (
-          <button
-            onClick={onInvite}
-            className={cn(
-              "p-2 rounded-full transition-colors",
-              "text-muted-foreground",
-              "hover:text-foreground hover:bg-accent/50"
-            )}
-            aria-label="Invite participants"
-          >
+          <button onClick={onInvite} className={cn("p-2 rounded-full transition-colors", "text-muted-foreground", "hover:text-foreground hover:bg-accent/50")} aria-label="Invite participants">
             <UserGroupIcon size={18} />
           </button>
         )}
 
         {onLayoutChange && (
           <div className="hidden sm:flex rounded-full p-1 gap-1 bg-secondary/50">
-            <button
-              onClick={() => onLayoutChange('grid')}
-              className={cn(
-                'p-2 rounded-full transition-colors',
-                layout === 'grid'
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-              )}
-              aria-label="Grid layout"
-              aria-pressed={layout === 'grid'}
-            >
+            <button onClick={() => onLayoutChange("grid")} className={cn("p-2 rounded-full transition-colors", layout === "grid" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")} aria-label="Grid layout" aria-pressed={layout === "grid"}>
               <LayoutGridIcon size={16} />
             </button>
             <button
-              onClick={() => onLayoutChange('spotlight')}
-              className={cn(
-                'p-2 rounded-full transition-colors',
-                layout === 'spotlight'
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-              )}
+              onClick={() => onLayoutChange("spotlight")}
+              className={cn("p-2 rounded-full transition-colors", layout === "spotlight" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")}
               aria-label="Spotlight layout"
-              aria-pressed={layout === 'spotlight'}
+              aria-pressed={layout === "spotlight"}
             >
               <Maximize01Icon size={16} />
             </button>
-            <button
-              onClick={() => onLayoutChange('sidebar')}
-              className={cn(
-                'p-2 rounded-full transition-colors',
-                layout === 'sidebar'
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-              )}
-              aria-label="Sidebar layout"
-              aria-pressed={layout === 'sidebar'}
-            >
+            <button onClick={() => onLayoutChange("sidebar")} className={cn("p-2 rounded-full transition-colors", layout === "sidebar" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")} aria-label="Sidebar layout" aria-pressed={layout === "sidebar"}>
               <ColumnIcon size={16} />
             </button>
           </div>
         )}
 
         {onSettings && (
-          <button
-            onClick={onSettings}
-            className={cn(
-              "p-2 rounded-full transition-colors",
-              "text-muted-foreground",
-              "hover:text-foreground hover:bg-accent/50"
-            )}
-            aria-label="Settings"
-          >
+          <button onClick={onSettings} className={cn("p-2 rounded-full transition-colors", "text-muted-foreground", "hover:text-foreground hover:bg-accent/50")} aria-label="Settings">
             <Settings01Icon size={18} />
           </button>
         )}
@@ -141,4 +79,4 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({
   );
 });
 
-MeetingHeader.displayName = 'MeetingHeader';
+MeetingHeader.displayName = "MeetingHeader";

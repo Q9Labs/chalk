@@ -1,18 +1,18 @@
 {
-	"name": "@q9labs/e2e",
-	"private": true,
-	"type": "module",
-	"scripts": {
-		"test": "bun run src/index.ts",
-		"test:monitor": "bun run src/index.ts --run --persistent"
-	},
-	"dependencies": {
-		"@aws-sdk/client-s3": "^3.863.0",
-		"@aws-sdk/s3-request-presigner": "^3.863.0",
-		"postgres": "^3.4.7"
-	},
-	"devDependencies": {
-		"@types/bun": "latest",
-		"typescript": "^5.7.2"
-	}
+  "name": "@q9labs/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun run src/index.ts",
+    "test:monitor": "bun run src/index.ts --run --persistent"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.863.0",
+    "@aws-sdk/s3-request-presigner": "^3.863.0",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.2"
+  }
 }

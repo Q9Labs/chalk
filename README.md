@@ -87,15 +87,15 @@ Native app specs + integration notes live in `apps/native/`.
 
 ### Infrastructure
 
-| Resource | Service                           |
-| -------- | --------------------------------- |
-| Compute  | EC2 `t4g.micro` (prod-lean)       |
-| Database | PlanetScale Postgres              |
-| Cache    | Upstash Redis                     |
-| CDN/WAF  | Cloudflare edge + Caddy TLS       |
-| DNS      | Cloudflare DNS                    |
-| Secrets  | SSM Parameter Store               |
-| IaC      | Terraform (dev/prod-lean)         |
+| Resource | Service                     |
+| -------- | --------------------------- |
+| Compute  | EC2 `t4g.micro` (prod-lean) |
+| Database | PlanetScale Postgres        |
+| Cache    | Upstash Redis               |
+| CDN/WAF  | Cloudflare edge + Caddy TLS |
+| DNS      | Cloudflare DNS              |
+| Secrets  | SSM Parameter Store         |
+| IaC      | Terraform (dev/prod-lean)   |
 
 ## License
 

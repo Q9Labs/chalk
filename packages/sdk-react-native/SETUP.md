@@ -46,6 +46,7 @@ Add to `ios/YourApp/Info.plist`:
 ```
 
 Or in Xcode: **Signing & Capabilities** → **+ Capability** → **Background Modes** → Check:
+
 - ✓ Audio, AirPlay, and Picture in Picture
 - ✓ Voice over IP
 
@@ -73,10 +74,12 @@ Or in Xcode: **Signing & Capabilities** → **+ Capability** → **Background Mo
 ### Screen Sharing
 
 **1. Create Broadcast Upload Extension:**
+
 - Xcode → **File > New > Target** → **Broadcast Upload Extension**
 - Name: `ChalkScreenShare`
 
 **2. Configure App Groups:**
+
 - Main app + extension: **Signing & Capabilities** → **+ App Groups**
 - Create: `group.com.yourcompany.chalk.screenshare`
 
@@ -93,7 +96,7 @@ end
 **5. Usage:**
 
 ```tsx
-import { useScreenShare } from '@chalk/react-native';
+import { useScreenShare } from "@chalk/react-native";
 
 const { startScreenShare, stopScreenShare, isScreenSharing } = useScreenShare();
 ```
@@ -179,7 +182,7 @@ class CallService : Service() {
 **4. Usage:**
 
 ```tsx
-import { NativeModules } from 'react-native';
+import { NativeModules } from "react-native";
 
 NativeModules.CallServiceModule?.startCallService();
 NativeModules.CallServiceModule?.stopCallService();
@@ -200,18 +203,14 @@ android:foregroundServiceType="camera|microphone|mediaProjection"
 ### Request Permissions Hook
 
 ```tsx
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from "react-native";
 
 export function usePermissions() {
   const requestPermissions = async () => {
-    if (Platform.OS === 'android') {
-      const results = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-      ]);
+    if (Platform.OS === "android") {
+      const results = await PermissionsAndroid.requestMultiple([PermissionsAndroid.PERMISSIONS.CAMERA, PermissionsAndroid.PERMISSIONS.RECORD_AUDIO]);
 
-      return results['android.permission.CAMERA'] === 'granted' &&
-             results['android.permission.RECORD_AUDIO'] === 'granted';
+      return results["android.permission.CAMERA"] === "granted" && results["android.permission.RECORD_AUDIO"] === "granted";
     }
     return true; // iOS: auto-requested by getUserMedia
   };
@@ -224,13 +223,13 @@ export function usePermissions() {
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| iOS: Permission denied despite Info.plist | Clean build: `cd ios && rm -rf build && pod install` |
-| iOS: Background audio stops | Verify `UIBackgroundModes` + AVAudioSession config |
-| Android: Foreground notification missing | Create NotificationChannel (Android 8+), check POST_NOTIFICATIONS |
-| Android: Screen capture fails (14+) | Add FOREGROUND_SERVICE_MEDIA_PROJECTION permission |
-| No audio/video after join | Check permissions granted, WebSocket connected, device hardware |
+| Issue                                     | Solution                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| iOS: Permission denied despite Info.plist | Clean build: `cd ios && rm -rf build && pod install`              |
+| iOS: Background audio stops               | Verify `UIBackgroundModes` + AVAudioSession config                |
+| Android: Foreground notification missing  | Create NotificationChannel (Android 8+), check POST_NOTIFICATIONS |
+| Android: Screen capture fails (14+)       | Add FOREGROUND_SERVICE_MEDIA_PROJECTION permission                |
+| No audio/video after join                 | Check permissions granted, WebSocket connected, device hardware   |
 
 ---
 

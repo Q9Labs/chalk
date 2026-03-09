@@ -27,10 +27,7 @@ interface WsSignalingDeps {
   appendMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
   setWhiteboardPermission: (participantId: string, canDraw: boolean) => void;
-  setAnnotationSession: (
-    shareSessionId: string | null,
-    sharerParticipantId: string | null,
-  ) => void;
+  setAnnotationSession: (shareSessionId: string | null, sharerParticipantId: string | null) => void;
   setAnnotationAccessMode: (accessMode: "all" | "sharer_only" | "off") => void;
   setCurrentRecording: (recording: { id: string } | null) => void;
   emitRoomSyncReady: (source: "rtk.snapshot" | "ws.snapshot", participantCount: number) => void;
@@ -139,15 +136,8 @@ export const setupConferenceSessionWsSignaling = (deps: WsSignalingDeps): (() =>
 
   subscribe("reaction", (data) => {
     const participants = deps.getParticipants();
-    const participant =
-      participants.get(data.participantId) ??
-      (deps.getLocalParticipant()?.id === data.participantId
-        ? deps.getLocalParticipant()
-        : undefined);
-    const resolvedParticipantName =
-      data.participantName && data.participantName !== "Unknown"
-        ? data.participantName
-        : participant?.displayName ?? "Unknown";
+    const participant = participants.get(data.participantId) ?? (deps.getLocalParticipant()?.id === data.participantId ? deps.getLocalParticipant() : undefined);
+    const resolvedParticipantName = data.participantName && data.participantName !== "Unknown" ? data.participantName : (participant?.displayName ?? "Unknown");
 
     deps.emit("reaction", {
       ...data,

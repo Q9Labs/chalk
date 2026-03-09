@@ -1,6 +1,7 @@
 <!-- image:  -->
 
 <!-- whats-new -->
+
 ## Features
 
 - **Scheduled Classes + Join Links** — Hosts can now create and manage scheduled classes and generate join links directly through Chalk flows.

@@ -1,12 +1,6 @@
 import { Effect, type ManagedRuntime } from "effect";
 import { MediaService } from "../effect/services/media-service";
-import type {
-  MediaDeviceData,
-  MediaState,
-  ParticipantState,
-  RoomState,
-  VideoBackgroundEffectData,
-} from "../effect/schemas/manager-state";
+import type { MediaDeviceData, MediaState, ParticipantState, RoomState, VideoBackgroundEffectData } from "../effect/schemas/manager-state";
 import type { ParticipantService } from "../effect/services/participant-service";
 import type { RoomService } from "../effect/services/room-service";
 import type { ConferenceSession } from "../room";

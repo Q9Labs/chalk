@@ -10,13 +10,13 @@ recording → processing → ready → archived
                       ↘ failed
 ```
 
-| Status | Description |
-|--------|-------------|
-| `recording` | Currently recording |
-| `processing` | Processing after stop |
-| `ready` | Available for download |
-| `archived` | Moved to cold storage |
-| `failed` | Recording failed |
+| Status       | Description            |
+| ------------ | ---------------------- |
+| `recording`  | Currently recording    |
+| `processing` | Processing after stop  |
+| `ready`      | Available for download |
+| `archived`   | Moved to cold storage  |
+| `failed`     | Recording failed       |
 
 ## Start Recording
 
@@ -41,8 +41,8 @@ Starts recording for the specified room. Returns conflict if already recording.
 
 ### Errors
 
-| Status | Description |
-|--------|-------------|
+| Status         | Description                    |
+| -------------- | ------------------------------ |
 | `409 Conflict` | Room is already being recorded |
 
 ## Stop Recording
@@ -68,8 +68,8 @@ Stops the active recording for the specified room.
 
 ### Errors
 
-| Status | Description |
-|--------|-------------|
+| Status          | Description                       |
+| --------------- | --------------------------------- |
 | `404 Not Found` | No active recording for this room |
 
 ## Sync Recordings
@@ -106,10 +106,10 @@ Lists all recordings for the current tenant.
 
 ### Query Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | integer | 20 | Maximum number of recordings to return |
-| `offset` | integer | 0 | Number of recordings to skip |
+| Parameter | Type    | Default | Description                            |
+| --------- | ------- | ------- | -------------------------------------- |
+| `limit`   | integer | 20      | Maximum number of recordings to return |
+| `offset`  | integer | 0       | Number of recordings to skip           |
 
 ### Response
 
@@ -214,8 +214,8 @@ Moves the recording to S3 Glacier for long-term storage. Recording must have sta
 
 ### Errors
 
-| Status | Description |
-|--------|-------------|
+| Status            | Description                                            |
+| ----------------- | ------------------------------------------------------ |
 | `400 Bad Request` | Recording is not in `ready` status or not stored in R2 |
 
 ## Recover Recording
@@ -240,8 +240,8 @@ Attempts to recover a stalled recording from Cloudflare. Recording must have sta
 
 ### Errors
 
-| Status | Description |
-|--------|-------------|
+| Status            | Description                                                                |
+| ----------------- | -------------------------------------------------------------------------- |
 | `400 Bad Request` | Recording is not in `processing` status or missing Cloudflare recording ID |
 
 ## Delete Recording

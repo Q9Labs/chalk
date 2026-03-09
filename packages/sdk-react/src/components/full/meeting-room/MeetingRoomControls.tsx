@@ -164,18 +164,12 @@ export function MeetingRoomControls({
           enableHandRaise={enableHandRaise}
           enableReactions={enableReactions}
           enableWhiteboard={enableWhiteboard}
-          enablePictureInPicture={
-            enablePictureInPicture && Boolean(isPictureInPictureSupported)
-          }
+          enablePictureInPicture={enablePictureInPicture && Boolean(isPictureInPictureSupported)}
           enableTranscription={enableTranscription}
           enableChat={enableChat}
           isPictureInPictureActive={isPictureInPictureActive}
           participantColorSeed={localParticipantColorSeed}
-          onTogglePictureInPicture={
-            enablePictureInPicture && isPictureInPictureSupported
-              ? onTogglePictureInPicture
-              : undefined
-          }
+          onTogglePictureInPicture={enablePictureInPicture && isPictureInPictureSupported ? onTogglePictureInPicture : undefined}
         />
       )}
 
@@ -210,11 +204,7 @@ export function MeetingRoomControls({
             onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
             onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
             onToggleWhiteboard={enableWhiteboard ? onToggleWhiteboard : undefined}
-            onTogglePictureInPicture={
-              enablePictureInPicture && isPictureInPictureSupported
-                ? onTogglePictureInPicture
-                : undefined
-            }
+            onTogglePictureInPicture={enablePictureInPicture && isPictureInPictureSupported ? onTogglePictureInPicture : undefined}
             onLeave={onLeave}
             onToggleChat={enableChat ? () => onTogglePanel("chat") : undefined}
             onToggleParticipants={() => onTogglePanel("participants")}

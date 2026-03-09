@@ -1,18 +1,18 @@
 {
   "name": "@q9labs/chalk-react",
   "version": "0.0.72",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/Q9Labs/chalk.git",
     "directory": "packages/sdk-react"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
-  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -31,9 +31,9 @@
     "./sounds/*": "./dist/assets/sounds/*",
     "./logos/*": "./dist/assets/logos/*"
   },
-  "files": [
-    "dist"
-  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
   "scripts": {
     "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw --external react-resizable-panels && bun run build:fix-use-client && bun run build:types && bun run build:styles && bun run build:assets",
     "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
@@ -85,11 +85,11 @@
     "vitest": "^4.0.16"
   },
   "peerDependencies": {
+    "@excalidraw/excalidraw": "^0.17.0 || ^0.18.0",
+    "@q9labs/chalk-whiteboard": "workspace:^",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "typescript": "^5",
-    "@q9labs/chalk-whiteboard": "workspace:^",
-    "@excalidraw/excalidraw": "^0.17.0 || ^0.18.0"
+    "typescript": "^5"
   },
   "peerDependenciesMeta": {
     "@q9labs/chalk-whiteboard": {

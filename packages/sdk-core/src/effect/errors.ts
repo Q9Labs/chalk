@@ -9,10 +9,7 @@
  */
 
 import { Data } from "effect";
-import {
-  ChalkError,
-  ChalkErrorCode,
-} from "../errors/chalk-error";
+import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 
 /**
  * Base interface for all SDK errors
@@ -27,48 +24,60 @@ interface SDKErrorBase {
 /**
  * Connection errors - network and WebSocket failures
  */
-export class ConnectionError extends Data.TaggedError("ConnectionError")<SDKErrorBase & {
-  readonly code: "CONNECTION_FAILED" | "CONNECTION_LOST" | "RECONNECT_FAILED" | "WEBSOCKET_ERROR";
-}> {}
+export class ConnectionError extends Data.TaggedError("ConnectionError")<
+  SDKErrorBase & {
+    readonly code: "CONNECTION_FAILED" | "CONNECTION_LOST" | "RECONNECT_FAILED" | "WEBSOCKET_ERROR";
+  }
+> {}
 
 /**
  * Authentication errors - token and permission issues
  */
-export class AuthError extends Data.TaggedError("AuthError")<SDKErrorBase & {
-  readonly code: "AUTH_FAILED" | "TOKEN_EXPIRED" | "TOKEN_REFRESH_FAILED" | "INVALID_API_KEY" | "PERMISSION_DENIED";
-  readonly tokenExpired?: boolean;
-}> {}
+export class AuthError extends Data.TaggedError("AuthError")<
+  SDKErrorBase & {
+    readonly code: "AUTH_FAILED" | "TOKEN_EXPIRED" | "TOKEN_REFRESH_FAILED" | "INVALID_API_KEY" | "PERMISSION_DENIED";
+    readonly tokenExpired?: boolean;
+  }
+> {}
 
 /**
  * Media errors - camera, microphone, screen share failures
  */
-export class MediaError extends Data.TaggedError("MediaError")<SDKErrorBase & {
-  readonly code: "MEDIA_PERMISSION_DENIED" | "DEVICE_NOT_FOUND" | "DEVICE_IN_USE" | "SCREEN_SHARE_CANCELLED" | "SCREEN_SHARE_FAILED" | "OVERCONSTRAINED";
-  readonly deviceId?: string;
-}> {}
+export class MediaError extends Data.TaggedError("MediaError")<
+  SDKErrorBase & {
+    readonly code: "MEDIA_PERMISSION_DENIED" | "DEVICE_NOT_FOUND" | "DEVICE_IN_USE" | "SCREEN_SHARE_CANCELLED" | "SCREEN_SHARE_FAILED" | "OVERCONSTRAINED";
+    readonly deviceId?: string;
+  }
+> {}
 
 /**
  * ConferenceSession errors - lifecycle and state issues
  */
-export class RoomError extends Data.TaggedError("RoomError")<SDKErrorBase & {
-  readonly code: "ROOM_NOT_FOUND" | "ROOM_FULL" | "ALREADY_IN_ROOM" | "NOT_IN_ROOM" | "ROOM_ENDED";
-  readonly roomId?: string;
-}> {}
+export class RoomError extends Data.TaggedError("RoomError")<
+  SDKErrorBase & {
+    readonly code: "ROOM_NOT_FOUND" | "ROOM_FULL" | "ALREADY_IN_ROOM" | "NOT_IN_ROOM" | "ROOM_ENDED";
+    readonly roomId?: string;
+  }
+> {}
 
 /**
  * Recording errors - recording lifecycle failures
  */
-export class RecordingError extends Data.TaggedError("RecordingError")<SDKErrorBase & {
-  readonly code: "RECORDING_FAILED" | "RECORDING_IN_PROGRESS" | "NO_ACTIVE_RECORDING";
-  readonly recordingId?: string;
-}> {}
+export class RecordingError extends Data.TaggedError("RecordingError")<
+  SDKErrorBase & {
+    readonly code: "RECORDING_FAILED" | "RECORDING_IN_PROGRESS" | "NO_ACTIVE_RECORDING";
+    readonly recordingId?: string;
+  }
+> {}
 
 /**
  * Generic errors - unknown, validation, rate limiting
  */
-export class GenericError extends Data.TaggedError("GenericError")<SDKErrorBase & {
-  readonly code: "UNKNOWN" | "INVALID_PARAMS" | "RATE_LIMITED" | "SERVER_ERROR";
-}> {}
+export class GenericError extends Data.TaggedError("GenericError")<
+  SDKErrorBase & {
+    readonly code: "UNKNOWN" | "INVALID_PARAMS" | "RATE_LIMITED" | "SERVER_ERROR";
+  }
+> {}
 
 /**
  * Timeout error - operation exceeded time limit
@@ -91,15 +100,7 @@ export class ParseError extends Data.TaggedError("ParseError")<{
 /**
  * Union of all SDK errors for exhaustive matching
  */
-export type SDKError =
-  | ConnectionError
-  | AuthError
-  | MediaError
-  | RoomError
-  | RecordingError
-  | GenericError
-  | TimeoutError
-  | ParseError;
+export type SDKError = ConnectionError | AuthError | MediaError | RoomError | RecordingError | GenericError | TimeoutError | ParseError;
 
 /**
  * Convert SDK Error to legacy ChalkError for backwards compatibility
@@ -107,60 +108,28 @@ export type SDKError =
 export const toChalkError = (error: SDKError): ChalkError => {
   switch (error._tag) {
     case "ConnectionError":
-      return new ChalkError(
-        ChalkErrorCode[error.code],
-        error.message,
-        { recoverable: error.recoverable, details: error.details, cause: error.cause as Error | undefined }
-      );
+      return new ChalkError(ChalkErrorCode[error.code], error.message, { recoverable: error.recoverable, details: error.details, cause: error.cause as Error | undefined });
 
     case "AuthError":
-      return new ChalkError(
-        ChalkErrorCode[error.code],
-        error.message,
-        { recoverable: error.recoverable, details: error.details, cause: error.cause as Error | undefined }
-      );
+      return new ChalkError(ChalkErrorCode[error.code], error.message, { recoverable: error.recoverable, details: error.details, cause: error.cause as Error | undefined });
 
     case "MediaError":
-      return new ChalkError(
-        ChalkErrorCode[error.code],
-        error.message,
-        { recoverable: error.recoverable, details: { ...error.details, deviceId: error.deviceId }, cause: error.cause as Error | undefined }
-      );
+      return new ChalkError(ChalkErrorCode[error.code], error.message, { recoverable: error.recoverable, details: { ...error.details, deviceId: error.deviceId }, cause: error.cause as Error | undefined });
 
     case "RoomError":
-      return new ChalkError(
-        ChalkErrorCode[error.code],
-        error.message,
-        { recoverable: error.recoverable, details: { ...error.details, roomId: error.roomId }, cause: error.cause as Error | undefined }
-      );
+      return new ChalkError(ChalkErrorCode[error.code], error.message, { recoverable: error.recoverable, details: { ...error.details, roomId: error.roomId }, cause: error.cause as Error | undefined });
 
     case "RecordingError":
-      return new ChalkError(
-        ChalkErrorCode[error.code],
-        error.message,
-        { recoverable: error.recoverable, details: { ...error.details, recordingId: error.recordingId }, cause: error.cause as Error | undefined }
-      );
+      return new ChalkError(ChalkErrorCode[error.code], error.message, { recoverable: error.recoverable, details: { ...error.details, recordingId: error.recordingId }, cause: error.cause as Error | undefined });
 
     case "GenericError":
-      return new ChalkError(
-        ChalkErrorCode[error.code],
-        error.message,
-        { recoverable: error.recoverable, details: error.details, cause: error.cause as Error | undefined }
-      );
+      return new ChalkError(ChalkErrorCode[error.code], error.message, { recoverable: error.recoverable, details: error.details, cause: error.cause as Error | undefined });
 
     case "TimeoutError":
-      return new ChalkError(
-        ChalkErrorCode.CONNECTION_FAILED,
-        error.message,
-        { recoverable: true, details: { operation: error.operation, timeoutMs: error.timeoutMs } }
-      );
+      return new ChalkError(ChalkErrorCode.CONNECTION_FAILED, error.message, { recoverable: true, details: { operation: error.operation, timeoutMs: error.timeoutMs } });
 
     case "ParseError":
-      return new ChalkError(
-        ChalkErrorCode.INVALID_PARAMS,
-        error.message,
-        { recoverable: false, details: { input: error.input, path: error.path } }
-      );
+      return new ChalkError(ChalkErrorCode.INVALID_PARAMS, error.message, { recoverable: false, details: { input: error.input, path: error.path } });
   }
 };
 

@@ -1,40 +1,40 @@
 {
-    "Label": "TranscriptionsTotal",
-    "Datapoints": [
-        {
-            "Timestamp": "2026-02-18T05:00:00+05:00",
-            "Sum": 24.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-15T05:00:00+05:00",
-            "Sum": 3.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-17T05:00:00+05:00",
-            "Sum": 35.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-14T05:00:00+05:00",
-            "Sum": 25.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-19T05:00:00+05:00",
-            "Sum": 22.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-13T05:00:00+05:00",
-            "Sum": 240.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-16T05:00:00+05:00",
-            "Sum": 56.0,
-            "Unit": "Count"
-        }
-    ]
+  "Label": "TranscriptionsTotal",
+  "Datapoints": [
+    {
+      "Timestamp": "2026-02-18T05:00:00+05:00",
+      "Sum": 24.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-15T05:00:00+05:00",
+      "Sum": 3.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-17T05:00:00+05:00",
+      "Sum": 35.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-14T05:00:00+05:00",
+      "Sum": 25.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-19T05:00:00+05:00",
+      "Sum": 22.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-13T05:00:00+05:00",
+      "Sum": 240.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-16T05:00:00+05:00",
+      "Sum": 56.0,
+      "Unit": "Count"
+    }
+  ]
 }

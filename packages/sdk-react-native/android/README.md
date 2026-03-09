@@ -68,30 +68,29 @@ project(':chalk').projectDir = new File(rootProject.projectDir, '../node_modules
 ### Configure Audio for Call
 
 ```javascript
-import { NativeModules } from 'react-native';
+import { NativeModules } from "react-native";
 
 const { AudioSessionModule } = NativeModules;
 
 // Request audio focus and set VoIP mode
 AudioSessionModule.configureForCall()
-  .then(() => console.log('Audio configured'))
-  .catch(e => console.error(e));
+  .then(() => console.log("Audio configured"))
+  .catch((e) => console.error(e));
 ```
 
 ### Output Routing
 
 ```javascript
 // Route to speaker
-AudioSessionModule.setOutputRoute('speaker')
-  .then(() => console.log('Audio routed to speaker'))
-  .catch(e => console.error(e));
+AudioSessionModule.setOutputRoute("speaker")
+  .then(() => console.log("Audio routed to speaker"))
+  .catch((e) => console.error(e));
 
 // Route to earpiece
-AudioSessionModule.setOutputRoute('earpiece');
+AudioSessionModule.setOutputRoute("earpiece");
 
 // Route to Bluetooth
-AudioSessionModule.setOutputRoute('bluetooth')
-  .catch(e => console.error('Bluetooth not available'));
+AudioSessionModule.setOutputRoute("bluetooth").catch((e) => console.error("Bluetooth not available"));
 ```
 
 ### Query Routes
@@ -99,13 +98,13 @@ AudioSessionModule.setOutputRoute('bluetooth')
 ```javascript
 // Get available routes
 AudioSessionModule.getAvailableRoutes()
-  .then(routes => console.log(routes)) // ['speaker', 'earpiece', 'bluetooth']
-  .catch(e => console.error(e));
+  .then((routes) => console.log(routes)) // ['speaker', 'earpiece', 'bluetooth']
+  .catch((e) => console.error(e));
 
 // Get current route
 AudioSessionModule.getCurrentRoute()
-  .then(route => console.log(route)) // 'speaker'
-  .catch(e => console.error(e));
+  .then((route) => console.log(route)) // 'speaker'
+  .catch((e) => console.error(e));
 ```
 
 ### Bluetooth Control
@@ -113,8 +112,8 @@ AudioSessionModule.getCurrentRoute()
 ```javascript
 // Start Bluetooth SCO (Synchronous Connection Oriented)
 AudioSessionModule.startBluetoothSco()
-  .then(() => console.log('Bluetooth SCO started'))
-  .catch(e => console.error('Bluetooth unavailable'));
+  .then(() => console.log("Bluetooth SCO started"))
+  .catch((e) => console.error("Bluetooth unavailable"));
 
 // Stop Bluetooth SCO
 AudioSessionModule.stopBluetoothSco();
@@ -123,16 +122,16 @@ AudioSessionModule.stopBluetoothSco();
 ### Listen to Events
 
 ```javascript
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter } from "react-native";
 
 // Route change events
-DeviceEventEmitter.addListener('audioRouteChanged', (e) => {
-  console.log('Route changed to:', e.route);
+DeviceEventEmitter.addListener("audioRouteChanged", (e) => {
+  console.log("Route changed to:", e.route);
 });
 
 // Audio focus change events
-DeviceEventEmitter.addListener('audioFocusChanged', (e) => {
-  console.log('Focus state:', e.focusState);
+DeviceEventEmitter.addListener("audioFocusChanged", (e) => {
+  console.log("Focus state:", e.focusState);
   // 'gained', 'lost', 'lostTransient', 'lostTransientCanDuck'
 });
 ```
@@ -220,6 +219,7 @@ override fun onCatalystInstanceDestroy() {
 ### Bluetooth Not Available
 
 Ensure:
+
 - Bluetooth device is paired and connected
 - App has `BLUETOOTH` and `BLUETOOTH_CONNECT` permissions (request at runtime on API 31+)
 - `isBluetoothScoAvailableOffCall` returns true
@@ -231,6 +231,7 @@ Listen to `audioFocusChanged` events to handle interruptions (notifications, cal
 ### No Sound During Call
 
 Verify:
+
 - `configureForCall()` was called
 - Audio mode is `MODE_IN_COMMUNICATION`
 - Volume is not muted (check with `audioManager.ringerMode`)

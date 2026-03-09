@@ -11,7 +11,7 @@ npm install @q9labs/chalk-react
 Import the styles in your app:
 
 ```tsx
-import '@q9labs/chalk-react/styles.css'
+import "@q9labs/chalk-react/styles.css";
 ```
 
 ---
@@ -21,7 +21,7 @@ import '@q9labs/chalk-react/styles.css'
 Wrap your application with `ChalkProvider` to enable Chalk features:
 
 ```tsx
-import { ChalkProvider } from '@q9labs/chalk-react'
+import { ChalkProvider } from "@q9labs/chalk-react";
 
 function App() {
   return (
@@ -29,25 +29,25 @@ function App() {
       apiUrl="https://chalk-api.q9labs.ai"
       tokenProvider={async () => {
         // Return fresh access token
-        const res = await fetch('/api/chalk/refresh')
-        const { accessToken } = await res.json()
-        return accessToken
+        const res = await fetch("/api/chalk/refresh");
+        const { accessToken } = await res.json();
+        return accessToken;
       }}
     >
       <YourApp />
     </ChalkProvider>
-  )
+  );
 }
 ```
 
 ### Provider Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `apiUrl` | `string` | Chalk API URL |
-| `wsUrl` | `string` | WebSocket URL (optional, derived from apiUrl) |
-| `tokenProvider` | `() => Promise<string>` | Function to get fresh tokens |
-| `debug` | `boolean` | Enable debug logging |
+| Prop            | Type                    | Description                                   |
+| --------------- | ----------------------- | --------------------------------------------- |
+| `apiUrl`        | `string`                | Chalk API URL                                 |
+| `wsUrl`         | `string`                | WebSocket URL (optional, derived from apiUrl) |
+| `tokenProvider` | `() => Promise<string>` | Function to get fresh tokens                  |
+| `debug`         | `boolean`               | Enable debug logging                          |
 
 ---
 
@@ -60,20 +60,15 @@ Chalk React provides three tiers of components for different levels of customiza
 Drop-in components for the fastest implementation. Zero configuration required.
 
 ```tsx
-import { VideoConference } from '@q9labs/chalk-react'
+import { VideoConference } from "@q9labs/chalk-react";
 
 function Room() {
-  return (
-    <VideoConference
-      roomId="my-room"
-      userName="John Doe"
-      authToken={token}
-    />
-  )
+  return <VideoConference roomId="my-room" userName="John Doe" authToken={token} />;
 }
 ```
 
 **Available turnkey components:**
+
 - `VideoConference` - Complete meeting experience
 - `MeetingRoom` - Full room with all controls
 - `PreJoinLobby` - Device selection before joining
@@ -85,13 +80,7 @@ function Room() {
 Mix and match components to create custom layouts:
 
 ```tsx
-import {
-  VideoGrid,
-  ControlBar,
-  ChatPanel,
-  ParticipantList,
-  SettingsPanel
-} from '@q9labs/chalk-react'
+import { VideoGrid, ControlBar, ChatPanel, ParticipantList, SettingsPanel } from "@q9labs/chalk-react";
 
 function CustomMeeting() {
   return (
@@ -104,11 +93,12 @@ function CustomMeeting() {
         <ChatPanel />
       </aside>
     </div>
-  )
+  );
 }
 ```
 
 **Available composable components:**
+
 - `VideoGrid` - Participant video layout
 - `ControlBar` - Mute, share, record controls
 - `ChatPanel` - Message list and input
@@ -125,13 +115,7 @@ function CustomMeeting() {
 Build fully custom UIs with low-level primitives:
 
 ```tsx
-import {
-  VideoTile,
-  Avatar,
-  ControlButton,
-  NameTag,
-  AudioIndicator
-} from '@q9labs/chalk-react'
+import { VideoTile, Avatar, ControlButton, NameTag, AudioIndicator } from "@q9labs/chalk-react";
 
 function CustomVideoTile({ participant }) {
   return (
@@ -143,11 +127,12 @@ function CustomVideoTile({ participant }) {
         <AudioIndicator participantId={participant.id} />
       </div>
     </div>
-  )
+  );
 }
 ```
 
 **Available atomic components:**
+
 - `VideoTile` - Single participant video
 - `Avatar` - User avatar
 - `ControlButton` - Icon button
@@ -165,127 +150,116 @@ Hooks are organized by category for easy discovery:
 ### Room Management
 
 ```tsx
-import { useRoom, useConnection } from '@q9labs/chalk-react'
+import { useRoom, useConnection } from "@q9labs/chalk-react";
 
 function RoomStatus() {
-  const { status, roomId, join, leave } = useRoom()
-  const { isConnected, error } = useConnection()
+  const { status, roomId, join, leave } = useRoom();
+  const { isConnected, error } = useConnection();
 
   return (
     <div>
       <p>Status: {status}</p>
-      <p>Connected: {isConnected ? 'Yes' : 'No'}</p>
+      <p>Connected: {isConnected ? "Yes" : "No"}</p>
       {error && <p className="text-red-500">{error}</p>}
     </div>
-  )
+  );
 }
 ```
 
 ### Participants
 
 ```tsx
-import { useParticipants, useActiveSpeaker } from '@q9labs/chalk-react'
+import { useParticipants, useActiveSpeaker } from "@q9labs/chalk-react";
 
 function ParticipantCount() {
-  const { participants, count } = useParticipants()
-  const { activeSpeaker } = useActiveSpeaker()
+  const { participants, count } = useParticipants();
+  const { activeSpeaker } = useActiveSpeaker();
 
   return (
     <div>
       <p>{count} participants</p>
       {activeSpeaker && <p>Speaking: {activeSpeaker.displayName}</p>}
     </div>
-  )
+  );
 }
 ```
 
 ### Media & Devices
 
 ```tsx
-import { useMedia, useDevices, useScreenShare } from '@q9labs/chalk-react'
+import { useMedia, useDevices, useScreenShare } from "@q9labs/chalk-react";
 
 function MediaControls() {
-  const { isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio } = useMedia()
-  const { devices, selectedCamera, selectCamera } = useDevices()
-  const { isScreenSharing, startScreenShare, stopScreenShare } = useScreenShare()
+  const { isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio } = useMedia();
+  const { devices, selectedCamera, selectCamera } = useDevices();
+  const { isScreenSharing, startScreenShare, stopScreenShare } = useScreenShare();
 
   return (
     <div className="flex gap-2">
-      <button onClick={toggleAudio}>
-        {isAudioEnabled ? 'Mute' : 'Unmute'}
-      </button>
-      <button onClick={toggleVideo}>
-        {isVideoEnabled ? 'Stop Video' : 'Start Video'}
-      </button>
-      <button onClick={isScreenSharing ? stopScreenShare : startScreenShare}>
-        {isScreenSharing ? 'Stop Share' : 'Share Screen'}
-      </button>
+      <button onClick={toggleAudio}>{isAudioEnabled ? "Mute" : "Unmute"}</button>
+      <button onClick={toggleVideo}>{isVideoEnabled ? "Stop Video" : "Start Video"}</button>
+      <button onClick={isScreenSharing ? stopScreenShare : startScreenShare}>{isScreenSharing ? "Stop Share" : "Share Screen"}</button>
     </div>
-  )
+  );
 }
 ```
 
 ### Features
 
 ```tsx
-import {
-  useChat,
-  useRecording,
-  useInteractions,
-  useWhiteboard
-} from '@q9labs/chalk-react'
+import { useChat, useRecording, useInteractions, useWhiteboard } from "@q9labs/chalk-react";
 
 // Chat
-const { messages, sendMessage, unreadCount } = useChat()
+const { messages, sendMessage, unreadCount } = useChat();
 
 // Recording
-const { isRecording, startRecording, stopRecording } = useRecording()
+const { isRecording, startRecording, stopRecording } = useRecording();
 
 // Interactions
-const { handRaised, raiseHand, lowerHand, sendReaction } = useInteractions()
+const { handRaised, raiseHand, lowerHand, sendReaction } = useInteractions();
 
 // Whiteboard
-const { isEnabled, data, updateWhiteboard } = useWhiteboard()
+const { isEnabled, data, updateWhiteboard } = useWhiteboard();
 ```
 
 ### UI State
 
 ```tsx
-import { useLayout, usePanels, useNotifications } from '@q9labs/chalk-react'
+import { useLayout, usePanels, useNotifications } from "@q9labs/chalk-react";
 
 // Layout modes: 'grid' | 'spotlight' | 'sidebar'
-const { mode, setLayoutMode } = useLayout()
+const { mode, setLayoutMode } = useLayout();
 
 // Panel management
-const { activePanel, openPanel, closePanel } = usePanels()
+const { activePanel, openPanel, closePanel } = usePanels();
 
 // Notifications
-const { notifications, addNotification, dismissNotification } = useNotifications()
+const { notifications, addNotification, dismissNotification } = useNotifications();
 ```
 
 ---
 
 ## Hook Reference
 
-| Hook | Returns | Description |
-|------|---------|-------------|
-| `useChalk` | Quick access | Convenience hook for common operations |
-| `useRoom` | Room state | Join, leave, room info |
-| `useConnection` | Connection state | isConnected, error, status |
-| `useParticipants` | Participants | List, count, getParticipant |
-| `useActiveSpeaker` | Active speaker | Currently speaking participant |
-| `useMedia` | Media controls | Toggle audio/video |
-| `useDevices` | Device management | Camera, mic, speaker selection |
-| `useScreenShare` | Screen sharing | Start, stop, track |
-| `useChat` | Messaging | Send, receive, react |
-| `useRecording` | Recording | Start, stop, status |
-| `useInteractions` | Interactions | Hands, reactions |
-| `useWhiteboard` | Whiteboard | Collaborative drawing |
-| `useLayout` | Layout | Grid, spotlight modes |
-| `usePanels` | Panels | Side panel management |
-| `useNotifications` | Notifications | Toast messages |
-| `useSoundEffects` | Audio | Play join, leave sounds |
-| `useKeyboardShortcuts` | Shortcuts | Keyboard bindings |
+| Hook                   | Returns           | Description                            |
+| ---------------------- | ----------------- | -------------------------------------- |
+| `useChalk`             | Quick access      | Convenience hook for common operations |
+| `useRoom`              | Room state        | Join, leave, room info                 |
+| `useConnection`        | Connection state  | isConnected, error, status             |
+| `useParticipants`      | Participants      | List, count, getParticipant            |
+| `useActiveSpeaker`     | Active speaker    | Currently speaking participant         |
+| `useMedia`             | Media controls    | Toggle audio/video                     |
+| `useDevices`           | Device management | Camera, mic, speaker selection         |
+| `useScreenShare`       | Screen sharing    | Start, stop, track                     |
+| `useChat`              | Messaging         | Send, receive, react                   |
+| `useRecording`         | Recording         | Start, stop, status                    |
+| `useInteractions`      | Interactions      | Hands, reactions                       |
+| `useWhiteboard`        | Whiteboard        | Collaborative drawing                  |
+| `useLayout`            | Layout            | Grid, spotlight modes                  |
+| `usePanels`            | Panels            | Side panel management                  |
+| `useNotifications`     | Notifications     | Toast messages                         |
+| `useSoundEffects`      | Audio             | Play join, leave sounds                |
+| `useKeyboardShortcuts` | Shortcuts         | Keyboard bindings                      |
 
 ---
 
@@ -294,19 +268,13 @@ const { notifications, addNotification, dismissNotification } = useNotifications
 All hooks and components are fully typed:
 
 ```tsx
-import type {
-  Participant,
-  ChatMessage,
-  Recording,
-  RoomState,
-  MediaState
-} from '@q9labs/chalk-react'
+import type { Participant, ChatMessage, Recording, RoomState, MediaState } from "@q9labs/chalk-react";
 
 // Full type inference
-const { participants } = useParticipants()
+const { participants } = useParticipants();
 // participants: Participant[]
 
-const { messages } = useChat()
+const { messages } = useChat();
 // messages: ChatMessage[]
 ```
 

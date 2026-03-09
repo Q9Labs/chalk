@@ -32,7 +32,7 @@ export const ApiResponse = <A, I, R>(dataSchema: Schema.Schema<A, I, R>) =>
     Schema.Struct({
       success: Schema.Literal(false),
       error: ApiErrorSchema,
-    })
+    }),
   );
 
 /**
@@ -106,15 +106,7 @@ export type RawJoinRoomResponse = Schema.Schema.Type<typeof RawJoinRoomResponseS
 export const RecordingSchema = Schema.Struct({
   id: Schema.String,
   roomId: Schema.String,
-  status: Schema.Union(
-    Schema.Literal("pending"),
-    Schema.Literal("recording"),
-    Schema.Literal("processing"),
-    Schema.Literal("ready"),
-    Schema.Literal("archived"),
-    Schema.Literal("failed"),
-    Schema.Literal("deleted")
-  ),
+  status: Schema.Union(Schema.Literal("pending"), Schema.Literal("recording"), Schema.Literal("processing"), Schema.Literal("ready"), Schema.Literal("archived"), Schema.Literal("failed"), Schema.Literal("deleted")),
   durationSeconds: Schema.optional(Schema.Number),
   sizeBytes: Schema.optional(Schema.Number),
   downloadUrl: Schema.optional(Schema.String),
@@ -142,38 +134,26 @@ export type DownloadUrlResponse = Schema.Schema.Type<typeof DownloadUrlResponseS
 /**
  * Participant role schema
  */
-export const ParticipantRoleSchema = Schema.Union(
-  Schema.Literal("host"),
-  Schema.Literal("participant")
-);
+export const ParticipantRoleSchema = Schema.Union(Schema.Literal("host"), Schema.Literal("participant"));
 export type ParticipantRole = Schema.Schema.Type<typeof ParticipantRoleSchema>;
 
 /**
  * ConferenceSession status schema
  */
-export const RoomStatusSchema = Schema.Union(
-  Schema.Literal("connecting"),
-  Schema.Literal("connected"),
-  Schema.Literal("reconnecting"),
-  Schema.Literal("disconnected"),
-  Schema.Literal("failed")
-);
+export const RoomStatusSchema = Schema.Union(Schema.Literal("connecting"), Schema.Literal("connected"), Schema.Literal("reconnecting"), Schema.Literal("disconnected"), Schema.Literal("failed"));
 export type SessionConnectionState = Schema.Schema.Type<typeof RoomStatusSchema>;
 
 /**
  * Decode helper - validates unknown input against schema
  */
-export const decode = <A, I>(schema: Schema.Schema<A, I>) =>
-  Schema.decodeUnknown(schema);
+export const decode = <A, I>(schema: Schema.Schema<A, I>) => Schema.decodeUnknown(schema);
 
 /**
  * Decode with Effect - returns Effect<A, ParseError>
  */
-export const decodeEffect = <A, I>(schema: Schema.Schema<A, I>) =>
-  Schema.decodeUnknown(schema);
+export const decodeEffect = <A, I>(schema: Schema.Schema<A, I>) => Schema.decodeUnknown(schema);
 
 /**
  * Encode helper - converts typed value to serializable form
  */
-export const encode = <A, I>(schema: Schema.Schema<A, I>) =>
-  Schema.encode(schema);
+export const encode = <A, I>(schema: Schema.Schema<A, I>) => Schema.encode(schema);

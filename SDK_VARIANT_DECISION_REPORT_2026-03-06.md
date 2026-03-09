@@ -13,12 +13,12 @@ Goal: pick one canonical variant per duplicated seam, reduce drift, keep compati
 
 ## Decision Table
 
-| Seam | Variants found | Decision | Why | Action window |
-|---|---|---|---|---|
-| Auth expiry event name | `token-expired` vs `token.expired` | Keep `token.expired` | Most runtime layers already emit dot form; kebab form is drift | Immediate |
-| Whiteboard update payload | v1 (no `schemaVersion`, delta merge semantics) vs v2 (`schemaVersion:2`, `sceneId`, `syncAll`) | Keep v2 | Better sync semantics, explicit schema, already supported inbound | Immediate outbound switch + staged v1 inbound deprecation |
-| WS event naming | colon names in `types/events/*` vs dot names in runtime schemas/session | Keep dot names | Runtime source of truth already dot-based; colon map is legacy type layer | Immediate for internals; staged public type migration |
-| Auth mode | `token/tokenProvider` vs deprecated `apiKey` | Keep token/provider | Security and modern flow; `apiKey` already flagged deprecated | Keep deprecated until next major |
+| Seam                      | Variants found                                                                                 | Decision             | Why                                                                       | Action window                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Auth expiry event name    | `token-expired` vs `token.expired`                                                             | Keep `token.expired` | Most runtime layers already emit dot form; kebab form is drift            | Immediate                                                 |
+| Whiteboard update payload | v1 (no `schemaVersion`, delta merge semantics) vs v2 (`schemaVersion:2`, `sceneId`, `syncAll`) | Keep v2              | Better sync semantics, explicit schema, already supported inbound         | Immediate outbound switch + staged v1 inbound deprecation |
+| WS event naming           | colon names in `types/events/*` vs dot names in runtime schemas/session                        | Keep dot names       | Runtime source of truth already dot-based; colon map is legacy type layer | Immediate for internals; staged public type migration     |
+| Auth mode                 | `token/tokenProvider` vs deprecated `apiKey`                                                   | Keep token/provider  | Security and modern flow; `apiKey` already flagged deprecated             | Keep deprecated until next major                          |
 
 ## Evidence (Pinpointed)
 
@@ -80,5 +80,6 @@ Goal: pick one canonical variant per duplicated seam, reduce drift, keep compati
 - Whiteboard v1 send removal too early can break mixed-version sessions.
 
 Mitigation:
+
 - Keep inbound compatibility first, then remove old outbound.
 - Ship deprecation notes + one release overlap before hard removal.

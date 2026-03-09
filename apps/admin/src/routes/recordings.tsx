@@ -1,27 +1,27 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
-import { api } from "@/lib/api"
-import { DataTable } from "@/components/data-table"
-import { Badge } from "@/components/ui/badge"
-import { format } from "date-fns"
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { DataTable } from "@/components/data-table";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/recordings")({
   component: RecordingsPage,
-})
+});
 
 function formatBytes(bytes: number): string {
-  if (!bytes) return "—"
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+  if (!bytes) return "—";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 function formatDuration(seconds: number | null): string {
-  if (!seconds) return "—"
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}m ${s}s`
+  if (!seconds) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s`;
 }
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -31,13 +31,13 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
   archived: "secondary",
   deleted: "destructive",
   failed: "destructive",
-}
+};
 
 function RecordingsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "recordings"],
     queryFn: () => api.listRecordings(),
-  })
+  });
 
   return (
     <div className="space-y-6">
@@ -51,11 +51,7 @@ function RecordingsPage() {
           {
             key: "status",
             header: "Status",
-            render: (r) => (
-              <Badge variant={statusColors[r.status as string] ?? "outline"}>
-                {r.status as string}
-              </Badge>
-            ),
+            render: (r) => <Badge variant={statusColors[r.status as string] ?? "outline"}>{r.status as string}</Badge>,
           },
           { key: "storage_provider", header: "Storage", render: (r) => (r.storage_provider as string) || "—" },
           { key: "size_bytes", header: "Size", render: (r) => formatBytes(r.size_bytes as number) },
@@ -68,5 +64,5 @@ function RecordingsPage() {
         ]}
       />
     </div>
-  )
+  );
 }

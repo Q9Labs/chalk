@@ -1,48 +1,48 @@
 // Overlays & Feedback
-export * from './NotificationStack';
-export * from './ConnectionLostOverlay';
-export * from './DiagnosticErrorSheet';
+export * from "./NotificationStack";
+export * from "./ConnectionLostOverlay";
+export * from "./DiagnosticErrorSheet";
 
 // Headers & Info
-export * from './MeetingHeader';
-export * from './InviteModal';
-export * from './InviteToast';
+export * from "./MeetingHeader";
+export * from "./InviteModal";
+export * from "./InviteToast";
 
 // Chat Components
-export * from './MessageBubble';
-export * from './TypingIndicator';
-export * from './PinnedMessageBanner';
-export * from './chat-types';
+export * from "./MessageBubble";
+export * from "./TypingIndicator";
+export * from "./PinnedMessageBanner";
+export * from "./chat-types";
 
 // Tour
-export * from './TourOverlay';
+export * from "./TourOverlay";
 
 // Panels - export components but handle Participant name collision
-export { ParticipantList } from './ParticipantList';
-export type { ParticipantListProps, Participant as ParticipantListParticipant } from './ParticipantList';
-export * from './ChatPanel';
-export * from './TranscriptionPanel';
-export * from './SettingsPanel';
+export { ParticipantList } from "./ParticipantList";
+export type { ParticipantListProps, Participant as ParticipantListParticipant } from "./ParticipantList";
+export * from "./ChatPanel";
+export * from "./TranscriptionPanel";
+export * from "./SettingsPanel";
 // SidePanelsWrapper removed - file does not exist
-export * from './WaitingRoom';
+export * from "./WaitingRoom";
 
 // Device & Media
-export * from './DeviceControlButton';
-export * from './DeviceSelector';
-export * from './BackgroundEffectsPicker';
-export * from './NoiseSuppressionToggle';
+export * from "./DeviceControlButton";
+export * from "./DeviceSelector";
+export * from "./BackgroundEffectsPicker";
+export * from "./NoiseSuppressionToggle";
 
 // Video & Layout - export with Participant as canonical type
-export { VideoGrid } from './VideoGrid';
-export type { VideoGridProps, Participant } from './VideoGrid';
-export * from './ScreenShareView';
-export * from './LayoutSwitcher';
-export * from './MediaPreview';
+export { VideoGrid } from "./VideoGrid";
+export type { VideoGridProps, Participant } from "./VideoGrid";
+export * from "./ScreenShareView";
+export * from "./LayoutSwitcher";
+export * from "./MediaPreview";
 
 // Controls
-export * from './ControlBar';
-export * from './MobileControlSheet';
-export * from './MobilePanel';
-export * from './ReactionPicker';
-export * from './RecordingControls';
-export * from './WhatsNewDialog';
+export * from "./ControlBar";
+export * from "./MobileControlSheet";
+export * from "./MobilePanel";
+export * from "./ReactionPicker";
+export * from "./RecordingControls";
+export * from "./WhatsNewDialog";

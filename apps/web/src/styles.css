@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -58,36 +58,36 @@
 
 /* Nord Theme (Middle-ground Dark/Blueish) */
 @theme inline {
-  --color-nord-bg: #2E3440;
-  --color-nord-fg: #ECEFF4;
+  --color-nord-bg: #2e3440;
+  --color-nord-fg: #eceff4;
 }
 
 .nord {
-  --background: #2E3440;
-  --foreground: #ECEFF4;
-  --card: #3B4252;
-  --card-foreground: #ECEFF4;
-  --popover: #3B4252;
-  --popover-foreground: #ECEFF4;
-  --primary: #88C0D0;
+  --background: #2e3440;
+  --foreground: #eceff4;
+  --card: #3b4252;
+  --card-foreground: #eceff4;
+  --popover: #3b4252;
+  --popover-foreground: #eceff4;
+  --primary: #88c0d0;
   /* Frost highlight */
-  --primary-foreground: #2E3440;
-  --secondary: #434C5E;
-  --secondary-foreground: #E5E9F0;
-  --muted: #4C566A;
-  --muted-foreground: #D8DEE9;
-  --accent: #434C5E;
-  --accent-foreground: #ECEFF4;
-  --destructive: #BF616A;
-  --destructive-foreground: #ECEFF4;
-  --border: #4C566A;
-  --input: #434C5E;
-  --ring: #81A1C1;
+  --primary-foreground: #2e3440;
+  --secondary: #434c5e;
+  --secondary-foreground: #e5e9f0;
+  --muted: #4c566a;
+  --muted-foreground: #d8dee9;
+  --accent: #434c5e;
+  --accent-foreground: #eceff4;
+  --destructive: #bf616a;
+  --destructive-foreground: #eceff4;
+  --border: #4c566a;
+  --input: #434c5e;
+  --ring: #81a1c1;
 }
 
 @theme inline {
-  --font-app: 'Figtree Variable', sans-serif;
-  --font-display: 'Sora', sans-serif;
+  --font-app: "Figtree Variable", sans-serif;
+  --font-display: "Sora", sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);

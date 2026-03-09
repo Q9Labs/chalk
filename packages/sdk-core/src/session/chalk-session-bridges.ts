@@ -140,10 +140,7 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
       ctx.complete("success", {
         shareSessionId: annotationState.shareSessionId,
         sharerParticipantId: annotationState.sharerParticipantId,
-        result:
-          room.localParticipant?.id === annotationState.sharerParticipantId
-            ? "ended_local_session"
-            : "closed_remote_session",
+        result: room.localParticipant?.id === annotationState.sharerParticipantId ? "ended_local_session" : "closed_remote_session",
       });
     }),
   );

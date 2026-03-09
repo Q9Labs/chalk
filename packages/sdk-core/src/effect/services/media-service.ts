@@ -14,12 +14,7 @@ import { Context, Effect, Layer, PubSub, Ref, Stream, SubscriptionRef } from "ef
 import type { ConferenceSession } from "../../room";
 import { MediaError, RoomError } from "../errors";
 import { LoggerService } from "../services";
-import type {
-  MediaEvent,
-  MediaState,
-  MediaDeviceData,
-  VideoBackgroundEffectData,
-} from "../schemas/manager-state";
+import type { MediaEvent, MediaState, MediaDeviceData, VideoBackgroundEffectData } from "../schemas/manager-state";
 import { isConferenceSessionVideoBackgroundSupported } from "../../conference-session/video-background-controller";
 import { RoomInstanceService } from "./room-instance";
 
@@ -87,10 +82,7 @@ export interface MediaServiceInterface {
 /**
  * MediaService Context Tag
  */
-export class MediaService extends Context.Tag("@chalk/MediaService")<
-  MediaService,
-  MediaServiceInterface
->() {}
+export class MediaService extends Context.Tag("@chalk/MediaService")<MediaService, MediaServiceInterface>() {}
 
 /**
  * MediaService Live implementation
@@ -123,7 +115,7 @@ export const MediaServiceLive = Layer.effect(
             code: "NOT_IN_ROOM",
             message: "Not connected to a room",
             recoverable: false,
-          })
+          }),
         );
       }
       return room;
@@ -142,7 +134,7 @@ export const MediaServiceLive = Layer.effect(
           Effect.gen(function* () {
             yield* Ref.set(previousDeviceRef, null);
             yield* Ref.set(undoTimerRef, null);
-          })
+          }),
         );
       }, 5000);
 
@@ -182,11 +174,7 @@ export const MediaServiceLive = Layer.effect(
           yield* PubSub.publish(eventBus, { _tag: "VideoChanged", enabled: result, track });
 
           return result;
-        }).pipe(
-          Effect.tapError(() =>
-            SubscriptionRef.update(stateRef, (s) => ({ ...s, isTogglingVideo: false }))
-          )
-        )
+        }).pipe(Effect.tapError(() => SubscriptionRef.update(stateRef, (s) => ({ ...s, isTogglingVideo: false })))),
       ),
 
       toggleAudio: audioSemaphore.withPermits(1)(
@@ -217,11 +205,7 @@ export const MediaServiceLive = Layer.effect(
           yield* PubSub.publish(eventBus, { _tag: "AudioChanged", enabled: result, track });
 
           return result;
-        }).pipe(
-          Effect.tapError(() =>
-            SubscriptionRef.update(stateRef, (s) => ({ ...s, isTogglingAudio: false }))
-          )
-        )
+        }).pipe(Effect.tapError(() => SubscriptionRef.update(stateRef, (s) => ({ ...s, isTogglingAudio: false })))),
       ),
 
       applyBackgroundEffect: (effect) =>
@@ -238,8 +222,7 @@ export const MediaServiceLive = Layer.effect(
             catch: (err) =>
               new MediaError({
                 code: "DEVICE_NOT_FOUND",
-                message:
-                  err instanceof Error ? err.message : "Video background update failed",
+                message: err instanceof Error ? err.message : "Video background update failed",
                 recoverable: true,
               }),
           }).pipe(
@@ -247,7 +230,7 @@ export const MediaServiceLive = Layer.effect(
               SubscriptionRef.update(stateRef, (s) => ({
                 ...s,
                 isApplyingBackgroundEffect: false,
-              }))
+              })),
             ),
           );
 
@@ -280,8 +263,7 @@ export const MediaServiceLive = Layer.effect(
           catch: (err) =>
             new MediaError({
               code: "DEVICE_NOT_FOUND",
-              message:
-                err instanceof Error ? err.message : "Video background clear failed",
+              message: err instanceof Error ? err.message : "Video background clear failed",
               recoverable: true,
             }),
         }).pipe(
@@ -289,16 +271,14 @@ export const MediaServiceLive = Layer.effect(
             SubscriptionRef.update(stateRef, (s) => ({
               ...s,
               isApplyingBackgroundEffect: false,
-            }))
+            })),
           ),
         );
 
         yield* SubscriptionRef.update(stateRef, (s) => ({
           ...s,
           isApplyingBackgroundEffect: false,
-          selectedBackgroundEffect: cleared
-            ? ({ mode: "none" } as const)
-            : s.selectedBackgroundEffect,
+          selectedBackgroundEffect: cleared ? ({ mode: "none" } as const) : s.selectedBackgroundEffect,
         }));
 
         if (cleared) {
@@ -376,17 +356,13 @@ export const MediaServiceLive = Layer.effect(
         clearTimeout(undoTimer);
 
         if (previousDevice.type === "camera") {
-          yield* Effect.tryPromise(() => room.selectCamera(previousDevice.id)).pipe(
-            Effect.catchAll(() => Effect.void)
-          );
+          yield* Effect.tryPromise(() => room.selectCamera(previousDevice.id)).pipe(Effect.catchAll(() => Effect.void));
           yield* SubscriptionRef.update(stateRef, (s) => ({
             ...s,
             selectedCamera: previousDevice.id,
           }));
         } else if (previousDevice.type === "microphone") {
-          yield* Effect.tryPromise(() => room.selectMicrophone(previousDevice.id)).pipe(
-            Effect.catchAll(() => Effect.void)
-          );
+          yield* Effect.tryPromise(() => room.selectMicrophone(previousDevice.id)).pipe(Effect.catchAll(() => Effect.void));
           yield* SubscriptionRef.update(stateRef, (s) => ({
             ...s,
             selectedMicrophone: previousDevice.id,
@@ -440,8 +416,7 @@ export const MediaServiceLive = Layer.effect(
       attachRoom: (room) =>
         Effect.gen(function* () {
           const localParticipant = room.localParticipant;
-          const isBackgroundEffectsSupported =
-            isConferenceSessionVideoBackgroundSupported(room.rtkMeeting);
+          const isBackgroundEffectsSupported = isConferenceSessionVideoBackgroundSupported(room.rtkMeeting);
 
           yield* SubscriptionRef.update(stateRef, (s) => ({
             ...s,
@@ -461,5 +436,5 @@ export const MediaServiceLive = Layer.effect(
         yield* PubSub.shutdown(eventBus);
       }),
     };
-  })
+  }),
 );

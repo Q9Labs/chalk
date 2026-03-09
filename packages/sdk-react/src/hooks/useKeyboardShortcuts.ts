@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef } from "react";
 
 export interface KeyboardShortcut {
   key: string;
@@ -37,7 +37,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): UseK
 
       // Ignore if user is typing in an input
       const target = event.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
         return;
       }
 
@@ -59,8 +59,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): UseK
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [shortcuts, preventDefault]);
 
   return {
@@ -83,13 +83,13 @@ export function createMeetingShortcuts(handlers: {
   onLeave?: () => void;
 }): KeyboardShortcut[] {
   return [
-    { key: 'm', action: handlers.onToggleMute ?? (() => {}), description: 'Toggle mute' },
-    { key: 'v', action: handlers.onToggleVideo ?? (() => {}), description: 'Toggle video' },
-    { key: 's', action: handlers.onToggleScreenShare ?? (() => {}), description: 'Toggle screen share' },
-    { key: 'h', action: handlers.onToggleHandRaise ?? (() => {}), description: 'Raise/lower hand' },
-    { key: 'c', action: handlers.onToggleChat ?? (() => {}), description: 'Toggle chat' },
-    { key: 'p', action: handlers.onToggleParticipants ?? (() => {}), description: 'Toggle participants' },
-    { key: 't', action: handlers.onToggleTranscription ?? (() => {}), description: 'Toggle transcription' },
-    { key: '?', shift: true, action: handlers.onShowShortcuts ?? (() => {}), description: 'Show keyboard shortcuts' },
+    { key: "m", action: handlers.onToggleMute ?? (() => {}), description: "Toggle mute" },
+    { key: "v", action: handlers.onToggleVideo ?? (() => {}), description: "Toggle video" },
+    { key: "s", action: handlers.onToggleScreenShare ?? (() => {}), description: "Toggle screen share" },
+    { key: "h", action: handlers.onToggleHandRaise ?? (() => {}), description: "Raise/lower hand" },
+    { key: "c", action: handlers.onToggleChat ?? (() => {}), description: "Toggle chat" },
+    { key: "p", action: handlers.onToggleParticipants ?? (() => {}), description: "Toggle participants" },
+    { key: "t", action: handlers.onToggleTranscription ?? (() => {}), description: "Toggle transcription" },
+    { key: "?", shift: true, action: handlers.onShowShortcuts ?? (() => {}), description: "Show keyboard shortcuts" },
   ];
 }

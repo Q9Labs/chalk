@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -54,7 +54,7 @@
   --card-foreground: oklch(0.13 0.028 261.692);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.13 0.028 261.692);
-  --primary: oklch(0.60 0.10 185);
+  --primary: oklch(0.6 0.1 185);
   --primary-foreground: oklch(0.98 0.01 181);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
@@ -66,25 +66,25 @@
   --destructive-foreground: oklch(0.98 0.01 0);
   --success: oklch(0.72 0.17 162);
   --success-foreground: oklch(0.98 0.01 181);
-  --warning: oklch(0.80 0.15 85);
+  --warning: oklch(0.8 0.15 85);
   --warning-foreground: oklch(0.21 0.006 285.885);
   --border: oklch(0.928 0.006 264.531);
   --input: oklch(0.928 0.006 264.531);
-  --ring: oklch(0.60 0.10 185);
+  --ring: oklch(0.6 0.1 185);
   --radius: 0.625rem;
 
   /* Video-specific variables */
   --chalk-bg-stage: #0f172a;
   --chalk-bg-tile: #111827;
   --chalk-bg-controls: rgba(255, 255, 255, 0.92);
-  --chalk-accent-speaking: #22C55E;
+  --chalk-accent-speaking: #22c55e;
   --chalk-accent-speaking-glow: rgba(34, 197, 94, 0.4);
 
   /* Glass effects */
   --chalk-bg-glass: rgba(255, 255, 255, 0.72);
 
   /* Tile gradient: 2-stop "Clean Fade" - no middle stop to prevent muddy transitions */
-  --chalk-tile-gradient-end: #E0F5F3;
+  --chalk-tile-gradient-end: #e0f5f3;
 
   /* Pills (control bar) */
   --chalk-pill-bg: rgba(15, 23, 42, 0.08);
@@ -109,7 +109,7 @@
   --chalk-border-radius-full: 9999px;
 
   /* Typography */
-  --chalk-font-family: 'Inter', 'Avenir Next', 'Avenir', 'Helvetica Neue', 'Segoe UI', sans-serif;
+  --chalk-font-family: "Inter", "Avenir Next", "Avenir", "Helvetica Neue", "Segoe UI", sans-serif;
 
   /* Transitions */
   --chalk-duration-fast: 150ms;
@@ -136,7 +136,7 @@
   --card-foreground: oklch(0.985 0.002 247.839);
   --popover: oklch(0.21 0.034 264.665);
   --popover-foreground: oklch(0.985 0.002 247.839);
-  --primary: oklch(0.70 0.12 183);
+  --primary: oklch(0.7 0.12 183);
   --primary-foreground: oklch(0.28 0.04 193);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
@@ -148,14 +148,14 @@
   --destructive-foreground: oklch(0.985 0 0);
   --success: oklch(0.72 0.17 162);
   --success-foreground: oklch(0.28 0.04 193);
-  --warning: oklch(0.80 0.15 85);
+  --warning: oklch(0.8 0.15 85);
   --warning-foreground: oklch(0.21 0.006 285.885);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
 
   /* Video-specific - Dark mode */
-  --chalk-bg-stage: #0A0A0C;
+  --chalk-bg-stage: #0a0a0c;
   --chalk-bg-tile: #141418;
   --chalk-bg-controls: rgba(26, 26, 26, 0.92);
 
@@ -251,21 +251,21 @@
 }
 
 @keyframes chalk-speaking-pulse {
-
   0%,
   100% {
-    box-shadow: 0 0 0 2px var(--chalk-accent-speaking),
+    box-shadow:
+      0 0 0 2px var(--chalk-accent-speaking),
       0 0 16px var(--chalk-accent-speaking-glow);
   }
 
   50% {
-    box-shadow: 0 0 0 3px var(--chalk-accent-speaking),
+    box-shadow:
+      0 0 0 3px var(--chalk-accent-speaking),
       0 0 28px var(--chalk-accent-speaking-glow);
   }
 }
 
 @keyframes chalk-speaking-glow {
-
   0%,
   100% {
     box-shadow: 0 0 0 2px var(--chalk-accent-speaking);
@@ -277,7 +277,6 @@
 }
 
 @keyframes chalk-bounce {
-
   0%,
   100% {
     transform: scale(1);
@@ -376,7 +375,6 @@
 }
 
 @keyframes chalk-reaction-wiggle {
-
   0%,
   100% {
     transform: rotate(0deg) scale(1);
@@ -416,7 +414,6 @@
 }
 
 @keyframes chalk-hand-wave {
-
   0%,
   100% {
     transform: rotate(0deg);
@@ -445,7 +442,6 @@
 }
 
 @keyframes chalk-hand-bounce {
-
   0%,
   100% {
     transform: translateY(0);
@@ -457,7 +453,6 @@
 }
 
 @keyframes chalk-recording-pulse {
-
   0%,
   100% {
     opacity: 1;
@@ -471,7 +466,6 @@
 }
 
 @keyframes chalk-pulse {
-
   0%,
   100% {
     opacity: 1;
@@ -523,14 +517,13 @@
 }
 
 @keyframes chalk-highlight-pulse {
-
   0%,
   100% {
-    box-shadow: 0 0 0 4px oklch(0.60 0.10 185 / 50%);
+    box-shadow: 0 0 0 4px oklch(0.6 0.1 185 / 50%);
   }
 
   50% {
-    box-shadow: 0 0 0 8px oklch(0.60 0.10 185 / 30%);
+    box-shadow: 0 0 0 8px oklch(0.6 0.1 185 / 30%);
   }
 }
 
@@ -547,7 +540,6 @@
 }
 
 @keyframes chalk-typing-dot {
-
   0%,
   60%,
   100% {
@@ -562,26 +554,24 @@
 }
 
 @keyframes chalk-interim-pulse {
-
   0%,
   100% {
     background-color: transparent;
   }
 
   50% {
-    background-color: oklch(0.60 0.10 185 / 5%);
+    background-color: oklch(0.6 0.1 185 / 5%);
   }
 }
 
 @keyframes chalk-search-highlight {
-
   0%,
   100% {
-    box-shadow: 0 0 0 2px oklch(0.80 0.15 85 / 50%);
+    box-shadow: 0 0 0 2px oklch(0.8 0.15 85 / 50%);
   }
 
   50% {
-    box-shadow: 0 0 0 4px oklch(0.80 0.15 85 / 30%);
+    box-shadow: 0 0 0 4px oklch(0.8 0.15 85 / 30%);
   }
 }
 
@@ -606,21 +596,21 @@
 }
 
 @keyframes chalk-glow-pulse {
-
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(27, 182, 166, 0.4),
+    box-shadow:
+      0 0 0 0 rgba(27, 182, 166, 0.4),
       0 0 20px rgba(27, 182, 166, 0.2);
   }
 
   50% {
-    box-shadow: 0 0 0 8px rgba(27, 182, 166, 0),
+    box-shadow:
+      0 0 0 8px rgba(27, 182, 166, 0),
       0 0 40px rgba(27, 182, 166, 0.3);
   }
 }
 
 @keyframes chalk-audio-pulse {
-
   0%,
   100% {
     transform: scaleX(1);
@@ -917,7 +907,6 @@
 
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-
   *,
   *::before,
   *::after {

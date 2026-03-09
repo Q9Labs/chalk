@@ -278,15 +278,17 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
   async presignChatAttachmentsUpload(
     roomId: string,
     files: Array<{ fileName: string; mimeType: string; sizeBytes: number }>,
-  ): Promise<Array<{
-    attachmentId: string;
-    uploadUrl: string;
-    expiresAtMs: number;
-    fileName: string;
-    mimeType: string;
-    sizeBytes: number;
-    kind: "image" | "document" | "file";
-  }>> {
+  ): Promise<
+    Array<{
+      attachmentId: string;
+      uploadUrl: string;
+      expiresAtMs: number;
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      kind: "image" | "document" | "file";
+    }>
+  > {
     const response = await this.apiClient.presignChatAttachmentsUpload(roomId, files);
     if (!response.success || !response.data) {
       throw new Error(response.error?.message ?? "Failed to presign chat attachment upload");

@@ -1,13 +1,5 @@
 import { describe, expect, it, vi } from "bun:test";
-import {
-  createJoinToken,
-  createRoom,
-  createSession,
-  exchangeJoinToken,
-  listRooms,
-  scheduleRoom,
-  updateOwnDisplayName,
-} from "../conference-client/client-room-ops.ts";
+import { createJoinToken, createRoom, createSession, exchangeJoinToken, listRooms, scheduleRoom, updateOwnDisplayName } from "../conference-client/client-room-ops.ts";
 
 describe("client-room-ops", () => {
   it("createSession returns id when API returns Room payload", async () => {
@@ -34,9 +26,7 @@ describe("client-room-ops", () => {
       }),
     };
 
-    await expect(createSession(apiClient as any)).rejects.toThrow(
-      "Missing room ID in create room response",
-    );
+    await expect(createSession(apiClient as any)).rejects.toThrow("Missing room ID in create room response");
   });
 
   it("createRoom returns normalized room resource", async () => {
@@ -50,9 +40,7 @@ describe("client-room-ops", () => {
       }),
     };
 
-    await expect(
-      createRoom(apiClient as any, { name: "Math" }),
-    ).resolves.toMatchObject({
+    await expect(createRoom(apiClient as any, { name: "Math" })).resolves.toMatchObject({
       id: "room_uuid_2",
       status: "active",
     });
@@ -93,9 +81,7 @@ describe("client-room-ops", () => {
       }),
     };
 
-    await expect(
-      listRooms(apiClient as any, { status: ["scheduled"] }),
-    ).resolves.toMatchObject({
+    await expect(listRooms(apiClient as any, { status: ["scheduled"] })).resolves.toMatchObject({
       total: 1,
       rooms: [{ id: "room_uuid_4", status: "scheduled" }],
     });
@@ -109,9 +95,7 @@ describe("client-room-ops", () => {
       }),
     };
 
-    await expect(
-      createJoinToken(apiClient as any, "room_uuid_5"),
-    ).resolves.toEqual({
+    await expect(createJoinToken(apiClient as any, "room_uuid_5")).resolves.toEqual({
       joinToken: "tok_123",
     });
   });
@@ -128,9 +112,7 @@ describe("client-room-ops", () => {
       }),
     };
 
-    await expect(
-      exchangeJoinToken(apiClient as any, "tok_abc"),
-    ).resolves.toMatchObject({
+    await expect(exchangeJoinToken(apiClient as any, "tok_abc")).resolves.toMatchObject({
       accessToken: "jwt_123",
       roomName: "room_uuid_6",
     });
@@ -147,23 +129,11 @@ describe("client-room-ops", () => {
       updateLocalParticipantDisplayName: vi.fn(),
     };
 
-    await expect(
-      updateOwnDisplayName(
-        apiClient as any,
-        currentSession as any,
-        "  Alicia  ",
-      ),
-    ).resolves.toBeUndefined();
-    expect(apiClient.updateParticipant).toHaveBeenCalledWith(
-      "room_uuid_7",
-      "me",
-      {
-        displayName: "Alicia",
-      },
-    );
-    expect(
-      currentSession.updateLocalParticipantDisplayName,
-    ).toHaveBeenCalledWith("Alicia");
+    await expect(updateOwnDisplayName(apiClient as any, currentSession as any, "  Alicia  ")).resolves.toBeUndefined();
+    expect(apiClient.updateParticipant).toHaveBeenCalledWith("room_uuid_7", "me", {
+      displayName: "Alicia",
+    });
+    expect(currentSession.updateLocalParticipantDisplayName).toHaveBeenCalledWith("Alicia");
   });
 
   it("rejects blank display names", async () => {
@@ -175,12 +145,8 @@ describe("client-room-ops", () => {
       updateLocalParticipantDisplayName: vi.fn(),
     };
 
-    await expect(
-      updateOwnDisplayName(apiClient as any, currentSession as any, "   "),
-    ).rejects.toThrow("Display name cannot be empty");
+    await expect(updateOwnDisplayName(apiClient as any, currentSession as any, "   ")).rejects.toThrow("Display name cannot be empty");
     expect(apiClient.updateParticipant).not.toHaveBeenCalled();
-    expect(
-      currentSession.updateLocalParticipantDisplayName,
-    ).not.toHaveBeenCalled();
+    expect(currentSession.updateLocalParticipantDisplayName).not.toHaveBeenCalled();
   });
 });

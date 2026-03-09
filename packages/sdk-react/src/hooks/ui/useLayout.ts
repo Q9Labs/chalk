@@ -7,18 +7,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
 export interface UseLayoutReturn {
-	/** Current layout mode */
-	layout: LayoutMode;
-	/** Whether in mobile view */
-	isMobileView: boolean;
-	/** Whether fullscreen is active */
-	isFullscreen: boolean;
-	/** Set layout mode */
-	setLayout: (layout: LayoutMode) => void;
-	/** Toggle between grid and spotlight */
-	toggleLayout: () => void;
-	/** Toggle fullscreen mode */
-	toggleFullscreen: () => Promise<void>;
+  /** Current layout mode */
+  layout: LayoutMode;
+  /** Whether in mobile view */
+  isMobileView: boolean;
+  /** Whether fullscreen is active */
+  isFullscreen: boolean;
+  /** Set layout mode */
+  setLayout: (layout: LayoutMode) => void;
+  /** Toggle between grid and spotlight */
+  toggleLayout: () => void;
+  /** Toggle fullscreen mode */
+  toggleFullscreen: () => Promise<void>;
 }
 
 /**
@@ -53,36 +53,30 @@ export interface UseLayoutReturn {
  * ```
  */
 export function useLayout(): UseLayoutReturn {
-	const session = useSession();
-	const { ui } = session;
+  const session = useSession();
+  const { ui } = session;
 
-	const [state, setState] = useState<UIState>(() => ui.getState());
+  const [state, setState] = useState<UIState>(() => ui.getState());
 
-	useEffect(() => {
-		return ui.subscribe(setState);
-	}, [ui]);
+  useEffect(() => {
+    return ui.subscribe(setState);
+  }, [ui]);
 
-	const setLayout = useCallback(
-		(layout: LayoutMode): void => ui.setLayout(layout),
-		[ui],
-	);
+  const setLayout = useCallback((layout: LayoutMode): void => ui.setLayout(layout), [ui]);
 
-	const toggleLayout = useCallback((): void => ui.toggleLayout(), [ui]);
+  const toggleLayout = useCallback((): void => ui.toggleLayout(), [ui]);
 
-	const toggleFullscreen = useCallback(
-		(): Promise<void> => ui.toggleFullscreen(),
-		[ui],
-	);
+  const toggleFullscreen = useCallback((): Promise<void> => ui.toggleFullscreen(), [ui]);
 
-	return useMemo(
-		(): UseLayoutReturn => ({
-			layout: state.layout,
-			isMobileView: state.isMobileView,
-			isFullscreen: state.isFullscreen,
-			setLayout,
-			toggleLayout,
-			toggleFullscreen,
-		}),
-		[state, setLayout, toggleLayout, toggleFullscreen],
-	);
+  return useMemo(
+    (): UseLayoutReturn => ({
+      layout: state.layout,
+      isMobileView: state.isMobileView,
+      isFullscreen: state.isFullscreen,
+      setLayout,
+      toggleLayout,
+      toggleFullscreen,
+    }),
+    [state, setLayout, toggleLayout, toggleFullscreen],
+  );
 }

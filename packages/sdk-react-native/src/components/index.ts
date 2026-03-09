@@ -15,11 +15,7 @@ export { ChatPanel, ControlBar, DeviceSelector } from "./composite/index";
 export { EndScreen, MeetingRoom, PreJoinLobby, VideoConference } from "./full/index";
 
 // Existing components
-export {
-	AudioSession,
-	useBluetoothAudio,
-	useSpeakerphone,
-} from "./AudioSession";
+export { AudioSession, useBluetoothAudio, useSpeakerphone } from "./AudioSession";
 export { ParticipantTile } from "./ParticipantTile";
 export { ScreenShareView } from "./ScreenShareView";
 export { VideoGrid } from "./VideoGrid";

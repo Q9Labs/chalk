@@ -64,57 +64,57 @@ export const scheduleRoom = async (apiClient: APIClient, options: ScheduleRoomOp
 };
 
 export const listRooms = async (apiClient: APIClient, options: ListRoomsOptions = {}): Promise<ListRoomsResponse> => {
-	const ctx = wideEvents.start("room.list");
-	ctx.set("input", options);
+  const ctx = wideEvents.start("room.list");
+  ctx.set("input", options);
 
-	try {
-		const response = await apiClient.listRooms(options);
-		if (!response.success || !response.data) {
-			throw new Error(response.error?.message ?? "Failed to list rooms");
-		}
+  try {
+    const response = await apiClient.listRooms(options);
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message ?? "Failed to list rooms");
+    }
 
-		ctx.complete("success", { count: response.data.rooms.length, total: response.data.total });
-		return response.data;
-	} catch (error) {
-		ctx.complete("error", error);
-		throw error;
-	}
+    ctx.complete("success", { count: response.data.rooms.length, total: response.data.total });
+    return response.data;
+  } catch (error) {
+    ctx.complete("error", error);
+    throw error;
+  }
 };
 
 export const createJoinToken = async (apiClient: APIClient, roomId: string): Promise<CreateJoinTokenResponse> => {
-	const ctx = wideEvents.start("room.create_join_token");
-	ctx.set("input", { roomId });
+  const ctx = wideEvents.start("room.create_join_token");
+  ctx.set("input", { roomId });
 
-	try {
-		const response = await apiClient.createJoinToken(roomId);
-		if (!response.success || !response.data) {
-			throw new Error(response.error?.message ?? "Failed to create join token");
-		}
+  try {
+    const response = await apiClient.createJoinToken(roomId);
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message ?? "Failed to create join token");
+    }
 
-		ctx.complete("success");
-		return response.data;
-	} catch (error) {
-		ctx.complete("error", error);
-		throw error;
-	}
+    ctx.complete("success");
+    return response.data;
+  } catch (error) {
+    ctx.complete("error", error);
+    throw error;
+  }
 };
 
 export const exchangeJoinToken = async (apiClient: APIClient, joinToken: string): Promise<ExchangeJoinTokenResponse> => {
-	const ctx = wideEvents.start("room.exchange_join_token");
-	ctx.set("input", { hasJoinToken: !!joinToken });
+  const ctx = wideEvents.start("room.exchange_join_token");
+  ctx.set("input", { hasJoinToken: !!joinToken });
 
-	try {
-		const response = await apiClient.exchangeJoinToken(joinToken);
-		if (!response.success || !response.data) {
-			throw new Error(response.error?.message ?? "Failed to exchange join token");
-		}
+  try {
+    const response = await apiClient.exchangeJoinToken(joinToken);
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message ?? "Failed to exchange join token");
+    }
 
-		ctx.complete("success");
-		return response.data;
-	} catch (error) {
-		ctx.complete("error", error);
-		throw error;
-	}
+    ctx.complete("success");
+    return response.data;
+  } catch (error) {
+    ctx.complete("error", error);
+    throw error;
+  }
 };
 
 export const endSession = async (apiClient: APIClient, sessionId: string): Promise<void> => {
@@ -246,39 +246,35 @@ export const removeParticipant = async (apiClient: APIClient, currentSession: Co
   }
 };
 
-export const updateOwnDisplayName = async (
-	apiClient: APIClient,
-	currentSession: ConferenceSession | null,
-	displayName: string,
-): Promise<void> => {
-	const ctx = wideEvents.start("participant.update_self_name");
-	const trimmedDisplayName = displayName.trim();
-	ctx.set("input", {
-		hasSession: currentSession !== null,
-		displayNameLength: trimmedDisplayName.length,
-	});
+export const updateOwnDisplayName = async (apiClient: APIClient, currentSession: ConferenceSession | null, displayName: string): Promise<void> => {
+  const ctx = wideEvents.start("participant.update_self_name");
+  const trimmedDisplayName = displayName.trim();
+  ctx.set("input", {
+    hasSession: currentSession !== null,
+    displayNameLength: trimmedDisplayName.length,
+  });
 
-	try {
-		if (!currentSession) {
-			throw new Error("Not connected to a room");
-		}
-		if (!trimmedDisplayName) {
-			throw new Error("Display name cannot be empty");
-		}
+  try {
+    if (!currentSession) {
+      throw new Error("Not connected to a room");
+    }
+    if (!trimmedDisplayName) {
+      throw new Error("Display name cannot be empty");
+    }
 
-		const response = await apiClient.updateParticipant(currentSession.id, "me", {
-			displayName: trimmedDisplayName,
-		});
-		if (!response.success) {
-			throw new Error(response.error?.message ?? "Failed to update display name");
-		}
+    const response = await apiClient.updateParticipant(currentSession.id, "me", {
+      displayName: trimmedDisplayName,
+    });
+    if (!response.success) {
+      throw new Error(response.error?.message ?? "Failed to update display name");
+    }
 
-		currentSession.updateLocalParticipantDisplayName(trimmedDisplayName);
-		ctx.complete("success");
-	} catch (error) {
-		ctx.complete("error", error);
-		throw error;
-	}
+    currentSession.updateLocalParticipantDisplayName(trimmedDisplayName);
+    ctx.complete("success");
+  } catch (error) {
+    ctx.complete("error", error);
+    throw error;
+  }
 };
 
 export const disconnectCurrentRoom = (currentSession: ConferenceSession | null, currentWsClient: WSClient | null, trackLeave: () => void): { nextSession: ConferenceSession | null; nextWsClient: WSClient | null } => {

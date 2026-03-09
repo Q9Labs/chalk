@@ -69,10 +69,7 @@ export interface RoomServiceInterface {
 /**
  * RoomService Context Tag
  */
-export class RoomService extends Context.Tag("@chalk/RoomService")<
-  RoomService,
-  RoomServiceInterface
->() {}
+export class RoomService extends Context.Tag("@chalk/RoomService")<RoomService, RoomServiceInterface>() {}
 
 /**
  * RoomService Live implementation
@@ -108,7 +105,7 @@ export const RoomServiceLive = Layer.effect(
               } else if (status === "disconnected") {
                 yield* PubSub.publish(eventBus, { _tag: "Disconnected", reason: "connection_lost" });
               }
-            })
+            }),
           );
         });
 
@@ -138,7 +135,7 @@ export const RoomServiceLive = Layer.effect(
                   code: "ALREADY_IN_ROOM",
                   message: "Already joining a room",
                   recoverable: false,
-                })
+                }),
               );
             }
 
@@ -148,7 +145,7 @@ export const RoomServiceLive = Layer.effect(
                   code: "ALREADY_IN_ROOM",
                   message: "Already connected to a room",
                   recoverable: false,
-                })
+                }),
               );
             }
 
@@ -158,16 +155,12 @@ export const RoomServiceLive = Layer.effect(
               isJoining: true,
               status: "connecting" as const,
             });
-          })
+          }),
         ),
 
       joinComplete: (room) =>
         Effect.gen(function* () {
-          yield* Effect.provideService(
-            setRoom(room),
-            RoomInstanceService,
-            roomRef
-          );
+          yield* Effect.provideService(setRoom(room), RoomInstanceService, roomRef);
 
           // Setup listeners
           const cleanup = yield* setupRoomListeners(room);
@@ -205,14 +198,11 @@ export const RoomServiceLive = Layer.effect(
                 code: "NOT_IN_ROOM",
                 message: "Not connected to a room",
                 recoverable: false,
-              })
+              }),
             );
           }
 
-          const shouldEndForAll =
-            typeof options?.endForAll === "function"
-              ? options.endForAll()
-              : (options?.endForAll ?? false);
+          const shouldEndForAll = typeof options?.endForAll === "function" ? options.endForAll() : (options?.endForAll ?? false);
 
           yield* logger.info("Leaving room", { endForAll: shouldEndForAll });
 
@@ -252,5 +242,5 @@ export const RoomServiceLive = Layer.effect(
         yield* PubSub.shutdown(eventBus);
       }),
     };
-  })
+  }),
 );

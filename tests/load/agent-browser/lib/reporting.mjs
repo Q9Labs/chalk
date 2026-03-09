@@ -67,9 +67,7 @@ export function buildMarkdown(summary, records) {
 export function printSummary(summary) {
   console.log("\n[join-stress] complete");
   console.log(`[join-stress] attempts=${summary.attempts} success=${summary.success} failed=${summary.failed} successRate=${summary.successRate}%`);
-  console.log(
-    `[join-stress] joinMs min=${summary.joinMs.min ?? "-"} p50=${summary.joinMs.p50 ?? "-"} p95=${summary.joinMs.p95 ?? "-"} p99=${summary.joinMs.p99 ?? "-"} max=${summary.joinMs.max ?? "-"}`,
-  );
+  console.log(`[join-stress] joinMs min=${summary.joinMs.min ?? "-"} p50=${summary.joinMs.p50 ?? "-"} p95=${summary.joinMs.p95 ?? "-"} p99=${summary.joinMs.p99 ?? "-"} max=${summary.joinMs.max ?? "-"}`);
   if (summary.failureReasons.length) {
     console.log(`[join-stress] topFailure=${summary.failureReasons[0].reason} (${summary.failureReasons[0].count})`);
   }

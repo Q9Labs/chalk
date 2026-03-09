@@ -34,4 +34,3 @@ Future considerations / TODOs (keep updated as we discover issues).
 
 - Add `language` to job schema end-to-end (Go -> Redis -> Python types) once upstream source exists.
 - Include optional debug fields on success (e.g. `duration_after_vad`, `language_probability`) if useful for tenants/support.
-

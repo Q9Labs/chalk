@@ -80,7 +80,7 @@ export const connectRealtimeKit = (options: RTKConnectionOptions) =>
             code: "CONNECTION_FAILED",
             message: "RealtimeKit init returned null client",
             recoverable: false,
-          })
+          }),
         );
       }
 
@@ -95,7 +95,7 @@ export const connectRealtimeKit = (options: RTKConnectionOptions) =>
           try: () => client.leave(),
           catch: () => undefined, // Ignore cleanup errors
         });
-      }).pipe(Effect.ignore)
+      }).pipe(Effect.ignore),
   );
 
 /**
@@ -103,10 +103,7 @@ export const connectRealtimeKit = (options: RTKConnectionOptions) =>
  *
  * Wraps rtkClient.join() with configurable timeout
  */
-export const joinRTKRoom = (
-  client: RealtimeKitClient,
-  timeoutMs: number = 10000
-) =>
+export const joinRTKRoom = (client: RealtimeKitClient, timeoutMs: number = 10000) =>
   Effect.gen(function* () {
     const logger = yield* LoggerService;
     yield* logger.debug("Joining RealtimeKit room");
@@ -122,7 +119,7 @@ export const joinRTKRoom = (
             cause: error,
           }),
       }),
-      Effect.timeoutOption(`${timeoutMs} millis`)
+      Effect.timeoutOption(`${timeoutMs} millis`),
     );
 
     if (Option.isNone(result)) {
@@ -131,7 +128,7 @@ export const joinRTKRoom = (
           message: `ConferenceSession join timed out after ${timeoutMs}ms`,
           operation: "joinRTKRoom",
           timeoutMs,
-        })
+        }),
       );
     }
 
@@ -166,8 +163,8 @@ export const connectWebSocket = (url: string) =>
                 message: "WebSocket connection failed",
                 recoverable: true,
                 cause: event,
-              })
-            )
+              }),
+            ),
           );
         };
 
@@ -188,7 +185,7 @@ export const connectWebSocket = (url: string) =>
         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
           ws.close(1000, "Effect cleanup");
         }
-      })
+      }),
   );
 
 /**
@@ -200,10 +197,7 @@ export const makeConnectionReady = () => Deferred.make<void, ConnectionError>();
  * Utility: Run scoped effect and return the value
  * Resources are cleaned up when the returned scope is closed
  */
-export const runScoped = <A, E, R>(
-  effect: Effect.Effect<A, E, R | Scope.Scope>
-) =>
-  Effect.scoped(effect);
+export const runScoped = <A, E, R>(effect: Effect.Effect<A, E, R | Scope.Scope>) => Effect.scoped(effect);
 
 /**
  * Create a join semaphore (mutex) for serializing join operations
@@ -219,10 +213,7 @@ export const makeJoinSemaphore = () => Effect.makeSemaphore(1);
  * Ensures only one join operation runs at a time.
  * Other callers wait for the permit to be released.
  */
-export const withJoinLock = <A, E, R>(
-  semaphore: Effect.Semaphore,
-  effect: Effect.Effect<A, E, R>
-) => semaphore.withPermits(1)(effect);
+export const withJoinLock = <A, E, R>(semaphore: Effect.Semaphore, effect: Effect.Effect<A, E, R>) => semaphore.withPermits(1)(effect);
 
 /**
  * Create an operation lock for serializing async operations (Promise-based)
@@ -246,7 +237,9 @@ export const createOperationLock = () => {
 
       isLocked = true;
       let resolve: () => void;
-      pendingPromise = new Promise((r) => { resolve = r; });
+      pendingPromise = new Promise((r) => {
+        resolve = r;
+      });
 
       try {
         return await operation();

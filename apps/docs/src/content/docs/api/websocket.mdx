@@ -18,10 +18,7 @@ The WebSocket connection requires a valid JWT token containing `room_id` and `pa
 Pass the token via the `Sec-WebSocket-Protocol` header using the format `token.{jwt}`:
 
 ```javascript
-const ws = new WebSocket('wss://api.chalk.q9labs.ai/api/v1/ws', [
-  'chalk',
-  `token.${accessToken}`
-]);
+const ws = new WebSocket("wss://api.chalk.q9labs.ai/api/v1/ws", ["chalk", `token.${accessToken}`]);
 ```
 
 **Deprecated: Query Parameter**

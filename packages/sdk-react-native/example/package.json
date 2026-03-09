@@ -9,12 +9,12 @@
     "pod-install": "cd ios && pod install"
   },
   "dependencies": {
+    "@cloudflare/react-native-webrtc": "^125.0.3",
     "@cloudflare/realtimekit-react-native": "^0.3.1",
     "@q9labs/chalk-core": "workspace:*",
     "@q9labs/chalk-react-native": "workspace:*",
     "react": "18.3.1",
-    "react-native": "0.76.5",
-    "@cloudflare/react-native-webrtc": "^125.0.3"
+    "react-native": "0.76.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",

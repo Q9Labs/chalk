@@ -7,7 +7,7 @@
  * Usage: Place once in your room component, passing all remote participants.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface AudioParticipant {
   id: string;
@@ -36,12 +36,7 @@ type SinkAwareAudioElement = HTMLAudioElement & {
   sinkId?: string;
 };
 
-export function AudioRenderer({
-  participants,
-  volume = 1,
-  audioOutputDeviceId,
-  getParticipantVolume,
-}: AudioRendererProps) {
+export function AudioRenderer({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume }: AudioRendererProps) {
   // Map of participant ID -> audio element (mic audio)
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   // Map of participant ID -> audio element (screen share audio)
@@ -63,22 +58,25 @@ export function AudioRenderer({
     if (pendingAutoplayRetryRef.current.size === 0) setNeedsAutoplayUnlock(false);
   };
 
-  const applyAudioOutputDevice = useCallback((audioEl: HTMLAudioElement) => {
-    if (!audioOutputDeviceId) return;
-    const sinkAware = audioEl as SinkAwareAudioElement;
-    if (typeof sinkAware.setSinkId !== 'function') return;
-    if (sinkAware.sinkId === audioOutputDeviceId) return;
-    void sinkAware.setSinkId(audioOutputDeviceId).catch(() => {
-      // Ignore unsupported/failed sink routing and continue with default output.
-    });
-  }, [audioOutputDeviceId]);
+  const applyAudioOutputDevice = useCallback(
+    (audioEl: HTMLAudioElement) => {
+      if (!audioOutputDeviceId) return;
+      const sinkAware = audioEl as SinkAwareAudioElement;
+      if (typeof sinkAware.setSinkId !== "function") return;
+      if (sinkAware.sinkId === audioOutputDeviceId) return;
+      void sinkAware.setSinkId(audioOutputDeviceId).catch(() => {
+        // Ignore unsupported/failed sink routing and continue with default output.
+      });
+    },
+    [audioOutputDeviceId],
+  );
 
   // Filter to remote participants with valid audio tracks
   const remoteWithAudio = participants.filter((p) => {
     if (p.isLocal) return false;
     if (!p.audioTrack) return false;
     try {
-      return p.audioTrack.readyState === 'live';
+      return p.audioTrack.readyState === "live";
     } catch {
       // Track may have been disposed
       return false;
@@ -90,20 +88,17 @@ export function AudioRenderer({
     if (p.isLocal) return false;
     if (!p.screenShareAudioTrack) return false;
     try {
-      return p.screenShareAudioTrack.readyState === 'live';
+      return p.screenShareAudioTrack.readyState === "live";
     } catch {
       return false;
     }
   });
 
-  const unlockEvents = useMemo(
-    () => ['pointerdown', 'touchend', 'click', 'keydown'] as const,
-    []
-  );
+  const unlockEvents = useMemo(() => ["pointerdown", "touchend", "click", "keydown"] as const, []);
 
   useEffect(() => {
     if (!needsAutoplayUnlock) return;
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     let inFlight = false;
 
@@ -123,7 +118,7 @@ export function AudioRenderer({
         for (const [i, r] of results.entries()) {
           const el = els[i];
           if (!el) continue;
-          if (r.status === 'rejected') pendingAutoplayRetryRef.current.add(el);
+          if (r.status === "rejected") pendingAutoplayRetryRef.current.add(el);
         }
 
         if (pendingAutoplayRetryRef.current.size === 0) {
@@ -247,7 +242,7 @@ export function AudioRenderer({
       };
 
       try {
-        audioTrack.addEventListener('ended', handleEnded);
+        audioTrack.addEventListener("ended", handleEnded);
         handlers.set(id, { track: audioTrack, handler: handleEnded });
       } catch {
         // Track may be invalid
@@ -257,7 +252,7 @@ export function AudioRenderer({
     return () => {
       for (const { track, handler } of handlers.values()) {
         try {
-          track.removeEventListener('ended', handler);
+          track.removeEventListener("ended", handler);
         } catch {
           // Track may have been disposed
         }
@@ -331,4 +326,4 @@ export function AudioRenderer({
   return null;
 }
 
-AudioRenderer.displayName = 'AudioRenderer';
+AudioRenderer.displayName = "AudioRenderer";

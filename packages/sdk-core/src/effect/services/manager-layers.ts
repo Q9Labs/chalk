@@ -17,12 +17,7 @@ import { LoggerService, NoopLoggerLive, ConsoleLoggerLive } from "../services";
 /**
  * All manager services type
  */
-export type ManagerServices =
-  | RoomInstanceService
-  | RoomService
-  | ParticipantService
-  | MediaService
-  | LoggerService;
+export type ManagerServices = RoomInstanceService | RoomService | ParticipantService | MediaService | LoggerService;
 
 /**
  * Create manager services layer with specified logger
@@ -30,12 +25,5 @@ export type ManagerServices =
 export const makeManagerServicesLayer = (debug: boolean) => {
   const loggerLayer = debug ? ConsoleLoggerLive : NoopLoggerLive;
 
-  return Layer.mergeAll(
-    RoomServiceLive,
-    ParticipantServiceLive,
-    MediaServiceLive
-  ).pipe(
-    Layer.provideMerge(RoomInstanceServiceLive),
-    Layer.provideMerge(loggerLayer)
-  );
+  return Layer.mergeAll(RoomServiceLive, ParticipantServiceLive, MediaServiceLive).pipe(Layer.provideMerge(RoomInstanceServiceLive), Layer.provideMerge(loggerLayer));
 };

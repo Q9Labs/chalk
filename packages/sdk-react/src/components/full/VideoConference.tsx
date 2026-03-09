@@ -18,12 +18,7 @@ import { useVideoConferenceController } from "./video-conference/useVideoConfere
 
 function VideoConferenceBase(props: VideoConferenceProps): React.JSX.Element {
   const { phase, preJoinProps, meetingRoomProps, endScreenProps, leaveDialogProps } = useVideoConferenceController(props);
-  const enableSharedPictureInPicture =
-    phase === "lobby" || phase === "joining"
-      ? Boolean(preJoinProps.enablePictureInPicture)
-      : phase === "meeting"
-        ? Boolean(meetingRoomProps.enablePictureInPicture)
-        : false;
+  const enableSharedPictureInPicture = phase === "lobby" || phase === "joining" ? Boolean(preJoinProps.enablePictureInPicture) : phase === "meeting" ? Boolean(meetingRoomProps.enablePictureInPicture) : false;
 
   return (
     <SharedPictureInPictureProvider enabled={enableSharedPictureInPicture}>

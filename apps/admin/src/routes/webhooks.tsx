@@ -1,37 +1,30 @@
-import { useState } from "react"
-import { createFileRoute } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
-import { api } from "@/lib/api"
-import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Skeleton } from "@/components/ui/skeleton"
-import { JsonViewer } from "@/components/json-viewer"
-import { format } from "date-fns"
+import { useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { JsonViewer } from "@/components/json-viewer";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/webhooks")({
   component: WebhooksPage,
-})
+});
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   delivered: "default",
   pending: "outline",
   sending: "outline",
   failed: "destructive",
-}
+};
 
 function WebhooksPage() {
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "webhooks"],
     queryFn: () => api.listWebhooks(),
-  })
+  });
 
   if (isLoading) {
     return (
@@ -43,10 +36,10 @@ function WebhooksPage() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
-  const deliveries = data ?? []
+  const deliveries = data ?? [];
 
   return (
     <div className="space-y-6">
@@ -66,19 +59,17 @@ function WebhooksPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-	            {deliveries.map((d) => (
-	              <>
-                <TableRow
-                  key={d.id}
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => setExpanded(expanded === d.id ? null : d.id)}
-                >
+            {deliveries.map((d) => (
+              <>
+                <TableRow key={d.id} className="cursor-pointer hover:bg-accent" onClick={() => setExpanded(expanded === d.id ? null : d.id)}>
                   <TableCell className="font-mono text-xs">{d.event_type}</TableCell>
                   <TableCell>{d.tenant_name}</TableCell>
-	                  <TableCell>
-	                    <Badge variant={statusColors[d.status ?? ""] ?? "outline"}>{d.status}</Badge>
-	                  </TableCell>
-                  <TableCell>{d.attempts}/{d.max_attempts}</TableCell>
+                  <TableCell>
+                    <Badge variant={statusColors[d.status ?? ""] ?? "outline"}>{d.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {d.attempts}/{d.max_attempts}
+                  </TableCell>
                   <TableCell className="max-w-[200px] truncate text-xs">{d.webhook_url}</TableCell>
                   <TableCell>{format(new Date(d.created_at), "PPp")}</TableCell>
                 </TableRow>
@@ -106,5 +97,5 @@ function WebhooksPage() {
         </Table>
       )}
     </div>
-  )
+  );
 }

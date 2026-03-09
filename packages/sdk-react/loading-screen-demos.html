@@ -1,591 +1,592 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Premium Loading Screen Concepts</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    :root {
-      --bg-dark: #030305;
-      --accent-1: #3b82f6;
-      --accent-2: #8b5cf6;
-      --accent-3: #c084fc;
-    }
-    
-    * { box-sizing: border-box; }
-    
-    body {
-      margin: 0;
-      background: var(--bg-dark);
-      color: white;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      overflow-x: hidden;
-      scroll-behavior: smooth;
-    }
-
-    /* Presentation UI */
-    .concept-container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      background: var(--bg-dark);
-    }
-    
-    .overlay-ui {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 3rem;
-    }
-
-    .title-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .concept-number {
-      font-size: 0.8rem;
-      letter-spacing: 0.3em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.4);
-      font-weight: 600;
-    }
-
-    .concept-title {
-      font-size: 2.5rem;
-      font-weight: 300;
-      letter-spacing: -0.02em;
-      margin: 0;
-      background: linear-gradient(to right, #fff, rgba(255,255,255,0.5));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .concept-desc {
-      max-width: 400px;
-      font-size: 0.9rem;
-      line-height: 1.6;
-      color: rgba(255,255,255,0.6);
-      margin-top: 1rem;
-    }
-
-    .controls {
-      pointer-events: auto;
-      align-self: flex-start;
-    }
-
-    .btn {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: white;
-      padding: 0.75rem 1.5rem;
-      border-radius: 100px;
-      font-size: 0.85rem;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      cursor: pointer;
-      backdrop-filter: blur(10px);
-      transition: all 0.3s ease;
-    }
-
-    .btn:hover {
-      background: rgba(255,255,255,1);
-      color: black;
-      transform: translateY(-1px);
-      box-shadow: 0 10px 20px -10px rgba(255,255,255,0.3);
-    }
-
-    canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
-
-    /* CONCEPT 1: HORIZON */
-    .horizon-bg {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at center 60%, #111528 0%, var(--bg-dark) 100%);
-    }
-    
-    .horizon-stars {
-      position: absolute;
-      inset: 0;
-      background-image: 
-        radial-gradient(1px 1px at 20px 30px, rgba(255,255,255,0.8), rgba(0,0,0,0)),
-        radial-gradient(1px 1px at 40px 70px, rgba(255,255,255,0.8), rgba(0,0,0,0)),
-        radial-gradient(1.5px 1.5px at 90px 40px, rgba(255,255,255,0.8), rgba(0,0,0,0));
-      background-size: 200px 200px;
-      opacity: 0.3;
-      transition: transform 10s ease-out, opacity 5s ease-in;
-    }
-
-    .horizon-core {
-      position: absolute;
-      top: 50%;
-      left: 0;
-      width: 100%;
-      height: 1px;
-      background: rgba(255,255,255,0.1);
-      z-index: 10;
-      transform-origin: center;
-    }
-
-    .horizon-glow {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 100%;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), #fff, rgba(59, 130, 246, 0.8), transparent);
-      filter: blur(4px);
-      opacity: 0;
-      z-index: 11;
-    }
-
-    .horizon-orb {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 400px;
-      height: 400px;
-      margin: -200px 0 0 -200px;
-      border-radius: 50%;
-      background: radial-gradient(circle at center, #fff 0%, #3b82f6 20%, transparent 60%);
-      opacity: 0;
-      filter: blur(20px);
-      transform: translateY(100px) scale(0.8) scaleY(0.5);
-      z-index: 5;
-      mix-blend-mode: screen;
-    }
-
-    .horizon-whiteout {
-      position: absolute;
-      inset: 0;
-      background: #fff;
-      opacity: 0;
-      z-index: 50;
-      pointer-events: none;
-    }
-
-    /* CONCEPT 3: VAULT DOORS */
-    .vault-door {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      height: 50vh;
-      background: #050505;
-      z-index: 20;
-      will-change: transform;
-    }
-    .vault-door.top {
-      top: 0;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-    }
-    .vault-door.bottom {
-      bottom: 0;
-      border-top: 1px solid rgba(255,255,255,0.1);
-      box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
-    }
-    
-    .room-preview {
-      position: absolute;
-      inset: 0;
-      background: url('https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=2000') center/cover;
-      z-index: 10;
-      opacity: 0.5;
-      filter: blur(10px) brightness(0.5);
-      transform: scale(1.1);
-      transition: all 1.5s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .room-preview.revealed {
-      opacity: 1;
-      filter: blur(0px) brightness(1);
-      transform: scale(1);
-    }
-
-  </style>
-</head>
-<body>
-
-  <!-- CONCEPT 1: HORIZON -->
-  <div class="concept-container" id="c1">
-    <div class="horizon-bg"></div>
-    <div class="horizon-stars" id="h-stars"></div>
-    <div class="horizon-orb" id="h-orb"></div>
-    <div class="horizon-core">
-      <div class="horizon-glow" id="h-glow"></div>
-    </div>
-    <div class="horizon-whiteout" id="h-whiteout"></div>
-    
-    <div class="overlay-ui">
-      <div class="title-group">
-        <span class="concept-number">Concept 01</span>
-        <h1 class="concept-title">Cinematic Horizon</h1>
-        <p class="concept-desc">A spatial, atmospheric progression. The horizon acts as a literal connection threshold. As the handshake completes, the light blooms and overtakes the screen.</p>
-      </div>
-      <div class="controls">
-        <button class="btn" onclick="playHorizon()">Trigger Connection</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- CONCEPT 2: NEURAL MESH -->
-  <div class="concept-container" id="c2">
-    <canvas id="mesh-canvas"></canvas>
-    
-    <div class="overlay-ui">
-      <div class="title-group">
-        <span class="concept-number">Concept 02</span>
-        <h1 class="concept-title">Neural Routing</h1>
-        <p class="concept-desc">Visualizes Cloudflare's edge routing. Nodes organically seek connections, building density until the network snaps into a singularity.</p>
-      </div>
-      <div class="controls">
-        <button class="btn" onclick="playMesh()">Trigger Connection</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- CONCEPT 3: KINETIC RESONANCE -->
-  <div class="concept-container" id="c3">
-    <div class="room-preview" id="v-room"></div>
-    <div class="vault-door top" id="v-top"></div>
-    <div class="vault-door bottom" id="v-bottom"></div>
-    <canvas id="wave-canvas" style="z-index: 30; pointer-events: none;"></canvas>
-
-    <div class="overlay-ui" id="v-ui">
-      <div class="title-group">
-        <span class="concept-number">Concept 03</span>
-        <h1 class="concept-title">Latency Resonance</h1>
-        <p class="concept-desc">Multi-phase harmonic waveforms simulate audio/video sync. The chaotic noise gracefully dampens into a zero-latency flatline, splitting open to reveal the room.</p>
-      </div>
-      <div class="controls">
-        <button class="btn" onclick="playWave()">Trigger Connection</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    /* EASING FUNCTIONS */
-    const easeOutExpo = x => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
-    const easeInOutCubic = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
-    const easeInExpo = x => x === 0 ? 0 : Math.pow(2, 10 * x - 10);
-    const easeOutBack = x => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
-    const easeInOutQuart = x => x < 0.5 ? 8 * x * x * x * x : 1 - Math.pow(-2 * x + 2, 4) / 2;
-
-    /* ANIMATION ENGINES */
-
-    // --- 1. HORIZON ---
-    let hAnim;
-    function playHorizon() {
-      if(hAnim) cancelAnimationFrame(hAnim);
-      
-      const orb = document.getElementById('h-orb');
-      const glow = document.getElementById('h-glow');
-      const stars = document.getElementById('h-stars');
-      const whiteout = document.getElementById('h-whiteout');
-      
-      let start = performance.now();
-      const duration = 6000;
-
-      function render(now) {
-        let elapsed = now - start;
-        let p = Math.min(elapsed / duration, 1);
-        
-        // Orb rises and blooms
-        let orbP = easeOutExpo(p);
-        let y = 100 - (orbP * 100);
-        let scale = 0.8 + (orbP * 1.5);
-        let opacity = Math.sin(p * Math.PI); // fade in then out at the very end
-        
-        orb.style.transform = `translateY(${y}px) scale(${scale}) scaleY(${0.5 + p*0.5})`;
-        orb.style.opacity = p < 0.8 ? p * 1.2 : 1;
-        orb.style.filter = `blur(${20 + p*40}px)`;
-
-        // Line glow intensifies
-        let glowP = easeInOutCubic(p);
-        glow.style.opacity = glowP;
-        glow.style.transform = `translate(-50%, -50%) scaleX(${0.2 + glowP * 0.8}) scaleY(${1 + p*5})`;
-        glow.style.filter = `blur(${4 + p*10}px)`;
-
-        // Stars zoom subtly
-        stars.style.transform = `scale(${1 + p*0.1})`;
-
-        // Final flash
-        if (p > 0.85) {
-          let flashP = (p - 0.85) / 0.15;
-          whiteout.style.opacity = easeInExpo(flashP);
-        } else {
-          whiteout.style.opacity = 0;
-        }
-
-        if (p < 1) {
-          hAnim = requestAnimationFrame(render);
-        } else {
-          // Reset after flash
-          setTimeout(() => {
-            whiteout.style.transition = 'opacity 1s ease';
-            whiteout.style.opacity = 0;
-            orb.style.opacity = 0;
-            glow.style.opacity = 0;
-            setTimeout(() => { whiteout.style.transition = ''; }, 1000);
-          }, 500);
-        }
+  <head>
+    <meta charset="UTF-8" />
+    <title>Premium Loading Screen Concepts</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      :root {
+        --bg-dark: #030305;
+        --accent-1: #3b82f6;
+        --accent-2: #8b5cf6;
+        --accent-3: #c084fc;
       }
-      requestAnimationFrame(render);
-    }
 
-    // --- 2. NEURAL MESH ---
-    let mAnim;
-    function playMesh() {
-      if(mAnim) cancelAnimationFrame(mAnim);
-      
-      const canvas = document.getElementById('mesh-canvas');
-      const ctx = canvas.getContext('2d', { alpha: false });
-      
-      const resize = () => {
-        canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-        canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-      };
-      window.addEventListener('resize', resize);
-      resize();
+      * {
+        box-sizing: border-box;
+      }
 
-      const width = canvas.offsetWidth;
-      const height = canvas.offsetHeight;
-      const centerX = width / 2;
-      const centerY = height / 2;
+      body {
+        margin: 0;
+        background: var(--bg-dark);
+        color: white;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        overflow-x: hidden;
+        scroll-behavior: smooth;
+      }
 
-      // Particles
-      const particles = Array.from({length: 120}, () => ({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 2,
-        vy: (Math.random() - 0.5) * 2,
-        baseSize: Math.random() * 2 + 0.5,
-        hue: 210 + Math.random() * 40 // Blues/purples
-      }));
+      /* Presentation UI */
+      .concept-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        background: var(--bg-dark);
+      }
 
-      let start = performance.now();
-      const duration = 5500;
+      .overlay-ui {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 3rem;
+      }
 
-      function render(now) {
-        let elapsed = now - start;
-        let p = Math.min(elapsed / duration, 1);
-        
-        // Trail effect
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = `rgba(3, 3, 5, ${p > 0.8 ? 1 : 0.3})`; // Darken faster at the end
-        ctx.fillRect(0, 0, width, height);
+      .title-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
 
-        ctx.globalCompositeOperation = 'screen';
+      .concept-number {
+        font-size: 0.8rem;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.4);
+        font-weight: 600;
+      }
 
-        // Phase calculations
-        const isSucking = p > 0.6;
-        const suckP = isSucking ? easeInExpo((p - 0.6) / 0.3) : 0; // 0.6 to 0.9
-        const isBursting = p > 0.9;
-        const burstP = isBursting ? easeOutExpo((p - 0.9) / 0.1) : 0;
+      .concept-title {
+        font-size: 2.5rem;
+        font-weight: 300;
+        letter-spacing: -0.02em;
+        margin: 0;
+        background: linear-gradient(to right, #fff, rgba(255, 255, 255, 0.5));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
 
-        // Draw connections
-        const maxDist = 150 + (p * 150); // Reach gets longer
-        ctx.lineWidth = 1 + p;
+      .concept-desc {
+        max-width: 400px;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 1rem;
+      }
 
-        for(let i=0; i<particles.length; i++) {
-          let p1 = particles[i];
-          
-          if (!isSucking) {
-            p1.x += p1.vx * (1 + p*2); // Speed up
-            p1.y += p1.vy * (1 + p*2);
-            // Bounce
-            if(p1.x < 0 || p1.x > width) p1.vx *= -1;
-            if(p1.y < 0 || p1.y > height) p1.vy *= -1;
+      .controls {
+        pointer-events: auto;
+        align-self: flex-start;
+      }
+
+      .btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 100px;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        cursor: pointer;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+      }
+
+      .btn:hover {
+        background: rgba(255, 255, 255, 1);
+        color: black;
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px -10px rgba(255, 255, 255, 0.3);
+      }
+
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* CONCEPT 1: HORIZON */
+      .horizon-bg {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center 60%, #111528 0%, var(--bg-dark) 100%);
+      }
+
+      .horizon-stars {
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(1px 1px at 20px 30px, rgba(255, 255, 255, 0.8), rgba(0, 0, 0, 0)), radial-gradient(1px 1px at 40px 70px, rgba(255, 255, 255, 0.8), rgba(0, 0, 0, 0)), radial-gradient(1.5px 1.5px at 90px 40px, rgba(255, 255, 255, 0.8), rgba(0, 0, 0, 0));
+        background-size: 200px 200px;
+        opacity: 0.3;
+        transition:
+          transform 10s ease-out,
+          opacity 5s ease-in;
+      }
+
+      .horizon-core {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 100%;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
+        z-index: 10;
+        transform-origin: center;
+      }
+
+      .horizon-glow {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), #fff, rgba(59, 130, 246, 0.8), transparent);
+        filter: blur(4px);
+        opacity: 0;
+        z-index: 11;
+      }
+
+      .horizon-orb {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 400px;
+        height: 400px;
+        margin: -200px 0 0 -200px;
+        border-radius: 50%;
+        background: radial-gradient(circle at center, #fff 0%, #3b82f6 20%, transparent 60%);
+        opacity: 0;
+        filter: blur(20px);
+        transform: translateY(100px) scale(0.8) scaleY(0.5);
+        z-index: 5;
+        mix-blend-mode: screen;
+      }
+
+      .horizon-whiteout {
+        position: absolute;
+        inset: 0;
+        background: #fff;
+        opacity: 0;
+        z-index: 50;
+        pointer-events: none;
+      }
+
+      /* CONCEPT 3: VAULT DOORS */
+      .vault-door {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        height: 50vh;
+        background: #050505;
+        z-index: 20;
+        will-change: transform;
+      }
+      .vault-door.top {
+        top: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      }
+      .vault-door.bottom {
+        bottom: 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.8);
+      }
+
+      .room-preview {
+        position: absolute;
+        inset: 0;
+        background: url("https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=2000") center/cover;
+        z-index: 10;
+        opacity: 0.5;
+        filter: blur(10px) brightness(0.5);
+        transform: scale(1.1);
+        transition: all 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .room-preview.revealed {
+        opacity: 1;
+        filter: blur(0px) brightness(1);
+        transform: scale(1);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- CONCEPT 1: HORIZON -->
+    <div class="concept-container" id="c1">
+      <div class="horizon-bg"></div>
+      <div class="horizon-stars" id="h-stars"></div>
+      <div class="horizon-orb" id="h-orb"></div>
+      <div class="horizon-core">
+        <div class="horizon-glow" id="h-glow"></div>
+      </div>
+      <div class="horizon-whiteout" id="h-whiteout"></div>
+
+      <div class="overlay-ui">
+        <div class="title-group">
+          <span class="concept-number">Concept 01</span>
+          <h1 class="concept-title">Cinematic Horizon</h1>
+          <p class="concept-desc">A spatial, atmospheric progression. The horizon acts as a literal connection threshold. As the handshake completes, the light blooms and overtakes the screen.</p>
+        </div>
+        <div class="controls">
+          <button class="btn" onclick="playHorizon()">Trigger Connection</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCEPT 2: NEURAL MESH -->
+    <div class="concept-container" id="c2">
+      <canvas id="mesh-canvas"></canvas>
+
+      <div class="overlay-ui">
+        <div class="title-group">
+          <span class="concept-number">Concept 02</span>
+          <h1 class="concept-title">Neural Routing</h1>
+          <p class="concept-desc">Visualizes Cloudflare's edge routing. Nodes organically seek connections, building density until the network snaps into a singularity.</p>
+        </div>
+        <div class="controls">
+          <button class="btn" onclick="playMesh()">Trigger Connection</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCEPT 3: KINETIC RESONANCE -->
+    <div class="concept-container" id="c3">
+      <div class="room-preview" id="v-room"></div>
+      <div class="vault-door top" id="v-top"></div>
+      <div class="vault-door bottom" id="v-bottom"></div>
+      <canvas id="wave-canvas" style="z-index: 30; pointer-events: none"></canvas>
+
+      <div class="overlay-ui" id="v-ui">
+        <div class="title-group">
+          <span class="concept-number">Concept 03</span>
+          <h1 class="concept-title">Latency Resonance</h1>
+          <p class="concept-desc">Multi-phase harmonic waveforms simulate audio/video sync. The chaotic noise gracefully dampens into a zero-latency flatline, splitting open to reveal the room.</p>
+        </div>
+        <div class="controls">
+          <button class="btn" onclick="playWave()">Trigger Connection</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /* EASING FUNCTIONS */
+      const easeOutExpo = (x) => (x === 1 ? 1 : 1 - Math.pow(2, -10 * x));
+      const easeInOutCubic = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+      const easeInExpo = (x) => (x === 0 ? 0 : Math.pow(2, 10 * x - 10));
+      const easeOutBack = (x) => (x === 1 ? 1 : 1 - Math.pow(2, -10 * x));
+      const easeInOutQuart = (x) => (x < 0.5 ? 8 * x * x * x * x : 1 - Math.pow(-2 * x + 2, 4) / 2);
+
+      /* ANIMATION ENGINES */
+
+      // --- 1. HORIZON ---
+      let hAnim;
+      function playHorizon() {
+        if (hAnim) cancelAnimationFrame(hAnim);
+
+        const orb = document.getElementById("h-orb");
+        const glow = document.getElementById("h-glow");
+        const stars = document.getElementById("h-stars");
+        const whiteout = document.getElementById("h-whiteout");
+
+        let start = performance.now();
+        const duration = 6000;
+
+        function render(now) {
+          let elapsed = now - start;
+          let p = Math.min(elapsed / duration, 1);
+
+          // Orb rises and blooms
+          let orbP = easeOutExpo(p);
+          let y = 100 - orbP * 100;
+          let scale = 0.8 + orbP * 1.5;
+          let opacity = Math.sin(p * Math.PI); // fade in then out at the very end
+
+          orb.style.transform = `translateY(${y}px) scale(${scale}) scaleY(${0.5 + p * 0.5})`;
+          orb.style.opacity = p < 0.8 ? p * 1.2 : 1;
+          orb.style.filter = `blur(${20 + p * 40}px)`;
+
+          // Line glow intensifies
+          let glowP = easeInOutCubic(p);
+          glow.style.opacity = glowP;
+          glow.style.transform = `translate(-50%, -50%) scaleX(${0.2 + glowP * 0.8}) scaleY(${1 + p * 5})`;
+          glow.style.filter = `blur(${4 + p * 10}px)`;
+
+          // Stars zoom subtly
+          stars.style.transform = `scale(${1 + p * 0.1})`;
+
+          // Final flash
+          if (p > 0.85) {
+            let flashP = (p - 0.85) / 0.15;
+            whiteout.style.opacity = easeInExpo(flashP);
           } else {
-            // Suck to center
-            p1.x += (centerX - p1.x) * suckP * 0.15;
-            p1.y += (centerY - p1.y) * suckP * 0.15;
+            whiteout.style.opacity = 0;
           }
 
-          // Node drawing
-          let size = p1.baseSize * (1 + suckP * 5);
-          ctx.fillStyle = `hsla(${p1.hue}, 100%, 70%, ${1 - suckP})`;
-          ctx.beginPath();
-          ctx.arc(p1.x, p1.y, size, 0, Math.PI*2);
-          ctx.fill();
+          if (p < 1) {
+            hAnim = requestAnimationFrame(render);
+          } else {
+            // Reset after flash
+            setTimeout(() => {
+              whiteout.style.transition = "opacity 1s ease";
+              whiteout.style.opacity = 0;
+              orb.style.opacity = 0;
+              glow.style.opacity = 0;
+              setTimeout(() => {
+                whiteout.style.transition = "";
+              }, 1000);
+            }, 500);
+          }
+        }
+        requestAnimationFrame(render);
+      }
 
-          // Lines
-          if (p < 0.9) {
-            for(let j=i+1; j<particles.length; j++) {
-              let p2 = particles[j];
-              let dx = p1.x - p2.x;
-              let dy = p1.y - p2.y;
-              let dist = Math.sqrt(dx*dx + dy*dy);
+      // --- 2. NEURAL MESH ---
+      let mAnim;
+      function playMesh() {
+        if (mAnim) cancelAnimationFrame(mAnim);
 
-              if(dist < maxDist) {
-                let alpha = (1 - dist/maxDist) * (1 - suckP);
-                ctx.strokeStyle = `hsla(${(p1.hue+p2.hue)/2}, 100%, 60%, ${alpha * 0.5})`;
-                ctx.beginPath();
-                ctx.moveTo(p1.x, p1.y);
-                ctx.lineTo(p2.x, p2.y);
-                ctx.stroke();
+        const canvas = document.getElementById("mesh-canvas");
+        const ctx = canvas.getContext("2d", { alpha: false });
+
+        const resize = () => {
+          canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+          canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+          ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        };
+        window.addEventListener("resize", resize);
+        resize();
+
+        const width = canvas.offsetWidth;
+        const height = canvas.offsetHeight;
+        const centerX = width / 2;
+        const centerY = height / 2;
+
+        // Particles
+        const particles = Array.from({ length: 120 }, () => ({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2,
+          baseSize: Math.random() * 2 + 0.5,
+          hue: 210 + Math.random() * 40, // Blues/purples
+        }));
+
+        let start = performance.now();
+        const duration = 5500;
+
+        function render(now) {
+          let elapsed = now - start;
+          let p = Math.min(elapsed / duration, 1);
+
+          // Trail effect
+          ctx.globalCompositeOperation = "source-over";
+          ctx.fillStyle = `rgba(3, 3, 5, ${p > 0.8 ? 1 : 0.3})`; // Darken faster at the end
+          ctx.fillRect(0, 0, width, height);
+
+          ctx.globalCompositeOperation = "screen";
+
+          // Phase calculations
+          const isSucking = p > 0.6;
+          const suckP = isSucking ? easeInExpo((p - 0.6) / 0.3) : 0; // 0.6 to 0.9
+          const isBursting = p > 0.9;
+          const burstP = isBursting ? easeOutExpo((p - 0.9) / 0.1) : 0;
+
+          // Draw connections
+          const maxDist = 150 + p * 150; // Reach gets longer
+          ctx.lineWidth = 1 + p;
+
+          for (let i = 0; i < particles.length; i++) {
+            let p1 = particles[i];
+
+            if (!isSucking) {
+              p1.x += p1.vx * (1 + p * 2); // Speed up
+              p1.y += p1.vy * (1 + p * 2);
+              // Bounce
+              if (p1.x < 0 || p1.x > width) p1.vx *= -1;
+              if (p1.y < 0 || p1.y > height) p1.vy *= -1;
+            } else {
+              // Suck to center
+              p1.x += (centerX - p1.x) * suckP * 0.15;
+              p1.y += (centerY - p1.y) * suckP * 0.15;
+            }
+
+            // Node drawing
+            let size = p1.baseSize * (1 + suckP * 5);
+            ctx.fillStyle = `hsla(${p1.hue}, 100%, 70%, ${1 - suckP})`;
+            ctx.beginPath();
+            ctx.arc(p1.x, p1.y, size, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Lines
+            if (p < 0.9) {
+              for (let j = i + 1; j < particles.length; j++) {
+                let p2 = particles[j];
+                let dx = p1.x - p2.x;
+                let dy = p1.y - p2.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < maxDist) {
+                  let alpha = (1 - dist / maxDist) * (1 - suckP);
+                  ctx.strokeStyle = `hsla(${(p1.hue + p2.hue) / 2}, 100%, 60%, ${alpha * 0.5})`;
+                  ctx.beginPath();
+                  ctx.moveTo(p1.x, p1.y);
+                  ctx.lineTo(p2.x, p2.y);
+                  ctx.stroke();
+                }
               }
             }
           }
-        }
 
-        // Singularity core & Burst
-        if (isSucking) {
-          let coreSize = suckP * 100;
-          if (isBursting) coreSize += burstP * width * 1.5;
+          // Singularity core & Burst
+          if (isSucking) {
+            let coreSize = suckP * 100;
+            if (isBursting) coreSize += burstP * width * 1.5;
 
-          let grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreSize);
-          grad.addColorStop(0, `rgba(255,255,255,${1 - burstP})`);
-          grad.addColorStop(0.2, `rgba(139, 92, 246, ${1 - burstP})`); // Purple edge
-          grad.addColorStop(1, 'rgba(0,0,0,0)');
+            let grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreSize);
+            grad.addColorStop(0, `rgba(255,255,255,${1 - burstP})`);
+            grad.addColorStop(0.2, `rgba(139, 92, 246, ${1 - burstP})`); // Purple edge
+            grad.addColorStop(1, "rgba(0,0,0,0)");
 
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(centerX, centerY, coreSize, 0, Math.PI*2);
-          ctx.fill();
-        }
-
-        if (p < 1) {
-          mAnim = requestAnimationFrame(render);
-        } else {
-          // Cleanup
-          ctx.fillStyle = '#030305';
-          ctx.fillRect(0, 0, width, height);
-        }
-      }
-      requestAnimationFrame(render);
-    }
-
-    // --- 3. KINETIC RESONANCE ---
-    let wAnim;
-    function playWave() {
-      if(wAnim) cancelAnimationFrame(wAnim);
-      
-      const canvas = document.getElementById('wave-canvas');
-      const ctx = canvas.getContext('2d');
-      const topDoor = document.getElementById('v-top');
-      const botDoor = document.getElementById('v-bottom');
-      const room = document.getElementById('v-room');
-      const ui = document.getElementById('v-ui');
-      
-      // Reset UI state
-      topDoor.style.transform = 'translateY(0)';
-      botDoor.style.transform = 'translateY(0)';
-      room.classList.remove('revealed');
-      canvas.style.opacity = '1';
-      ui.style.opacity = '0';
-      ui.style.transition = 'opacity 0.5s';
-
-      const resize = () => {
-        canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-        canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-      };
-      window.addEventListener('resize', resize);
-      resize();
-
-      const width = canvas.offsetWidth;
-      const height = canvas.offsetHeight;
-      const centerY = height / 2;
-
-      let start = performance.now();
-      const waveDuration = 4500; // Flatline point
-
-      // 3 overlapping waves
-      const waves = [
-        { freq: 0.015, amp: 1.0, color: '#3b82f6', phaseSpeed: 0.005 },
-        { freq: 0.025, amp: 0.7, color: '#8b5cf6', phaseSpeed: -0.003 },
-        { freq: 0.008, amp: 1.2, color: '#c084fc', phaseSpeed: 0.008 }
-      ];
-
-      function render(now) {
-        let elapsed = now - start;
-        let p = Math.min(elapsed / waveDuration, 1);
-        
-        ctx.clearRect(0, 0, width, height);
-        ctx.globalCompositeOperation = 'screen';
-
-        // Damping: Chaotic -> Smooth -> Flat
-        // We want amplitude to go to 0, and frequency to stabilize
-        let damping = easeInOutQuart(1 - p); // 1 down to 0
-        let globalAmp = height * 0.3 * damping;
-        
-        waves.forEach(w => {
-          ctx.beginPath();
-          ctx.moveTo(0, centerY);
-          
-          let currentFreq = w.freq + (p * 0.05); // frequency tightens as it completes
-          let phase = elapsed * w.phaseSpeed;
-
-          for(let x=0; x<=width; x+=2) {
-            // Envelope to taper ends
-            let nx = x / width;
-            let envelope = Math.sin(nx * Math.PI); // 0 at edges, 1 in center
-
-            let y = centerY + Math.sin(x * currentFreq + phase) * globalAmp * w.amp * envelope;
-            ctx.lineTo(x, y);
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, coreSize, 0, Math.PI * 2);
+            ctx.fill();
           }
 
-          ctx.lineWidth = 2 + (p * 2);
-          ctx.strokeStyle = w.color;
-          ctx.stroke();
-
-          // Glow
-          ctx.shadowColor = w.color;
-          ctx.shadowBlur = 15;
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-        });
-
-        // Core white line that appears as it flatlines
-        if (p > 0.7) {
-          let lineP = (p - 0.7) / 0.3;
-          ctx.beginPath();
-          ctx.moveTo(0, centerY);
-          ctx.lineTo(width, centerY);
-          ctx.lineWidth = 1 + lineP * 4;
-          ctx.strokeStyle = `rgba(255,255,255,${lineP})`;
-          ctx.shadowColor = '#fff';
-          ctx.shadowBlur = lineP * 30;
-          ctx.stroke();
-          ctx.shadowBlur = 0;
+          if (p < 1) {
+            mAnim = requestAnimationFrame(render);
+          } else {
+            // Cleanup
+            ctx.fillStyle = "#030305";
+            ctx.fillRect(0, 0, width, height);
+          }
         }
-
-        if (p < 1) {
-          wAnim = requestAnimationFrame(render);
-        } else {
-          // Open Doors!
-          canvas.style.transition = 'opacity 0.3s';
-          canvas.style.opacity = '0';
-          
-          topDoor.style.transition = 'transform 1.2s cubic-bezier(0.7, 0, 0.2, 1)';
-          botDoor.style.transition = 'transform 1.2s cubic-bezier(0.7, 0, 0.2, 1)';
-          
-          topDoor.style.transform = 'translateY(-100%)';
-          botDoor.style.transform = 'translateY(100%)';
-          
-          room.classList.add('revealed');
-
-          setTimeout(() => {
-            ui.style.opacity = '1';
-          }, 2000);
-        }
+        requestAnimationFrame(render);
       }
-      requestAnimationFrame(render);
-    }
-  </script>
-</body>
+
+      // --- 3. KINETIC RESONANCE ---
+      let wAnim;
+      function playWave() {
+        if (wAnim) cancelAnimationFrame(wAnim);
+
+        const canvas = document.getElementById("wave-canvas");
+        const ctx = canvas.getContext("2d");
+        const topDoor = document.getElementById("v-top");
+        const botDoor = document.getElementById("v-bottom");
+        const room = document.getElementById("v-room");
+        const ui = document.getElementById("v-ui");
+
+        // Reset UI state
+        topDoor.style.transform = "translateY(0)";
+        botDoor.style.transform = "translateY(0)";
+        room.classList.remove("revealed");
+        canvas.style.opacity = "1";
+        ui.style.opacity = "0";
+        ui.style.transition = "opacity 0.5s";
+
+        const resize = () => {
+          canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+          canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+          ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        };
+        window.addEventListener("resize", resize);
+        resize();
+
+        const width = canvas.offsetWidth;
+        const height = canvas.offsetHeight;
+        const centerY = height / 2;
+
+        let start = performance.now();
+        const waveDuration = 4500; // Flatline point
+
+        // 3 overlapping waves
+        const waves = [
+          { freq: 0.015, amp: 1.0, color: "#3b82f6", phaseSpeed: 0.005 },
+          { freq: 0.025, amp: 0.7, color: "#8b5cf6", phaseSpeed: -0.003 },
+          { freq: 0.008, amp: 1.2, color: "#c084fc", phaseSpeed: 0.008 },
+        ];
+
+        function render(now) {
+          let elapsed = now - start;
+          let p = Math.min(elapsed / waveDuration, 1);
+
+          ctx.clearRect(0, 0, width, height);
+          ctx.globalCompositeOperation = "screen";
+
+          // Damping: Chaotic -> Smooth -> Flat
+          // We want amplitude to go to 0, and frequency to stabilize
+          let damping = easeInOutQuart(1 - p); // 1 down to 0
+          let globalAmp = height * 0.3 * damping;
+
+          waves.forEach((w) => {
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+
+            let currentFreq = w.freq + p * 0.05; // frequency tightens as it completes
+            let phase = elapsed * w.phaseSpeed;
+
+            for (let x = 0; x <= width; x += 2) {
+              // Envelope to taper ends
+              let nx = x / width;
+              let envelope = Math.sin(nx * Math.PI); // 0 at edges, 1 in center
+
+              let y = centerY + Math.sin(x * currentFreq + phase) * globalAmp * w.amp * envelope;
+              ctx.lineTo(x, y);
+            }
+
+            ctx.lineWidth = 2 + p * 2;
+            ctx.strokeStyle = w.color;
+            ctx.stroke();
+
+            // Glow
+            ctx.shadowColor = w.color;
+            ctx.shadowBlur = 15;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+          });
+
+          // Core white line that appears as it flatlines
+          if (p > 0.7) {
+            let lineP = (p - 0.7) / 0.3;
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(width, centerY);
+            ctx.lineWidth = 1 + lineP * 4;
+            ctx.strokeStyle = `rgba(255,255,255,${lineP})`;
+            ctx.shadowColor = "#fff";
+            ctx.shadowBlur = lineP * 30;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+          }
+
+          if (p < 1) {
+            wAnim = requestAnimationFrame(render);
+          } else {
+            // Open Doors!
+            canvas.style.transition = "opacity 0.3s";
+            canvas.style.opacity = "0";
+
+            topDoor.style.transition = "transform 1.2s cubic-bezier(0.7, 0, 0.2, 1)";
+            botDoor.style.transition = "transform 1.2s cubic-bezier(0.7, 0, 0.2, 1)";
+
+            topDoor.style.transform = "translateY(-100%)";
+            botDoor.style.transform = "translateY(100%)";
+
+            room.classList.add("revealed");
+
+            setTimeout(() => {
+              ui.style.opacity = "1";
+            }, 2000);
+          }
+        }
+        requestAnimationFrame(render);
+      }
+    </script>
+  </body>
 </html>

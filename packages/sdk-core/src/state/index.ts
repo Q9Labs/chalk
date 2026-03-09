@@ -5,4 +5,4 @@
  * @module @q9labs/chalk-core/state
  */
 
-export { StateContainer } from './state-container';
+export { StateContainer } from "./state-container";

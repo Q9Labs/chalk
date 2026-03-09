@@ -260,12 +260,14 @@ Shipped defaults (current plan):
 - VAD: enabled (`WHISPER_VAD_FILTER=1`) with `min_silence_duration_ms=500` (override with `WHISPER_VAD_MIN_SILENCE_MS`)
 - Segment timestamps: enabled (`WHISPER_WITHOUT_TIMESTAMPS=0`)
 - Batch size caps (T4 16GB): distil `WHISPER_BATCH_SIZE_MAX=16`; non-distil `WHISPER_BATCH_SIZE_MAX=8` (fallback halves on OOM)
-Runtime: backlog (>1 job total) => `BatchedInferencePipeline`; otherwise => `WhisperModel.transcribe`; silent/near-silent => `completed` empty transcript.
+  Runtime: backlog (>1 job total) => `BatchedInferencePipeline`; otherwise => `WhisperModel.transcribe`; silent/near-silent => `completed` empty transcript.
 
 ---
 
 ## Chalk Pipeline Diagrams
+
 ### Sequence
+
 ```mermaid
 sequenceDiagram
   participant API as apps/api (Go)
@@ -285,7 +287,9 @@ sequenceDiagram
     API->>Redis: GET ... -> error bubbled
   end
 ```
+
 ### Worker State Machine (single job)
+
 ```mermaid
 stateDiagram-v2
   [*] --> Waiting

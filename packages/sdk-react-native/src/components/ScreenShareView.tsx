@@ -9,16 +9,16 @@ import { RTCView } from "@cloudflare/react-native-webrtc";
 import { CHALK_THEME } from "../theme";
 
 interface ScreenShareViewProps {
-	/** MediaStream of the screen share */
-	stream: MediaStream | null;
-	/** How to fit the screen content */
-	objectFit?: "contain" | "cover";
-	/** Custom styles */
-	style?: ViewStyle;
-	/** Z-order for layering */
-	zOrder?: number;
-	/** Test ID for testing purposes */
-	testID?: string;
+  /** MediaStream of the screen share */
+  stream: MediaStream | null;
+  /** How to fit the screen content */
+  objectFit?: "contain" | "cover";
+  /** Custom styles */
+  style?: ViewStyle;
+  /** Z-order for layering */
+  zOrder?: number;
+  /** Test ID for testing purposes */
+  testID?: string;
 }
 
 /**
@@ -36,37 +36,25 @@ interface ScreenShareViewProps {
  * }
  * ```
  */
-export const ScreenShareView = React.forwardRef<View, ScreenShareViewProps>(
-	({ stream, objectFit = "contain", style, zOrder = 1, testID }, ref) => {
-		if (!stream) {
-			return <View style={[styles.placeholder, style]} testID={testID} />;
-		}
+export const ScreenShareView = React.forwardRef<View, ScreenShareViewProps>(({ stream, objectFit = "contain", style, zOrder = 1, testID }, ref) => {
+  if (!stream) {
+    return <View style={[styles.placeholder, style]} testID={testID} />;
+  }
 
-		return (
-			<RTCView
-				ref={ref}
-				streamURL={(stream as unknown as { toURL(): string }).toURL()}
-				style={[styles.screenShare, style]}
-				mirror={false}
-				objectFit={objectFit}
-				zOrder={zOrder}
-				testID={testID}
-			/>
-		);
-	},
-);
+  return <RTCView ref={ref} streamURL={(stream as unknown as { toURL(): string }).toURL()} style={[styles.screenShare, style]} mirror={false} objectFit={objectFit} zOrder={zOrder} testID={testID} />;
+});
 
 ScreenShareView.displayName = "ScreenShareView";
 
 const styles = StyleSheet.create({
-	screenShare: {
-		flex: 1,
-		backgroundColor: "#000",
-	},
-	placeholder: {
-		flex: 1,
-		backgroundColor: CHALK_THEME.colors.surface,
-		justifyContent: "center",
-		alignItems: "center",
-	},
+  screenShare: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  placeholder: {
+    flex: 1,
+    backgroundColor: CHALK_THEME.colors.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });

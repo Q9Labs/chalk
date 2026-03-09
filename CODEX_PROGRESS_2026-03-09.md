@@ -8,7 +8,7 @@
 - 00:41 PKT - traced missing screen-annotation UI to non-optimistic local session activation; patched `ScreenAnnotationsManager` to seed local share-session/access state immediately and added focused sdk-core regression coverage.
 - 01:13 PKT - traced stuck “Connecting annotations...” state to an eager local `requestSync()` race in `ScreenAnnotationsLayer`; local sharer now skips the immediate sync once its own session is active, and a focused sdk-react regression locks that behavior.
 - 01:22 PKT - reset the annotation bootstrap latch only on active→inactive transitions so the local sharer can recover from stale session drops without spawning repeated retry timers; added focused layer regressions for open/start and owner-session no-sync behavior.
-2026-03-09 14:22:21 PKT
+  2026-03-09 14:22:21 PKT
 - sdk-react/sdk-core tests start leak investigation; inspect runners/setup; reproduce pending
 - 2026-03-09 14:29:00 PKT
 - root cause: `turbo test` depended on `build`, fan-out into docs/admin/web + package builds at high concurrency; removed build dependency from `test` task

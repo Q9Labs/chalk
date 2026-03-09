@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { cn } from '../../utils/cn';
-import { StatusBadge, IconButton } from '../atomic';
-import { PlayIcon, PauseIcon, SquareIcon, CircleIcon } from '../../utils/icons';
+import React, { useEffect, useState } from "react";
+import { cn } from "../../utils/cn";
+import { StatusBadge, IconButton } from "../atomic";
+import { PlayIcon, PauseIcon, SquareIcon, CircleIcon } from "../../utils/icons";
 
 export interface RecordingControlsProps {
   isRecording: boolean;
@@ -14,16 +14,7 @@ export interface RecordingControlsProps {
   className?: string;
 }
 
-export const RecordingControls = React.memo(({
-  isRecording,
-  duration = 0,
-  onStart,
-  onStop,
-  onPause,
-  isPaused,
-  canRecord = true,
-  className,
-}: RecordingControlsProps) => {
+export const RecordingControls = React.memo(({ isRecording, duration = 0, onStart, onStop, onPause, isPaused, canRecord = true, className }: RecordingControlsProps) => {
   const [elapsed, setElapsed] = useState(duration);
 
   useEffect(() => {
@@ -33,7 +24,7 @@ export const RecordingControls = React.memo(({
   useEffect(() => {
     if (isRecording && !isPaused) {
       const interval = setInterval(() => {
-        setElapsed(e => e + 1);
+        setElapsed((e) => e + 1);
       }, 1000);
       return () => clearInterval(interval);
     }
@@ -43,31 +34,31 @@ export const RecordingControls = React.memo(({
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
-    
+
     if (h > 0) {
-      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
     }
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   const renderBadge = () => {
     if (isRecording && !isPaused) {
       return <StatusBadge status="recording" pulse={true} />;
     }
-    
+
     if (isRecording && isPaused) {
       return (
         <div className="inline-flex items-center gap-1.5 rounded-[var(--chalk-border-radius-sm)] font-medium px-2 py-1 text-xs bg-yellow-500/10 text-yellow-500">
-           <CircleIcon size={12} className="fill-current" />
-           <span>PAUSED</span>
+          <CircleIcon size={12} className="fill-current" />
+          <span>PAUSED</span>
         </div>
       );
     }
 
     return (
       <div className="inline-flex items-center gap-1.5 rounded-[var(--chalk-border-radius-sm)] font-medium px-2 py-1 text-xs bg-background-tertiary text-foreground-secondary">
-         <div className="w-2.5 h-2.5 rounded-full bg-foreground-muted" />
-         <span>READY</span>
+        <div className="w-2.5 h-2.5 rounded-full bg-foreground-muted" />
+        <span>READY</span>
       </div>
     );
   };
@@ -75,42 +66,18 @@ export const RecordingControls = React.memo(({
   return (
     <div className={cn("flex items-center gap-3 px-3 py-1.5 bg-card rounded-full border border-border/50", className)}>
       {renderBadge()}
-      
-      <div className="font-mono text-sm min-w-[3rem]">
-        {formatTime(elapsed)}
-      </div>
-      
+
+      <div className="font-mono text-sm min-w-[3rem]">{formatTime(elapsed)}</div>
+
       {canRecord && (
         <div className="flex items-center gap-1 border-l border-border/50 pl-2">
           {!isRecording ? (
-             <IconButton 
-                icon={<PlayIcon size={16} className="fill-current" />} 
-                onClick={onStart} 
-                variant="ghost" 
-                size="sm"
-                aria-label="Start recording"
-                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-             />
+            <IconButton icon={<PlayIcon size={16} className="fill-current" />} onClick={onStart} variant="ghost" size="sm" aria-label="Start recording" className="text-red-500 hover:text-red-600 hover:bg-red-500/10" />
           ) : (
-             <>
-               {onPause && (
-                  <IconButton 
-                    icon={isPaused ? <PlayIcon size={16} className="fill-current" /> : <PauseIcon size={16} className="fill-current" />} 
-                    onClick={onPause} 
-                    variant="ghost" 
-                    size="sm"
-                    aria-label={isPaused ? "Resume recording" : "Pause recording"}
-                  />
-               )}
-               <IconButton 
-                  icon={<SquareIcon size={16} className="fill-current" />} 
-                  onClick={onStop} 
-                  variant="ghost" 
-                  size="sm"
-                  aria-label="Stop recording"
-                  className="text-foreground-secondary hover:text-foreground-primary"
-               />
-             </>
+            <>
+              {onPause && <IconButton icon={isPaused ? <PlayIcon size={16} className="fill-current" /> : <PauseIcon size={16} className="fill-current" />} onClick={onPause} variant="ghost" size="sm" aria-label={isPaused ? "Resume recording" : "Pause recording"} />}
+              <IconButton icon={<SquareIcon size={16} className="fill-current" />} onClick={onStop} variant="ghost" size="sm" aria-label="Stop recording" className="text-foreground-secondary hover:text-foreground-primary" />
+            </>
           )}
         </div>
       )}
@@ -118,4 +85,4 @@ export const RecordingControls = React.memo(({
   );
 });
 
-RecordingControls.displayName = 'RecordingControls';
+RecordingControls.displayName = "RecordingControls";

@@ -50,10 +50,7 @@ export interface ParticipantServiceInterface {
 /**
  * ParticipantService Context Tag
  */
-export class ParticipantService extends Context.Tag("@chalk/ParticipantService")<
-  ParticipantService,
-  ParticipantServiceInterface
->() {}
+export class ParticipantService extends Context.Tag("@chalk/ParticipantService")<ParticipantService, ParticipantServiceInterface>() {}
 
 /** Normalize participant to match schema */
 const normalizeParticipant = (p: Participant): ParticipantData => ({
@@ -144,7 +141,7 @@ export const ParticipantServiceLive = Layer.effect(
                 displayName: normalized.displayName,
               });
               yield* PubSub.publish(eventBus, { _tag: "Joined", participant: normalized });
-            })
+            }),
           );
         });
 
@@ -161,7 +158,7 @@ export const ParticipantServiceLive = Layer.effect(
                 displayName: p?.displayName,
               });
               yield* PubSub.publish(eventBus, { _tag: "Left", participantId });
-            })
+            }),
           );
         });
 
@@ -179,7 +176,7 @@ export const ParticipantServiceLive = Layer.effect(
                 participantId,
                 participant: normalized,
               });
-            })
+            }),
           );
         });
 
@@ -198,7 +195,7 @@ export const ParticipantServiceLive = Layer.effect(
                 _tag: "ActiveSpeakerChanged",
                 participant: normalized,
               });
-            })
+            }),
           );
         });
 
@@ -262,5 +259,5 @@ export const ParticipantServiceLive = Layer.effect(
         yield* PubSub.shutdown(eventBus);
       }),
     };
-  })
+  }),
 );

@@ -3,7 +3,9 @@
 Scope locked: `q9labs` account, `us-east-1`, requested incidents + error classes.
 
 ## Incident 1 — Monday ~2:50pm PST service error
+
 Status: completed
+
 - exact window used:
   - UTC: `2026-02-16T22:20:00Z` → `2026-02-16T23:20:00Z`
   - PST: `2026-02-16 14:20:00` → `2026-02-16 15:20:00` (anchor `14:50 PST`)
@@ -40,6 +42,7 @@ Status: completed
   - Improve incident telemetry: client error payload + request-id + absolute UTC timestamp in reports.
 
 ## Incident 2 — Monday ~5:01pm PST token exchange failed (Service Unavailable)
+
 Status: completed
 
 - Exact window used:
@@ -81,7 +84,9 @@ Status: completed
   - Add regression perf test gate for `/api/v1/auth/token` under high tenant cardinality (protect <30s SLA).
 
 ## Incident 3 — Wednesday ~7:19pm PST failed to fetch (consumer)
+
 Status: completed
+
 - exact window: `2026-02-19T02:34:00Z` → `2026-02-19T04:04:00Z` (PST `2026-02-18 6:34pm` → `8:04pm`); anchor `2026-02-19T03:19:00Z` (`7:19pm PST`)
 - mapping (`failed to fetch` -> backend/network 5xx/timeout/disconnect): **no backend 5xx/timeout/disconnect evidence**
   - ALB (`app/chalk-prod/cec7c64737109afb`, TG `chalk-prod-api`): `RequestCount=13`; `HTTPCode_Target_5XX_Count=0`; `HTTPCode_ELB_5XX_Count=0`; `TargetConnectionErrorCount=0`; `UnHealthyHostCount max=0`; `TargetResponseTime max=0.001004s`
@@ -104,6 +109,7 @@ Status: completed
   - clean up whisper IAM misconfig (`RegisterContainerInstance` to wrong cluster) to reduce noisy parallel failures
 
 ## Incident 4 — Thursday ~9:30pm PST participant kicked from room
+
 Status: investigated (pre-window), pending post-window confirmation
 
 - exact window:
@@ -141,6 +147,7 @@ Status: investigated (pre-window), pending post-window confirmation
     - incident follow-up query run after `2026-02-20T06:15:00Z` to confirm/deny any actual `1006/1011` or participant eviction events in true window
 
 ## Root Cause Track A — 5xx errors
+
 Status: completed
 
 - Top 5xx pathways:
@@ -167,6 +174,7 @@ Status: completed
   - tests/scripts/collect-infra-snapshot.sh already emits ALB 5xx aggregates (lines 90-138) so we can validate hardening impact after retries/breaker updates.
 
 ## Root Cause Track B — redis client errors
+
 Status: completed
 
 - Source paths + lifecycle bug(s:
@@ -191,6 +199,7 @@ Status: completed
   3. `apps/api/internal/infrastructure/redis/redis.go` (and any redis caller) — add health check/reconnect wrapper, guard commands after `Close`, emit `redis.connection_error` events, and expose a retry/backoff policy so downstream jobs back off instead of flooding logs.
 
 ## Root Cause Track C — failed to get reader EOF
+
 Status: completed
 
 - Focus: websocket reader loop + header parsing trips where logs show `failed to get reader: EOF`. Trace from `handlers/websocket.go` upgrade → `websocket.NewClient` → `Client.readPump` → `nhooyr.io/websocket.Conn.reader` (readLoop/readFrameHeader).
@@ -209,6 +218,7 @@ Status: completed
   - `apps/api/internal/interfaces/websocket/hub.go`: hook `ParticipantService.LeaveRoom` to `DisconnectInfo` so downstream systems know whether the drop came from peer/backpressure/idle timeout before tearing down room state.
 
 ## Implementation Update — 2026-02-20
+
 Status: completed
 
 - Cloudflare add-participant hardening shipped in code:
@@ -226,6 +236,7 @@ Status: completed
   - added websocket counters/log fields for `read_eofs` and `read_errors`
 
 ## Implementation Update 2 — 2026-02-20
+
 Status: completed
 
 - Cloudflare `CreateMeeting` parity hardening shipped in code:

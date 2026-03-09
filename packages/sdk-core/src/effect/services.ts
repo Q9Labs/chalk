@@ -27,26 +27,17 @@ export interface TokenServiceInterface {
   readonly clear: Effect.Effect<void>;
 }
 
-export class TokenService extends Context.Tag("@chalk/TokenService")<
-  TokenService,
-  TokenServiceInterface
->() {}
+export class TokenService extends Context.Tag("@chalk/TokenService")<TokenService, TokenServiceInterface>() {}
 
 /**
  * Token provider callback service
  */
-export class TokenProviderService extends Context.Tag("@chalk/TokenProviderService")<
-  TokenProviderService,
-  TokenProvider | undefined
->() {}
+export class TokenProviderService extends Context.Tag("@chalk/TokenProviderService")<TokenProviderService, TokenProvider | undefined>() {}
 
 /**
  * Configuration service
  */
-export class ConfigService extends Context.Tag("@chalk/ConfigService")<
-  ConfigService,
-  ConferenceClientConfig
->() {}
+export class ConfigService extends Context.Tag("@chalk/ConfigService")<ConfigService, ConferenceClientConfig>() {}
 
 /**
  * Logger service for debug output
@@ -58,10 +49,7 @@ export interface LoggerInterface {
   readonly error: (message: string, data?: Record<string, unknown>) => Effect.Effect<void>;
 }
 
-export class LoggerService extends Context.Tag("@chalk/LoggerService")<
-  LoggerService,
-  LoggerInterface
->() {}
+export class LoggerService extends Context.Tag("@chalk/LoggerService")<LoggerService, LoggerInterface>() {}
 
 /**
  * Event emitter service for SDK events
@@ -70,60 +58,52 @@ export interface EventEmitterInterface<T extends Record<string, unknown>> {
   readonly emit: <K extends keyof T>(event: K, data: T[K]) => Effect.Effect<void>;
 }
 
-export class EventEmitterService extends Context.Tag("@chalk/EventEmitterService")<
-  EventEmitterService,
-  EventEmitterInterface<Record<string, unknown>>
->() {}
+export class EventEmitterService extends Context.Tag("@chalk/EventEmitterService")<EventEmitterService, EventEmitterInterface<Record<string, unknown>>>() {}
 
 /**
  * Create a no-op logger layer (for production/silent mode)
  */
-export const NoopLoggerLive = Layer.succeed(
-  LoggerService,
-  {
-    debug: () => Effect.void,
-    info: () => Effect.void,
-    warn: () => Effect.void,
-    error: () => Effect.void,
-  }
-);
+export const NoopLoggerLive = Layer.succeed(LoggerService, {
+  debug: () => Effect.void,
+  info: () => Effect.void,
+  warn: () => Effect.void,
+  error: () => Effect.void,
+});
 
 /**
  * Create a console logger layer (for debug mode)
  * Now enriches the active wide event context instead of direct console output
  */
-export const ConsoleLoggerLive = Layer.succeed(
-  LoggerService,
-  {
-    debug: (message, data) => Effect.sync(() => {
+export const ConsoleLoggerLive = Layer.succeed(LoggerService, {
+  debug: (message, data) =>
+    Effect.sync(() => {
       wideEventsCollector.enrichActiveContext(`debug:${message}`, data);
     }),
-    info: (message, data) => Effect.sync(() => {
+  info: (message, data) =>
+    Effect.sync(() => {
       wideEventsCollector.enrichActiveContext(`info:${message}`, data);
     }),
-    warn: (message, data) => Effect.sync(() => {
+  warn: (message, data) =>
+    Effect.sync(() => {
       wideEventsCollector.enrichActiveContext(`warn:${message}`, data);
     }),
-    error: (message, data) => Effect.sync(() => {
+  error: (message, data) =>
+    Effect.sync(() => {
       wideEventsCollector.enrichActiveContext(`error:${message}`, data);
     }),
-  }
-);
+});
 
 /**
  * Create a logger layer based on debug config
  */
-export const makeLoggerLayer = (debug: boolean) =>
-  debug ? ConsoleLoggerLive : NoopLoggerLive;
+export const makeLoggerLayer = (debug: boolean) => (debug ? ConsoleLoggerLive : NoopLoggerLive);
 
 /**
  * Create config layer from ConferenceClientConfig
  */
-export const makeConfigLayer = (config: ConferenceClientConfig) =>
-  Layer.succeed(ConfigService, config);
+export const makeConfigLayer = (config: ConferenceClientConfig) => Layer.succeed(ConfigService, config);
 
 /**
  * Create token provider layer
  */
-export const makeTokenProviderLayer = (provider: TokenProvider | undefined) =>
-  Layer.succeed(TokenProviderService, provider);
+export const makeTokenProviderLayer = (provider: TokenProvider | undefined) => Layer.succeed(TokenProviderService, provider);

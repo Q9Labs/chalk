@@ -14,28 +14,33 @@ UI: custom. Not implemented in this doc. References in `apps/native/SPEC.md`.
 ## Authentication + Tokens
 
 Native apps must treat tokens as two separate channels:
+
 - `accessToken` (JWT): authorizes Chalk HTTP + Chalk WebSocket
 - `rtcToken`: authorizes Cloudflare RealtimeKit meeting join
 
 Acquisition:
+
 - Preferred: your app backend provides the SDK a fresh `accessToken` + `rtcToken` for a given `roomId` + `displayName`.
 - Supported fallback (parity with web): API-key-to-token provider (server issues tokens from API key); token stored securely.
 
 Refresh:
+
 - HTTP 401: refresh `accessToken` via `POST /api/v1/auth/refresh` (or call back to app backend) then retry.
 - WS reconnect: refresh `accessToken` before reconnect if available.
 
 ## Join / Leave (happy path)
 
 Join:
-1) HTTP add participant: `POST /api/v1/rooms/:id/participants`
-2) Connect Chalk WS `/ws` using `Sec-WebSocket-Protocol: chalk, token.<accessToken>`
-3) Init + join RTK meeting using `rtcToken`
-4) Render UI based on:
+
+1. HTTP add participant: `POST /api/v1/rooms/:id/participants`
+2. Connect Chalk WS `/ws` using `Sec-WebSocket-Protocol: chalk, token.<accessToken>`
+3. Init + join RTK meeting using `rtcToken`
+4. Render UI based on:
    - Participants/state: Chalk WS snapshot + deltas
    - Media tracks/screenshare: RTK events/tracks mapped to participants
 
 Leave:
+
 - RTK: leave meeting + stop local tracks.
 - WS: close connection.
 - HTTP: optional remove participant (`DELETE /api/v1/rooms/:id/participants/:pid`) depending on policy.
@@ -51,6 +56,7 @@ Leave:
 ### Heartbeat + reconnect
 
 Baseline behavior (match `sdk-core`):
+
 - Periodic `ping` outbound; `pong` inbound updates last-seen; reconnect if timed out.
 - Reconnect with backoff; refresh token on reconnect if possible.
 - On reconnect, request re-sync if local state is behind (`room.sync`, `whiteboard.sync`).
@@ -58,6 +64,7 @@ Baseline behavior (match `sdk-core`):
 ### Message types to implement (minimum)
 
 Server → client:
+
 - `connected`
 - `room.snapshot`, `room.updated`
 - `participant.joined`, `participant.left`, `participant.updated`
@@ -68,6 +75,7 @@ Server → client:
 - `transcript.ack`
 
 Client → server:
+
 - `chat.send`, `reaction.send`, `hand.raise`, `hand.lower`
 - `whiteboard.update`, `whiteboard.sync`, `whiteboard.clear`, `whiteboard.cursor`, `whiteboard.open`, `whiteboard.close`
 - `permission.grant`, `permission.revoke` (host-only)
@@ -79,12 +87,14 @@ Payload catalogs: `apps/api/internal/interfaces/websocket/messages.go` and `apps
 ## Participants + State Model
 
 Chalk WS participants are the authoritative roster and “product state”:
+
 - display name, role, handRaised, (optionally) audio/video enabled flags, metadata
 - recording state in room snapshot
 
 RTK participants are authoritative for media tracks + screenshare + active speaker.
 
 Requirement: stable participant identity across both systems so you can attach tracks to the correct Chalk participant.
+
 - Ideal: RTK participant `userId`/`customParticipantId` == Chalk `participantId` (UUID string).
 - Do not ship if this mapping is not guaranteed and tested.
 
@@ -105,6 +115,7 @@ Requirement: stable participant identity across both systems so you can attach t
 Transport: Chalk WS.
 
 Requirements:
+
 - Must support initial sync on join: request `whiteboard.sync` and render `whiteboard.snapshot`.
 - Must support live updates (`whiteboard.update` → `whiteboard.data`) + cursor presence.
 - Must support file uploads via presigned URLs:
@@ -117,15 +128,18 @@ Note: protocol supports both v1 and v2 updates. Prefer v2 long-term (sceneId, sy
 ### Whiteboard UI Strategy (native apps)
 
 Decision: Excalidraw runs in a WebView. Native owns:
+
 - Chalk WS connection + whiteboard message I/O
 - Presign API calls (Chalk HTTP)
 - Bridging (JSON messages) between WebView and native view-model
 
 Web host implementation:
+
 - `apps/native/whiteboard-web` (bundled; no CDN)
 - Collab engine: `packages/chalk-whiteboard/src/collab/*`
 
 Bridge protocol (WebView <-> native):
+
 - Native -> WebView (call `window.__chalkNativeOnMessage(JSON_STRING)`):
   - `wb.init { canDraw, theme? }`
   - `wb.snapshot { sceneId?, elements[] }`
@@ -142,6 +156,7 @@ Bridge protocol (WebView <-> native):
   - `wb.presignDownload { fileId }` (with `requestId`)
 
 Hardening pitfalls (plan for them explicitly):
+
 - CORS from WebView origin: uploads/downloads use `fetch(presignedUrl)` inside WebView. If presigned host/bucket CORS is restrictive, this can fail. If it fails, fallback plan: perform PUT/GET in native, then deliver `dataURL` into WebView (requires new bridge messages).
 - Message size: `elements[]` can be large. Must avoid UI-thread JSON work; consider chunking or compression if server/client limits hit.
 - Touch/stylus: validate pointer events in Android WebView + iOS WKWebView (pinch/zoom, palm rejection, Apple Pencil). Disable conflicting scroll containers around WebView.
@@ -151,14 +166,17 @@ Hardening pitfalls (plan for them explicitly):
 ## Recording
 
 Control: Chalk HTTP.
+
 - Start: `POST /api/v1/rooms/:id/recordings/start`
 - Stop: `POST /api/v1/rooms/:id/recordings/stop`
 
 State:
+
 - Observe `recording.started|stopped` over WS + `isRecording/recordingId` in room snapshot.
 - Retrieve: `GET /api/v1/recordings/:id` and `GET /api/v1/recordings/:id/download`
 
 UX constraints:
+
 - Avoid start/stop within ~5 seconds (short recordings can error).
 - Show clear recording indicator + host-only controls.
 
@@ -167,6 +185,7 @@ UX constraints:
 Transport/control: RTK (not Chalk WS).
 
 Requirements:
+
 - Start/stop local screenshare using RTK APIs.
 - Surface remote screenshare tracks in UI and map to correct participant.
 - iOS: ReplayKit extension + app group plumbing (high-risk area; test early).
@@ -177,6 +196,7 @@ Requirements:
 Source: RTK transcript stream.
 
 Requirements:
+
 - Emit interim transcripts to UI (optional).
 - Persist final transcripts to backend via WS `transcript` message.
 - Handle `transcript.ack`.
@@ -191,6 +211,7 @@ Requirements:
 ## “Ready to Extract SDK” Definition
 
 Do not start SDK extraction until:
+
 - Both apps implement the protocol correctly (HTTP + WS + RTK).
 - Participant identity mapping is proven across join/reconnect.
 - Whiteboard sync is stable under multi-user concurrent editing.

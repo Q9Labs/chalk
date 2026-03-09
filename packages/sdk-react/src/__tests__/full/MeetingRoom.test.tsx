@@ -1,9 +1,9 @@
-import { beforeEach, describe, it, expect, vi } from 'bun:test';
-import { fireEvent, render, waitFor, within } from '@testing-library/react';
-import { MeetingRoom } from '../../components/full/MeetingRoom';
-import { SharedPictureInPictureProvider } from '../../components/full/picture-in-picture/PictureInPictureContext';
+import { beforeEach, describe, it, expect, vi } from "bun:test";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
+import { MeetingRoom } from "../../components/full/MeetingRoom";
+import { SharedPictureInPictureProvider } from "../../components/full/picture-in-picture/PictureInPictureContext";
 
-vi.mock('../../components/composite/ParticipantList/ParticipantOptionsMenu', () => ({
+vi.mock("../../components/composite/ParticipantList/ParticipantOptionsMenu", () => ({
   ParticipantOptionsMenu: () => null,
 }));
 
@@ -14,14 +14,14 @@ window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 global.MediaStream = vi.fn().mockImplementation(() => ({})) as any;
 global.MediaStreamTrack = vi.fn().mockImplementation(() => ({
-  kind: 'video',
+  kind: "video",
   enabled: true,
   stop: vi.fn(),
 })) as any;
 const originalDocumentPictureInPicture = window.documentPictureInPicture;
 
-describe('MeetingRoom', () => {
-  const vibrateSpy = vi.spyOn(navigator, 'vibrate');
+describe("MeetingRoom", () => {
+  const vibrateSpy = vi.spyOn(navigator, "vibrate");
 
   beforeEach(() => {
     localStorage.clear();
@@ -30,59 +30,39 @@ describe('MeetingRoom', () => {
   });
 
   const localParticipant = {
-    id: 'local',
-    displayName: 'Me',
+    id: "local",
+    displayName: "Me",
     isLocal: true,
   };
 
-  const participants = [
-    { id: 'p1', displayName: 'Alice' },
-  ];
+  const participants = [{ id: "p1", displayName: "Alice" }];
 
-  it('renders correctly', () => {
-    const { getByText, getByLabelText } = render(
-      <MeetingRoom 
-        roomName="Test Room" 
-        localParticipant={localParticipant} 
-        participants={participants} 
-      />
-    );
-    expect(getByText('Test Room')).toBeDefined();
-    expect(getByLabelText('Meeting controls')).toBeDefined();
+  it("renders correctly", () => {
+    const { getByText, getByLabelText } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} />);
+    expect(getByText("Test Room")).toBeDefined();
+    expect(getByLabelText("Meeting controls")).toBeDefined();
   });
 
-  it('renders with shared picture-in-picture enabled without re-render loops', () => {
+  it("renders with shared picture-in-picture enabled without re-render loops", () => {
     const { getByText } = render(
       <SharedPictureInPictureProvider enabled>
-        <MeetingRoom
-          roomName="Test Room"
-          localParticipant={localParticipant}
-          participants={participants}
-          enablePictureInPicture
-        />
-      </SharedPictureInPictureProvider>
+        <MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enablePictureInPicture />
+      </SharedPictureInPictureProvider>,
     );
 
-    expect(getByText('Test Room')).toBeDefined();
+    expect(getByText("Test Room")).toBeDefined();
   });
 
-  it('shows chat panel when defaultChatOpen is true', () => {
-    const { getByLabelText } = render(
-      <MeetingRoom 
-        roomName="Test Room" 
-        localParticipant={localParticipant} 
-        participants={[]} 
-        defaultChatOpen={true}
-      />
-    );
-    expect(getByLabelText('Chat panel')).toBeDefined();
+  it("shows chat panel when defaultChatOpen is true", () => {
+    const { getByLabelText } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={[]} defaultChatOpen={true} />);
+    expect(getByLabelText("Chat panel")).toBeDefined();
   });
 
-  it('keeps mobile mute control clickable when invite toast is visible', () => {
+  it("keeps mobile mute control clickable when invite toast is visible", () => {
     const onToggleMute = vi.fn();
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === '(max-width: 639px)',
+      matches: query === "(max-width: 639px)",
       media: query,
       onchange: null,
       addListener: () => {},
@@ -93,96 +73,66 @@ describe('MeetingRoom', () => {
     })) as any;
 
     try {
-      const { getByLabelText, getByRole } = render(
-        <MeetingRoom
-          roomName="Test Room"
-          localParticipant={localParticipant}
-          participants={participants}
-          enableTour={false}
-          onToggleMute={onToggleMute}
-        />
-      );
+      const { getByLabelText, getByRole } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} onToggleMute={onToggleMute} />);
 
-      fireEvent.click(getByLabelText('Mute'));
+      fireEvent.click(getByLabelText("Mute"));
       expect(onToggleMute).toHaveBeenCalledTimes(1);
 
-      const inviteToast = getByRole('status');
-      expect(inviteToast.className).toContain('top-4');
-      expect(inviteToast.className).toContain('bottom-auto');
+      const inviteToast = getByRole("status");
+      expect(inviteToast.className).toContain("top-4");
+      expect(inviteToast.className).toContain("bottom-auto");
     } finally {
       window.matchMedia = originalMatchMedia;
     }
   });
 
-  it('fires haptics for mute keyboard shortcuts', () => {
+  it("fires haptics for mute keyboard shortcuts", () => {
     const onToggleMute = vi.fn();
 
-    render(
-      <MeetingRoom
-        roomName="Test Room"
-        localParticipant={localParticipant}
-        participants={participants}
-        enableTour={false}
-        onToggleMute={onToggleMute}
-      />
-    );
+    render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} onToggleMute={onToggleMute} />);
 
-    fireEvent.keyDown(window, { key: 'm' });
+    fireEvent.keyDown(window, { key: "m" });
 
     expect(onToggleMute).toHaveBeenCalledTimes(1);
     expect(vibrateSpy).toHaveBeenCalled();
   });
 
-  it('shows support code in connection overlay', () => {
-    const { getByText } = render(
-      <MeetingRoom
-        roomName="Test Room"
-        localParticipant={localParticipant}
-        participants={participants}
-        connectionState="failed"
-        connectionSupportCode="CHK-20260302-121212-001"
-      />
-    );
+  it("shows support code in connection overlay", () => {
+    const { getByText } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} connectionState="failed" connectionSupportCode="CHK-20260302-121212-001" />);
 
-    expect(getByText('Support Code')).toBeDefined();
-    expect(getByText('CHK-20260302-121212-001')).toBeDefined();
+    expect(getByText("Support Code")).toBeDefined();
+    expect(getByText("CHK-20260302-121212-001")).toBeDefined();
   });
 
-  it('renders inline device selectors in the desktop dock', () => {
+  it("renders inline device selectors in the desktop dock", () => {
     const { container, getByText } = render(
       <MeetingRoom
         roomName="Test Room"
         localParticipant={localParticipant}
         participants={participants}
         enableTour={false}
-        audioInputDevices={[
-          { deviceId: 'mic-1', kind: 'audioinput', label: 'Microphone 1' },
-        ]}
-        audioOutputDevices={[
-          { deviceId: 'spk-1', kind: 'audiooutput', label: 'Speaker 1' },
-        ]}
-        videoInputDevices={[
-          { deviceId: 'cam-1', kind: 'videoinput', label: 'Camera 1' },
-        ]}
+        audioInputDevices={[{ deviceId: "mic-1", kind: "audioinput", label: "Microphone 1" }]}
+        audioOutputDevices={[{ deviceId: "spk-1", kind: "audiooutput", label: "Speaker 1" }]}
+        videoInputDevices={[{ deviceId: "cam-1", kind: "videoinput", label: "Camera 1" }]}
         selectedAudioInput="mic-1"
         selectedAudioOutput="spk-1"
         selectedVideoInput="cam-1"
         onAudioInputChange={() => {}}
         onAudioOutputChange={() => {}}
         onVideoInputChange={() => {}}
-      />
+      />,
     );
 
     const deviceMenuButtons = container.querySelectorAll('button[aria-haspopup="true"]');
     fireEvent.click(deviceMenuButtons[0] as HTMLButtonElement);
-    expect(getByText('Microphone 1')).toBeDefined();
-    expect(getByText('Speaker 1')).toBeDefined();
+    expect(getByText("Microphone 1")).toBeDefined();
+    expect(getByText("Speaker 1")).toBeDefined();
 
     fireEvent.click(deviceMenuButtons[1] as HTMLButtonElement);
-    expect(getByText('Camera 1')).toBeDefined();
+    expect(getByText("Camera 1")).toBeDefined();
   });
 
-  it('opens the settings dialog and changes microphone preference', () => {
+  it("opens the settings dialog and changes microphone preference", () => {
     const onAudioInputChange = vi.fn();
     const { getByLabelText, getByRole, getByText } = render(
       <MeetingRoom
@@ -191,54 +141,43 @@ describe('MeetingRoom', () => {
         participants={participants}
         enableTour={false}
         audioInputDevices={[
-          { deviceId: 'mic-1', kind: 'audioinput', label: 'Microphone 1' },
-          { deviceId: 'mic-2', kind: 'audioinput', label: 'Microphone 2' },
+          { deviceId: "mic-1", kind: "audioinput", label: "Microphone 1" },
+          { deviceId: "mic-2", kind: "audioinput", label: "Microphone 2" },
         ]}
         audioOutputDevices={[
-          { deviceId: 'spk-1', kind: 'audiooutput', label: 'Speaker 1' },
-          { deviceId: 'spk-2', kind: 'audiooutput', label: 'Speaker 2' },
+          { deviceId: "spk-1", kind: "audiooutput", label: "Speaker 1" },
+          { deviceId: "spk-2", kind: "audiooutput", label: "Speaker 2" },
         ]}
         videoInputDevices={[
-          { deviceId: 'cam-1', kind: 'videoinput', label: 'Camera 1' },
-          { deviceId: 'cam-2', kind: 'videoinput', label: 'Camera 2' },
+          { deviceId: "cam-1", kind: "videoinput", label: "Camera 1" },
+          { deviceId: "cam-2", kind: "videoinput", label: "Camera 2" },
         ]}
         selectedAudioInput="mic-1"
         onAudioInputChange={onAudioInputChange}
-      />
+      />,
     );
 
-    fireEvent.click(getByRole('button', { name: 'Settings' }));
-    const dialog = getByRole('dialog', { name: 'Meeting settings' });
-    expect(getByLabelText('Search settings')).toBeDefined();
-    fireEvent.click(within(dialog).getByText('Microphone 1'));
-    fireEvent.click(within(dialog).getByText('Microphone 2'));
-    expect(onAudioInputChange).toHaveBeenCalledWith('mic-2');
+    fireEvent.click(getByRole("button", { name: "Settings" }));
+    const dialog = getByRole("dialog", { name: "Meeting settings" });
+    expect(getByLabelText("Search settings")).toBeDefined();
+    fireEvent.click(within(dialog).getByText("Microphone 1"));
+    fireEvent.click(within(dialog).getByText("Microphone 2"));
+    expect(onAudioInputChange).toHaveBeenCalledWith("mic-2");
   });
 
-  it('applies and persists background effect selections', async () => {
+  it("applies and persists background effect selections", async () => {
     const onApplyBackgroundEffect = vi.fn();
-    const { getByRole, getByText } = render(
-      <MeetingRoom
-        roomName="Test Room"
-        localParticipant={localParticipant}
-        participants={participants}
-        enableTour={false}
-        enableBackgroundEffects
-        isBackgroundEffectsSupported
-        onApplyBackgroundEffect={onApplyBackgroundEffect}
-      />
-    );
+    const { getByRole, getByText } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} enableBackgroundEffects isBackgroundEffectsSupported onApplyBackgroundEffect={onApplyBackgroundEffect} />);
 
-    fireEvent.click(getByRole('button', { name: 'Settings' }));
-    fireEvent.click(getByText('Video'));
-    fireEvent.click(getByRole('button', { name: 'Select Blur' }));
+    fireEvent.click(getByRole("button", { name: "Settings" }));
+    fireEvent.click(getByText("Video"));
+    fireEvent.click(getByRole("button", { name: "Select Blur" }));
 
     await waitFor(() => {
-      expect(onApplyBackgroundEffect).toHaveBeenCalledWith({ mode: 'blur', blurStrength: undefined });
+      expect(onApplyBackgroundEffect).toHaveBeenCalledWith({ mode: "blur", blurStrength: undefined });
     });
 
-    const stored = JSON.parse(localStorage.getItem('chalk-meeting-settings') ?? '{}');
-    expect(stored.video.backgroundEffect).toEqual({ type: 'blur' });
+    const stored = JSON.parse(localStorage.getItem("chalk-meeting-settings") ?? "{}");
+    expect(stored.video.backgroundEffect).toEqual({ type: "blur" });
   });
-
 });

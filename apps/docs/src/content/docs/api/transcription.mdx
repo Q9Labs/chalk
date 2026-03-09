@@ -20,10 +20,10 @@ Queues a transcription job for the specified recording.
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `room_id` | string | Yes | ID of the room |
-| `provider` | string | No | Transcription provider (uses default if not specified) |
+| Field      | Type   | Required | Description                                            |
+| ---------- | ------ | -------- | ------------------------------------------------------ |
+| `room_id`  | string | Yes      | ID of the room                                         |
+| `provider` | string | No       | Transcription provider (uses default if not specified) |
 
 ### Response
 
@@ -163,9 +163,9 @@ Lists all post-meeting transcripts for a specific room.
 
 ## Transcript Status
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Job queued, waiting to start |
-| `processing` | Transcription in progress |
-| `completed` | Transcript ready |
-| `failed` | Transcription failed |
+| Status       | Description                  |
+| ------------ | ---------------------------- |
+| `pending`    | Job queued, waiting to start |
+| `processing` | Transcription in progress    |
+| `completed`  | Transcript ready             |
+| `failed`     | Transcription failed         |

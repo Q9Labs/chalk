@@ -70,11 +70,7 @@ const correlationRows = orderedRecords.map((record) => ({
   attemptDir: record.artifactsDir ?? null,
   failureReason: record.failureReason ?? null,
 }));
-await writeFile(
-  resolve(outDir, "correlation-map.ndjson"),
-  correlationRows.map((row) => JSON.stringify(row)).join("\n") + "\n",
-  "utf8",
-);
+await writeFile(resolve(outDir, "correlation-map.ndjson"), correlationRows.map((row) => JSON.stringify(row)).join("\n") + "\n", "utf8");
 await writeFile(resolve(outDir, "correlation-map.json"), JSON.stringify(correlationRows, null, 2) + "\n", "utf8");
 printSummary(summary);
 
@@ -126,8 +122,7 @@ function parseArgs(argv) {
       out.artifactMode = "failures-only";
       out.successSamplePercent = 5;
       out.reuseSessionPerWorker = true;
-    }
-    else if (arg === "--full-trace") out.fullTrace = true;
+    } else if (arg === "--full-trace") out.fullTrace = true;
     else if (arg === "--headed") out.headed = true;
     else if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -149,12 +144,10 @@ function parseArgs(argv) {
   }
   out.concurrency = Math.min(out.concurrency, out.count);
   if (!out.unsafeConcurrency) {
-    const totalGb = totalmem() / (1024 ** 3);
+    const totalGb = totalmem() / 1024 ** 3;
     const recommendedMax = totalGb <= 20 ? 2 : totalGb <= 32 ? 4 : 8;
     if (out.concurrency > recommendedMax) {
-      console.warn(
-        `[join-stress] capping concurrency ${out.concurrency} -> ${recommendedMax} for host RAM ${Math.round(totalGb)}GB (use --unsafe-concurrency to bypass)`,
-      );
+      console.warn(`[join-stress] capping concurrency ${out.concurrency} -> ${recommendedMax} for host RAM ${Math.round(totalGb)}GB (use --unsafe-concurrency to bypass)`);
       out.concurrency = recommendedMax;
     }
   }

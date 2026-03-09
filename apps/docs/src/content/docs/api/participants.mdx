@@ -21,11 +21,11 @@ The room `{id}` can be either a UUID or a room name. If the room doesn't exist a
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `display_name` | string | Yes | Display name shown to other participants |
-| `external_user_id` | string | No | Your application's user identifier |
-| `role` | string | No | Participant role (e.g., "host", "participant") |
+| Field              | Type   | Required | Description                                    |
+| ------------------ | ------ | -------- | ---------------------------------------------- |
+| `display_name`     | string | Yes      | Display name shown to other participants       |
+| `external_user_id` | string | No       | Your application's user identifier             |
+| `role`             | string | No       | Participant role (e.g., "host", "participant") |
 
 ### Response
 
@@ -54,12 +54,12 @@ The room `{id}` can be either a UUID or a room name. If the room doesn't exist a
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `room_created` | `true` if room was auto-created via early join |
-| `access_token` | JWT for SDK authentication |
-| `auth_token` | JWT for API authentication |
-| `should_start_recording` | Indicates if client should initiate recording |
+| Field                    | Description                                    |
+| ------------------------ | ---------------------------------------------- |
+| `room_created`           | `true` if room was auto-created via early join |
+| `access_token`           | JWT for SDK authentication                     |
+| `auth_token`             | JWT for API authentication                     |
+| `should_start_recording` | Indicates if client should initiate recording  |
 
 ## List Participants
 
@@ -69,9 +69,9 @@ GET /api/v1/rooms/{id}/participants
 
 ### Query Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `active` | boolean | false | If `true`, returns only active participants |
+| Parameter | Type    | Default | Description                                 |
+| --------- | ------- | ------- | ------------------------------------------- |
+| `active`  | boolean | false   | If `true`, returns only active participants |
 
 ### Response
 

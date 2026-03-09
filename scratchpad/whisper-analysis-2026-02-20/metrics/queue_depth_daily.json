@@ -1,59 +1,59 @@
 {
-    "Label": "TranscriptionQueueDepth",
-    "Datapoints": [
-        {
-            "Timestamp": "2026-02-18T05:00:00+05:00",
-            "Average": 0.0,
-            "Maximum": 0.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-12T05:00:00+05:00",
-            "Average": 0.10526315789473684,
-            "Maximum": 1.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-15T05:00:00+05:00",
-            "Average": 0.0,
-            "Maximum": 0.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-17T05:00:00+05:00",
-            "Average": 0.0,
-            "Maximum": 0.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-14T05:00:00+05:00",
-            "Average": 0.0028228652081863093,
-            "Maximum": 1.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-20T05:00:00+05:00",
-            "Average": 0.0,
-            "Maximum": 0.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-19T05:00:00+05:00",
-            "Average": 0.0,
-            "Maximum": 0.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-13T05:00:00+05:00",
-            "Average": 0.12318840579710146,
-            "Maximum": 92.0,
-            "Unit": "Count"
-        },
-        {
-            "Timestamp": "2026-02-16T05:00:00+05:00",
-            "Average": 0.0,
-            "Maximum": 0.0,
-            "Unit": "Count"
-        }
-    ]
+  "Label": "TranscriptionQueueDepth",
+  "Datapoints": [
+    {
+      "Timestamp": "2026-02-18T05:00:00+05:00",
+      "Average": 0.0,
+      "Maximum": 0.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-12T05:00:00+05:00",
+      "Average": 0.10526315789473684,
+      "Maximum": 1.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-15T05:00:00+05:00",
+      "Average": 0.0,
+      "Maximum": 0.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-17T05:00:00+05:00",
+      "Average": 0.0,
+      "Maximum": 0.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-14T05:00:00+05:00",
+      "Average": 0.0028228652081863093,
+      "Maximum": 1.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-20T05:00:00+05:00",
+      "Average": 0.0,
+      "Maximum": 0.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-19T05:00:00+05:00",
+      "Average": 0.0,
+      "Maximum": 0.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-13T05:00:00+05:00",
+      "Average": 0.12318840579710146,
+      "Maximum": 92.0,
+      "Unit": "Count"
+    },
+    {
+      "Timestamp": "2026-02-16T05:00:00+05:00",
+      "Average": 0.0,
+      "Maximum": 0.0,
+      "Unit": "Count"
+    }
+  ]
 }

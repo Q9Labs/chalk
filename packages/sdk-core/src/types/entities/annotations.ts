@@ -10,19 +10,11 @@
 export type AnnotationAccessMode = "all" | "sharer_only" | "off";
 export type ScreenAnnotationAccessMode = AnnotationAccessMode;
 
-export type ScreenAnnotationShape =
-  | "rectangle"
-  | "ellipse"
-  | "line"
-  | "arrow";
+export type ScreenAnnotationShape = "rectangle" | "ellipse" | "line" | "arrow";
 
 export type ScreenAnnotationShapeKind = ScreenAnnotationShape;
 
-export type ScreenAnnotationTool =
-  | "pen"
-  | "highlighter"
-  | ScreenAnnotationShape
-  | "text";
+export type ScreenAnnotationTool = "pen" | "highlighter" | ScreenAnnotationShape | "text";
 
 export interface ScreenAnnotationPoint {
   x: number;
@@ -69,10 +61,7 @@ export interface ScreenAnnotationTextItem extends ScreenAnnotationItemBase {
   text: string;
 }
 
-export type ScreenAnnotationItem =
-  | ScreenAnnotationFreehandItem
-  | ScreenAnnotationShapeItem
-  | ScreenAnnotationTextItem;
+export type ScreenAnnotationItem = ScreenAnnotationFreehandItem | ScreenAnnotationShapeItem | ScreenAnnotationTextItem;
 
 export interface ScreenAnnotationCursor {
   shareSessionId: string;
@@ -90,8 +79,7 @@ export interface ScreenAnnotationSession {
   accessMode: AnnotationAccessMode;
 }
 
-export interface ScreenAnnotationSessionStarted
-  extends ScreenAnnotationSession {}
+export interface ScreenAnnotationSessionStarted extends ScreenAnnotationSession {}
 
 export interface ScreenAnnotationSessionEnded {
   shareSessionId: string;

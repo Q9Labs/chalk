@@ -18,6 +18,7 @@ Output: `apps/native/whiteboard-web/dist`
 ## Bridge contract (overview)
 
 Inbound (native -> WebView):
+
 - `wb.init`
 - `wb.snapshot`
 - `wb.update`
@@ -27,6 +28,7 @@ Inbound (native -> WebView):
 - `wb.presignDownload.result`
 
 Outbound (WebView -> native):
+
 - `wb.sendUpdateV2`
 - `wb.sendCursor`
 - `wb.requestSync`
@@ -38,9 +40,10 @@ All messages are JSON strings of shape:
 `{ "type": "<string>", "payload": { ... }, "requestId"?: "<string>" }`
 
 Native must provide a JS global for outbound:
+
 - Prefer: `window.ChalkNativeBridge.postMessage(string)`
 - iOS fallback: `window.webkit.messageHandlers.chalk.postMessage(string)`
 
 Native sends inbound by calling:
-- `window.__chalkNativeOnMessage(string)`
 
+- `window.__chalkNativeOnMessage(string)`

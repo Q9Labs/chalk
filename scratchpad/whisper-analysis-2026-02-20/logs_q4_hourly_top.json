@@ -1,13 +1,13 @@
 {
-    "queryLanguage": "CWLI",
-    "results": [],
-    "statistics": {
-        "recordsMatched": 0.0,
-        "recordsScanned": 24484.0,
-        "estimatedRecordsSkipped": 0.0,
-        "bytesScanned": 2516911.0,
-        "estimatedBytesSkipped": 0.0,
-        "logGroupsScanned": 1.0
-    },
-    "status": "Complete"
+  "queryLanguage": "CWLI",
+  "results": [],
+  "statistics": {
+    "recordsMatched": 0.0,
+    "recordsScanned": 24484.0,
+    "estimatedRecordsSkipped": 0.0,
+    "bytesScanned": 2516911.0,
+    "estimatedBytesSkipped": 0.0,
+    "logGroupsScanned": 1.0
+  },
+  "status": "Complete"
 }

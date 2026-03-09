@@ -1,18 +1,18 @@
 {
   "name": "@q9labs/chalk-core",
   "version": "0.0.72",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/Q9Labs/chalk.git",
     "directory": "packages/sdk-core"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
-  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,9 +21,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
     "build:types": "tsc --project tsconfig.json",

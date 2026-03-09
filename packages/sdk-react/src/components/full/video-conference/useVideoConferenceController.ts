@@ -30,33 +30,13 @@ import { useLobbyDevices } from "./useLobbyDevices";
 import { useMeetingStats } from "./useMeetingStats";
 import { useVideoConferenceMeetingRoomProps } from "./useVideoConferenceMeetingRoomProps";
 import { useSessionEvents } from "./useSessionEvents";
-import {
-  buildVideoConferenceViewState,
-  type VideoConferenceControllerState,
-} from "./view-state";
+import { buildVideoConferenceViewState, type VideoConferenceControllerState } from "./view-state";
 
 const DISCONNECT_GRACE_MS = 8000;
 const EMPTY_FEATURES: Features = {};
 const EMPTY_DEFAULTS: NonNullable<VideoConferenceProps["defaults"]> = {};
 
-export function useVideoConferenceController({
-  roomId,
-  roomName,
-  userName,
-  autoJoin = false,
-  role,
-  metadata,
-  features,
-  defaults,
-  sounds = true,
-  onJoin,
-  onLeave,
-  onEnd,
-  onError,
-  onAddPeople,
-  whiteboard: whiteboardOptions,
-  className,
-}: VideoConferenceProps): VideoConferenceControllerState {
+export function useVideoConferenceController({ roomId, roomName, userName, autoJoin = false, role, metadata, features, defaults, sounds = true, onJoin, onLeave, onEnd, onError, onAddPeople, whiteboard: whiteboardOptions, className }: VideoConferenceProps): VideoConferenceControllerState {
   const resolvedFeatures = features ?? EMPTY_FEATURES;
   const resolvedDefaults = defaults ?? EMPTY_DEFAULTS;
 
@@ -70,61 +50,27 @@ export function useVideoConferenceController({
 
   const { join, leave, isJoining } = useConnection();
   const { isConnected, status } = useRoom();
-  const {
-    participants,
-    localParticipant,
-    participantCount,
-    updateDisplayName,
-  } = useParticipants();
+  const { participants, localParticipant, participantCount, updateDisplayName } = useParticipants();
   const { activeSpeaker } = useActiveSpeaker();
   const media = useMedia();
   const screenShare = useScreenShare();
-  const {
-    messages,
-    sendMessage: sendChatMessage,
-    sendMessageWithAttachments: sendChatMessageWithAttachments,
-    getAttachmentDownloadUrl,
-    unreadCount,
-    markAsRead,
-  } = useChat();
+  const { messages, sendMessage: sendChatMessage, sendMessageWithAttachments: sendChatMessageWithAttachments, getAttachmentDownloadUrl, unreadCount, markAsRead } = useChat();
   const recording = useRecording();
   const interactions = useInteractions();
   const whiteboard = useWhiteboard();
   const { layout } = useLayout();
   const { activePanel } = usePanels();
-  const { participantVolumes, setParticipantVolume, getAudioVolume } =
-    useParticipantVolume();
-  const {
-    refreshDevices,
-    cameras,
-    microphones,
-    speakers: audioOutputs,
-  } = useDevices();
+  const { participantVolumes, setParticipantVolume, getAudioVolume } = useParticipantVolume();
+  const { refreshDevices, cameras, microphones, speakers: audioOutputs } = useDevices();
 
-  const {
-    lastWsToastAtRef,
-    roomIdRef,
-    phaseRef,
-    localParticipantIdRef,
-    disconnectGraceTimeoutRef,
-    isDisconnectGraceActive,
-    setIsDisconnectGraceActive,
-    clearDisconnectGraceTimeout,
-  } = useConferenceLifecycleState({
+  const { lastWsToastAtRef, roomIdRef, phaseRef, localParticipantIdRef, disconnectGraceTimeoutRef, isDisconnectGraceActive, setIsDisconnectGraceActive, clearDisconnectGraceTimeout } = useConferenceLifecycleState({
     phase,
     status,
     roomId,
     localParticipantId: localParticipant?.id,
   });
 
-  const {
-    lobbySelectedCamera,
-    setLobbySelectedCamera,
-    lobbySelectedMicrophone,
-    setLobbySelectedMicrophone,
-    lobbySelectedSpeaker,
-    setLobbySelectedSpeaker,
-  } = useLobbyDevices({
+  const { lobbySelectedCamera, setLobbySelectedCamera, lobbySelectedMicrophone, setLobbySelectedMicrophone, lobbySelectedSpeaker, setLobbySelectedSpeaker } = useLobbyDevices({
     refreshDevices,
     cameras,
     microphones,
@@ -137,10 +83,7 @@ export function useVideoConferenceController({
   const { session } = useChalkSession();
   const { play } = useSoundEffects({ enabled: sounds, autoSubscribe: true });
   const { transcripts: rawTranscripts } = useTranscripts();
-  const committedTranscripts = useMemo(
-    () => rawTranscripts.filter((transcript) => transcript.isInterim !== true),
-    [rawTranscripts],
-  );
+  const committedTranscripts = useMemo(() => rawTranscripts.filter((transcript) => transcript.isInterim !== true), [rawTranscripts]);
   const transcripts = useMemo(
     () =>
       rawTranscripts.map((transcript) => ({
@@ -162,22 +105,15 @@ export function useVideoConferenceController({
     [session],
   );
 
-  const { supportCode, setSupportCode, emitError } = useConferenceErrorReporter(
-    {
-      session,
-      onError,
-      roomIdRef,
-      phaseRef,
-      pushIncidentBreadcrumb,
-    },
-  );
+  const { supportCode, setSupportCode, emitError } = useConferenceErrorReporter({
+    session,
+    onError,
+    roomIdRef,
+    phaseRef,
+    pushIncidentBreadcrumb,
+  });
 
-  const {
-    meetingDuration,
-    incrementHandRaiseCount,
-    buildEndData,
-    resetForRejoin,
-  } = useMeetingStats({
+  const { meetingDuration, incrementHandRaiseCount, buildEndData, resetForRejoin } = useMeetingStats({
     phase,
     roomId,
     participants,
@@ -231,20 +167,7 @@ export function useVideoConferenceController({
     roomIdRef,
   });
 
-  const {
-    handleLeave,
-    initiateLeave,
-    handleRejoin,
-    handleGoHome,
-    handleToggleMute,
-    handleToggleVideo,
-    handleToggleScreenShare,
-    handleToggleRecording,
-    handleToggleHandRaise,
-    handleSendReaction,
-    handleSendMessage,
-    handleSendMessageWithAttachments,
-  } = useConferenceMeetingActions({
+  const { handleLeave, initiateLeave, handleRejoin, handleGoHome, handleToggleMute, handleToggleVideo, handleToggleScreenShare, handleToggleRecording, handleToggleHandRaise, handleSendReaction, handleSendMessage, handleSendMessageWithAttachments } = useConferenceMeetingActions({
     clearDisconnectGraceTimeout,
     setShowLeaveConfirm,
     setIsExiting,
@@ -294,8 +217,7 @@ export function useVideoConferenceController({
   });
 
   const selectedCamera = media.selectedCamera ?? lobbySelectedCamera;
-  const selectedMicrophone =
-    media.selectedMicrophone ?? lobbySelectedMicrophone;
+  const selectedMicrophone = media.selectedMicrophone ?? lobbySelectedMicrophone;
 
   useEffect(() => {
     if (!autoJoin || phase !== "lobby" || autoJoinStartedRef.current) {
@@ -311,17 +233,7 @@ export function useVideoConferenceController({
       selectedAudioInput: lobbySelectedMicrophone ?? undefined,
       selectedAudioOutput: lobbySelectedSpeaker ?? undefined,
     });
-  }, [
-    autoJoin,
-    handleJoin,
-    lobbySelectedCamera,
-    lobbySelectedMicrophone,
-    lobbySelectedSpeaker,
-    phase,
-    resolvedDefaults.audioEnabled,
-    resolvedDefaults.videoEnabled,
-    userName,
-  ]);
+  }, [autoJoin, handleJoin, lobbySelectedCamera, lobbySelectedMicrophone, lobbySelectedSpeaker, phase, resolvedDefaults.audioEnabled, resolvedDefaults.videoEnabled, userName]);
 
   useEffect(() => {
     if (phase !== "meeting") {
@@ -350,14 +262,10 @@ export function useVideoConferenceController({
   const handleMeetingRoomMicrophoneChange = useCallback(
     (deviceId: string) => {
       void media.selectMicrophone(deviceId).catch((error) => {
-        pushIncidentBreadcrumb(
-          "media",
-          "In-meeting microphone selection failed",
-          {
-            deviceId,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        );
+        pushIncidentBreadcrumb("media", "In-meeting microphone selection failed", {
+          deviceId,
+          message: error instanceof Error ? error.message : String(error),
+        });
       });
     },
     [media, pushIncidentBreadcrumb],
@@ -411,8 +319,7 @@ export function useVideoConferenceController({
       handleChatOpen,
       handleUpdateDisplayName: updateDisplayName,
       defaultChatOpen: resolvedDefaults.chatOpen ?? activePanel === "chat",
-      defaultParticipantsOpen:
-        resolvedDefaults.participantsOpen ?? activePanel === "participants",
+      defaultParticipantsOpen: resolvedDefaults.participantsOpen ?? activePanel === "participants",
       audioInputDevices: microphones,
       audioOutputDevices: audioOutputs,
       videoInputDevices: cameras,

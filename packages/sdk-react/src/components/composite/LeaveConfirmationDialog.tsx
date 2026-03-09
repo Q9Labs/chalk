@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
-import { CallEnd01Icon } from '../../utils/icons';
-import { cn } from '../../utils/cn';
-import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
+import React, { useEffect, useRef } from "react";
+import { CallEnd01Icon } from "../../utils/icons";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 
 export interface LeaveConfirmationDialogProps {
   isOpen: boolean;
@@ -10,23 +10,18 @@ export interface LeaveConfirmationDialogProps {
   className?: string;
 }
 
-export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(({
-  isOpen,
-  onClose,
-  onConfirm,
-  className,
-}: LeaveConfirmationDialogProps) => {
+export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(({ isOpen, onClose, onConfirm, className }: LeaveConfirmationDialogProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === "Escape" && isOpen) {
         onClose();
       }
     };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
 
   // Close when clicking backdrop
@@ -41,12 +36,7 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
   return (
     <div
       data-chalk
-      className={cn(
-        'chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4',
-        'bg-background/80 backdrop-blur-sm',
-        !prefersReducedMotion && 'animate-in fade-in duration-200',
-        className
-      )}
+      className={cn("chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4", "bg-background/80 backdrop-blur-sm", !prefersReducedMotion && "animate-in fade-in duration-200", className)}
       role="dialog"
       aria-modal="true"
       aria-labelledby="leave-modal-title"
@@ -54,42 +44,27 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
     >
       <div
         ref={modalRef}
-        className={cn(
-          "w-full max-w-[400px] overflow-hidden rounded-[24px] relative",
-          "bg-card text-card-foreground shadow-2xl border border-border/50",
-          !prefersReducedMotion && "animate-in fade-in zoom-in-[0.95] slide-in-from-bottom-4 duration-300 ease-out"
-        )}
-        onClick={e => e.stopPropagation()}
+        className={cn("w-full max-w-[400px] overflow-hidden rounded-[24px] relative", "bg-card text-card-foreground shadow-2xl border border-border/50", !prefersReducedMotion && "animate-in fade-in zoom-in-[0.95] slide-in-from-bottom-4 duration-300 ease-out")}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="p-8">
           <div className="flex flex-col items-center text-center space-y-5">
-            <div 
-              className="w-16 h-16 rounded-full flex items-center justify-center relative"
-            >
-              <div className="absolute inset-0 bg-destructive/10 rounded-full animate-ping" style={{ animationDuration: '3s' }} />
+            <div className="w-16 h-16 rounded-full flex items-center justify-center relative">
+              <div className="absolute inset-0 bg-destructive/10 rounded-full animate-ping" style={{ animationDuration: "3s" }} />
               <div className="absolute inset-0 bg-destructive/20 rounded-full" />
               <CallEnd01Icon size={28} className="text-destructive relative z-10" />
             </div>
-            
+
             <div className="space-y-2">
               <h2 id="leave-modal-title" className="text-xl font-bold tracking-tight">
                 Leave Meeting?
               </h2>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                You will be disconnected from the current session. You can always rejoin using the meeting link later.
-              </p>
+              <p className="text-muted-foreground text-sm leading-relaxed">You will be disconnected from the current session. You can always rejoin using the meeting link later.</p>
             </div>
           </div>
 
           <div className="flex gap-3 mt-8">
-            <button
-              onClick={onClose}
-              className={cn(
-                "flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none",
-                "bg-secondary/50 text-secondary-foreground hover:bg-secondary border border-transparent",
-                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-border"
-              )}
-            >
+            <button onClick={onClose} className={cn("flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none", "bg-secondary/50 text-secondary-foreground hover:bg-secondary border border-transparent", "focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-border")}>
               Cancel
             </button>
             <button
@@ -98,7 +73,7 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
                 "flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none text-destructive-foreground",
                 "bg-destructive hover:opacity-90 shadow-sm",
                 "focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                "active:scale-[0.98]"
+                "active:scale-[0.98]",
               )}
             >
               Leave
@@ -110,4 +85,4 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
   );
 });
 
-LeaveConfirmationDialog.displayName = 'LeaveConfirmationDialog';
+LeaveConfirmationDialog.displayName = "LeaveConfirmationDialog";

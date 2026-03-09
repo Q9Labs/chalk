@@ -15,10 +15,7 @@ Purpose: quick, accurate reference for anyone touching Chalk's Document PiP work
 - Feature detection:
 
 ```ts
-const supported =
-  typeof window !== "undefined" &&
-  "documentPictureInPicture" in window &&
-  typeof window.documentPictureInPicture?.requestWindow === "function";
+const supported = typeof window !== "undefined" && "documentPictureInPicture" in window && typeof window.documentPictureInPicture?.requestWindow === "function";
 ```
 
 - Open window:

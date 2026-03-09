@@ -117,11 +117,7 @@ export const ChatMessagePayload = Schema.Struct({
         fileName: Schema.String,
         mimeType: Schema.String,
         sizeBytes: Schema.Number,
-        kind: Schema.Union(
-          Schema.Literal("image"),
-          Schema.Literal("document"),
-          Schema.Literal("file"),
-        ),
+        kind: Schema.Union(Schema.Literal("image"), Schema.Literal("document"), Schema.Literal("file")),
       }),
     ),
   ),
@@ -290,41 +286,27 @@ export type WhiteboardClosedPayload = Schema.Schema.Type<typeof WhiteboardClosed
 export const AnnotationSessionStartedPayload = Schema.Struct({
   shareSessionId: Schema.String,
   sharerParticipantId: Schema.String,
-  accessMode: Schema.Union(
-    Schema.Literal("all"),
-    Schema.Literal("sharer_only"),
-    Schema.Literal("off"),
-  ),
+  accessMode: Schema.Union(Schema.Literal("all"), Schema.Literal("sharer_only"), Schema.Literal("off")),
   timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
 });
-export type AnnotationSessionStartedPayload = Schema.Schema.Type<
-  typeof AnnotationSessionStartedPayload
->;
+export type AnnotationSessionStartedPayload = Schema.Schema.Type<typeof AnnotationSessionStartedPayload>;
 
 export const AnnotationSessionEndedPayload = Schema.Struct({
   shareSessionId: Schema.String,
   timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
 });
-export type AnnotationSessionEndedPayload = Schema.Schema.Type<
-  typeof AnnotationSessionEndedPayload
->;
+export type AnnotationSessionEndedPayload = Schema.Schema.Type<typeof AnnotationSessionEndedPayload>;
 
 export const AnnotationSnapshotPayload = Schema.Struct({
   roomId: Schema.String,
   shareSessionId: Schema.String,
   sharerParticipantId: Schema.String,
-  accessMode: Schema.Union(
-    Schema.Literal("all"),
-    Schema.Literal("sharer_only"),
-    Schema.Literal("off"),
-  ),
+  accessMode: Schema.Union(Schema.Literal("all"), Schema.Literal("sharer_only"), Schema.Literal("off")),
   items: Schema.Array(Schema.Unknown),
   updatedAtMs: Schema.optional(Schema.Number),
   lastSeq: Schema.Number,
 });
-export type AnnotationSnapshotPayload = Schema.Schema.Type<
-  typeof AnnotationSnapshotPayload
->;
+export type AnnotationSnapshotPayload = Schema.Schema.Type<typeof AnnotationSnapshotPayload>;
 
 export const AnnotationDataPayload = Schema.Struct({
   shareSessionId: Schema.String,
@@ -336,44 +318,26 @@ export const AnnotationDataPayload = Schema.Struct({
   seq: Schema.Number,
   timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
 });
-export type AnnotationDataPayload = Schema.Schema.Type<
-  typeof AnnotationDataPayload
->;
+export type AnnotationDataPayload = Schema.Schema.Type<typeof AnnotationDataPayload>;
 
 export const AnnotationCursorPayload = Schema.Struct({
   shareSessionId: Schema.String,
   participantId: Schema.String,
   displayName: Schema.String,
-  tool: Schema.Union(
-    Schema.Literal("pen"),
-    Schema.Literal("highlighter"),
-    Schema.Literal("rectangle"),
-    Schema.Literal("ellipse"),
-    Schema.Literal("line"),
-    Schema.Literal("arrow"),
-    Schema.Literal("text"),
-  ),
+  tool: Schema.Union(Schema.Literal("pen"), Schema.Literal("highlighter"), Schema.Literal("rectangle"), Schema.Literal("ellipse"), Schema.Literal("line"), Schema.Literal("arrow"), Schema.Literal("text")),
   x: Schema.Number,
   y: Schema.Number,
   timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
 });
-export type AnnotationCursorPayload = Schema.Schema.Type<
-  typeof AnnotationCursorPayload
->;
+export type AnnotationCursorPayload = Schema.Schema.Type<typeof AnnotationCursorPayload>;
 
 export const AnnotationAccessChangedPayload = Schema.Struct({
   shareSessionId: Schema.String,
-  accessMode: Schema.Union(
-    Schema.Literal("all"),
-    Schema.Literal("sharer_only"),
-    Schema.Literal("off"),
-  ),
+  accessMode: Schema.Union(Schema.Literal("all"), Schema.Literal("sharer_only"), Schema.Literal("off")),
   changedBy: Schema.String,
   timestamp: Schema.Union(Schema.String, Schema.DateFromSelf),
 });
-export type AnnotationAccessChangedPayload = Schema.Schema.Type<
-  typeof AnnotationAccessChangedPayload
->;
+export type AnnotationAccessChangedPayload = Schema.Schema.Type<typeof AnnotationAccessChangedPayload>;
 
 /**
  * error event payload

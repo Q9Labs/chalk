@@ -43,12 +43,9 @@ export function useMeetingRoomUiState({ defaultChatOpen, defaultParticipantsOpen
     }
   }, [activePanel, onChatOpen]);
 
-  const togglePanel = useCallback(
-    (panel: MeetingPanel) => {
-      setActivePanel((current) => (current === panel ? null : panel));
-    },
-    [],
-  );
+  const togglePanel = useCallback((panel: MeetingPanel) => {
+    setActivePanel((current) => (current === panel ? null : panel));
+  }, []);
 
   return {
     activePanel,

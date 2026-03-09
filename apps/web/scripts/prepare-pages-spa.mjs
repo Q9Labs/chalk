@@ -7,9 +7,7 @@ const indexPath = resolve(clientDir, "index.html");
 const fallback404Path = resolve(clientDir, "404.html");
 
 if (!existsSync(shellPath)) {
-	throw new Error(
-		`missing ${shellPath}; expected TanStack Start SPA build output to include _shell.html`,
-	);
+  throw new Error(`missing ${shellPath}; expected TanStack Start SPA build output to include _shell.html`);
 }
 
 // Cloudflare Pages: ensure deep-link loads SPA shell (even if rewrites are not applied).

@@ -7,18 +7,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
 export interface UseNotificationsReturn {
-	/** Active notifications */
-	notifications: readonly Notification[];
-	/** Add a notification */
-	notify: (
-		message: string,
-		severity?: NotificationSeverity,
-		autoDismiss?: boolean,
-	) => string;
-	/** Dismiss a notification */
-	dismiss: (id: string) => void;
-	/** Clear all notifications */
-	clear: () => void;
+  /** Active notifications */
+  notifications: readonly Notification[];
+  /** Add a notification */
+  notify: (message: string, severity?: NotificationSeverity, autoDismiss?: boolean) => string;
+  /** Dismiss a notification */
+  dismiss: (id: string) => void;
+  /** Clear all notifications */
+  clear: () => void;
 }
 
 /**
@@ -43,38 +39,28 @@ export interface UseNotificationsReturn {
  * ```
  */
 export function useNotifications(): UseNotificationsReturn {
-	const session = useSession();
-	const { ui } = session;
+  const session = useSession();
+  const { ui } = session;
 
-	const [state, setState] = useState<UIState>(() => ui.getState());
+  const [state, setState] = useState<UIState>(() => ui.getState());
 
-	useEffect(() => {
-		return ui.subscribe(setState);
-	}, [ui]);
+  useEffect(() => {
+    return ui.subscribe(setState);
+  }, [ui]);
 
-	const notify = useCallback(
-		(
-			message: string,
-			severity: NotificationSeverity = "info",
-			autoDismiss = true,
-		): string => ui.notify(message, severity, autoDismiss),
-		[ui],
-	);
+  const notify = useCallback((message: string, severity: NotificationSeverity = "info", autoDismiss = true): string => ui.notify(message, severity, autoDismiss), [ui]);
 
-	const dismiss = useCallback(
-		(id: string): void => ui.dismissNotification(id),
-		[ui],
-	);
+  const dismiss = useCallback((id: string): void => ui.dismissNotification(id), [ui]);
 
-	const clear = useCallback((): void => ui.clearNotifications(), [ui]);
+  const clear = useCallback((): void => ui.clearNotifications(), [ui]);
 
-	return useMemo(
-		(): UseNotificationsReturn => ({
-			notifications: state.notifications,
-			notify,
-			dismiss,
-			clear,
-		}),
-		[state.notifications, notify, dismiss, clear],
-	);
+  return useMemo(
+    (): UseNotificationsReturn => ({
+      notifications: state.notifications,
+      notify,
+      dismiss,
+      clear,
+    }),
+    [state.notifications, notify, dismiss, clear],
+  );
 }

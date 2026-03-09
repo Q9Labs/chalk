@@ -7,44 +7,44 @@
 
 // WebSocket event schemas
 export {
-	// Message envelope
-	WSMessage,
-	type WSMessage as WSMessageType,
-	// Heartbeat
-	HeartbeatPayload,
-	// Participant schemas
-	ParticipantPayload,
-	ParticipantJoinedPayload,
-	ParticipantLeftPayload,
-	ParticipantUpdatedPayload,
-	ParticipantControlPayload,
-	// Chat schemas
-	ChatMessagePayload,
-	// Reaction schemas
-	ReactionPayload,
-	// Hand schemas
-	HandPayload,
-	// Recording schemas
-	RecordingStartedPayload,
-	RecordingStoppedPayload,
-	// ConferenceSession schemas
-	RoomUpdatedPayload,
-	RoomSnapshotPayload,
-	RegisteredPayload,
-	// Whiteboard schemas
-	WhiteboardDataPayload,
-	WhiteboardSnapshotPayload,
-	WhiteboardCursorPayload,
-	PermissionChangedPayload,
-	WhiteboardOpenedPayload,
-	WhiteboardClosedPayload,
-	// Error schema
-	ErrorPayload,
-	// Transcript
-	TranscriptAckPayload,
-	// Schema map
-	WSPayloadSchemas,
-	type WSMessageType as WSMessageTypeName,
+  // Message envelope
+  WSMessage,
+  type WSMessage as WSMessageType,
+  // Heartbeat
+  HeartbeatPayload,
+  // Participant schemas
+  ParticipantPayload,
+  ParticipantJoinedPayload,
+  ParticipantLeftPayload,
+  ParticipantUpdatedPayload,
+  ParticipantControlPayload,
+  // Chat schemas
+  ChatMessagePayload,
+  // Reaction schemas
+  ReactionPayload,
+  // Hand schemas
+  HandPayload,
+  // Recording schemas
+  RecordingStartedPayload,
+  RecordingStoppedPayload,
+  // ConferenceSession schemas
+  RoomUpdatedPayload,
+  RoomSnapshotPayload,
+  RegisteredPayload,
+  // Whiteboard schemas
+  WhiteboardDataPayload,
+  WhiteboardSnapshotPayload,
+  WhiteboardCursorPayload,
+  PermissionChangedPayload,
+  WhiteboardOpenedPayload,
+  WhiteboardClosedPayload,
+  // Error schema
+  ErrorPayload,
+  // Transcript
+  TranscriptAckPayload,
+  // Schema map
+  WSPayloadSchemas,
+  type WSMessageType as WSMessageTypeName,
 } from "./ws-events";
 
 // Whiteboard schemas
@@ -54,10 +54,7 @@ export { AppStateSchema, AppStatePartialSchema } from "./whiteboard";
 export { WSEventSchemas } from "./ws-emitted";
 
 // WebSocket outbound schemas
-export {
-  WSOutboundPayloadSchemas,
-  type WSOutboundMessageType,
-} from "./ws-outbound";
+export { WSOutboundPayloadSchemas, type WSOutboundMessageType } from "./ws-outbound";
 
 // API response schemas
 export {

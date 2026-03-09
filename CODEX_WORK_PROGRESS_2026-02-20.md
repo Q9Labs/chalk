@@ -1,11 +1,13 @@
 # CODEX Work Progress — 2026-02-20
 
 ## 07:30 PKT
+
 - Task start: Whisper worker downscale feasibility (GPU -> CPU spot)
 - Scope: infra review, observability audit, AWS historical metrics, cost/capacity forecast, faster-whisper CPU feasibility research
 - Action: discovered whisper worker code at `infrastructure/whisper-worker/`
 
 ## 07:35 PKT
+
 - Spawned explorer swarm:
   - infra/runtime map: `019c78e6-bf6c-7370-ab4e-850b43590481`
   - observability map: `019c78e6-bfb0-73b1-85fb-d890faea7212`
@@ -13,6 +15,7 @@
 - Next: gather AWS inventory + long-range metrics while explorers read code
 
 ## 07:41 PKT
+
 - Confirmed AWS target: account `688819141892`, region `us-east-1`, ASG `chalk-whisper-prod-20260126085717939200000005`
 - Live whisper capacity: 1x `g4dn.xlarge` Spot (`i-01984d504395fe9ef`), ASG min/desired/max `1/1/2`
 - Observed repeated recent Spot capacity launch failures for g4dn.xlarge before eventual success (capacity risk signal)
@@ -20,6 +23,7 @@
 - Confirmed no CWAgent GPU metrics currently emitted (no `CWAgent` gpu/nvidia metrics found)
 
 ## 08:05 PKT
+
 - Completed historical pull window:
   - CloudWatch custom metrics (`Chalk/Whisper`) daily (2025-01-01..2026-02-20) + 10m (2026-02-13..2026-02-20)
   - EC2 ASG-dimension metrics (CPU/Network) 10m + daily
@@ -46,11 +50,13 @@
     - c6i.2xlarge ~0.157/hr
 
 ## 08:12 PKT
+
 - Wrote analysis report: `scratchpad/whisper-analysis-2026-02-20/WHISPER_DOWNSCALE_ANALYSIS_2026-02-20.md`
 - Report includes: topology map, historical metrics summary, interruption/capacity incidents, cost baselines, CPU feasibility envelopes, downscale recommendations + guardrails
 - Pulled upstream research sources (faster-whisper, ctranslate2, AWS Spot best practices) for recommendation grounding
 
 ## 08:18 PKT
+
 - User approved infra change path via subagent for focus
 - Subagent implemented CPU canary in Terraform:
   - module whisper now supports CPU/GPU toggle (`use_gpu`) + runtime env vars (`whisper_device`, `whisper_compute_type`, `whisper_cpu_threads`)
@@ -61,6 +67,7 @@
   - `terraform -chdir=infrastructure/terraform/environments/prod validate` ✅
 
 ## 08:10 PKT
+
 - Implemented observability additions in worker + monitoring module:
   - Worker now publishes `AudioDurationSeconds` and `RtfRatio` per completed job.
   - Added GPU exporter (`gpu_metrics.py`) reading `nvidia-smi` and emitting `GpuUtilizationPercent`, `GpuMemoryUtilizationPercent`, `GpuDeviceCount`.
@@ -75,6 +82,7 @@
   - Updated `CHANGELOG.md` (`[Unreleased]`) with Whisper observability + CPU canary infra entries.
 
 ## 08:18 PKT
+
 - Committed + pushed observability and CPU canary changes:
   - Commit: `19fca25855deb78f5c63b2e4154599e4590cda36`
   - Message: `feat(whisper): add audio/rtf/gpu metrics and cpu canary infra`
@@ -86,6 +94,7 @@
   - Whisper Worker Build (`22209753660`) ✅ success
 
 ## 08:30 PKT
+
 - Post-deploy runtime verification (AWS CLI, profile `q9labs`, region `us-east-1`):
   - ASG instance rotation was needed (ASG initially still on LT v10/g4dn despite latest LT v11 available).
   - Started ASG instance refresh:
@@ -106,6 +115,7 @@
       - `WHISPER_GPU_METRICS_ENABLED=false`
 
 ## 08:32 PKT
+
 - Live transcription probe executed through Redis queue on prod worker:
   - Probe job: `probe-1771558050`
   - Audio URL: `https://raw.githubusercontent.com/openai/whisper/main/tests/jfk.flac`
@@ -121,6 +131,7 @@
   - GPU util metrics currently absent by design on CPU canary (`WHISPER_GPU_METRICS_ENABLED=false`).
 
 ## 08:58 PKT
+
 - User-requested certainty check: replayed an old successful job shape on live prod CPU worker.
 - Replay command target:
   - Instance: `i-01aa458b972f52ecf` (`c7i.xlarge` spot)
@@ -140,6 +151,7 @@
   - `TranscriptionsCompleted` latest sum: `1.0` at `2026-02-20T08:57:00+05:00`
 
 ## 10:13 PKT
+
 - User-requested long recording validation executed on prod CPU worker.
 - Created long spoken test file inside worker container by looping JFK sample:
   - Source: `tests/jfk.flac` (OpenAI whisper repo)
@@ -160,6 +172,7 @@
   - `ProcessingTimeSeconds` latest: `107.35` at `2026-02-20T10:12:00+05:00`
 
 ## 13:13 PKT
+
 - User requested immediate further cost-down (no canary).
 - Terraform change applied for Whisper prod module:
   - `instance_type: c7i.xlarge -> c7i.large`
@@ -169,6 +182,7 @@
 - Next execution path: commit+push -> infra apply -> force instance refresh -> transcribe short+long audio probes on live worker.
 
 ## 13:30 PKT
+
 - Commit/push for aggressive downsize:
   - Commit: `4f8f9f3283dc53aeb4deaacf82460153c2980128`
   - Message: `perf(infra): downsize whisper worker to c7i.large spot`
@@ -186,6 +200,7 @@
   - Observed active processing of a real production queued long audio item (~1h11m) from `transcription:jobs:processing`.
 
 ## 13:31 PKT
+
 - Audio transcription tests on downscaled `c7i.large` instance:
   - Direct file test 1 (short speech `/tmp/jfk.flac`):
     - `status=completed`
