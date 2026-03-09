@@ -12,6 +12,7 @@ import type { WhiteboardManager } from "../managers/whiteboard-manager";
 import type { ConferenceSession } from "../room";
 import type { Participant } from "../types.ts";
 import type { MediaSessionApi, ParticipantSessionApi, RoomSessionApi, SessionStateUpdaters } from "./chalk-session-state";
+import { wideEvents } from "../wide-events/index.ts";
 
 interface AttachRoomBridgeArgs {
   room: ConferenceSession;
@@ -90,7 +91,13 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
 
   screenShareUnsubscribers.push(
     screenShare.on("started", ({ participantId, isLocal }) => {
+      const ctx = wideEvents.start("annotations.bridge.share-started");
+      ctx.merge({
+        participantId,
+        isLocal,
+      });
       if (!isLocal) {
+        ctx.complete("success", { result: "ignored_remote_share" });
         return;
       }
 
@@ -99,17 +106,29 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
 
       if (screenShare.consumeAnnotationAutoOpen()) {
         annotations.open();
+        ctx.complete("success", {
+          shareSessionId,
+          result: "started_and_opened",
+        });
       } else {
         annotations.close();
+        ctx.complete("success", {
+          shareSessionId,
+          result: "started_and_closed",
+        });
       }
     }),
   );
 
   screenShareUnsubscribers.push(
     screenShare.on("stopped", () => {
+      const ctx = wideEvents.start("annotations.bridge.share-stopped");
       const annotationState = annotations.getState();
       if (!annotationState.shareSessionId) {
         annotations.close();
+        ctx.complete("success", {
+          result: "closed_without_session",
+        });
         return;
       }
 
@@ -118,6 +137,14 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
       }
 
       annotations.close();
+      ctx.complete("success", {
+        shareSessionId: annotationState.shareSessionId,
+        sharerParticipantId: annotationState.sharerParticipantId,
+        result:
+          room.localParticipant?.id === annotationState.sharerParticipantId
+            ? "ended_local_session"
+            : "closed_remote_session",
+      });
     }),
   );
 
