@@ -28,6 +28,7 @@ var (
 
 type CloudflareClient interface {
 	CreateMeeting(ctx context.Context, req cloudflare.CreateMeetingRequest) (*cloudflare.Meeting, error)
+	EndMeeting(ctx context.Context, meetingID string) (*cloudflare.Meeting, error)
 	AddParticipant(ctx context.Context, meetingID string, req cloudflare.AddParticipantRequest) (*cloudflare.Participant, error)
 	RemoveParticipant(ctx context.Context, meetingID, participantID string) error
 	RefreshParticipantToken(ctx context.Context, meetingID, participantID string) (*cloudflare.Participant, error)
@@ -306,25 +307,35 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 			return nil, fmt.Errorf("failed to create room: %w", err)
 		}
 
-		createRoomStart := time.Now()
-		newRoom, err := s.db.CreateRoomWithID(ctx, db.CreateRoomWithIDParams{
-			ID:                  input.RoomID,
-			TenantID:            input.TenantID,
-			CloudflareMeetingID: cfMeeting.ID,
+			createRoomStart := time.Now()
+			newRoom, err := s.db.CreateRoomWithID(ctx, db.CreateRoomWithIDParams{
+				ID:                  input.RoomID,
+				TenantID:            input.TenantID,
+				CloudflareMeetingID: cfMeeting.ID,
 			Name:                strPtr(roomName),
 			Config:              []byte("{}"),
-		})
-		telemetry.observeDB("db_create_room_with_id", time.Since(createRoomStart))
-		if err != nil {
-			failedStep = "db_create_room_with_id"
-			return nil, fmt.Errorf("failed to create room in database: %w", err)
-		}
-		room = newRoom
-		roomCreated = true
-		activeParticipantsCount = 0
-	} else {
-		room = roomFromCountRow(roomRow)
-		activeParticipantsCount = roomRow.ActiveParticipantCount
+			})
+			telemetry.observeDB("db_create_room_with_id", time.Since(createRoomStart))
+			if err != nil {
+				_, _ = s.cfClient.EndMeeting(ctx, cfMeeting.ID)
+				refetchRoomStart := time.Now()
+				refetchedRoom, refetchErr := s.db.GetRoom(ctx, input.RoomID)
+				telemetry.observeDB("db_get_room_after_create_race", time.Since(refetchRoomStart))
+				if refetchErr != nil {
+					failedStep = "db_create_room_with_id"
+					return nil, fmt.Errorf("failed to create room in database: %w", err)
+				}
+				room = refetchedRoom
+				roomCreated = false
+				activeParticipantsCount = 0
+			} else {
+				room = newRoom
+				roomCreated = true
+				activeParticipantsCount = 0
+			}
+		} else {
+			room = roomFromCountRow(roomRow)
+			activeParticipantsCount = roomRow.ActiveParticipantCount
 
 		// Security: if a room exists but belongs to another tenant, act like it's missing.
 		if input.TenantID != uuid.Nil && room.TenantID != input.TenantID {

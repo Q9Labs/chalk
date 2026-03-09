@@ -1,5 +1,64 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveApiUrl, startMagicLink, verifyMagicLink } from "./internalAuth";
+import { fetchInternalAccessToken, getOrCreateLocalClientId, resolveApiUrl, startMagicLink, verifyMagicLink } from "./internalAuth";
+
+const originalWindow = globalThis.window;
+const originalLocalStorage = globalThis.localStorage;
+
+function createStorageMock() {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    removeItem: (key: string) => {
+      values.delete(key);
+    },
+    clear: () => {
+      values.clear();
+    },
+  };
+}
+
+function installBrowserEnv(rawUrl: string) {
+  let currentUrl = new URL(rawUrl);
+  const localStorage = createStorageMock();
+  const windowMock = {
+    get location() {
+      return currentUrl;
+    },
+    history: {
+      replaceState: (_state: unknown, _title: string, nextUrl: string) => {
+        currentUrl = new URL(nextUrl);
+      },
+    },
+  };
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: windowMock,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: localStorage,
+    writable: true,
+  });
+  return { window: windowMock, localStorage };
+}
+
+function restoreBrowserEnv() {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: originalWindow,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: originalLocalStorage,
+    writable: true,
+  });
+}
 
 describe("resolveApiUrl", () => {
   it("prefers localhost api when localhost is running with prod config", () => {
@@ -61,12 +120,64 @@ describe("verifyMagicLink", () => {
   });
 });
 
+describe("fetchInternalAccessToken", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    restoreBrowserEnv();
+  });
+
+  it("sends a stable localhost bootstrap header", async () => {
+    installBrowserEnv("http://localhost:3070/dashboard");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: "token-123" }),
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
+
+    const first = await fetchInternalAccessToken("http://localhost:8080");
+    const second = await fetchInternalAccessToken("http://localhost:8080");
+
+    expect(first).toBe("token-123");
+    expect(second).toBe("token-123");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8080/api/v1/internal/auth/access-token",
+      expect.objectContaining({
+        headers: {
+          "X-Chalk-Local-Client-ID": expect.any(String),
+        },
+      }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(fetchMock.mock.calls[1]?.[1]);
+  });
+
+  it("does not send localhost bootstrap header on hosted origins", async () => {
+    installBrowserEnv("https://chalk.q9labs.ai/dashboard");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: "token-123" }),
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
+
+    await fetchInternalAccessToken("https://chalk-api.q9labs.ai");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://chalk-api.q9labs.ai/api/v1/internal/auth/access-token",
+      expect.objectContaining({
+        headers: undefined,
+      }),
+    );
+  });
+});
+
 describe("startMagicLink", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    restoreBrowserEnv();
   });
 
   it("requests dashboard as the default callback url", async () => {
+    installBrowserEnv("http://localhost:3000/dashboard");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({}),
@@ -84,5 +195,21 @@ describe("startMagicLink", () => {
         }),
       }),
     );
+  });
+});
+
+describe("getOrCreateLocalClientId", () => {
+  afterEach(() => {
+    restoreBrowserEnv();
+  });
+
+  it("reuses the same id across calls on localhost", () => {
+    installBrowserEnv("http://localhost:3070/");
+
+    const first = getOrCreateLocalClientId();
+    const second = getOrCreateLocalClientId();
+
+    expect(first).toBeTruthy();
+    expect(second).toBe(first);
   });
 });

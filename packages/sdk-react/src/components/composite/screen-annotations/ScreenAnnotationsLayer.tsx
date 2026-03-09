@@ -413,7 +413,7 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
       {cursorChips.map((cursor: ScreenAnnotationCursor) => (
         <div
           key={cursor.participantId}
-          className="absolute z-20 -translate-x-1/2 -translate-y-full rounded-full border border-cyan-400/25 bg-zinc-950/90 px-2 py-1 text-[10px] font-semibold text-cyan-50 shadow-lg shadow-cyan-950/30"
+          className="absolute z-20 -translate-x-1/2 -translate-y-full rounded-full border border-primary/25 bg-background/95 px-2 py-1 text-[10px] font-semibold text-primary shadow-lg backdrop-blur-sm dark:bg-zinc-950/95"
           style={{
             left: `${cursor.x * 100}%`,
             top: `${cursor.y * 100}%`,
@@ -439,7 +439,7 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
               setTextDraft(null);
             }
           }}
-          className="absolute z-30 min-h-[52px] w-56 resize-none rounded-2xl border border-cyan-400/35 bg-zinc-950/85 px-3 py-2 text-sm font-medium text-white outline-none backdrop-blur-md"
+          className="absolute z-30 min-h-[52px] w-56 resize-none rounded-2xl border border-primary/30 bg-background/85 px-3 py-2 text-sm font-medium text-foreground outline-none backdrop-blur-md transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/20 dark:bg-zinc-950/85"
           placeholder="Type note..."
           style={{
             left: `${textDraft.x * 100}%`,

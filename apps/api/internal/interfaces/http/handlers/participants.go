@@ -95,8 +95,9 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 			// Not a UUID - look up by room name
 			existingRoom, lookupErr := h.roomService.GetRoomByName(ctx, roomIDParam, claims.TenantID)
 			if lookupErr != nil {
-				// Room doesn't exist yet - generate UUID for auto-creation (allow_early_join will handle it)
-				roomID = uuid.New()
+				// Derive a stable room UUID from tenant+slug so repeated joins can't fork
+				// into separate auto-created rooms before the name cache is warm.
+				roomID = deterministicRoomIDForTenantName(claims.TenantID, roomIDParam)
 			} else {
 				roomID = existingRoom.ID
 				h.setCachedRoomID(ctx, claims.TenantID, roomIDParam, roomID)
@@ -214,6 +215,11 @@ func joinRoomNameCacheKey(tenantID uuid.UUID, roomName string) string {
 	normalized := strings.ToLower(strings.TrimSpace(roomName))
 	sum := sha256.Sum256([]byte(normalized))
 	return "join:room_name:v1:" + tenantID.String() + ":" + hex.EncodeToString(sum[:])
+}
+
+func deterministicRoomIDForTenantName(tenantID uuid.UUID, roomName string) uuid.UUID {
+	normalized := strings.ToLower(strings.TrimSpace(roomName))
+	return uuid.NewSHA1(tenantID, []byte(normalized))
 }
 
 func (h *ParticipantHandler) getCachedRoomID(ctx context.Context, tenantID uuid.UUID, roomName string) (uuid.UUID, bool) {

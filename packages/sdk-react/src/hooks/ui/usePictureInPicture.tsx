@@ -59,9 +59,13 @@ function syncThemeAttributes(targetDocument: Document) {
     targetDocument.documentElement.setAttribute("data-chalk-theme", theme);
   }
 
+  // Copy dark mode classes and color-scheme from main document
+  targetDocument.documentElement.className = document.documentElement.className;
+  targetDocument.documentElement.style.cssText = document.documentElement.style.cssText;
+
   targetDocument.body.style.margin = "0";
   targetDocument.body.style.minHeight = "100vh";
-  targetDocument.body.style.background = "#050911";
+  targetDocument.body.style.background = "var(--background, #050911)";
 }
 
 function copyStylesIntoPictureInPicture(targetDocument: Document) {

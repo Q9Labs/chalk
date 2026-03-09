@@ -46,7 +46,7 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
   const { size: pxSize, fontSize } = sizeMap[size];
 
   return (
-    <div className={cn("relative inline-flex shrink-0", className)} style={{ width: pxSize, height: pxSize, ...style }} role="img" aria-label={`Avatar for ${name || "Unknown"}`}>
+    <div className={cn("relative inline-flex shrink-0 rounded-full", className)} style={{ width: pxSize, height: pxSize, ...style }} role="img" aria-label={`Avatar for ${name || "Unknown"}`}>
       {src ? (
         <img src={src} alt={name} className="h-full w-full rounded-full object-cover" />
       ) : (

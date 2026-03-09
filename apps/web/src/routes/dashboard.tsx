@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import z from "zod";
 import { ConferenceClient, type RoomResource } from "@q9labs/chalk-core";
-import { fetchInternalAccessToken, getApiUrl, startMagicLink, createWebTokenProvider } from "../lib/internalAuth";
+import { clearJoinContext, createWebTokenProvider, fetchInternalAccessToken, getApiUrl, startMagicLink } from "../lib/internalAuth";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { cn } from "../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -102,7 +102,7 @@ function DashboardPage() {
 
   const handleLogout = useCallback(() => {
     // Simple logout: clear state and reload
-    window.localStorage.removeItem("chalk_join_context_v1");
+    clearJoinContext();
     window.location.href = "/";
   }, []);
 

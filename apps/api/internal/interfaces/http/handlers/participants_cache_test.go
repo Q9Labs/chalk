@@ -57,3 +57,17 @@ func TestParticipantHandler_InvalidCachedRoomIDIsIgnored(t *testing.T) {
 	_, ok := handler.getCachedRoomID(context.Background(), tenantID, "physics")
 	require.False(t, ok)
 }
+
+func TestDeterministicRoomIDForTenantName_NormalizesRoomName(t *testing.T) {
+	tenantID := uuid.New()
+	roomIDA := deterministicRoomIDForTenantName(tenantID, "  Algebra-101 ")
+	roomIDB := deterministicRoomIDForTenantName(tenantID, "algebra-101")
+	require.Equal(t, roomIDA, roomIDB)
+}
+
+func TestDeterministicRoomIDForTenantName_IsTenantScoped(t *testing.T) {
+	roomName := "physics"
+	roomIDA := deterministicRoomIDForTenantName(uuid.New(), roomName)
+	roomIDB := deterministicRoomIDForTenantName(uuid.New(), roomName)
+	require.NotEqual(t, roomIDA, roomIDB)
+}

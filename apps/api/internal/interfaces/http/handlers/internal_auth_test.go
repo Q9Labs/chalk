@@ -57,14 +57,26 @@ type internalAuthQueriesStub struct {
 	tenantByOwner       db.Tenant
 	getInternalCalls    int
 	touchUserSessionCnt int
+	createTenantCalls   int
+	createClaimCalls    int
+	createdTenant       db.Tenant
+	createdClaim        db.TenantClaim
 }
 
 func (q *internalAuthQueriesStub) CreateInternalTenant(context.Context, db.CreateInternalTenantParams) (db.Tenant, error) {
-	panic("unexpected CreateInternalTenant")
+	q.createTenantCalls++
+	if q.createdTenant.ID == uuid.Nil {
+		q.createdTenant = db.Tenant{ID: uuid.New()}
+	}
+	return q.createdTenant, nil
 }
 
 func (q *internalAuthQueriesStub) CreateTenantClaim(context.Context, db.CreateTenantClaimParams) (db.TenantClaim, error) {
-	panic("unexpected CreateTenantClaim")
+	q.createClaimCalls++
+	if q.createdClaim.ID == uuid.Nil {
+		q.createdClaim = db.TenantClaim{ID: uuid.New(), TenantID: q.createdTenant.ID}
+	}
+	return q.createdClaim, nil
 }
 
 func (q *internalAuthQueriesStub) CreateUser(context.Context, string) (db.User, error) {
@@ -346,4 +358,69 @@ func TestInternalAuthCookieSameSite(t *testing.T) {
 		require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
 		require.False(t, cookies[0].Secure)
 	})
+
+	t.Run("ignores configured prod cookie domain on localhost requests", func(t *testing.T) {
+		handler := &InternalAuthHandler{
+			cfg: &config.Config{
+				Server: config.ServerConfig{Env: "production"},
+				Auth:   config.AuthConfig{CookieDomain: ".q9labs.ai"},
+			},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/", nil)
+		req.Host = "localhost:8080"
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = req
+
+		handler.setCookie(c, internalSessionCookieName, "session-token", time.Now().Add(time.Hour))
+
+		cookies := w.Result().Cookies()
+		require.Len(t, cookies, 1)
+		require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
+		require.False(t, cookies[0].Secure)
+		require.Empty(t, cookies[0].Domain)
+	})
+}
+
+func TestInternalAuthAccessToken_ReusesLocalClientBootstrap(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cacheStub := &internalAuthCacheStub{}
+	queryStub := &internalAuthQueriesStub{}
+	handler := NewInternalAuthHandler(
+		&config.Config{Server: config.ServerConfig{Env: "development"}},
+		queryStub,
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		cacheStub,
+	)
+
+	makeRequest := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/v1/internal/auth/access-token", nil)
+		req.Host = "localhost:8080"
+		req.Header.Set(localClientIDHeader, "browser-1")
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = req
+		handler.AccessToken(c)
+		require.Equal(t, http.StatusOK, w.Code)
+		return w
+	}
+
+	first := makeRequest()
+	second := makeRequest()
+
+	require.Equal(t, 1, queryStub.createTenantCalls)
+	require.Equal(t, 1, queryStub.createClaimCalls)
+	require.Contains(t, cacheStub.values, localClientTenantRedisKey("browser-1"))
+	require.Len(t, first.Result().Cookies(), 1)
+	require.Len(t, second.Result().Cookies(), 1)
+
+	var firstBody map[string]any
+	var secondBody map[string]any
+	require.NoError(t, json.Unmarshal(first.Body.Bytes(), &firstBody))
+	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &secondBody))
+	require.NotEmpty(t, firstBody["access_token"])
+	require.NotEmpty(t, secondBody["access_token"])
 }

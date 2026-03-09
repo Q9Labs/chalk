@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/mail"
@@ -27,6 +28,8 @@ const (
 	internalSessionCookieName = "chalk_session"
 	internalClaimCookieName   = "chalk_claim"
 	internalTenantCacheTTL    = 5 * time.Minute
+	localClientIDHeader       = "X-Chalk-Local-Client-ID"
+	localClientTenantTTL      = 7 * 24 * time.Hour
 )
 
 type internalAuthQueries interface {
@@ -56,6 +59,11 @@ type InternalAuthHandler struct {
 	apiKeySvc    *auth.APIKeyService
 	redis        internalAuthCache
 	resendClient *email.ResendClient
+}
+
+type localClientTenantBootstrap struct {
+	TenantID    uuid.UUID `json:"tenant_id"`
+	ClaimSecret string    `json:"claim_secret"`
 }
 
 func NewInternalAuthHandler(
@@ -289,15 +297,26 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 
 	// 3) No session/claim yet: create a temporary internal tenant + claim cookie.
 	if tenantID == uuid.Nil {
-		tenant, claimSecret, err := h.createInternalTenantWithClaim(ctx)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to initialize workspace"})
-			return
-		}
-		tenantID = tenant.ID
-		subject = "claim:" + tenant.ID.String()
+		localClientID := strings.TrimSpace(c.GetHeader(localClientIDHeader))
+		if bootstrap, ok := h.getCachedLocalClientTenant(ctx, c.Request, localClientID); ok {
+			tenantID = bootstrap.TenantID
+			subject = "claim:" + tenantID.String()
+			h.setCookie(c, internalClaimCookieName, bootstrap.ClaimSecret, time.Now().Add(localClientTenantTTL))
+		} else {
+			tenant, claimSecret, err := h.createInternalTenantWithClaim(ctx)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to initialize workspace"})
+				return
+			}
+			tenantID = tenant.ID
+			subject = "claim:" + tenant.ID.String()
 
-		h.setCookie(c, internalClaimCookieName, claimSecret, time.Now().Add(7*24*time.Hour))
+			if localClientID != "" {
+				h.setCachedLocalClientTenant(ctx, c.Request, localClientID, tenant.ID, claimSecret)
+			}
+
+			h.setCookie(c, internalClaimCookieName, claimSecret, time.Now().Add(localClientTenantTTL))
+		}
 	}
 
 	claims := domainAuth.Claims{
@@ -424,38 +443,44 @@ func (h *InternalAuthHandler) tryClaimTenant(ctx context.Context, claimSecret st
 }
 
 func (h *InternalAuthHandler) setCookie(c *gin.Context, name, value string, expiresAt time.Time) {
-	secure := h.cookieSecure()
-	c.SetSameSite(h.cookieSameSite())
+	secure := h.cookieSecure(c.Request)
+	c.SetSameSite(h.cookieSameSite(c.Request))
 	c.SetCookie(
 		name,
 		value,
 		int(time.Until(expiresAt).Seconds()),
 		"/",
-		h.cookieDomain(),
+		h.cookieDomain(c.Request),
 		secure,
 		true, // httpOnly
 	)
 }
 
 func (h *InternalAuthHandler) clearCookie(c *gin.Context, name string) {
-	secure := h.cookieSecure()
-	c.SetSameSite(h.cookieSameSite())
-	c.SetCookie(name, "", -1, "/", h.cookieDomain(), secure, true)
+	secure := h.cookieSecure(c.Request)
+	c.SetSameSite(h.cookieSameSite(c.Request))
+	c.SetCookie(name, "", -1, "/", h.cookieDomain(c.Request), secure, true)
 }
 
-func (h *InternalAuthHandler) cookieDomain() string {
+func (h *InternalAuthHandler) cookieDomain(r *http.Request) string {
+	if isLocalRequest(r) {
+		return ""
+	}
 	if h.cfg == nil {
 		return ""
 	}
 	return h.cfg.Auth.CookieDomain
 }
 
-func (h *InternalAuthHandler) cookieSecure() bool {
+func (h *InternalAuthHandler) cookieSecure(r *http.Request) bool {
+	if isLocalRequest(r) {
+		return false
+	}
 	return h.cfg != nil && h.cfg.Server.Env == "production"
 }
 
-func (h *InternalAuthHandler) cookieSameSite() http.SameSite {
-	if h.cookieSecure() {
+func (h *InternalAuthHandler) cookieSameSite(r *http.Request) http.SameSite {
+	if h.cookieSecure(r) {
 		return http.SameSiteNoneMode
 	}
 	return http.SameSiteLaxMode
@@ -493,6 +518,50 @@ func (h *InternalAuthHandler) setCachedInternalTenantByOwner(ctx context.Context
 
 func magicLinkRedisKey(token string) string {
 	return "internal_auth:magic:" + sha256Hex(token)
+}
+
+func localClientTenantRedisKey(clientID string) string {
+	return "internal_auth:local_client:v1:" + clientID
+}
+
+func (h *InternalAuthHandler) getCachedLocalClientTenant(ctx context.Context, r *http.Request, clientID string) (*localClientTenantBootstrap, bool) {
+	if h.redis == nil || clientID == "" || !isLocalRequest(r) {
+		return nil, false
+	}
+
+	payload, err := h.redis.Get(ctx, localClientTenantRedisKey(clientID))
+	if err != nil || payload == "" {
+		return nil, false
+	}
+
+	var bootstrap localClientTenantBootstrap
+	if err := json.Unmarshal([]byte(payload), &bootstrap); err != nil {
+		_ = h.redis.Del(ctx, localClientTenantRedisKey(clientID))
+		return nil, false
+	}
+
+	if bootstrap.TenantID == uuid.Nil || strings.TrimSpace(bootstrap.ClaimSecret) == "" {
+		_ = h.redis.Del(ctx, localClientTenantRedisKey(clientID))
+		return nil, false
+	}
+
+	return &bootstrap, true
+}
+
+func (h *InternalAuthHandler) setCachedLocalClientTenant(ctx context.Context, r *http.Request, clientID string, tenantID uuid.UUID, claimSecret string) {
+	if h.redis == nil || clientID == "" || claimSecret == "" || !isLocalRequest(r) {
+		return
+	}
+
+	payload, err := json.Marshal(localClientTenantBootstrap{
+		TenantID:    tenantID,
+		ClaimSecret: claimSecret,
+	})
+	if err != nil {
+		return
+	}
+
+	_ = h.redis.Set(ctx, localClientTenantRedisKey(clientID), string(payload), localClientTenantTTL)
 }
 
 func sha256Hex(s string) string {
@@ -614,6 +683,34 @@ func isLocalMagicLinkHost(host string) bool {
 
 	ip := net.ParseIP(normalizedHost)
 	return ip != nil && ip.IsLoopback()
+}
+
+func isLocalRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" {
+		return false
+	}
+
+	parsedHost := host
+	if strings.Contains(host, "://") {
+		if parsed, err := url.Parse(host); err == nil {
+			parsedHost = parsed.Host
+		}
+	}
+
+	hostname := parsedHost
+	if value, _, err := net.SplitHostPort(parsedHost); err == nil {
+		hostname = value
+	}
+	hostname = strings.Trim(hostname, "[]")
+	return isLocalMagicLinkHost(hostname)
 }
 
 func appendURLQuery(rawURL, key, value string) string {

@@ -8,6 +8,7 @@ type JoinContextV1 = {
 };
 
 const JOIN_CONTEXT_KEY = "chalk_join_context_v1";
+const LOCAL_CLIENT_ID_KEY = "chalk_local_client_id_v1";
 const verifiedMagicLinks = new Set<string>();
 const inFlightMagicLinkVerifications = new Map<string, Promise<void>>();
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
@@ -42,7 +43,26 @@ export function getApiUrl() {
   return resolveApiUrl(import.meta.env.VITE_API_URL, typeof window === "undefined" ? undefined : window.location.hostname);
 }
 
-export function getJoinContext(): JoinContextV1 | null {
+export function getOrCreateLocalClientId() {
+  if (typeof window === "undefined" || !isLocalHost(window.location.hostname)) {
+    return null;
+  }
+
+  try {
+    const existing = localStorage.getItem(LOCAL_CLIENT_ID_KEY);
+    if (existing) {
+      return existing;
+    }
+
+    const next = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `chalk-local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(LOCAL_CLIENT_ID_KEY, next);
+    return next;
+  } catch {
+    return null;
+  }
+}
+
+function readJoinContext(): JoinContextV1 | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(JOIN_CONTEXT_KEY);
@@ -51,6 +71,20 @@ export function getJoinContext(): JoinContextV1 | null {
   } catch {
     return null;
   }
+}
+
+function isJoinContextActiveForCurrentRoom(ctx: JoinContextV1) {
+  if (typeof window === "undefined") return true;
+  if (!ctx.roomName) return false;
+  if (!window.location.pathname.startsWith("/room/")) return false;
+  const currentRoomName = decodeURIComponent(window.location.pathname.slice("/room/".length));
+  return currentRoomName === ctx.roomName;
+}
+
+export function getJoinContext(): JoinContextV1 | null {
+  const ctx = readJoinContext();
+  if (!ctx) return null;
+  return isJoinContextActiveForCurrentRoom(ctx) ? ctx : null;
 }
 
 export function setJoinContext(ctx: JoinContextV1) {
@@ -64,9 +98,15 @@ export function clearJoinContext() {
 }
 
 export async function fetchInternalAccessToken(apiUrl: string) {
+  const localClientId = getOrCreateLocalClientId();
   const res = await fetch(`${apiUrl}/api/v1/internal/auth/access-token`, {
     method: "GET",
     credentials: "include",
+    headers: localClientId
+      ? {
+          "X-Chalk-Local-Client-ID": localClientId,
+        }
+      : undefined,
   });
   if (!res.ok) {
     throw new Error(`auth failed (${res.status})`);
