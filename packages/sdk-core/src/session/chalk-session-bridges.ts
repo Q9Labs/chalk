@@ -101,6 +101,15 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
         return;
       }
 
+      const annotationState = annotations.getState();
+      if (annotationState.isSessionActive && annotationState.sharerParticipantId === participantId && annotationState.shareSessionId) {
+        ctx.complete("success", {
+          shareSessionId: annotationState.shareSessionId,
+          result: "ignored_duplicate_local_share",
+        });
+        return;
+      }
+
       const shareSessionId = createShareSessionId();
       annotations.startSession(shareSessionId, participantId);
 

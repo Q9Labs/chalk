@@ -184,6 +184,8 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
       const result = await this.room.startScreenShare(options);
 
       if (result && this.room.localParticipant) {
+        const alreadyStartedLocally = this.getState().isActive && this.getState().isLocalSharer && this.getState().sharerParticipantId === this.room.localParticipant.id;
+
         this.setState({
           isActive: true,
           isStarting: false,
@@ -192,10 +194,13 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
           videoTrack: this.room.localParticipant.screenShareTrack ?? null,
           audioTrack: this.room.localParticipant.screenShareAudioTrack ?? null,
         });
-        this.events.emit("started", {
-          participantId: this.room.localParticipant.id,
-          isLocal: true,
-        });
+
+        if (!alreadyStartedLocally) {
+          this.events.emit("started", {
+            participantId: this.room.localParticipant.id,
+            isLocal: true,
+          });
+        }
       } else {
         this.setState({ isStarting: false });
         this.openAnnotationsAfterStart = false;

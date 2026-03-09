@@ -14,16 +14,24 @@ class MockRoom extends EventEmitter {
   public localParticipant: ParticipantLike | null;
   public participants = new Map<string, ParticipantLike>();
   public stopCalled = false;
+  private readonly emitParticipantUpdatedOnStart: boolean;
 
-  constructor(localParticipant: ParticipantLike) {
+  constructor(localParticipant: ParticipantLike, options?: { emitParticipantUpdatedOnStart?: boolean }) {
     super();
     this.localParticipant = localParticipant;
     this.participants.set(localParticipant.id, localParticipant);
+    this.emitParticipantUpdatedOnStart = options?.emitParticipantUpdatedOnStart ?? false;
   }
 
   async startScreenShare(): Promise<boolean> {
     if (!this.localParticipant) return false;
     this.localParticipant.isScreenSharing = true;
+    if (this.emitParticipantUpdatedOnStart) {
+      this.emit("participant.updated", {
+        participantId: this.localParticipant.id,
+        participant: this.localParticipant,
+      });
+    }
     return true;
   }
 
@@ -81,5 +89,40 @@ describe("ScreenShareManager", () => {
     expect(manager.isLocalSharing).toBe(false);
     await manager.stop();
     expect(room.stopCalled).toBe(false);
+  });
+
+  it("does not emit duplicate started events when the room updates local sharing during start", async () => {
+    const room = new MockRoom(
+      {
+        id: "local",
+        isLocal: true,
+        isScreenSharing: false,
+      },
+      { emitParticipantUpdatedOnStart: true },
+    );
+
+    const manager = new ScreenShareManager();
+    manager.attachRoom(room as any);
+
+    const startedEvents: Array<{ participantId: string; isLocal: boolean }> = [];
+    manager.on("started", (event) => {
+      startedEvents.push(event);
+    });
+
+    const started = await manager.start();
+
+    expect(started).toBe(true);
+    expect(startedEvents).toEqual([
+      {
+        participantId: "local",
+        isLocal: true,
+      },
+    ]);
+    expect(manager.getState()).toMatchObject({
+      isActive: true,
+      isStarting: false,
+      isLocalSharer: true,
+      sharerParticipantId: "local",
+    });
   });
 });

@@ -56,10 +56,9 @@ function PictureInPictureStage({ source, className, hideOverlay }: { source: Pic
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4">
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-white">{source?.title ?? "Waiting for video"}</p>
-              {source?.subtitle ? <p className="truncate text-xs text-white/70">{source.subtitle}</p> : null}
+              <p className="truncate text-[15px] font-medium text-white drop-shadow-md">{source?.title ?? "Waiting for video"}</p>
             </div>
-            {source?.isMuted ? <div className="rounded-full bg-black/50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/80">Muted</div> : null}
+            {source?.isMuted ? <div className="rounded-full bg-black/60 shadow-lg backdrop-blur-md px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/80">Muted</div> : null}
           </div>
         </div>
       ) : null}
@@ -170,9 +169,9 @@ export function PictureInPictureWindow({ phase, source, previewSource, controls,
   }, [controls, onReturnToTab, phase]);
 
   return (
-    <div className="flex h-screen w-full flex-col bg-background p-3 text-foreground gap-3">
+    <div className="flex h-screen w-full flex-col bg-background text-foreground chalk-theme-transition">
       {/* Video Stage Container */}
-      <div className="relative flex-1 overflow-hidden rounded-[28px] border border-border shadow-2xl bg-[var(--chalk-bg-tile)]">
+      <div className="relative flex-1 overflow-hidden rounded-[24px] border border-border bg-[var(--chalk-bg-tile)] m-3 mb-0 shadow-2xl">
         <PictureInPictureStage source={source} className="h-full w-full border-0" hideOverlay />
 
         {/* Top Right: Mute Indicator */}
@@ -196,7 +195,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, controls,
       </div>
 
       {/* Bottom Controls */}
-      <div className="flex shrink-0 items-center justify-center gap-2 pb-1">
+      <div className="flex shrink-0 items-center justify-center gap-2 pb-4 pt-4 px-4 bg-background">
         {actionButtons.map((button) => (button ? <ControlButton key={button.key} icon={button.icon} label={button.label} active={button.active} onClick={button.onClick} size="md" activeClassName={button.activeClassName} /> : null))}
       </div>
     </div>
