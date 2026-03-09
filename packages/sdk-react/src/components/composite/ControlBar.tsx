@@ -462,8 +462,6 @@ export const ControlBar = React.memo(
 							icon={<SmileIcon />}
 							label="Reactions"
 							onClick={onOpenReactions}
-							active={true}
-							activeClassName="bg-white dark:bg-zinc-900 shadow-md hover:bg-zinc-50 dark:hover:bg-zinc-800 text-foreground"
 							showLabel={showLabels}
 						/>
 					);
@@ -511,8 +509,6 @@ export const ControlBar = React.memo(
 							icon={<Settings01Icon size={20} />}
 							label="Settings"
 							onClick={onOpenSettings}
-							active={true}
-							activeClassName="bg-white dark:bg-zinc-900 shadow-md hover:bg-zinc-50 dark:hover:bg-zinc-800 text-foreground"
 							showLabel={showLabels}
 						/>
 					);
@@ -543,8 +539,6 @@ export const ControlBar = React.memo(
 						<ControlButton
 							key="thumbsup"
 							icon={<ThumbsUpIcon size={20} className="text-[#FFD700]" />}
-							active={true}
-							activeClassName="bg-white dark:bg-zinc-900 shadow-md hover:bg-zinc-50 dark:hover:bg-zinc-800 text-foreground"
 							label="Reactions"
 							onClick={onOpenReactions}
 						/>
