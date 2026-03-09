@@ -79,4 +79,29 @@ describe('ParticipantList', () => {
     await user.click(getByLabelText('Mute volume'));
     expect(onParticipantVolumeChange).toHaveBeenCalledWith('2', 0);
   });
+
+  it('dedupes duplicate participant ids before rendering rows', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const duplicateParticipants = [
+      { id: '1', displayName: 'Alice', role: 'host' as const, isLocal: true },
+      { id: '1', displayName: 'Alice duplicate', role: 'host' as const, isLocal: true },
+      { id: '2', displayName: 'Bob' },
+    ];
+
+    const { getAllByLabelText, queryByText } = render(
+      <ParticipantList participants={duplicateParticipants} />
+    );
+
+    expect(getAllByLabelText(/^Avatar for /)).toHaveLength(2);
+    expect(queryByText('Alice')).toBeNull();
+    expect(queryByText('Alice duplicate')).toBeDefined();
+    expect(queryByText('Bob')).toBeDefined();
+    expect(
+      consoleError.mock.calls.some(([message]) =>
+        String(message).includes('Each child in a list should have a unique "key" prop.')
+      )
+    ).toBe(false);
+
+    consoleError.mockRestore();
+  });
 });

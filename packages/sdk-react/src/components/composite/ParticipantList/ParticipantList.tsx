@@ -26,6 +26,7 @@ export interface ParticipantListProps {
 	onRemoveParticipant?: (id: string) => void;
 	onMakeHost?: (id: string) => void;
 	onMakeCoHost?: (id: string) => void;
+	onUpdateDisplayName?: (name: string) => void;
 	onAddPeople?: () => void;
 	canManageParticipants?: boolean;
 	searchable?: boolean;
@@ -40,12 +41,17 @@ export interface ParticipantListProps {
 	title?: string;
 }
 
+function getParticipantIdentity(participant: Participant): string {
+	return participant.id || participant.displayName || '__unknown-participant__';
+}
+
 export const ParticipantList = React.memo(({
 	participants,
 	onMuteParticipant,
 	onRemoveParticipant,
 	onMakeHost,
 	onMakeCoHost,
+	onUpdateDisplayName,
 	onAddPeople,
 	participantVolumes,
 	onParticipantVolumeChange,
@@ -63,7 +69,13 @@ export const ParticipantList = React.memo(({
 	const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
 	const filteredParticipants = useMemo(() => {
-		let sorted = [...participants].sort((a, b) => {
+		const uniqueParticipants = Array.from(
+			new Map(
+				participants.map((participant) => [getParticipantIdentity(participant), participant]),
+			).values(),
+		);
+
+		let sorted = [...uniqueParticipants].sort((a, b) => {
 			const aScore = a.role === 'host' ? 2 : a.role === 'co-host' ? 1 : 0;
 			const bScore = b.role === 'host' ? 2 : b.role === 'co-host' ? 1 : 0;
 
@@ -97,7 +109,7 @@ export const ParticipantList = React.memo(({
 			) : (
 				filteredParticipants.map((participant) => (
 					<ParticipantRow
-						key={participant.id}
+						key={getParticipantIdentity(participant)}
 						participant={participant}
 						variant={variant}
 						canManageParticipants={canManageParticipants}
@@ -105,6 +117,7 @@ export const ParticipantList = React.memo(({
 						onRemoveParticipant={onRemoveParticipant}
 						onMakeHost={onMakeHost}
 						onMakeCoHost={onMakeCoHost}
+						onUpdateDisplayName={onUpdateDisplayName}
 						participantVolumes={participantVolumes}
 						onParticipantVolumeChange={onParticipantVolumeChange}
 						menuOpen={activeMenuId === participant.id}
