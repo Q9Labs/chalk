@@ -24,6 +24,16 @@ interface MeetingRoomOverlaysProps {
   volume?: number;
 }
 
+export function getMeetingShareLink(locationHref: string) {
+  try {
+    const url = new URL(locationHref);
+    url.searchParams.delete("autoJoin");
+    return url.toString();
+  } catch {
+    return locationHref;
+  }
+}
+
 export function MeetingRoomOverlays({
   connectionState,
   onRetryConnection,
@@ -43,7 +53,10 @@ export function MeetingRoomOverlays({
   selectedAudioOutput,
   volume = 1,
 }: MeetingRoomOverlaysProps) {
-  const meetingLink = typeof window !== "undefined" ? window.location.href : "";
+  const meetingLink =
+    typeof window !== "undefined"
+      ? getMeetingShareLink(window.location.href)
+      : "";
 
   return (
     <>
