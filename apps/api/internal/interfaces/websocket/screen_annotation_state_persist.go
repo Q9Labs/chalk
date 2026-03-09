@@ -68,8 +68,29 @@ func (h *Hub) persistScreenAnnotationState(roomID uuid.UUID) {
 	}
 
 	if err := h.screenAnnotationStore.Save(h.ctxOrBackground(), roomID, data); err != nil {
-		h.logger.Error("failed to persist screen annotation state", "room_id", roomID, "error", err.Error())
+		h.logger.Error("failed to persist screen annotation state",
+			"event", "annotation.state.persist",
+			"room_id", roomID,
+			"share_session_id", snapshot.ShareSessionID,
+			"sharer_participant_id", snapshot.SharerParticipantID,
+			"access_mode", snapshot.AccessMode,
+			"last_seq", snapshot.LastSeq,
+			"item_count", len(rawItems),
+			"outcome", "error",
+			"error", err.Error(),
+		)
+		return
 	}
+	h.logger.Info("persisted screen annotation state",
+		"event", "annotation.state.persist",
+		"room_id", roomID,
+		"share_session_id", snapshot.ShareSessionID,
+		"sharer_participant_id", snapshot.SharerParticipantID,
+		"access_mode", snapshot.AccessMode,
+		"last_seq", snapshot.LastSeq,
+		"item_count", len(rawItems),
+		"outcome", "success",
+	)
 }
 
 func (h *Hub) clearPersistedScreenAnnotationState(roomID uuid.UUID) {
@@ -77,7 +98,13 @@ func (h *Hub) clearPersistedScreenAnnotationState(roomID uuid.UUID) {
 		return
 	}
 	if err := h.screenAnnotationStore.Save(h.ctxOrBackground(), roomID, nil); err != nil {
-		h.logger.Error("failed to clear persisted screen annotation state", "room_id", roomID, "error", err.Error())
+		h.logger.Error("failed to clear persisted screen annotation state",
+			"event", "annotation.state.persist",
+			"room_id", roomID,
+			"outcome", "error",
+			"reason", "clear_persisted_state_failed",
+			"error", err.Error(),
+		)
 	}
 }
 
@@ -94,11 +121,27 @@ func (h *Hub) getOrRestoreScreenAnnotationState(roomID uuid.UUID) *ScreenAnnotat
 
 	loaded, err := h.screenAnnotationStore.Load(h.ctxOrBackground(), roomID)
 	if err != nil || len(loaded) == 0 {
+		if err != nil {
+			h.logger.Error("failed to restore screen annotation state",
+				"event", "annotation.state.restore",
+				"room_id", roomID,
+				"outcome", "error",
+				"error", err.Error(),
+			)
+		}
 		return nil
 	}
 
 	var persisted persistedScreenAnnotationState
 	if err := json.Unmarshal(loaded, &persisted); err != nil || persisted.ShareSessionID == "" {
+		if err != nil {
+			h.logger.Error("failed to decode persisted screen annotation state",
+				"event", "annotation.state.restore",
+				"room_id", roomID,
+				"outcome", "error",
+				"error", err.Error(),
+			)
+		}
 		return nil
 	}
 
@@ -125,6 +168,16 @@ func (h *Hub) getOrRestoreScreenAnnotationState(roomID uuid.UUID) *ScreenAnnotat
 	h.mu.Lock()
 	h.screenAnnotationState[roomID] = state
 	h.mu.Unlock()
+	h.logger.Info("restored screen annotation state",
+		"event", "annotation.state.restore",
+		"room_id", roomID,
+		"share_session_id", state.ShareSessionID,
+		"sharer_participant_id", state.SharerParticipantID,
+		"access_mode", state.AccessMode,
+		"last_seq", state.LastSeq,
+		"item_count", len(state.Items),
+		"outcome", "success",
+	)
 	return state
 }
 

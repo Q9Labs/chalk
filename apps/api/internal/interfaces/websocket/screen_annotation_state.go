@@ -56,6 +56,13 @@ func (h *Hub) StartScreenAnnotationSession(roomID uuid.UUID, payload AnnotationS
 	h.mu.Lock()
 	h.screenAnnotationState[roomID] = newScreenAnnotationState(payload.ShareSessionID, payload.SharerParticipantID, payload.AccessMode)
 	h.mu.Unlock()
+	h.logger.Info("started screen annotation session",
+		"event", "annotation.session.state.start",
+		"room_id", roomID,
+		"share_session_id", payload.ShareSessionID,
+		"sharer_participant_id", payload.SharerParticipantID,
+		"access_mode", payload.AccessMode,
+	)
 
 	go h.scheduleScreenAnnotationPersist(roomID)
 
@@ -77,6 +84,15 @@ func (h *Hub) EndScreenAnnotationSession(roomID uuid.UUID, shareSessionID string
 	delete(h.screenAnnotationState, roomID)
 	h.stopScreenAnnotationPersistTimerLocked(roomID)
 	h.mu.Unlock()
+	h.logger.Info("ended screen annotation session",
+		"event", "annotation.session.state.end",
+		"room_id", roomID,
+		"share_session_id", shareSessionID,
+		"sharer_participant_id", state.SharerParticipantID,
+		"access_mode", state.AccessMode,
+		"last_seq", state.LastSeq,
+		"item_count", len(state.Items),
+	)
 
 	h.clearPersistedScreenAnnotationState(roomID)
 	return true

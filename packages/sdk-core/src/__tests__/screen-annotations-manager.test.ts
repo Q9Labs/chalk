@@ -1,6 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { EventEmitter } from "node:events";
 import { ScreenAnnotationsManager } from "../managers/screen-annotations-manager";
+import { wideEvents } from "../wide-events";
 
 type AnnotationAccessMode = "all" | "sharer_only" | "off";
 
@@ -40,6 +41,8 @@ class MockRoom extends EventEmitter {
     this.startCalls.push({ shareSessionId, accessMode });
   }
 
+  requestAnnotationSync(): void {}
+
   _setAnnotationSession(
     shareSessionId: string | null,
     sharerParticipantId: string | null,
@@ -54,6 +57,11 @@ class MockRoom extends EventEmitter {
 }
 
 describe("ScreenAnnotationsManager", () => {
+  afterEach(() => {
+    wideEvents.configure({ enabled: false, handler: undefined });
+    wideEvents.reset();
+  });
+
   it("activates the local sharer session immediately before the server echo", () => {
     const room = new MockRoom();
     const manager = new ScreenAnnotationsManager();
@@ -107,6 +115,36 @@ describe("ScreenAnnotationsManager", () => {
       isOpen: true,
       isSessionActive: false,
       canDraw: false,
+    });
+  });
+
+  it("emits wide events for local annotation lifecycle actions", () => {
+    const events: Array<{ eventType: string; data: Record<string, unknown> }> = [];
+    wideEvents.configure({
+      enabled: true,
+      handler: (event) => {
+        events.push({ eventType: event.eventType, data: event.data });
+      },
+    });
+
+    const room = new MockRoom();
+    const manager = new ScreenAnnotationsManager();
+    manager.attachRoom(room as any);
+
+    manager.open();
+    manager.startSession("share-3", "local", "all");
+    manager.requestSync();
+
+    expect(events.map((event) => event.eventType)).toEqual([
+      "annotations.open",
+      "annotations.session.start",
+      "annotations.sync.request",
+    ]);
+    expect(events[1]?.data).toMatchObject({
+      requestedShareSessionId: "share-3",
+      requestedSharerParticipantId: "local",
+      requestedAccessMode: "all",
+      result: "sent",
     });
   });
 });

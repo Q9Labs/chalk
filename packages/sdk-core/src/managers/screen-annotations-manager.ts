@@ -19,6 +19,7 @@ import type {
   ScreenAnnotationUpdate,
 } from "../types/entities/annotations.ts";
 import { TypedEventEmitter } from "../utils/typed-emitter";
+import { wideEvents } from "../wide-events/index.ts";
 
 export interface ScreenAnnotationsState {
   shareSessionId: string | null;
@@ -89,6 +90,30 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
     this.roomUnsubscribers = [];
   }
 
+  private emitTelemetry(
+    eventType: string,
+    data: Record<string, unknown> = {},
+  ): void {
+    if (!wideEvents.isEnabled) {
+      return;
+    }
+
+    const state = this.getState();
+    const ctx = wideEvents.start(eventType);
+    ctx.merge({
+      shareSessionId: state.shareSessionId,
+      sharerParticipantId: state.sharerParticipantId,
+      accessMode: state.accessMode,
+      isSessionActive: state.isSessionActive,
+      isOpen: state.isOpen,
+      canDraw: state.canDraw,
+      itemCount: state.items.length,
+      cursorCount: this.cursors.size,
+      ...data,
+    });
+    ctx.complete("success");
+  }
+
   private syncDerivedState(): void {
     const state = this.getState();
     this.setState({
@@ -134,6 +159,12 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
           isSessionActive: true,
         });
         this.syncDerivedState();
+        this.emitTelemetry("annotations.session.started", {
+          shareSessionId: session.shareSessionId,
+          sharerParticipantId: session.sharerParticipantId,
+          accessMode: session.accessMode,
+          transport: "ws",
+        });
         this.events.emit("session:started", session);
       }),
     );
@@ -141,6 +172,11 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
     this.roomUnsubscribers.push(
       room.on("annotation.session.ended", (session) => {
         this.resetSession(this.getState().isOpen);
+        this.emitTelemetry("annotations.session.ended", {
+          shareSessionId: session.shareSessionId,
+          endedAt: session.endedAt.toISOString(),
+          transport: "ws",
+        });
         this.events.emit("session:ended", session);
       }),
     );
@@ -158,6 +194,14 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
           isSessionActive: true,
         });
         this.syncDerivedState();
+        this.emitTelemetry("annotations.snapshot", {
+          shareSessionId: snapshot.shareSessionId,
+          sharerParticipantId: snapshot.sharerParticipantId,
+          accessMode: snapshot.accessMode,
+          lastSeq: snapshot.lastSeq,
+          itemCount: snapshot.items.length,
+          transport: "ws",
+        });
         this.events.emit("snapshot", {
           ...snapshot,
           items: snapshot.items as ScreenAnnotationItem[],
@@ -175,6 +219,15 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
           isSessionActive: true,
         });
         this.syncDerivedState();
+        this.emitTelemetry("annotations.update.remote", {
+          shareSessionId: update.shareSessionId,
+          sharerParticipantId: update.sharerParticipantId,
+          participantId: update.participantId,
+          seq: update.seq,
+          syncAll: update.syncAll,
+          itemCount: update.items.length,
+          transport: "ws",
+        });
         this.events.emit("update", {
           ...update,
           items: update.items as ScreenAnnotationItem[],
@@ -194,6 +247,12 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
       room.on("annotation.access.changed", (change) => {
         this.setState({ accessMode: change.accessMode });
         this.syncDerivedState();
+        this.emitTelemetry("annotations.access.changed", {
+          shareSessionId: change.shareSessionId,
+          accessMode: change.accessMode,
+          changedBy: change.changedBy,
+          transport: "ws",
+        });
         this.events.emit("access:changed", change);
       }),
     );
@@ -208,10 +267,16 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
 
   open(): void {
     this.setState({ isOpen: true });
+    this.emitTelemetry("annotations.open", {
+      trigger: "manager",
+    });
   }
 
   close(): void {
     this.setState({ isOpen: false });
+    this.emitTelemetry("annotations.close", {
+      trigger: "manager",
+    });
   }
 
   toggle(): void {
@@ -228,6 +293,12 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
     }
 
     if (this.room.localParticipant?.id !== sharerParticipantId) {
+      this.emitTelemetry("annotations.session.start", {
+        requestedShareSessionId: shareSessionId,
+        requestedSharerParticipantId: sharerParticipantId,
+        requestedAccessMode: accessMode,
+        result: "ignored_non_local_sharer",
+      });
       return;
     }
 
@@ -244,6 +315,14 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
       isSessionActive: true,
     });
     this.syncDerivedState();
+    this.emitTelemetry("annotations.session.start", {
+      requestedShareSessionId: shareSessionId,
+      requestedSharerParticipantId: sharerParticipantId,
+      requestedAccessMode: accessMode,
+      trigger: "local",
+      transport: "manager",
+      result: "sent",
+    });
     this.room.startAnnotationSession(shareSessionId, accessMode);
   }
 
@@ -252,7 +331,13 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
       throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
     }
 
-    this.room.endAnnotationSession(shareSessionId ?? this.getState().shareSessionId ?? undefined);
+    const resolvedShareSessionId =
+      shareSessionId ?? this.getState().shareSessionId ?? undefined;
+    this.emitTelemetry("annotations.session.end", {
+      requestedShareSessionId: resolvedShareSessionId ?? null,
+      transport: "manager",
+    });
+    this.room.endAnnotationSession(resolvedShareSessionId);
   }
 
   requestSync(): void {
@@ -260,6 +345,10 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
       throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
     }
 
+    this.emitTelemetry("annotations.sync.request", {
+      requestedShareSessionId: this.getState().shareSessionId,
+      transport: "manager",
+    });
     this.room.requestAnnotationSync();
   }
 
@@ -275,6 +364,14 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
 
     const seq = Date.now();
     this.setState({ items, lastSeq: seq });
+    this.emitTelemetry("annotations.update.local", {
+      shareSessionId: state.shareSessionId,
+      sharerParticipantId: state.sharerParticipantId,
+      seq,
+      syncAll: true,
+      itemCount: items.length,
+      transport: "manager",
+    });
     this.room.sendAnnotationUpdate({
       shareSessionId: state.shareSessionId,
       sharerParticipantId: state.sharerParticipantId,
@@ -295,6 +392,10 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
     }
 
     this.setState({ items: [], lastSeq: Date.now() });
+    this.emitTelemetry("annotations.clear", {
+      shareSessionId,
+      transport: "manager",
+    });
     this.room.clearAnnotations(shareSessionId);
   }
 
@@ -326,6 +427,11 @@ export class ScreenAnnotationsManager extends StateContainer<ScreenAnnotationsSt
       return;
     }
 
+    this.emitTelemetry("annotations.access.set", {
+      shareSessionId,
+      nextAccessMode: accessMode,
+      transport: "manager",
+    });
     this.room.setAnnotationAccessMode(accessMode, shareSessionId);
   }
 

@@ -5,6 +5,7 @@ import type {
   ScreenAnnotationTool,
 } from "@q9labs/chalk-core";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSession } from "../../../context/chalk-provider";
 import { useParticipants } from "../../../hooks/participants/useParticipants";
 import { useScreenAnnotations } from "../../../hooks/features/useScreenAnnotations";
 import { useScreenShare } from "../../../hooks/stream/useScreenShare";
@@ -49,6 +50,7 @@ interface ScreenAnnotationsLayerProps {
 
 export const ScreenAnnotationsLayer = memo(
   ({ enabled, className }: ScreenAnnotationsLayerProps) => {
+    const session = useSession();
     const { localParticipant } = useParticipants();
     const {
       isActive: isShareActive,
@@ -64,6 +66,7 @@ export const ScreenAnnotationsLayer = memo(
       isSessionActive,
       items,
       open,
+      shareSessionId,
       sharerParticipantId,
       startSession,
       replaceItems,
@@ -89,6 +92,40 @@ export const ScreenAnnotationsLayer = memo(
     const isHost = localParticipant?.role === "host";
     const interactive = enabled && isOpen && canDraw && isSessionActive;
     const localSharerParticipantId = localParticipant?.id ?? null;
+    const recordUiBreadcrumb = useCallback(
+      (message: string, data: Record<string, unknown> = {}) => {
+        session.recordIncidentBreadcrumb({
+          category: "annotations_ui",
+          message,
+          data: {
+            enabled,
+            isShareActive,
+            isLocalSharing,
+            isSessionActive,
+            isOpen,
+            canDraw,
+            accessMode,
+            shareSessionId,
+            sharerParticipantId,
+            localSharerParticipantId,
+            ...data,
+          },
+        });
+      },
+      [
+        accessMode,
+        canDraw,
+        enabled,
+        isLocalSharing,
+        isOpen,
+        isSessionActive,
+        isShareActive,
+        localSharerParticipantId,
+        session,
+        shareSessionId,
+        sharerParticipantId,
+      ],
+    );
 
     useEffect(() => {
       if (!enabled || !isSessionActive) {
@@ -105,11 +142,15 @@ export const ScreenAnnotationsLayer = memo(
       }
 
       if (isLocalSharing && localSharerParticipantId && sharerParticipantId === localSharerParticipantId) {
+        recordUiBreadcrumb("Annotation sync skipped for local owner");
         return;
       }
 
+      recordUiBreadcrumb("Annotation sync requested from active layer", {
+        trigger: "active-session-effect",
+      });
       requestSync();
-    }, [enabled, isLocalSharing, isSessionActive, localSharerParticipantId, requestSync, sharerParticipantId]);
+    }, [enabled, isLocalSharing, isSessionActive, localSharerParticipantId, recordUiBreadcrumb, requestSync, sharerParticipantId]);
 
     useEffect(() => {
       if (!isSessionActive && previousSessionActiveRef.current) {
@@ -128,6 +169,9 @@ export const ScreenAnnotationsLayer = memo(
       }
 
       if (!isLocalSharing || !localSharerParticipantId) {
+        recordUiBreadcrumb("Annotation sync requested while waiting for remote session", {
+          trigger: "inactive-share-effect",
+        });
         requestSync();
         return;
       }
@@ -139,6 +183,10 @@ export const ScreenAnnotationsLayer = memo(
 
       const timeoutId = window.setTimeout(() => {
         fallbackStartRef.current = fallbackKey;
+        recordUiBreadcrumb("Annotation fallback starting local session", {
+          trigger: "fallback-timeout",
+          fallbackKey,
+        });
         startSession(createShareSessionId(), localSharerParticipantId, accessMode);
       }, 350);
 
@@ -150,6 +198,7 @@ export const ScreenAnnotationsLayer = memo(
       isSessionActive,
       isShareActive,
       localSharerParticipantId,
+      recordUiBreadcrumb,
       requestSync,
       startSession,
     ]);
@@ -370,11 +419,21 @@ export const ScreenAnnotationsLayer = memo(
         if (isLocalSharing && localSharerParticipantId) {
           const fallbackKey = `${localSharerParticipantId}:${accessMode}`;
           fallbackStartRef.current = fallbackKey;
+          recordUiBreadcrumb("Annotation toolbar open starting local session", {
+            trigger: "toolbar-open",
+            fallbackKey,
+          });
           startSession(createShareSessionId(), localSharerParticipantId, accessMode);
         } else {
+          recordUiBreadcrumb("Annotation toolbar open requesting sync", {
+            trigger: "toolbar-open",
+          });
           requestSync();
         }
       }
+      recordUiBreadcrumb("Annotation toolbar opened", {
+        trigger: "toolbar-open",
+      });
       open();
     };
 

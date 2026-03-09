@@ -324,6 +324,14 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     return this.currentSession?.connectionState ?? "disconnected";
   }
 
+  get websocketConnectionState(): SessionConnectionState {
+    return this.currentWsClient?.connectionState ?? "disconnected";
+  }
+
+  get localParticipantId(): string | null {
+    return this.currentSession?.localParticipant?.id ?? null;
+  }
+
   async removeParticipant(apiParticipantId: string): Promise<void> {
     return removeParticipantOp(this.apiClient, this.currentSession, apiParticipantId);
   }

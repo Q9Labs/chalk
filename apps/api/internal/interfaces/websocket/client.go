@@ -564,6 +564,48 @@ func (c *Client) sendErrorMessage(code, message string) {
 	c.Send(data)
 }
 
+func (c *Client) annotationStateAttrs(state *ScreenAnnotationState) []any {
+	if state == nil {
+		return []any{
+			"state_exists", false,
+		}
+	}
+
+	return []any{
+		"state_exists", true,
+		"state_share_session_id", state.ShareSessionID,
+		"state_sharer_participant_id", state.SharerParticipantID,
+		"state_access_mode", state.AccessMode,
+		"state_last_seq", state.LastSeq,
+		"state_item_count", len(state.Items),
+	}
+}
+
+func (c *Client) annotationLog(level slog.Level, msg string, attrs ...any) {
+	switch {
+	case level <= slog.LevelInfo:
+		c.logger().Info(msg, attrs...)
+	case level == slog.LevelWarn:
+		c.logger().Warn(msg, attrs...)
+	default:
+		c.logger().Error(msg, attrs...)
+	}
+
+	if !logging.AxiomEnabled() {
+		return
+	}
+
+	allAttrs := append(c.baseAttrs(), attrs...)
+	switch {
+	case level <= slog.LevelInfo:
+		logging.Stdout().Info(msg, allAttrs...)
+	case level == slog.LevelWarn:
+		logging.Stdout().Warn(msg, allAttrs...)
+	default:
+		logging.Stdout().Error(msg, allAttrs...)
+	}
+}
+
 func (c *Client) requireWhiteboardDrawAccess() bool {
 	if c.hub.CanParticipantDraw(c.roomID, c.participantID) {
 		return true
@@ -575,10 +617,24 @@ func (c *Client) requireWhiteboardDrawAccess() bool {
 func (c *Client) requireAnnotationState(shareSessionID string) (*ScreenAnnotationState, bool) {
 	state := c.hub.getOrRestoreScreenAnnotationState(c.roomID)
 	if state == nil || state.ShareSessionID == "" {
+		c.annotationLog(slog.LevelWarn, "annotation state missing",
+			append([]any{
+				"event", "annotation.state.miss",
+				"requested_share_session_id", shareSessionID,
+				"reason", "missing_state",
+			}, c.annotationStateAttrs(state)...)...,
+		)
 		c.sendAnnotationSessionEnded(shareSessionID)
 		return nil, false
 	}
 	if shareSessionID != "" && shareSessionID != state.ShareSessionID {
+		c.annotationLog(slog.LevelWarn, "annotation state stale session requested",
+			append([]any{
+				"event", "annotation.state.stale_session",
+				"requested_share_session_id", shareSessionID,
+				"reason", "requested_session_mismatch",
+			}, c.annotationStateAttrs(state)...)...,
+		)
 		c.sendAnnotationSnapshot()
 		return nil, false
 	}
@@ -593,6 +649,14 @@ func (c *Client) requireAnnotationDrawAccess(shareSessionID string) (*ScreenAnno
 	if c.hub.CanParticipantAnnotate(c.roomID, c.participantID) {
 		return state, true
 	}
+	c.annotationLog(slog.LevelWarn, "annotation draw access denied",
+		append([]any{
+			"event", "annotation.draw_access.denied",
+			"requested_share_session_id", shareSessionID,
+			"reason", "participant_cannot_annotate",
+			"is_host", c.hub.isHostParticipant(c.participantID),
+		}, c.annotationStateAttrs(state)...)...,
+	)
 	c.sendErrorMessage("forbidden", "You do not have screen annotation permissions")
 	return nil, false
 }
@@ -813,18 +877,42 @@ func (c *Client) handleWhiteboardClose() {
 func (c *Client) handleAnnotationSessionStart(msg *Message) {
 	var payload AnnotationSessionStartPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.annotationLog(slog.LevelWarn, "annotation session start invalid payload",
+			"event", "annotation.session.start.rejected",
+			"reason", "invalid_payload",
+			"message_type", msg.Type,
+			"error", err.Error(),
+		)
 		c.sendErrorMessage("invalid_payload", "Failed to parse annotation session start")
 		return
 	}
 	if payload.ShareSessionID == "" || payload.SharerParticipantID == uuid.Nil {
+		c.annotationLog(slog.LevelWarn, "annotation session start missing required fields",
+			"event", "annotation.session.start.rejected",
+			"reason", "missing_required_fields",
+			"share_session_id", payload.ShareSessionID,
+			"sharer_participant_id", payload.SharerParticipantID,
+		)
 		c.sendErrorMessage("invalid_payload", "share_session_id and sharer_participant_id are required")
 		return
 	}
 	if payload.SharerParticipantID != c.participantID {
+		c.annotationLog(slog.LevelWarn, "annotation session start forbidden",
+			"event", "annotation.session.start.rejected",
+			"reason", "caller_not_sharer",
+			"share_session_id", payload.ShareSessionID,
+			"sharer_participant_id", payload.SharerParticipantID,
+		)
 		c.sendErrorMessage("forbidden", "Only the sharer can start screen annotations")
 		return
 	}
 
+	c.annotationLog(slog.LevelInfo, "annotation session start accepted",
+		"event", "annotation.session.start",
+		"share_session_id", payload.ShareSessionID,
+		"sharer_participant_id", payload.SharerParticipantID,
+		"access_mode", payload.AccessMode,
+	)
 	started := c.hub.StartScreenAnnotationSession(c.roomID, payload)
 	startedMsg, _ := NewMessage(MessageTypeAnnotationSessionStarted, started)
 	msgData, _ := json.Marshal(startedMsg)
@@ -834,6 +922,12 @@ func (c *Client) handleAnnotationSessionStart(msg *Message) {
 func (c *Client) handleAnnotationSessionEnd(msg *Message) {
 	var payload AnnotationSessionEndPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.annotationLog(slog.LevelWarn, "annotation session end invalid payload",
+			"event", "annotation.session.end.rejected",
+			"reason", "invalid_payload",
+			"message_type", msg.Type,
+			"error", err.Error(),
+		)
 		c.sendErrorMessage("invalid_payload", "Failed to parse annotation session end")
 		return
 	}
@@ -842,14 +936,35 @@ func (c *Client) handleAnnotationSessionEnd(msg *Message) {
 		return
 	}
 	if c.participantID != state.SharerParticipantID && !c.hub.isHostParticipant(c.participantID) {
+		c.annotationLog(slog.LevelWarn, "annotation session end forbidden",
+			append([]any{
+				"event", "annotation.session.end.rejected",
+				"reason", "caller_not_sharer_or_host",
+				"requested_share_session_id", payload.ShareSessionID,
+				"is_host", c.hub.isHostParticipant(c.participantID),
+			}, c.annotationStateAttrs(state)...)...,
+		)
 		c.sendErrorMessage("forbidden", "Only the sharer or host can end screen annotations")
 		return
 	}
 	if !c.hub.EndScreenAnnotationSession(c.roomID, payload.ShareSessionID) {
+		c.annotationLog(slog.LevelWarn, "annotation session end fell back to snapshot",
+			append([]any{
+				"event", "annotation.session.end.rejected",
+				"reason", "end_rejected_by_state",
+				"requested_share_session_id", payload.ShareSessionID,
+			}, c.annotationStateAttrs(state)...)...,
+		)
 		c.sendAnnotationSnapshot()
 		return
 	}
 
+	c.annotationLog(slog.LevelInfo, "annotation session ended",
+		append([]any{
+			"event", "annotation.session.end",
+			"requested_share_session_id", payload.ShareSessionID,
+		}, c.annotationStateAttrs(state)...)...,
+	)
 	endedMsg, _ := NewMessage(MessageTypeAnnotationSessionEnded, AnnotationSessionEndedPayload{
 		ShareSessionID: payload.ShareSessionID,
 		Timestamp:      time.Now(),
@@ -861,6 +976,10 @@ func (c *Client) handleAnnotationSessionEnd(msg *Message) {
 func (c *Client) handleAnnotationSync(msg *Message) {
 	var payload AnnotationSessionEndPayload
 	_ = msg.UnmarshalPayload(&payload)
+	c.annotationLog(slog.LevelInfo, "annotation sync requested",
+		"event", "annotation.sync",
+		"requested_share_session_id", payload.ShareSessionID,
+	)
 	if payload.ShareSessionID != "" {
 		if _, ok := c.requireAnnotationState(payload.ShareSessionID); !ok {
 			return
@@ -872,10 +991,22 @@ func (c *Client) handleAnnotationSync(msg *Message) {
 func (c *Client) handleAnnotationUpdate(msg *Message) {
 	var payload AnnotationUpdatePayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.annotationLog(slog.LevelWarn, "annotation update invalid payload",
+			"event", "annotation.update.rejected",
+			"reason", "invalid_payload",
+			"message_type", msg.Type,
+			"error", err.Error(),
+		)
 		c.sendErrorMessage("invalid_payload", "Failed to parse annotation update")
 		return
 	}
 	if payload.ShareSessionID == "" || payload.SharerParticipantID == uuid.Nil {
+		c.annotationLog(slog.LevelWarn, "annotation update missing required fields",
+			"event", "annotation.update.rejected",
+			"reason", "missing_required_fields",
+			"share_session_id", payload.ShareSessionID,
+			"sharer_participant_id", payload.SharerParticipantID,
+		)
 		c.sendErrorMessage("invalid_payload", "share_session_id and sharer_participant_id are required")
 		return
 	}
@@ -883,10 +1014,25 @@ func (c *Client) handleAnnotationUpdate(msg *Message) {
 		return
 	}
 	if !c.hub.UpdateScreenAnnotationState(c.roomID, payload) {
+		c.annotationLog(slog.LevelWarn, "annotation update healed with snapshot",
+			"event", "annotation.update.rejected",
+			"reason", "stale_session_or_sharer",
+			"share_session_id", payload.ShareSessionID,
+			"sharer_participant_id", payload.SharerParticipantID,
+			"sync_all", payload.SyncAll,
+			"seq", payload.Seq,
+		)
 		c.sendAnnotationSnapshot()
 		return
 	}
 
+	c.annotationLog(slog.LevelInfo, "annotation update accepted",
+		"event", "annotation.update",
+		"share_session_id", payload.ShareSessionID,
+		"sharer_participant_id", payload.SharerParticipantID,
+		"sync_all", payload.SyncAll,
+		"seq", payload.Seq,
+	)
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 	dataMsg, _ := NewMessage(MessageTypeAnnotationData, AnnotationDataPayload{
 		ShareSessionID:      payload.ShareSessionID,
@@ -905,6 +1051,12 @@ func (c *Client) handleAnnotationUpdate(msg *Message) {
 func (c *Client) handleAnnotationClear(msg *Message) {
 	var payload AnnotationClearPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.annotationLog(slog.LevelWarn, "annotation clear invalid payload",
+			"event", "annotation.clear.rejected",
+			"reason", "invalid_payload",
+			"message_type", msg.Type,
+			"error", err.Error(),
+		)
 		c.sendErrorMessage("invalid_payload", "Failed to parse annotation clear")
 		return
 	}
@@ -915,10 +1067,25 @@ func (c *Client) handleAnnotationClear(msg *Message) {
 
 	seq := time.Now().UnixMilli()
 	if !c.hub.ClearScreenAnnotationState(c.roomID, payload.ShareSessionID, seq) {
+		c.annotationLog(slog.LevelWarn, "annotation clear healed with snapshot",
+			append([]any{
+				"event", "annotation.clear.rejected",
+				"reason", "clear_rejected_by_state",
+				"requested_share_session_id", payload.ShareSessionID,
+				"seq", seq,
+			}, c.annotationStateAttrs(state)...)...,
+		)
 		c.sendAnnotationSnapshot()
 		return
 	}
 
+	c.annotationLog(slog.LevelInfo, "annotation clear accepted",
+		append([]any{
+			"event", "annotation.clear",
+			"requested_share_session_id", payload.ShareSessionID,
+			"seq", seq,
+		}, c.annotationStateAttrs(state)...)...,
+	)
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 	dataMsg, _ := NewMessage(MessageTypeAnnotationData, AnnotationDataPayload{
 		ShareSessionID:      state.ShareSessionID,
@@ -937,12 +1104,25 @@ func (c *Client) handleAnnotationClear(msg *Message) {
 func (c *Client) handleAnnotationCursor(msg *Message) {
 	var payload AnnotationCursorSendPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.annotationLog(slog.LevelWarn, "annotation cursor invalid payload",
+			"event", "annotation.cursor.rejected",
+			"reason", "invalid_payload",
+			"message_type", msg.Type,
+			"error", err.Error(),
+		)
 		return
 	}
 	if _, ok := c.requireAnnotationDrawAccess(payload.ShareSessionID); !ok {
 		return
 	}
 
+	c.annotationLog(slog.LevelInfo, "annotation cursor accepted",
+		"event", "annotation.cursor",
+		"share_session_id", payload.ShareSessionID,
+		"tool", payload.Tool,
+		"x", payload.X,
+		"y", payload.Y,
+	)
 	meta := c.hub.GetParticipantMetadata(c.participantID)
 	cursorMsg, _ := NewMessage(MessageTypeAnnotationCursor, AnnotationCursorPayload{
 		ShareSessionID: payload.ShareSessionID,
@@ -959,12 +1139,23 @@ func (c *Client) handleAnnotationCursor(msg *Message) {
 
 func (c *Client) handleAnnotationAccessSet(msg *Message) {
 	if !c.hub.isHostParticipant(c.participantID) {
+		c.annotationLog(slog.LevelWarn, "annotation access set forbidden",
+			"event", "annotation.access.set.rejected",
+			"reason", "caller_not_host",
+			"is_host", false,
+		)
 		c.sendErrorMessage("forbidden", "Only hosts can change annotation access")
 		return
 	}
 
 	var payload AnnotationAccessSetPayload
 	if err := msg.UnmarshalPayload(&payload); err != nil {
+		c.annotationLog(slog.LevelWarn, "annotation access set invalid payload",
+			"event", "annotation.access.set.rejected",
+			"reason", "invalid_payload",
+			"message_type", msg.Type,
+			"error", err.Error(),
+		)
 		c.sendErrorMessage("invalid_payload", "Failed to parse annotation access")
 		return
 	}
@@ -974,10 +1165,21 @@ func (c *Client) handleAnnotationAccessSet(msg *Message) {
 
 	accessMode, ok := c.hub.SetScreenAnnotationAccessMode(c.roomID, payload.ShareSessionID, payload.AccessMode)
 	if !ok {
+		c.annotationLog(slog.LevelWarn, "annotation access set healed with snapshot",
+			"event", "annotation.access.set.rejected",
+			"reason", "state_rejected_access_change",
+			"requested_share_session_id", payload.ShareSessionID,
+			"access_mode", payload.AccessMode,
+		)
 		c.sendAnnotationSnapshot()
 		return
 	}
 
+	c.annotationLog(slog.LevelInfo, "annotation access set accepted",
+		"event", "annotation.access.set",
+		"share_session_id", payload.ShareSessionID,
+		"access_mode", accessMode,
+	)
 	changeMsg, _ := NewMessage(MessageTypeAnnotationAccessChanged, AnnotationAccessChangedPayload{
 		ShareSessionID: payload.ShareSessionID,
 		AccessMode:     accessMode,
@@ -995,12 +1197,23 @@ func (c *Client) sendAnnotationSnapshot() {
 		return
 	}
 
+	c.annotationLog(slog.LevelInfo, "annotation snapshot sent",
+		"event", "annotation.snapshot.sent",
+		"share_session_id", payload.ShareSessionID,
+		"sharer_participant_id", payload.SharerParticipantID,
+		"access_mode", payload.AccessMode,
+		"last_seq", payload.LastSeq,
+	)
 	snapshot, _ := NewMessage(MessageTypeAnnotationSnapshot, payload)
 	data, _ := json.Marshal(snapshot)
 	c.SendReliable(data)
 }
 
 func (c *Client) sendAnnotationSessionEnded(shareSessionID string) {
+	c.annotationLog(slog.LevelInfo, "annotation session ended sent",
+		"event", "annotation.session.ended.sent",
+		"share_session_id", shareSessionID,
+	)
 	ended, _ := NewMessage(MessageTypeAnnotationSessionEnded, AnnotationSessionEndedPayload{
 		ShareSessionID: shareSessionID,
 		Timestamp:      time.Now(),

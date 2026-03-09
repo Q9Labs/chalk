@@ -295,6 +295,72 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     this.addExternalSubscription(this.media._emitter.on("error", (error) => this.emitErrorWithIncident(error, "media")));
     this.addExternalSubscription(this.screenShare.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
     this.addExternalSubscription(this.annotations.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
+    this.addExternalSubscription(
+      this.annotations.on("session:started", (session) => {
+        this.recordIncidentBreadcrumb({
+          category: "annotations",
+          message: "Screen annotation session started",
+          data: {
+            shareSessionId: session.shareSessionId,
+            sharerParticipantId: session.sharerParticipantId,
+            accessMode: session.accessMode,
+          },
+        });
+      }),
+    );
+    this.addExternalSubscription(
+      this.annotations.on("session:ended", (session) => {
+        this.recordIncidentBreadcrumb({
+          category: "annotations",
+          message: "Screen annotation session ended",
+          data: session,
+        });
+      }),
+    );
+    this.addExternalSubscription(
+      this.annotations.on("snapshot", (snapshot) => {
+        this.recordIncidentBreadcrumb({
+          category: "annotations",
+          message: "Screen annotation snapshot received",
+          data: {
+            shareSessionId: snapshot.shareSessionId,
+            sharerParticipantId: snapshot.sharerParticipantId,
+            accessMode: snapshot.accessMode,
+            itemCount: snapshot.items.length,
+            lastSeq: snapshot.lastSeq,
+          },
+        });
+      }),
+    );
+    this.addExternalSubscription(
+      this.annotations.on("update", (update) => {
+        this.recordIncidentBreadcrumb({
+          category: "annotations",
+          message: "Screen annotation update received",
+          data: {
+            shareSessionId: update.shareSessionId,
+            sharerParticipantId: update.sharerParticipantId,
+            participantId: update.participantId,
+            syncAll: update.syncAll,
+            itemCount: update.items.length,
+            seq: update.seq,
+          },
+        });
+      }),
+    );
+    this.addExternalSubscription(
+      this.annotations.on("access:changed", (change) => {
+        this.recordIncidentBreadcrumb({
+          category: "annotations",
+          message: "Screen annotation access changed",
+          data: {
+            shareSessionId: change.shareSessionId,
+            accessMode: change.accessMode,
+            changedBy: change.changedBy,
+          },
+        });
+      }),
+    );
     this.addExternalSubscription(this.chat.on("error", (error) => this.emitErrorWithIncident(error, "chat")));
     this.addExternalSubscription(this.recording.on("error", (error) => this.emitErrorWithIncident(error, "recording")));
     this.addExternalSubscription(this.interactions.on("error", (error) => this.emitErrorWithIncident(error, "interactions")));

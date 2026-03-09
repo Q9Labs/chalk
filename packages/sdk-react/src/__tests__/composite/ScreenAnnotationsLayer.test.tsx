@@ -41,6 +41,13 @@ const createAnnotationsState = () => ({
 let participantsState = createParticipantsState();
 let screenShareState = createScreenShareState();
 let annotationsState = createAnnotationsState();
+const sessionState = {
+  recordIncidentBreadcrumb: vi.fn(),
+};
+
+vi.mock("../../context/chalk-provider", () => ({
+  useSession: () => sessionState,
+}));
 
 vi.mock("../../hooks/participants/useParticipants", () => ({
   useParticipants: () => participantsState,
@@ -61,6 +68,7 @@ describe("ScreenAnnotationsLayer", () => {
     participantsState = createParticipantsState();
     screenShareState = createScreenShareState();
     annotationsState = createAnnotationsState();
+    sessionState.recordIncidentBreadcrumb.mockClear();
   });
 
   afterEach(() => {
@@ -75,6 +83,7 @@ describe("ScreenAnnotationsLayer", () => {
     expect(annotationsState.startSession).toHaveBeenCalledTimes(1);
     expect(annotationsState.requestSync).not.toHaveBeenCalled();
     expect(annotationsState.open).toHaveBeenCalledTimes(1);
+    expect(sessionState.recordIncidentBreadcrumb).toHaveBeenCalled();
   });
 
   it("does not request sync while the local sharer already owns the active session", () => {
@@ -90,5 +99,11 @@ describe("ScreenAnnotationsLayer", () => {
     render(<ScreenAnnotationsLayer enabled />);
 
     expect(annotationsState.requestSync).not.toHaveBeenCalled();
+    expect(sessionState.recordIncidentBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "annotations_ui",
+        message: "Annotation sync skipped for local owner",
+      }),
+    );
   });
 });
