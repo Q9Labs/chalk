@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchInternalAccessToken, getOrCreateLocalClientId, resolveApiUrl, startMagicLink, verifyMagicLink } from "./internalAuth";
+import { fetchInternalAccessToken, getJoinContext, getOrCreateLocalClientId, resolveApiUrl, setJoinContext, startMagicLink, verifyMagicLink } from "./internalAuth";
 
 const originalWindow = globalThis.window;
 const originalLocalStorage = globalThis.localStorage;
+const originalSessionStorage = globalThis.sessionStorage;
 
 function createStorageMock() {
   const values = new Map<string, string>();
@@ -23,6 +24,7 @@ function createStorageMock() {
 function installBrowserEnv(rawUrl: string) {
   let currentUrl = new URL(rawUrl);
   const localStorage = createStorageMock();
+  const sessionStorage = createStorageMock();
   const windowMock = {
     get location() {
       return currentUrl;
@@ -44,7 +46,12 @@ function installBrowserEnv(rawUrl: string) {
     value: localStorage,
     writable: true,
   });
-  return { window: windowMock, localStorage };
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: sessionStorage,
+    writable: true,
+  });
+  return { window: windowMock, localStorage, sessionStorage };
 }
 
 function restoreBrowserEnv() {
@@ -56,6 +63,11 @@ function restoreBrowserEnv() {
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: originalLocalStorage,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: originalSessionStorage,
     writable: true,
   });
 }
@@ -167,6 +179,35 @@ describe("fetchInternalAccessToken", () => {
         headers: undefined,
       }),
     );
+  });
+});
+
+describe("getJoinContext", () => {
+  afterEach(() => {
+    restoreBrowserEnv();
+  });
+
+  it("returns room-scoped join context on the matching room route", () => {
+    installBrowserEnv("http://localhost:3070/room/math-101");
+    setJoinContext({
+      joinToken: "join-token",
+      roomName: "math-101",
+    });
+
+    expect(getJoinContext()).toEqual({
+      joinToken: "join-token",
+      roomName: "math-101",
+    });
+  });
+
+  it("ignores stale join context on a different room route", () => {
+    installBrowserEnv("http://localhost:3070/room/physics-201");
+    setJoinContext({
+      joinToken: "join-token",
+      roomName: "math-101",
+    });
+
+    expect(getJoinContext()).toBeNull();
   });
 });
 

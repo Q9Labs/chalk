@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Web/API: same room code now stays in the same room on localhost** — localhost room joins now reuse the same temporary tenant across tabs, ignore stale join-link session context when the current `/room/$roomId` does not match, and recover cleanly if two joins race to create the same slug-backed room.
 - **SDK-Core: screen-share audio default restored on supported browsers** — screen sharing now requests system audio by default on Chrome-like browsers again, while Safari/WebKit keeps the safer no-audio default unless callers explicitly opt in.
 - **SDK screen annotations: local sharer visibility** — screen annotation sessions now become active locally as soon as a share starts, so the sharer immediately sees the annotation affordance instead of waiting for the websocket echo.
 - **SDK screen annotations: launcher fallback** — the annotation launcher now stays visible during active screen share while session state syncs, requests a fresh sync automatically, and lets the local sharer bootstrap the session if the first signal is late.

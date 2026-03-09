@@ -138,6 +138,9 @@ type fakeCF struct {
 func (f *fakeCF) CreateMeeting(ctx context.Context, req cloudflare.CreateMeetingRequest) (*cloudflare.Meeting, error) {
 	panic("unexpected CreateMeeting")
 }
+func (f *fakeCF) EndMeeting(ctx context.Context, meetingID string) (*cloudflare.Meeting, error) {
+	panic("unexpected EndMeeting")
+}
 func (f *fakeCF) AddParticipant(ctx context.Context, meetingID string, req cloudflare.AddParticipantRequest) (*cloudflare.Participant, error) {
 	time.Sleep(f.delay)
 	return &cloudflare.Participant{ID: "cf_participant_1", Token: "cf_token_1"}, nil
