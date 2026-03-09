@@ -16,14 +16,77 @@ describe("withPatchedGetDisplayMedia", () => {
 		setNavigator(originalNavigator);
 	});
 
-	it("forces audio=false when withAudio is not requested", async () => {
+	it("requests screen-share audio by default on Chrome-like browsers", async () => {
 		const calls: any[] = [];
 		const getDisplayMedia = mock(async (constraints: any) => {
 			calls.push(constraints);
 			return { stream: true, constraints };
 		});
 
-		setNavigator({ mediaDevices: { getDisplayMedia } });
+		setNavigator({
+			userAgent:
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+			platform: "MacIntel",
+			maxTouchPoints: 0,
+			mediaDevices: { getDisplayMedia },
+		});
+
+		await withPatchedGetDisplayMedia(
+			async () => {
+				await (navigator as any).mediaDevices.getDisplayMedia({
+					audio: true,
+					video: { width: { max: 1920 } },
+				});
+				return true;
+			},
+		);
+
+		expect(calls.length).toBe(1);
+		expect(calls[0].audio).toBe(true);
+		expect(typeof calls[0].video).toBe("object");
+	});
+
+	it("defaults to audio=false on Safari when audio is not explicitly requested", async () => {
+		const calls: any[] = [];
+		const getDisplayMedia = mock(async (constraints: any) => {
+			calls.push(constraints);
+			return { stream: true, constraints };
+		});
+
+		setNavigator({
+			userAgent:
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+			platform: "MacIntel",
+			maxTouchPoints: 0,
+			mediaDevices: { getDisplayMedia },
+		});
+
+		await withPatchedGetDisplayMedia(async () => {
+			await (navigator as any).mediaDevices.getDisplayMedia({
+				audio: true,
+				video: { width: { max: 1920 } },
+			});
+			return true;
+		});
+
+		expect(calls.length).toBe(1);
+		expect(calls[0].audio).toBe(false);
+	});
+
+	it("honors explicit withAudio=false even on Chrome-like browsers", async () => {
+		const calls: any[] = [];
+		const getDisplayMedia = mock(async (constraints: any) => {
+			calls.push(constraints);
+			return { stream: true, constraints };
+		});
+
+		setNavigator({
+			userAgent:
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+			platform: "MacIntel",
+			maxTouchPoints: 0,
+			mediaDevices: { getDisplayMedia },
+		});
 
 		await withPatchedGetDisplayMedia(
 			async () => {
@@ -38,7 +101,6 @@ describe("withPatchedGetDisplayMedia", () => {
 
 		expect(calls.length).toBe(1);
 		expect(calls[0].audio).toBe(false);
-		expect(typeof calls[0].video).toBe("object");
 	});
 
 	it("retries without audio when audio=true fails", async () => {
@@ -53,7 +115,13 @@ describe("withPatchedGetDisplayMedia", () => {
 			return { ok: true };
 		});
 
-		setNavigator({ mediaDevices: { getDisplayMedia } });
+		setNavigator({
+			userAgent:
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+			platform: "MacIntel",
+			maxTouchPoints: 0,
+			mediaDevices: { getDisplayMedia },
+		});
 
 		await withPatchedGetDisplayMedia(
 			async () => {
@@ -80,7 +148,13 @@ describe("withPatchedGetDisplayMedia", () => {
 			throw err;
 		});
 
-		setNavigator({ mediaDevices: { getDisplayMedia } });
+		setNavigator({
+			userAgent:
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+			platform: "MacIntel",
+			maxTouchPoints: 0,
+			mediaDevices: { getDisplayMedia },
+		});
 
 		await expect(
 			withPatchedGetDisplayMedia(
@@ -103,7 +177,13 @@ describe("withPatchedGetDisplayMedia", () => {
 	it("restores the original getDisplayMedia after run()", async () => {
 		const getDisplayMedia = mock(async () => ({ ok: true }));
 		const md = { getDisplayMedia };
-		setNavigator({ mediaDevices: md });
+		setNavigator({
+			userAgent:
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+			platform: "MacIntel",
+			maxTouchPoints: 0,
+			mediaDevices: md,
+		});
 
 		const before = md.getDisplayMedia;
 
@@ -112,4 +192,3 @@ describe("withPatchedGetDisplayMedia", () => {
 		expect(md.getDisplayMedia).toBe(before);
 	});
 });
-

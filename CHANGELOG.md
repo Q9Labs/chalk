@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-Core: screen-share audio default restored on supported browsers** — screen sharing now requests system audio by default on Chrome-like browsers again, while Safari/WebKit keeps the safer no-audio default unless callers explicitly opt in.
 - **SDK screen annotations: local sharer visibility** — screen annotation sessions now become active locally as soon as a share starts, so the sharer immediately sees the annotation affordance instead of waiting for the websocket echo.
 - **SDK screen annotations: launcher fallback** — the annotation launcher now stays visible during active screen share while session state syncs, requests a fresh sync automatically, and lets the local sharer bootstrap the session if the first signal is late.
 - **SDK screen annotations: stable open toolbar** — the annotation toolbar now stays open through late `annotation.session.ended` sync replies, and the launcher is promoted to a stronger bottom-left control instead of the old top-left text button.

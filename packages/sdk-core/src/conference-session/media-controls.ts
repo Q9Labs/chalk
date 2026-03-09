@@ -154,7 +154,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
           await rtkClient.self.enableScreenShare();
           return true;
         },
-        { withAudio: options?.withAudio === true },
+        { withAudio: options?.withAudio },
       );
 
       localParticipant.isScreenSharing = true;

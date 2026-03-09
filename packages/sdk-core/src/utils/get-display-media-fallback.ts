@@ -18,20 +18,53 @@ const tryGetMediaDevices = () => {
 	return md && typeof md.getDisplayMedia === "function" ? md : undefined;
 };
 
+const getNavigatorInfo = () => {
+	if (typeof navigator === "undefined") {
+		return {
+			userAgent: "",
+			platform: "",
+			maxTouchPoints: 0,
+		};
+	}
+
+	return {
+		userAgent: navigator.userAgent ?? "",
+		platform: navigator.platform ?? "",
+		maxTouchPoints: navigator.maxTouchPoints ?? 0,
+	};
+};
+
+const shouldDefaultScreenShareAudioOn = () => {
+	const { userAgent, platform, maxTouchPoints } = getNavigatorInfo();
+	const isIOS =
+		/iPad|iPhone|iPod/i.test(userAgent) ||
+		(platform === "MacIntel" && maxTouchPoints > 1);
+	const isSafariFamily =
+		/AppleWebKit/i.test(userAgent) &&
+		!/Chrome|Chromium|CriOS|Edg|EdgiOS|Firefox|FxiOS|OPR|Opera|SamsungBrowser/i.test(
+			userAgent,
+		);
+
+	return !(isIOS || isSafariFamily);
+};
+
 const buildConstraintsWithAudioPreference = (
 	constraints: unknown,
-	withAudio: boolean,
+	withAudio?: boolean,
 ) => {
 	if (!isRecord(constraints)) {
-		return { video: true, audio: withAudio };
+		return {
+			video: true,
+			audio: withAudio ?? shouldDefaultScreenShareAudioOn(),
+		};
 	}
 
 	const next = { ...constraints } as any;
 
-	// Default behavior in Chalk: prefer reliability over system-audio capture.
-	// If the caller explicitly requests audio, keep it true and let the retry path
-	// handle unsupported platforms.
-	next.audio = withAudio ? next.audio ?? true : false;
+	// Default behavior in Chalk: request screen-share audio on browsers that
+	// commonly support it, but keep Safari/WebKit on the safer no-audio path
+	// unless the caller explicitly opts in.
+	next.audio = withAudio ?? shouldDefaultScreenShareAudioOn();
 
 	// If video constraints are missing, ensure we at least request video.
 	if (typeof next.video === "undefined") next.video = true;
@@ -62,14 +95,15 @@ export const withPatchedGetDisplayMedia = async (
 	const md = tryGetMediaDevices();
 	if (!md) return run();
 
-	const withAudio = opts?.withAudio === true;
+	const withAudio = opts?.withAudio;
 
 	const originalFn = md.getDisplayMedia;
 	const callOriginal = (constraints: unknown) =>
 		(originalFn as any).call(md, constraints);
 
 	const wrapped = async (constraints: unknown) => {
-		// 1) Prefer caller audio preference (defaults to audio: false).
+		// 1) Prefer caller audio preference. Default keeps screen audio on where
+		// it is commonly supported, while Safari/WebKit stays on the safer path.
 		const preferred = buildConstraintsWithAudioPreference(constraints, withAudio);
 		try {
 			return await callOriginal(preferred);
