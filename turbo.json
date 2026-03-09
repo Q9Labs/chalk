@@ -21,7 +21,6 @@
 			"persistent": true
 		},
 		"test": {
-			"dependsOn": ["build"],
 			"inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
 			"outputs": ["coverage/**"],
 			"env": ["CI", "NODE_ENV"]

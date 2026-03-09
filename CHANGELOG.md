@@ -866,3 +866,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Color palette**: Richer dark mode with subtle blue/purple undertones (`#0A0A0C`, `#12121A`)
   - **Glass effects**: New CSS variables for backdrop-blur surfaces (`--chalk-bg-glass`, `--chalk-bg-control`)
   - **Control buttons**: Glass morphism with layered shadows and smooth hover scale (1.04x)
+- **Test pipeline resource fix** - stop forcing workspace builds before `turbo test`, so running tests no longer fans out into `docs`/`admin`/`web` builds and unnecessary parallel memory pressure.
