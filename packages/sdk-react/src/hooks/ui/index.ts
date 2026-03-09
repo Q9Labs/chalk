@@ -9,6 +9,14 @@ export { useWhatsNew, type UseWhatsNewReturn, type UseWhatsNewOptions, type What
 export { useParticipantVolume, type UseParticipantVolumeReturn } from "./useParticipantVolume";
 export { useDraggable, type UseDraggableOptions } from "./useDraggable";
 export {
+	useHaptics,
+	type UseHapticsOptions,
+	type UseHapticsReturn,
+	type ChalkHapticInput,
+	type ChalkHapticPreset,
+	type ChalkHapticTriggerOptions,
+} from "./useHaptics";
+export {
 	usePictureInPicture,
 	type UsePictureInPictureOptions,
 	type UsePictureInPictureReturn,

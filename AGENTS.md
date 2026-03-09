@@ -13,6 +13,15 @@ bun run generate               # Re-generate openapi.yml when suitable after mak
 cd apps/api && go run ./cmd/main.go # Run API server
 ```
 
+## Testing Rules
+
+- For UX changes or any user-facing feature/behavior change, do both: add/update the appropriate automated tests and verify in a real browser flow with the Agent Browser CLI.
+- Use Agent Browser to exercise the changed flow end-to-end the way a user would: load the app, navigate the affected surfaces, interact with controls, and confirm the visible result.
+- During browser verification, check realistic viewport scale/zoom/layout conditions as well, so spacing, overflow, clipping, responsiveness, and visual hierarchy are validated under normal viewing conditions.
+- Prefer verifying in the Chalk demo/user-facing app that exposes the changed behavior after the package-level implementation is complete.
+- Do not treat browser verification as optional for user-facing work unless the feature cannot be exercised locally; if blocked, state exactly what prevented Agent Browser testing.
+- Agent Browser verification does not replace automated coverage. Keep writing tests wherever they fit; for bug fixes or previously broken behavior, add a regression test when feasible. Browser testing is the user-level proof on top.
+
 ## Cost Formulas (Quick Reference)
 
 - RealtimeKit participant-minutes: `participant_minutes = sessions * avg_minutes * avg_participants`

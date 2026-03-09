@@ -173,8 +173,12 @@ describe('MeetingRoom', () => {
       />
     );
 
+    const deviceMenuButtons = container.querySelectorAll('button[aria-haspopup="true"]');
+    fireEvent.click(deviceMenuButtons[0] as HTMLButtonElement);
     expect(getByText('Microphone 1')).toBeDefined();
     expect(getByText('Speaker 1')).toBeDefined();
+
+    fireEvent.click(deviceMenuButtons[1] as HTMLButtonElement);
     expect(getByText('Camera 1')).toBeDefined();
   });
 
@@ -210,4 +214,31 @@ describe('MeetingRoom', () => {
     fireEvent.click(within(dialog).getByText('Microphone 2'));
     expect(onAudioInputChange).toHaveBeenCalledWith('mic-2');
   });
+
+  it('applies and persists background effect selections', async () => {
+    const onApplyBackgroundEffect = vi.fn();
+    const { getByRole, getByText } = render(
+      <MeetingRoom
+        roomName="Test Room"
+        localParticipant={localParticipant}
+        participants={participants}
+        enableTour={false}
+        enableBackgroundEffects
+        isBackgroundEffectsSupported
+        onApplyBackgroundEffect={onApplyBackgroundEffect}
+      />
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Settings' }));
+    fireEvent.click(getByText('Video'));
+    fireEvent.click(getByRole('button', { name: 'Select Blur' }));
+
+    await waitFor(() => {
+      expect(onApplyBackgroundEffect).toHaveBeenCalledWith({ mode: 'blur', blurStrength: undefined });
+    });
+
+    const stored = JSON.parse(localStorage.getItem('chalk-meeting-settings') ?? '{}');
+    expect(stored.video.backgroundEffect).toEqual({ type: 'blur' });
+  });
+
 });

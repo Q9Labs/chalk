@@ -35,7 +35,8 @@
     "generate:types": "openapi-typescript ../../apps/api/openapi.yaml -o src/generated/api-types.ts"
   },
   "dependencies": {
-    "@cloudflare/realtimekit": "^1.2.2",
+    "@cloudflare/realtimekit": "^1.2.4",
+    "@cloudflare/realtimekit-virtual-background": "^0.0.2",
     "@effect/schema": "^0.75.5",
     "@q9labs/chalk-whiteboard": "workspace:^",
     "effect": "^3.11.9"

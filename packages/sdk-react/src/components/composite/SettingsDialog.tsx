@@ -21,6 +21,10 @@ import {
 	VolumeHighIcon,
 } from "../../utils/icons";
 import { IconButton, Input, Toggle, VolumeSlider } from "../atomic";
+import {
+	BackgroundEffectsPicker,
+	type BackgroundEffect,
+} from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 
@@ -58,6 +62,13 @@ interface SettingsDialogProps {
 	onUpdateVideo: (updates: Partial<MeetingRoomSettings["video"]>) => void;
 	onUpdateAppearance: (updates: Partial<MeetingRoomSettings["appearance"]>) => void;
 	onUpdateExperience: (updates: Partial<MeetingRoomSettings["experience"]>) => void;
+	enableBackgroundEffects?: boolean;
+	isBackgroundEffectsSupported?: boolean;
+	isApplyingBackgroundEffect?: boolean;
+	backgroundEffects?: readonly BackgroundEffect[];
+	selectedBackgroundEffectId?: string;
+	onSelectBackgroundEffect?: (effectId: string) => void;
+	onUploadBackgroundEffect?: (file: File) => void;
 	audioInputDevices?: readonly Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[];
 	audioOutputDevices?: readonly Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[];
 	videoInputDevices?: readonly Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[];
@@ -79,9 +90,9 @@ const SECTIONS = [
 	{
 		id: "video",
 		label: "Video",
-		description: "Camera and preview",
+		description: "Camera, preview, backgrounds",
 		icon: Video01Icon,
-		keywords: ["video", "camera", "preview"],
+		keywords: ["video", "camera", "preview", "background", "blur"],
 	},
 	{
 		id: "appearance",
@@ -156,6 +167,13 @@ export const SettingsDialog = React.memo(
 		onUpdateVideo,
 		onUpdateAppearance,
 		onUpdateExperience,
+		enableBackgroundEffects = false,
+		isBackgroundEffectsSupported = false,
+		isApplyingBackgroundEffect = false,
+		backgroundEffects = [],
+		selectedBackgroundEffectId,
+		onSelectBackgroundEffect,
+		onUploadBackgroundEffect,
 		audioInputDevices = [],
 		audioOutputDevices = [],
 		videoInputDevices = [],
@@ -311,22 +329,45 @@ export const SettingsDialog = React.memo(
 					);
 				case "video":
 					return (
-						<SectionCard
-							title="Camera"
-							description="Pick the active camera and confirm the preview before teaching."
-						>
-							<DeviceSelector
-								type="videoinput"
-								devices={effectiveVideoInputDevices}
-								selectedDeviceId={settings.video.selectedInput}
-								onChange={(deviceId) =>
-									onUpdateVideo({ selectedInput: deviceId })
-								}
-								label="Camera"
-								previewTrack={videoTrack}
-								participantColorSeed={participantColorSeed}
-							/>
-						</SectionCard>
+						<div className="space-y-5">
+							<SectionCard
+								title="Camera"
+								description="Pick the active camera and confirm the preview before teaching."
+							>
+								<DeviceSelector
+									type="videoinput"
+									devices={effectiveVideoInputDevices}
+									selectedDeviceId={settings.video.selectedInput}
+									onChange={(deviceId) =>
+										onUpdateVideo({ selectedInput: deviceId })
+									}
+									label="Camera"
+									previewTrack={videoTrack}
+									participantColorSeed={participantColorSeed}
+								/>
+							</SectionCard>
+							{enableBackgroundEffects ? (
+								<SectionCard
+									title="Background Effects"
+									description="Blur distractions or swap in a background locally for this browser."
+								>
+									{isBackgroundEffectsSupported ? (
+										<BackgroundEffectsPicker
+											effects={[...backgroundEffects]}
+											selectedEffectId={selectedBackgroundEffectId}
+											onSelect={onSelectBackgroundEffect ?? (() => {})}
+											onCustomUpload={onUploadBackgroundEffect}
+											disabled={isApplyingBackgroundEffect}
+											participantColorSeed={participantColorSeed}
+										/>
+									) : (
+										<div className="rounded-2xl border border-border/50 bg-card/60 p-4 text-sm text-muted-foreground">
+											Background effects are not supported in this browser yet.
+										</div>
+									)}
+								</SectionCard>
+							) : null}
+						</div>
 					);
 				case "appearance":
 					return (
@@ -480,7 +521,7 @@ export const SettingsDialog = React.memo(
 					>
 						<Dialog.Title className="sr-only">Meeting settings</Dialog.Title>
 						<div className="flex h-full flex-col md:flex-row">
-							<aside className="flex w-full flex-col border-b border-border/50 bg-secondary/20 md:w-[280px] md:border-b-0 md:border-r">
+							<aside className="flex w-full shrink-0 flex-col border-b border-border/50 bg-secondary/20 md:w-[280px] md:border-b-0 md:border-r">
 								<div className="p-5">
 									<div className="mb-5 flex items-center gap-2">
 										<Settings01Icon className="h-5 w-5 text-primary" />
@@ -501,7 +542,7 @@ export const SettingsDialog = React.memo(
 										aria-label="Search settings"
 									/>
 								</div>
-								<nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+								<nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
 									{filteredSections.map((section) => {
 										const Icon = section.icon;
 

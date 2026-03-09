@@ -515,6 +515,18 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 		);
 	}
 
+	async updateParticipant(
+		roomId: string,
+		participantId: string,
+		data: { displayName?: string; role?: string },
+	): Promise<ApiResponse<RoomResource["activeParticipantCount"]>> {
+		return this.request<RoomResource["activeParticipantCount"]>(
+			"PATCH",
+			`/api/v1/rooms/${roomId}/participants/${participantId}`,
+			data,
+		);
+	}
+
 	// Recording endpoints
 	async startRecording(
 		roomId: string,

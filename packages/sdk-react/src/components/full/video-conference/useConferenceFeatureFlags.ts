@@ -15,12 +15,13 @@ export interface ConferenceFeatureFlags {
 	chat: boolean;
 	recording: boolean;
 	screenShare: boolean;
-	pictureInPicture: boolean;
+	annotations: boolean;
 	whiteboard: boolean;
 	reactions: boolean;
 	handRaise: boolean;
-	tour: boolean;
+	backgroundEffects: boolean;
 	pictureInPicture: boolean;
+	tour: boolean;
 }
 
 const resolveFeature = (
@@ -38,22 +39,22 @@ export function useConferenceFeatureFlags({
 	localParticipant,
 	participantCount,
 	isRecording,
-		pictureInPicture: pictureInPictureFeature,
 }: UseConferenceFeatureFlagsParams): ConferenceFeatureFlags {
 	const {
 		chat: chatFeature,
 		recording: recordingFeature,
 		screenShare: screenShareFeature,
+		annotations: annotationsFeature,
 		whiteboard: whiteboardFeature,
 		reactions: reactionsFeature,
 		handRaise: handRaiseFeature,
-		tour: tourFeature,
+		backgroundEffects: backgroundEffectsFeature,
 		pictureInPicture: pictureInPictureFeature,
+		tour: tourFeature,
 	} = features;
 
 	return useMemo(() => {
 		const ctx: FeatureContext = {
-			pictureInPicture: resolveFeature(pictureInPictureFeature, ctx),
 			participants,
 			localParticipant,
 			participantCount,
@@ -63,22 +64,25 @@ export function useConferenceFeatureFlags({
 			chat: resolveFeature(chatFeature, ctx),
 			recording: resolveFeature(recordingFeature, ctx),
 			screenShare: resolveFeature(screenShareFeature, ctx),
+			annotations: resolveFeature(annotationsFeature, ctx),
 			whiteboard: resolveFeature(whiteboardFeature, ctx),
 			reactions: resolveFeature(reactionsFeature, ctx),
 			handRaise: resolveFeature(handRaiseFeature, ctx),
-		pictureInPictureFeature,
-			tour: resolveFeature(tourFeature, ctx),
+			backgroundEffects: resolveFeature(backgroundEffectsFeature, ctx),
 			pictureInPicture: resolveFeature(pictureInPictureFeature, ctx),
+			tour: resolveFeature(tourFeature, ctx),
 		};
 	}, [
 		chatFeature,
 		recordingFeature,
 		screenShareFeature,
+		annotationsFeature,
 		whiteboardFeature,
 		reactionsFeature,
 		handRaiseFeature,
-		tourFeature,
+		backgroundEffectsFeature,
 		pictureInPictureFeature,
+		tourFeature,
 		participants,
 		localParticipant,
 		participantCount,

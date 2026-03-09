@@ -11,6 +11,21 @@
 export type MediaDeviceKind = "videoinput" | "audioinput" | "audiooutput";
 
 /**
+ * Supported runtime video background effect modes.
+ */
+export const VIDEO_BACKGROUND_MODES = ["none", "blur", "image"] as const;
+
+export type VideoBackgroundMode = (typeof VIDEO_BACKGROUND_MODES)[number];
+
+/**
+ * Runtime video background effect applied to the local published camera track.
+ */
+export type VideoBackgroundEffect =
+	| { mode: "none" }
+	| { mode: "blur"; blurStrength?: number }
+	| { mode: "image"; imageUrl: string };
+
+/**
  * Information about an available media device
  *
  * @example

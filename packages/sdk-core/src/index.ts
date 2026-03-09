@@ -207,6 +207,10 @@ export type {
 	WhiteboardSnapshot,
 	WhiteboardUpdate,
 } from "./types/entities/whiteboard.ts";
+export type {
+	VideoBackgroundEffect,
+	VideoBackgroundMode,
+} from "./types/entities/media.ts";
 
 // ============================================================================
 // Legacy exports (backward compatibility with existing code)

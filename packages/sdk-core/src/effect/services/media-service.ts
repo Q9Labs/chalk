@@ -14,7 +14,13 @@ import { Context, Effect, Layer, PubSub, Ref, Stream, SubscriptionRef } from "ef
 import type { ConferenceSession } from "../../room";
 import { MediaError, RoomError } from "../errors";
 import { LoggerService } from "../services";
-import type { MediaEvent, MediaState, MediaDeviceData } from "../schemas/manager-state";
+import type {
+  MediaEvent,
+  MediaState,
+  MediaDeviceData,
+  VideoBackgroundEffectData,
+} from "../schemas/manager-state";
+import { isConferenceSessionVideoBackgroundSupported } from "../../conference-session/video-background-controller";
 import { RoomInstanceService } from "./room-instance";
 
 /** Previous device for undo functionality */
@@ -29,9 +35,12 @@ const initialState: MediaState = {
   isAudioEnabled: false,
   isTogglingVideo: false,
   isTogglingAudio: false,
+  isBackgroundEffectsSupported: false,
+  isApplyingBackgroundEffect: false,
   selectedCamera: null,
   selectedMicrophone: null,
   selectedSpeaker: null,
+  selectedBackgroundEffect: { mode: "none" },
   devices: [],
 };
 
@@ -53,6 +62,10 @@ export interface MediaServiceInterface {
   readonly selectMicrophone: (deviceId: string) => Effect.Effect<void, RoomError>;
   /** Select speaker */
   readonly selectSpeaker: (deviceId: string) => Effect.Effect<void>;
+  /** Apply a video background effect */
+  readonly applyBackgroundEffect: (effect: VideoBackgroundEffectData) => Effect.Effect<void, MediaError | RoomError>;
+  /** Clear any active video background effect */
+  readonly clearBackgroundEffect: Effect.Effect<void, MediaError | RoomError>;
   /** Undo last device change (within 5s) */
   readonly undoDeviceChange: Effect.Effect<void>;
   /** Refresh available devices */
@@ -211,6 +224,88 @@ export const MediaServiceLive = Layer.effect(
         )
       ),
 
+      applyBackgroundEffect: (effect) =>
+        Effect.gen(function* () {
+          const room = yield* requireRoom;
+
+          yield* SubscriptionRef.update(stateRef, (s) => ({
+            ...s,
+            isApplyingBackgroundEffect: true,
+          }));
+
+          const applied = yield* Effect.tryPromise({
+            try: () => room.applyBackgroundEffect(effect),
+            catch: (err) =>
+              new MediaError({
+                code: "DEVICE_NOT_FOUND",
+                message:
+                  err instanceof Error ? err.message : "Video background update failed",
+                recoverable: true,
+              }),
+          }).pipe(
+            Effect.tapError(() =>
+              SubscriptionRef.update(stateRef, (s) => ({
+                ...s,
+                isApplyingBackgroundEffect: false,
+              }))
+            ),
+          );
+
+          if (!applied) {
+            yield* SubscriptionRef.update(stateRef, (s) => ({
+              ...s,
+              isApplyingBackgroundEffect: false,
+            }));
+            return;
+          }
+
+          yield* SubscriptionRef.update(stateRef, (s) => ({
+            ...s,
+            isApplyingBackgroundEffect: false,
+            selectedBackgroundEffect: effect,
+          }));
+          yield* logger.info("Video background updated", { mode: effect.mode });
+        }),
+
+      clearBackgroundEffect: Effect.gen(function* () {
+        const room = yield* requireRoom;
+
+        yield* SubscriptionRef.update(stateRef, (s) => ({
+          ...s,
+          isApplyingBackgroundEffect: true,
+        }));
+
+        const cleared = yield* Effect.tryPromise({
+          try: () => room.clearBackgroundEffect(),
+          catch: (err) =>
+            new MediaError({
+              code: "DEVICE_NOT_FOUND",
+              message:
+                err instanceof Error ? err.message : "Video background clear failed",
+              recoverable: true,
+            }),
+        }).pipe(
+          Effect.tapError(() =>
+            SubscriptionRef.update(stateRef, (s) => ({
+              ...s,
+              isApplyingBackgroundEffect: false,
+            }))
+          ),
+        );
+
+        yield* SubscriptionRef.update(stateRef, (s) => ({
+          ...s,
+          isApplyingBackgroundEffect: false,
+          selectedBackgroundEffect: cleared
+            ? ({ mode: "none" } as const)
+            : s.selectedBackgroundEffect,
+        }));
+
+        if (cleared) {
+          yield* logger.info("Video background cleared");
+        }
+      }),
+
       selectCamera: (deviceId) =>
         Effect.gen(function* () {
           const room = yield* requireRoom;
@@ -345,13 +440,15 @@ export const MediaServiceLive = Layer.effect(
       attachRoom: (room) =>
         Effect.gen(function* () {
           const localParticipant = room.localParticipant;
-          if (localParticipant) {
-            yield* SubscriptionRef.update(stateRef, (s) => ({
-              ...s,
-              isVideoEnabled: localParticipant.videoEnabled ?? false,
-              isAudioEnabled: localParticipant.audioEnabled ?? false,
-            }));
-          }
+          const isBackgroundEffectsSupported =
+            isConferenceSessionVideoBackgroundSupported(room.rtkMeeting);
+
+          yield* SubscriptionRef.update(stateRef, (s) => ({
+            ...s,
+            isVideoEnabled: localParticipant?.videoEnabled ?? s.isVideoEnabled,
+            isAudioEnabled: localParticipant?.audioEnabled ?? s.isAudioEnabled,
+            isBackgroundEffectsSupported,
+          }));
         }),
 
       events: Stream.fromPubSub(eventBus),

@@ -10,6 +10,7 @@ export interface UseMeetingRoomPropsParams {
 	canManageParticipants: MeetingRoomProps["canManageParticipants"];
 	handleToggleParticipantMute: NonNullable<MeetingRoomProps["onToggleParticipantMute"]>;
 	handleRemoveParticipant: NonNullable<MeetingRoomProps["onRemoveParticipant"]>;
+	handleUpdateDisplayName: MeetingRoomProps["onUpdateDisplayName"];
 	activeReactions: NonNullable<MeetingRoomProps["activeReactions"]>;
 	transcripts: NonNullable<MeetingRoomProps["transcripts"]>;
 	isMuted: NonNullable<MeetingRoomProps["isMuted"]>;
@@ -52,6 +53,12 @@ export interface UseMeetingRoomPropsParams {
 	getParticipantVolume: NonNullable<MeetingRoomProps["getParticipantVolume"]>;
 	selectedAudioOutput: MeetingRoomProps["selectedAudioOutput"];
 	selectedVideoInput: MeetingRoomProps["selectedVideoInput"];
+	enableBackgroundEffects?: MeetingRoomProps["enableBackgroundEffects"];
+	isBackgroundEffectsSupported?: MeetingRoomProps["isBackgroundEffectsSupported"];
+	isApplyingBackgroundEffect?: MeetingRoomProps["isApplyingBackgroundEffect"];
+	selectedBackgroundEffect?: MeetingRoomProps["selectedBackgroundEffect"];
+	handleApplyBackgroundEffect?: MeetingRoomProps["onApplyBackgroundEffect"];
+	handleClearBackgroundEffect?: MeetingRoomProps["onClearBackgroundEffect"];
 	connectionState: NonNullable<MeetingRoomProps["connectionState"]>;
 	handleRetryConnection: NonNullable<MeetingRoomProps["onRetryConnection"]>;
 	connectionSupportCode: MeetingRoomProps["connectionSupportCode"];
@@ -68,6 +75,7 @@ export function useMeetingRoomProps({
 	canManageParticipants,
 	handleToggleParticipantMute,
 	handleRemoveParticipant,
+	handleUpdateDisplayName,
 	activeReactions,
 	transcripts,
 	isMuted,
@@ -110,15 +118,32 @@ export function useMeetingRoomProps({
 	getParticipantVolume,
 	selectedAudioOutput,
 	selectedVideoInput,
-	isPictureInPictureSupported,
-	isPictureInPictureActive,
-	handleTogglePictureInPicture,
+	enableBackgroundEffects,
+	isBackgroundEffectsSupported,
+	isApplyingBackgroundEffect,
+	selectedBackgroundEffect,
+	handleApplyBackgroundEffect,
+	handleClearBackgroundEffect,
 	connectionState,
 	handleRetryConnection,
 	connectionSupportCode,
 	className,
+	isPictureInPictureSupported,
+	isPictureInPictureActive,
+	handleTogglePictureInPicture,
 }: UseMeetingRoomPropsParams): MeetingRoomProps {
-	const { chat, recording, screenShare, handRaise, reactions, whiteboard, pictureInPicture, tour } =
+	const {
+		chat,
+		recording,
+		screenShare,
+		annotations,
+		handRaise,
+		reactions,
+		whiteboard,
+		backgroundEffects,
+		pictureInPicture,
+		tour,
+	} =
 		featureFlags;
 
 	return useMemo(
@@ -129,6 +154,7 @@ export function useMeetingRoomProps({
 			canManageParticipants,
 			onToggleParticipantMute: handleToggleParticipantMute,
 			onRemoveParticipant: handleRemoveParticipant,
+			onUpdateDisplayName: handleUpdateDisplayName,
 			activeReactions,
 			transcripts,
 			isMuted,
@@ -149,11 +175,13 @@ export function useMeetingRoomProps({
 			enableChat: chat,
 			enableRecording: recording,
 			enableScreenShare: screenShare,
+			enableAnnotations: annotations,
 			enableHandRaise: handRaise,
 			enableReactions: reactions,
 			enableWhiteboard: whiteboard,
-			enableTour: tour,
+			enableBackgroundEffects: enableBackgroundEffects && backgroundEffects,
 			enablePictureInPicture: pictureInPicture,
+			enableTour: tour,
 			defaultLayout: meetingLayout,
 			defaultChatOpen,
 			defaultParticipantsOpen,
@@ -165,8 +193,8 @@ export function useMeetingRoomProps({
 			onToggleScreenShare: handleToggleScreenShare,
 			onToggleRecording: handleToggleRecording,
 			onToggleHandRaise: handleToggleHandRaise,
-			onTogglePictureInPicture: handleTogglePictureInPicture,
 			onToggleWhiteboard: handleToggleWhiteboard,
+			onTogglePictureInPicture: handleTogglePictureInPicture,
 			onSendReaction: handleSendReaction,
 			onLeave: handleLeave,
 			onAddPeople,
@@ -179,9 +207,14 @@ export function useMeetingRoomProps({
 			onParticipantVolumeChange,
 			getParticipantVolume,
 			selectedAudioOutput,
+			selectedVideoInput,
+			isBackgroundEffectsSupported,
+			isApplyingBackgroundEffect,
+			selectedBackgroundEffect,
+			onApplyBackgroundEffect: handleApplyBackgroundEffect,
+			onClearBackgroundEffect: handleClearBackgroundEffect,
 			isPictureInPictureSupported,
 			isPictureInPictureActive,
-			selectedVideoInput,
 			connectionState,
 			onRetryConnection: handleRetryConnection,
 			connectionSupportCode,
@@ -194,6 +227,7 @@ export function useMeetingRoomProps({
 			canManageParticipants,
 			handleToggleParticipantMute,
 			handleRemoveParticipant,
+			handleUpdateDisplayName,
 			activeReactions,
 			transcripts,
 			isMuted,
@@ -207,10 +241,12 @@ export function useMeetingRoomProps({
 			chat,
 			recording,
 			screenShare,
+			annotations,
 			handRaise,
-			pictureInPicture,
 			reactions,
 			whiteboard,
+			backgroundEffects,
+			pictureInPicture,
 			tour,
 			chatMessages,
 			unreadChatCount,
@@ -228,9 +264,9 @@ export function useMeetingRoomProps({
 			handleVideoInputChange,
 			handleToggleScreenShare,
 			handleToggleRecording,
-			handleTogglePictureInPicture,
 			handleToggleHandRaise,
 			handleToggleWhiteboard,
+			handleTogglePictureInPicture,
 			handleSendReaction,
 			handleLeave,
 			onAddPeople,
@@ -244,10 +280,16 @@ export function useMeetingRoomProps({
 			getParticipantVolume,
 			selectedAudioOutput,
 			selectedVideoInput,
-			connectionState,
-			handleRetryConnection,
+			enableBackgroundEffects,
+			isBackgroundEffectsSupported,
+			isApplyingBackgroundEffect,
+			selectedBackgroundEffect,
+			handleApplyBackgroundEffect,
+			handleClearBackgroundEffect,
 			isPictureInPictureSupported,
 			isPictureInPictureActive,
+			connectionState,
+			handleRetryConnection,
 			connectionSupportCode,
 			className,
 		],

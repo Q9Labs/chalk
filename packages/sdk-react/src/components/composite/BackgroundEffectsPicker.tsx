@@ -52,12 +52,6 @@ export const BackgroundEffectsPicker = React.memo(({
 
   return (
     <div className={cn("flex flex-col gap-3", className)} style={themeVariables as React.CSSProperties}>
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-muted-foreground">
-          Background Effects
-        </label>
-      </div>
-
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="group" aria-label="Background effects">
         <button
           type="button"
@@ -75,7 +69,7 @@ export const BackgroundEffectsPicker = React.memo(({
           aria-pressed={isSelected('none')}
         >
           <Cancel01Icon className="w-6 h-6 mb-1 text-muted-foreground" />
-          <span className="text-[10px] font-medium text-muted-foreground">None</span>
+          <span className="text-[10px] font-medium text-foreground">None</span>
         </button>
 
         {effects.map((effect) => (
@@ -96,9 +90,9 @@ export const BackgroundEffectsPicker = React.memo(({
             aria-pressed={isSelected(effect.id)}
           >
             {effect.type === 'blur' ? (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-300 to-gray-400">
+              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-500 to-slate-600">
                 <Image01Icon className="w-6 h-6 text-white mb-1 opacity-50 blur-[1px]" />
-                <span className="text-[10px] font-medium text-white drop-shadow-md">Blur</span>
+                <span className="text-[10px] font-medium text-white drop-shadow-sm">Blur</span>
               </div>
             ) : effect.thumbnail || effect.value ? (
               <img

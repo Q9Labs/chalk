@@ -22,8 +22,9 @@ import {
 	Video01Icon,
 	VideoOffIcon,
 } from "../../utils/icons";
-import { ControlButton, Select } from "../atomic";
+import { ControlButton } from "../atomic";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { DeviceControlButton } from "./DeviceControlButton";
 
 export type ControlBarButton =
 	| "mic"
@@ -91,14 +92,6 @@ export interface ControlBarProps {
 	className?: string;
 }
 
-interface InlineDevicePickerProps {
-	label: string;
-	devices?: readonly MediaDevice[];
-	value?: string;
-	onChange?: (deviceId: string) => void;
-	placeholder: string;
-}
-
 const EMPTY_DETECTED_DEVICES = {
 	audioinput: [] as MediaDevice[],
 	audiooutput: [] as MediaDevice[],
@@ -124,37 +117,6 @@ function mergeDevices(
 	}
 
 	return Array.from(devicesById.values());
-}
-
-function InlineDevicePicker({
-	label,
-	devices = [],
-	value,
-	onChange,
-	placeholder,
-}: InlineDevicePickerProps) {
-	if (!onChange) {
-		return null;
-	}
-
-	return (
-		<div className="flex items-center gap-2 rounded-full bg-white/70 dark:bg-zinc-900/70 px-2.5 py-1">
-			<span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
-				{label}
-			</span>
-			<Select
-				options={devices.map((device) => ({
-					label: device.label || placeholder,
-					value: device.deviceId,
-				}))}
-				value={value}
-				onChange={(event) => onChange(event.target.value)}
-				size="sm"
-				placeholder={placeholder}
-				className="w-[120px] border-black/10 bg-white/90 text-sm dark:border-white/10 dark:bg-zinc-950/90"
-			/>
-		</div>
-	);
 }
 
 function withSelectedDeviceFallback(
@@ -237,7 +199,10 @@ export const ControlBar = React.memo(
 
 		className,
 	}: ControlBarProps) => {
-		const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+		const themeVariables = useMemo(
+			() => getParticipantThemeVariables(participantColorSeed),
+			[participantColorSeed],
+		);
 		const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
 		const defaultButtons: ControlBarButton[] = [
 			"mic",
@@ -313,6 +278,7 @@ export const ControlBar = React.memo(
 			"Current camera",
 			"videoinput",
 		);
+
 		const showLeave = buttonsToRender.includes("leave");
 		const mediaButtons = buttonsToRender.filter((b) =>
 			b === "mic" ||
@@ -651,34 +617,30 @@ export const ControlBar = React.memo(
 					>
 						{/* Middle: Media controls */}
 						<div className="flex items-center gap-1.5">
-							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
-								{renderButton("mic")}
-								<InlineDevicePicker
-									label="Mic"
-									devices={effectiveAudioInputDevices}
-									value={selectedAudioInput}
-									onChange={onAudioInputChange}
-									placeholder="Select microphone"
-								/>
-								<InlineDevicePicker
-									label="Speaker"
-									devices={effectiveAudioOutputDevices}
-									value={selectedAudioOutput}
-									onChange={onAudioOutputChange}
-									placeholder="Select speaker"
-								/>
-							</div>
+							<DeviceControlButton
+								type="mic"
+								isActive={!isMuted}
+								onToggle={onToggleMute ?? (() => {})}
+								devices={effectiveAudioInputDevices}
+								selectedDeviceId={selectedAudioInput}
+								onDeviceChange={onAudioInputChange ?? (() => {})}
+								secondaryDevices={effectiveAudioOutputDevices}
+								selectedSecondaryDeviceId={selectedAudioOutput}
+								onSecondaryDeviceChange={onAudioOutputChange}
+								orientation="up"
+								haptic="medium"
+							/>
 
-							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
-								{renderButton("video")}
-								<InlineDevicePicker
-									label="Cam"
-									devices={effectiveVideoInputDevices}
-									value={selectedVideoInput}
-									onChange={onVideoInputChange}
-									placeholder="Select camera"
-								/>
-							</div>
+							<DeviceControlButton
+								type="video"
+								isActive={isVideoEnabled}
+								onToggle={onToggleVideo ?? (() => {})}
+								devices={effectiveVideoInputDevices}
+								selectedDeviceId={selectedVideoInput}
+								onDeviceChange={onVideoInputChange ?? (() => {})}
+								orientation="up"
+								haptic="medium"
+							/>
 
 							<div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
 								{renderButton("screenshare")}

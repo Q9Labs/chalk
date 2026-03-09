@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useChalkSession } from "../../../context/chalk-provider";
 import { useChat } from "../../../hooks/features/useChat";
@@ -30,13 +30,33 @@ import { useLobbyDevices } from "./useLobbyDevices";
 import { useMeetingStats } from "./useMeetingStats";
 import { useVideoConferenceMeetingRoomProps } from "./useVideoConferenceMeetingRoomProps";
 import { useSessionEvents } from "./useSessionEvents";
-import { buildVideoConferenceViewState, type VideoConferenceControllerState } from "./view-state";
+import {
+  buildVideoConferenceViewState,
+  type VideoConferenceControllerState,
+} from "./view-state";
 
 const DISCONNECT_GRACE_MS = 8000;
 const EMPTY_FEATURES: Features = {};
 const EMPTY_DEFAULTS: NonNullable<VideoConferenceProps["defaults"]> = {};
 
-export function useVideoConferenceController({ roomId, roomName, userName, role, metadata, features, defaults, sounds = true, onJoin, onLeave, onEnd, onError, onAddPeople, whiteboard: whiteboardOptions, className }: VideoConferenceProps): VideoConferenceControllerState {
+export function useVideoConferenceController({
+  roomId,
+  roomName,
+  userName,
+  autoJoin = false,
+  role,
+  metadata,
+  features,
+  defaults,
+  sounds = true,
+  onJoin,
+  onLeave,
+  onEnd,
+  onError,
+  onAddPeople,
+  whiteboard: whiteboardOptions,
+  className,
+}: VideoConferenceProps): VideoConferenceControllerState {
   const resolvedFeatures = features ?? EMPTY_FEATURES;
   const resolvedDefaults = defaults ?? EMPTY_DEFAULTS;
 
@@ -44,12 +64,18 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const [error, setError] = useState<string | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  const autoJoinStartedRef = useRef(false);
 
   const effectiveRoomName = roomName ?? roomId;
 
   const { join, leave, isJoining } = useConnection();
   const { isConnected, status } = useRoom();
-  const { participants, localParticipant, participantCount } = useParticipants();
+  const {
+    participants,
+    localParticipant,
+    participantCount,
+    updateDisplayName,
+  } = useParticipants();
   const { activeSpeaker } = useActiveSpeaker();
   const media = useMedia();
   const screenShare = useScreenShare();
@@ -66,17 +92,39 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const whiteboard = useWhiteboard();
   const { layout } = useLayout();
   const { activePanel } = usePanels();
-  const { participantVolumes, setParticipantVolume, getAudioVolume } = useParticipantVolume();
-  const { refreshDevices, cameras, microphones, speakers: audioOutputs } = useDevices();
+  const { participantVolumes, setParticipantVolume, getAudioVolume } =
+    useParticipantVolume();
+  const {
+    refreshDevices,
+    cameras,
+    microphones,
+    speakers: audioOutputs,
+  } = useDevices();
 
-  const { lastWsToastAtRef, roomIdRef, phaseRef, localParticipantIdRef, disconnectGraceTimeoutRef, isDisconnectGraceActive, setIsDisconnectGraceActive, clearDisconnectGraceTimeout } = useConferenceLifecycleState({
+  const {
+    lastWsToastAtRef,
+    roomIdRef,
+    phaseRef,
+    localParticipantIdRef,
+    disconnectGraceTimeoutRef,
+    isDisconnectGraceActive,
+    setIsDisconnectGraceActive,
+    clearDisconnectGraceTimeout,
+  } = useConferenceLifecycleState({
     phase,
     status,
     roomId,
     localParticipantId: localParticipant?.id,
   });
 
-  const { lobbySelectedCamera, setLobbySelectedCamera, lobbySelectedMicrophone, setLobbySelectedMicrophone, lobbySelectedSpeaker, setLobbySelectedSpeaker } = useLobbyDevices({
+  const {
+    lobbySelectedCamera,
+    setLobbySelectedCamera,
+    lobbySelectedMicrophone,
+    setLobbySelectedMicrophone,
+    lobbySelectedSpeaker,
+    setLobbySelectedSpeaker,
+  } = useLobbyDevices({
     refreshDevices,
     cameras,
     microphones,
@@ -89,7 +137,10 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const { session } = useChalkSession();
   const { play } = useSoundEffects({ enabled: sounds, autoSubscribe: true });
   const { transcripts: rawTranscripts } = useTranscripts();
-  const committedTranscripts = useMemo(() => rawTranscripts.filter((transcript) => transcript.isInterim !== true), [rawTranscripts]);
+  const committedTranscripts = useMemo(
+    () => rawTranscripts.filter((transcript) => transcript.isInterim !== true),
+    [rawTranscripts],
+  );
   const transcripts = useMemo(
     () =>
       rawTranscripts.map((transcript) => ({
@@ -111,15 +162,22 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
     [session],
   );
 
-  const { supportCode, setSupportCode, emitError } = useConferenceErrorReporter({
-    session,
-    onError,
-    roomIdRef,
-    phaseRef,
-    pushIncidentBreadcrumb,
-  });
+  const { supportCode, setSupportCode, emitError } = useConferenceErrorReporter(
+    {
+      session,
+      onError,
+      roomIdRef,
+      phaseRef,
+      pushIncidentBreadcrumb,
+    },
+  );
 
-  const { meetingDuration, incrementHandRaiseCount, buildEndData, resetForRejoin } = useMeetingStats({
+  const {
+    meetingDuration,
+    incrementHandRaiseCount,
+    buildEndData,
+    resetForRejoin,
+  } = useMeetingStats({
     phase,
     roomId,
     participants,
@@ -173,7 +231,20 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
     roomIdRef,
   });
 
-  const { handleLeave, initiateLeave, handleRejoin, handleGoHome, handleToggleMute, handleToggleVideo, handleToggleScreenShare, handleToggleRecording, handleToggleHandRaise, handleSendReaction, handleSendMessage, handleSendMessageWithAttachments } = useConferenceMeetingActions({
+  const {
+    handleLeave,
+    initiateLeave,
+    handleRejoin,
+    handleGoHome,
+    handleToggleMute,
+    handleToggleVideo,
+    handleToggleScreenShare,
+    handleToggleRecording,
+    handleToggleHandRaise,
+    handleSendReaction,
+    handleSendMessage,
+    handleSendMessageWithAttachments,
+  } = useConferenceMeetingActions({
     clearDisconnectGraceTimeout,
     setShowLeaveConfirm,
     setIsExiting,
@@ -223,7 +294,34 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   });
 
   const selectedCamera = media.selectedCamera ?? lobbySelectedCamera;
-  const selectedMicrophone = media.selectedMicrophone ?? lobbySelectedMicrophone;
+  const selectedMicrophone =
+    media.selectedMicrophone ?? lobbySelectedMicrophone;
+
+  useEffect(() => {
+    if (!autoJoin || phase !== "lobby" || autoJoinStartedRef.current) {
+      return;
+    }
+
+    autoJoinStartedRef.current = true;
+    void handleJoin({
+      displayName: userName,
+      videoEnabled: resolvedDefaults.videoEnabled ?? true,
+      audioEnabled: resolvedDefaults.audioEnabled ?? true,
+      selectedVideoDevice: lobbySelectedCamera ?? undefined,
+      selectedAudioInput: lobbySelectedMicrophone ?? undefined,
+      selectedAudioOutput: lobbySelectedSpeaker ?? undefined,
+    });
+  }, [
+    autoJoin,
+    handleJoin,
+    lobbySelectedCamera,
+    lobbySelectedMicrophone,
+    lobbySelectedSpeaker,
+    phase,
+    resolvedDefaults.audioEnabled,
+    resolvedDefaults.videoEnabled,
+    userName,
+  ]);
 
   useEffect(() => {
     if (phase !== "meeting") {
@@ -252,10 +350,14 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
   const handleMeetingRoomMicrophoneChange = useCallback(
     (deviceId: string) => {
       void media.selectMicrophone(deviceId).catch((error) => {
-        pushIncidentBreadcrumb("media", "In-meeting microphone selection failed", {
-          deviceId,
-          message: error instanceof Error ? error.message : String(error),
-        });
+        pushIncidentBreadcrumb(
+          "media",
+          "In-meeting microphone selection failed",
+          {
+            deviceId,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        );
       });
     },
     [media, pushIncidentBreadcrumb],
@@ -307,8 +409,10 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       handleSendMessageWithAttachments,
       resolveChatAttachmentUrl: getAttachmentDownloadUrl,
       handleChatOpen,
+      handleUpdateDisplayName: updateDisplayName,
       defaultChatOpen: resolvedDefaults.chatOpen ?? activePanel === "chat",
-      defaultParticipantsOpen: resolvedDefaults.participantsOpen ?? activePanel === "participants",
+      defaultParticipantsOpen:
+        resolvedDefaults.participantsOpen ?? activePanel === "participants",
       audioInputDevices: microphones,
       audioOutputDevices: audioOutputs,
       videoInputDevices: cameras,
@@ -330,13 +434,19 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       participantVolumes,
       onParticipantVolumeChange: setParticipantVolume,
       getParticipantVolume: getAudioVolume,
+      enableBackgroundEffects: featureFlags.backgroundEffects,
+      isBackgroundEffectsSupported: media.isBackgroundEffectsSupported,
+      isApplyingBackgroundEffect: media.isApplyingBackgroundEffect,
+      selectedBackgroundEffect: media.selectedBackgroundEffect,
+      handleApplyBackgroundEffect: media.applyBackgroundEffect,
+      handleClearBackgroundEffect: media.clearBackgroundEffect,
       connectionState,
-	      isPictureInPictureSupported: false,
-	      isPictureInPictureActive: false,
-	      handleTogglePictureInPicture: undefined,
       handleRetryConnection,
       connectionSupportCode: supportCode ?? undefined,
       className: cn(className, isExiting && "chalk-animate-exit"),
+      isPictureInPictureSupported: false,
+      isPictureInPictureActive: false,
+      handleTogglePictureInPicture: undefined,
     },
   });
 
@@ -359,13 +469,13 @@ export function useVideoConferenceController({ roomId, roomName, userName, role,
       onAudioOutputChange: setLobbySelectedSpeaker,
       initialVideoEnabled: resolvedDefaults.videoEnabled ?? true,
       initialAudioEnabled: resolvedDefaults.audioEnabled ?? true,
-	      enablePictureInPicture: featureFlags.pictureInPicture,
-	      isPictureInPictureSupported: false,
-	      isPictureInPictureActive: false,
-	      onTogglePictureInPicture: undefined,
       isLoading: phase === "joining" || isJoining,
       error: error ?? undefined,
       supportCode: supportCode ?? undefined,
+      enablePictureInPicture: featureFlags.pictureInPicture,
+      isPictureInPictureSupported: false,
+      isPictureInPictureActive: false,
+      onTogglePictureInPicture: undefined,
       className,
       meetingDuration,
       participantCount,

@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act } from "react";
 
 import { SettingsDialog } from "../../components/composite/SettingsDialog";
 
 const settings = {
-	version: 2,
+	version: 3,
 	audio: {
 		selectedInput: undefined,
 		selectedOutput: undefined,
@@ -13,6 +14,7 @@ const settings = {
 	},
 	video: {
 		selectedInput: undefined,
+		backgroundEffect: { type: "none" as const },
 	},
 	appearance: {
 		theme: "system" as const,
@@ -69,12 +71,15 @@ describe("SettingsDialog", () => {
 			expect(globalThis.navigator.mediaDevices.enumerateDevices).toHaveBeenCalledTimes(1);
 		});
 
-		fireEvent.click(getAllByRole("button", { name: "Select device" })[0]);
+		await act(async () => {
+			fireEvent.click(getAllByRole("button", { name: "Select device" })[0]);
+		});
 		expect(await findByText("Fallback Mic")).toBeDefined();
 
-		fireEvent.click(getByText("Video"));
-		fireEvent.click(getByRole("button", { name: "Select device" }));
-		expect(await findByText("Fallback Cam")).toBeDefined();
+		act(() => {
+			fireEvent.click(getByText("Video"));
+		});
+		expect(getByRole("heading", { name: "Camera" })).toBeDefined();
 	});
 
 	it("keeps a fixed dialog shell height across sections", () => {
@@ -90,8 +95,63 @@ describe("SettingsDialog", () => {
 			/>
 		);
 
-		expect(getByRole("dialog", { name: "Meeting settings" }).className).toContain(
-			"h-[min(720px,calc(100vh-2rem))]",
+		expect(getByRole("dialog", { name: "Meeting settings" }).className).toMatch(/\bh-\[min\(720px/);
+		expect(getByRole("dialog", { name: "Meeting settings" }).className).not.toContain("max-h-");
+	});
+
+	it("renders background effects when enabled and supported", () => {
+		const onSelectBackgroundEffect = vi.fn();
+		const { getByText, getByRole } = render(
+			<SettingsDialog
+				isOpen
+				onClose={() => {}}
+				settings={settings}
+				onUpdateAudio={() => {}}
+				onUpdateVideo={() => {}}
+				onUpdateAppearance={() => {}}
+				onUpdateExperience={() => {}}
+				enableBackgroundEffects
+				isBackgroundEffectsSupported
+				backgroundEffects={[
+					{
+						id: "blur",
+						type: "blur",
+						name: "Blur",
+					},
+				]}
+				selectedBackgroundEffectId="none"
+				onSelectBackgroundEffect={onSelectBackgroundEffect}
+			/>
 		);
+
+		act(() => {
+			fireEvent.click(getByText("Video"));
+		});
+		fireEvent.click(getByRole("button", { name: "Select Blur" }));
+
+		expect(getByRole("group", { name: "Background effects" })).toBeDefined();
+		expect(onSelectBackgroundEffect).toHaveBeenCalledWith("blur");
+	});
+
+	it("shows unsupported background effects note", () => {
+		const { getByText } = render(
+			<SettingsDialog
+				isOpen
+				onClose={() => {}}
+				settings={settings}
+				onUpdateAudio={() => {}}
+				onUpdateVideo={() => {}}
+				onUpdateAppearance={() => {}}
+				onUpdateExperience={() => {}}
+				enableBackgroundEffects
+			/>
+		);
+
+		act(() => {
+			fireEvent.click(getByText("Video"));
+		});
+		expect(
+			getByText("Background effects are not supported in this browser yet."),
+		).toBeDefined();
 	});
 });

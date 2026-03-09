@@ -10,6 +10,7 @@ import {
 	Video01Icon,
 	VideoOffIcon,
 } from "../../../utils/icons";
+import { useHaptics } from "../../../hooks/ui/useHaptics";
 import { cn } from "../../../utils/cn";
 import type { PreJoinDropdown } from "./usePreJoinUiState";
 
@@ -61,6 +62,7 @@ export function PreJoinFloatingControls({
 	isPictureInPictureActive = false,
 	onTogglePictureInPicture,
 }: PreJoinFloatingControlsProps): React.JSX.Element {
+	const { trigger } = useHaptics();
 	const selectedAudioInputDevice = useMemo(
 		() =>
 			effectiveAudioInputDevices.find(
@@ -125,6 +127,7 @@ export function PreJoinFloatingControls({
 									role="menuitemradio"
 									aria-checked={isSelected}
 									onClick={() => {
+										void trigger("selection");
 										if (openDropdown === "audio") {
 											onAudioInputChange(device.deviceId);
 										} else {
@@ -163,9 +166,12 @@ export function PreJoinFloatingControls({
 				}}
 			>
 				<div className="flex items-center gap-1">
-					<button
-						type="button"
-						onClick={onToggleAudio}
+						<button
+							type="button"
+							onClick={() => {
+								void trigger(isAudioEnabled ? "medium" : "selection");
+								onToggleAudio();
+							}}
 						title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
 						aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
 						className={cn(
@@ -186,6 +192,7 @@ export function PreJoinFloatingControls({
 							type="button"
 							onClick={(event) => {
 								event.stopPropagation();
+								void trigger("selection");
 								setOpenDropdown(openDropdown === "audio" ? null : "audio");
 							}}
 							title="Select microphone"
@@ -212,9 +219,12 @@ export function PreJoinFloatingControls({
 				</div>
 
 				<div className="flex items-center gap-1">
-					<button
-						type="button"
-						onClick={onToggleVideo}
+						<button
+							type="button"
+							onClick={() => {
+								void trigger(isVideoEnabled ? "medium" : "selection");
+								onToggleVideo();
+							}}
 						title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
 						aria-label={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
 						className={cn(
@@ -231,6 +241,7 @@ export function PreJoinFloatingControls({
 							type="button"
 							onClick={(event) => {
 								event.stopPropagation();
+								void trigger("selection");
 								setOpenDropdown(openDropdown === "video" ? null : "video");
 							}}
 							title="Select camera"
@@ -260,7 +271,10 @@ export function PreJoinFloatingControls({
 
 				<button
 					type="button"
-					onClick={onToggleSettings}
+					onClick={() => {
+						void trigger("selection");
+						onToggleSettings();
+					}}
 					title="Settings"
 					aria-label="Settings"
 					className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-(--foreground) hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] active:scale-90"

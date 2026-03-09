@@ -13,6 +13,8 @@ export type {
 	Track,
 	TrackKind,
 	TrackSource,
+	VideoBackgroundEffect,
+	VideoBackgroundMode,
 } from "./media";
 export type {
 	ChatMessage,
@@ -38,7 +40,27 @@ export type {
 	JoinSessionConfig,
 	SessionConnectionState,
 } from "./room";
-
+export type {
+	AnnotationAccessMode,
+	ScreenAnnotationAccessMode,
+	ScreenAnnotationAccessChanged,
+	ScreenAnnotationAccessChange,
+	ScreenAnnotationCursor,
+	ScreenAnnotationFreehandItem,
+	ScreenAnnotationItem,
+	ScreenAnnotationPoint,
+	ScreenAnnotationSession,
+	ScreenAnnotationSessionEnded,
+	ScreenAnnotationSessionStarted,
+	ScreenAnnotationShape,
+	ScreenAnnotationShapeKind,
+	ScreenAnnotationShapeItem,
+	ScreenAnnotationSnapshot,
+	ScreenAnnotationStyle,
+	ScreenAnnotationTextItem,
+	ScreenAnnotationTool,
+	ScreenAnnotationUpdate,
+} from "./annotations";
 export type {
 	WhiteboardCursor,
 	WhiteboardFeature,

@@ -19,6 +19,7 @@ import {
   scheduleRoom as scheduleRoomOp,
   startRecording as startRecordingOp,
   stopRecording as stopRecordingOp,
+  updateOwnDisplayName as updateOwnDisplayNameOp,
 } from "./conference-client/client-room-ops.ts";
 import { configureConferenceWideEvents, DEFAULT_API_URL, deriveWsUrl, isTokenExpired as parseTokenExpiry } from "./conference-client/config.ts";
 import { createRealtimeKitInitEffect, emitRtkJoinAttemptTelemetry, joinRealtimeKitWithRetry, preloadRealtimeKitBundle } from "./conference-client/join-engine.ts";
@@ -334,6 +335,10 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
 
   async removeParticipant(apiParticipantId: string): Promise<void> {
     return removeParticipantOp(this.apiClient, this.currentSession, apiParticipantId);
+  }
+
+  async updateOwnDisplayName(displayName: string): Promise<void> {
+    return updateOwnDisplayNameOp(this.apiClient, this.currentSession, displayName);
   }
 
   disconnect(): void {

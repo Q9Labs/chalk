@@ -17,6 +17,7 @@ interface MeetingRoomStageProps {
   allParticipants: Participant[];
   isFilmstripOpen: boolean;
   onToggleFilmstrip: () => void;
+  enableAnnotations: boolean;
   enableWhiteboard: boolean;
   isWhiteboardOpen: boolean;
   theme: "light" | "dark" | "system";
@@ -26,7 +27,7 @@ interface MeetingRoomStageProps {
   localParticipantColorSeed?: string;
 }
 
-export function MeetingRoomStage({ isMobile, layout, isStageMode, isSplit, screenSharer, allParticipants, isFilmstripOpen, onToggleFilmstrip, enableWhiteboard, isWhiteboardOpen, theme, onWhiteboardExcalidrawApiReady, activeReactions, isExiting, localParticipantColorSeed }: MeetingRoomStageProps) {
+export function MeetingRoomStage({ isMobile, layout, isStageMode, isSplit, screenSharer, allParticipants, isFilmstripOpen, onToggleFilmstrip, enableAnnotations, enableWhiteboard, isWhiteboardOpen, theme, onWhiteboardExcalidrawApiReady, activeReactions, isExiting, localParticipantColorSeed }: MeetingRoomStageProps) {
   return (
     <div className={cn("flex-1 h-full min-w-0 relative flex rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]", isStageMode && layout === "sidebar" ? "flex-row" : "flex-col", isExiting && "chalk-animate-void-exit")}>
       {isStageMode ? (
@@ -34,13 +35,13 @@ export function MeetingRoomStage({ isMobile, layout, isStageMode, isSplit, scree
           <div className="flex-1 relative min-h-0 min-w-0">
             {isSplit && screenSharer?.screenShareTrack ? (
               <SplitStage
-                leftPanel={<ScreenShareView screenShareTrack={screenSharer.screenShareTrack} sharedByName={screenSharer.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />}
+                leftPanel={<ScreenShareView screenShareTrack={screenSharer.screenShareTrack} sharedByName={screenSharer.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} enableAnnotations={enableAnnotations} />}
                 rightPanel={<WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} />}
               />
             ) : enableWhiteboard && isWhiteboardOpen ? (
               <WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} />
             ) : (
-              <ScreenShareView screenShareTrack={screenSharer?.screenShareTrack!} sharedByName={screenSharer?.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />
+              <ScreenShareView screenShareTrack={screenSharer?.screenShareTrack!} sharedByName={screenSharer?.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} enableAnnotations={enableAnnotations} />
             )}
 
             {allParticipants.length > 0 && (

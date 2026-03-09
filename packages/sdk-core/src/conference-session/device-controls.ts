@@ -5,6 +5,7 @@ interface DeviceControllerDeps {
   getRtkClient: () => RealtimeKitClient | undefined;
   getLocalParticipant: () => Participant | null;
   emitError: (error: ChalkError) => void;
+  reapplyBackgroundEffect?: () => Promise<unknown>;
 }
 
 export const createConferenceSessionDeviceController = (deps: DeviceControllerDeps) => {
@@ -65,6 +66,7 @@ export const createConferenceSessionDeviceController = (deps: DeviceControllerDe
 
       localParticipant.videoEnabled = true;
       localParticipant.videoTrack = (self.videoTrack as MediaStreamTrack | undefined) ?? undefined;
+      await deps.reapplyBackgroundEffect?.();
       return true;
     } catch {
       deps.emitError({

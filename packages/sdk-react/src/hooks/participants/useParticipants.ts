@@ -19,6 +19,8 @@ export interface UseParticipantsReturn {
 	participantCount: number;
 	/** Get a participant by ID */
 	getParticipant: (id: string) => Participant | undefined;
+	/** Update local participant display name */
+	updateDisplayName: (name: string) => Promise<void>;
 }
 
 /**
@@ -58,6 +60,11 @@ export function useParticipants(): UseParticipantsReturn {
 		[manager],
 	);
 
+	const updateDisplayName = useMemo(
+		() => (name: string) => session.updateOwnDisplayName(name),
+		[session],
+	);
+
 	return useMemo(
 		(): UseParticipantsReturn => ({
 			participants: state.participants,
@@ -66,7 +73,8 @@ export function useParticipants(): UseParticipantsReturn {
 			activeSpeaker: state.activeSpeaker,
 			participantCount: state.count,
 			getParticipant,
+			updateDisplayName,
 		}),
-		[state, manager, getParticipant],
+		[state, manager, getParticipant, updateDisplayName],
 	);
 }

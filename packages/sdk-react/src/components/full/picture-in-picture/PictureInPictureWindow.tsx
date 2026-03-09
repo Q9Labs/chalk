@@ -34,9 +34,11 @@ interface PictureInPictureWindowProps {
 function PictureInPictureStage({
 	source,
 	className,
+	hideOverlay,
 }: {
 	source: PictureInPictureSource | null;
 	className?: string;
+	hideOverlay?: boolean;
 }) {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const hasVideo = Boolean(source?.videoTrack);
@@ -90,24 +92,25 @@ function PictureInPictureStage({
 					/>
 				</div>
 			)}
-
-			<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4">
-				<div className="flex items-end justify-between gap-3">
-					<div className="min-w-0">
-						<p className="truncate text-base font-semibold text-white">
-							{source?.title ?? "Waiting for video"}
-						</p>
-						{source?.subtitle ? (
-							<p className="truncate text-xs text-white/70">{source.subtitle}</p>
+			{!hideOverlay ? (
+				<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4">
+					<div className="flex items-end justify-between gap-3">
+						<div className="min-w-0">
+							<p className="truncate text-base font-semibold text-white">
+								{source?.title ?? "Waiting for video"}
+							</p>
+							{source?.subtitle ? (
+								<p className="truncate text-xs text-white/70">{source.subtitle}</p>
+							) : null}
+						</div>
+						{source?.isMuted ? (
+							<div className="rounded-full bg-black/50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/80">
+								Muted
+							</div>
 						) : null}
 					</div>
-					{source?.isMuted ? (
-						<div className="rounded-full bg-black/50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/80">
-							Muted
-						</div>
-					) : null}
 				</div>
-			</div>
+			) : null}
 		</div>
 	);
 }
@@ -115,7 +118,6 @@ function PictureInPictureStage({
 export function PictureInPictureWindow({
 	phase,
 	roomName,
-	displayName,
 	source,
 	previewSource,
 	controls,
@@ -227,32 +229,49 @@ export function PictureInPictureWindow({
 	}, [controls, onReturnToTab, phase]);
 
 	return (
-		<div className="flex min-h-screen flex-col gap-3 bg-[#050911] p-3 text-white">
-			<div className="flex items-center justify-between gap-3 px-1">
-				<div className="min-w-0">
-					<p className="truncate text-sm font-semibold text-white">
+		<div className="group relative flex min-h-screen flex-col overflow-hidden bg-[#050911] text-neutral-50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]">
+			{/* Full bleed stage */}
+			<div className="absolute inset-0 z-0">
+				<PictureInPictureStage source={source} className="h-full w-full rounded-none border-0" hideOverlay />
+			</div>
+
+			{/* Top Bar (Glass) */}
+			<div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 bg-gradient-to-b from-black/80 via-black/30 to-transparent p-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+				<div className="min-w-0 flex-1">
+					<p className="truncate text-[13px] font-medium text-white drop-shadow-md">
+						{source?.title ?? "Waiting for video"}
+					</p>
+					{source?.subtitle ? (
+						<p className="truncate text-[11px] font-medium text-white/70 drop-shadow-md">
+							{source.subtitle}
+						</p>
+					) : null}
+					{source?.isMuted ? (
+						<div className="mt-1.5 inline-flex rounded-full bg-black/60 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-white/90 backdrop-blur-md">
+							Muted
+						</div>
+					) : null}
+				</div>
+				<div className="min-w-0 shrink-0 text-right">
+					<p className="truncate text-[11px] font-medium text-white/90 drop-shadow-md">
 						{roomName ?? "Meeting"}
 					</p>
-					<p className="truncate text-[11px] uppercase tracking-[0.16em] text-white/45">
-						{phase === "prejoin" ? "Ready to join" : "Picture in Picture"}
+					<p className="truncate text-[9px] font-semibold uppercase tracking-[0.2em] text-white/60 drop-shadow-md">
+						{phase === "prejoin" ? "Ready" : "PIP"}
 					</p>
 				</div>
-				{displayName ? (
-					<div className="truncate text-xs font-medium text-white/60">{displayName}</div>
-				) : null}
 			</div>
 
-			<div className="relative flex flex-1 flex-col">
-				<PictureInPictureStage source={source} />
-				{phase === "meeting" && previewSource ? (
-					<div className="pointer-events-none absolute bottom-4 right-4 h-20 w-16 overflow-hidden rounded-2xl border border-white/10 bg-black/30 shadow-xl">
-						<PictureInPictureStage source={previewSource} className="rounded-none border-0" />
-					</div>
-				) : null}
-			</div>
+			{/* Preview */}
+			{phase === "meeting" && previewSource ? (
+				<div className="pointer-events-none absolute bottom-20 right-4 z-10 h-28 w-20 overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-2xl backdrop-blur-md transition-all duration-300 group-hover:-translate-y-1">
+					<PictureInPictureStage source={previewSource} className="h-full w-full rounded-none border-0" hideOverlay />
+				</div>
+			) : null}
 
-			<div className="rounded-[28px] border border-white/10 bg-white/6 px-3 py-2 shadow-[0_18px_48px_rgba(0,0,0,0.36)] backdrop-blur-xl">
-				<div className="flex flex-wrap items-center justify-center gap-2">
+			{/* Controls (Glass) */}
+			<div className="absolute inset-x-0 bottom-6 z-20 flex justify-center translate-y-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+				<div className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-2 shadow-2xl backdrop-blur-2xl">
 					{actionButtons.map((button) =>
 						button ? (
 							<ControlButton

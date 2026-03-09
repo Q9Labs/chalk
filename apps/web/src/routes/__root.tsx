@@ -110,7 +110,7 @@ function RootComponent() {
 			: undefined);
 
 	// Token provider: handles API key → JWT exchange and auto-refresh
-	const apiKey = isLocalApi ? undefined : import.meta.env.VITE_CHALK_API_KEY;
+	const apiKey = import.meta.env.VITE_CHALK_API_KEY;
 	const tokenProvider = useMemo(
 		() =>
 			apiKey

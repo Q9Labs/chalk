@@ -27,6 +27,7 @@ export * from './SettingsPanel';
 export * from './WaitingRoom';
 
 // Device & Media
+export * from './DeviceControlButton';
 export * from './DeviceSelector';
 export * from './BackgroundEffectsPicker';
 export * from './NoiseSuppressionToggle';

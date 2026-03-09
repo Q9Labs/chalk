@@ -10,3 +10,6 @@
 - 19:56 PKT - traced live meeting-room path; confirmed dock/device-picker JSX present; focused on controller/device refresh path
 - 20:01 PKT - added in-meeting `refreshDevices()` on meeting phase entry; added dock control-bar regression for inline pickers + light-mode elevated settings/reactions
 - 20:05 PKT - added desktop `MeetingRoom` regression for visible inline pickers; validated speaker selection already flows through meeting-room view model, so kept that path intact
+- 19:37 PKT - scoped Document PiP feature in `packages/sdk-react`; mapped `PreJoinLobby` + `MeetingRoom` + `VideoConference` phase flow; chose Chromium-only `DocumentPictureInPicture` with hidden unsupported state.
+- 22:58 PKT - landed shared `DocumentPictureInPicture` ownership in `VideoConference`; prejoin/meeting now register live PiP payloads into one provider, prejoin uses active preview track, changelog updated, targeted PiP tests green.
+- 08:56 PKT - fixed prod header nav + internal magic-link targeting. landing page now routes via TanStack links, `/documentation` aliases docs, and API magic-link callbacks default to `/dashboard` while preserving safe allowlisted callback paths.

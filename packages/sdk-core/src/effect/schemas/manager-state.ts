@@ -146,15 +146,32 @@ export const MediaDeviceSchema = Schema.Struct({
   kind: Schema.Literal("videoinput", "audioinput", "audiooutput"),
 });
 
+export const VideoBackgroundEffectSchema = Schema.Union(
+  Schema.Struct({
+    mode: Schema.Literal("none"),
+  }),
+  Schema.Struct({
+    mode: Schema.Literal("blur"),
+    blurStrength: Schema.optional(Schema.Number),
+  }),
+  Schema.Struct({
+    mode: Schema.Literal("image"),
+    imageUrl: Schema.String,
+  })
+);
+
 /** Media state schema */
 export const MediaStateSchema = Schema.Struct({
   isVideoEnabled: Schema.Boolean,
   isAudioEnabled: Schema.Boolean,
   isTogglingVideo: Schema.Boolean,
   isTogglingAudio: Schema.Boolean,
+  isBackgroundEffectsSupported: Schema.Boolean,
+  isApplyingBackgroundEffect: Schema.Boolean,
   selectedCamera: Schema.NullOr(Schema.String),
   selectedMicrophone: Schema.NullOr(Schema.String),
   selectedSpeaker: Schema.NullOr(Schema.String),
+  selectedBackgroundEffect: VideoBackgroundEffectSchema,
   devices: Schema.Array(MediaDeviceSchema),
 });
 
@@ -201,5 +218,6 @@ export type ParticipantState = Schema.Schema.Type<typeof ParticipantStateSchema>
 export type ParticipantEvent = Schema.Schema.Type<typeof ParticipantEventSchema>;
 
 export type MediaDeviceData = Schema.Schema.Type<typeof MediaDeviceSchema>;
+export type VideoBackgroundEffectData = Schema.Schema.Type<typeof VideoBackgroundEffectSchema>;
 export type MediaState = Schema.Schema.Type<typeof MediaStateSchema>;
 export type MediaEvent = Schema.Schema.Type<typeof MediaEventSchema>;

@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 
 import type { MeetingLayout } from "../components/full/meeting-room/types";
+import {
+	DEFAULT_STORED_VIDEO_BACKGROUND_EFFECT,
+	type StoredVideoBackgroundEffect,
+	type VideoBackgroundPresetId,
+} from "../utils/videoBackgrounds";
 
 export interface MeetingRoomSettings {
 	version: number;
@@ -12,6 +17,7 @@ export interface MeetingRoomSettings {
 	};
 	video: {
 		selectedInput?: string;
+		backgroundEffect: StoredVideoBackgroundEffect;
 	};
 	appearance: {
 		theme: "light" | "dark" | "system";
@@ -40,7 +46,8 @@ interface UseMeetingRoomSettingsOptions {
 }
 
 const SETTINGS_KEY = "chalk-meeting-settings";
-const SETTINGS_VERSION = 2;
+const SETTINGS_VERSION = 3;
+const LEGACY_SETTINGS_VERSION = 2;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
@@ -52,6 +59,61 @@ function withDefined<T extends Record<string, unknown>>(value: T) {
 	) as Partial<T>;
 }
 
+function isVideoBackgroundPresetId(
+	value: unknown,
+): value is VideoBackgroundPresetId {
+	return (
+		typeof value === "string" &&
+		value.startsWith("preset-")
+	);
+}
+
+function sanitizeStoredVideoBackgroundEffect(
+	value: unknown,
+): StoredVideoBackgroundEffect | undefined {
+	if (!isRecord(value) || typeof value.type !== "string") {
+		return undefined;
+	}
+
+	if (value.type === "none") {
+		return { type: "none" };
+	}
+
+	if (value.type === "blur") {
+		return {
+			type: "blur",
+			blurStrength:
+				typeof value.blurStrength === "number"
+					? value.blurStrength
+					: undefined,
+		};
+	}
+
+	if (
+		value.type === "preset" &&
+		isVideoBackgroundPresetId(value.presetId)
+	) {
+		return {
+			type: "preset",
+			presetId: value.presetId,
+		};
+	}
+
+	if (
+		value.type === "custom" &&
+		typeof value.assetKey === "string"
+	) {
+		return {
+			type: "custom",
+			assetKey: value.assetKey,
+			fileName:
+				typeof value.fileName === "string" ? value.fileName : undefined,
+		};
+	}
+
+	return undefined;
+}
+
 function sanitizeStoredSettings(
 	value: unknown,
 ): StoredMeetingRoomSettings | null {
@@ -60,7 +122,10 @@ function sanitizeStoredSettings(
 	}
 
 	const version = value.version;
-	if (version !== SETTINGS_VERSION) {
+	if (
+		version !== SETTINGS_VERSION &&
+		version !== LEGACY_SETTINGS_VERSION
+	) {
 		return null;
 	}
 
@@ -70,7 +135,7 @@ function sanitizeStoredSettings(
 	const experience = isRecord(value.experience) ? value.experience : undefined;
 
 	return {
-		version,
+		version: SETTINGS_VERSION,
 		audio: audio
 			? withDefined({
 					selectedInput:
@@ -97,6 +162,9 @@ function sanitizeStoredSettings(
 						typeof video.selectedInput === "string"
 							? video.selectedInput
 							: undefined,
+					backgroundEffect: sanitizeStoredVideoBackgroundEffect(
+						video.backgroundEffect,
+					),
 				})
 			: undefined,
 		appearance: appearance
@@ -156,6 +224,7 @@ const createDefaultSettings = (
 		...defaults?.audio,
 	},
 	video: {
+		backgroundEffect: DEFAULT_STORED_VIDEO_BACKGROUND_EFFECT,
 		...defaults?.video,
 	},
 	appearance: {
@@ -178,7 +247,7 @@ const mergeSettings = (
 	base: MeetingRoomSettings,
 	stored: StoredMeetingRoomSettings | null,
 ): MeetingRoomSettings => {
-	if (!stored || stored.version !== SETTINGS_VERSION) {
+	if (!stored) {
 		return base;
 	}
 

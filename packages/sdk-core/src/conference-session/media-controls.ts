@@ -1,7 +1,12 @@
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { ChalkErrorCode, type ChalkError, type Participant, type ScreenShareOptions } from "../types.ts";
+import type { VideoBackgroundEffect } from "../types/entities/media.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import { withPatchedGetDisplayMedia } from "../utils/get-display-media-fallback.ts";
+import {
+  createConferenceSessionVideoBackgroundController,
+  isConferenceSessionVideoBackgroundSupported,
+} from "./video-background-controller.ts";
 
 interface MediaControllerDeps {
   getRtkClient: () => RealtimeKitClient | undefined;
@@ -61,6 +66,10 @@ const boostVideoBitrate = async (rtkClient: RealtimeKitClient): Promise<void> =>
 };
 
 export const createConferenceSessionMediaController = (deps: MediaControllerDeps) => {
+  const videoBackgroundController = createConferenceSessionVideoBackgroundController({
+    getRtkClient: deps.getRtkClient,
+  });
+
   const toggleVideo = async (): Promise<boolean> => {
     const rtkClient = deps.getRtkClient();
     const localParticipant = deps.getLocalParticipant();
@@ -82,6 +91,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
         await rtkClient.self.enableVideo();
         localParticipant.videoEnabled = true;
         localParticipant.videoTrack = rtkClient.self.videoTrack ?? undefined;
+        await videoBackgroundController.reapplySelectedBackgroundEffect();
         await boostVideoBitrate(rtkClient);
       }
 
@@ -204,9 +214,68 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     }
   };
 
+  const applyBackgroundEffect = async (
+    effect: VideoBackgroundEffect,
+  ): Promise<boolean> => {
+    const rtkClient = deps.getRtkClient();
+    const localParticipant = deps.getLocalParticipant();
+
+    if (!rtkClient || !localParticipant) {
+      return false;
+    }
+
+    if (!isConferenceSessionVideoBackgroundSupported(rtkClient)) {
+      return false;
+    }
+
+    const ctx = wideEvents.start("media.background.apply");
+    ctx.set("mode", effect.mode);
+
+    try {
+      const applied = await videoBackgroundController.applyBackgroundEffect(effect);
+      ctx.complete("success", { applied });
+      return applied;
+    } catch (error) {
+      ctx.complete("error", error);
+      deps.emitError({
+        code: "MEDIA_ERROR",
+        message: "Failed to apply video background",
+        details: { mode: effect.mode },
+      });
+      return false;
+    }
+  };
+
+  const clearBackgroundEffect = async (): Promise<boolean> => {
+    const rtkClient = deps.getRtkClient();
+    const localParticipant = deps.getLocalParticipant();
+
+    if (!rtkClient || !localParticipant) {
+      return false;
+    }
+
+    const ctx = wideEvents.start("media.background.clear");
+
+    try {
+      const cleared = await videoBackgroundController.clearBackgroundEffect();
+      ctx.complete("success", { cleared });
+      return cleared;
+    } catch (error) {
+      ctx.complete("error", error);
+      deps.emitError({
+        code: "MEDIA_ERROR",
+        message: "Failed to clear video background",
+      });
+      return false;
+    }
+  };
+
   const validateMediaTrack = validateTrack;
 
   return {
+    applyBackgroundEffect,
+    clearBackgroundEffect,
+    reapplyBackgroundEffect: videoBackgroundController.reapplySelectedBackgroundEffect,
     toggleVideo,
     toggleAudio,
     startScreenShare,

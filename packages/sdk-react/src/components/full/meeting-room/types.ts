@@ -1,4 +1,4 @@
-import type { MediaDevice } from "@q9labs/chalk-core";
+import type { MediaDevice, VideoBackgroundEffect } from "@q9labs/chalk-core";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 export type MeetingPanel = "chat" | "participants" | "transcription";
@@ -74,9 +74,6 @@ export interface MeetingRoomProps {
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
-  enablePictureInPicture?: boolean;
-  isPictureInPictureActive?: boolean;
-  isPictureInPictureSupported?: boolean;
   isWhiteboardOpen?: boolean;
   isRecording?: boolean;
   recordingDuration?: number;
@@ -87,8 +84,12 @@ export interface MeetingRoomProps {
   chatMessages?: ChatMessage[];
   unreadChatCount?: number;
   enablePictureInPicture?: boolean;
+  enableBackgroundEffects?: boolean;
   isPictureInPictureActive?: boolean;
   isPictureInPictureSupported?: boolean;
+  isBackgroundEffectsSupported?: boolean;
+  isApplyingBackgroundEffect?: boolean;
+  selectedBackgroundEffect?: VideoBackgroundEffect;
   onSendMessage?: (content: string) => void;
   onSendMessageWithAttachments?: (content: string, files: File[]) => Promise<void>;
   onResolveChatAttachmentUrl?: (attachmentId: string) => Promise<string>;
@@ -96,11 +97,11 @@ export interface MeetingRoomProps {
   enableChat?: boolean;
   enableRecording?: boolean;
   enableScreenShare?: boolean;
+  enableAnnotations?: boolean;
   enableHandRaise?: boolean;
   enableReactions?: boolean;
   enableWhiteboard?: boolean;
   enableTranscription?: boolean;
-  onTogglePictureInPicture?: () => Promise<void> | void;
   enableTour?: boolean;
   defaultLayout?: MeetingLayout;
   defaultChatOpen?: boolean;
@@ -120,6 +121,8 @@ export interface MeetingRoomProps {
   onSendReaction?: (emoji: string) => void;
   onToggleTranscription?: () => void;
   onTogglePictureInPicture?: () => Promise<void> | void;
+  onApplyBackgroundEffect?: (effect: VideoBackgroundEffect) => Promise<void> | void;
+  onClearBackgroundEffect?: () => Promise<void> | void;
   onLeave?: () => void;
   onTourComplete?: () => void;
   onAddPeople?: () => void;

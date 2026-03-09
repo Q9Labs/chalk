@@ -9,6 +9,7 @@ import type { ChatMessage, MediaDevice, Participant, ReactionEmoji, ScreenShareO
 import { wideEvents } from "./wide-events/index.ts";
 import { WideEventContext } from "./wide-events/context.ts";
 import type { WSClient } from "./ws-client.ts";
+import type { APIClient } from "./api-client.ts";
 import { createConferenceSessionDeviceController } from "./conference-session/device-controls.ts";
 import { createConferenceSessionInteractionActions } from "./conference-session/interaction-actions.ts";
 import { createConferenceSessionLeaveFlow } from "./conference-session/leave-flow.ts";
@@ -20,6 +21,7 @@ import { createConferenceSessionAnnotationActions } from "./conference-session/a
 import { createConferenceSessionWhiteboardActions } from "./conference-session/whiteboard-actions.ts";
 import { createHostAudioCommandHandler, setupConferenceSessionWsSignaling } from "./conference-session/ws-signaling.ts";
 import type { ScreenAnnotationAccessMode, ScreenAnnotationItem, ScreenAnnotationTool } from "./types/entities/annotations.ts";
+import type { VideoBackgroundEffect } from "./types/entities/media.ts";
 
 export type { ConferenceSessionEvents, Transcript } from "./conference-session/types.ts";
 
@@ -47,6 +49,7 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
 
   private rtkClient?: RealtimeKitClient;
   private wsClient?: WSClient;
+  private apiClient?: APIClient;
   private readonly debug: boolean;
   private readonly sessionStore: ConferenceSessionStore;
   private wsSignalingCleanup: (() => void) | null = null;
@@ -64,10 +67,11 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   private readonly whiteboardActions: ReturnType<typeof createConferenceSessionWhiteboardActions>;
   private readonly leaveFlow: ReturnType<typeof createConferenceSessionLeaveFlow>;
 
-  constructor(roomId: string, wsClientOrRtkClient?: WSClient | RealtimeKitClient, debug = false) {
+  constructor(roomId: string, wsClientOrRtkClient?: WSClient | RealtimeKitClient, debug = false, apiClient?: APIClient) {
     super();
     this.id = roomId;
     this.debug = debug;
+    this.apiClient = apiClient;
     this.sessionStore = createConferenceSessionStore({
       getParticipants: () => this._participants,
       getPeerIdMap: () => this._rtkPeerIdToStableId,
@@ -122,6 +126,8 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       getRtkClient: () => this.rtkClient,
       getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
       emitError: (error) => this.emit("error", error),
+      reapplyBackgroundEffect: () =>
+        this.mediaController.reapplyBackgroundEffect(),
     });
 
     this.interactionActions = createConferenceSessionInteractionActions({
@@ -381,6 +387,14 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
     await this.mediaController.stopScreenShare();
   }
 
+  async applyBackgroundEffect(effect: VideoBackgroundEffect): Promise<boolean> {
+    return this.mediaController.applyBackgroundEffect(effect);
+  }
+
+  async clearBackgroundEffect(): Promise<boolean> {
+    return this.mediaController.clearBackgroundEffect();
+  }
+
   async getDevices(): Promise<MediaDevice[]> {
     return this.deviceController.getDevices();
   }
@@ -431,6 +445,26 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
 
   unmuteParticipant(participantId: string): void {
     this.interactionActions.unmuteParticipant(participantId);
+  }
+
+  updateLocalParticipantDisplayName(displayName: string): void {
+    const trimmedDisplayName = displayName.trim();
+    const localParticipant = this.sessionStore.getLocalParticipant();
+    if (!localParticipant || !trimmedDisplayName) {
+      return;
+    }
+
+    const updatedParticipant: Participant = {
+      ...localParticipant,
+      displayName: trimmedDisplayName,
+    };
+
+    this.sessionStore.setLocalParticipant(updatedParticipant);
+    this.sessionStore.setParticipant(updatedParticipant.id, updatedParticipant);
+    this.emit("participant.updated", {
+      participantId: updatedParticipant.id,
+      participant: updatedParticipant,
+    });
   }
 
   canDrawWhiteboard(participantId?: string): boolean {
@@ -532,5 +566,24 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
 
   async leave(): Promise<void> {
     return this.leaveFlow.leave();
+  }
+
+  async updateDisplayName(displayName: string): Promise<void> {
+    const localParticipant = this.localParticipant;
+    if (!localParticipant) {
+      throw new Error("No local participant");
+    }
+
+    if (this.apiClient) {
+      const response = await this.apiClient.updateParticipant(this.id, "me", { displayName });
+      if (!response.success) {
+        throw new Error(response.error?.message ?? "Failed to update display name");
+      }
+    }
+
+    // Update local state immediately
+    localParticipant.displayName = displayName;
+    this._setLocalParticipant(localParticipant);
+    this.emitParticipantUpdated(localParticipant.id, localParticipant);
   }
 }

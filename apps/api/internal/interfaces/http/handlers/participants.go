@@ -261,6 +261,79 @@ func (h *ParticipantHandler) recordError(c *gin.Context, err error, step string,
 	_ = c.Error(err).SetType(gin.ErrorTypePrivate).SetMeta(meta)
 }
 
+type UpdateParticipantRequest struct {
+	DisplayName *string `json:"display_name"`
+	Role        *string `json:"role"`
+}
+
+func (h *ParticipantHandler) Update(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	roomID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		return
+	}
+
+	// Verify room belongs to tenant
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), roomID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+	if existingRoom.TenantID != claims.TenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+
+	participantIDParam := c.Param("pid")
+	var participantID uuid.UUID
+	if participantIDParam == "me" {
+		participantID, err = uuid.Parse(claims.Subject)
+	} else {
+		participantID, err = uuid.Parse(participantIDParam)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participant id"})
+		return
+	}
+
+	// Only host can update others; participants can only update themselves
+	if participantID.String() != claims.Subject && claims.Role != "host" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	var req UpdateParticipantRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Participants cannot update their own role
+	if participantID.String() == claims.Subject && claims.Role != "host" && req.Role != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "participants cannot update their own role"})
+		return
+	}
+
+	p, err := h.participantService.UpdateParticipant(c.Request.Context(), participantID, req.DisplayName, req.Role)
+	if err != nil {
+		if errors.Is(err, participant.ErrParticipantNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "participant not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update participant: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, p)
+}
+
 func (h *ParticipantHandler) List(c *gin.Context) {
 	claims, ok := middleware.GetClaims(c)
 	if !ok || claims == nil {

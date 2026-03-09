@@ -206,9 +206,12 @@ const bridgeRoomToSessionState = ({ room, roomApi, participantsApi, mediaApi, st
       isAudioEnabled: localParticipant.audioEnabled,
       isTogglingVideo: false,
       isTogglingAudio: false,
+      isBackgroundEffectsSupported: mediaApi._state.isBackgroundEffectsSupported,
+      isApplyingBackgroundEffect: false,
       selectedCamera: null,
       selectedMicrophone: null,
       selectedSpeaker: null,
+      selectedBackgroundEffect: mediaApi._state.selectedBackgroundEffect,
       devices: [],
     });
   }

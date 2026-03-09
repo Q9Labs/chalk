@@ -1,6 +1,12 @@
 import { Effect, type ManagedRuntime } from "effect";
 import { MediaService } from "../effect/services/media-service";
-import type { MediaDeviceData, MediaState, ParticipantState, RoomState } from "../effect/schemas/manager-state";
+import type {
+  MediaDeviceData,
+  MediaState,
+  ParticipantState,
+  RoomState,
+  VideoBackgroundEffectData,
+} from "../effect/schemas/manager-state";
 import type { ParticipantService } from "../effect/services/participant-service";
 import type { RoomService } from "../effect/services/room-service";
 import type { ConferenceSession } from "../room";
@@ -59,6 +65,8 @@ export interface MediaSessionApi {
   readonly subscribe: (listener: (state: MediaState, prevState: MediaState) => void) => () => void;
   readonly toggleVideo: () => Promise<boolean>;
   readonly toggleAudio: () => Promise<boolean>;
+  readonly applyBackgroundEffect: (effect: VideoBackgroundEffectData) => Promise<void>;
+  readonly clearBackgroundEffect: () => Promise<void>;
   readonly selectCamera: (deviceId: string) => Promise<void>;
   readonly selectMicrophone: (deviceId: string) => Promise<void>;
   readonly selectSpeaker: (deviceId: string) => Promise<void>;
@@ -92,9 +100,12 @@ export const createDefaultMediaState = (): MediaState => ({
   isAudioEnabled: false,
   isTogglingVideo: false,
   isTogglingAudio: false,
+  isBackgroundEffectsSupported: false,
+  isApplyingBackgroundEffect: false,
   selectedCamera: null,
   selectedMicrophone: null,
   selectedSpeaker: null,
+  selectedBackgroundEffect: { mode: "none" },
   devices: [],
 });
 
@@ -183,6 +194,22 @@ export const createSessionStateApis = (
         Effect.gen(function* () {
           const mediaSvc = yield* MediaService;
           return yield* mediaSvc.toggleAudio;
+        }),
+      );
+    },
+    applyBackgroundEffect: async (effect) => {
+      return args.runtime.runPromise(
+        Effect.gen(function* () {
+          const mediaSvc = yield* MediaService;
+          yield* mediaSvc.applyBackgroundEffect(effect);
+        }),
+      );
+    },
+    clearBackgroundEffect: async () => {
+      return args.runtime.runPromise(
+        Effect.gen(function* () {
+          const mediaSvc = yield* MediaService;
+          yield* mediaSvc.clearBackgroundEffect;
         }),
       );
     },

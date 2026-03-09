@@ -38,6 +38,10 @@ export {
 } from "./features/useInteractions";
 export { type UseRecordingReturn, useRecording } from "./features/useRecording";
 export {
+	type UseScreenAnnotationsReturn,
+	useScreenAnnotations,
+} from "./features/useScreenAnnotations";
+export {
 	type UseTranscriptsReturn,
 	useTranscripts,
 } from "./features/useTranscripts";

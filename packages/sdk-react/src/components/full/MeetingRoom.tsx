@@ -16,6 +16,7 @@ import { MeetingRoomPanels } from "./meeting-room/MeetingRoomPanels";
 import { MeetingRoomStage } from "./meeting-room/MeetingRoomStage";
 import { MeetingRoomTopBar } from "./meeting-room/MeetingRoomTopBar";
 import type { MeetingLayout, MeetingRoomProps } from "./meeting-room/types";
+import { useMeetingRoomBackgroundEffects } from "./meeting-room/useMeetingRoomBackgroundEffects";
 import { useMeetingRoomDerived } from "./meeting-room/useMeetingRoomDerived";
 import { useMeetingRoomLifecycle } from "./meeting-room/useMeetingRoomLifecycle";
 import { useMeetingRoomTheme } from "./meeting-room/useMeetingRoomTheme";
@@ -28,6 +29,7 @@ function MeetingRoomBase({
 	canManageParticipants = false,
 	onToggleParticipantMute,
 	onRemoveParticipant,
+	onUpdateDisplayName,
 	activeReactions = [],
 	isMuted = false,
 	isVideoEnabled = false,
@@ -39,11 +41,15 @@ function MeetingRoomBase({
 	meetingDuration = 0,
 	canRecord = false,
 	transcripts = [],
-	enablePictureInPicture = false,
-	isPictureInPictureActive,
-	isPictureInPictureSupported,
 	chatMessages = [],
 	unreadChatCount = 0,
+	enablePictureInPicture = false,
+	enableBackgroundEffects = true,
+	isPictureInPictureActive,
+	isPictureInPictureSupported,
+	isBackgroundEffectsSupported = false,
+	isApplyingBackgroundEffect = false,
+	selectedBackgroundEffect = { mode: "none" },
 	onSendMessage,
 	onSendMessageWithAttachments,
 	onResolveChatAttachmentUrl,
@@ -51,6 +57,7 @@ function MeetingRoomBase({
 	enableChat = true,
 	enableRecording = true,
 	enableScreenShare = true,
+	enableAnnotations = true,
 	enableHandRaise = true,
 	enableReactions = true,
 	enableWhiteboard = true,
@@ -71,9 +78,11 @@ function MeetingRoomBase({
 	onToggleRecording,
 	onToggleHandRaise,
 	onToggleWhiteboard,
-	onTogglePictureInPicture,
 	onSendReaction,
 	onToggleTranscription,
+	onTogglePictureInPicture,
+	onApplyBackgroundEffect,
+	onClearBackgroundEffect,
 	onLeave,
 	onTourComplete,
 	onAddPeople,
@@ -139,6 +148,16 @@ function MeetingRoomBase({
 	} = useMeetingRoomSettings({
 		defaults: settingsDefaults,
 	});
+	const backgroundEffects = useMeetingRoomBackgroundEffects({
+		enabled: enableBackgroundEffects,
+		settings,
+		updateVideoSettings,
+		currentEffect: selectedBackgroundEffect,
+		isSupported: isBackgroundEffectsSupported,
+		isApplying: isApplyingBackgroundEffect,
+		applyBackgroundEffect: onApplyBackgroundEffect,
+		clearBackgroundEffect: onClearBackgroundEffect,
+	});
 
 	const ui = useMeetingRoomUiState({
 		defaultChatOpen: settings.experience.defaultOpenChat,
@@ -173,6 +192,8 @@ function MeetingRoomBase({
 			enableWhiteboard,
 			isWhiteboardOpen,
 		});
+	const participantColorSeed =
+		localParticipant.displayName || localParticipant.id;
 	const hasExternalPictureInPicture =
 		typeof onTogglePictureInPicture === "function";
 	const sharedPictureInPicture = useSharedPictureInPicture();
@@ -273,9 +294,7 @@ function MeetingRoomBase({
 			}
 		: sharedPictureInPicture
 			? sharedPictureInPicture
-			: internalPictureInPicture;
-	const participantColorSeed =
-		localParticipant.displayName || localParticipant.id;
+		: internalPictureInPicture;
 
 	useEffect(() => {
 		if (didHydrateDevicePreferencesRef.current) {
@@ -513,6 +532,7 @@ function MeetingRoomBase({
 					allParticipants={allParticipants}
 					isFilmstripOpen={ui.isFilmstripOpen}
 					onToggleFilmstrip={handleFilmstripToggle}
+					enableAnnotations={enableAnnotations}
 					enableWhiteboard={enableWhiteboard}
 					isWhiteboardOpen={isWhiteboardOpen}
 					theme={roomTheme}
@@ -530,6 +550,7 @@ function MeetingRoomBase({
 					canManageParticipants={canManageParticipants}
 					onToggleParticipantMute={onToggleParticipantMute}
 					onRemoveParticipant={onRemoveParticipant}
+					onUpdateDisplayName={onUpdateDisplayName}
 					onAddPeople={handleAddPeople}
 					chatMessages={chatMessages}
 					onSendMessage={onSendMessage}
@@ -570,12 +591,12 @@ function MeetingRoomBase({
 					enableRecording={enableRecording}
 					enableHandRaise={enableHandRaise}
 					enableReactions={enableReactions}
-					enablePictureInPicture={enablePictureInPicture}
-					isPictureInPictureSupported={pictureInPicture.isSupported}
-					isPictureInPictureActive={pictureInPicture.isActive}
 					enableWhiteboard={enableWhiteboard}
+					enablePictureInPicture={enablePictureInPicture}
 					enableTranscription={enableTranscription}
 					enableChat={enableChat}
+					isPictureInPictureSupported={pictureInPicture.isSupported}
+					isPictureInPictureActive={pictureInPicture.isActive}
 					audioInputDevices={audioInputDevices}
 					audioOutputDevices={audioOutputDevices}
 					videoInputDevices={videoInputDevices}
@@ -591,8 +612,8 @@ function MeetingRoomBase({
 					onToggleRecording={onToggleRecording}
 					onToggleHandRaise={onToggleHandRaise}
 					onToggleWhiteboard={onToggleWhiteboard}
-					onTogglePictureInPicture={pictureInPicture.toggle}
 					onToggleTranscription={onToggleTranscription}
+					onTogglePictureInPicture={pictureInPicture.toggle}
 					onSendReaction={onSendReaction}
 					onLeave={onLeave}
 					onOpenSettings={() => ui.setIsSettingsOpen(true)}
@@ -624,6 +645,13 @@ function MeetingRoomBase({
 				isOpen={ui.isSettingsOpen}
 				onClose={() => ui.setIsSettingsOpen(false)}
 				settings={settings}
+				enableBackgroundEffects={enableBackgroundEffects}
+				isBackgroundEffectsSupported={backgroundEffects.isSupported}
+				isApplyingBackgroundEffect={backgroundEffects.isApplying}
+				backgroundEffects={backgroundEffects.effects}
+				selectedBackgroundEffectId={backgroundEffects.selectedEffectId}
+				onSelectBackgroundEffect={backgroundEffects.handleSelect}
+				onUploadBackgroundEffect={backgroundEffects.handleCustomUpload}
 				onUpdateAudio={(updates) => {
 					updateAudioSettings(updates);
 					if (updates.selectedInput) {

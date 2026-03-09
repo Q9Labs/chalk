@@ -92,7 +92,7 @@ export const joinConferenceSession = async (sessionId: string, config: JoinSessi
       throw new Error("RealtimeKit init returned null/undefined client");
     }
 
-    const session = new ConferenceSession(roomInfo.id, rtkClient, deps.debug);
+    const session = new ConferenceSession(roomInfo.id, rtkClient, deps.debug, deps.apiClient);
     session._setLocalParticipant(localParticipant);
     session._setInfo(roomInfo);
     session._setTokens(tokens);

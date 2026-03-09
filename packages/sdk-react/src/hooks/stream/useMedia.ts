@@ -2,7 +2,11 @@
  * useMedia - Control video/audio from MediaManager
  */
 
-import type { MediaDevice, MediaState } from "@q9labs/chalk-core";
+import type {
+	MediaDevice,
+	MediaState,
+	VideoBackgroundEffect,
+} from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../../context/chalk-provider";
 
@@ -29,10 +33,20 @@ export interface UseMediaReturn {
 	selectedMicrophone: string | null;
 	/** Selected speaker device ID */
 	selectedSpeaker: string | null;
+	/** Whether background effects are supported in this browser/runtime */
+	isBackgroundEffectsSupported: boolean;
+	/** Whether a background effect change is in progress */
+	isApplyingBackgroundEffect: boolean;
+	/** Currently selected runtime background effect */
+	selectedBackgroundEffect: VideoBackgroundEffect;
 	/** Toggle video on/off */
 	toggleVideo: () => Promise<boolean>;
 	/** Toggle audio on/off */
 	toggleAudio: () => Promise<boolean>;
+	/** Apply a local video background effect */
+	applyBackgroundEffect: (effect: VideoBackgroundEffect) => Promise<void>;
+	/** Clear any active local video background effect */
+	clearBackgroundEffect: () => Promise<void>;
 	/** Select a camera */
 	selectCamera: (deviceId: string) => Promise<void>;
 	/** Select a microphone */
@@ -97,6 +111,17 @@ export function useMedia(): UseMediaReturn {
 		[media],
 	);
 
+	const applyBackgroundEffect = useCallback(
+		(effect: VideoBackgroundEffect): Promise<void> =>
+			media.applyBackgroundEffect(effect),
+		[media],
+	);
+
+	const clearBackgroundEffect = useCallback(
+		(): Promise<void> => media.clearBackgroundEffect(),
+		[media],
+	);
+
 	const selectMicrophone = useCallback(
 		(deviceId: string): Promise<void> => media.selectMicrophone(deviceId),
 		[media],
@@ -127,9 +152,14 @@ export function useMedia(): UseMediaReturn {
 			cameras: media.cameras,
 			microphones: media.microphones,
 			speakers: media.speakers,
+			isBackgroundEffectsSupported: state.isBackgroundEffectsSupported,
+			isApplyingBackgroundEffect: state.isApplyingBackgroundEffect,
 			selectedCamera: state.selectedCamera,
+			selectedBackgroundEffect: state.selectedBackgroundEffect,
 			selectedMicrophone: state.selectedMicrophone,
 			selectedSpeaker: state.selectedSpeaker,
+			applyBackgroundEffect,
+			clearBackgroundEffect,
 			toggleVideo,
 			toggleAudio,
 			selectCamera,
@@ -141,6 +171,8 @@ export function useMedia(): UseMediaReturn {
 		[
 			state,
 			media,
+			applyBackgroundEffect,
+			clearBackgroundEffect,
 			toggleVideo,
 			toggleAudio,
 			selectCamera,
