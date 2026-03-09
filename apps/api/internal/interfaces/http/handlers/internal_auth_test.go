@@ -413,7 +413,7 @@ func TestInternalAuthAccessToken_ReusesLocalClientBootstrap(t *testing.T) {
 
 	require.Equal(t, 1, queryStub.createTenantCalls)
 	require.Equal(t, 1, queryStub.createClaimCalls)
-	require.Contains(t, cacheStub.values, localClientTenantRedisKey("browser-1"))
+	require.Contains(t, cacheStub.values, localClientTenantRedisKey(localLoopbackClientID))
 	require.Len(t, first.Result().Cookies(), 1)
 	require.Len(t, second.Result().Cookies(), 1)
 
@@ -423,4 +423,36 @@ func TestInternalAuthAccessToken_ReusesLocalClientBootstrap(t *testing.T) {
 	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &secondBody))
 	require.NotEmpty(t, firstBody["access_token"])
 	require.NotEmpty(t, secondBody["access_token"])
+}
+
+func TestInternalAuthAccessToken_ReusesLoopbackBootstrapAcrossDifferentClientIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cacheStub := &internalAuthCacheStub{}
+	queryStub := &internalAuthQueriesStub{}
+	handler := NewInternalAuthHandler(
+		&config.Config{Server: config.ServerConfig{Env: "development"}},
+		queryStub,
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		cacheStub,
+	)
+
+	makeRequest := func(clientID string) {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/v1/internal/auth/access-token", nil)
+		req.Host = "localhost:8080"
+		req.Header.Set(localClientIDHeader, clientID)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = req
+		handler.AccessToken(c)
+		require.Equal(t, http.StatusOK, w.Code)
+	}
+
+	makeRequest("browser-a")
+	makeRequest("browser-b")
+
+	require.Equal(t, 1, queryStub.createTenantCalls)
+	require.Equal(t, 1, queryStub.createClaimCalls)
+	require.Contains(t, cacheStub.values, localClientTenantRedisKey(localLoopbackClientID))
 }

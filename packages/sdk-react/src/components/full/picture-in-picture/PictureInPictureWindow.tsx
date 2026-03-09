@@ -16,6 +16,22 @@ interface PictureInPictureWindowProps {
   onReturnToTab: () => void;
 }
 
+function Equalizer() {
+  return (
+    <div className="flex items-end gap-[2px] h-3 ml-2 shrink-0">
+      <div className="w-[3px] bg-white rounded-full h-full origin-bottom" style={{ animation: "pip-eq 0.8s ease-in-out infinite" }} />
+      <div className="w-[3px] bg-white rounded-full h-full origin-bottom" style={{ animation: "pip-eq 0.8s ease-in-out infinite 0.2s" }} />
+      <div className="w-[3px] bg-white rounded-full h-full origin-bottom" style={{ animation: "pip-eq 0.8s ease-in-out infinite 0.4s" }} />
+      <style>{`
+        @keyframes pip-eq {
+          0%, 100% { transform: scaleY(0.4); }
+          50% { transform: scaleY(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function PictureInPictureStage({ source, className }: { source: PictureInPictureSource | null; className?: string; hideOverlay?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasVideo = Boolean(source?.videoTrack);
@@ -41,7 +57,7 @@ function PictureInPictureStage({ source, className }: { source: PictureInPicture
   }, [source?.videoTrack]);
 
   return (
-    <div className={cn("relative flex-1 bg-[var(--chalk-bg-tile)] overflow-hidden", className)}>
+    <div className={cn("relative flex-1 bg-[var(--chalk-bg-tile)] overflow-hidden transition-all duration-300", source?.isSpeaking && "ring-2 ring-emerald-500/80 shadow-[0_0_24px_rgba(16,185,129,0.3)]", className)}>
       {hasVideo ? (
         <video ref={videoRef} autoPlay playsInline muted className={cn("h-full w-full", source?.kind === "screen-share" ? "object-contain bg-black" : "object-cover")} />
       ) : (
@@ -112,8 +128,11 @@ export function PictureInPictureWindow({ phase, source, previewSource, controls,
           </div>
         )}
 
-        <div className="absolute inset-x-0 bottom-0 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 pb-5 pt-8">
-          <p className="max-w-full truncate text-[15px] font-medium text-white drop-shadow-md">{source?.title ?? "Waiting for video"}</p>
+        <div className="absolute inset-x-0 bottom-0 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 pb-5 pt-8 flex items-center justify-between">
+          <div className="flex items-center min-w-0">
+            <p className="max-w-[140px] truncate text-[15px] font-medium text-white drop-shadow-md">{source?.title ?? "Waiting for video"}</p>
+            {source?.isSpeaking && <Equalizer />}
+          </div>
         </div>
 
         {phase === "meeting" && previewSource && (

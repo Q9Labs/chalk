@@ -30,6 +30,7 @@ const (
 	internalTenantCacheTTL    = 5 * time.Minute
 	localClientIDHeader       = "X-Chalk-Local-Client-ID"
 	localClientTenantTTL      = 7 * 24 * time.Hour
+	localLoopbackClientID     = "loopback-shared"
 )
 
 type internalAuthQueries interface {
@@ -297,7 +298,7 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 
 	// 3) No session/claim yet: create a temporary internal tenant + claim cookie.
 	if tenantID == uuid.Nil {
-		localClientID := strings.TrimSpace(c.GetHeader(localClientIDHeader))
+		localClientID := localClientBootstrapKey(c.Request, strings.TrimSpace(c.GetHeader(localClientIDHeader)))
 		if bootstrap, ok := h.getCachedLocalClientTenant(ctx, c.Request, localClientID); ok {
 			tenantID = bootstrap.TenantID
 			subject = "claim:" + tenantID.String()
@@ -522,6 +523,13 @@ func magicLinkRedisKey(token string) string {
 
 func localClientTenantRedisKey(clientID string) string {
 	return "internal_auth:local_client:v1:" + clientID
+}
+
+func localClientBootstrapKey(r *http.Request, clientID string) string {
+	if isLocalRequest(r) {
+		return localLoopbackClientID
+	}
+	return clientID
 }
 
 func (h *InternalAuthHandler) getCachedLocalClientTenant(ctx context.Context, r *http.Request, clientID string) (*localClientTenantBootstrap, bool) {

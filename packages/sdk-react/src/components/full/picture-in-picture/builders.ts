@@ -15,6 +15,7 @@ export function buildPreJoinPictureInPictureSource({ displayName, videoTrack, is
     videoTrack: isVideoEnabled && hasLiveTrack(videoTrack) ? videoTrack : null,
     isMuted: !isAudioEnabled,
     isLocal: true,
+    isSpeaking: false,
   };
 }
 
@@ -31,6 +32,7 @@ export function buildMeetingPictureInPictureSource({ participants, localParticip
         videoTrack: screenSharer.screenShareTrack,
         isMuted: screenSharer.isMuted,
         isLocal: screenSharer.isLocal,
+        isSpeaking: screenSharer.isSpeaking,
       } satisfies PictureInPictureSource,
       previewSource: localParticipant.id !== screenSharer.id ? buildParticipantSource(localParticipant) : null,
     };
@@ -64,5 +66,6 @@ function buildParticipantSource(participant: MeetingParticipant | null | undefin
     avatarUrl: participant.avatarUrl,
     isMuted: participant.isMuted,
     isLocal: participant.isLocal,
+    isSpeaking: participant.isSpeaking,
   };
 }

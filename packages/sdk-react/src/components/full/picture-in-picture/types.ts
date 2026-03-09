@@ -11,6 +11,7 @@ export interface PictureInPictureSource {
   avatarUrl?: string;
   isMuted?: boolean;
   isLocal?: boolean;
+  isSpeaking?: boolean;
 }
 
 export interface PictureInPictureControls {
