@@ -12,6 +12,15 @@ interface AnnotationActionsDeps {
 }
 
 export const createConferenceSessionAnnotationActions = (deps: AnnotationActionsDeps) => {
+  let pendingSessionStart:
+    | {
+        shareSessionId: string;
+        sharerParticipantId: string;
+        accessMode: AnnotationAccessMode;
+      }
+    | null = null;
+  let pendingSessionStartCleanup: (() => void) | null = null;
+
   const logAnnotationEvent = (eventType: string, outcome: "success" | "error", data: Record<string, unknown>): void => {
     const ctx = wideEvents.start(eventType);
     ctx.merge(data);
@@ -24,6 +33,31 @@ export const createConferenceSessionAnnotationActions = (deps: AnnotationActions
       code: typeof data.code === "string" ? data.code : "ANNOTATION_EVENT_ERROR",
       message: typeof data.message === "string" ? data.message : "Screen annotation event failed",
     });
+  };
+
+  const clearPendingSessionStart = (): void => {
+    pendingSessionStartCleanup?.();
+    pendingSessionStartCleanup = null;
+  };
+
+  const flushPendingSessionStart = (): void => {
+    const wsClient = deps.getWsClient();
+    if (!wsClient || !pendingSessionStart || wsClient.connectionState !== "connected") {
+      return;
+    }
+
+    const payload = pendingSessionStart;
+    pendingSessionStart = null;
+    clearPendingSessionStart();
+
+    logAnnotationEvent("annotation.session.start", "success", {
+      shareSessionId: payload.shareSessionId,
+      sharerParticipantId: payload.sharerParticipantId,
+      accessMode: payload.accessMode,
+      wsConnectionState: wsClient.connectionState,
+      result: "flushed_after_connect",
+    });
+    wsClient.sendAnnotationSessionStart(payload);
   };
 
   const canDrawAnnotations = (participantId?: string): boolean => {
@@ -46,28 +80,65 @@ export const createConferenceSessionAnnotationActions = (deps: AnnotationActions
 
   const startAnnotationSession = (shareSessionId: string, accessMode?: AnnotationAccessMode): void => {
     const localParticipant = deps.getLocalParticipant();
+    const resolvedAccessMode = accessMode ?? deps.getCurrentAccessMode();
     if (!localParticipant) {
       logAnnotationEvent("annotation.session.start", "error", {
         reason: "missing_local_participant",
         shareSessionId,
-        accessMode: accessMode ?? deps.getCurrentAccessMode(),
+        accessMode: resolvedAccessMode,
         code: "ANNOTATION_LOCAL_PARTICIPANT_MISSING",
         message: "Cannot start screen annotations without a local participant",
       });
       return;
     }
 
+    const wsClient = deps.getWsClient();
+    if (!wsClient) {
+      logAnnotationEvent("annotation.session.start", "error", {
+        reason: "missing_ws_client",
+        shareSessionId,
+        sharerParticipantId: localParticipant.id,
+        accessMode: resolvedAccessMode,
+        code: "ANNOTATION_WS_UNAVAILABLE",
+        message: "Cannot start screen annotations without an active websocket client",
+      });
+      return;
+    }
+
+    const payload = {
+      shareSessionId,
+      sharerParticipantId: localParticipant.id,
+      accessMode: resolvedAccessMode,
+    } as const;
+
+    if (wsClient.connectionState !== "connected") {
+      pendingSessionStart = payload;
+      if (!pendingSessionStartCleanup) {
+        pendingSessionStartCleanup = wsClient.on("connected", () => {
+          flushPendingSessionStart();
+        });
+      }
+
+      logAnnotationEvent("annotation.session.start", "success", {
+        shareSessionId,
+        sharerParticipantId: localParticipant.id,
+        accessMode: resolvedAccessMode,
+        wsConnectionState: wsClient.connectionState,
+        result: "queued_waiting_for_socket",
+      });
+      return;
+    }
+
+    pendingSessionStart = null;
+    clearPendingSessionStart();
     logAnnotationEvent("annotation.session.start", "success", {
       shareSessionId,
       sharerParticipantId: localParticipant.id,
-      accessMode: accessMode ?? deps.getCurrentAccessMode(),
-      wsConnected: Boolean(deps.getWsClient()),
+      accessMode: resolvedAccessMode,
+      wsConnectionState: wsClient.connectionState,
+      result: "sent",
     });
-    deps.getWsClient()?.sendAnnotationSessionStart({
-      shareSessionId,
-      sharerParticipantId: localParticipant.id,
-      accessMode: accessMode ?? deps.getCurrentAccessMode(),
-    });
+    wsClient.sendAnnotationSessionStart(payload);
   };
 
   const endAnnotationSession = (shareSessionId?: string): void => {
@@ -92,13 +163,17 @@ export const createConferenceSessionAnnotationActions = (deps: AnnotationActions
 
   const requestAnnotationSync = (): void => {
     const shareSessionId = deps.getCurrentShareSessionId() ?? undefined;
+    const wsClient = deps.getWsClient();
     logAnnotationEvent("annotation.sync.request", "success", {
       shareSessionId: shareSessionId ?? null,
       sharerParticipantId: deps.getCurrentSharerParticipantId(),
       accessMode: deps.getCurrentAccessMode(),
-      wsConnected: Boolean(deps.getWsClient()),
+      wsConnectionState: wsClient?.connectionState ?? "missing",
+      result: wsClient?.connectionState === "connected" ? "sent" : "skipped_socket_not_connected",
     });
-    deps.getWsClient()?.requestAnnotationSync(shareSessionId);
+    if (wsClient?.connectionState === "connected") {
+      wsClient.requestAnnotationSync(shareSessionId);
+    }
   };
 
   const sendAnnotationUpdate = (payload: { shareSessionId: string; sharerParticipantId: string; syncAll: boolean; items: ScreenAnnotationItem[]; seq?: number }): void => {
