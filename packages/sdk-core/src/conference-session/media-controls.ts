@@ -66,6 +66,12 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
   const videoBackgroundController = createConferenceSessionVideoBackgroundController({
     getRtkClient: deps.getRtkClient,
   });
+  const resetLocalScreenShareState = (participant: Participant) => {
+    participant.isScreenSharing = false;
+    participant.screenShareTrack = undefined;
+    participant.screenShareAudioTrack = undefined;
+    deps.emitParticipantUpdated(participant.id, participant);
+  };
 
   const toggleVideo = async (): Promise<boolean> => {
     const rtkClient = deps.getRtkClient();
@@ -173,8 +179,11 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
       const err = error as { name?: string; message?: string };
       const name = typeof err?.name === "string" ? err.name : undefined;
       const message = typeof err?.message === "string" ? err.message : "Failed to start screen sharing";
+      const isCancelled = name === "AbortError" || name === "NotAllowedError";
 
-      const code = name === "OverconstrainedError" ? ChalkErrorCode.OVERCONSTRAINED : name === "NotAllowedError" ? ChalkErrorCode.SCREEN_SHARE_CANCELLED : ChalkErrorCode.SCREEN_SHARE_FAILED;
+      resetLocalScreenShareState(localParticipant);
+
+      const code = name === "OverconstrainedError" ? ChalkErrorCode.OVERCONSTRAINED : isCancelled ? ChalkErrorCode.SCREEN_SHARE_CANCELLED : ChalkErrorCode.SCREEN_SHARE_FAILED;
 
       deps.emitError({
         code,

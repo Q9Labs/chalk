@@ -133,6 +133,39 @@ describe("withPatchedGetDisplayMedia", () => {
     expect(calls[1].audio).toBe(false);
   });
 
+  it.each(["AbortError", "NotAllowedError"])("does not retry when the user cancels with %s", async (errorName) => {
+    const calls: any[] = [];
+    const getDisplayMedia = mock(async (constraints: any) => {
+      calls.push(constraints);
+      const err = new Error("User cancelled");
+      (err as any).name = errorName;
+      throw err;
+    });
+
+    setNavigator({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      platform: "MacIntel",
+      maxTouchPoints: 0,
+      mediaDevices: { getDisplayMedia },
+    });
+
+    await expect(
+      withPatchedGetDisplayMedia(
+        async () => {
+          await (navigator as any).mediaDevices.getDisplayMedia({
+            audio: true,
+            video: { width: { max: 1920 } },
+          });
+          return true;
+        },
+        { withAudio: true },
+      ),
+    ).rejects.toMatchObject({ name: errorName });
+
+    expect(calls.length).toBe(1);
+    expect(calls[0].audio).toBe(true);
+  });
+
   it("retries with video-only when constraints are overconstrained", async () => {
     const calls: any[] = [];
     const getDisplayMedia = mock(async (constraints: any) => {

@@ -9,6 +9,7 @@
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 const getErrorName = (err: unknown) => (isRecord(err) && typeof err.name === "string" ? err.name : undefined);
+const isUserCancelledError = (name: string | undefined) => name === "AbortError" || name === "NotAllowedError";
 
 const tryGetMediaDevices = () => {
   if (typeof navigator === "undefined") return undefined;
@@ -92,6 +93,10 @@ export const withPatchedGetDisplayMedia = async (run: () => Promise<boolean>, op
     try {
       return await callOriginal(preferred);
     } catch (err1) {
+      if (isUserCancelledError(getErrorName(err1))) {
+        throw err1;
+      }
+
       // 2) If audio might be the issue, retry without audio.
       const preferredAny = preferred as any;
       const audioWasRequested = preferredAny?.audio === true || (typeof preferredAny?.audio === "object" && preferredAny?.audio !== null);
@@ -100,6 +105,9 @@ export const withPatchedGetDisplayMedia = async (run: () => Promise<boolean>, op
         try {
           return await callOriginal({ ...preferredAny, audio: false });
         } catch (err2) {
+          if (isUserCancelledError(getErrorName(err2))) {
+            throw err2;
+          }
           err1 = err2;
         }
       }
