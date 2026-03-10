@@ -224,6 +224,15 @@ describe("VideoConference pre-join devices", () => {
     wideEvents.reset();
   });
 
+  it("starts with camera and microphone off when defaults are omitted", async () => {
+    const { getByLabelText } = render(<VideoConference roomId="room-123" userName="Hasan" />);
+
+    await waitFor(() => {
+      expect(getByLabelText("Unmute microphone")).toBeDefined();
+    });
+    expect(getByLabelText("Turn on camera")).toBeDefined();
+  });
+
   it("applies selected lobby camera/mic after join instead of before join", async () => {
     const { getByLabelText, getByText } = render(<VideoConference roomId="room-123" userName="Hasan" defaults={{ videoEnabled: false, audioEnabled: false }} />);
 

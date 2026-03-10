@@ -30,6 +30,14 @@ describe("PreJoinLobby", () => {
     expect(getByText("Ask to join")).toBeDefined();
   });
 
+  it("starts with camera and microphone off by default", async () => {
+    const { getByLabelText } = render(<PreJoinLobby onJoin={() => {}} roomName="Big Meeting" />);
+    await act(async () => {});
+
+    expect(getByLabelText("Unmute microphone")).toBeDefined();
+    expect(getByLabelText("Turn on camera")).toBeDefined();
+  });
+
   it("renders with shared picture-in-picture enabled without re-render loops", async () => {
     const { getByText } = render(
       <SharedPictureInPictureProvider enabled>
