@@ -33,14 +33,15 @@ function getStoredUserName() {
 
 function getStoredJoinDefaults() {
   if (typeof window === "undefined") {
-    return { audioEnabled: true, videoEnabled: true };
+    return { audioEnabled: false, videoEnabled: false };
   }
 
-  const muteDefault = localStorage.getItem("chalk_join_muted") === "true";
-  const noVideoDefault = localStorage.getItem("chalk_join_no_video") === "true";
+  const storedMuted = localStorage.getItem("chalk_join_muted");
+  const storedNoVideo = localStorage.getItem("chalk_join_no_video");
+
   return {
-    audioEnabled: !muteDefault,
-    videoEnabled: !noVideoDefault,
+    audioEnabled: storedMuted === null ? false : storedMuted !== "true",
+    videoEnabled: storedNoVideo === null ? false : storedNoVideo !== "true",
   };
 }
 

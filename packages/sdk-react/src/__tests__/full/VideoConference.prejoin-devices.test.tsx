@@ -233,6 +233,24 @@ describe("VideoConference pre-join devices", () => {
     expect(getByLabelText("Turn on camera")).toBeDefined();
   });
 
+  it("auto-join uses camera and microphone off when defaults are omitted", async () => {
+    const joinMock = (globalThis as any).__vcJoinMock;
+
+    render(<VideoConference roomId="room-123" userName="Hasan" autoJoin />);
+
+    await waitFor(() => {
+      expect(joinMock).toHaveBeenCalledTimes(1);
+    });
+    expect(joinMock).toHaveBeenCalledWith(
+      "room-123",
+      expect.objectContaining({
+        userName: "Hasan",
+        audioEnabled: false,
+        videoEnabled: false,
+      }),
+    );
+  });
+
   it("applies selected lobby camera/mic after join instead of before join", async () => {
     const { getByLabelText, getByText } = render(<VideoConference roomId="room-123" userName="Hasan" defaults={{ videoEnabled: false, audioEnabled: false }} />);
 

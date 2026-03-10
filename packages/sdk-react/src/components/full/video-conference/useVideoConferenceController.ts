@@ -227,8 +227,8 @@ export function useVideoConferenceController({ roomId, roomName, userName, autoJ
     autoJoinStartedRef.current = true;
     void handleJoin({
       displayName: userName,
-      videoEnabled: resolvedDefaults.videoEnabled ?? true,
-      audioEnabled: resolvedDefaults.audioEnabled ?? true,
+      videoEnabled: resolvedDefaults.videoEnabled ?? false,
+      audioEnabled: resolvedDefaults.audioEnabled ?? false,
       selectedVideoDevice: lobbySelectedCamera ?? undefined,
       selectedAudioInput: lobbySelectedMicrophone ?? undefined,
       selectedAudioOutput: lobbySelectedSpeaker ?? undefined,
