@@ -20,6 +20,8 @@ import { usePreJoinMedia } from "./prejoin-lobby/usePreJoinMedia";
 import { usePreJoinTheme } from "./prejoin-lobby/usePreJoinTheme";
 import { usePreJoinUiState } from "./prejoin-lobby/usePreJoinUiState";
 
+const JOINING_ROOM_MESSAGES = ["Checking your camera and mic...", "Syncing room settings...", "Choosing the fastest route...", "Almost there..."];
+
 function PreJoinLobbyBase({
   roomName,
   userName = "Guest",
@@ -206,7 +208,7 @@ function PreJoinLobbyBase({
   return (
     <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName).primary } as React.CSSProperties}>
       <div className={cn("absolute inset-0 z-50 transition-all duration-1000 ease-in-out pointer-events-none", isLoading ? "opacity-100 pointer-events-auto" : "opacity-0")}>
-        <LoadingScreen message="Joining room..." className="w-full h-full" displayName={ui.displayName} />
+        <LoadingScreen message="Joining room..." className="w-full h-full" displayName={ui.displayName} supportingMessages={JOINING_ROOM_MESSAGES} />
       </div>
 
       <div className={cn("flex-1 flex flex-col w-full transition-all duration-700 ease-in-out", isLoading ? "opacity-0 scale-95 blur-sm" : "opacity-100 scale-100 blur-0")}>

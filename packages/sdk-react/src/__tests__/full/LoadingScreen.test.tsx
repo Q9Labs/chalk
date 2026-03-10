@@ -1,6 +1,6 @@
 import React from "react";
-import { render } from "@testing-library/react";
-import { describe, it, expect } from "bun:test";
+import { act, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import { LoadingScreen } from "../../components/full/LoadingScreen";
 
 describe("LoadingScreen", () => {
@@ -15,12 +15,29 @@ describe("LoadingScreen", () => {
     expect(getByText(customMessage)).toBeDefined();
   });
 
-  it("has appropriate accessibility attributes (though purely visual)", () => {
+  it("renders a polite status region", () => {
     const { container } = render(<LoadingScreen />);
-    // Check if the main container is present
     expect(container.firstChild).toBeDefined();
-    // Check for the animation elements by class presence
-    expect(container.querySelector(".chalk-animate-ripple")).toBeDefined();
-    expect(container.querySelector(".chalk-animate-spin-slow")).toBeDefined();
+    expect(container.querySelector('[role="status"]')).toBeDefined();
   });
+
+  it("rotates supporting messages", async () => {
+    vi.useFakeTimers();
+
+    const supportingMessages = ["Checking devices...", "Syncing settings...", "Almost there..."];
+    const { getByText, queryByText } = render(<LoadingScreen message="Joining room..." supportingMessages={supportingMessages} />);
+
+    expect(getByText("Joining room...")).toBeDefined();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1800);
+    });
+
+    expect(queryByText("Joining room...")).toBeNull();
+    expect(getByText("Checking devices...")).toBeDefined();
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });

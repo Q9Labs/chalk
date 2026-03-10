@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import { getParticipantColor } from "../../utils/colorGenerator";
 
@@ -7,12 +7,31 @@ export interface LoadingScreenProps {
   className?: string;
   /** Display name or participant ID used to generate dynamic colors */
   displayName?: string;
+  supportingMessages?: readonly string[];
 }
 
-function LoadingScreenBase({ message = "Loading...", className, displayName = "Chalk User" }: LoadingScreenProps): React.JSX.Element {
+function LoadingScreenBase({ message = "Loading...", className, displayName = "Chalk User", supportingMessages = [] }: LoadingScreenProps): React.JSX.Element {
+  const [headlineMessageIndex, setHeadlineMessageIndex] = useState(0);
+
   // Tie colors directly to the user's generated gradient palette
   const colors = useMemo(() => getParticipantColor(displayName), [displayName]);
   const primaryColor = colors.primary;
+  const headlineMessages = useMemo(() => [message, ...supportingMessages], [message, supportingMessages]);
+  const activeHeadlineMessage = headlineMessages[headlineMessageIndex] ?? message;
+
+  useEffect(() => {
+    setHeadlineMessageIndex(0);
+  }, [headlineMessages]);
+
+  useEffect(() => {
+    if (headlineMessages.length <= 1) return;
+
+    const intervalId = window.setInterval(() => {
+      setHeadlineMessageIndex((currentIndex) => (currentIndex + 1) % headlineMessages.length);
+    }, 1800);
+
+    return () => window.clearInterval(intervalId);
+  }, [headlineMessages]);
 
   return (
     <div data-chalk className={cn("relative flex flex-col items-center justify-center min-h-screen bg-background text-foreground overflow-hidden transition-colors duration-1000 font-sans", className)}>
@@ -31,8 +50,8 @@ function LoadingScreenBase({ message = "Loading...", className, displayName = "C
 
       {/* Foreground Typography / Branding */}
       <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center animate-in fade-in zoom-in-95 duration-1000">
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-3xl md:text-4xl font-bold tracking-tight text-foreground drop-shadow-2xl">{message}</p>
+        <div className="flex flex-col items-center gap-4" role="status" aria-live="polite">
+          <p className="text-3xl md:text-4xl font-bold tracking-tight text-foreground drop-shadow-2xl">{activeHeadlineMessage}</p>
 
           {/* Professional Progress Indicator */}
           <div className="flex gap-2.5 mt-2">
