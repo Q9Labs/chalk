@@ -61,6 +61,7 @@ interface SettingsDialogProps {
   videoTrack?: MediaStreamTrack | null;
   reducedMotion?: boolean;
   participantColorSeed?: string;
+  isDarkMode?: boolean;
   className?: string;
 }
 
@@ -156,6 +157,7 @@ export const SettingsDialog = React.memo(
     videoTrack,
     reducedMotion = false,
     participantColorSeed,
+    isDarkMode = false,
     className,
   }: SettingsDialogProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
@@ -287,6 +289,33 @@ export const SettingsDialog = React.memo(
                 </div>
               </SectionCard>
 
+              {isDarkMode && (
+                <SectionCard title="Background Gradient" description="Adjust the intensity of the background gradient.">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => onUpdateAppearance({ gradient: "default" })}
+                      className={cn("group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors", settings.appearance.gradient === "default" ? "border-primary text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
+                    >
+                      {settings.appearance.gradient === "default" && <div className="absolute inset-0 bg-primary/10" />}
+                      <div className="absolute inset-0 opacity-20 transition-opacity group-hover:opacity-40" style={{ background: "radial-gradient(ellipse at top left, var(--primary) 0%, transparent 70%)" }} />
+                      <div className="absolute inset-0 opacity-10 transition-opacity group-hover:opacity-30" style={{ background: "radial-gradient(ellipse at bottom right, var(--accent) 0%, transparent 70%)" }} />
+                      <div className="relative z-10 text-sm font-semibold">Default</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateAppearance({ gradient: "darker" })}
+                      className={cn("group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors", settings.appearance.gradient === "darker" ? "border-primary text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
+                    >
+                      {settings.appearance.gradient === "darker" && <div className="absolute inset-0 bg-primary/10" />}
+                      <div className="absolute inset-0 opacity-5 transition-opacity group-hover:opacity-10" style={{ background: "radial-gradient(ellipse at top left, var(--primary) 0%, transparent 70%)" }} />
+                      <div className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-5" style={{ background: "radial-gradient(ellipse at bottom right, var(--accent) 0%, transparent 70%)" }} />
+                      <div className="relative z-10 text-sm font-semibold">Darker</div>
+                    </button>
+                  </div>
+                </SectionCard>
+              )}
+
               <SectionCard title="Layout" description="Persist the room composition you want to land in first.">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {(
@@ -398,7 +427,7 @@ export const SettingsDialog = React.memo(
           <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm", !disableMotion && "animate-in fade-in duration-200")} />
           <Dialog.Popup
             className={cn(
-              "fixed inset-x-4 top-1/2 z-[101] h-[min(720px,calc(100vh-2rem))] -translate-y-1/2 overflow-hidden rounded-[28px] border border-border/60 bg-card text-card-foreground shadow-2xl md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
+              "fixed inset-x-4 top-1/2 z-[101] h-[min(720px,calc(100vh-2rem))] -translate-y-1/2 overflow-hidden rounded-[28px] border border-border/60 bg-card/80 backdrop-blur-xl text-card-foreground shadow-2xl md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
               !disableMotion && "animate-in fade-in zoom-in-[0.98] slide-in-from-bottom-4 duration-200",
               className,
             )}

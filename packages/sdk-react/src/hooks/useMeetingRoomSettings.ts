@@ -17,6 +17,7 @@ export interface MeetingRoomSettings {
   };
   appearance: {
     theme: "light" | "dark" | "system";
+    gradient: "default" | "darker";
     layout: MeetingLayout;
     showFilmstrip: boolean;
     reducedMotion: boolean;
@@ -127,6 +128,7 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
     appearance: appearance
       ? withDefined({
           theme: appearance.theme === "light" || appearance.theme === "dark" || appearance.theme === "system" ? appearance.theme : undefined,
+          gradient: appearance.gradient === "default" || appearance.gradient === "darker" ? appearance.gradient : undefined,
           layout: appearance.layout === "grid" || appearance.layout === "spotlight" || appearance.layout === "sidebar" ? appearance.layout : undefined,
           showFilmstrip: typeof appearance.showFilmstrip === "boolean" ? appearance.showFilmstrip : undefined,
           reducedMotion: typeof appearance.reducedMotion === "boolean" ? appearance.reducedMotion : undefined,
@@ -157,6 +159,7 @@ const createDefaultSettings = (defaults?: UseMeetingRoomSettingsOptions["default
   },
   appearance: {
     theme: "system",
+    gradient: "default",
     layout: "grid",
     showFilmstrip: true,
     reducedMotion: false,

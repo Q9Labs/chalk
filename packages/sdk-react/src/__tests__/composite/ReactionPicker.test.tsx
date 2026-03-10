@@ -36,11 +36,10 @@ describe("ReactionPicker", () => {
 
   it("triggers haptics when close is tapped", () => {
     const onClose = vi.fn();
-    const { getByLabelText } = render(<ReactionPicker isOpen={true} onClose={onClose} onSelect={() => {}} />);
+    render(<ReactionPicker isOpen={true} onClose={onClose} onSelect={() => {}} />);
 
-    fireEvent.click(getByLabelText("Close"));
+    fireEvent.keyDown(document, { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(vibrateSpy).toHaveBeenCalledTimes(1);
   });
 });

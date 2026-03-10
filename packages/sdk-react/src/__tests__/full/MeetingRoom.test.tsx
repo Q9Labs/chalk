@@ -97,6 +97,37 @@ describe("MeetingRoom", () => {
     expect(vibrateSpy).toHaveBeenCalled();
   });
 
+  it("opens settings with cmd+k", () => {
+    const { getByRole } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} />);
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    expect(getByRole("dialog", { name: "Meeting settings" })).toBeDefined();
+  });
+
+  it("opens settings with ctrl+k", () => {
+    const { getByRole } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} />);
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+
+    expect(getByRole("dialog", { name: "Meeting settings" })).toBeDefined();
+  });
+
+  it("does not open settings from editable inputs", () => {
+    const { queryByRole } = render(
+      <>
+        <input aria-label="Outside input" />
+        <MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} />
+      </>,
+    );
+
+    const input = document.querySelector('input[aria-label="Outside input"]') as HTMLInputElement;
+    input.focus();
+    fireEvent.keyDown(input, { key: "k", metaKey: true });
+
+    expect(queryByRole("dialog", { name: "Meeting settings" })).toBeNull();
+  });
+
   it("shows support code in connection overlay", () => {
     const { getByText } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} connectionState="failed" connectionSupportCode="CHK-20260302-121212-001" />);
 

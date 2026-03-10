@@ -1,5 +1,6 @@
 import type React from "react";
 import { memo, useCallback, useEffect, useId, useMemo, useRef } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
 
 import { SettingsDialog } from "../composite/SettingsDialog";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
@@ -154,6 +155,15 @@ function MeetingRoomBase({
     defaultFilmstripOpen: settings.appearance.showFilmstrip,
     showInviteToastOnJoin: settings.experience.showInviteToast,
     onChatOpen,
+  });
+  const handleOpenSettings = useCallback(() => {
+    ui.setIsSettingsOpen(true);
+  }, [ui.setIsSettingsOpen]);
+
+  useHotkey("Mod+K", handleOpenSettings, {
+    enabled: !ui.isExiting,
+    ignoreInputs: true,
+    preventDefault: true,
   });
 
   const roomTheme = settings.appearance.theme;
@@ -431,16 +441,16 @@ function MeetingRoomBase({
       data-chalk-theme={roomTheme === "system" ? undefined : roomTheme}
       style={getParticipantThemeVariables(participantColorSeed) as React.CSSProperties}
     >
-      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", !reduceMotion && "animate-out fade-out duration-[7000ms] delay-[4000ms] fill-mode-forwards", isDarkMode ? "mix-blend-screen" : "mix-blend-multiply")}>
+      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "mix-blend-screen" : "mix-blend-multiply")}>
         <div
-          className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
+          className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-10" : "opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
           style={{
             background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
             filter: "blur(100px)",
           }}
         />
         <div
-          className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
+          className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-5" : "opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
           style={{
             background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
             filter: "blur(120px)",
@@ -540,7 +550,7 @@ function MeetingRoomBase({
           onTogglePictureInPicture={pictureInPicture.toggle}
           onSendReaction={onSendReaction}
           onLeave={onLeave}
-          onOpenSettings={() => ui.setIsSettingsOpen(true)}
+          onOpenSettings={handleOpenSettings}
           isExiting={ui.isExiting}
           localParticipantColorSeed={participantColorSeed}
         />
@@ -612,6 +622,7 @@ function MeetingRoomBase({
         videoTrack={localParticipant.videoTrack}
         reducedMotion={reduceMotion}
         participantColorSeed={participantColorSeed}
+        isDarkMode={isDarkMode}
       />
     </div>
   );
