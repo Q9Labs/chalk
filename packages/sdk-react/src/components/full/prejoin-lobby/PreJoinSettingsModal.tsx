@@ -1,7 +1,9 @@
 import type React from "react";
 
-import { Cancel01Icon } from "../../../utils/icons";
+import { Cancel01Icon, PictureInPictureIcon } from "../../../utils/icons";
 import { DeviceSelector } from "../../composite";
+import { Toggle } from "../../atomic";
+import { cn } from "../../../utils/cn";
 
 interface PreJoinSettingsModalProps {
   isOpen: boolean;
@@ -21,6 +23,12 @@ interface PreJoinSettingsModalProps {
   isAudioEnabled: boolean;
   audioLevel: number;
   isLoading: boolean;
+  enablePictureInPicture?: boolean;
+  isPictureInPictureSupported?: boolean;
+  isPictureInPictureActive?: boolean;
+  onOpenPictureInPicture?: () => void;
+  autoOpenPictureInPicture?: boolean;
+  onAutoOpenPictureInPictureChange?: (enabled: boolean) => void;
 }
 
 export function PreJoinSettingsModal({
@@ -41,6 +49,12 @@ export function PreJoinSettingsModal({
   isAudioEnabled,
   audioLevel,
   isLoading,
+  enablePictureInPicture = false,
+  isPictureInPictureSupported = false,
+  isPictureInPictureActive = false,
+  onOpenPictureInPicture,
+  autoOpenPictureInPicture = true,
+  onAutoOpenPictureInPictureChange,
 }: PreJoinSettingsModalProps): React.JSX.Element | null {
   if (!isOpen) return null;
 
@@ -71,12 +85,50 @@ export function PreJoinSettingsModal({
           Settings
         </h2>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
           {hasVideoDevices && <DeviceSelector type="videoinput" label="Camera" devices={videoDevices} selectedDeviceId={selectedVideoDevice} onChange={onVideoDeviceChange} disabled={isLoading} />}
 
           {hasAudioInput && <DeviceSelector type="audioinput" label="Microphone" devices={audioInputDevices} selectedDeviceId={selectedAudioInput} onChange={onAudioInputChange} audioLevel={isAudioEnabled ? audioLevel : 0} disabled={isLoading} />}
 
           {hasAudioOutput && <DeviceSelector type="audiooutput" label="Speaker" devices={audioOutputDevices} selectedDeviceId={selectedAudioOutput} onChange={onAudioOutputChange} disabled={isLoading} />}
+
+          {enablePictureInPicture && (
+            <div className="space-y-4 pt-4 border-t border-white/10">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-black/5 p-4">
+                <div>
+                  <div className="text-sm font-medium text-(--foreground)">Auto-open Picture-in-Picture</div>
+                  <div className="text-xs text-(--muted-foreground)">Try to open PiP automatically when the room loads.</div>
+                </div>
+                <Toggle checked={autoOpenPictureInPicture} onChange={onAutoOpenPictureInPictureChange ?? (() => {})} label="Auto-open Picture-in-Picture" />
+              </div>
+
+              <div className="rounded-2xl border border-white/5 bg-black/5 p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-(--foreground)">Manual open</div>
+                    <div className="text-xs text-(--muted-foreground)">{isPictureInPictureSupported ? (isPictureInPictureActive ? "Picture-in-Picture is already open." : "Open PiP manually if the browser blocked automatic opening.") : "Picture-in-Picture is not supported in this browser."}</div>
+                  </div>
+                  <PictureInPictureIcon className="h-5 w-5 shrink-0 text-primary" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenPictureInPicture?.();
+                  }}
+                  disabled={!isPictureInPictureSupported || isPictureInPictureActive || !onOpenPictureInPicture}
+                  className={cn(
+                    "w-full h-10 inline-flex items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
+                    "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    "bg-primary text-primary-foreground hover:bg-primary/90",
+                  )}
+                  aria-label="Open Picture-in-Picture now"
+                >
+                  Open Picture-in-Picture now
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-6 flex justify-end">

@@ -78,12 +78,28 @@ describe("ScreenAnnotationsLayer", () => {
   it("starts the local annotation session immediately when the sharer opens the toolbar", () => {
     const { getByText } = render(<ScreenAnnotationsLayer enabled />);
 
-    fireEvent.click(getByText("Annotate"));
+    fireEvent.click(getByText("Annotate Screen"));
 
     expect(annotationsState.startSession).toHaveBeenCalledTimes(1);
     expect(annotationsState.requestSync).not.toHaveBeenCalled();
     expect(annotationsState.open).toHaveBeenCalledTimes(1);
     expect(sessionState.recordIncidentBreadcrumb).toHaveBeenCalled();
+  });
+
+  it("starts the local annotation session when the active share owner matches local participant even if isLocalSharing drifted false", () => {
+    screenShareState = {
+      ...screenShareState,
+      isLocalSharing: false,
+      sharerParticipantId: "local",
+    };
+
+    const { getByText } = render(<ScreenAnnotationsLayer enabled />);
+
+    fireEvent.click(getByText("Annotate Screen"));
+
+    expect(annotationsState.startSession).toHaveBeenCalledTimes(1);
+    expect(annotationsState.requestSync).not.toHaveBeenCalled();
+    expect(annotationsState.open).toHaveBeenCalledTimes(1);
   });
 
   it("does not request sync while the local sharer already owns the active session", () => {

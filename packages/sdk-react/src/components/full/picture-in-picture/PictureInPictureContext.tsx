@@ -1,5 +1,5 @@
 import type React from "react";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, useRef } from "react";
 
 import { usePictureInPicture, type UsePictureInPictureOptions } from "../../../hooks/ui/usePictureInPicture";
 import type { PictureInPictureControls } from "./types";
@@ -25,18 +25,24 @@ const SharedPictureInPictureContext = createContext<SharedPictureInPictureValue 
 
 export function SharedPictureInPictureProvider({ enabled = true, children }: { enabled?: boolean; children: React.ReactNode }) {
   const [registration, setRegistration] = useState<SharedPictureInPictureRegistration | null>(null);
+  const pendingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const register = useCallback((ownerId: string, options: UsePictureInPictureOptions | null) => {
-    setRegistration((current) => {
-      if (!options) {
-        return current?.ownerId === ownerId ? null : current;
+    if (options) {
+      if (pendingClearRef.current) {
+        clearTimeout(pendingClearRef.current);
+        pendingClearRef.current = null;
       }
-
-      return {
-        ownerId,
-        options,
-      };
-    });
+      setRegistration({ ownerId, options });
+    } else {
+      // Small delay to allow for handover between components (e.g. prejoin -> meeting)
+      // This prevents the PiP window from closing and losing user activation if a new
+      // component registers immediately after.
+      pendingClearRef.current = setTimeout(() => {
+        setRegistration((current) => (current?.ownerId === ownerId ? null : current));
+        pendingClearRef.current = null;
+      }, 100);
+    }
   }, []);
 
   const pictureInPicture = usePictureInPicture({

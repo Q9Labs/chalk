@@ -12,13 +12,11 @@ interface AnnotationActionsDeps {
 }
 
 export const createConferenceSessionAnnotationActions = (deps: AnnotationActionsDeps) => {
-  let pendingSessionStart:
-    | {
-        shareSessionId: string;
-        sharerParticipantId: string;
-        accessMode: AnnotationAccessMode;
-      }
-    | null = null;
+  let pendingSessionStart: {
+    shareSessionId: string;
+    sharerParticipantId: string;
+    accessMode: AnnotationAccessMode;
+  } | null = null;
   let pendingSessionStartCleanup: (() => void) | null = null;
 
   const logAnnotationEvent = (eventType: string, outcome: "success" | "error", data: Record<string, unknown>): void => {

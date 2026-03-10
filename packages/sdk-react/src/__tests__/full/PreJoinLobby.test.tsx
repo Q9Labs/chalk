@@ -235,4 +235,19 @@ describe("PreJoinLobby", () => {
     expect(document.documentElement.classList.contains("light")).toBe(true);
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
+
+  it("renders picture-in-picture settings in settings modal", async () => {
+    window.documentPictureInPicture = {
+      requestWindow: vi.fn(),
+    } as any;
+
+    const { getByLabelText, getByRole, getByText } = render(<PreJoinLobby onJoin={() => {}} enablePictureInPicture={true} initialVideoEnabled={false} initialAudioEnabled={false} />);
+    await act(async () => {});
+
+    // Open settings modal
+    fireEvent.click(getByLabelText("Settings"));
+
+    expect(getByText("Auto-open Picture-in-Picture")).toBeDefined();
+    expect(getByRole("button", { name: "Open Picture-in-Picture now" })).toBeDefined();
+  });
 });

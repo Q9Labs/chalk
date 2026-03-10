@@ -99,11 +99,7 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
   }
 
   const version = value.version;
-  if (
-    version !== SETTINGS_VERSION &&
-    version !== PREVIOUS_SETTINGS_VERSION &&
-    version !== LEGACY_SETTINGS_VERSION
-  ) {
+  if (version !== SETTINGS_VERSION && version !== PREVIOUS_SETTINGS_VERSION && version !== LEGACY_SETTINGS_VERSION) {
     return null;
   }
 

@@ -209,6 +209,15 @@ function MeetingRoomBase({
         enableHandRaise,
         enableWhiteboard,
         enableReactions,
+        audioInputDevices,
+        audioOutputDevices,
+        videoInputDevices,
+        selectedAudioInput,
+        selectedAudioOutput,
+        selectedVideoInput,
+        onAudioInputChange,
+        onAudioOutputChange,
+        onVideoInputChange,
         onToggleMute,
         onToggleVideo,
         onToggleScreenShare,
@@ -232,6 +241,15 @@ function MeetingRoomBase({
       enableHandRaise,
       enableWhiteboard,
       enableReactions,
+      audioInputDevices,
+      audioOutputDevices,
+      videoInputDevices,
+      selectedAudioInput,
+      selectedAudioOutput,
+      selectedVideoInput,
+      onAudioInputChange,
+      onAudioOutputChange,
+      onVideoInputChange,
       onToggleMute,
       onToggleVideo,
       onToggleScreenShare,
@@ -554,11 +572,7 @@ function MeetingRoomBase({
         enablePictureInPicture={enablePictureInPicture}
         isPictureInPictureSupported={pictureInPicture.isSupported}
         isPictureInPictureActive={pictureInPicture.isActive}
-        onOpenPictureInPicture={
-          pictureInPicture.isSupported && !pictureInPicture.isActive
-            ? pictureInPicture.toggle
-            : undefined
-        }
+        onOpenPictureInPicture={pictureInPicture.isSupported && !pictureInPicture.isActive ? pictureInPicture.toggle : undefined}
         enableBackgroundEffects={enableBackgroundEffects}
         isBackgroundEffectsSupported={backgroundEffects.isSupported}
         isApplyingBackgroundEffect={backgroundEffects.isApplying}

@@ -6,10 +6,7 @@ import { SharedPictureInPictureProvider, useSharedPictureInPicture } from "../..
 import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 
 const originalDocumentPictureInPicture = window.documentPictureInPicture;
-const originalUserActivationDescriptor = Object.getOwnPropertyDescriptor(
-  navigator,
-  "userActivation",
-);
+const originalUserActivationDescriptor = Object.getOwnPropertyDescriptor(navigator, "userActivation");
 const PREJOIN_SOURCE = {
   id: "prejoin",
   kind: "participant" as const,
@@ -165,11 +162,7 @@ describe("usePictureInPicture", () => {
     window.documentPictureInPicture = originalDocumentPictureInPicture;
 
     if (originalUserActivationDescriptor) {
-      Object.defineProperty(
-        navigator,
-        "userActivation",
-        originalUserActivationDescriptor,
-      );
+      Object.defineProperty(navigator, "userActivation", originalUserActivationDescriptor);
     } else {
       // @ts-expect-error test cleanup for optional browser API
       delete navigator.userActivation;

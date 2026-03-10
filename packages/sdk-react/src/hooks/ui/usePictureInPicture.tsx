@@ -200,10 +200,7 @@ export function usePictureInPicture({ enabled = true, autoOpen = false, phase, r
       await open();
       setIsAutoOpenPending(false);
     } catch (error) {
-      if (
-        error instanceof DOMException &&
-        (error.name === "NotAllowedError" || error.name === "NotSupportedError")
-      ) {
+      if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotSupportedError")) {
         setIsAutoOpenPending(error.name === "NotAllowedError");
         return;
       }

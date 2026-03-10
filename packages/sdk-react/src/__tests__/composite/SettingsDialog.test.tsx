@@ -127,34 +127,19 @@ describe("SettingsDialog", () => {
     const onUpdateExperience = vi.fn();
     const onOpenPictureInPicture = vi.fn();
     const { getByRole, getByText } = render(
-      <SettingsDialog
-        isOpen
-        onClose={() => {}}
-        settings={settings}
-        onUpdateAudio={() => {}}
-        onUpdateVideo={() => {}}
-        onUpdateAppearance={() => {}}
-        onUpdateExperience={onUpdateExperience}
-        enablePictureInPicture
-        isPictureInPictureSupported
-        onOpenPictureInPicture={onOpenPictureInPicture}
-      />,
+      <SettingsDialog isOpen onClose={() => {}} settings={settings} onUpdateAudio={() => {}} onUpdateVideo={() => {}} onUpdateAppearance={() => {}} onUpdateExperience={onUpdateExperience} enablePictureInPicture isPictureInPictureSupported onOpenPictureInPicture={onOpenPictureInPicture} />,
     );
 
     act(() => {
       fireEvent.click(getByText("Experience"));
     });
 
-    fireEvent.click(
-      getByRole("switch", { name: "Auto-open Picture-in-Picture" }),
-    );
+    fireEvent.click(getByRole("switch", { name: "Auto-open Picture-in-Picture" }));
     expect(onUpdateExperience).toHaveBeenCalledWith({
       autoOpenPictureInPicture: false,
     });
 
-    fireEvent.click(
-      getByRole("button", { name: "Open Picture-in-Picture now" }),
-    );
+    fireEvent.click(getByRole("button", { name: "Open Picture-in-Picture now" }));
     expect(onOpenPictureInPicture).toHaveBeenCalledTimes(1);
   });
 });

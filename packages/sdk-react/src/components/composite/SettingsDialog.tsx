@@ -114,13 +114,17 @@ function SectionCard({ title, description, children }: { title: string; descript
 }
 
 function ToggleRow({ title, description, checked, onChange }: { title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  const titleId = React.useId();
+
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/50 bg-card/60 p-4">
       <div>
-        <div className="text-sm font-medium text-foreground">{title}</div>
+        <div id={titleId} className="text-sm font-medium text-foreground">
+          {title}
+        </div>
         <div className="text-xs text-muted-foreground">{description}</div>
       </div>
-      <Toggle checked={checked} onChange={onChange} label={title} />
+      <Toggle checked={checked} onChange={onChange} ariaLabelledby={titleId} />
     </div>
   );
 }
@@ -353,13 +357,7 @@ export const SettingsDialog = React.memo(
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div>
                         <div className="text-sm font-medium text-foreground">Manual open</div>
-                        <div className="text-xs text-muted-foreground">
-                          {isPictureInPictureSupported
-                            ? isPictureInPictureActive
-                              ? "Picture-in-Picture is already open."
-                              : "Open PiP manually if the browser blocked automatic opening."
-                            : "Picture-in-Picture is not supported in this browser."}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{isPictureInPictureSupported ? (isPictureInPictureActive ? "Picture-in-Picture is already open." : "Open PiP manually if the browser blocked automatic opening.") : "Picture-in-Picture is not supported in this browser."}</div>
                       </div>
                       <PictureInPictureIcon className="h-5 w-5 shrink-0 text-primary" />
                     </div>
@@ -368,11 +366,7 @@ export const SettingsDialog = React.memo(
                       onClick={() => {
                         void onOpenPictureInPicture?.();
                       }}
-                      disabled={
-                        !isPictureInPictureSupported ||
-                        isPictureInPictureActive ||
-                        !onOpenPictureInPicture
-                      }
+                      disabled={!isPictureInPictureSupported || isPictureInPictureActive || !onOpenPictureInPicture}
                       className={cn(
                         "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
                         "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",

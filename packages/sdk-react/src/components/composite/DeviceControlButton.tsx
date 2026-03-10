@@ -24,9 +24,10 @@ export interface DeviceControlButtonProps {
   className?: string;
   disabled?: boolean;
   haptic?: ChalkHapticInput | false;
+  size?: "sm" | "md" | "lg";
 }
 
-export const DeviceControlButton = ({ type, isActive, onToggle, devices, selectedDeviceId, onDeviceChange, secondaryDevices, selectedSecondaryDeviceId, onSecondaryDeviceChange, orientation = "up", className, disabled = false, haptic = "selection" }: DeviceControlButtonProps) => {
+export const DeviceControlButton = ({ type, isActive, onToggle, devices, selectedDeviceId, onDeviceChange, secondaryDevices, selectedSecondaryDeviceId, onSecondaryDeviceChange, orientation = "up", className, disabled = false, haptic = "soft", size = "md" }: DeviceControlButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { trigger } = useHaptics({
@@ -82,7 +83,7 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
   return (
     <div className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
-      <ControlButton icon={icon} label={label} onClick={onToggle} active={isActive} disabled={disabled} haptic={haptic} className={cn("rounded-r-none border-r border-black/5 dark:border-white/5", isOpen && "brightness-110")} />
+      <ControlButton icon={icon} label={label} onClick={onToggle} active={isActive} disabled={disabled} haptic={haptic} size={size} className={cn("rounded-r-none border-r border-black/5 dark:border-white/5", isOpen && "brightness-110")} />
 
       {/* Chevron Trigger */}
       <Tooltip content={`Select ${dropdownLabel}`} position={orientation === "up" ? "top" : "bottom"}>

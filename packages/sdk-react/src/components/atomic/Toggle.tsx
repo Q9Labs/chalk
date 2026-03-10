@@ -6,16 +6,19 @@ interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: string;
+  ariaLabel?: string;
+  ariaLabelledby?: string;
   disabled?: boolean;
   size?: "sm" | "md";
   className?: string;
 }
 
 export const Toggle = React.memo(
-  React.forwardRef<HTMLSpanElement, ToggleProps>(({ checked, onChange, label, disabled = false, size = "md", className }, ref) => {
+  React.forwardRef<HTMLSpanElement, ToggleProps>(({ checked, onChange, label, ariaLabel, ariaLabelledby, disabled = false, size = "md", className }, ref) => {
     const isSmall = size === "sm";
     const labelId = React.useId();
     const switchRef = React.useRef<HTMLSpanElement | null>(null);
+    const resolvedAriaLabelledby = ariaLabelledby ?? (label ? labelId : undefined);
 
     const mergedRef = React.useCallback(
       (node: HTMLSpanElement | null) => {
@@ -37,7 +40,8 @@ export const Toggle = React.memo(
           checked={checked}
           onCheckedChange={onChange}
           disabled={disabled}
-          aria-labelledby={label ? labelId : undefined}
+          aria-label={ariaLabel}
+          aria-labelledby={resolvedAriaLabelledby}
           className={cn(
             "relative inline-flex shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",

@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { cn } from "../../utils/cn";
 import { getParticipantGradient, getParticipantColor } from "../../utils/colorGenerator";
 import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
+import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
 import { DiagnosticErrorSheet } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
 import { buildPreJoinPictureInPictureSource } from "./picture-in-picture";
@@ -52,6 +53,8 @@ function PreJoinLobbyBase({
 }: PreJoinLobbyProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { settings, updateExperienceSettings } = useMeetingRoomSettings();
 
   const ui = usePreJoinUiState({
     userName,
@@ -111,7 +114,7 @@ function PreJoinLobbyBase({
   );
   const pictureInPictureOptions = useMemo(
     () => ({
-      autoOpen: true,
+      autoOpen: settings.experience.autoOpenPictureInPicture,
       phase: "prejoin" as const,
       roomName,
       displayName: ui.displayName,
@@ -119,11 +122,38 @@ function PreJoinLobbyBase({
       controls: {
         isMuted: !ui.isAudioEnabled,
         isVideoEnabled: ui.isVideoEnabled,
+        audioInputDevices,
+        audioOutputDevices,
+        videoInputDevices: videoDevices,
+        selectedAudioInput,
+        selectedAudioOutput,
+        selectedVideoInput: selectedVideoDevice,
+        onAudioInputChange,
+        onAudioOutputChange,
+        onVideoInputChange: onVideoDeviceChange,
         onToggleMute: ui.toggleAudio,
         onToggleVideo: ui.toggleVideo,
       },
     }),
-    [roomName, ui.displayName, pictureInPictureSource, ui.isAudioEnabled, ui.isVideoEnabled, ui.toggleAudio, ui.toggleVideo],
+    [
+      settings.experience.autoOpenPictureInPicture,
+      roomName,
+      ui.displayName,
+      pictureInPictureSource,
+      ui.isAudioEnabled,
+      ui.isVideoEnabled,
+      ui.toggleAudio,
+      ui.toggleVideo,
+      audioInputDevices,
+      audioOutputDevices,
+      videoDevices,
+      selectedAudioInput,
+      selectedAudioOutput,
+      selectedVideoDevice,
+      onAudioInputChange,
+      onAudioOutputChange,
+      onVideoDeviceChange,
+    ],
   );
 
   useEffect(() => {
@@ -167,11 +197,11 @@ function PreJoinLobbyBase({
   const hasAudioOutput = audioOutputDevices.length > 0;
 
   const handleJoin = useCallback(() => {
-    if (enablePictureInPicture && pictureInPicture.isSupported && !pictureInPicture.isActive) {
+    if (enablePictureInPicture && settings.experience.autoOpenPictureInPicture && pictureInPicture.isSupported && !pictureInPicture.isActive) {
       void pictureInPicture.open();
     }
     ui.handleJoin();
-  }, [enablePictureInPicture, pictureInPicture, ui]);
+  }, [enablePictureInPicture, settings.experience.autoOpenPictureInPicture, pictureInPicture, ui]);
 
   return (
     <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName).primary } as React.CSSProperties}>
@@ -198,6 +228,12 @@ function PreJoinLobbyBase({
           isAudioEnabled={ui.isAudioEnabled}
           audioLevel={activeAudioLevel}
           isLoading={isLoading}
+          enablePictureInPicture={enablePictureInPicture}
+          isPictureInPictureSupported={pictureInPicture.isSupported}
+          isPictureInPictureActive={pictureInPicture.isActive}
+          onOpenPictureInPicture={pictureInPicture.toggle}
+          autoOpenPictureInPicture={settings.experience.autoOpenPictureInPicture}
+          onAutoOpenPictureInPictureChange={(checked: boolean) => updateExperienceSettings({ autoOpenPictureInPicture: checked })}
         />
 
         <PreJoinHeader roomName={roomName} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />

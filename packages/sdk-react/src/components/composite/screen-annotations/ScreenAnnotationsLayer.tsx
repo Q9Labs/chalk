@@ -35,7 +35,7 @@ interface ScreenAnnotationsLayerProps {
 export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnotationsLayerProps) => {
   const session = useSession();
   const { localParticipant } = useParticipants();
-  const { isActive: isShareActive, isLocalSharing } = useScreenShare();
+  const { isActive: isShareActive, isLocalSharing, sharerParticipantId: activeShareParticipantId } = useScreenShare();
   const { accessMode, canDraw, clear, close, cursors, isOpen, isSessionActive, items, open, shareSessionId, sharerParticipantId, startSession, replaceItems, requestSync, sendCursor, setAccessMode } = useScreenAnnotations();
   const layerRef = useRef<HTMLDivElement>(null);
   const suppressHistoryResetRef = useRef(false);
@@ -52,9 +52,10 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
     value: string;
   } | null>(null);
 
-  const isHost = localParticipant?.role === "host";
-  const interactive = enabled && isOpen && canDraw && isSessionActive;
   const localSharerParticipantId = localParticipant?.id ?? null;
+  const isHost = localParticipant?.role === "host";
+  const isLocalShareOwner = Boolean(localSharerParticipantId && isShareActive && activeShareParticipantId === localSharerParticipantId);
+  const interactive = enabled && isOpen && canDraw && isSessionActive;
   const recordUiBreadcrumb = useCallback(
     (message: string, data: Record<string, unknown> = {}) => {
       session.recordIncidentBreadcrumb({
@@ -64,18 +65,20 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
           enabled,
           isShareActive,
           isLocalSharing,
+          isLocalShareOwner,
           isSessionActive,
           isOpen,
           canDraw,
           accessMode,
           shareSessionId,
           sharerParticipantId,
+          activeShareParticipantId,
           localSharerParticipantId,
           ...data,
         },
       });
     },
-    [accessMode, canDraw, enabled, isLocalSharing, isOpen, isSessionActive, isShareActive, localSharerParticipantId, session, shareSessionId, sharerParticipantId],
+    [accessMode, activeShareParticipantId, canDraw, enabled, isLocalShareOwner, isLocalSharing, isOpen, isSessionActive, isShareActive, localSharerParticipantId, session, shareSessionId, sharerParticipantId],
   );
 
   useEffect(() => {
@@ -92,7 +95,7 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
       return;
     }
 
-    if (isLocalSharing && localSharerParticipantId && sharerParticipantId === localSharerParticipantId) {
+    if (isLocalShareOwner && localSharerParticipantId && sharerParticipantId === localSharerParticipantId) {
       recordUiBreadcrumb("Annotation sync skipped for local owner");
       return;
     }
@@ -101,7 +104,7 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
       trigger: "active-session-effect",
     });
     requestSync();
-  }, [enabled, isLocalSharing, isSessionActive, localSharerParticipantId, recordUiBreadcrumb, requestSync, sharerParticipantId]);
+  }, [enabled, isLocalShareOwner, isSessionActive, localSharerParticipantId, recordUiBreadcrumb, requestSync, sharerParticipantId]);
 
   useEffect(() => {
     if (!isSessionActive && previousSessionActiveRef.current) {
@@ -119,7 +122,7 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
       return;
     }
 
-    if (!isLocalSharing || !localSharerParticipantId) {
+    if (!isLocalShareOwner || !localSharerParticipantId) {
       recordUiBreadcrumb("Annotation sync requested while waiting for remote session", {
         trigger: "inactive-share-effect",
       });
@@ -142,7 +145,7 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
     }, 350);
 
     return () => window.clearTimeout(timeoutId);
-  }, [accessMode, enabled, isLocalSharing, isSessionActive, isShareActive, localSharerParticipantId, recordUiBreadcrumb, requestSync, startSession]);
+  }, [accessMode, enabled, isLocalShareOwner, isSessionActive, isShareActive, localSharerParticipantId, recordUiBreadcrumb, requestSync, startSession]);
 
   useEffect(() => {
     if (suppressHistoryResetRef.current) {
@@ -350,7 +353,7 @@ export const ScreenAnnotationsLayer = memo(({ enabled, className }: ScreenAnnota
 
   const handleOpen = () => {
     if (!isSessionActive) {
-      if (isLocalSharing && localSharerParticipantId) {
+      if (isLocalShareOwner && localSharerParticipantId) {
         const fallbackKey = `${localSharerParticipantId}:${accessMode}`;
         fallbackStartRef.current = fallbackKey;
         recordUiBreadcrumb("Annotation toolbar open starting local session", {

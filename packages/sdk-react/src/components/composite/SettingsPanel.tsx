@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Cancel01Icon, Microphone01Icon, Video01Icon, Settings01Icon } from "../../utils/icons";
-import { IconButton } from "../atomic";
+import { Cancel01Icon, Microphone01Icon, Video01Icon, Settings01Icon, PictureInPictureIcon } from "../../utils/icons";
+import { IconButton, Toggle } from "../atomic";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 import { VolumeSlider } from "../atomic";
@@ -25,6 +25,13 @@ export interface SettingsPanelProps {
   noiseSuppression?: boolean;
   onNoiseSuppressionChange?: (enabled: boolean) => void;
 
+  enablePictureInPicture?: boolean;
+  isPictureInPictureSupported?: boolean;
+  isPictureInPictureActive?: boolean;
+  autoOpenPictureInPicture?: boolean;
+  onAutoOpenPictureInPictureChange?: (enabled: boolean) => void;
+  onOpenPictureInPicture?: () => void;
+
   onClose?: () => void;
   participantColorSeed?: string;
   className?: string;
@@ -45,6 +52,12 @@ export const SettingsPanel = React.memo(
     videoTrack,
     noiseSuppression = false,
     onNoiseSuppressionChange,
+    enablePictureInPicture = false,
+    isPictureInPictureSupported = false,
+    isPictureInPictureActive = false,
+    autoOpenPictureInPicture = true,
+    onAutoOpenPictureInPictureChange,
+    onOpenPictureInPicture,
     onClose,
     participantColorSeed,
     className,
@@ -77,6 +90,12 @@ export const SettingsPanel = React.memo(
               Video
             </div>
           </button>
+          <button onClick={() => setActiveTab("general")} className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "general" ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}>
+            <div className="flex items-center justify-center gap-2">
+              <Settings01Icon className="w-4 h-4" />
+              General
+            </div>
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -107,6 +126,47 @@ export const SettingsPanel = React.memo(
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Camera</h3>
                 <DeviceSelector type="videoinput" devices={videoInputDevices} selectedDeviceId={selectedVideoInput} onChange={(id) => onVideoInputChange?.(id)} label="Input Device" previewTrack={videoTrack} participantColorSeed={participantColorSeed} />
               </div>
+            </div>
+          )}
+
+          {activeTab === "general" && (
+            <div className={cn("space-y-6", !prefersReducedMotion && "animate-in fade-in duration-200")}>
+              {enablePictureInPicture && (
+                <div className="space-y-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Picture in Picture</h3>
+
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/50 bg-card/60 p-4">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">Auto-open PiP</div>
+                      <div className="text-xs text-muted-foreground text-wrap">Try to open PiP automatically on join.</div>
+                    </div>
+                    <Toggle checked={autoOpenPictureInPicture} onChange={onAutoOpenPictureInPictureChange ?? (() => {})} label="Auto-open PiP" />
+                  </div>
+
+                  <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-foreground">Manual open</div>
+                        <div className="text-xs text-muted-foreground">{isPictureInPictureSupported ? (isPictureInPictureActive ? "PiP is already open." : "Open PiP manually if auto-open failed.") : "PiP not supported."}</div>
+                      </div>
+                      <PictureInPictureIcon className="h-4 w-4 shrink-0 text-primary" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenPictureInPicture?.()}
+                      disabled={!isPictureInPictureSupported || isPictureInPictureActive || !onOpenPictureInPicture}
+                      className={cn(
+                        "w-full h-9 inline-flex items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
+                        "focus-visible:ring-2 focus-visible:ring-primary",
+                        "disabled:cursor-not-allowed disabled:opacity-50",
+                        "bg-primary text-primary-foreground hover:bg-primary/90",
+                      )}
+                    >
+                      Open PiP now
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useMemo } from "react";
 
 import { cn } from "../../../utils/cn";
-import { getParticipantGradient } from "../../../utils/colorGenerator";
+import { getParticipantGradient, getParticipantThemeVariables } from "../../../utils/colorGenerator";
 import { Avatar, ControlButton } from "../../atomic";
-import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon } from "../../../utils/icons";
+import { DeviceControlButton } from "../../composite/DeviceControlButton";
+import { HandIcon, Home01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, CallEnd01Icon } from "../../../utils/icons";
 import type { PictureInPictureControls, PictureInPicturePhase, PictureInPictureSource } from "./types";
 
 interface PictureInPictureWindowProps {
@@ -71,24 +72,7 @@ function PictureInPictureStage({ source, className }: { source: PictureInPicture
 
 export function PictureInPictureWindow({ phase, source, previewSource, controls, onReturnToTab }: PictureInPictureWindowProps) {
   const actionButtons = useMemo(() => {
-    const base = [
-      {
-        key: "mute",
-        label: controls.isMuted ? "Unmute" : "Mute",
-        icon: controls.isMuted ? <MicrophoneOff01Icon size={18} /> : <Microphone01Icon size={18} />,
-        active: !controls.isMuted,
-        danger: controls.isMuted,
-        onClick: controls.onToggleMute,
-      },
-      {
-        key: "video",
-        label: controls.isVideoEnabled ? "Stop Video" : "Start Video",
-        icon: controls.isVideoEnabled ? <Video01Icon size={18} /> : <VideoOffIcon size={18} />,
-        active: controls.isVideoEnabled,
-        danger: !controls.isVideoEnabled,
-        onClick: controls.onToggleVideo,
-      },
-    ];
+    const base: any[] = [];
 
     if (phase === "prejoin") {
       return [...base, { key: "return", label: "Return", icon: <Home01Icon size={18} />, active: true, danger: false, activeClassName: "bg-[var(--secondary)] text-[var(--foreground)]", onClick: onReturnToTab }];
@@ -102,6 +86,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, controls,
         icon: controls.isScreenSharing ? <MonitorOffIcon size={18} /> : <Monitor01Icon size={18} />,
         active: controls.isScreenSharing,
         danger: false,
+        activeClassName: "bg-primary text-primary-foreground hover:bg-primary/90",
         onClick: controls.onToggleScreenShare,
       },
       controls.enableHandRaise && {
@@ -110,6 +95,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, controls,
         icon: <HandIcon size={18} />,
         active: controls.isHandRaised,
         danger: false,
+        activeClassName: "bg-primary text-primary-foreground hover:bg-primary/90",
         onClick: controls.onToggleHandRaise,
       },
       { key: "return", label: "Return", icon: <Home01Icon size={18} />, active: true, danger: false, activeClassName: "bg-[var(--secondary)] text-[var(--foreground)]", onClick: onReturnToTab },
@@ -117,21 +103,22 @@ export function PictureInPictureWindow({ phase, source, previewSource, controls,
     ].filter((btn): btn is Exclude<typeof btn, false | undefined | null> => Boolean(btn));
   }, [controls, onReturnToTab, phase]);
 
+  const participantThemeVariables = useMemo(() => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown"), [source?.title, source?.id]);
+
   return (
-    <div className="flex h-screen w-full flex-col bg-background text-foreground chalk-theme-transition">
+    <div className="flex h-screen w-full flex-col bg-background text-foreground chalk-theme-transition" style={participantThemeVariables as React.CSSProperties}>
       <div className="relative flex-1 overflow-hidden rounded-2xl border border-border bg-[var(--chalk-bg-tile)] m-3 mb-0 shadow-2xl">
         <PictureInPictureStage source={source} className="h-full w-full border-0" />
-
-        {source?.isMuted && (
-          <div className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 shadow-lg backdrop-blur-md">
-            <MicrophoneOff01Icon size={16} className="text-white" />
-          </div>
-        )}
 
         <div className="absolute inset-x-0 bottom-0 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 pb-5 pt-8 flex items-center justify-between">
           <div className="flex items-center min-w-0">
             <p className="max-w-[140px] truncate text-[15px] font-medium text-white drop-shadow-md">{source?.title ?? "Waiting for video"}</p>
-            {source?.isSpeaking && <Equalizer />}
+            {source?.isSpeaking && !source?.isMuted && <Equalizer />}
+            {source?.isMuted && (
+              <div className="rounded-full bg-red-500/80 p-0.5 ml-2">
+                <MicrophoneOff01Icon size={12} className="text-white" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -142,8 +129,33 @@ export function PictureInPictureWindow({ phase, source, previewSource, controls,
         )}
       </div>
       <div className="flex shrink-0 items-center justify-center gap-2 pb-4 pt-4 px-4 bg-background">
+        <DeviceControlButton
+          type="mic"
+          isActive={!controls.isMuted}
+          onToggle={controls.onToggleMute ?? (() => {})}
+          devices={controls.audioInputDevices ?? []}
+          selectedDeviceId={controls.selectedAudioInput}
+          onDeviceChange={controls.onAudioInputChange ?? (() => {})}
+          secondaryDevices={controls.audioOutputDevices ?? []}
+          selectedSecondaryDeviceId={controls.selectedAudioOutput}
+          onSecondaryDeviceChange={controls.onAudioOutputChange}
+          orientation="up"
+          haptic="medium"
+          size="sm"
+        />
+        <DeviceControlButton
+          type="video"
+          isActive={!!controls.isVideoEnabled}
+          onToggle={controls.onToggleVideo ?? (() => {})}
+          devices={controls.videoInputDevices ?? []}
+          selectedDeviceId={controls.selectedVideoInput}
+          onDeviceChange={controls.onVideoInputChange ?? (() => {})}
+          orientation="up"
+          haptic="medium"
+          size="sm"
+        />
         {actionButtons.map((btn) => (
-          <ControlButton key={btn.key} icon={btn.icon} label={btn.label} active={btn.active} danger={"danger" in btn ? btn.danger : false} onClick={btn.onClick} size="md" activeClassName={"activeClassName" in btn ? btn.activeClassName : undefined} />
+          <ControlButton key={btn.key} icon={btn.icon} label={btn.label} active={btn.active} danger={"danger" in btn ? btn.danger : false} onClick={btn.onClick} size="sm" activeClassName={"activeClassName" in btn ? btn.activeClassName : undefined} />
         ))}
       </div>
     </div>
