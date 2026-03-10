@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-React: settings hotkey cross-platform coverage** — the `Cmd+K` / `Ctrl+K` meeting-settings shortcut now has explicit macOS/Windows test coverage and stable hotkey-manager reset logic in the SDK React test harness.
 - **Web/API: same room code now stays in the same room on localhost** — localhost room joins now reuse the same temporary tenant across tabs, ignore stale join-link session context when the current `/room/$roomId` does not match, and recover cleanly if two joins race to create the same slug-backed room.
 - **SDK-Core: screen-share audio default restored on supported browsers** — screen sharing now requests system audio by default on Chrome-like browsers again, while Safari/WebKit keeps the safer no-audio default unless callers explicitly opt in.
 - **SDK screen annotations: local sharer visibility** — screen annotation sessions now become active locally as soon as a share starts, so the sharer immediately sees the annotation affordance instead of waiting for the websocket echo.

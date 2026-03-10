@@ -5,6 +5,7 @@ import { afterEach, expect, vi } from "bun:test";
 import * as matchers from "@testing-library/jest-dom/matchers";
 // @ts-ignore
 import { cleanup } from "@testing-library/react";
+import { HotkeyManager } from "@tanstack/react-hotkeys";
 
 // @ts-ignore
 expect.extend(matchers);
@@ -38,6 +39,12 @@ globalThis.FocusEvent = dom.window.FocusEvent;
 globalThis.Audio = dom.window.Audio;
 // @ts-ignore
 globalThis.HTMLMediaElement = dom.window.HTMLMediaElement;
+// @ts-ignore
+globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+// @ts-ignore
+globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
+// @ts-ignore
+globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
 
 // Media element shims used across many components
 // @ts-ignore
@@ -228,4 +235,5 @@ afterEach(() => {
   delete (setTimeout as any).clock;
 
   cleanup();
+  HotkeyManager.resetInstance();
 });

@@ -1,5 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "bun:test";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
+import { HotkeyManager } from "@tanstack/react-hotkeys";
 import { MeetingRoom } from "../../components/full/MeetingRoom";
 import { SharedPictureInPictureProvider } from "../../components/full/picture-in-picture/PictureInPictureContext";
 
@@ -19,6 +20,16 @@ global.MediaStreamTrack = vi.fn().mockImplementation(() => ({
   stop: vi.fn(),
 })) as any;
 const originalDocumentPictureInPicture = window.documentPictureInPicture;
+const setNavigatorPlatform = (platform: string, userAgent: string) => {
+  Object.defineProperty(window.navigator, "platform", {
+    configurable: true,
+    value: platform,
+  });
+  Object.defineProperty(window.navigator, "userAgent", {
+    configurable: true,
+    value: userAgent,
+  });
+};
 
 describe("MeetingRoom", () => {
   const vibrateSpy = vi.spyOn(navigator, "vibrate");
@@ -27,6 +38,8 @@ describe("MeetingRoom", () => {
     localStorage.clear();
     vibrateSpy.mockClear();
     window.documentPictureInPicture = originalDocumentPictureInPicture;
+    HotkeyManager.resetInstance();
+    setNavigatorPlatform("Win32", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
   });
 
   const localParticipant = {
@@ -97,20 +110,25 @@ describe("MeetingRoom", () => {
     expect(vibrateSpy).toHaveBeenCalled();
   });
 
-  it("opens settings with cmd+k", () => {
+  it("opens settings with cmd+k", async () => {
+    setNavigatorPlatform("MacIntel", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)");
     const { getByRole } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} />);
 
-    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
 
-    expect(getByRole("dialog", { name: "Meeting settings" })).toBeDefined();
+    await waitFor(() => {
+      expect(getByRole("dialog", { name: "Meeting settings" })).toBeDefined();
+    });
   });
 
-  it("opens settings with ctrl+k", () => {
+  it("opens settings with ctrl+k", async () => {
     const { getByRole } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} />);
 
-    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
 
-    expect(getByRole("dialog", { name: "Meeting settings" })).toBeDefined();
+    await waitFor(() => {
+      expect(getByRole("dialog", { name: "Meeting settings" })).toBeDefined();
+    });
   });
 
   it("does not open settings from editable inputs", () => {
@@ -123,7 +141,7 @@ describe("MeetingRoom", () => {
 
     const input = document.querySelector('input[aria-label="Outside input"]') as HTMLInputElement;
     input.focus();
-    fireEvent.keyDown(input, { key: "k", metaKey: true });
+    fireEvent.keyDown(input, { key: "k", ctrlKey: true });
 
     expect(queryByRole("dialog", { name: "Meeting settings" })).toBeNull();
   });
