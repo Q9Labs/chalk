@@ -26,6 +26,7 @@ describe("useMeetingRoomSettings", () => {
     expect(result.current.settings.appearance.layout).toBe("sidebar");
     expect(result.current.settings.appearance.theme).toBe("dark");
     expect(result.current.settings.experience.showInviteToast).toBe(false);
+    expect(result.current.settings.experience.autoOpenPictureInPicture).toBe(true);
     expect(result.current.settings.video.backgroundEffect).toEqual({
       type: "none",
     });
@@ -42,7 +43,7 @@ describe("useMeetingRoomSettings", () => {
     expect(stored.audio.selectedInput).toBe("mic-2");
     expect(stored.audio.outputVolume).toBe(72);
     expect(stored.video.backgroundEffect).toEqual({ type: "none" });
-    expect(stored.version).toBe(3);
+    expect(stored.version).toBe(4);
   });
 
   it("migrates existing stored settings with defaults", () => {
@@ -56,6 +57,9 @@ describe("useMeetingRoomSettings", () => {
         },
         appearance: {
           showFilmstrip: false,
+        },
+        experience: {
+          autoOpenPictureInPicture: false,
         },
       }),
     );
@@ -74,6 +78,7 @@ describe("useMeetingRoomSettings", () => {
     expect(result.current.settings.audio.outputVolume).toBe(55);
     expect(result.current.settings.appearance.showFilmstrip).toBe(false);
     expect(result.current.settings.appearance.layout).toBe("spotlight");
+    expect(result.current.settings.experience.autoOpenPictureInPicture).toBe(false);
     expect(result.current.settings.video.backgroundEffect).toEqual({
       type: "none",
     });
@@ -110,6 +115,21 @@ describe("useMeetingRoomSettings", () => {
     expect(result.current.settings.video.backgroundEffect).toEqual({
       type: "none",
     });
+  });
+
+  it("persists auto-open picture-in-picture preference", () => {
+    const { result } = renderHook(() => useMeetingRoomSettings());
+
+    act(() => {
+      result.current.updateExperienceSettings({
+        autoOpenPictureInPicture: false,
+      });
+    });
+
+    const stored = JSON.parse(localStorage.getItem("chalk-meeting-settings") ?? "{}");
+
+    expect(stored.experience.autoOpenPictureInPicture).toBe(false);
+    expect(result.current.settings.experience.autoOpenPictureInPicture).toBe(false);
   });
 
   it("falls back to no background effect for malformed stored background data", () => {

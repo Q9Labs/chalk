@@ -193,7 +193,7 @@ function MeetingRoomBase({
   );
   const pictureInPictureOptions = useMemo(
     () => ({
-      autoOpen: true,
+      autoOpen: settings.experience.autoOpenPictureInPicture,
       phase: "meeting" as const,
       roomName,
       displayName: localParticipant.displayName,
@@ -239,6 +239,7 @@ function MeetingRoomBase({
       onToggleWhiteboard,
       ui.setIsReactionPickerOpen,
       onLeave,
+      settings.experience.autoOpenPictureInPicture,
     ],
   );
 
@@ -262,6 +263,16 @@ function MeetingRoomBase({
     ? {
         isActive: Boolean(isPictureInPictureActive),
         isSupported: Boolean(isPictureInPictureSupported),
+        open: async () => {
+          if (!isPictureInPictureActive) {
+            await onTogglePictureInPicture?.();
+          }
+        },
+        close: async () => {
+          if (isPictureInPictureActive) {
+            await onTogglePictureInPicture?.();
+          }
+        },
         toggle: onTogglePictureInPicture,
       }
     : sharedPictureInPicture
@@ -540,6 +551,14 @@ function MeetingRoomBase({
         isOpen={ui.isSettingsOpen}
         onClose={() => ui.setIsSettingsOpen(false)}
         settings={settings}
+        enablePictureInPicture={enablePictureInPicture}
+        isPictureInPictureSupported={pictureInPicture.isSupported}
+        isPictureInPictureActive={pictureInPicture.isActive}
+        onOpenPictureInPicture={
+          pictureInPicture.isSupported && !pictureInPicture.isActive
+            ? pictureInPicture.toggle
+            : undefined
+        }
         enableBackgroundEffects={enableBackgroundEffects}
         isBackgroundEffectsSupported={backgroundEffects.isSupported}
         isApplyingBackgroundEffect={backgroundEffects.isApplying}

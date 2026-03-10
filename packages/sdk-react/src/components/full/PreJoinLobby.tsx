@@ -146,6 +146,16 @@ function PreJoinLobbyBase({
     ? {
         isActive: Boolean(isPictureInPictureActive),
         isSupported: Boolean(isPictureInPictureSupported),
+        open: async () => {
+          if (!isPictureInPictureActive) {
+            await onTogglePictureInPicture?.();
+          }
+        },
+        close: async () => {
+          if (isPictureInPictureActive) {
+            await onTogglePictureInPicture?.();
+          }
+        },
         toggle: onTogglePictureInPicture,
       }
     : sharedPictureInPicture
@@ -155,6 +165,13 @@ function PreJoinLobbyBase({
   const hasVideoDevices = effectiveVideoDevices.length > 0;
   const hasAudioInput = effectiveAudioInputDevices.length > 0;
   const hasAudioOutput = audioOutputDevices.length > 0;
+
+  const handleJoin = useCallback(() => {
+    if (enablePictureInPicture && pictureInPicture.isSupported && !pictureInPicture.isActive) {
+      void pictureInPicture.open();
+    }
+    ui.handleJoin();
+  }, [enablePictureInPicture, pictureInPicture, ui]);
 
   return (
     <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName).primary } as React.CSSProperties}>
@@ -221,7 +238,7 @@ function PreJoinLobbyBase({
               }
             />
 
-            <PreJoinJoinPanel displayName={ui.displayName} isLoading={isLoading} canJoin={ui.canJoin} onDisplayNameChange={ui.setDisplayNameFromInput} onJoin={ui.handleJoin} participantGradient={participantGradient} />
+            <PreJoinJoinPanel displayName={ui.displayName} isLoading={isLoading} canJoin={ui.canJoin} onDisplayNameChange={ui.setDisplayNameFromInput} onJoin={handleJoin} participantGradient={participantGradient} />
           </div>
         </div>
       </div>
@@ -231,7 +248,7 @@ function PreJoinLobbyBase({
           supportCode={supportCode}
           onRetry={() => {
             ui.setLocalError(undefined);
-            ui.handleJoin();
+            handleJoin();
           }}
           onBack={() => {
             ui.setLocalError(undefined);

@@ -27,6 +27,7 @@ const settings = {
     defaultOpenChat: false,
     defaultOpenParticipants: false,
     defaultOpenTranscription: false,
+    autoOpenPictureInPicture: true,
   },
 };
 
@@ -120,5 +121,40 @@ describe("SettingsDialog", () => {
       fireEvent.click(getByText("Video"));
     });
     expect(getByText("Background effects are not supported in this browser yet.")).toBeDefined();
+  });
+
+  it("renders picture-in-picture experience controls and manual open action", () => {
+    const onUpdateExperience = vi.fn();
+    const onOpenPictureInPicture = vi.fn();
+    const { getByRole, getByText } = render(
+      <SettingsDialog
+        isOpen
+        onClose={() => {}}
+        settings={settings}
+        onUpdateAudio={() => {}}
+        onUpdateVideo={() => {}}
+        onUpdateAppearance={() => {}}
+        onUpdateExperience={onUpdateExperience}
+        enablePictureInPicture
+        isPictureInPictureSupported
+        onOpenPictureInPicture={onOpenPictureInPicture}
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(getByText("Experience"));
+    });
+
+    fireEvent.click(
+      getByRole("switch", { name: "Auto-open Picture-in-Picture" }),
+    );
+    expect(onUpdateExperience).toHaveBeenCalledWith({
+      autoOpenPictureInPicture: false,
+    });
+
+    fireEvent.click(
+      getByRole("button", { name: "Open Picture-in-Picture now" }),
+    );
+    expect(onOpenPictureInPicture).toHaveBeenCalledTimes(1);
   });
 });

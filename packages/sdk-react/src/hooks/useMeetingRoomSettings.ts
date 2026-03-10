@@ -26,6 +26,7 @@ export interface MeetingRoomSettings {
     defaultOpenChat: boolean;
     defaultOpenParticipants: boolean;
     defaultOpenTranscription: boolean;
+    autoOpenPictureInPicture: boolean;
   };
 }
 
@@ -42,7 +43,8 @@ interface UseMeetingRoomSettingsOptions {
 }
 
 const SETTINGS_KEY = "chalk-meeting-settings";
-const SETTINGS_VERSION = 3;
+const SETTINGS_VERSION = 4;
+const PREVIOUS_SETTINGS_VERSION = 3;
 const LEGACY_SETTINGS_VERSION = 2;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,7 +99,11 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
   }
 
   const version = value.version;
-  if (version !== SETTINGS_VERSION && version !== LEGACY_SETTINGS_VERSION) {
+  if (
+    version !== SETTINGS_VERSION &&
+    version !== PREVIOUS_SETTINGS_VERSION &&
+    version !== LEGACY_SETTINGS_VERSION
+  ) {
     return null;
   }
 
@@ -136,6 +142,7 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
           defaultOpenChat: typeof experience.defaultOpenChat === "boolean" ? experience.defaultOpenChat : undefined,
           defaultOpenParticipants: typeof experience.defaultOpenParticipants === "boolean" ? experience.defaultOpenParticipants : undefined,
           defaultOpenTranscription: typeof experience.defaultOpenTranscription === "boolean" ? experience.defaultOpenTranscription : undefined,
+          autoOpenPictureInPicture: typeof experience.autoOpenPictureInPicture === "boolean" ? experience.autoOpenPictureInPicture : undefined,
         })
       : undefined,
   };
@@ -164,6 +171,7 @@ const createDefaultSettings = (defaults?: UseMeetingRoomSettingsOptions["default
     defaultOpenChat: false,
     defaultOpenParticipants: false,
     defaultOpenTranscription: false,
+    autoOpenPictureInPicture: true,
     ...defaults?.experience,
   },
 });

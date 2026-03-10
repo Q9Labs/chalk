@@ -5,7 +5,7 @@ import type { MeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
-import { Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
+import { Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { IconButton, Input, Toggle, VolumeSlider } from "../atomic";
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
@@ -43,6 +43,10 @@ interface SettingsDialogProps {
   onUpdateVideo: (updates: Partial<MeetingRoomSettings["video"]>) => void;
   onUpdateAppearance: (updates: Partial<MeetingRoomSettings["appearance"]>) => void;
   onUpdateExperience: (updates: Partial<MeetingRoomSettings["experience"]>) => void;
+  enablePictureInPicture?: boolean;
+  isPictureInPictureSupported?: boolean;
+  isPictureInPictureActive?: boolean;
+  onOpenPictureInPicture?: () => Promise<void> | void;
   enableBackgroundEffects?: boolean;
   isBackgroundEffectsSupported?: boolean;
   isApplyingBackgroundEffect?: boolean;
@@ -116,7 +120,7 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
         <div className="text-sm font-medium text-foreground">{title}</div>
         <div className="text-xs text-muted-foreground">{description}</div>
       </div>
-      <Toggle checked={checked} onChange={onChange} />
+      <Toggle checked={checked} onChange={onChange} label={title} />
     </div>
   );
 }
@@ -130,6 +134,10 @@ export const SettingsDialog = React.memo(
     onUpdateVideo,
     onUpdateAppearance,
     onUpdateExperience,
+    enablePictureInPicture = false,
+    isPictureInPictureSupported = false,
+    isPictureInPictureActive = false,
+    onOpenPictureInPicture,
     enableBackgroundEffects = false,
     isBackgroundEffectsSupported = false,
     isApplyingBackgroundEffect = false,
@@ -326,7 +334,58 @@ export const SettingsDialog = React.memo(
                     })
                   }
                 />
+                {enablePictureInPicture ? (
+                  <ToggleRow
+                    title="Auto-open Picture-in-Picture"
+                    description="Try to open PiP automatically when the meeting loads. Some browsers may wait for your first interaction."
+                    checked={settings.experience.autoOpenPictureInPicture}
+                    onChange={(checked) =>
+                      onUpdateExperience({
+                        autoOpenPictureInPicture: checked,
+                      })
+                    }
+                  />
+                ) : null}
               </SectionCard>
+              {enablePictureInPicture ? (
+                <SectionCard title="Picture in Picture" description="Fallback controls if automatic opening is blocked by the browser.">
+                  <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-foreground">Manual open</div>
+                        <div className="text-xs text-muted-foreground">
+                          {isPictureInPictureSupported
+                            ? isPictureInPictureActive
+                              ? "Picture-in-Picture is already open."
+                              : "Open PiP manually if the browser blocked automatic opening."
+                            : "Picture-in-Picture is not supported in this browser."}
+                        </div>
+                      </div>
+                      <PictureInPictureIcon className="h-5 w-5 shrink-0 text-primary" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void onOpenPictureInPicture?.();
+                      }}
+                      disabled={
+                        !isPictureInPictureSupported ||
+                        isPictureInPictureActive ||
+                        !onOpenPictureInPicture
+                      }
+                      className={cn(
+                        "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
+                        "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                        "disabled:cursor-not-allowed disabled:opacity-50",
+                        "bg-primary text-primary-foreground hover:bg-primary/90",
+                      )}
+                      aria-label="Open Picture-in-Picture now"
+                    >
+                      Open Picture-in-Picture now
+                    </button>
+                  </div>
+                </SectionCard>
+              ) : null}
             </div>
           );
       }
