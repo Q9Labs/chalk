@@ -12,6 +12,7 @@ interface ControlButtonProps {
   disabled?: boolean;
   size?: "sm" | "md" | "lg";
   showLabel?: boolean;
+  hideTooltip?: boolean;
   noBorder?: boolean;
   onClick?: () => void;
   className?: string;
@@ -22,7 +23,7 @@ interface ControlButtonProps {
   ref?: React.Ref<HTMLButtonElement>;
 }
 
-export const ControlButton = React.memo(({ icon, label, active = false, danger = false, disabled = false, size = "md", showLabel = false, noBorder = false, onClick, className, haptic = "selection", activeClassName, "data-tour": dataTour, ref }: ControlButtonProps) => {
+export const ControlButton = React.memo(({ icon, label, active = false, danger = false, disabled = false, size = "md", showLabel = false, hideTooltip = false, noBorder = false, onClick, className, haptic = "selection", activeClassName, "data-tour": dataTour, ref }: ControlButtonProps) => {
   const { trigger } = useHaptics({
     enabled: !disabled && haptic !== false,
   });
@@ -75,6 +76,10 @@ export const ControlButton = React.memo(({ icon, label, active = false, danger =
         <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
       </div>
     );
+  }
+
+  if (hideTooltip) {
+    return button;
   }
 
   return (
