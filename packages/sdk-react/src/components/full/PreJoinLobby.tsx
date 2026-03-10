@@ -111,6 +111,7 @@ function PreJoinLobbyBase({
   );
   const pictureInPictureOptions = useMemo(
     () => ({
+      autoOpen: true,
       phase: "prejoin" as const,
       roomName,
       displayName: ui.displayName,

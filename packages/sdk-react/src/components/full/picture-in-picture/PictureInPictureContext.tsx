@@ -41,6 +41,7 @@ export function SharedPictureInPictureProvider({ enabled = true, children }: { e
 
   const pictureInPicture = usePictureInPicture({
     enabled: enabled && Boolean(registration),
+    autoOpen: registration?.options.autoOpen ?? false,
     phase: registration?.options.phase ?? "meeting",
     roomName: registration?.options.roomName,
     displayName: registration?.options.displayName,

@@ -193,6 +193,7 @@ function MeetingRoomBase({
   );
   const pictureInPictureOptions = useMemo(
     () => ({
+      autoOpen: true,
       phase: "meeting" as const,
       roomName,
       displayName: localParticipant.displayName,

@@ -6,6 +6,7 @@ import type { PictureInPictureControls, PictureInPicturePhase, PictureInPictureS
 
 export interface UsePictureInPictureOptions {
   enabled?: boolean;
+  autoOpen?: boolean;
   phase: PictureInPicturePhase;
   roomName?: string;
   displayName?: string;
@@ -43,6 +44,22 @@ declare global {
 const PIP_WIDTH = 420;
 const PIP_HEIGHT = 460;
 
+function hasTransientUserActivation() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const userActivation = (
+    navigator as Navigator & {
+      userActivation?: {
+        isActive?: boolean;
+      };
+    }
+  ).userActivation;
+
+  return userActivation?.isActive === true;
+}
+
 function getDocumentPictureInPictureApi() {
   if (typeof window === "undefined") {
     return undefined;
@@ -78,10 +95,12 @@ function copyStylesIntoPictureInPicture(targetDocument: Document) {
   syncThemeAttributes(targetDocument);
 }
 
-export function usePictureInPicture({ enabled = true, phase, roomName, displayName, source, previewSource, controls }: UsePictureInPictureOptions): UsePictureInPictureReturn {
+export function usePictureInPicture({ enabled = true, autoOpen = false, phase, roomName, displayName, source, previewSource, controls }: UsePictureInPictureOptions): UsePictureInPictureReturn {
   const [isActive, setIsActive] = useState(false);
+  const [isAutoOpenPending, setIsAutoOpenPending] = useState(false);
   const pipWindowRef = useRef<DocumentPictureInPictureWindow | null>(null);
   const pipRootRef = useRef<Root | null>(null);
+  const autoOpenAttemptKeyRef = useRef<string | null>(null);
 
   const api = useMemo(() => getDocumentPictureInPictureApi(), []);
   const isSupported = Boolean(api?.requestWindow);
@@ -166,6 +185,33 @@ export function usePictureInPicture({ enabled = true, phase, roomName, displayNa
     renderPictureInPictureWindow();
   }, [api, disposePictureInPictureWindow, enabled, renderPictureInPictureWindow]);
 
+  const attemptAutoOpen = useCallback(async () => {
+    if (!enabled || !api?.requestWindow || isActive) {
+      setIsAutoOpenPending(false);
+      return;
+    }
+
+    if (!hasTransientUserActivation()) {
+      setIsAutoOpenPending(true);
+      return;
+    }
+
+    try {
+      await open();
+      setIsAutoOpenPending(false);
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        (error.name === "NotAllowedError" || error.name === "NotSupportedError")
+      ) {
+        setIsAutoOpenPending(error.name === "NotAllowedError");
+        return;
+      }
+
+      throw error;
+    }
+  }, [api, enabled, isActive, open]);
+
   const toggle = useCallback(async () => {
     if (isActive) {
       await close();
@@ -180,6 +226,49 @@ export function usePictureInPicture({ enabled = true, phase, roomName, displayNa
       void close();
     }
   }, [close, enabled, isActive]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setIsAutoOpenPending(false);
+      autoOpenAttemptKeyRef.current = null;
+    }
+  }, [enabled]);
+
+  useEffect(() => {
+    autoOpenAttemptKeyRef.current = null;
+  }, [phase]);
+
+  useEffect(() => {
+    if (!autoOpen || !enabled || !api?.requestWindow || isActive) {
+      return;
+    }
+
+    const autoOpenAttemptKey = `${phase}:${roomName ?? ""}`;
+    if (autoOpenAttemptKeyRef.current === autoOpenAttemptKey) {
+      return;
+    }
+
+    autoOpenAttemptKeyRef.current = autoOpenAttemptKey;
+    void attemptAutoOpen();
+  }, [api, attemptAutoOpen, autoOpen, enabled, isActive, phase, roomName]);
+
+  useEffect(() => {
+    if (!isAutoOpenPending || !enabled || !api?.requestWindow || isActive) {
+      return;
+    }
+
+    const handleUserActivation = () => {
+      void attemptAutoOpen();
+    };
+
+    document.addEventListener("pointerdown", handleUserActivation, true);
+    document.addEventListener("keydown", handleUserActivation, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleUserActivation, true);
+      document.removeEventListener("keydown", handleUserActivation, true);
+    };
+  }, [api, attemptAutoOpen, enabled, isActive, isAutoOpenPending]);
 
   useEffect(() => {
     if (!isActive) {

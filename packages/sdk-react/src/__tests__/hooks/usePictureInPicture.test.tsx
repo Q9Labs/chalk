@@ -6,6 +6,10 @@ import { SharedPictureInPictureProvider, useSharedPictureInPicture } from "../..
 import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 
 const originalDocumentPictureInPicture = window.documentPictureInPicture;
+const originalUserActivationDescriptor = Object.getOwnPropertyDescriptor(
+  navigator,
+  "userActivation",
+);
 const PREJOIN_SOURCE = {
   id: "prejoin",
   kind: "participant" as const,
@@ -60,6 +64,40 @@ function Harness() {
       <span>{pip.isActive ? "active" : "inactive"}</span>
     </div>
   );
+}
+
+function AutoOpenHarness() {
+  const pip = usePictureInPicture({
+    enabled: true,
+    autoOpen: true,
+    phase: "meeting",
+    roomName: "PiP Room",
+    displayName: "Hasan",
+    source: {
+      id: "local",
+      kind: "participant",
+      title: "Hasan",
+      videoTrack: null,
+      isLocal: true,
+    },
+    controls: {},
+  });
+
+  return (
+    <div>
+      <span>{pip.isSupported ? "supported" : "unsupported"}</span>
+      <span>{pip.isActive ? "active" : "inactive"}</span>
+    </div>
+  );
+}
+
+function mockUserActivation(isActive: boolean) {
+  Object.defineProperty(navigator, "userActivation", {
+    configurable: true,
+    get: () => ({
+      isActive,
+    }),
+  });
 }
 
 function SharedPhaseHarness({ phase }: { phase: "prejoin" | "meeting" }) {
@@ -125,6 +163,17 @@ function SharedRegistrar({
 describe("usePictureInPicture", () => {
   afterEach(() => {
     window.documentPictureInPicture = originalDocumentPictureInPicture;
+
+    if (originalUserActivationDescriptor) {
+      Object.defineProperty(
+        navigator,
+        "userActivation",
+        originalUserActivationDescriptor,
+      );
+    } else {
+      // @ts-expect-error test cleanup for optional browser API
+      delete navigator.userActivation;
+    }
   });
 
   it("opens and closes a Document PiP window", async () => {
@@ -155,6 +204,60 @@ describe("usePictureInPicture", () => {
     await waitFor(() => {
       expect(close).toHaveBeenCalledTimes(1);
       expect(getByText("inactive")).toBeDefined();
+    });
+  });
+
+  it("auto-opens when mounted with user activation", async () => {
+    const pipDocument = document.implementation.createHTMLDocument("pip");
+    const requestWindow = vi.fn().mockResolvedValue({
+      document: pipDocument,
+      addEventListener: vi.fn(),
+      close: vi.fn(),
+      focus: vi.fn(),
+      closed: false,
+    });
+
+    mockUserActivation(true);
+    window.documentPictureInPicture = {
+      requestWindow,
+    } as any;
+
+    const { getByText } = render(<AutoOpenHarness />);
+
+    await waitFor(() => {
+      expect(requestWindow).toHaveBeenCalledTimes(1);
+      expect(getByText("active")).toBeDefined();
+    });
+  });
+
+  it("auto-opens on the next eligible user interaction when mount-time activation is unavailable", async () => {
+    const pipDocument = document.implementation.createHTMLDocument("pip");
+    const requestWindow = vi.fn().mockResolvedValue({
+      document: pipDocument,
+      addEventListener: vi.fn(),
+      close: vi.fn(),
+      focus: vi.fn(),
+      closed: false,
+    });
+
+    mockUserActivation(false);
+    window.documentPictureInPicture = {
+      requestWindow,
+    } as any;
+
+    const { getByText } = render(<AutoOpenHarness />);
+
+    await waitFor(() => {
+      expect(getByText("inactive")).toBeDefined();
+    });
+    expect(requestWindow).toHaveBeenCalledTimes(0);
+
+    mockUserActivation(true);
+    fireEvent.pointerDown(document.body);
+
+    await waitFor(() => {
+      expect(requestWindow).toHaveBeenCalledTimes(1);
+      expect(getByText("active")).toBeDefined();
     });
   });
 
