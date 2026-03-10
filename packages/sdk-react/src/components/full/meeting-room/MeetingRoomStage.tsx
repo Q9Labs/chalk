@@ -1,4 +1,5 @@
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { useMemo } from "react";
 
 import { cn } from "../../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon } from "../../../utils/icons";
@@ -6,6 +7,7 @@ import { ReactionBubble, VideoTile } from "../../atomic";
 import { NotificationStack, ScreenShareView, VideoGrid } from "../../composite";
 import { SplitStage } from "../SplitStage";
 import { WhiteboardPanel } from "../WhiteboardPanel";
+import { getParticipantColor } from "../../../utils/colorGenerator";
 import type { ActiveReaction, MeetingLayout, Participant } from "./types";
 
 interface MeetingRoomStageProps {
@@ -43,18 +45,20 @@ export function MeetingRoomStage({
   isExiting,
   localParticipantColorSeed,
 }: MeetingRoomStageProps) {
+  const localParticipantColor = useMemo(() => localParticipantColorSeed ? getParticipantColor(localParticipantColorSeed).primary : undefined, [localParticipantColorSeed]);
+
   return (
-    <div className={cn("flex-1 h-full min-w-0 relative flex rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]", isStageMode && layout === "sidebar" ? "flex-row" : "flex-col", isExiting && "chalk-animate-void-exit")}>
+    <div className={cn("flex-1 h-full min-h-0 relative flex rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]", isStageMode && layout === "sidebar" ? "flex-row" : "flex-col", isExiting && "chalk-animate-void-exit")}>
       {isStageMode ? (
         <>
           <div className="flex-1 relative min-h-0 min-w-0">
             {isSplit && screenSharer?.screenShareTrack ? (
               <SplitStage
                 leftPanel={<ScreenShareView screenShareTrack={screenSharer.screenShareTrack} sharedByName={screenSharer.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />}
-                rightPanel={<WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} />}
+                rightPanel={<WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} localParticipantColor={localParticipantColor} />}
               />
             ) : enableWhiteboard && isWhiteboardOpen ? (
-              <WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} />
+              <WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} localParticipantColor={localParticipantColor} />
             ) : (
               <ScreenShareView screenShareTrack={screenSharer?.screenShareTrack!} sharedByName={screenSharer?.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />
             )}

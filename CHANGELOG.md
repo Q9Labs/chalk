@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-React: meeting stage symbol regression** — restore the missing React/state imports used by the in-room stage so `useMemo`-driven whiteboard/stage state no longer crashes at runtime.
 - **SDK-Core: screen-share cancel loop + stale active state** — canceling the browser screen-share picker now stops immediately without retrying alternate capture constraints, and failed/canceled starts reset transient local share state so the UI does not flip into a false “sharing” state.
 - **SDK-React: settings hotkey cross-platform coverage** — the `Cmd+K` / `Ctrl+K` meeting-settings shortcut now has explicit macOS/Windows test coverage and stable hotkey-manager reset logic in the SDK React test harness.
 - **Web/API: same room code now stays in the same room on localhost** — localhost room joins now reuse the same temporary tenant across tabs, ignore stale join-link session context when the current `/room/$roomId` does not match, and recover cleanly if two joins race to create the same slug-backed room.
