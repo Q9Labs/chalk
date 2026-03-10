@@ -44,7 +44,6 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
   private readonly events = new TypedEventEmitter<ScreenShareManagerEvents>();
   private room: ConferenceSession | null = null;
   private roomUnsubscribers: Array<() => void> = [];
-  private openAnnotationsAfterStart = false;
 
   constructor(_debug = false) {
     super({
@@ -178,7 +177,6 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
     }
 
     this.setState({ isStarting: true });
-    this.openAnnotationsAfterStart = options?.withAnnotations === true;
 
     try {
       const result = await this.room.startScreenShare(options);
@@ -203,7 +201,6 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
         }
       } else {
         this.setState({ isStarting: false });
-        this.openAnnotationsAfterStart = false;
         // ConferenceSession.startScreenShare returns false on failure (it emits a room error event).
         // Surface a manager-level error so UI hooks can react consistently.
         if (!this.getState().isActive) {
@@ -214,7 +211,6 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
       return result;
     } catch (err) {
       this.setState({ isStarting: false });
-      this.openAnnotationsAfterStart = false;
       const error = ChalkError.wrap(err);
       this.events.emit("error", error);
       throw error;
@@ -235,7 +231,6 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
     }
 
     await this.room.stopScreenShare();
-    this.openAnnotationsAfterStart = false;
 
     this.setState({
       isActive: false,
@@ -254,12 +249,6 @@ export class ScreenShareManager extends StateContainer<ScreenShareState> {
   get isLocalSharing(): boolean {
     const state = this.getState();
     return state.isActive && state.isLocalSharer;
-  }
-
-  consumeAnnotationAutoOpen(): boolean {
-    const shouldOpen = this.openAnnotationsAfterStart;
-    this.openAnnotationsAfterStart = false;
-    return shouldOpen;
   }
 
   /** Cleanup resources */

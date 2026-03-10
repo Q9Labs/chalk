@@ -34,7 +34,6 @@ export { useChalkSession, useSession } from "../context/chalk-provider";
 export { type UseChatReturn, useChat } from "./features/useChat";
 export { type UseInteractionsReturn, useInteractions } from "./features/useInteractions";
 export { type UseRecordingReturn, useRecording } from "./features/useRecording";
-export { type UseScreenAnnotationsReturn, useScreenAnnotations } from "./features/useScreenAnnotations";
 export { type UseTranscriptsReturn, useTranscripts } from "./features/useTranscripts";
 export { type UseWhiteboardReturn, useWhiteboard } from "./features/useWhiteboard";
 export { type UseActiveSpeakerReturn, useActiveSpeaker } from "./participants/useActiveSpeaker";

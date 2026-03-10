@@ -58,7 +58,6 @@ function MeetingRoomBase({
   enableChat = true,
   enableRecording = true,
   enableScreenShare = true,
-  enableAnnotations = true,
   enableHandRaise = true,
   enableReactions = true,
   enableWhiteboard = true,
@@ -442,20 +441,24 @@ function MeetingRoomBase({
       style={getParticipantThemeVariables(participantColorSeed) as React.CSSProperties}
     >
       <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "mix-blend-screen" : "mix-blend-multiply")}>
-        <div
-          className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-10" : "opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
-          style={{
-            background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
-            filter: "blur(100px)",
-          }}
-        />
-        <div
-          className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-5" : "opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
-          style={{
-            background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
-            filter: "blur(120px)",
-          }}
-        />
+        {settings.appearance.ambientBackground && (
+          <>
+            <div
+              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-10" : "opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
+              style={{
+                background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
+                filter: "blur(100px)",
+              }}
+            />
+            <div
+              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-5" : "opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
+              style={{
+                background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
+                filter: "blur(120px)",
+              }}
+            />
+          </>
+        )}
       </div>
 
       <div className={cn("relative z-10 w-full", !reduceMotion && "animate-in fade-in slide-in-from-top-4 duration-700 ease-out fill-mode-both delay-100")}>
@@ -472,7 +475,6 @@ function MeetingRoomBase({
           allParticipants={allParticipants}
           isFilmstripOpen={ui.isFilmstripOpen}
           onToggleFilmstrip={handleFilmstripToggle}
-          enableAnnotations={enableAnnotations}
           enableWhiteboard={enableWhiteboard}
           isWhiteboardOpen={isWhiteboardOpen}
           theme={roomTheme}

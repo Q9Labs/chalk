@@ -15,7 +15,6 @@ export interface ConferenceFeatureFlags {
   chat: boolean;
   recording: boolean;
   screenShare: boolean;
-  annotations: boolean;
   whiteboard: boolean;
   reactions: boolean;
   handRaise: boolean;
@@ -35,7 +34,6 @@ export function useConferenceFeatureFlags({ features, participants, localPartici
     chat: chatFeature,
     recording: recordingFeature,
     screenShare: screenShareFeature,
-    annotations: annotationsFeature,
     whiteboard: whiteboardFeature,
     reactions: reactionsFeature,
     handRaise: handRaiseFeature,
@@ -55,7 +53,6 @@ export function useConferenceFeatureFlags({ features, participants, localPartici
       chat: resolveFeature(chatFeature, ctx),
       recording: resolveFeature(recordingFeature, ctx),
       screenShare: resolveFeature(screenShareFeature, ctx),
-      annotations: resolveFeature(annotationsFeature, ctx),
       whiteboard: resolveFeature(whiteboardFeature, ctx),
       reactions: resolveFeature(reactionsFeature, ctx),
       handRaise: resolveFeature(handRaiseFeature, ctx),
@@ -63,5 +60,5 @@ export function useConferenceFeatureFlags({ features, participants, localPartici
       pictureInPicture: resolveFeature(pictureInPictureFeature, ctx),
       tour: resolveFeature(tourFeature, ctx),
     };
-  }, [chatFeature, recordingFeature, screenShareFeature, annotationsFeature, whiteboardFeature, reactionsFeature, handRaiseFeature, backgroundEffectsFeature, pictureInPictureFeature, tourFeature, participants, localParticipant, participantCount, isRecording]);
+  }, [chatFeature, recordingFeature, screenShareFeature, whiteboardFeature, reactionsFeature, handRaiseFeature, backgroundEffectsFeature, pictureInPictureFeature, tourFeature, participants, localParticipant, participantCount, isRecording]);
 }

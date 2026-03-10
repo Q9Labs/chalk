@@ -101,7 +101,6 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	wsHub := websocket.NewHub(cfg.RedisClient, slog.Default())
 	wsHub.SetWhiteboardStateStore(&whiteboardStateStoreAdapter{queries: queries})
-	wsHub.SetScreenAnnotationStateStore(&screenAnnotationStateStoreAdapter{queries: queries})
 	go wsHub.Run(context.Background())
 
 	roomState := redis.NewRoomState(cfg.RedisClient)
@@ -199,18 +198,6 @@ func (a *whiteboardStateStoreAdapter) Save(ctx context.Context, roomID uuid.UUID
 
 func (a *whiteboardStateStoreAdapter) Load(ctx context.Context, roomID uuid.UUID) ([]byte, error) {
 	return a.queries.GetRoomWhiteboardState(ctx, roomID)
-}
-
-type screenAnnotationStateStoreAdapter struct {
-	queries *db.Queries
-}
-
-func (a *screenAnnotationStateStoreAdapter) Save(ctx context.Context, roomID uuid.UUID, state []byte) error {
-	return a.queries.UpdateRoomScreenAnnotationState(ctx, roomID, state)
-}
-
-func (a *screenAnnotationStateStoreAdapter) Load(ctx context.Context, roomID uuid.UUID) ([]byte, error) {
-	return a.queries.GetRoomScreenAnnotationState(ctx, roomID)
 }
 
 func (r *Router) setupRoutes() {

@@ -674,11 +674,6 @@ export type ChalkEventType =
  */
 export interface ScreenShareOptions {
   /**
-   * Enable collaborative annotations on the shared screen
-   * @default false
-   */
-  withAnnotations?: boolean;
-  /**
    * Include system audio in the share (browser support varies)
    * @default false
    */

@@ -10,7 +10,7 @@
 import { Schema } from "@effect/schema";
 
 import type { ChalkError, ChatMessage, Participant, Reaction, SessionSnapshot } from "../../types.ts";
-import type { ScreenAnnotationAccessChange, ScreenAnnotationCursor, ScreenAnnotationSnapshot, ScreenAnnotationUpdate, WhiteboardCursor, WhiteboardPermission, WhiteboardSnapshot, WhiteboardUpdate } from "../../types/entities/index.ts";
+import type { WhiteboardCursor, WhiteboardPermission, WhiteboardSnapshot, WhiteboardUpdate } from "../../types/entities/index.ts";
 import { RegisteredPayload } from "./ws-events.ts";
 
 const isObject = (input: unknown): input is Record<string, unknown> => typeof input === "object" && input !== null && !Array.isArray(input);
@@ -34,14 +34,6 @@ const WhiteboardSnapshotSchema = Schema.declare((input): input is WhiteboardSnap
 const WhiteboardCursorSchema = Schema.declare((input): input is WhiteboardCursor => isObject(input));
 
 const WhiteboardPermissionSchema = Schema.declare((input): input is WhiteboardPermission => isObject(input));
-
-const ScreenAnnotationUpdateSchema = Schema.declare((input): input is ScreenAnnotationUpdate => isObject(input));
-
-const ScreenAnnotationSnapshotSchema = Schema.declare((input): input is ScreenAnnotationSnapshot => isObject(input));
-
-const ScreenAnnotationCursorSchema = Schema.declare((input): input is ScreenAnnotationCursor => isObject(input));
-
-const ScreenAnnotationAccessChangeSchema = Schema.declare((input): input is ScreenAnnotationAccessChange => isObject(input));
 
 export const WSEventSchemas = {
   connected: Schema.Void,
@@ -102,18 +94,4 @@ export const WSEventSchemas = {
     participantId: Schema.String,
     timestamp: Schema.DateFromSelf,
   }),
-  "annotation.session.started": Schema.declare(
-    (
-      input,
-    ): input is {
-      shareSessionId: string;
-      sharerParticipantId: string;
-      accessMode: "all" | "sharer_only" | "off";
-    } => isObject(input),
-  ),
-  "annotation.session.ended": Schema.declare((input): input is { shareSessionId: string; endedAt?: Date } => isObject(input)),
-  "annotation.snapshot": ScreenAnnotationSnapshotSchema,
-  "annotation.update": ScreenAnnotationUpdateSchema,
-  "annotation.cursor": ScreenAnnotationCursorSchema,
-  "annotation.access.changed": ScreenAnnotationAccessChangeSchema,
 } as const;

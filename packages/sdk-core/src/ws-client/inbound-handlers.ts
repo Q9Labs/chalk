@@ -1,12 +1,6 @@
 import type { WSEvents } from "./emitted-events.ts";
 import type { WSInboundPayloadMap, WSInboundType, WSOutboundMessage } from "./messages.ts";
 import {
-  toAnnotationAccessChanged,
-  toAnnotationCursor,
-  toAnnotationSessionEnded,
-  toAnnotationSessionStarted,
-  toAnnotationSnapshot,
-  toAnnotationUpdate,
   toChatMessage,
   toParticipant,
   toPermissionChanged,
@@ -100,24 +94,6 @@ export const createInboundHandlers = (deps: { emit: Emit; send: (message: WSOutb
     },
     "whiteboard.closed": (payload) => {
       deps.emit("whiteboard.closed", toWhiteboardClosed(payload));
-    },
-    "annotation.session.started": (payload) => {
-      deps.emit("annotation.session.started", toAnnotationSessionStarted(payload));
-    },
-    "annotation.session.ended": (payload) => {
-      deps.emit("annotation.session.ended", toAnnotationSessionEnded(payload));
-    },
-    "annotation.snapshot": (payload) => {
-      deps.emit("annotation.snapshot", toAnnotationSnapshot(payload));
-    },
-    "annotation.data": (payload) => {
-      deps.emit("annotation.update", toAnnotationUpdate(payload));
-    },
-    "annotation.cursor": (payload) => {
-      deps.emit("annotation.cursor", toAnnotationCursor(payload));
-    },
-    "annotation.access.changed": (payload) => {
-      deps.emit("annotation.access.changed", toAnnotationAccessChanged(payload));
     },
     ping: (_payload) => {
       deps.send({ type: "pong" });

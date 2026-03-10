@@ -17,7 +17,6 @@ export interface Features {
   chat?: FeatureValue;
   recording?: FeatureValue;
   screenShare?: FeatureValue;
-  annotations?: FeatureValue;
   whiteboard?: FeatureValue;
   reactions?: FeatureValue;
   handRaise?: FeatureValue;

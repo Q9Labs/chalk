@@ -10,25 +10,4 @@ export type { ChatMessage, MessageReaction, Reaction, ReactionEmoji } from "./me
 export type { ConnectionQuality, Participant, ParticipantInfo, ParticipantRole } from "./participant";
 export type { Recording, RecordingStatus, StorageProvider } from "./recording";
 export type { JoinOptions, LeaveOptions, ConferenceSession, JoinSessionConfig, SessionConnectionState } from "./room";
-export type {
-  AnnotationAccessMode,
-  ScreenAnnotationAccessMode,
-  ScreenAnnotationAccessChanged,
-  ScreenAnnotationAccessChange,
-  ScreenAnnotationCursor,
-  ScreenAnnotationFreehandItem,
-  ScreenAnnotationItem,
-  ScreenAnnotationPoint,
-  ScreenAnnotationSession,
-  ScreenAnnotationSessionEnded,
-  ScreenAnnotationSessionStarted,
-  ScreenAnnotationShape,
-  ScreenAnnotationShapeKind,
-  ScreenAnnotationShapeItem,
-  ScreenAnnotationSnapshot,
-  ScreenAnnotationStyle,
-  ScreenAnnotationTextItem,
-  ScreenAnnotationTool,
-  ScreenAnnotationUpdate,
-} from "./annotations";
 export type { WhiteboardCursor, WhiteboardFeature, WhiteboardPermission, WhiteboardSnapshot, WhiteboardUpdate } from "./whiteboard";

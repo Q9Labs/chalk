@@ -52,20 +52,6 @@ const (
 	MessageTypeWhiteboardOpened   MessageType = "whiteboard.opened"
 	MessageTypeWhiteboardClosed   MessageType = "whiteboard.closed"
 
-	// Screen annotation messages
-	MessageTypeAnnotationSessionStart   MessageType = "annotation.session.start"
-	MessageTypeAnnotationSessionEnd     MessageType = "annotation.session.end"
-	MessageTypeAnnotationSync           MessageType = "annotation.sync"
-	MessageTypeAnnotationUpdate         MessageType = "annotation.update"
-	MessageTypeAnnotationClear          MessageType = "annotation.clear"
-	MessageTypeAnnotationCursor         MessageType = "annotation.cursor"
-	MessageTypeAnnotationAccessSet      MessageType = "annotation.access.set"
-	MessageTypeAnnotationSessionStarted MessageType = "annotation.session.started"
-	MessageTypeAnnotationSessionEnded   MessageType = "annotation.session.ended"
-	MessageTypeAnnotationSnapshot       MessageType = "annotation.snapshot"
-	MessageTypeAnnotationData           MessageType = "annotation.data"
-	MessageTypeAnnotationAccessChanged  MessageType = "annotation.access.changed"
-
 	// Permission messages
 	MessageTypePermissionGrant   MessageType = "permission.grant"
 	MessageTypePermissionRevoke  MessageType = "permission.revoke"
@@ -293,7 +279,7 @@ type WhiteboardCursorPayload struct {
 // PermissionGrantPayload - host grants drawing permission
 type PermissionGrantPayload struct {
 	ParticipantID uuid.UUID `json:"participant_id"`
-	Feature       string    `json:"feature"` // "whiteboard" or "annotations"
+	Feature       string    `json:"feature"` // "whiteboard"
 }
 
 // PermissionChangedPayload - broadcast permission change
@@ -316,98 +302,6 @@ type WhiteboardOpenedPayload struct {
 type WhiteboardClosedPayload struct {
 	ParticipantID uuid.UUID `json:"participant_id"`
 	Timestamp     time.Time `json:"timestamp"`
-}
-
-type AnnotationAccessMode string
-
-const (
-	AnnotationAccessModeAll        AnnotationAccessMode = "all"
-	AnnotationAccessModeSharerOnly AnnotationAccessMode = "sharer_only"
-	AnnotationAccessModeOff        AnnotationAccessMode = "off"
-)
-
-type AnnotationSessionStartPayload struct {
-	ShareSessionID      string               `json:"share_session_id"`
-	SharerParticipantID uuid.UUID            `json:"sharer_participant_id"`
-	AccessMode          AnnotationAccessMode `json:"access_mode"`
-}
-
-type AnnotationSessionStartedPayload struct {
-	ShareSessionID      string               `json:"share_session_id"`
-	SharerParticipantID uuid.UUID            `json:"sharer_participant_id"`
-	AccessMode          AnnotationAccessMode `json:"access_mode"`
-	Timestamp           time.Time            `json:"timestamp"`
-}
-
-type AnnotationSessionEndPayload struct {
-	ShareSessionID string `json:"share_session_id"`
-}
-
-type AnnotationSessionEndedPayload struct {
-	ShareSessionID string    `json:"share_session_id"`
-	Timestamp      time.Time `json:"timestamp"`
-}
-
-type AnnotationUpdatePayload struct {
-	ShareSessionID      string          `json:"share_session_id"`
-	SharerParticipantID uuid.UUID       `json:"sharer_participant_id"`
-	SyncAll             bool            `json:"sync_all"`
-	Items               json.RawMessage `json:"items"`
-	Seq                 int64           `json:"seq"`
-}
-
-type AnnotationDataPayload struct {
-	ShareSessionID      string          `json:"share_session_id"`
-	SharerParticipantID uuid.UUID       `json:"sharer_participant_id"`
-	ParticipantID       uuid.UUID       `json:"participant_id"`
-	DisplayName         string          `json:"display_name"`
-	SyncAll             bool            `json:"sync_all"`
-	Items               json.RawMessage `json:"items"`
-	Seq                 int64           `json:"seq"`
-	Timestamp           time.Time       `json:"timestamp"`
-}
-
-type AnnotationSnapshotPayload struct {
-	RoomID              uuid.UUID            `json:"room_id"`
-	ShareSessionID      string               `json:"share_session_id"`
-	SharerParticipantID uuid.UUID            `json:"sharer_participant_id"`
-	AccessMode          AnnotationAccessMode `json:"access_mode"`
-	Items               json.RawMessage      `json:"items"`
-	UpdatedAtMs         int64                `json:"updated_at_ms"`
-	LastSeq             int64                `json:"last_seq"`
-}
-
-type AnnotationClearPayload struct {
-	ShareSessionID string `json:"share_session_id"`
-}
-
-type AnnotationCursorSendPayload struct {
-	ShareSessionID string  `json:"share_session_id"`
-	Tool           string  `json:"tool"`
-	X              float64 `json:"x"`
-	Y              float64 `json:"y"`
-}
-
-type AnnotationCursorPayload struct {
-	ShareSessionID string    `json:"share_session_id"`
-	ParticipantID  uuid.UUID `json:"participant_id"`
-	DisplayName    string    `json:"display_name"`
-	Tool           string    `json:"tool"`
-	X              float64   `json:"x"`
-	Y              float64   `json:"y"`
-	Timestamp      time.Time `json:"timestamp"`
-}
-
-type AnnotationAccessSetPayload struct {
-	ShareSessionID string               `json:"share_session_id"`
-	AccessMode     AnnotationAccessMode `json:"access_mode"`
-}
-
-type AnnotationAccessChangedPayload struct {
-	ShareSessionID string               `json:"share_session_id"`
-	AccessMode     AnnotationAccessMode `json:"access_mode"`
-	ChangedBy      uuid.UUID            `json:"changed_by"`
-	Timestamp      time.Time            `json:"timestamp"`
 }
 
 // TranscriptPayload - client sends transcript from Cloudflare AI

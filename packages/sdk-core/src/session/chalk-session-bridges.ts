@@ -6,13 +6,11 @@ import type { ParticipantState } from "../effect/schemas/manager-state";
 import type { ChatManager } from "../managers/chat-manager";
 import type { InteractionManager } from "../managers/interaction-manager";
 import type { RecordingManager } from "../managers/recording-manager";
-import type { ScreenAnnotationsManager } from "../managers/screen-annotations-manager";
 import type { ScreenShareManager } from "../managers/screen-share-manager";
 import type { WhiteboardManager } from "../managers/whiteboard-manager";
 import type { ConferenceSession } from "../room";
 import type { Participant } from "../types.ts";
 import type { MediaSessionApi, ParticipantSessionApi, RoomSessionApi, SessionStateUpdaters } from "./chalk-session-state";
-import { wideEvents } from "../wide-events/index.ts";
 
 interface AttachRoomBridgeArgs {
   room: ConferenceSession;
@@ -23,7 +21,6 @@ interface AttachRoomBridgeArgs {
   stateUpdaters: SessionStateUpdaters;
   runtime: ManagedRuntime.ManagedRuntime<RoomService | ParticipantService | MediaService, never>;
   screenShare: ScreenShareManager;
-  annotations: ScreenAnnotationsManager;
   chat: ChatManager;
   recording: RecordingManager;
   interactions: InteractionManager;
@@ -31,14 +28,6 @@ interface AttachRoomBridgeArgs {
   startRecording: () => Promise<string>;
   stopRecording: () => Promise<void>;
 }
-
-const createShareSessionId = () => {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  return `share_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-};
 
 const normalizeParticipant = (participant: Participant): ParticipantState["participants"][number] => ({
   id: participant.id,
@@ -59,11 +48,10 @@ const normalizeParticipant = (participant: Participant): ParticipantState["parti
   metadata: participant.metadata,
 });
 
-export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomApi, participantsApi, mediaApi, stateUpdaters, runtime, screenShare, annotations, chat, recording, interactions, whiteboard, startRecording, stopRecording }: AttachRoomBridgeArgs): (() => void) => {
+export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomApi, participantsApi, mediaApi, stateUpdaters, runtime, screenShare, chat, recording, interactions, whiteboard, startRecording, stopRecording }: AttachRoomBridgeArgs): (() => void) => {
   setCurrentRoom(room);
 
   screenShare.attachRoom(room);
-  annotations.attachRoom(room);
   chat.attachRoom(room);
   recording.attachRoom(room);
   interactions.attachRoom(room);
@@ -87,73 +75,6 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
 
   recording.setApiCallbacks(startRecording, stopRecording);
 
-  const screenShareUnsubscribers: Array<() => void> = [];
-
-  screenShareUnsubscribers.push(
-    screenShare.on("started", ({ participantId, isLocal }) => {
-      const ctx = wideEvents.start("annotations.bridge.share-started");
-      ctx.merge({
-        participantId,
-        isLocal,
-      });
-      if (!isLocal) {
-        ctx.complete("success", { result: "ignored_remote_share" });
-        return;
-      }
-
-      const annotationState = annotations.getState();
-      if (annotationState.isSessionActive && annotationState.sharerParticipantId === participantId && annotationState.shareSessionId) {
-        ctx.complete("success", {
-          shareSessionId: annotationState.shareSessionId,
-          result: "ignored_duplicate_local_share",
-        });
-        return;
-      }
-
-      const shareSessionId = createShareSessionId();
-      annotations.startSession(shareSessionId, participantId);
-
-      if (screenShare.consumeAnnotationAutoOpen()) {
-        annotations.open();
-        ctx.complete("success", {
-          shareSessionId,
-          result: "started_and_opened",
-        });
-      } else {
-        annotations.close();
-        ctx.complete("success", {
-          shareSessionId,
-          result: "started_and_closed",
-        });
-      }
-    }),
-  );
-
-  screenShareUnsubscribers.push(
-    screenShare.on("stopped", () => {
-      const ctx = wideEvents.start("annotations.bridge.share-stopped");
-      const annotationState = annotations.getState();
-      if (!annotationState.shareSessionId) {
-        annotations.close();
-        ctx.complete("success", {
-          result: "closed_without_session",
-        });
-        return;
-      }
-
-      if (room.localParticipant?.id === annotationState.sharerParticipantId) {
-        annotations.endSession(annotationState.shareSessionId);
-      }
-
-      annotations.close();
-      ctx.complete("success", {
-        shareSessionId: annotationState.shareSessionId,
-        sharerParticipantId: annotationState.sharerParticipantId,
-        result: room.localParticipant?.id === annotationState.sharerParticipantId ? "ended_local_session" : "closed_remote_session",
-      });
-    }),
-  );
-
   const bridgeCleanup = bridgeRoomToSessionState({
     room,
     roomApi,
@@ -164,14 +85,6 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
 
   return () => {
     bridgeCleanup();
-
-    for (const unsubscribe of screenShareUnsubscribers) {
-      try {
-        unsubscribe();
-      } catch {
-        // best effort cleanup
-      }
-    }
   };
 };
 

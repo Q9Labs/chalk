@@ -17,7 +17,6 @@ interface MeetingRoomStageProps {
   allParticipants: Participant[];
   isFilmstripOpen: boolean;
   onToggleFilmstrip: () => void;
-  enableAnnotations: boolean;
   enableWhiteboard: boolean;
   isWhiteboardOpen: boolean;
   theme: "light" | "dark" | "system";
@@ -36,7 +35,6 @@ export function MeetingRoomStage({
   allParticipants,
   isFilmstripOpen,
   onToggleFilmstrip,
-  enableAnnotations,
   enableWhiteboard,
   isWhiteboardOpen,
   theme,
@@ -52,13 +50,13 @@ export function MeetingRoomStage({
           <div className="flex-1 relative min-h-0 min-w-0">
             {isSplit && screenSharer?.screenShareTrack ? (
               <SplitStage
-                leftPanel={<ScreenShareView screenShareTrack={screenSharer.screenShareTrack} sharedByName={screenSharer.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} enableAnnotations={enableAnnotations} />}
+                leftPanel={<ScreenShareView screenShareTrack={screenSharer.screenShareTrack} sharedByName={screenSharer.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />}
                 rightPanel={<WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} />}
               />
             ) : enableWhiteboard && isWhiteboardOpen ? (
               <WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} />
             ) : (
-              <ScreenShareView screenShareTrack={screenSharer?.screenShareTrack!} sharedByName={screenSharer?.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} enableAnnotations={enableAnnotations} />
+              <ScreenShareView screenShareTrack={screenSharer?.screenShareTrack!} sharedByName={screenSharer?.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />
             )}
 
             {allParticipants.length > 0 && (
@@ -66,7 +64,7 @@ export function MeetingRoomStage({
                 type="button"
                 onClick={onToggleFilmstrip}
                 className={cn(
-                  "absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",
+                  "absolute z-20 flex items-center justify-center bg-muted/80 border border-border text-foreground/80 hover:text-foreground hover:bg-muted transition-all duration-300 shadow-lg",
                   layout === "sidebar" ? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl" : "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl",
                 )}
                 aria-label={isFilmstripOpen ? "Collapse filmstrip" : "Expand filmstrip"}
@@ -77,7 +75,7 @@ export function MeetingRoomStage({
           </div>
 
           {isFilmstripOpen && allParticipants.length > 0 && (
-            <div className={cn("flex gap-2 transition-all duration-500 ease-in-out", layout === "sidebar" ? "flex-col p-2 w-64 h-full overflow-y-auto border-l border-white/5" : "flex-row items-center p-2 h-40 w-full overflow-x-auto overflow-y-hidden scrollbar-none")}>
+            <div className={cn("flex gap-2 transition-all duration-500 ease-in-out", layout === "sidebar" ? "flex-col p-2 w-64 h-full overflow-y-auto border-l border-border" : "flex-row items-center p-2 h-40 w-full overflow-x-auto overflow-y-hidden scrollbar-none")}>
               {allParticipants.map((participant, index) => (
                 <div key={participant.id} className={cn("shrink-0 relative transition-all duration-300 hover:scale-[1.02]", layout === "sidebar" ? "aspect-video w-full" : "aspect-video h-full")}>
                   <VideoTile

@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **SDK-React: Full-bleed Picture-in-Picture** — redesigned the Document PiP window to feature a full-bleed video stage, floating glassmorphism controls, and refined typography for maximum use of small space.
+- **SDK/API: remove screen annotations from screen sharing** — strip the incomplete shared-screen annotation protocol, state managers, React overlay/tooling, and demo flag wiring so screen sharing falls back to the stable non-annotated path.
 
 ### Fixed
 

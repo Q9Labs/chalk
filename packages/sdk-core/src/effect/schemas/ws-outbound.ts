@@ -61,57 +61,12 @@ export const WhiteboardCursorPayload = Schema.Struct({
 });
 export type WhiteboardCursorPayload = Schema.Schema.Type<typeof WhiteboardCursorPayload>;
 
-export const AnnotationSessionStartPayload = Schema.Struct({
-  shareSessionId: Schema.String,
-  sharerParticipantId: Schema.String,
-  accessMode: Schema.Union(Schema.Literal("all"), Schema.Literal("sharer_only"), Schema.Literal("off")),
-});
-export type AnnotationSessionStartPayload = Schema.Schema.Type<typeof AnnotationSessionStartPayload>;
-
-export const AnnotationSessionEndPayload = Schema.Struct({
-  shareSessionId: Schema.String,
-});
-export type AnnotationSessionEndPayload = Schema.Schema.Type<typeof AnnotationSessionEndPayload>;
-
-export const AnnotationSyncPayload = Schema.Struct({
-  shareSessionId: Schema.optional(Schema.String),
-});
-export type AnnotationSyncPayload = Schema.Schema.Type<typeof AnnotationSyncPayload>;
-
-export const AnnotationUpdatePayload = Schema.Struct({
-  shareSessionId: Schema.String,
-  sharerParticipantId: Schema.String,
-  syncAll: Schema.Boolean,
-  items: Schema.Array(Schema.Unknown),
-  seq: Schema.Number,
-});
-export type AnnotationUpdatePayload = Schema.Schema.Type<typeof AnnotationUpdatePayload>;
-
-export const AnnotationClearPayload = Schema.Struct({
-  shareSessionId: Schema.String,
-});
-export type AnnotationClearPayload = Schema.Schema.Type<typeof AnnotationClearPayload>;
-
-export const AnnotationCursorPayload = Schema.Struct({
-  shareSessionId: Schema.String,
-  tool: Schema.Union(Schema.Literal("pen"), Schema.Literal("highlighter"), Schema.Literal("rectangle"), Schema.Literal("ellipse"), Schema.Literal("line"), Schema.Literal("arrow"), Schema.Literal("text")),
-  x: Schema.Number,
-  y: Schema.Number,
-});
-export type AnnotationCursorPayload = Schema.Schema.Type<typeof AnnotationCursorPayload>;
-
-export const AnnotationAccessSetPayload = Schema.Struct({
-  shareSessionId: Schema.String,
-  accessMode: Schema.Union(Schema.Literal("all"), Schema.Literal("sharer_only"), Schema.Literal("off")),
-});
-export type AnnotationAccessSetPayload = Schema.Schema.Type<typeof AnnotationAccessSetPayload>;
-
 /**
  * permission.grant / permission.revoke payload
  */
 export const PermissionPayload = Schema.Struct({
   participantId: Schema.String,
-  feature: Schema.Union(Schema.Literal("whiteboard"), Schema.Literal("annotations")),
+  feature: Schema.Literal("whiteboard"),
 });
 export type PermissionPayload = Schema.Schema.Type<typeof PermissionPayload>;
 
@@ -157,13 +112,6 @@ export const WSOutboundPayloadSchemas = {
   "whiteboard.cursor": WhiteboardCursorPayload,
   "whiteboard.open": Schema.Void,
   "whiteboard.close": Schema.Void,
-  "annotation.session.start": AnnotationSessionStartPayload,
-  "annotation.session.end": AnnotationSessionEndPayload,
-  "annotation.sync": AnnotationSyncPayload,
-  "annotation.update": AnnotationUpdatePayload,
-  "annotation.clear": AnnotationClearPayload,
-  "annotation.cursor": AnnotationCursorPayload,
-  "annotation.access.set": AnnotationAccessSetPayload,
   "permission.grant": PermissionPayload,
   "permission.revoke": PermissionPayload,
   transcript: TranscriptPayload,

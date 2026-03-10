@@ -223,7 +223,6 @@ function RoomPage() {
           chat: true,
           recording: role === "host",
           screenShare: true,
-          annotations: true,
           whiteboard: true,
           reactions: true,
           handRaise: true,

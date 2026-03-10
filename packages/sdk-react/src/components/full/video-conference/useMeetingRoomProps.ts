@@ -132,7 +132,7 @@ export function useMeetingRoomProps({
   isPictureInPictureActive,
   handleTogglePictureInPicture,
 }: UseMeetingRoomPropsParams): MeetingRoomProps {
-  const { chat, recording, screenShare, annotations, handRaise, reactions, whiteboard, backgroundEffects, pictureInPicture, tour } = featureFlags;
+  const { chat, recording, screenShare, handRaise, reactions, whiteboard, backgroundEffects, pictureInPicture, tour } = featureFlags;
 
   return useMemo(
     () => ({
@@ -163,7 +163,6 @@ export function useMeetingRoomProps({
       enableChat: chat,
       enableRecording: recording,
       enableScreenShare: screenShare,
-      enableAnnotations: annotations,
       enableHandRaise: handRaise,
       enableReactions: reactions,
       enableWhiteboard: whiteboard,
@@ -229,7 +228,6 @@ export function useMeetingRoomProps({
       chat,
       recording,
       screenShare,
-      annotations,
       handRaise,
       reactions,
       whiteboard,

@@ -122,8 +122,6 @@ export type {
   RoomState,
   ScreenShareManagerEvents,
   ScreenShareState,
-  ScreenAnnotationsManagerEvents,
-  ScreenAnnotationsState,
   UIManagerEvents,
   UIState,
   WhiteboardManagerEvents,
@@ -132,7 +130,7 @@ export type {
 // Namespace exports for managers
 export * as managers from "./managers/index.ts";
 // Individual managers (non-Effect)
-export { ChatManager, InteractionManager, RecordingManager, ScreenShareManager, ScreenAnnotationsManager, UIManager, WhiteboardManager } from "./managers/index.ts";
+export { ChatManager, InteractionManager, RecordingManager, ScreenShareManager, UIManager, WhiteboardManager } from "./managers/index.ts";
 export type { ChalkSessionConfig, ChalkSessionEvents } from "./session/chalk-session.ts";
 // ChalkSession - main orchestrator
 export { ChalkSession } from "./session/chalk-session.ts";
@@ -141,7 +139,6 @@ export * as state from "./state/index.ts";
 // State container base class
 export { StateContainer } from "./state/state-container.ts";
 // Whiteboard types
-export type { AnnotationAccessMode, ScreenAnnotationAccessMode, ScreenAnnotationAccessChange, ScreenAnnotationCursor, ScreenAnnotationItem, ScreenAnnotationSession, ScreenAnnotationSnapshot, ScreenAnnotationTool, ScreenAnnotationUpdate } from "./types/entities/annotations.ts";
 export type { WhiteboardCursor, WhiteboardSnapshot, WhiteboardUpdate } from "./types/entities/whiteboard.ts";
 export type { VideoBackgroundEffect, VideoBackgroundMode } from "./types/entities/media.ts";
 

@@ -7,7 +7,6 @@
  * @packageDocumentation
  * @module @q9labs/chalk-core/types
  */
-import type { ScreenAnnotationAccessMode, ScreenAnnotationItem, ScreenAnnotationTool } from "../entities/annotations";
 // ============================================================================
 // Payload Types (matching Go structs in messages.go)
 // ============================================================================
@@ -53,47 +52,13 @@ export interface WhiteboardCursorSendPayload {
 /** Grant permission to a participant */
 export interface PermissionGrantPayload {
   participantId: string;
-  feature: "whiteboard" | "annotations";
+  feature: "whiteboard";
 }
 
 /** Revoke permission from a participant */
 export interface PermissionRevokePayload {
   participantId: string;
-  feature: "whiteboard" | "annotations";
-}
-
-export interface AnnotationSessionStartPayload {
-  shareSessionId: string;
-  sharerParticipantId: string;
-  accessMode: ScreenAnnotationAccessMode;
-}
-
-export interface AnnotationSessionEndPayload {
-  shareSessionId: string;
-}
-
-export interface AnnotationUpdatePayload {
-  shareSessionId: string;
-  sharerParticipantId: string;
-  syncAll: boolean;
-  items: ScreenAnnotationItem[];
-  seq: number;
-}
-
-export interface AnnotationClearPayload {
-  shareSessionId: string;
-}
-
-export interface AnnotationCursorSendPayload {
-  shareSessionId: string;
-  tool: ScreenAnnotationTool;
-  x: number;
-  y: number;
-}
-
-export interface AnnotationAccessSetPayload {
-  shareSessionId: string;
-  accessMode: ScreenAnnotationAccessMode;
+  feature: "whiteboard";
 }
 
 // ============================================================================
@@ -132,13 +97,6 @@ export interface ClientEventMap {
   "whiteboard:cursor": WhiteboardCursorSendPayload;
   "whiteboard:open": Record<string, never>;
   "whiteboard:close": Record<string, never>;
-  "annotation:session-start": AnnotationSessionStartPayload;
-  "annotation:session-end": AnnotationSessionEndPayload;
-  "annotation:sync": Record<string, never>;
-  "annotation:update": AnnotationUpdatePayload;
-  "annotation:clear": AnnotationClearPayload;
-  "annotation:cursor": AnnotationCursorSendPayload;
-  "annotation:access-set": AnnotationAccessSetPayload;
 
   // Permission events
   "permission:grant": PermissionGrantPayload;
@@ -189,12 +147,6 @@ export const serverMessageTypeMap: Record<string, keyof import("./server-events"
   "whiteboard.cursor": "whiteboard:cursor",
   "whiteboard.opened": "whiteboard:opened",
   "whiteboard.closed": "whiteboard:closed",
-  "annotation.session.started": "annotation:session-started",
-  "annotation.session.ended": "annotation:session-ended",
-  "annotation.snapshot": "annotation:snapshot",
-  "annotation.data": "annotation:data",
-  "annotation.cursor": "annotation:cursor",
-  "annotation.access.changed": "annotation:access-changed",
   "permission.changed": "permission:changed",
   error: "error",
   ping: "ping",
@@ -215,13 +167,6 @@ export const clientMessageTypeMap: Record<keyof ClientEventMap, string> = {
   "whiteboard:cursor": "whiteboard.cursor",
   "whiteboard:open": "whiteboard.open",
   "whiteboard:close": "whiteboard.close",
-  "annotation:session-start": "annotation.session.start",
-  "annotation:session-end": "annotation.session.end",
-  "annotation:sync": "annotation.sync",
-  "annotation:update": "annotation.update",
-  "annotation:clear": "annotation.clear",
-  "annotation:cursor": "annotation.cursor",
-  "annotation:access-set": "annotation.access.set",
   "permission:grant": "permission.grant",
   "permission:revoke": "permission.revoke",
   pong: "pong",

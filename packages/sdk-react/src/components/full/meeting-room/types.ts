@@ -97,7 +97,6 @@ export interface MeetingRoomProps {
   enableChat?: boolean;
   enableRecording?: boolean;
   enableScreenShare?: boolean;
-  enableAnnotations?: boolean;
   enableHandRaise?: boolean;
   enableReactions?: boolean;
   enableWhiteboard?: boolean;

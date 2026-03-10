@@ -17,10 +17,8 @@ import { createConferenceSessionMediaController } from "./conference-session/med
 import { createConferenceSessionStore, type ConferenceSessionStore } from "./conference-session/session-store.ts";
 import { setupConferenceSessionRtkSignaling } from "./conference-session/rtk-signaling.ts";
 import type { ConferenceSessionEvents, Transcript } from "./conference-session/types.ts";
-import { createConferenceSessionAnnotationActions } from "./conference-session/annotation-actions.ts";
 import { createConferenceSessionWhiteboardActions } from "./conference-session/whiteboard-actions.ts";
 import { createHostAudioCommandHandler, setupConferenceSessionWsSignaling } from "./conference-session/ws-signaling.ts";
-import type { ScreenAnnotationAccessMode, ScreenAnnotationItem, ScreenAnnotationTool } from "./types/entities/annotations.ts";
 import type { VideoBackgroundEffect } from "./types/entities/media.ts";
 
 export type { ConferenceSessionEvents, Transcript } from "./conference-session/types.ts";
@@ -40,9 +38,6 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   private _tokens: TokenSet | null = null;
   private _whiteboardPermissions = new Map<string, boolean>();
   private _whiteboardDefaultAccess = true;
-  private _annotationShareSessionId: string | null = null;
-  private _annotationSharerParticipantId: string | null = null;
-  private _annotationAccessMode: ScreenAnnotationAccessMode = "all";
   private _roomCreated = false;
   private _tenantConfig: TenantConfig | null = null;
   private _roomSyncReadyEmitted = false;
@@ -63,7 +58,6 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
   private readonly mediaController: ReturnType<typeof createConferenceSessionMediaController>;
   private readonly deviceController: ReturnType<typeof createConferenceSessionDeviceController>;
   private readonly interactionActions: ReturnType<typeof createConferenceSessionInteractionActions>;
-  private readonly annotationActions: ReturnType<typeof createConferenceSessionAnnotationActions>;
   private readonly whiteboardActions: ReturnType<typeof createConferenceSessionWhiteboardActions>;
   private readonly leaveFlow: ReturnType<typeof createConferenceSessionLeaveFlow>;
 
@@ -145,14 +139,6 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       getParticipants: () => this.sessionStore.getParticipants(),
       getWhiteboardPermission: (participantId) => this.sessionStore.getWhiteboardPermission(participantId),
       getDefaultWhiteboardAccess: () => this._whiteboardDefaultAccess,
-    });
-
-    this.annotationActions = createConferenceSessionAnnotationActions({
-      getWsClient: () => this.wsClient,
-      getLocalParticipant: () => this.sessionStore.getLocalParticipant(),
-      getCurrentAccessMode: () => this._annotationAccessMode,
-      getCurrentShareSessionId: () => this._annotationShareSessionId,
-      getCurrentSharerParticipantId: () => this._annotationSharerParticipantId,
     });
 
     this.leaveFlow = createConferenceSessionLeaveFlow({
@@ -286,12 +272,6 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       setMessages: (messages) => this.sessionStore.setMessages(messages),
       setWhiteboardPermission: (participantId, canDraw) => {
         this.sessionStore.setWhiteboardPermission(participantId, canDraw);
-      },
-      setAnnotationSession: (shareSessionId, sharerParticipantId) => {
-        this._setAnnotationSession(shareSessionId, sharerParticipantId);
-      },
-      setAnnotationAccessMode: (accessMode) => {
-        this._setAnnotationAccessMode(accessMode);
       },
       setCurrentRecording: (recording) => {
         this.sessionStore.setCurrentRecording(recording);
@@ -500,47 +480,6 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
 
   closeWhiteboard(): void {
     this.whiteboardActions.closeWhiteboard();
-  }
-
-  canDrawAnnotations(participantId?: string): boolean {
-    return this.annotationActions.canDrawAnnotations(participantId);
-  }
-
-  startAnnotationSession(shareSessionId: string, accessMode?: ScreenAnnotationAccessMode): void {
-    this.annotationActions.startAnnotationSession(shareSessionId, accessMode);
-  }
-
-  endAnnotationSession(shareSessionId?: string): void {
-    this.annotationActions.endAnnotationSession(shareSessionId);
-  }
-
-  requestAnnotationSync(): void {
-    this.annotationActions.requestAnnotationSync();
-  }
-
-  sendAnnotationUpdate(payload: { shareSessionId: string; sharerParticipantId: string; syncAll: boolean; items: ScreenAnnotationItem[]; seq?: number }): void {
-    this.annotationActions.sendAnnotationUpdate(payload);
-  }
-
-  sendAnnotationCursor(payload: { shareSessionId: string; tool: ScreenAnnotationTool; x: number; y: number }): void {
-    this.annotationActions.sendAnnotationCursor(payload);
-  }
-
-  clearAnnotations(shareSessionId?: string): void {
-    this.annotationActions.clearAnnotations(shareSessionId);
-  }
-
-  setAnnotationAccessMode(accessMode: ScreenAnnotationAccessMode, shareSessionId?: string): void {
-    this.annotationActions.setAnnotationAccessMode(accessMode, shareSessionId);
-  }
-
-  _setAnnotationSession(shareSessionId: string | null, sharerParticipantId: string | null): void {
-    this._annotationShareSessionId = shareSessionId;
-    this._annotationSharerParticipantId = sharerParticipantId;
-  }
-
-  _setAnnotationAccessMode(accessMode: ScreenAnnotationAccessMode): void {
-    this._annotationAccessMode = accessMode;
   }
 
   async leave(): Promise<void> {

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
 import { Spinner, VideoTile } from "../atomic";
-import { ScreenAnnotationsLayer } from "./screen-annotations/ScreenAnnotationsLayer";
 import type { Participant } from "./VideoGrid";
 
 export interface ScreenShareViewProps {
@@ -13,7 +12,6 @@ export interface ScreenShareViewProps {
   showThumbnails?: boolean;
   thumbnailPosition?: "bottom" | "right";
   enableZoom?: boolean;
-  enableAnnotations?: boolean;
   className?: string;
 }
 
@@ -45,7 +43,7 @@ const getContainedSize = (containerWidth: number, containerHeight: number, video
   };
 };
 
-export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, enableAnnotations = true, className }: ScreenShareViewProps) => {
+export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -223,7 +221,7 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
       <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-black group" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
         {/* Loading State */}
         {isLoading && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-900/50 backdrop-blur-md transition-opacity duration-500">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 transition-opacity duration-500">
             <div className="relative">
               <div className="absolute -inset-4 rounded-full bg-primary/20 blur-xl animate-pulse" />
               <Spinner size="lg" className="text-primary relative z-10" />
@@ -248,7 +246,6 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
             onLoadedMetadata={handleVideoLoaded}
             className={cn("h-full w-full rounded-xl bg-black transition-all duration-700", isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100", zoom > 1 && isDragging && "cursor-grabbing", zoom > 1 && !isDragging && "cursor-grab")}
           />
-          <ScreenAnnotationsLayer enabled={enableAnnotations} />
         </div>
 
         <div className={cn("absolute top-3 left-3 px-2 py-1 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-xs font-medium transition-opacity duration-500", isLoading ? "opacity-0" : "opacity-100")}>Shared by {sharedByName}</div>

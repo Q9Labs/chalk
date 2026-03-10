@@ -9,7 +9,7 @@ import type { AppState } from "@q9labs/chalk-whiteboard/collab";
 /**
  * Whiteboard permission feature
  */
-export type WhiteboardFeature = "whiteboard" | "annotations";
+export type WhiteboardFeature = "whiteboard";
 
 /**
  * Cursor position for a participant on the whiteboard

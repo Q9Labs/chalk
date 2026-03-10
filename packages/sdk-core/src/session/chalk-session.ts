@@ -11,7 +11,6 @@ import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 import { ChatManager } from "../managers/chat-manager";
 import { InteractionManager } from "../managers/interaction-manager";
 import { RecordingManager } from "../managers/recording-manager";
-import { ScreenAnnotationsManager } from "../managers/screen-annotations-manager";
 import { ScreenShareManager } from "../managers/screen-share-manager";
 import { UIManager } from "../managers/ui-manager";
 import { WhiteboardManager } from "../managers/whiteboard-manager";
@@ -101,9 +100,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   /** Screen share manager */
   readonly screenShare: ScreenShareManager;
 
-  /** Screen annotations manager */
-  readonly annotations: ScreenAnnotationsManager;
-
   /** Chat messages manager */
   readonly chat: ChatManager;
 
@@ -165,7 +161,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 
     // Initialize other managers (non-Effect)
     this.screenShare = new ScreenShareManager();
-    this.annotations = new ScreenAnnotationsManager();
     this.chat = new ChatManager();
     this.recording = new RecordingManager();
     this.interactions = new InteractionManager();
@@ -294,73 +289,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     // Forward errors from all managers
     this.addExternalSubscription(this.media._emitter.on("error", (error) => this.emitErrorWithIncident(error, "media")));
     this.addExternalSubscription(this.screenShare.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
-    this.addExternalSubscription(this.annotations.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
-    this.addExternalSubscription(
-      this.annotations.on("session:started", (session) => {
-        this.recordIncidentBreadcrumb({
-          category: "annotations",
-          message: "Screen annotation session started",
-          data: {
-            shareSessionId: session.shareSessionId,
-            sharerParticipantId: session.sharerParticipantId,
-            accessMode: session.accessMode,
-          },
-        });
-      }),
-    );
-    this.addExternalSubscription(
-      this.annotations.on("session:ended", (session) => {
-        this.recordIncidentBreadcrumb({
-          category: "annotations",
-          message: "Screen annotation session ended",
-          data: session,
-        });
-      }),
-    );
-    this.addExternalSubscription(
-      this.annotations.on("snapshot", (snapshot) => {
-        this.recordIncidentBreadcrumb({
-          category: "annotations",
-          message: "Screen annotation snapshot received",
-          data: {
-            shareSessionId: snapshot.shareSessionId,
-            sharerParticipantId: snapshot.sharerParticipantId,
-            accessMode: snapshot.accessMode,
-            itemCount: snapshot.items.length,
-            lastSeq: snapshot.lastSeq,
-          },
-        });
-      }),
-    );
-    this.addExternalSubscription(
-      this.annotations.on("update", (update) => {
-        this.recordIncidentBreadcrumb({
-          category: "annotations",
-          message: "Screen annotation update received",
-          data: {
-            shareSessionId: update.shareSessionId,
-            sharerParticipantId: update.sharerParticipantId,
-            participantId: update.participantId,
-            syncAll: update.syncAll,
-            itemCount: update.items.length,
-            seq: update.seq,
-          },
-        });
-      }),
-    );
-    this.addExternalSubscription(
-      this.annotations.on("access:changed", (change) => {
-        this.recordIncidentBreadcrumb({
-          category: "annotations",
-          message: "Screen annotation access changed",
-          data: {
-            shareSessionId: change.shareSessionId,
-            accessMode: change.accessMode,
-            changedBy: change.changedBy,
-          },
-        });
-      }),
-    );
     this.addExternalSubscription(this.chat.on("error", (error) => this.emitErrorWithIncident(error, "chat")));
     this.addExternalSubscription(this.recording.on("error", (error) => this.emitErrorWithIncident(error, "recording")));
     this.addExternalSubscription(this.interactions.on("error", (error) => this.emitErrorWithIncident(error, "interactions")));
@@ -399,7 +327,6 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       stateUpdaters: this.stateUpdaters,
       runtime: this._runtime,
       screenShare: this.screenShare,
-      annotations: this.annotations,
       chat: this.chat,
       recording: this.recording,
       interactions: this.interactions,

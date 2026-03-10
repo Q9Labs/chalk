@@ -87,46 +87,6 @@ export class WSClient extends WSClientBase {
     this.send({ type: "whiteboard.close" });
   }
 
-  sendAnnotationSessionStart(payload: { shareSessionId: string; sharerParticipantId: string; accessMode: "all" | "sharer_only" | "off" }): void {
-    this.send({ type: "annotation.session.start", payload });
-  }
-
-  sendAnnotationSessionEnd(payload: { shareSessionId: string }): void {
-    this.send({ type: "annotation.session.end", payload });
-  }
-
-  requestAnnotationSync(shareSessionId?: string): void {
-    this.send({
-      type: "annotation.sync",
-      payload: shareSessionId ? { shareSessionId } : {},
-    });
-  }
-
-  sendAnnotationUpdate(payload: { shareSessionId: string; sharerParticipantId: string; syncAll: boolean; items: unknown[]; seq?: number }): void {
-    this.send({
-      type: "annotation.update",
-      payload: {
-        shareSessionId: payload.shareSessionId,
-        sharerParticipantId: payload.sharerParticipantId,
-        syncAll: payload.syncAll,
-        items: payload.items,
-        seq: payload.seq ?? this.now(),
-      },
-    });
-  }
-
-  clearAnnotations(payload: { shareSessionId: string }): void {
-    this.send({ type: "annotation.clear", payload });
-  }
-
-  sendAnnotationCursor(payload: { shareSessionId: string; tool: "pen" | "highlighter" | "rectangle" | "ellipse" | "line" | "arrow" | "text"; x: number; y: number }): void {
-    this.send({ type: "annotation.cursor", payload });
-  }
-
-  setAnnotationAccessMode(payload: { shareSessionId: string; accessMode: "all" | "sharer_only" | "off" }): void {
-    this.send({ type: "annotation.access.set", payload });
-  }
-
   sendTranscript(transcript: { id: string; participantId: string; speakerName: string; text: string; timestamp: Date; isInterim?: boolean; confidence?: number }): void {
     if (transcript.isInterim) return;
     this.send({

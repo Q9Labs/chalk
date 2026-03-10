@@ -148,7 +148,6 @@ export {
   usePrefersReducedMotion,
   useRecording,
   useRoom,
-  useScreenAnnotations,
   useScreenShare,
   // Utilities
   useSoundEffects,

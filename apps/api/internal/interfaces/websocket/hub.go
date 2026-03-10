@@ -65,8 +65,6 @@ type Hub struct {
 	roomRecording         map[uuid.UUID]*RoomRecordingState
 	whiteboardState       map[uuid.UUID]*WhiteboardState
 	whiteboardStore       WhiteboardStateStore
-	screenAnnotationState map[uuid.UUID]*ScreenAnnotationState
-	screenAnnotationStore ScreenAnnotationStateStore
 	whiteboardPolicy      map[uuid.UUID]WhiteboardRoomPolicy
 	whiteboardPermissions map[uuid.UUID]map[uuid.UUID]bool
 
@@ -79,8 +77,7 @@ type Hub struct {
 	roomStateSource    RoomStateSource
 	chatService        ChatService
 
-	whiteboardPersistTimers       map[uuid.UUID]*time.Timer
-	screenAnnotationPersistTimers map[uuid.UUID]*time.Timer
+	whiteboardPersistTimers map[uuid.UUID]*time.Timer
 
 	instanceID string
 
@@ -109,26 +106,24 @@ func NewHub(redisClient RedisInterface, logger *slog.Logger) *Hub {
 	}
 	instanceID := logging.InstanceID()
 	return &Hub{
-		clients:                       make(map[uuid.UUID]*Client),
-		rooms:                         make(map[uuid.UUID]map[uuid.UUID]*Client),
-		participantMeta:               make(map[uuid.UUID]domain.ParticipantMetadata),
-		roomRecording:                 make(map[uuid.UUID]*RoomRecordingState),
-		whiteboardState:               make(map[uuid.UUID]*WhiteboardState),
-		screenAnnotationState:         make(map[uuid.UUID]*ScreenAnnotationState),
-		whiteboardPolicy:              make(map[uuid.UUID]WhiteboardRoomPolicy),
-		whiteboardPermissions:         make(map[uuid.UUID]map[uuid.UUID]bool),
-		register:                      make(chan *Client),
-		unregister:                    make(chan *Client),
-		redisClient:                   redisClient,
-		ctx:                           context.Background(),
-		stop:                          make(chan struct{}),
-		whiteboardPersistTimers:       make(map[uuid.UUID]*time.Timer),
-		screenAnnotationPersistTimers: make(map[uuid.UUID]*time.Timer),
-		instanceID:                    instanceID,
-		roomSubRefcount:               make(map[uuid.UUID]int),
-		roomSubCancel:                 make(map[uuid.UUID]context.CancelFunc),
-		pubsubDedupe:                  newPubsubDedupe(2*time.Minute, 10_000),
-		logger:                        logger.With("component", "ws_hub", "instance_id", instanceID),
+		clients:                 make(map[uuid.UUID]*Client),
+		rooms:                   make(map[uuid.UUID]map[uuid.UUID]*Client),
+		participantMeta:         make(map[uuid.UUID]domain.ParticipantMetadata),
+		roomRecording:           make(map[uuid.UUID]*RoomRecordingState),
+		whiteboardState:         make(map[uuid.UUID]*WhiteboardState),
+		whiteboardPolicy:        make(map[uuid.UUID]WhiteboardRoomPolicy),
+		whiteboardPermissions:   make(map[uuid.UUID]map[uuid.UUID]bool),
+		register:                make(chan *Client),
+		unregister:              make(chan *Client),
+		redisClient:             redisClient,
+		ctx:                     context.Background(),
+		stop:                    make(chan struct{}),
+		whiteboardPersistTimers: make(map[uuid.UUID]*time.Timer),
+		instanceID:              instanceID,
+		roomSubRefcount:         make(map[uuid.UUID]int),
+		roomSubCancel:           make(map[uuid.UUID]context.CancelFunc),
+		pubsubDedupe:            newPubsubDedupe(2*time.Minute, 10_000),
+		logger:                  logger.With("component", "ws_hub", "instance_id", instanceID),
 	}
 }
 
@@ -154,10 +149,6 @@ func (h *Hub) SetChatService(service ChatService) {
 // SetWhiteboardStateStore sets the persistence layer for whiteboard state.
 func (h *Hub) SetWhiteboardStateStore(store WhiteboardStateStore) {
 	h.whiteboardStore = store
-}
-
-func (h *Hub) SetScreenAnnotationStateStore(store ScreenAnnotationStateStore) {
-	h.screenAnnotationStore = store
 }
 
 // GetTranscriptService returns the transcript service (may be nil)
@@ -396,13 +387,10 @@ func (h *Hub) unregisterClient(client *Client) {
 				)
 			}
 		}
-		h.clearPersistedScreenAnnotationState(client.roomID)
-
 		h.mu.Lock()
 		delete(h.rooms, client.roomID)
 		delete(h.roomRecording, client.roomID)
 		delete(h.whiteboardState, client.roomID)
-		delete(h.screenAnnotationState, client.roomID)
 		delete(h.whiteboardPolicy, client.roomID)
 		delete(h.whiteboardPermissions, client.roomID)
 		if cancel, ok := h.roomSubCancel[client.roomID]; ok {
@@ -414,7 +402,6 @@ func (h *Hub) unregisterClient(client *Client) {
 			timer.Stop()
 			delete(h.whiteboardPersistTimers, client.roomID)
 		}
-		h.stopScreenAnnotationPersistTimerLocked(client.roomID)
 		h.mu.Unlock()
 		h.logger.Info("room removed",
 			"room_id", client.roomID,
@@ -920,11 +907,6 @@ func (h *Hub) Close() {
 		timer.Stop()
 		delete(h.whiteboardPersistTimers, roomID)
 	}
-	for roomID, timer := range h.screenAnnotationPersistTimers {
-		timer.Stop()
-		delete(h.screenAnnotationPersistTimers, roomID)
-	}
-
 	// Close all client connections
 	for _, client := range h.clients {
 		client.Close()
@@ -933,7 +915,6 @@ func (h *Hub) Close() {
 	h.clients = make(map[uuid.UUID]*Client)
 	h.rooms = make(map[uuid.UUID]map[uuid.UUID]*Client)
 	h.whiteboardState = make(map[uuid.UUID]*WhiteboardState)
-	h.screenAnnotationState = make(map[uuid.UUID]*ScreenAnnotationState)
 	h.whiteboardPolicy = make(map[uuid.UUID]WhiteboardRoomPolicy)
 	h.whiteboardPermissions = make(map[uuid.UUID]map[uuid.UUID]bool)
 }

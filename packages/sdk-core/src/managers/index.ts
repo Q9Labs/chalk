@@ -21,10 +21,6 @@ export { RecordingManager } from "./recording-manager";
 export type { ScreenShareManagerEvents, ScreenShareState } from "./screen-share-manager";
 export { ScreenShareManager } from "./screen-share-manager";
 
-// Screen Annotations Manager
-export type { ScreenAnnotationsManagerEvents, ScreenAnnotationsState } from "./screen-annotations-manager";
-export { ScreenAnnotationsManager } from "./screen-annotations-manager";
-
 // UI Manager
 export type { LayoutMode, Notification, NotificationSeverity, PanelType, UIManagerEvents, UIState } from "./ui-manager";
 export { UIManager } from "./ui-manager";
