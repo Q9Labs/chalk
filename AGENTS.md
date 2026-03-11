@@ -15,8 +15,8 @@ cd apps/api && go run ./cmd/main.go # Run API server
 
 ## Scratchpad Notes
 
-- Session/progress notes live in `scratchpad/`, not repo root.
-- Prefer `chalk-<owner>-session-log-YYYY-MM-DD.md`.
+- Session/progress/handoff/tracker/report notes live in `scratchpad/`, not repo root.
+- Prefer `chalk-<topic>-<artifact>-YYYY-MM-DD.md`.
 
 ## Testing Rules
 
