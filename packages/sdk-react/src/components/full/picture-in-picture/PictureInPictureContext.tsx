@@ -33,7 +33,13 @@ export function SharedPictureInPictureProvider({ enabled = true, children }: { e
         clearTimeout(pendingClearRef.current);
         pendingClearRef.current = null;
       }
-      setRegistration({ ownerId, options });
+      setRegistration((current) => {
+        if (current?.ownerId === ownerId && current.options === options) {
+          return current;
+        }
+
+        return { ownerId, options };
+      });
     } else {
       // Small delay to allow for handover between components (e.g. prejoin -> meeting)
       // This prevents the PiP window from closing and losing user activation if a new

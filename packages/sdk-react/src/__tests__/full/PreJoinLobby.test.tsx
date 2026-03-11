@@ -249,13 +249,13 @@ describe("PreJoinLobby", () => {
       requestWindow: vi.fn(),
     } as any;
 
-    const { getByLabelText, getByRole, getByText } = render(<PreJoinLobby onJoin={() => {}} enablePictureInPicture={true} initialVideoEnabled={false} initialAudioEnabled={false} />);
+    const { getByLabelText, getByRole } = render(<PreJoinLobby onJoin={() => {}} enablePictureInPicture={true} initialVideoEnabled={false} initialAudioEnabled={false} />);
     await act(async () => {});
 
     // Open settings modal
     fireEvent.click(getByLabelText("Settings"));
 
-    expect(getByText("Auto-open Picture-in-Picture")).toBeDefined();
+    expect(getByRole("switch", { name: "Auto-open Picture-in-Picture" })).toBeDefined();
     expect(getByRole("button", { name: "Open Picture-in-Picture now" })).toBeDefined();
   });
 });

@@ -6,3 +6,5 @@
 - `2026-03-12 00:34 PKT` patched root config/docs/changelog to remove active references to e2e/admin/next-pages-demo/stress tooling before deleting those paths.
 - `2026-03-12 00:37 PKT` deleted `apps/e2e`, `apps/admin`, `apps/next-pages-demo`, stress/load infra under `tests/`, stress result artifacts, stress runner scripts, and the repo-local `chalk-stress-testing` skill.
 - `2026-03-12 00:38 PKT` refreshed `bun.lock`; verified active repo refs to removed apps/stress surfaces are gone outside historical files like `CHANGELOG.md`, `CLAUDE.md`, and `scratchpad/`.
+- `2026-03-12 01:05 PKT` fixed the shared Picture-in-Picture render loop in `@q9labs/chalk-react` by hoisting stable default props in `MeetingRoom` and `PreJoinLobby`, and by making shared PiP registration idempotent for unchanged registrations.
+- `2026-03-12 01:07 PKT` verified `MeetingRoom` and `PreJoinLobby` shared PiP regression tests pass; full `packages/sdk-react` test run now clears the old runaway and stops later on unrelated existing failures in `TourTooltip` and `ParticipantList`.

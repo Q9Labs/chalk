@@ -21,6 +21,8 @@ import { usePreJoinTheme } from "./prejoin-lobby/usePreJoinTheme";
 import { usePreJoinUiState } from "./prejoin-lobby/usePreJoinUiState";
 
 const JOINING_ROOM_MESSAGES = ["Checking your camera and mic...", "Syncing room settings...", "Choosing the fastest route...", "Almost there..."];
+const EMPTY_LIST = [] as never[];
+const NOOP = () => {};
 
 function PreJoinLobbyBase({
   roomName,
@@ -30,15 +32,15 @@ function PreJoinLobbyBase({
   videoTrack,
   audioTrack,
   audioLevel,
-  videoDevices = [],
-  audioInputDevices = [],
-  audioOutputDevices = [],
+  videoDevices = EMPTY_LIST,
+  audioInputDevices = EMPTY_LIST,
+  audioOutputDevices = EMPTY_LIST,
   selectedVideoDevice,
   selectedAudioInput,
   selectedAudioOutput,
-  onVideoDeviceChange = () => {},
-  onAudioInputChange = () => {},
-  onAudioOutputChange = () => {},
+  onVideoDeviceChange = NOOP,
+  onAudioInputChange = NOOP,
+  onAudioOutputChange = NOOP,
   initialVideoEnabled = false,
   initialAudioEnabled = false,
   initialShowSettings = false,

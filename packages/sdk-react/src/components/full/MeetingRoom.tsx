@@ -23,6 +23,10 @@ import { useMeetingRoomLifecycle } from "./meeting-room/useMeetingRoomLifecycle"
 import { useMeetingRoomTheme } from "./meeting-room/useMeetingRoomTheme";
 import { useMeetingRoomUiState } from "./meeting-room/useMeetingRoomUiState";
 
+// Stable defaults prevent effect dependencies from changing when callers omit props.
+const EMPTY_LIST = [] as never[];
+const DEFAULT_BACKGROUND_EFFECT = { mode: "none" } as const;
+
 function MeetingRoomBase({
   roomName,
   localParticipant,
@@ -31,7 +35,7 @@ function MeetingRoomBase({
   onToggleParticipantMute,
   onRemoveParticipant,
   onUpdateDisplayName,
-  activeReactions = [],
+  activeReactions = EMPTY_LIST,
   isMuted = false,
   isVideoEnabled = false,
   isScreenSharing = false,
@@ -41,8 +45,8 @@ function MeetingRoomBase({
   recordingDuration: _recordingDuration = 0,
   meetingDuration = 0,
   canRecord = false,
-  transcripts = [],
-  chatMessages = [],
+  transcripts = EMPTY_LIST,
+  chatMessages = EMPTY_LIST,
   unreadChatCount = 0,
   enablePictureInPicture = false,
   enableBackgroundEffects = true,
@@ -50,7 +54,7 @@ function MeetingRoomBase({
   isPictureInPictureSupported,
   isBackgroundEffectsSupported = false,
   isApplyingBackgroundEffect = false,
-  selectedBackgroundEffect = { mode: "none" },
+  selectedBackgroundEffect = DEFAULT_BACKGROUND_EFFECT,
   onSendMessage,
   onSendMessageWithAttachments,
   onResolveChatAttachmentUrl,
@@ -89,9 +93,9 @@ function MeetingRoomBase({
   connectionState = "connected",
   onRetryConnection,
   connectionSupportCode,
-  audioInputDevices = [],
-  audioOutputDevices = [],
-  videoInputDevices = [],
+  audioInputDevices = EMPTY_LIST,
+  audioOutputDevices = EMPTY_LIST,
+  videoInputDevices = EMPTY_LIST,
   selectedAudioInput,
   participantVolumes,
   onParticipantVolumeChange,
