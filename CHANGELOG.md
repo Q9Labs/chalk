@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-React: shared PiP render-loop fix** — hoisted stable omitted-prop defaults for `MeetingRoom` and `PreJoinLobby`, and made shared Picture-in-Picture registration idempotent so shared PiP no longer spirals into `Maximum update depth exceeded`.
 - **SDK-Core: background-effects support state sync** — room attachment now pushes the media service’s computed state into session state, so Chromium-capable browsers no longer stay stuck on the default “unsupported” background-effects message.
 - **SDK background presets: localhost CORS breakage** — preset image backgrounds now ship as local SDK assets instead of loading from the Cloudflare RTK asset host, and failed image loads now report a concrete `BACKGROUND_IMAGE_LOAD_FAILED` error instead of opaque `[object Event]` telemetry.
 - **Web/API: localhost dashboard auth + SDK toast export** — restore the `toast` export on `@q9labs/chalk-react`, allow `X-Chalk-Local-Client-ID` through API CORS preflight, and default the local room route to camera/mic off unless stored join prefs explicitly opt in.
