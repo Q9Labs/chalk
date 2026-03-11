@@ -90,6 +90,7 @@ function MeetingRoomBase({
   onLeave,
   onTourComplete,
   onAddPeople,
+  onOpenDebug,
   connectionState = "connected",
   onRetryConnection,
   connectionSupportCode,
