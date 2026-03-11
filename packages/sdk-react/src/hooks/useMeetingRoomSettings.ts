@@ -18,6 +18,7 @@ export interface MeetingRoomSettings {
   appearance: {
     theme: "light" | "dark" | "system";
     gradient: "default" | "darker";
+    generatedAvatars: boolean;
     profileGradient: {
       mode: "auto" | "custom";
       from?: string;
@@ -52,8 +53,8 @@ interface UseMeetingRoomSettingsOptions {
 }
 
 const SETTINGS_KEY = "chalk-meeting-settings";
-const SETTINGS_VERSION = 5;
-const SUPPORTED_SETTINGS_VERSIONS = new Set([SETTINGS_VERSION, 4, 3, 2]);
+const SETTINGS_VERSION = 6;
+const SUPPORTED_SETTINGS_VERSIONS = new Set([SETTINGS_VERSION, 5, 4, 3, 2]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -140,6 +141,7 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
       ? withDefined({
           theme: appearance.theme === "light" || appearance.theme === "dark" || appearance.theme === "system" ? appearance.theme : undefined,
           gradient: appearance.gradient === "default" || appearance.gradient === "darker" ? appearance.gradient : undefined,
+          generatedAvatars: typeof appearance.generatedAvatars === "boolean" ? appearance.generatedAvatars : undefined,
           profileGradient: isRecord(appearance.profileGradient)
             ? withDefined({
                 mode: appearance.profileGradient.mode === "auto" || appearance.profileGradient.mode === "custom" ? appearance.profileGradient.mode : undefined,
@@ -182,6 +184,7 @@ const createDefaultSettings = (defaults?: UseMeetingRoomSettingsOptions["default
     appearance: {
       theme: defaultAppearance?.theme ?? "system",
       gradient: defaultAppearance?.gradient ?? "default",
+      generatedAvatars: defaultAppearance?.generatedAvatars ?? true,
       profileGradient: {
         mode: defaultAppearance?.profileGradient?.mode ?? "auto",
         from: defaultAppearance?.profileGradient?.from,

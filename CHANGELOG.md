@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **SDK-React: fun avatar toggle + richer FaceHash styling** — meeting Appearance settings now let each participant switch generated FaceHash avatars on or off locally, and the generated avatar fallback now requests dramatic 3D intensity with blinking enabled.
+
 ### Fixed
 
 ## [0.0.73] - 2026-03-12

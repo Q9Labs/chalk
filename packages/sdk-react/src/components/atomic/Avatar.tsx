@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarGradient, getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
@@ -31,6 +31,16 @@ const statusColorMap = {
 };
 
 export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference }: AvatarProps) => {
+  const [imageError, setImageError] = useState(false);
+  const { settings } = useMeetingRoomSettings();
+  const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
+  const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
+  const isGeneratedAvatarEnabled = settings.appearance.generatedAvatars && !src && Boolean(name);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [src, name, isGeneratedAvatarEnabled]);
+
   const initials = useMemo(() => {
     if (!name || name.trim() === "") return "?";
     const cleanName = name.trim();
@@ -45,18 +55,33 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
     );
   }, [name]);
 
-  const { settings } = useMeetingRoomSettings();
-  const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
-  const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
-
   const participantColors = useMemo(() => getParticipantColor(name || "unknown", gradientPreference), [gradientPreference, name]);
   const gradient = useMemo(() => (isDarkerGradient ? `linear-gradient(135deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantAvatarGradient(name || "unknown", gradientPreference)), [gradientPreference, name, isDarkerGradient, participantColors]);
   const { size: pxSize, fontSize } = sizeMap[size];
 
+  const facehashUrl = useMemo(() => {
+    if (!isGeneratedAvatarEnabled) return null;
+    const baseUrl = "https://facehash.dev/api/avatar";
+    const params = new URLSearchParams({
+      name: name || "guest",
+      size: String(pxSize * 2),
+      variant: "gradient",
+      format: "svg",
+      intensity3d: "dramatic",
+      enableBlink: "true",
+    });
+    return `${baseUrl}?${params.toString()}`;
+  }, [isGeneratedAvatarEnabled, name, pxSize]);
+
   return (
     <div className={cn("relative inline-flex shrink-0 rounded-full", className)} style={{ width: pxSize, height: pxSize, ...style }} role="img" aria-label={`Avatar for ${name || "Unknown"}`}>
-      {src ? (
-        <img src={src} alt={name} className="h-full w-full rounded-full object-cover" />
+      {(src || facehashUrl) && !imageError ? (
+        <img
+          src={src || facehashUrl || ""}
+          alt={name}
+          className="h-full w-full rounded-full object-cover"
+          onError={() => setImageError(true)}
+        />
       ) : (
         <div className="flex h-full w-full items-center justify-center rounded-full text-white font-medium" style={{ fontSize, background: gradient }}>
           {initials}

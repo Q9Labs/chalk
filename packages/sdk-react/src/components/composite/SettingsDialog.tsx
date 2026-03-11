@@ -84,7 +84,7 @@ const SECTIONS = [
     label: "Appearance",
     description: "Theme, layout, motion",
     icon: Monitor01Icon,
-    keywords: ["theme", "layout", "filmstrip", "motion", "dark", "light", "color", "gradient", "profile"],
+    keywords: ["theme", "layout", "filmstrip", "motion", "dark", "light", "color", "gradient", "profile", "avatar", "facehash", "generated", "initials", "fun"],
   },
   {
     id: "experience",
@@ -452,6 +452,7 @@ export const SettingsDialog = React.memo(
                   ))}
                 </div>
                 <ToggleRow title="Show filmstrip" description="Keep the participant strip visible by default." checked={settings.appearance.showFilmstrip} onChange={(checked) => onUpdateAppearance({ showFilmstrip: checked })} />
+                <ToggleRow title="Fun avatars" description="Use generated FaceHash avatars when no photo is set. Turn this off for plain initials." checked={settings.appearance.generatedAvatars} onChange={(checked) => onUpdateAppearance({ generatedAvatars: checked })} />
                 <ToggleRow title="Ambient background" description="Show a glowing animated gradient behind the meeting room." checked={settings.appearance.ambientBackground} onChange={(checked) => onUpdateAppearance({ ambientBackground: checked })} />
                 <ToggleRow title="Reduced motion" description="Turn down transitions and ambient motion." checked={settings.appearance.reducedMotion} onChange={(checked) => onUpdateAppearance({ reducedMotion: checked })} />
               </SectionCard>

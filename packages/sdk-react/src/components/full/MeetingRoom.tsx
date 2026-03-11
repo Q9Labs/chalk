@@ -137,6 +137,7 @@ function MeetingRoomBase({
         theme,
         showFilmstrip: true,
         reducedMotion: false,
+        generatedAvatars: true,
       },
       experience: {
         showInviteToast: showInviteToastOnJoin,

@@ -1,12 +1,36 @@
-import { describe, it, expect } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { render } from "@testing-library/react";
 import { Avatar } from "../../components/atomic/Avatar";
 
 describe("Avatar", () => {
-  it("renders initials when no src is provided", () => {
-    const { getByText, getByRole } = render(<Avatar name="John Doe" />);
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("renders a generated avatar when no src is provided", () => {
+    const { getByRole } = render(<Avatar name="John Doe" />);
+    const img = getByRole("img", { name: "John Doe" });
+    expect(img).toBeDefined();
+    expect(img).toHaveAttribute("src", expect.stringContaining("https://facehash.dev/api/avatar"));
+    expect(img).toHaveAttribute("src", expect.stringContaining("intensity3d=dramatic"));
+    expect(img).toHaveAttribute("src", expect.stringContaining("enableBlink=true"));
+    expect(getByRole("img", { name: "Avatar for John Doe" })).toBeDefined();
+  });
+
+  it("renders initials when generated avatars are disabled", () => {
+    localStorage.setItem(
+      "chalk-meeting-settings",
+      JSON.stringify({
+        version: 6,
+        appearance: {
+          generatedAvatars: false,
+        },
+      }),
+    );
+
+    const { getByText, queryByRole } = render(<Avatar name="John Doe" />);
     expect(getByText("JD")).toBeDefined();
-    expect(getByRole("img")).toHaveAttribute("aria-label", "Avatar for John Doe");
+    expect(queryByRole("img", { name: "John Doe" })).toBeNull();
   });
 
   it("renders an image when src is provided", () => {

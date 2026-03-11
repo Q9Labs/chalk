@@ -6,7 +6,7 @@ import { SettingsDialog } from "../../components/composite/SettingsDialog";
 import { PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
 
 const settings = {
-  version: 5,
+  version: 6,
   audio: {
     selectedInput: undefined,
     selectedOutput: undefined,
@@ -20,6 +20,7 @@ const settings = {
   appearance: {
     theme: "system" as const,
     gradient: "default" as const,
+    generatedAvatars: true,
     profileGradient: {
       mode: "auto" as const,
     },
@@ -215,6 +216,30 @@ describe("SettingsDialog", () => {
 
     expect(getByLabelText("Use automatic profile gradient")).toBeDefined();
     expect(getByText("Automatic Identity")).toBeDefined();
+  });
+
+  it("lets users switch fun avatars off", () => {
+    const onUpdateAppearance = vi.fn();
+    const { getByRole, getByText } = render(
+      <SettingsDialog
+        isOpen
+        onClose={() => {}}
+        settings={settings}
+        onUpdateAudio={() => {}}
+        onUpdateVideo={() => {}}
+        onUpdateAppearance={onUpdateAppearance}
+        onUpdateExperience={() => {}}
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(getByText("Appearance"));
+    });
+
+    fireEvent.click(getByRole("switch", { name: "Fun avatars" }));
+    expect(onUpdateAppearance).toHaveBeenCalledWith({
+      generatedAvatars: false,
+    });
   });
 
 });

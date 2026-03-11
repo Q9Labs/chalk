@@ -25,6 +25,7 @@ describe("useMeetingRoomSettings", () => {
 
     expect(result.current.settings.appearance.layout).toBe("sidebar");
     expect(result.current.settings.appearance.theme).toBe("dark");
+    expect(result.current.settings.appearance.generatedAvatars).toBe(true);
     expect(result.current.settings.experience.showInviteToast).toBe(false);
     expect(result.current.settings.experience.autoOpenPictureInPicture).toBe(true);
     expect(result.current.settings.video.backgroundEffect).toEqual({
@@ -43,7 +44,7 @@ describe("useMeetingRoomSettings", () => {
     expect(stored.audio.selectedInput).toBe("mic-2");
     expect(stored.audio.outputVolume).toBe(72);
     expect(stored.video.backgroundEffect).toEqual({ type: "none" });
-    expect(stored.version).toBe(5);
+    expect(stored.version).toBe(6);
   });
 
   it("migrates existing stored settings with defaults", () => {
@@ -78,6 +79,7 @@ describe("useMeetingRoomSettings", () => {
     expect(result.current.settings.audio.outputVolume).toBe(55);
     expect(result.current.settings.appearance.showFilmstrip).toBe(false);
     expect(result.current.settings.appearance.layout).toBe("spotlight");
+    expect(result.current.settings.appearance.generatedAvatars).toBe(true);
     expect(result.current.settings.experience.autoOpenPictureInPicture).toBe(false);
     expect(result.current.settings.video.backgroundEffect).toEqual({
       type: "none",
@@ -188,7 +190,7 @@ describe("useMeetingRoomSettings", () => {
 
     const stored = JSON.parse(localStorage.getItem("chalk-meeting-settings") ?? "{}");
 
-    expect(stored.version).toBe(5);
+    expect(stored.version).toBe(6);
     expect(stored.appearance.profileGradient).toEqual({
       mode: "custom",
       from: "#112233",
@@ -199,5 +201,21 @@ describe("useMeetingRoomSettings", () => {
       from: "#112233",
       to: "#445566",
     });
+  });
+
+  it("persists the generated avatar preference", () => {
+    const { result } = renderHook(() => useMeetingRoomSettings());
+
+    act(() => {
+      result.current.updateAppearanceSettings({
+        generatedAvatars: false,
+      });
+    });
+
+    const stored = JSON.parse(localStorage.getItem("chalk-meeting-settings") ?? "{}");
+
+    expect(stored.version).toBe(6);
+    expect(stored.appearance.generatedAvatars).toBe(false);
+    expect(result.current.settings.appearance.generatedAvatars).toBe(false);
   });
 });
