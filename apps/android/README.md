@@ -2,7 +2,7 @@
 
 Specs: `apps/native/SPEC.md`  
 Tasks: `apps/native/TASKS.md`  
-Progress log: `apps/native/PROGRESS.md`
+Session log: `scratchpad/chalk-native-session-log.md`
 
 ## Dev run (local)
 

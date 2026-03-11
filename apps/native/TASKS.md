@@ -10,7 +10,7 @@ Order matters. Spike risky stuff first.
 - [ ] WS auth (subprotocol token): offer `chalk` + `token.<jwt>`; no query-param auth
 - [ ] Room snapshot → participant roster rendering (basic list)
 - [ ] MeetingKit boundary: UI never touches WS/HTTP/RTK directly (only view-model state + actions)
-- [ ] Add `apps/native/PROGRESS.md` and keep it updated per PR/commit
+- [ ] Keep `scratchpad/chalk-native-session-log.md` updated per PR/commit
 
 ## P0 — UI Contract (for UI implementer)
 

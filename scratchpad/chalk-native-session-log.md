@@ -1,4 +1,4 @@
-# Chalk Native Apps — Progress Log
+# Chalk Native Apps — Session Log
 
 Append-only. Short entries. Link commits. Keep everyone aligned.
 

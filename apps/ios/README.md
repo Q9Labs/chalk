@@ -2,7 +2,7 @@
 
 Specs: `apps/native/SPEC.md`  
 Tasks: `apps/native/TASKS.md`  
-Progress log: `apps/native/PROGRESS.md`
+Session log: `scratchpad/chalk-native-session-log.md`
 
 This repo intentionally keeps iOS as apps-first. We are not publishing an iOS SDK yet.
 
