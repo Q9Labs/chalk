@@ -40,10 +40,4 @@ describe("VideoTile", () => {
     expect(container.querySelector("svg")).toBeDefined();
   });
 
-  it("shows connection quality for poor connections", () => {
-    const poorParticipant = { ...participant, connectionQuality: 1 as 1 };
-    const { getByRole } = render(<VideoTile participant={poorParticipant} />);
-    // Connection quality is currently not rendered, but the prop should be safe to pass.
-    expect(getByRole("region", { name: "Video tile for Alice" })).toBeDefined();
-  });
 });
