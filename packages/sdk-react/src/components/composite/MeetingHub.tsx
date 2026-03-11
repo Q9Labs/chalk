@@ -71,7 +71,7 @@ export const MeetingHub = React.memo<MeetingHubProps>(({
     bitrate: "4.2 Mbps",
     resolution: "1080p • 60fps",
     region: "Frankfurt, DE (fra-1)",
-    version: "v0.0.72"
+    version: "v0.0.73"
   },
   className
 }) => {

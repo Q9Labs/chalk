@@ -1,31 +1,24 @@
-<!-- image:  -->
-
-<!-- whats-new -->
-
 ## Features
 
-- **Scheduled Classes + Join Links** — Hosts can now create and manage scheduled classes and generate join links directly through Chalk flows.
-- **SDK Room Listing + Join Tokens** — Apps can now list rooms and create/exchange join tokens with first-class SDK methods.
+- **More control inside meetings** — desktop meetings now include inline device switching, a searchable settings dialog, keyboard shortcuts for settings, browser haptics on supported devices, Document Picture-in-Picture, and local profile gradient controls.
+- **Richer visual setup** — meetings now support local background effects with blur, presets, and custom uploads so participants can personalize their camera feed more easily.
+- **Dashboard avatar styling** — the web dashboard now lets users keep an automatic name-based avatar gradient or choose from preset blends with live preview updates.
 
 ## Improvements
 
-- **Participant Color Experience** — Meeting controls, chat, transcription, and participant UI now consistently follow participant-aware color themes.
-- **Join-Link Preflight UX** — Early joiners now see a clear waiting state with countdown before auto-entering at meeting time.
+- **Smoother joining and PiP layouts** — join loading states feel more reassuring, Picture-in-Picture uses more of the window, and compact room layouts adapt better to screen share, whiteboard, and multi-participant views.
+- **Leaned-down workspace** — the repo now focuses on active web, API, and package surfaces after removing legacy native, admin, demo, and stress-testing surfaces.
 
 ## Bug Fixes
 
-- Whiteboard image sync now shows clear progress states so the short sync window feels reliable, not failed.
-- Chat alignment is now consistent: your messages stay on the right, incoming stays on the left.
-- Reactions and hand raises now sync and sound exactly once across reconnects and peers.
-- SDK sound effects now start immediately with less leading delay.
-- Browser preflight for R2 uploads/downloads is fixed with proper CORS rules.
-- Localhost internal auth callback flows now route back to local app callbacks correctly.
-<!-- /whats-new -->
+- **Room access stays on target** — scheduled dashboard joins and localhost room entry are more reliable about landing users in the correct workspace and room.
+- **Settings and media flows are steadier** — saved room preferences, device discovery, speaker tests, and desktop dock controls now behave more consistently during active meetings.
+- **Picture-in-Picture is more stable** — shared PiP no longer loops into render-depth crashes, compact layouts avoid duplicate-key warnings, and local identity visuals stay in sync.
+- **Backgrounds and screen share behave better** — background support state now syncs correctly, preset image loading is more reliable on localhost, screen-share cancel no longer gets stuck, and supported browsers restore system-audio capture by default.
+- **Annotation and local-dev regressions are resolved** — local sharers see annotation controls sooner, startup/sync races are handled more cleanly, and localhost auth/router issues no longer break common dashboard and room flows.
 
 ## Technical Notes
 
-- Added SDK client/session APIs: `listRooms`, `createJoinToken`, `exchangeJoinToken`.
-- Added multi-status room filtering + participant counts on `GET /api/v1/rooms`.
-- Removed deprecated Terraform `prod` environment and standardized on `prod-lean` operations.
-- Added whiteboard sync status states (`uploading`, `awaiting remote upload`, `downloading`, `error`) with SDK-React/whiteboard UI wiring.
-- Hardened SDK reaction/hand-raise replay and participant-state enrichment during reconnect paths.
+- Cut release `v0.0.73` on `2026-03-12`.
+- Updated package versions for `@q9labs/chalk-core`, `@q9labs/chalk-react`, `@q9labs/chalk-ui`, and `@q9labs/chalk-whiteboard`.
+- Refreshed the changelog and release metadata for the latest publish cycle.

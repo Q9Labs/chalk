@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.73] - 2026-03-12
+
+### Added
+
 - **SDK-React: in-room media device switching** — the desktop meeting control bar now includes inline dropdowns for microphone input, speaker output, and camera device selection beside the existing mic/video controls.
 - **SDK-React: in-room settings dialog** — meeting rooms now ship a searchable settings modal with left-rail navigation for audio, video, appearance, and entry preferences, backed by browser-local persistence.
 - **SDK-React: settings hotkey** — meeting rooms now open the settings dialog with `Cmd+K` on macOS and `Ctrl+K` on Windows/Linux, while ignoring editable fields.
@@ -37,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React: local avatar gradient consistency** — in-room Appearance now uses clearer preset gradient swatches with a more obvious Auto/default option plus expanded colorways, and the same stored local profile gradient now flows through meeting tiles, joining/loading states, and Picture-in-Picture for the local participant.
 - **Web: TanStack fallback route import crash** — corrected `TanStackFallbacks` to import `Link` from `@tanstack/react-router` and added a smoke test for the fallback module so broken router imports fail in tests instead of surfacing as a runtime `500` / `HTTPError`.
 - **SDK-React: shared PiP render-loop fix** — hoisted stable omitted-prop defaults for `MeetingRoom` and `PreJoinLobby`, and made shared Picture-in-Picture registration idempotent so shared PiP no longer spirals into `Maximum update depth exceeded`.
+- **SDK-React: PiP meeting tile key stability** — meeting Picture-in-Picture tiles now derive composite keys from source kind/id/order so React no longer warns when compact PiP layouts receive repeated participant ids.
 - **Repo: low-signal test cleanup** — removed legacy/trivial UI smoke tests, meta/policy-only sdk-core tests, and the placeholder webhook E2E harness so the repo’s test surface better reflects active behavior.
 - **SDK-Core: background-effects support state sync** — room attachment now pushes the media service’s computed state into session state, so Chromium-capable browsers no longer stay stuck on the default “unsupported” background-effects message.
 - **SDK background presets: localhost CORS breakage** — preset image backgrounds now ship as local SDK assets instead of loading from the Cloudflare RTK asset host, and failed image loads now report a concrete `BACKGROUND_IMAGE_LOAD_FAILED` error instead of opaque `[object Event]` telemetry.
