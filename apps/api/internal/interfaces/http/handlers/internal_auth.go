@@ -150,7 +150,7 @@ type verifyInternalAuthRequest struct {
 	Token string `json:"token" binding:"required"`
 }
 
-// POST /api/v1/internal/auth/verify
+// GET|POST /api/v1/internal/auth/verify
 func (h *InternalAuthHandler) Verify(c *gin.Context) {
 	if c.Request.Method == http.MethodGet {
 		h.verifyBrowserRedirect(c)

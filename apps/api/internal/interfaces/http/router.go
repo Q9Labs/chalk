@@ -296,6 +296,7 @@ func (r *Router) setupRoutes() {
 			authGroup := internal.Group("/auth")
 			{
 				authGroup.POST("/start", internalAuth.Start)
+				authGroup.GET("/verify", internalAuth.Verify)
 				authGroup.POST("/verify", internalAuth.Verify)
 				authGroup.GET("/access-token", internalAuth.AccessToken)
 			}

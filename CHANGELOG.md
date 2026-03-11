@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React: Document Picture-in-Picture** — add Document PiP support for pre-join and in-room views, with a `usePictureInPicture` hook and controls to open/close the floating window on supported browsers.
 - **SDK: local video backgrounds** — add web-only background effects with blur, Cloudflare-hosted presets, and custom local uploads, plus meeting settings persistence and feature-flagged in-room controls.
 - **SDK: web screen annotations** — add Zoom-style shared-screen annotations with a dedicated `annotation.*` websocket protocol, per-share-session state, host access controls, and a web SVG overlay/toolbar aligned to the shared screen.
+- **API: magic-link verify route restored for email clicks** — mount `GET /api/v1/internal/auth/verify` alongside the existing POST handler so dashboard auth emails no longer 404 before redirecting back to the app.
+
 - **Web: dashboard avatar gradient controls** — the dashboard Appearance settings now let users keep a name-derived profile gradient or click through preset avatar blends, with browser-local persistence, one shared resolver hook, and live header-avatar updates.
 - **SDK-React: local profile gradient controls** — the meeting Appearance settings now let each user keep their name-derived gradient or switch to a custom two-color profile gradient, persisted locally and applied across their local pre-join/in-room identity surfaces.
 
