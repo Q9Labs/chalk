@@ -1,6 +1,0 @@
-# Raw k6 JSON outputs (large files, markdown summary is the persistent record)
-*.json
-
-# Keep the markdown results
-!STRESS_TEST_RESULTS.md
-!SUMMARY.md

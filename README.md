@@ -14,12 +14,10 @@ chalk/
 ├── apps/
 │   ├── api/                   # Go backend (Gin, sqlc, Clean Architecture)
 │   ├── web/                   # Demo app (Vite + React 19 + TanStack Router)
-│   ├── docs/                  # Documentation site (Astro + Starlight)
-│   └── e2e/                   # End-to-end test suite
+│   └── docs/                  # Documentation site (Astro + Starlight)
 ├── infrastructure/
 │   ├── terraform/             # AWS IaC (ECS, Aurora, ElastiCache, WAF, etc.)
 │   └── whisper-worker/        # Whisper transcription service (Python)
-├── tests/                     # Load testing (Artillery, k6, WebRTC)
 └── .github/workflows/         # CI/CD (api-lean.yml, infra-lean.yml, sdk.yml, web.yml, whisper-worker.yml)
 ```
 

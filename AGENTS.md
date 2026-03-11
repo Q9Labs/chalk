@@ -49,9 +49,8 @@ All apps & packages:
 - **chalk-whiteboard**: Whiteboard features (stable)
 - **api**: Go backend API (`apps/api`, stable)
 - **terraform**: AWS IaC (`infrastructure/terraform`, stable)
-- **admin**: Admin management app (limited-access, for owner only)
 - **docs**: Chalk docs (`docs.chalk.q9labs.ai`, stable)
-  **Demo apps (`apps/web`, `apps/next-pages-demo`) are for testing only.**
+  **Demo apps (`apps/web`) are for testing only.**
 
 After packages → export → use in demo apps for user testing.
 Sometimes (rarely) the user might want to directly work on the app and later create the sdk.
@@ -68,7 +67,6 @@ Never add client-side business logic to demo apps.
 
 ## Skills
 
-- `chalk-stress-testing` — project skill for stress test planning/execution.
 - `release` — release skill (project only).
 
 ## Whisper Rollback Note

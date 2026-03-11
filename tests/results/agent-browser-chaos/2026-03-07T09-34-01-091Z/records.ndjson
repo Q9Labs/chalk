@@ -1,1 +1,0 @@
-{"scenario":"post_join_offline","status":"fail","durationMs":166473,"supportCode":"CHK-20260307-093410-001","details":{"hasConnectionOverlay":false,"hasEndScreen":false,"hasDisconnectSignal":true,"netErrCount":33,"wsErrors":11},"artifactDir":"/Users/macmini/Desktop/Code/chalk/tests/results/agent-browser-chaos/2026-03-07T09-34-01-091Z/post_join_offline"}
