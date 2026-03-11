@@ -13,11 +13,6 @@ bun run generate               # Re-generate openapi.yml when suitable after mak
 cd apps/api && go run ./cmd/main.go # Run API server
 ```
 
-## Scratchpad Notes
-
-- Session/progress/handoff/tracker/report notes live in `scratchpad/`, not repo root.
-- Prefer `chalk-<topic>-<artifact>-YYYY-MM-DD.md`.
-
 ## Testing Rules
 
 - For UX changes or any user-facing feature/behavior change, do both: add/update the appropriate automated tests and verify in a real browser flow with the Agent Browser CLI.
