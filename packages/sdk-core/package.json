@@ -28,7 +28,7 @@
     "build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
     "build:types": "tsc --project tsconfig.json",
     "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
-    "test": "bun test",
+    "test": "bun test ./src/__tests__",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",
     "clean": "rm -rf dist",

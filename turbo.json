@@ -15,13 +15,43 @@
       "persistent": true
     },
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md",
+        "!**/node_modules/**",
+        "!**/dist/**",
+        "!**/coverage/**",
+        "!**/.turbo/**",
+        "!**/.astro/**",
+        "!**/.next/**",
+        "!**/.wrangler/**",
+        "!**/.output/**",
+        "!example/**",
+        "!ios/**",
+        "!android/**"
+      ],
       "outputs": ["coverage/**"],
       "env": ["CI", "NODE_ENV"]
     },
     "check-types": {
       "dependsOn": ["^build"],
-      "inputs": ["**/*.ts", "**/*.tsx", "tsconfig.json"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/node_modules/**",
+        "!**/dist/**",
+        "!**/coverage/**",
+        "!**/.turbo/**",
+        "!**/.astro/**",
+        "!**/.next/**",
+        "!**/.wrangler/**",
+        "!**/.output/**",
+        "!example/**",
+        "!ios/**",
+        "!android/**"
+      ],
       "outputs": []
     },
     "lint": {
