@@ -41,6 +41,9 @@ describe("withPatchedGetDisplayMedia", () => {
     expect(calls.length).toBe(1);
     expect(calls[0].audio).toBe(true);
     expect(typeof calls[0].video).toBe("object");
+    expect(calls[0].preferCurrentTab).toBe(false);
+    expect(calls[0].selfBrowserSurface).toBe("exclude");
+    expect(calls[0].surfaceSwitching).toBe("include");
   });
 
   it("defaults to audio=false on Safari when audio is not explicitly requested", async () => {

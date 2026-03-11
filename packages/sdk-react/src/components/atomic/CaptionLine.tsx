@@ -14,12 +14,7 @@ export const CaptionLine = React.memo<CaptionLineProps>(({ text, speaker, positi
 
   return (
     <div className={cn("absolute left-1/2 -translate-x-1/2 z-50 w-full max-w-3xl px-4 text-center pointer-events-none", position === "top" ? "top-[10%]" : "bottom-[10%]", className)} role="status" aria-live="polite" aria-atomic="true">
-      <div
-        className={cn("inline-block px-4 py-2 rounded-[var(--chalk-border-radius-md)]", "backdrop-blur-sm transition-all duration-200", "text-[var(--chalk-font-size-lg)] text-white font-[var(--chalk-font-weight-medium)]", "shadow-[var(--chalk-shadow-md)]")}
-        style={{
-          backgroundColor: "rgba(0, 0, 0, 0.7)",
-        }}
-      >
+      <div className="inline-block px-4 py-2 rounded-lg bg-zinc-950/90 text-lg text-white font-medium shadow-lg transition-all duration-200">
         {speaker && <span className="text-accent font-bold mr-2">{speaker}:</span>}
         <span
           className="line-clamp-none"

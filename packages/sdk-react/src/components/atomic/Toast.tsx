@@ -26,32 +26,41 @@ export const Toast = React.memo<ToastProps>(({ message, type = "info", duration 
   }, [duration, onDismiss]);
 
   const icons = {
-    info: <InformationCircleIcon size={20} className="text-primary" />,
-    success: <CheckmarkCircle02Icon size={20} className="text-success" />,
-    warning: <Alert02Icon size={20} className="text-warning" />,
-    error: <CancelCircleIcon size={20} className="text-destructive" />,
-  };
-
-  const borderColors = {
-    info: "border-l-primary",
-    success: "border-l-success",
-    warning: "border-l-warning",
-    error: "border-l-destructive",
+    info: (
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary shrink-0">
+        <InformationCircleIcon size={18} />
+      </div>
+    ),
+    success: (
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-success/10 text-success shrink-0">
+        <CheckmarkCircle02Icon size={18} />
+      </div>
+    ),
+    warning: (
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-warning/10 text-warning shrink-0">
+        <Alert02Icon size={18} />
+      </div>
+    ),
+    error: (
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-destructive/10 text-destructive shrink-0">
+        <CancelCircleIcon size={18} />
+      </div>
+    ),
   };
 
   return (
-    <div className={cn("flex items-start gap-3 p-4 rounded-md shadow-lg min-w-[300px] max-w-md", "bg-card border border-border border-l-4", !prefersReducedMotion && "chalk-animate-toast-in", borderColors[type], className)} role={type === "error" || type === "warning" ? "alert" : "status"}>
-      <div className="flex-shrink-0 mt-0.5">{icons[type]}</div>
-      <div className="flex-1">
-        <p className="text-sm font-medium text-foreground">{message}</p>
+    <div className={cn("flex items-center gap-3 p-2 pr-3 rounded-xl shadow-2xl min-w-[280px] max-w-md", "bg-card border border-border text-foreground", !prefersReducedMotion && "chalk-animate-toast-in", className)} role={type === "error" || type === "warning" ? "alert" : "status"}>
+      <div className="flex-shrink-0">{icons[type]}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-foreground leading-none">{message}</p>
         {action && (
-          <button onClick={action.onClick} className="mt-2 text-sm font-semibold text-foreground hover:underline focus:outline-none">
+          <button onClick={action.onClick} className="mt-2 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity">
             {action.label}
           </button>
         )}
       </div>
       {onDismiss && (
-        <button onClick={onDismiss} className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors" aria-label="Close">
+        <button onClick={onDismiss} className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors" aria-label="Close">
           <Cancel01Icon size={16} />
         </button>
       )}

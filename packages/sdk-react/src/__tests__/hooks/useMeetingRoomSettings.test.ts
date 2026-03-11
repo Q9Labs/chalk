@@ -43,7 +43,7 @@ describe("useMeetingRoomSettings", () => {
     expect(stored.audio.selectedInput).toBe("mic-2");
     expect(stored.audio.outputVolume).toBe(72);
     expect(stored.video.backgroundEffect).toEqual({ type: "none" });
-    expect(stored.version).toBe(4);
+    expect(stored.version).toBe(5);
   });
 
   it("migrates existing stored settings with defaults", () => {
@@ -170,6 +170,34 @@ describe("useMeetingRoomSettings", () => {
     expect(stored.video.backgroundEffect).toEqual({
       type: "preset",
       presetId: "preset-study",
+    });
+  });
+
+  it("persists a custom profile gradient override", () => {
+    const { result } = renderHook(() => useMeetingRoomSettings());
+
+    act(() => {
+      result.current.updateAppearanceSettings({
+        profileGradient: {
+          mode: "custom",
+          from: "#112233",
+          to: "#445566",
+        },
+      });
+    });
+
+    const stored = JSON.parse(localStorage.getItem("chalk-meeting-settings") ?? "{}");
+
+    expect(stored.version).toBe(5);
+    expect(stored.appearance.profileGradient).toEqual({
+      mode: "custom",
+      from: "#112233",
+      to: "#445566",
+    });
+    expect(result.current.settings.appearance.profileGradient).toEqual({
+      mode: "custom",
+      from: "#112233",
+      to: "#445566",
     });
   });
 });

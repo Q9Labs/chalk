@@ -1,7 +1,7 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 
 import { cn } from "../../../utils/cn";
-import { getParticipantColor, getParticipantGradient, getParticipantThemeVariables } from "../../../utils/colorGenerator";
+import { getParticipantColor, getParticipantGradient, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { Avatar, ControlButton } from "../../atomic";
 import { ReactionPicker } from "../../composite";
 import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, Cancel01Icon, RefreshIcon, ArrowLeft01Icon } from "../../../utils/icons";
@@ -108,17 +108,30 @@ function WhiteboardPictureInPictureStage({
   );
 }
 
-function PictureInPictureStage({ source, className }: { source: PictureInPictureSource | null; className?: string; hideOverlay?: boolean }) {
+function getSourceGradientPreference(source: PictureInPictureSource | null, localParticipantGradientPreference?: ParticipantGradientPreference) {
+  return source?.isLocal ? localParticipantGradientPreference : undefined;
+}
+
+function PictureInPictureStage({
+  source,
+  className,
+  gradientPreference,
+}: {
+  source: PictureInPictureSource | null;
+  className?: string;
+  hideOverlay?: boolean;
+  gradientPreference?: ParticipantGradientPreference;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasVideo = Boolean(source?.videoTrack);
   const { settings } = useMeetingRoomSettings();
   const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
   const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
-  const participantColors = useMemo(() => getParticipantColor(source?.title || source?.id || "unknown"), [source?.title, source?.id]);
+  const participantColors = useMemo(() => getParticipantColor(source?.title || source?.id || "unknown", gradientPreference), [gradientPreference, source?.title, source?.id]);
 
   const participantGradient = useMemo(
-    () => (isDarkerGradient ? `linear-gradient(180deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantGradient(source?.title || source?.id || "unknown")),
-    [source?.title, source?.id, isDarkerGradient, participantColors],
+    () => (isDarkerGradient ? `linear-gradient(180deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantGradient(source?.title || source?.id || "unknown", gradientPreference)),
+    [gradientPreference, source?.title, source?.id, isDarkerGradient, participantColors],
   );
 
   useEffect(() => {
@@ -147,7 +160,7 @@ function PictureInPictureStage({ source, className }: { source: PictureInPicture
         <video ref={videoRef} autoPlay playsInline muted className={cn("h-full w-full", source?.kind === "screen-share" ? "object-contain bg-black" : "object-cover")} />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300" style={{ backgroundImage: participantGradient }}>
-          <Avatar name={source?.title ?? "Guest"} src={source?.avatarUrl} size="xl" className="opacity-90" />
+          <Avatar name={source?.title ?? "Guest"} src={source?.avatarUrl} size="xl" className="opacity-90" gradientPreference={gradientPreference} />
         </div>
       )}
     </div>
@@ -157,9 +170,11 @@ function PictureInPictureStage({ source, className }: { source: PictureInPicture
 function PictureInPictureTile({
   source,
   className,
+  gradientPreference,
 }: {
   source: PictureInPictureSource | null;
   className?: string;
+  gradientPreference?: ParticipantGradientPreference;
 }) {
   if (!source) {
     return null;
@@ -192,10 +207,10 @@ function PictureInPictureTile({
         </div>
       ) : (
         <>
-          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" />
+          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={gradientPreference} />
           <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
             <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/5 bg-zinc-950/80 px-1.5 py-1">
-              {!source.videoTrack && <Avatar name={source.title} src={source.avatarUrl} size="xs" />}
+              {!source.videoTrack && <Avatar name={source.title} src={source.avatarUrl} size="xs" gradientPreference={gradientPreference} />}
               <span className="max-w-[96px] truncate text-xs font-medium text-white">{source.title}</span>
               {source.subtitle ? <span className="text-[11px] text-white/70">{source.subtitle}</span> : null}
               {source.isSpeaking && !source.isMuted ? <Equalizer /> : null}
@@ -244,19 +259,21 @@ function MeetingPictureInPictureLayout({
   source,
   participantSources,
   meetingLayout,
+  localParticipantGradientPreference,
 }: {
   source: PictureInPictureSource | null;
   participantSources: PictureInPictureSource[];
   meetingLayout: PictureInPictureMeetingLayout;
+  localParticipantGradientPreference?: ParticipantGradientPreference;
 }) {
   if (meetingLayout === "screen-share") {
     return (
       <div className="flex h-full min-h-0 gap-3 overflow-hidden p-3" data-testid="pip-layout" data-layout="screen-share">
-        <PictureInPictureTile source={source} className="min-w-0 flex-1 shadow-2xl" />
+        <PictureInPictureTile source={source} className="min-w-0 flex-1 shadow-2xl" gradientPreference={getSourceGradientPreference(source, localParticipantGradientPreference)} />
         {participantSources.length > 0 && (
           <div className="flex w-24 shrink-0 flex-col gap-3">
             {participantSources.map((participant) => (
-              <PictureInPictureTile key={participant.id} source={participant} className="flex-1 shadow-xl" />
+              <PictureInPictureTile key={participant.id} source={participant} className="flex-1 shadow-xl" gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)} />
             ))}
           </div>
         )}
@@ -276,6 +293,7 @@ function MeetingPictureInPictureLayout({
         <PictureInPictureTile
           key={participant.id}
           source={participant}
+          gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)}
           className={cn(
             "shadow-xl",
             meetingLayout === "single" && "col-span-1 row-span-1",
@@ -291,6 +309,8 @@ function MeetingPictureInPictureLayout({
 export function PictureInPictureWindow({ phase, source, previewSource, participantSources, meetingLayout = "single", controls, onReturnToTab }: PictureInPictureWindowProps) {
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
+  const localParticipantGradientPreference = controls.localParticipantGradientPreference;
+  const sourceGradientPreference = getSourceGradientPreference(source, localParticipantGradientPreference);
   const actionButtons = useMemo(() => {
     const base = [
       {
@@ -358,7 +378,10 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
     ].filter((btn): btn is Exclude<typeof btn, false | undefined | null> => Boolean(btn));
   }, [controls, onReturnToTab, phase]);
 
-  const participantThemeVariables = useMemo(() => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown"), [source?.title, source?.id]);
+  const participantThemeVariables = useMemo(
+    () => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown", sourceGradientPreference),
+    [source?.title, source?.id, sourceGradientPreference],
+  );
   const { settings } = useMeetingRoomSettings();
   const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
   const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
@@ -391,10 +414,10 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
       
       <div className="relative z-10 flex flex-1 flex-col overflow-hidden shadow-2xl transition-all duration-300">
         {phase === "meeting" && (
-          <MeetingPictureInPictureLayout source={source} participantSources={participantSources ?? []} meetingLayout={meetingLayout} />
+          <MeetingPictureInPictureLayout source={source} participantSources={participantSources ?? []} meetingLayout={meetingLayout} localParticipantGradientPreference={localParticipantGradientPreference} />
         )}
         {phase === "prejoin" && (
-          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" />
+          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={sourceGradientPreference ?? localParticipantGradientPreference} />
         )}
 
         {phase === "prejoin" && !showErrorOverlay && (
@@ -410,6 +433,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                className="w-full h-full min-h-0" 
                message="Joining room..."
                supportingMessages={controls.loadingMessages}
+               gradientPreference={sourceGradientPreference ?? localParticipantGradientPreference}
              />
           </div>
         )}
@@ -489,7 +513,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
 
         {phase === "meeting" && meetingLayout === "single" && previewSource && (
           <div className="absolute right-4 bottom-4 h-28 w-20 overflow-hidden rounded-xl border border-border shadow-xl bg-muted/80">
-            <PictureInPictureStage source={previewSource} className="h-full w-full" />
+            <PictureInPictureStage source={previewSource} className="h-full w-full" gradientPreference={getSourceGradientPreference(previewSource, localParticipantGradientPreference)} />
           </div>
         )}
 

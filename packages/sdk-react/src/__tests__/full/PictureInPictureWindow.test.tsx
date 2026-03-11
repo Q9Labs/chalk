@@ -84,4 +84,20 @@ describe("PictureInPictureWindow", () => {
     expect(queryByText("You're not in the room yet")).toBeNull();
     expect(queryByText("Join Now")).toBeNull();
   });
+
+  it("uses the local participant gradient preference for local PiP surfaces", () => {
+    const localParticipantGradientPreference = { mode: "custom" as const, from: "#ff00aa", to: "#7c3aed" };
+    const { container } = render(
+      <PictureInPictureWindow
+        phase="prejoin"
+        source={participant("hasan", { isLocal: true })}
+        controls={{ localParticipantGradientPreference }}
+        onReturnToTab={() => {}}
+      />,
+    );
+
+    expect(container.firstChild).toHaveStyle({
+      "--primary": "#ff00aa",
+    });
+  });
 });

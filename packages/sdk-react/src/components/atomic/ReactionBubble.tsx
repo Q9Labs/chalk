@@ -107,10 +107,10 @@ export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, 
       <div className={cn("relative z-10 text-5xl", !prefersReducedMotion && "chalk-animate-reaction-bounce-in", !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
 
       {/* Participant name badge */}
-      {participantName && (
+      {participantName && participantName.toLowerCase() !== "unknown" && (
         <div
-          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap", "px-2 py-0.5 rounded-full text-xs font-medium", "text-white backdrop-blur-sm", "border border-white/10", !prefersReducedMotion && "animate-in fade-in duration-300")}
-          style={{ backgroundColor: `${participantColors.primary}E6` }} // 90% opacity hex
+          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium text-white border border-white/5 shadow-sm", !prefersReducedMotion && "animate-in fade-in duration-300")}
+          style={{ backgroundColor: participantColors.primary }}
         >
           {participantName}
         </div>

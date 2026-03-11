@@ -83,7 +83,7 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
   return (
     <div className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
-      <ControlButton icon={icon} label={label} onClick={onToggle} active={isActive} disabled={disabled} haptic={haptic} size={size} className={cn("rounded-r-none border-r border-black/5 dark:border-white/5", isOpen && "brightness-110")} />
+      <ControlButton icon={icon} label={label} onClick={onToggle} active={isActive} disabled={disabled} haptic={haptic} size={size} className={cn("rounded-r-none border-r border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/10", isOpen && "brightness-110")} />
 
       {/* Chevron Trigger */}
       <Tooltip content={`Select ${dropdownLabel}`} position={orientation === "up" ? "top" : "bottom"}>
@@ -93,8 +93,8 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
           disabled={disabled || (devices.length === 0 && (!secondaryDevices || secondaryDevices.length === 0))}
           className={cn(
             "chalk-button-tactile h-11 px-1.5 flex items-center justify-center rounded-r-full transition-all duration-300 ease-out",
-            "bg-[var(--secondary)] shadow-lg hover:brightness-110 border-l border-black/5 dark:border-white/5",
-            "text-[var(--foreground)]",
+            "bg-black/5 dark:bg-white/10 shadow-lg hover:brightness-110 border-l border-black/5 dark:border-white/5",
+            "text-foreground",
             isOpen && "brightness-110",
             disabled && "cursor-not-allowed opacity-50",
           )}
@@ -109,16 +109,16 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
       {isOpen && (
         <div
           className={cn(
-            "absolute z-[70] min-w-[240px] max-w-[280px] rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 pointer-events-auto",
+            "absolute z-[70] min-w-[240px] max-w-[280px] rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 pointer-events-auto",
             orientation === "up" ? "bottom-full mb-3" : "top-full mt-3",
             "left-0",
           )}
         >
-          <div className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 border-b border-black/5 dark:border-white/5 mb-1">{dropdownLabel}</div>
+          <div className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground border-b border-border mb-1">{dropdownLabel}</div>
 
           <div className="max-h-[220px] overflow-y-auto py-1">
             {devices.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-zinc-500 italic">No devices found</div>
+              <div className="px-4 py-3 text-sm text-muted-foreground italic">No devices found</div>
             ) : (
               devices.map((device) => {
                 const isSelected = selectedDeviceId === device.deviceId;
@@ -127,10 +127,10 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
                     key={device.deviceId}
                     type="button"
                     onClick={() => handleSelectDevice(device.deviceId)}
-                    className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors", "hover:bg-black/5 dark:hover:bg-white/5", isSelected ? "bg-[var(--primary)]/10 text-[var(--primary)] font-medium" : "text-zinc-700 dark:text-zinc-300")}
+                    className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors", "hover:bg-muted", isSelected ? "bg-primary/10 text-primary font-medium" : "text-foreground/80")}
                   >
                     <div className="flex items-center gap-3 truncate pr-2">
-                      <span className={cn("h-2 w-2 shrink-0 rounded-full", isSelected ? "bg-[var(--primary)]" : "bg-black/10 dark:bg-white/10")} />
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", isSelected ? "bg-primary" : "bg-border")} />
                       <span className="truncate">{device.label || `${dropdownLabel} ${device.deviceId.slice(0, 4)}`}</span>
                     </div>
                     {isSelected && <Tick01Icon size={14} className="shrink-0" />}
@@ -142,7 +142,7 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
 
           {secondaryDevices && secondaryDevices.length > 0 && (
             <>
-              <div className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 border-y border-black/5 dark:border-white/5 my-1 bg-black/5 dark:bg-white/5">Speakers</div>
+              <div className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground border-y border-border my-1 bg-muted/50">Speakers</div>
               <div className="max-h-[180px] overflow-y-auto py-1">
                 {secondaryDevices.map((device) => {
                   const isSelected = selectedSecondaryDeviceId === device.deviceId;
@@ -151,10 +151,10 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
                       key={device.deviceId}
                       type="button"
                       onClick={() => handleSelectSecondaryDevice(device.deviceId)}
-                      className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors", "hover:bg-black/5 dark:hover:bg-white/5", isSelected ? "bg-[var(--primary)]/10 text-[var(--primary)] font-medium" : "text-zinc-700 dark:text-zinc-300")}
+                      className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors", "hover:bg-muted", isSelected ? "bg-primary/10 text-primary font-medium" : "text-foreground/80")}
                     >
                       <div className="flex items-center gap-3 truncate pr-2">
-                        <VolumeHighIcon size={14} className={cn("shrink-0", isSelected ? "text-[var(--primary)]" : "opacity-50")} />
+                        <VolumeHighIcon size={14} className={cn("shrink-0", isSelected ? "text-primary" : "opacity-50")} />
                         <span className="truncate">{device.label || `Speaker ${device.deviceId.slice(0, 4)}`}</span>
                       </div>
                       {isSelected && <Tick01Icon size={14} className="shrink-0" />}

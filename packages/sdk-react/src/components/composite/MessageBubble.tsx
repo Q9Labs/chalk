@@ -212,7 +212,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
         {!isLocal && <div className="shrink-0 w-10">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" className="!w-10 !h-10" />}</div>}
 
         <div className={cn("flex flex-col max-w-[70%]", isLocal ? "items-end" : "items-start")}>
-          <div className={cn("px-4 py-3 backdrop-blur-sm", isLocal ? "bg-primary text-primary-foreground rounded-[20px_4px_20px_20px]" : "bg-card text-card-foreground rounded-[4px_20px_20px_20px]")}>
+          <div className={cn("px-4 py-3", isLocal ? "bg-primary text-primary-foreground rounded-[20px_4px_20px_20px]" : "bg-card text-card-foreground rounded-[4px_20px_20px_20px]")}>
             <p className="text-sm leading-relaxed break-words">{renderContent(content)}</p>
             {renderAttachments()}
           </div>

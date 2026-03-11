@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
-import { getParticipantColor } from "../../utils/colorGenerator";
+import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface LoadingScreenProps {
   message?: string;
@@ -8,13 +8,16 @@ export interface LoadingScreenProps {
   /** Display name or participant ID used to generate dynamic colors */
   displayName?: string;
   supportingMessages?: readonly string[];
+  gradientPreference?: ParticipantGradientPreference;
 }
 
-function LoadingScreenBase({ message = "Loading...", className, displayName = "Chalk User", supportingMessages = [] }: LoadingScreenProps): React.JSX.Element {
+const EMPTY_SUPPORTING_MESSAGES: readonly string[] = [];
+
+function LoadingScreenBase({ message = "Loading...", className, displayName = "Chalk User", supportingMessages = EMPTY_SUPPORTING_MESSAGES, gradientPreference }: LoadingScreenProps): React.JSX.Element {
   const [headlineMessageIndex, setHeadlineMessageIndex] = useState(0);
 
   // Tie colors directly to the user's generated gradient palette
-  const colors = useMemo(() => getParticipantColor(displayName), [displayName]);
+  const colors = useMemo(() => getParticipantColor(displayName, gradientPreference), [displayName, gradientPreference]);
   const primaryColor = colors.primary;
   const headlineMessages = useMemo(() => [message, ...supportingMessages], [message, supportingMessages]);
   const activeHeadlineMessage = headlineMessages[headlineMessageIndex] ?? message;

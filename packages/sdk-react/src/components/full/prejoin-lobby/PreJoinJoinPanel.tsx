@@ -38,9 +38,8 @@ export function PreJoinJoinPanel({ displayName, isLoading, canJoin, participantG
             disabled={isLoading}
             className={cn(
               "w-full h-12 px-4 rounded-xl text-base transition-all outline-none text-(--foreground) placeholder:text-(--muted-foreground) disabled:opacity-50",
-              "border bg-[var(--chalk-lobby-glass-bg)] backdrop-blur-md shadow-sm",
-              "border-[var(--chalk-lobby-glass-border)]",
-              "focus-visible:border-[var(--primary)] focus-visible:ring-4 focus-visible:ring-[var(--primary)]/20 focus-visible:shadow-[0_0_15px_var(--primary)]",
+              "border bg-card border-border shadow-sm",
+              "focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/20",
             )}
           />
         </div>

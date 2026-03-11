@@ -3,7 +3,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { cn } from "../../utils/cn";
 import { CircleIcon, FileTextIcon, HandIcon, Message01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Edit02Icon, CallEnd01Icon, Settings01Icon, SmileIcon, UserGroupIcon, Video01Icon, VideoOffIcon, PictureInPictureIcon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface MobileControlSheetProps {
   isOpen: boolean;
@@ -45,6 +45,7 @@ export interface MobileControlSheetProps {
   enableChat?: boolean;
 
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
 }
 
@@ -86,13 +87,14 @@ export const MobileControlSheet = React.memo(
     enableTranscription = true,
     enableChat = true,
     participantColorSeed,
+    participantGradientPreference,
     className,
   }: MobileControlSheetProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [translateY, setTranslateY] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const touchStartRef = useRef<{ y: number; time: number } | null>(null);
-    const themeVariables = getParticipantThemeVariables(participantColorSeed);
+    const themeVariables = getParticipantThemeVariables(participantColorSeed, participantGradientPreference);
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
       const touch = e.touches[0];
@@ -254,7 +256,7 @@ export const MobileControlSheet = React.memo(
       <Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
         <Dialog.Portal>
           {/* Backdrop */}
-          <Dialog.Backdrop className={cn("fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-200", isOpen ? "opacity-100" : "opacity-0 pointer-events-none")} />
+          <Dialog.Backdrop className={cn("fixed inset-0 bg-background/80 z-40 transition-opacity duration-200", isOpen ? "opacity-100" : "opacity-0 pointer-events-none")} />
 
           {/* Sheet */}
           <Dialog.Popup

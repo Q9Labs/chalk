@@ -23,7 +23,7 @@ export const ConnectionLostOverlay = React.memo<ConnectionLostOverlayProps>(({ i
   };
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-popover/80 backdrop-blur-sm transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
+    <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-background/95 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
       <div className="flex flex-col items-center justify-center p-8 bg-background rounded-[var(--chalk-border-radius-lg)] shadow-[var(--chalk-shadow-xl)] max-w-sm w-full border border-border">
         {status === "failed" ? (
           <div className="mb-6 p-4 rounded-full bg-card text-destructive">

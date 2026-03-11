@@ -41,12 +41,26 @@ const shouldDefaultScreenShareAudioOn = () => {
   return !(isIOS || isSafariFamily);
 };
 
+const supportsAntiMirrorHints = () => {
+  const { userAgent } = getNavigatorInfo();
+
+  return /Chrome|Chromium|Edg|OPR|Opera|SamsungBrowser/i.test(userAgent) && !/CriOS|EdgiOS/i.test(userAgent);
+};
+
 const buildConstraintsWithAudioPreference = (constraints: unknown, withAudio?: boolean) => {
   if (!isRecord(constraints)) {
-    return {
+    const next = {
       video: true,
       audio: withAudio ?? shouldDefaultScreenShareAudioOn(),
     };
+
+    if (supportsAntiMirrorHints()) {
+      (next as any).preferCurrentTab = false;
+      (next as any).selfBrowserSurface = "exclude";
+      (next as any).surfaceSwitching = "include";
+    }
+
+    return next;
   }
 
   const next = { ...constraints } as any;
@@ -58,6 +72,12 @@ const buildConstraintsWithAudioPreference = (constraints: unknown, withAudio?: b
 
   // If video constraints are missing, ensure we at least request video.
   if (typeof next.video === "undefined") next.video = true;
+
+  if (supportsAntiMirrorHints()) {
+    next.preferCurrentTab = false;
+    next.selfBrowserSurface = "exclude";
+    next.surfaceSwitching ??= "include";
+  }
 
   return next;
 };

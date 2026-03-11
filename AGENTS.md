@@ -21,6 +21,7 @@ cd apps/api && go run ./cmd/main.go # Run API server
 - Prefer verifying in the Chalk demo/user-facing app that exposes the changed behavior after the package-level implementation is complete.
 - Do not treat browser verification as optional for user-facing work unless the feature cannot be exercised locally; if blocked, state exactly what prevented Agent Browser testing.
 - Agent Browser verification does not replace automated coverage. Keep writing tests wherever they fit; for bug fixes or previously broken behavior, add a regression test when feasible. Browser testing is the user-level proof on top.
+- UI polish note: for in-product placeholders/empty states/guard rails, keep typography on-brand with Chalk theme tokens (`font-app`, `font-display` where applicable) and verify both light + dark mode before closing.
 
 ## Cost Formulas (Quick Reference)
 

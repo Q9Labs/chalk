@@ -23,7 +23,7 @@ import {
   VideoOffIcon,
 } from "../../utils/icons";
 import { ControlButton } from "../atomic";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { DeviceControlButton } from "./DeviceControlButton";
 
 export type ControlBarButton = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "more" | "info" | "thumbsup" | "leave";
@@ -73,6 +73,7 @@ export interface ControlBarProps {
   onLeave?: () => void;
 
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
 }
 
@@ -173,10 +174,11 @@ export const ControlBar = React.memo(
     onOpenInfo,
     onLeave,
     participantColorSeed,
+    participantGradientPreference,
 
     className,
   }: ControlBarProps) => {
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
     const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
     const defaultButtons: ControlBarButton[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "transcription", "thumbsup", "pip", "settings"];
 
@@ -307,12 +309,9 @@ export const ControlBar = React.memo(
     if (variant === "mobile") {
       return (
         <div
-          className={cn("flex items-center justify-center gap-3 px-4 py-3 rounded-full mx-auto", className)}
+          className={cn("flex items-center justify-center gap-3 px-4 py-3 rounded-full mx-auto bg-zinc-950/95 shadow-xl", className)}
           style={{
             ...(themeVariables as React.CSSProperties),
-            background: "rgba(0, 0, 0, 0.7)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
             paddingBottom: "max(12px, env(safe-area-inset-bottom))",
           }}
           role="toolbar"
@@ -418,23 +417,13 @@ export const ControlBar = React.memo(
       <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
         {/* Left: Timer section */}
         <div
-          className="flex items-center rounded-full px-5 py-2.5 backdrop-blur-md border"
-          style={{
-            background: "var(--chalk-bg-glass, var(--chalk-pill-bg))",
-            color: "var(--chalk-pill-text)",
-            borderColor: "var(--chalk-border-subtle, var(--chalk-pill-border))",
-            boxShadow: "var(--chalk-shadow-2, 0 10px 30px rgba(0,0,0,0.25))",
-          }}
+          className="flex items-center rounded-full px-5 py-2.5 bg-card border border-border shadow-md"
         >
           <div className="flex items-center gap-3">
             <div
-              className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.65)]"
-              style={{
-                outline: "2px solid var(--chalk-pill-dot-ring)",
-                outlineOffset: "2px",
-              }}
+              className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.4)]"
             />
-            <span className="text-[14px] font-semibold tracking-wide tabular-nums" style={{ color: "var(--chalk-pill-text)" }}>
+            <span className="text-[14px] font-semibold tracking-wide tabular-nums text-foreground">
               {formatDuration(meetingDuration)}
             </span>
           </div>

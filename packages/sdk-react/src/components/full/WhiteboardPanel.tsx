@@ -43,6 +43,8 @@ export interface WhiteboardPanelProps {
   showThumbnails?: boolean;
   /** Position of thumbnails relative to whiteboard */
   thumbnailPosition?: "bottom" | "right";
+  /** Color of the local participant for whiteboard elements */
+  localParticipantColor?: string;
   /** Exposes Excalidraw imperative API (for overlays/extensions). Called once per mount. */
   onExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
 }
@@ -53,7 +55,7 @@ export interface WhiteboardPanelProps {
  * Uses Excalidraw with real-time sync via the SDK's whiteboard system.
  * Automatically handles permissions, cursors, and element syncing.
  */
-function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = EXCALIDRAW_CSS_CDN, theme = "auto", participants = [], showThumbnails = true, thumbnailPosition = "bottom", onExcalidrawApiReady }: WhiteboardPanelProps): React.JSX.Element {
+function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = EXCALIDRAW_CSS_CDN, theme = "auto", participants = [], showThumbnails = true, thumbnailPosition = "bottom", localParticipantColor, onExcalidrawApiReady }: WhiteboardPanelProps): React.JSX.Element {
   const session = useSession() as unknown as WhiteboardSessionLike;
   const { canDraw, latestUpdate, latestSnapshot, requestSync } = useWhiteboard();
   const { canGrant, grantAll, revokeAll } = useWhiteboardPermissions();
@@ -98,6 +100,7 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
     resolvedTheme,
     excalidrawCssPath,
     session,
+    localParticipantColor,
     onExcalidrawApiReady,
     onFileSyncStateChange: setFileSyncState,
   });
@@ -111,18 +114,16 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
     refs,
   });
 
-  const isDarkTheme = resolvedTheme === "dark";
-  const isDarkCanvas = isDarkTheme;
-  const pillBg = isDarkCanvas ? "bg-black/50" : "bg-white/80";
-  const pillBorder = isDarkCanvas ? "border-white/10" : "border-black/10";
-  const buttonText = isDarkCanvas ? "text-white/70 hover:text-white" : "text-black/70 hover:text-black";
-  const buttonHover = isDarkCanvas ? "hover:bg-white/10" : "hover:bg-black/10";
+  const pillBg = "bg-popover/90";
+  const pillBorder = "border-border";
+  const buttonText = "text-muted-foreground hover:text-foreground";
+  const buttonHover = "hover:bg-accent";
 
   return (
-    <div className={cn("flex h-full w-full gap-2 transition-all duration-500", thumbnailPosition === "bottom" ? "flex-col" : "flex-row", !isVisible && "hidden", className)}>
+    <div className={cn("flex flex-1 min-h-0 min-w-0 w-full overflow-hidden gap-2 transition-all duration-500", thumbnailPosition === "bottom" ? "flex-col" : "flex-row", !isVisible && "hidden", className)}>
       <div className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-background">
         {canGrant && (
-          <div className={cn("absolute top-4 right-4 z-10 rounded-lg p-1 backdrop-blur-md border flex items-center gap-1", pillBg, pillBorder)}>
+          <div className={cn("absolute top-4 right-4 z-10 rounded-lg p-1 border flex items-center gap-1 shadow-sm", pillBg, pillBorder)}>
             <button type="button" onClick={grantAll} className={cn("w-8 h-8 rounded-md flex items-center justify-center transition-colors", buttonText, buttonHover)} aria-label="Enable drawing for all" title="Enable All">
               <UnlockIcon />
             </button>
@@ -142,9 +143,9 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
         )}
 
         {fileSyncMessage && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 rounded-lg border border-white/20 bg-black/65 px-3 py-2 text-xs text-white backdrop-blur-md shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 rounded-lg border border-border bg-popover/95 px-3 py-2 text-xs text-popover-foreground shadow-lg">
             <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-white/80 animate-pulse" />
+              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
               <span>{fileSyncMessage}</span>
             </div>
           </div>
@@ -159,14 +160,14 @@ function WhiteboardPanelBase({ isVisible = true, className, excalidrawCssPath = 
           </div>
         )}
 
-        <div ref={containerRef} className="h-full w-full" />
+        <div ref={containerRef} className="h-full min-h-0 min-w-0 w-full" />
 
         {showThumbnails && participants.length > 0 && (
           <button
             type="button"
             onClick={toggleThumbnails}
             className={cn(
-              "absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",
+              "absolute z-20 flex items-center justify-center bg-muted/80 border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-300 shadow-lg",
               thumbnailPosition === "right" ? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl" : "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl",
             )}
             aria-label={isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"}

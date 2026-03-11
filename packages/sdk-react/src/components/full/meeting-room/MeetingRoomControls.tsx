@@ -1,5 +1,6 @@
 import type { MediaDevice } from "@q9labs/chalk-core";
 import { cn } from "../../../utils/cn";
+import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { ControlBar, MobileControlSheet, ReactionPicker } from "../../composite";
 import type { MeetingPanel } from "./types";
 
@@ -52,6 +53,7 @@ interface MeetingRoomControlsProps {
   onOpenSettings?: () => void;
   isExiting: boolean;
   localParticipantColorSeed?: string;
+  localParticipantGradientPreference?: ParticipantGradientPreference;
 }
 
 export function MeetingRoomControls({
@@ -103,6 +105,7 @@ export function MeetingRoomControls({
   onOpenSettings,
   isExiting,
   localParticipantColorSeed,
+  localParticipantGradientPreference,
 }: MeetingRoomControlsProps) {
   return (
     <>
@@ -169,6 +172,7 @@ export function MeetingRoomControls({
           enableChat={enableChat}
           isPictureInPictureActive={isPictureInPictureActive}
           participantColorSeed={localParticipantColorSeed}
+          participantGradientPreference={localParticipantGradientPreference}
           onTogglePictureInPicture={enablePictureInPicture && isPictureInPictureSupported ? onTogglePictureInPicture : undefined}
         />
       )}
@@ -220,6 +224,7 @@ export function MeetingRoomControls({
             onOpenSettings={onOpenSettings}
             onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
             participantColorSeed={localParticipantColorSeed}
+            participantGradientPreference={localParticipantGradientPreference}
             className={cn(isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] touch-manipulation" : "", isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up")}
           />
           {enableReactions && !isMobile && (
@@ -231,6 +236,7 @@ export function MeetingRoomControls({
                 setIsReactionPickerOpen(false);
               }}
               participantColorSeed={localParticipantColorSeed}
+              participantGradientPreference={localParticipantGradientPreference}
               position="top"
               className="absolute bottom-24 left-1/2 -translate-x-1/2"
             />

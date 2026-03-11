@@ -4,6 +4,8 @@ import { MicrophoneOff01Icon, Monitor01Icon, HandIcon } from "../../utils/icons"
 import { Avatar } from "./Avatar";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import { getParticipantGradient, getParticipantColor } from "../../utils/colorGenerator";
+import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
+import { useMeetingRoomTheme } from "../full/meeting-room/useMeetingRoomTheme";
 
 export interface VideoTileProps {
   participant: {
@@ -129,8 +131,13 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
   const isTrackValid = isTrackUsable(videoTrack);
   const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError && isLoaded;
 
-  const participantColors = useMemo(() => getParticipantColor(participant.displayName || participant.id), [participant.displayName, participant.id]);
-  const participantGradient = useMemo(() => getParticipantGradient(participant.displayName || participant.id), [participant.displayName, participant.id]);
+  const { settings } = useMeetingRoomSettings();
+  const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
+  const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
+  const localGradientPreference = participant.isLocal ? settings.appearance.profileGradient : undefined;
+
+  const participantColors = useMemo(() => getParticipantColor(participant.displayName || participant.id, localGradientPreference), [localGradientPreference, participant.displayName, participant.id]);
+  const participantGradient = useMemo(() => (isDarkerGradient ? `linear-gradient(180deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantGradient(participant.displayName || participant.id, localGradientPreference)), [localGradientPreference, participant.displayName, participant.id, isDarkerGradient, participantColors]);
 
   return (
     <div
@@ -164,7 +171,7 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
       {/* Avatar background when video is off or loading */}
       {!showVideo && showAvatar && (
         <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 bg-[var(--chalk-bg-tile)]" style={{ backgroundImage: participantGradient }}>
-          <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" className="opacity-90" />
+          <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" className="opacity-90" gradientPreference={localGradientPreference} />
         </div>
       )}
 
@@ -174,13 +181,10 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
       {(showName || showStatus) && (
         <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
           <div
-            className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-full backdrop-blur-md"
-            style={{
-              background: "rgba(0, 0, 0, 0.5)",
-            }}
+            className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-full bg-zinc-950/80 border border-white/5"
           >
             {/* Small avatar when video is off */}
-            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" />}
+            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" gradientPreference={localGradientPreference} />}
 
             {/* Name */}
             {showName && <span className="text-xs font-medium text-white truncate max-w-[100px]">{participant.displayName}</span>}

@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 
 import { Avatar } from "../../atomic";
 import { cn } from "../../../utils/cn";
-import { getParticipantColor } from "../../../utils/colorGenerator";
+import { getParticipantColor, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 
 interface PreJoinPreviewPaneProps {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -13,11 +13,12 @@ interface PreJoinPreviewPaneProps {
   audioLevel: number;
   normalizedAudioLevel: number;
   participantGradient: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   controls: React.ReactNode;
 }
 
-export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAudioEnabled, audioLevel, normalizedAudioLevel, participantGradient, controls }: PreJoinPreviewPaneProps): React.JSX.Element {
-  const participantColors = getParticipantColor(displayName);
+export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAudioEnabled, audioLevel, normalizedAudioLevel, participantGradient, participantGradientPreference, controls }: PreJoinPreviewPaneProps): React.JSX.Element {
+  const participantColors = getParticipantColor(displayName, participantGradientPreference);
 
   return (
     <div className="w-full relative" style={{ "--primary": participantColors.primary } as React.CSSProperties}>
@@ -43,8 +44,8 @@ export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAu
               border: "1px solid var(--chalk-lobby-glass-border)",
             }}
           >
-            <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors", isAudioEnabled ? "bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]" : "bg-muted-foreground/40")} />
-            <span className="text-sm font-medium text-(--foreground)">{displayName || "You"}</span>
+            <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors", isAudioEnabled ? "bg-primary shadow-[0_0_8px_var(--primary)]" : "bg-muted-foreground/40")} />
+            <span className="text-sm font-medium text-foreground">{displayName || "You"}</span>
 
             {isAudioEnabled && (
               <div className="w-16 h-1.5 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
@@ -86,6 +87,7 @@ export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAu
             <Avatar
               name={displayName}
               size="2xl"
+              gradientPreference={participantGradientPreference}
               className="opacity-90 relative z-10 transition-transform duration-75"
               style={{
                 transform: `scale(${1 + audioLevel * 0.1})`,

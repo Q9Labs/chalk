@@ -1,11 +1,11 @@
 import { Dialog } from "@base-ui/react/dialog";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { MeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion, useMediaQuery } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
-import { Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
+import { getParticipantAvatarGradient, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
+import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { IconButton, Input, Toggle, VolumeSlider } from "../atomic";
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
@@ -62,7 +62,6 @@ interface SettingsDialogProps {
   reducedMotion?: boolean;
   participantColorSeed?: string;
   isDarkMode?: boolean;
-  className?: string;
 }
 
 const SECTIONS = [
@@ -85,7 +84,7 @@ const SECTIONS = [
     label: "Appearance",
     description: "Theme, layout, motion",
     icon: Monitor01Icon,
-    keywords: ["theme", "layout", "filmstrip", "motion", "dark", "light"],
+    keywords: ["theme", "layout", "filmstrip", "motion", "dark", "light", "color", "gradient", "profile"],
   },
   {
     id: "experience",
@@ -104,7 +103,7 @@ const SECTIONS = [
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border border-border/50 bg-background/70 p-5 shadow-sm">
+    <section className="rounded-3xl border border-border/50 bg-background/70 p-4 shadow-sm sm:p-5">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
@@ -119,7 +118,7 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/50 bg-card/60 p-4">
-      <div>
+      <div className="min-w-0 flex-1">
         <div id={titleId} className="text-sm font-medium text-foreground">
           {title}
         </div>
@@ -158,17 +157,59 @@ export const SettingsDialog = React.memo(
     reducedMotion = false,
     participantColorSeed,
     isDarkMode = false,
-    className,
   }: SettingsDialogProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
+    const isDesktop = useMediaQuery("(min-width: 768px)");
     const disableMotion = prefersReducedMotion || reducedMotion;
     const [activeSection, setActiveSection] = useState<SectionId>("audio");
+    const [isNavOpen, setIsNavOpen] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [detectedDevices, setDetectedDevices] = useState(EMPTY_DEVICE_GROUPS);
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+    const autoProfileColors = useMemo(() => getParticipantColor(participantColorSeed), [participantColorSeed]);
+    const profileGradient = settings.appearance.profileGradient;
+    const profileGradientMode = profileGradient.mode;
+    const resolvedProfileFrom = profileGradient.from ?? autoProfileColors.primary;
+    const resolvedProfileTo = profileGradient.to ?? autoProfileColors.gradientEnd;
+    const selectedProfileGradientPreset = useMemo(
+      () => PARTICIPANT_GRADIENT_PRESETS.find((preset) => preset.from.toLowerCase() === resolvedProfileFrom.toLowerCase() && preset.to.toLowerCase() === resolvedProfileTo.toLowerCase()) ?? null,
+      [resolvedProfileFrom, resolvedProfileTo],
+    );
+    const profilePreviewGradient = useMemo(
+      () => getParticipantAvatarGradient(participantColorSeed, { mode: profileGradientMode, from: resolvedProfileFrom, to: resolvedProfileTo }),
+      [participantColorSeed, profileGradientMode, resolvedProfileFrom, resolvedProfileTo],
+    );
+    const profilePreviewInitials = useMemo(() => {
+      const previewName = participantColorSeed?.trim() || "You";
+      return (
+        previewName
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((part) => part[0] || "")
+          .join("")
+          .toUpperCase() || "Y"
+      );
+    }, [participantColorSeed]);
     const effectiveAudioInputDevices = useMemo(() => mergeDevices(audioInputDevices, detectedDevices.audioinput), [audioInputDevices, detectedDevices.audioinput]);
     const effectiveAudioOutputDevices = useMemo(() => mergeDevices(audioOutputDevices, detectedDevices.audiooutput), [audioOutputDevices, detectedDevices.audiooutput]);
     const effectiveVideoInputDevices = useMemo(() => mergeDevices(videoInputDevices, detectedDevices.videoinput), [detectedDevices.videoinput, videoInputDevices]);
+    const settingsChromeVariables = useMemo(() => {
+      const vars = getParticipantThemeVariables(participantColorSeed, settings.appearance.profileGradient);
+      return vars as React.CSSProperties;
+    }, [participantColorSeed, settings.appearance.profileGradient]);
+
+    const selectProfileGradientPreset = useCallback(
+      (from: string, to: string) => {
+        onUpdateAppearance({
+          profileGradient: {
+            mode: "custom",
+            from,
+            to,
+          },
+        });
+      },
+      [onUpdateAppearance],
+    );
 
     const filteredSections = useMemo(() => {
       if (!searchQuery.trim()) {
@@ -186,6 +227,12 @@ export const SettingsDialog = React.memo(
         setActiveSection(filteredSections[0]?.id ?? "audio");
       }
     }, [activeSection, filteredSections]);
+
+    useEffect(() => {
+      if (isOpen) {
+        setIsNavOpen(true);
+      }
+    }, [isOpen]);
 
     useEffect(() => {
       if (!isOpen) {
@@ -231,12 +278,12 @@ export const SettingsDialog = React.memo(
           return (
             <div className="space-y-5">
               <SectionCard title="Microphone" description="Choose the live input device and clean up background noise.">
-                <DeviceSelector type="audioinput" devices={effectiveAudioInputDevices} selectedDeviceId={settings.audio.selectedInput} onChange={(deviceId) => onUpdateAudio({ selectedInput: deviceId })} label="Input device" audioLevel={audioLevel} participantColorSeed={participantColorSeed} />
+                <DeviceSelector type="audioinput" devices={effectiveAudioInputDevices} selectedDeviceId={settings.audio.selectedInput} onChange={(deviceId) => onUpdateAudio({ selectedInput: deviceId })} label="Input device" audioLevel={audioLevel} participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
                 <NoiseSuppressionToggle enabled={settings.audio.noiseSuppression} onChange={(enabled) => onUpdateAudio({ noiseSuppression: enabled })} level="medium" />
               </SectionCard>
 
               <SectionCard title="Speakers" description="Route audio where you want it and tune playback volume.">
-                <DeviceSelector type="audiooutput" devices={effectiveAudioOutputDevices} selectedDeviceId={settings.audio.selectedOutput} onChange={(deviceId) => onUpdateAudio({ selectedOutput: deviceId })} label="Output device" participantColorSeed={participantColorSeed} />
+                <DeviceSelector type="audiooutput" devices={effectiveAudioOutputDevices} selectedDeviceId={settings.audio.selectedOutput} onChange={(deviceId) => onUpdateAudio({ selectedOutput: deviceId })} label="Output device" participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
                 <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
                     <VolumeHighIcon className="h-4 w-4 text-primary" />
@@ -251,12 +298,12 @@ export const SettingsDialog = React.memo(
           return (
             <div className="space-y-5">
               <SectionCard title="Camera" description="Pick the active camera and confirm the preview before teaching.">
-                <DeviceSelector type="videoinput" devices={effectiveVideoInputDevices} selectedDeviceId={settings.video.selectedInput} onChange={(deviceId) => onUpdateVideo({ selectedInput: deviceId })} label="Camera" previewTrack={videoTrack} participantColorSeed={participantColorSeed} />
+                <DeviceSelector type="videoinput" devices={effectiveVideoInputDevices} selectedDeviceId={settings.video.selectedInput} onChange={(deviceId) => onUpdateVideo({ selectedInput: deviceId })} label="Camera" previewTrack={videoTrack} participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
               </SectionCard>
               {enableBackgroundEffects ? (
                 <SectionCard title="Background Effects" description="Blur distractions or swap in a background locally for this browser.">
                   {isBackgroundEffectsSupported ? (
-                    <BackgroundEffectsPicker effects={[...backgroundEffects]} selectedEffectId={selectedBackgroundEffectId} onSelect={onSelectBackgroundEffect ?? (() => {})} onCustomUpload={onUploadBackgroundEffect} disabled={isApplyingBackgroundEffect} participantColorSeed={participantColorSeed} />
+                    <BackgroundEffectsPicker effects={[...backgroundEffects]} selectedEffectId={selectedBackgroundEffectId} onSelect={onSelectBackgroundEffect ?? (() => {})} onCustomUpload={onUploadBackgroundEffect} disabled={isApplyingBackgroundEffect} participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
                   ) : (
                     <div className="rounded-2xl border border-border/50 bg-card/60 p-4 text-sm text-muted-foreground">Background effects are not supported in this browser yet.</div>
                   )}
@@ -316,6 +363,73 @@ export const SettingsDialog = React.memo(
                 </SectionCard>
               )}
 
+              <SectionCard title="Profile Gradient" description="Personalize how you appear to others in the room. Default follows your name.">
+                <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                  <div className="mb-4 flex items-center gap-4">
+                    <div
+                      className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold text-white shadow-lg ring-1 ring-white/20"
+                      style={{ background: profilePreviewGradient }}
+                      aria-hidden="true"
+                    >
+                      {profilePreviewInitials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-foreground">{participantColorSeed?.trim() || "You"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {profileGradientMode === "auto" ? "Currently dynamic based on your name" : selectedProfileGradientPreset ? `Using the "${selectedProfileGradientPreset.label}" preset` : "Using a custom pinned colorway"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <button
+                      type="button"
+                      onClick={() => onUpdateAppearance({ profileGradient: { mode: "auto" } })}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-xl border p-3.5 transition-all",
+                        profileGradientMode === "auto" ? "border-primary bg-primary/10 text-primary shadow-sm shadow-primary/10" : "border-border/50 bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg border", profileGradientMode === "auto" ? "border-primary/30 bg-primary/20" : "border-border/60 bg-background")}>
+                          <SparklesIcon className="h-4 w-4" />
+                        </div>
+                        <div className="text-left text-sm font-semibold">Automatic Identity</div>
+                      </div>
+                      {profileGradientMode === "auto" && <div className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">Active</div>}
+                    </button>
+
+                    <div className="space-y-3">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">Color Presets</div>
+                      <div className="grid grid-cols-4 gap-3 sm:grid-cols-6" role="radiogroup" aria-label="Profile gradient presets">
+                        {PARTICIPANT_GRADIENT_PRESETS.map((preset) => {
+                          const isSelected = profileGradientMode === "custom" && preset.id === selectedProfileGradientPreset?.id;
+
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => selectProfileGradientPreset(preset.from, preset.to)}
+                              aria-label={`Use ${preset.label} profile gradient`}
+                              aria-pressed={isSelected}
+                              className={cn(
+                                "group relative flex aspect-square w-full items-center justify-center rounded-xl border shadow-sm transition-all",
+                                isSelected ? "border-primary ring-2 ring-primary/30 ring-offset-2 ring-offset-background" : "border-border/60 hover:border-primary/40",
+                              )}
+                              style={{ background: `linear-gradient(135deg, ${preset.from} 0%, ${preset.to} 100%)` }}
+                            >
+                              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background opacity-0 transition-opacity group-hover:opacity-100">
+                                {preset.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
               <SectionCard title="Layout" description="Persist the room composition you want to land in first.">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {(
@@ -337,6 +451,7 @@ export const SettingsDialog = React.memo(
                   ))}
                 </div>
                 <ToggleRow title="Show filmstrip" description="Keep the participant strip visible by default." checked={settings.appearance.showFilmstrip} onChange={(checked) => onUpdateAppearance({ showFilmstrip: checked })} />
+                <ToggleRow title="Ambient background" description="Show a glowing animated gradient behind the meeting room." checked={settings.appearance.ambientBackground} onChange={(checked) => onUpdateAppearance({ ambientBackground: checked })} />
                 <ToggleRow title="Reduced motion" description="Turn down transitions and ambient motion." checked={settings.appearance.reducedMotion} onChange={(checked) => onUpdateAppearance({ reducedMotion: checked })} />
               </SectionCard>
             </div>
@@ -384,7 +499,7 @@ export const SettingsDialog = React.memo(
                 <SectionCard title="Picture in Picture" description="Fallback controls if automatic opening is blocked by the browser.">
                   <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                     <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium text-foreground">Manual open</div>
                         <div className="text-xs text-muted-foreground">{isPictureInPictureSupported ? (isPictureInPictureActive ? "Picture-in-Picture is already open." : "Open PiP manually if the browser blocked automatic opening.") : "Picture-in-Picture is not supported in this browser."}</div>
                       </div>
@@ -414,6 +529,9 @@ export const SettingsDialog = React.memo(
       }
     };
 
+    const showSidebar = isDesktop || isNavOpen;
+    const showContent = isDesktop || !isNavOpen;
+
     return (
       <Dialog.Root
         open={isOpen}
@@ -424,38 +542,43 @@ export const SettingsDialog = React.memo(
         }}
       >
         <Dialog.Portal>
-          <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm", !disableMotion && "animate-in fade-in duration-200")} />
+          <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-background/80", !disableMotion && "animate-in fade-in duration-200")} />
           <Dialog.Popup
             className={cn(
-              "fixed inset-x-4 top-1/2 z-[101] h-[min(720px,calc(100vh-2rem))] -translate-y-1/2 overflow-hidden rounded-[28px] border border-border/60 bg-card/80 backdrop-blur-xl text-card-foreground shadow-2xl md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
-              !disableMotion && "animate-in fade-in zoom-in-[0.98] slide-in-from-bottom-4 duration-200",
-              className,
+              "fixed inset-0 z-[101] flex flex-col overflow-hidden bg-card text-card-foreground shadow-2xl md:inset-x-4 md:top-1/2 md:h-[min(720px,calc(100vh-2rem))] md:-translate-y-1/2 md:rounded-[28px] md:border md:border-border md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
+              !disableMotion && "animate-in fade-in duration-300 ease-out",
+              !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
             )}
-            style={themeVariables as React.CSSProperties}
+            style={settingsChromeVariables}
           >
             <Dialog.Title className="sr-only">Meeting settings</Dialog.Title>
             <div className="flex h-full flex-col md:flex-row">
-              <aside className="flex w-full shrink-0 flex-col border-b border-border/50 bg-secondary/20 md:w-[280px] md:border-b-0 md:border-r">
-                <div className="p-5">
-                  <div className="mb-5 flex items-center gap-2">
-                    <Settings01Icon className="h-5 w-5 text-primary" />
-                    <div>
-                      <div className="text-base font-semibold">Settings</div>
-                      <div className="text-xs text-muted-foreground">Local to this browser</div>
+              <aside className={cn("flex w-full shrink-0 flex-col border-border/50 bg-muted/30 md:w-[280px] md:border-r", !showSidebar && "hidden")}>
+                <div className="p-5 pb-4 md:p-6">
+                  <div className="mb-5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Settings01Icon className="h-5 w-5 text-primary" />
+                      <div>
+                        <div className="text-base font-semibold">Settings</div>
+                        <div className="text-xs text-muted-foreground">Local to this browser</div>
+                      </div>
                     </div>
+                    <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" className="md:hidden" />
                   </div>
-                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" icon={<Search01Icon className="h-4 w-4" />} fullWidth className="rounded-2xl border-border/50 bg-background/80" aria-label="Search settings" />
+                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" icon={<Search01Icon className="h-4 w-4" />} fullWidth className="rounded-2xl border-border/50 bg-muted/50" aria-label="Search settings" />
                 </div>
-                <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+                <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6 md:px-4">
                   {filteredSections.map((section) => {
                     const Icon = section.icon;
-
                     return (
                       <button
                         key={section.id}
                         type="button"
-                        onClick={() => setActiveSection(section.id)}
-                        className={cn("flex w-full items-start gap-3 rounded-2xl px-4 py-3 text-left transition-colors", activeSection === section.id ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" : "text-muted-foreground hover:bg-background/80 hover:text-foreground")}
+                        onClick={() => {
+                          setActiveSection(section.id);
+                          setIsNavOpen(false);
+                        }}
+                        className={cn("flex w-full items-start gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors md:py-3", activeSection === section.id ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
                       >
                         <Icon className="mt-0.5 h-4 w-4 shrink-0" />
                         <span className="min-w-0">
@@ -465,20 +588,23 @@ export const SettingsDialog = React.memo(
                       </button>
                     );
                   })}
-                  {filteredSections.length === 0 && <div className="rounded-2xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">No matching settings.</div>}
+                  {filteredSections.length === 0 && <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">No matching settings.</div>}
                 </nav>
               </aside>
 
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="flex items-start justify-between border-b border-border/50 px-5 py-5 md:px-7">
-                  <div>
-                    <h2 className="text-xl font-semibold text-foreground">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{SECTIONS.find((section) => section.id === activeSection)?.description}</p>
+              <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
+                <div className="flex items-start justify-between border-b border-border/50 px-5 py-4 md:px-7 md:py-6">
+                  <div className="flex items-center gap-3">
+                    <IconButton icon={<ArrowLeft02Icon className="h-5 w-5" />} variant="ghost" onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections" />
+                    <div>
+                      <h2 className="text-lg font-semibold text-foreground md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                      <p className="mt-0.5 text-xs text-muted-foreground md:mt-1 md:text-sm">{SECTIONS.find((section) => section.id === activeSection)?.description}</p>
+                    </div>
                   </div>
                   <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-7">
-                  <div className="mx-auto max-w-[560px]">{renderSectionContent()}</div>
+                  <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                 </div>
               </div>
             </div>

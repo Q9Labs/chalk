@@ -98,7 +98,7 @@ export const WhatsNewDialog = React.memo<WhatsNewDialogProps>(({ isOpen, onClose
   });
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm", "bg-background/80", className)} role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
+    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4", "bg-background/80", className)} role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
       <div ref={modalRef} tabIndex={-1} className={cn("w-full max-w-3xl overflow-hidden rounded-xl shadow-lg", "bg-card", "border border-border", "flex flex-col max-h-[85vh]", !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200")}>
         {/* Main content: Image left (40%), Content right (60%) */}
         <div className="flex flex-1 min-h-0">

@@ -3,9 +3,10 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act } from "react";
 
 import { SettingsDialog } from "../../components/composite/SettingsDialog";
+import { PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
 
 const settings = {
-  version: 3,
+  version: 5,
   audio: {
     selectedInput: undefined,
     selectedOutput: undefined,
@@ -18,9 +19,14 @@ const settings = {
   },
   appearance: {
     theme: "system" as const,
+    gradient: "default" as const,
+    profileGradient: {
+      mode: "auto" as const,
+    },
     layout: "grid" as const,
     showFilmstrip: true,
     reducedMotion: false,
+    ambientBackground: true,
   },
   experience: {
     showInviteToast: true,
@@ -35,6 +41,21 @@ describe("SettingsDialog", () => {
   afterEach(() => {
     globalThis.navigator.mediaDevices ??= {} as MediaDevices;
     globalThis.navigator.mediaDevices.enumerateDevices = async () => [];
+  });
+
+  // Mock matchMedia to simulate desktop by default
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation((query) => ({
+      matches: query.includes("min-width: 768px") || query.includes("min-width: 1024px"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
   });
 
   it("falls back to browser-enumerated media devices", async () => {
@@ -73,10 +94,10 @@ describe("SettingsDialog", () => {
     expect(getByRole("heading", { name: "Camera" })).toBeDefined();
   });
 
-  it("keeps a fixed dialog shell height across sections", () => {
+  it("keeps a fixed dialog shell height across sections on desktop", () => {
     const { getByRole } = render(<SettingsDialog isOpen onClose={() => {}} settings={settings} onUpdateAudio={() => {}} onUpdateVideo={() => {}} onUpdateAppearance={() => {}} onUpdateExperience={() => {}} />);
 
-    expect(getByRole("dialog", { name: "Meeting settings" }).className).toMatch(/\bh-\[min\(720px/);
+    expect(getByRole("dialog", { name: "Meeting settings" }).className).toMatch(/md:h-\[min\(720px/);
     expect(getByRole("dialog", { name: "Meeting settings" }).className).not.toContain("max-h-");
   });
 
@@ -142,4 +163,59 @@ describe("SettingsDialog", () => {
     fireEvent.click(getByRole("button", { name: "Open Picture-in-Picture now" }));
     expect(onOpenPictureInPicture).toHaveBeenCalledTimes(1);
   });
+
+  it("lets users pin a preset profile gradient from the swatch picker", () => {
+    const onUpdateAppearance = vi.fn();
+    const preset = PARTICIPANT_GRADIENT_PRESETS[2];
+    const { getByText, getByRole, queryByLabelText } = render(
+      <SettingsDialog
+        isOpen
+        onClose={() => {}}
+        settings={settings}
+        onUpdateAudio={() => {}}
+        onUpdateVideo={() => {}}
+        onUpdateAppearance={onUpdateAppearance}
+        onUpdateExperience={() => {}}
+        participantColorSeed="Hasan Shoaib"
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(getByText("Appearance"));
+    });
+
+    expect(queryByLabelText("Gradient start color")).toBeNull();
+    fireEvent.click(getByRole("button", { name: `Use ${preset.label} profile gradient` }));
+    expect(onUpdateAppearance).toHaveBeenCalledWith({
+      profileGradient: {
+        mode: "custom",
+        from: preset.from,
+        to: preset.to,
+      },
+    });
+  });
+
+  it("makes the auto profile gradient option explicit", () => {
+    const { getByText, getByRole } = render(
+      <SettingsDialog
+        isOpen
+        onClose={() => {}}
+        settings={settings}
+        onUpdateAudio={() => {}}
+        onUpdateVideo={() => {}}
+        onUpdateAppearance={() => {}}
+        onUpdateExperience={() => {}}
+        participantColorSeed="Hasan Shoaib"
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(getByText("Appearance"));
+    });
+
+    expect(getByRole("button", { name: "Use automatic profile gradient" })).toBeDefined();
+    expect(getByText("Default")).toBeDefined();
+    expect(getByText("Auto")).toBeDefined();
+  });
+
 });

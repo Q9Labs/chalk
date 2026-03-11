@@ -8,11 +8,12 @@ import { cn } from "../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Video01Icon, Download01Icon, Share01Icon, Calendar01Icon, Clock01Icon, File02Icon, Search01Icon, Database01Icon, AlertCircleIcon, CheckmarkCircle01Icon, InformationCircleIcon, Sun01Icon, Moon02Icon, Home01Icon, Archive01Icon, Settings03Icon } from "@hugeicons/core-free-icons";
 import { useTheme } from "../context/theme";
-import { toast, Toaster } from "sonner";
+import { toast, NotificationStack } from "@q9labs/chalk-react";
 import { ScheduledClassesPanel } from "../features/classes/components/ScheduledClassesPanel";
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@q9labs/chalk-ui";
 import { ChalkLogo } from "../components/ChalkLogo";
 import { SettingsModal } from "../components/SettingsModal";
+import { useProfileAvatar } from "../lib/useProfileAvatar";
 import { Logout01Icon } from "@hugeicons/core-free-icons";
 
 export const Route = createFileRoute("/dashboard")({
@@ -61,12 +62,6 @@ function formatDuration(seconds: number) {
   return `${s}s`;
 }
 
-function getAvatarGradient(email: string) {
-  const hash = email.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const gradients = ["from-blue-500 to-cyan-400", "from-purple-500 to-pink-400", "from-emerald-500 to-teal-400", "from-orange-500 to-yellow-400", "from-indigo-500 to-purple-400"];
-  return gradients[hash % gradients.length];
-}
-
 function DashboardPage() {
   const apiUrl = useMemo(() => getApiUrl(), []);
   const sdkClient = useMemo(
@@ -97,8 +92,9 @@ function DashboardPage() {
     if (state.kind === "ready") return "hasan@q9labs.ai";
     return "guest@chalk.ai";
   }, [state]);
-
-  const avatarGradient = useMemo(() => getAvatarGradient(userEmail), [userEmail]);
+  const avatarProfile = useProfileAvatar({
+    fallbackSeed: userEmail,
+  });
 
   const handleLogout = useCallback(() => {
     // Simple logout: clear state and reload
@@ -342,7 +338,7 @@ function DashboardPage() {
 
   return (
     <div className="font-app min-h-screen bg-muted/40 selection:bg-primary/20 flex flex-col">
-      <Toaster position="top-right" theme={theme === "nord" ? "dark" : theme} />
+      <NotificationStack notifications={[]} onDismiss={() => {}} />
 
       {/* Top Navigation */}
       <header className="sticky top-0 z-50 h-16 w-full border-b border-border bg-background/80 backdrop-blur-xl flex items-center justify-between px-6">
@@ -385,9 +381,10 @@ function DashboardPage() {
           <DropdownMenu>
             <DropdownMenuTrigger>
               <button
-                className={cn("w-9 h-9 rounded-full flex items-center justify-center border border-border/50 cursor-pointer hover:ring-2 ring-primary/30 transition-all ml-1 overflow-hidden bg-gradient-to-br shadow-inner outline-none focus-visible:ring-2 focus-visible:ring-primary", avatarGradient)}
+                className="w-9 h-9 rounded-full flex items-center justify-center border border-border/50 cursor-pointer hover:ring-2 ring-primary/30 transition-all ml-1 overflow-hidden shadow-inner outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                style={{ backgroundImage: avatarProfile.backgroundImage }}
               >
-                <span className="text-white font-black text-xs tracking-tighter uppercase">{userEmail.substring(0, 2)}</span>
+                <span className="text-white font-black text-xs tracking-tighter uppercase">{avatarProfile.initials}</span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 mt-2">

@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from "bun:test";
+import { afterAll, beforeEach, describe, it, expect, vi } from "bun:test";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { HotkeyManager } from "@tanstack/react-hotkeys";
 import { MeetingRoom } from "../../components/full/MeetingRoom";
@@ -6,6 +6,10 @@ import { SharedPictureInPictureProvider } from "../../components/full/picture-in
 
 vi.mock("../../components/composite/ParticipantList/ParticipantOptionsMenu", () => ({
   ParticipantOptionsMenu: () => null,
+}));
+
+vi.mock("../../components/full/WhiteboardPanel", () => ({
+  WhiteboardPanel: () => <div aria-label="Whiteboard panel" />,
 }));
 
 // Mock everything
@@ -20,6 +24,8 @@ global.MediaStreamTrack = vi.fn().mockImplementation(() => ({
   stop: vi.fn(),
 })) as any;
 const originalDocumentPictureInPicture = window.documentPictureInPicture;
+const originalRequestAnimationFrame = window.requestAnimationFrame;
+const originalCancelAnimationFrame = window.cancelAnimationFrame;
 const setNavigatorPlatform = (platform: string, userAgent: string) => {
   Object.defineProperty(window.navigator, "platform", {
     configurable: true,
@@ -38,8 +44,15 @@ describe("MeetingRoom", () => {
     localStorage.clear();
     vibrateSpy.mockClear();
     window.documentPictureInPicture = originalDocumentPictureInPicture;
+    window.requestAnimationFrame = originalRequestAnimationFrame ?? ((callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0)) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = originalCancelAnimationFrame ?? ((handle: number) => window.clearTimeout(handle)) as typeof window.cancelAnimationFrame;
     HotkeyManager.resetInstance();
     setNavigatorPlatform("Win32", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+  });
+
+  afterAll(() => {
+    window.requestAnimationFrame = originalRequestAnimationFrame;
+    window.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
   const localParticipant = {
@@ -66,9 +79,50 @@ describe("MeetingRoom", () => {
     expect(getByText("Test Room")).toBeDefined();
   });
 
+  it("hides the local share preview in the main stage to prevent mirror loops", () => {
+    const localScreenSharer = {
+      ...localParticipant,
+      isScreenSharing: true,
+      screenShareTrack: { kind: "video", readyState: "live" } as MediaStreamTrack,
+    };
+
+    const { getByText, queryByText } = render(
+      <MeetingRoom
+        roomName="Test Room"
+        localParticipant={localScreenSharer}
+        participants={[localScreenSharer, { id: "p1", displayName: "Alice" }]}
+        enableTour={false}
+      />,
+    );
+
+    expect(getByText("Preview hidden in this window")).toBeDefined();
+    expect(queryByText("Shared by Me")).toBeNull();
+  });
+
   it("shows chat panel when defaultChatOpen is true", () => {
     const { getByLabelText } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={[]} defaultChatOpen={true} />);
     expect(getByLabelText("Chat panel")).toBeDefined();
+  });
+
+  it("dispatches a resize after opening chat with whiteboard already open", async () => {
+    const dispatchEventSpy = vi.spyOn(window, "dispatchEvent");
+
+    try {
+      const { getByRole, getByLabelText } = render(
+        <MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} enableWhiteboard={true} isWhiteboardOpen={true} />,
+      );
+
+      dispatchEventSpy.mockClear();
+
+      fireEvent.click(getByRole("button", { name: "Chat" }));
+
+      await waitFor(() => {
+        expect(getByLabelText("Chat panel")).toBeDefined();
+        expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "resize" }));
+      });
+    } finally {
+      dispatchEventSpy.mockRestore();
+    }
   });
 
   it("keeps mobile mute control clickable when invite toast is visible", () => {
@@ -104,9 +158,20 @@ describe("MeetingRoom", () => {
 
     render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} onToggleMute={onToggleMute} />);
 
-    fireEvent.keyDown(window, { key: "m" });
+    fireEvent.keyDown(document, { key: "m" });
 
     expect(onToggleMute).toHaveBeenCalledTimes(1);
+    expect(vibrateSpy).toHaveBeenCalled();
+  });
+
+  it("fires haptics for video keyboard shortcuts", () => {
+    const onToggleVideo = vi.fn();
+
+    render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} onToggleVideo={onToggleVideo} />);
+
+    fireEvent.keyDown(document, { key: "v" });
+
+    expect(onToggleVideo).toHaveBeenCalledTimes(1);
     expect(vibrateSpy).toHaveBeenCalled();
   });
 

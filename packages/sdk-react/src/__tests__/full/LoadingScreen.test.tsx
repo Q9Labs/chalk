@@ -2,6 +2,7 @@ import React from "react";
 import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { LoadingScreen } from "../../components/full/LoadingScreen";
+import { getParticipantColor } from "../../utils/colorGenerator";
 
 describe("LoadingScreen", () => {
   it("renders correctly with default message", () => {
@@ -19,6 +20,14 @@ describe("LoadingScreen", () => {
     const { container } = render(<LoadingScreen />);
     expect(container.firstChild).toBeDefined();
     expect(container.querySelector('[role="status"]')).toBeDefined();
+  });
+
+  it("uses the provided gradient preference for its ambient color", () => {
+    const gradientPreference = { mode: "custom" as const, from: "#ff00aa", to: "#7c3aed" };
+    const expectedPrimary = getParticipantColor("Hasan", gradientPreference).primary;
+    const { container } = render(<LoadingScreen displayName="Hasan" gradientPreference={gradientPreference} />);
+
+    expect(container.querySelector(".animate-pulse")).toHaveStyle({ backgroundColor: expectedPrimary });
   });
 
   it("rotates supporting messages", async () => {

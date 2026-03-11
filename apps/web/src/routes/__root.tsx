@@ -54,6 +54,26 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('chalk-theme') || 'dark';
+                  var root = document.documentElement;
+                  root.classList.remove('light', 'dark', 'nord');
+                  if (theme === 'nord') {
+                    root.classList.add('dark', 'nord');
+                  } else {
+                    root.classList.add(theme);
+                  }
+                  root.style.colorScheme = (theme === 'light' ? 'light' : 'dark');
+                  root.setAttribute('data-chalk-theme', theme);
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
         {import.meta.env.DEV && <script src="//unpkg.com/react-grab/dist/index.global.js" crossOrigin="anonymous" />}
       </head>
       <body>
@@ -189,7 +209,7 @@ function RootComponent() {
     <ThemeProvider>
       <ErrorProvider>
         <div className="overflow-hidden bg-background text-foreground">
-          <Outlet />
+          <Outlet context={{ setIsDebugOpen }} />
           <WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
 
           {/* Version Trigger - Bottom Right */}

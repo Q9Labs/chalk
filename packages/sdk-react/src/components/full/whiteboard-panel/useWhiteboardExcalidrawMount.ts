@@ -10,11 +10,12 @@ interface UseWhiteboardExcalidrawMountParams {
   resolvedTheme: "light" | "dark";
   excalidrawCssPath: string;
   session: WhiteboardSessionLike;
+  localParticipantColor?: string;
   onExcalidrawApiReady?: (api: ExcalidrawImperativeAPI) => void;
   onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
 }
 
-export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidrawCssPath, session, onExcalidrawApiReady, onFileSyncStateChange }: UseWhiteboardExcalidrawMountParams) {
+export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidrawCssPath, session, localParticipantColor, onExcalidrawApiReady, onFileSyncStateChange }: UseWhiteboardExcalidrawMountParams) {
   const collabEngineRef = useRef<CollabEngine | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const didReportApiRef = useRef(false);
@@ -56,6 +57,16 @@ export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidra
         root = createRoot(containerRef.current);
 
         const ExcalidrawWrapper = () => {
+          useEffect(() => {
+            if (containerRef.current && localParticipantColor) {
+              const root = containerRef.current;
+              root.style.setProperty("--color-primary", localParticipantColor);
+              root.style.setProperty("--color-primary-darker", localParticipantColor);
+              root.style.setProperty("--color-primary-darkest", localParticipantColor);
+              root.style.setProperty("--accent-color", localParticipantColor);
+            }
+          }, []);
+
           const handleChange = (elements: readonly unknown[], appState: unknown, files: BinaryFiles) => {
             collabEngineRef.current?.handleChange(elements as readonly OrderedExcalidrawElement[], appState as AppState, files);
           };
@@ -66,7 +77,7 @@ export function useWhiteboardExcalidrawMount({ canDraw, resolvedTheme, excalidra
 
           const isDark = resolvedTheme === "dark";
           const backgroundColor = isDark ? "#000" : "#0000";
-          const strokeColor = "#4CB9FF";
+          const strokeColor = localParticipantColor || "#4CB9FF";
 
           return createElement(Excalidraw, {
             excalidrawAPI: (api: unknown) => {

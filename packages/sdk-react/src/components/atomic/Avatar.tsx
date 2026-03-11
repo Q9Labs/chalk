@@ -1,6 +1,8 @@
 import React, { useMemo } from "react";
 import { cn } from "../../utils/cn";
-import { getParticipantAvatarGradient } from "../../utils/colorGenerator";
+import { getParticipantAvatarGradient, getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
+import { useMeetingRoomTheme } from "../full/meeting-room/useMeetingRoomTheme";
 
 export interface AvatarProps {
   name: string;
@@ -9,6 +11,7 @@ export interface AvatarProps {
   status?: "online" | "away" | "busy" | "offline";
   className?: string;
   style?: React.CSSProperties;
+  gradientPreference?: ParticipantGradientPreference;
 }
 
 const sizeMap = {
@@ -27,7 +30,7 @@ const statusColorMap = {
   offline: "var(--muted-foreground)",
 };
 
-export const Avatar = React.memo(({ name, src, size = "md", status, className, style }: AvatarProps) => {
+export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference }: AvatarProps) => {
   const initials = useMemo(() => {
     if (!name || name.trim() === "") return "?";
     const cleanName = name.trim();
@@ -42,7 +45,12 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
     );
   }, [name]);
 
-  const gradient = useMemo(() => getParticipantAvatarGradient(name || "unknown"), [name]);
+  const { settings } = useMeetingRoomSettings();
+  const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
+  const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
+
+  const participantColors = useMemo(() => getParticipantColor(name || "unknown", gradientPreference), [gradientPreference, name]);
+  const gradient = useMemo(() => (isDarkerGradient ? `linear-gradient(135deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantAvatarGradient(name || "unknown", gradientPreference)), [gradientPreference, name, isDarkerGradient, participantColors]);
   const { size: pxSize, fontSize } = sizeMap[size];
 
   return (

@@ -3,6 +3,8 @@ import { User, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Input, Separator, Dialog, DialogContent, DialogClose } from "@q9labs/chalk-ui";
 import { useTheme } from "../context/theme";
+import { AVATAR_GRADIENT_PRESETS, DEFAULT_AVATAR_GRADIENT_PREFERENCE, getAvatarGradientCss, notifyUserSettingsUpdated } from "../lib/avatarGradient";
+import { useProfileAvatar } from "../lib/useProfileAvatar";
 import { cn } from "../lib/utils";
 
 interface SettingsModalProps {
@@ -17,6 +19,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [displayName, setDisplayName] = useState("");
   const [joinMuted, setJoinMuted] = useState(false);
   const [joinNoVideo, setJoinNoVideo] = useState(false);
+  const avatarProfile = useProfileAvatar({
+    displayNameOverride: displayName || undefined,
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -30,6 +35,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     localStorage.setItem("chalk_default_name", displayName);
     localStorage.setItem("chalk_join_muted", String(joinMuted));
     localStorage.setItem("chalk_join_no_video", String(joinNoVideo));
+    notifyUserSettingsUpdated();
     toast.success("Settings saved successfully");
   };
 
@@ -190,6 +196,65 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <div className="w-3/4 h-2.5 rounded-full bg-zinc-950" />
                       </div>
                     </button>
+                  </div>
+
+                  <Separator className="opacity-30" />
+
+                  <div className="space-y-5">
+                    <div>
+                      <label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Profile Gradient</label>
+                      <p className="mt-2 text-sm text-muted-foreground max-w-lg">Your avatar derives from your name by default. Or lock in one of these preset blends.</p>
+                    </div>
+
+                    <div className="rounded-[28px] border border-border/40 bg-muted/10 p-6">
+                      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/20 text-lg font-black uppercase tracking-tight text-white shadow-xl shadow-black/10" style={{ backgroundImage: avatarProfile.backgroundImage }}>
+                            {avatarProfile.initials}
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm font-bold text-foreground">{avatarProfile.title}</p>
+                            <p className="text-xs font-semibold text-muted-foreground">{avatarProfile.description}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          aria-label="Use derived profile gradient"
+                          onClick={() => avatarProfile.setPreference(DEFAULT_AVATAR_GRADIENT_PREFERENCE)}
+                          className={cn("group flex flex-col items-center gap-2 rounded-2xl border px-3 py-3 transition-all", avatarProfile.preference.mode === "derived" ? "border-primary bg-primary/10 shadow-lg shadow-primary/10" : "border-border/40 bg-background hover:border-primary/30")}
+                        >
+                          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 text-[11px] font-black uppercase tracking-tight text-white shadow-md" style={{ backgroundImage: getAvatarGradientCss(avatarProfile.gradient) }}>
+                            {avatarProfile.initials}
+                          </span>
+                          <span className="text-[11px] font-black uppercase tracking-widest text-foreground">Auto</span>
+                        </button>
+
+                        {AVATAR_GRADIENT_PRESETS.map((preset) => {
+                          const isSelected = avatarProfile.preference.mode === "preset" && avatarProfile.preference.presetId === preset.id;
+
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              aria-label={`Use ${preset.label} profile gradient`}
+                              onClick={() =>
+                                avatarProfile.setPreference({
+                                  mode: "preset",
+                                  presetId: preset.id,
+                                })
+                              }
+                              className={cn("group flex flex-col items-center gap-2 rounded-2xl border px-3 py-3 transition-all", isSelected ? "border-primary bg-primary/10 shadow-lg shadow-primary/10" : "border-border/40 bg-background hover:border-primary/30")}
+                            >
+                              <span className="h-12 w-12 rounded-full border border-white/20 shadow-md" style={{ backgroundImage: getAvatarGradientCss({ start: preset.start, end: preset.end }) }} />
+                              <span className="text-[11px] font-black uppercase tracking-widest text-foreground">{preset.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

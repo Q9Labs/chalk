@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "../../utils/cn";
 import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon } from "../../utils/icons";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface Notification {
   id: string;
@@ -21,6 +21,7 @@ export interface NotificationStackProps {
   position?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
   maxVisible?: number;
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
 }
 
@@ -31,14 +32,14 @@ const positionMap = {
   "bottom-left": "bottom-left" as const,
 };
 
-export const NotificationStack = React.memo<NotificationStackProps>(({ notifications, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, className }) => {
+export const NotificationStack = React.memo<NotificationStackProps>(({ notifications, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, participantGradientPreference, className }) => {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
       return document.documentElement.classList.contains("dark") ? "dark" : "light";
     }
     return "light";
   });
-  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
   useEffect(() => {
     const handleThemeChange = () => {
@@ -102,30 +103,39 @@ export const NotificationStack = React.memo<NotificationStackProps>(({ notificat
       visibleToasts={maxVisible}
       closeButton
       icons={{
-        info: <InformationCircleIcon size={20} className="text-primary" />,
-        success: <CheckmarkCircle02Icon size={20} className="text-success" />,
-        warning: <Alert02Icon size={20} className="text-warning" />,
-        error: <CancelCircleIcon size={20} className="text-destructive" />,
+        info: (
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary shrink-0">
+            <InformationCircleIcon size={18} />
+          </div>
+        ),
+        success: (
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-success/10 text-success shrink-0">
+            <CheckmarkCircle02Icon size={18} />
+          </div>
+        ),
+        warning: (
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-warning/10 text-warning shrink-0">
+            <Alert02Icon size={18} />
+          </div>
+        ),
+        error: (
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-destructive/10 text-destructive shrink-0">
+            <CancelCircleIcon size={18} />
+          </div>
+        ),
       }}
       toastOptions={{
+        unstyled: true,
         classNames: {
           toast: cn(
-            "group flex items-start gap-3 p-4 rounded-md shadow-lg min-w-[300px] max-w-md",
-            "bg-card border border-border border-l-4",
-            "data-[type=info]:border-l-primary",
-            "data-[type=success]:border-l-success",
-            "data-[type=warning]:border-l-warning",
-            "data-[type=error]:border-l-destructive",
-            "data-[type=info]:text-primary",
-            "data-[type=success]:text-success",
-            "data-[type=warning]:text-warning",
-            "data-[type=error]:text-destructive",
+            "group flex items-center gap-3 p-2 pr-3 rounded-xl shadow-2xl min-w-[280px] max-w-md",
+            "bg-card border border-border text-foreground",
             "chalk-animate-toast-in",
           ),
-          title: "text-sm font-medium text-foreground",
-          description: "text-sm text-muted-foreground",
-          actionButton: "mt-2 text-sm font-semibold text-foreground hover:underline focus:outline-none",
-          closeButton: "flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors",
+          title: "text-sm font-semibold leading-none",
+          description: "text-[11px] text-muted-foreground leading-tight",
+          actionButton: "ml-auto px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity",
+          closeButton: "!static !transform-none !bg-transparent !border-none !p-1 !m-0 !text-muted-foreground hover:!text-foreground transition-colors",
         },
       }}
       className={cn(className)}

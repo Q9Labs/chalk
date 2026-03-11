@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { MeetingLayout } from "../components/full/meeting-room/types";
 import { DEFAULT_STORED_VIDEO_BACKGROUND_EFFECT, type StoredVideoBackgroundEffect, type VideoBackgroundPresetId } from "../utils/videoBackgrounds";
@@ -18,9 +18,15 @@ export interface MeetingRoomSettings {
   appearance: {
     theme: "light" | "dark" | "system";
     gradient: "default" | "darker";
+    profileGradient: {
+      mode: "auto" | "custom";
+      from?: string;
+      to?: string;
+    };
     layout: MeetingLayout;
     showFilmstrip: boolean;
     reducedMotion: boolean;
+    ambientBackground: boolean;
   };
   experience: {
     showInviteToast: boolean;
@@ -35,7 +41,9 @@ interface StoredMeetingRoomSettings {
   version: number;
   audio?: Partial<MeetingRoomSettings["audio"]>;
   video?: Partial<MeetingRoomSettings["video"]>;
-  appearance?: Partial<MeetingRoomSettings["appearance"]>;
+  appearance?: Omit<Partial<MeetingRoomSettings["appearance"]>, "profileGradient"> & {
+    profileGradient?: Partial<MeetingRoomSettings["appearance"]["profileGradient"]>;
+  };
   experience?: Partial<MeetingRoomSettings["experience"]>;
 }
 
@@ -44,9 +52,8 @@ interface UseMeetingRoomSettingsOptions {
 }
 
 const SETTINGS_KEY = "chalk-meeting-settings";
-const SETTINGS_VERSION = 4;
-const PREVIOUS_SETTINGS_VERSION = 3;
-const LEGACY_SETTINGS_VERSION = 2;
+const SETTINGS_VERSION = 5;
+const SUPPORTED_SETTINGS_VERSIONS = new Set([SETTINGS_VERSION, 4, 3, 2]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -58,6 +65,10 @@ function withDefined<T extends Record<string, unknown>>(value: T) {
 
 function isVideoBackgroundPresetId(value: unknown): value is VideoBackgroundPresetId {
   return typeof value === "string" && value.startsWith("preset-");
+}
+
+function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 }
 
 function sanitizeStoredVideoBackgroundEffect(value: unknown): StoredVideoBackgroundEffect | undefined {
@@ -100,7 +111,7 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
   }
 
   const version = value.version;
-  if (version !== SETTINGS_VERSION && version !== PREVIOUS_SETTINGS_VERSION && version !== LEGACY_SETTINGS_VERSION) {
+  if (!SUPPORTED_SETTINGS_VERSIONS.has(Number(version))) {
     return null;
   }
 
@@ -129,9 +140,17 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
       ? withDefined({
           theme: appearance.theme === "light" || appearance.theme === "dark" || appearance.theme === "system" ? appearance.theme : undefined,
           gradient: appearance.gradient === "default" || appearance.gradient === "darker" ? appearance.gradient : undefined,
+          profileGradient: isRecord(appearance.profileGradient)
+            ? withDefined({
+                mode: appearance.profileGradient.mode === "auto" || appearance.profileGradient.mode === "custom" ? appearance.profileGradient.mode : undefined,
+                from: isHexColor(appearance.profileGradient.from) ? appearance.profileGradient.from : undefined,
+                to: isHexColor(appearance.profileGradient.to) ? appearance.profileGradient.to : undefined,
+              })
+            : undefined,
           layout: appearance.layout === "grid" || appearance.layout === "spotlight" || appearance.layout === "sidebar" ? appearance.layout : undefined,
           showFilmstrip: typeof appearance.showFilmstrip === "boolean" ? appearance.showFilmstrip : undefined,
           reducedMotion: typeof appearance.reducedMotion === "boolean" ? appearance.reducedMotion : undefined,
+          ambientBackground: typeof appearance.ambientBackground === "boolean" ? appearance.ambientBackground : undefined,
         })
       : undefined,
     experience: experience
@@ -146,34 +165,43 @@ function sanitizeStoredSettings(value: unknown): StoredMeetingRoomSettings | nul
   };
 }
 
-const createDefaultSettings = (defaults?: UseMeetingRoomSettingsOptions["defaults"]): MeetingRoomSettings => ({
-  version: SETTINGS_VERSION,
-  audio: {
-    outputVolume: 100,
-    noiseSuppression: true,
-    ...defaults?.audio,
-  },
-  video: {
-    backgroundEffect: DEFAULT_STORED_VIDEO_BACKGROUND_EFFECT,
-    ...defaults?.video,
-  },
-  appearance: {
-    theme: "system",
-    gradient: "default",
-    layout: "grid",
-    showFilmstrip: true,
-    reducedMotion: false,
-    ...defaults?.appearance,
-  },
-  experience: {
-    showInviteToast: true,
-    defaultOpenChat: false,
-    defaultOpenParticipants: false,
-    defaultOpenTranscription: false,
-    autoOpenPictureInPicture: true,
-    ...defaults?.experience,
-  },
-});
+const createDefaultSettings = (defaults?: UseMeetingRoomSettingsOptions["defaults"]): MeetingRoomSettings => {
+  const defaultAppearance = defaults?.appearance;
+
+  return {
+    version: SETTINGS_VERSION,
+    audio: {
+      outputVolume: 100,
+      noiseSuppression: true,
+      ...defaults?.audio,
+    },
+    video: {
+      backgroundEffect: DEFAULT_STORED_VIDEO_BACKGROUND_EFFECT,
+      ...defaults?.video,
+    },
+    appearance: {
+      theme: defaultAppearance?.theme ?? "system",
+      gradient: defaultAppearance?.gradient ?? "default",
+      profileGradient: {
+        mode: defaultAppearance?.profileGradient?.mode ?? "auto",
+        from: defaultAppearance?.profileGradient?.from,
+        to: defaultAppearance?.profileGradient?.to,
+      },
+      layout: defaultAppearance?.layout ?? "grid",
+      showFilmstrip: defaultAppearance?.showFilmstrip ?? true,
+      reducedMotion: defaultAppearance?.reducedMotion ?? false,
+      ambientBackground: defaultAppearance?.ambientBackground ?? true,
+    },
+    experience: {
+      showInviteToast: true,
+      defaultOpenChat: false,
+      defaultOpenParticipants: false,
+      defaultOpenTranscription: false,
+      autoOpenPictureInPicture: true,
+      ...defaults?.experience,
+    },
+  };
+};
 
 const mergeSettings = (base: MeetingRoomSettings, stored: StoredMeetingRoomSettings | null): MeetingRoomSettings => {
   if (!stored) {
@@ -185,7 +213,15 @@ const mergeSettings = (base: MeetingRoomSettings, stored: StoredMeetingRoomSetti
     ...stored,
     audio: { ...base.audio, ...stored.audio },
     video: { ...base.video, ...stored.video },
-    appearance: { ...base.appearance, ...stored.appearance },
+    appearance: {
+      ...base.appearance,
+      ...stored.appearance,
+      profileGradient: {
+        ...base.appearance.profileGradient,
+        ...stored.appearance?.profileGradient,
+        mode: stored.appearance?.profileGradient?.mode ?? base.appearance.profileGradient.mode,
+      },
+    },
     experience: { ...base.experience, ...stored.experience },
   };
 };
@@ -215,6 +251,33 @@ export function useMeetingRoomSettings({ defaults }: UseMeetingRoomSettingsOptio
     }
   });
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleSync = () => {
+      try {
+        const stored = localStorage.getItem(SETTINGS_KEY);
+        if (stored) {
+          setSettings(() => mergeSettings(baseSettings, sanitizeStoredSettings(JSON.parse(stored))));
+        }
+      } catch {
+        // Ignore
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === SETTINGS_KEY) handleSync();
+    };
+
+    window.addEventListener("chalk-settings-updated", handleSync);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("chalk-settings-updated", handleSync);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [baseSettings]);
+
   const persist = useCallback((next: MeetingRoomSettings) => {
     if (typeof window === "undefined") {
       return;
@@ -222,6 +285,7 @@ export function useMeetingRoomSettings({ defaults }: UseMeetingRoomSettingsOptio
 
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+      window.dispatchEvent(new Event("chalk-settings-updated"));
     } catch {
       // Ignore storage failures; keep the in-memory settings usable.
     }

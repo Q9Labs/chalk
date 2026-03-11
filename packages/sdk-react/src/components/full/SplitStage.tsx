@@ -68,7 +68,7 @@ export function SplitStage({ leftPanel, rightPanel, className, onLayoutChange }:
         {leftPanel}
       </Panel>
 
-      <Separator className="relative w-px bg-white/10 hover:bg-primary/50 transition-colors group z-50 flex items-center justify-center mx-1 focus:outline-none">
+      <Separator className="relative w-px bg-border hover:bg-primary transition-colors group z-50 flex items-center justify-center mx-1 focus:outline-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
           <DocketControl isLeftCollapsed={isLeftCollapsed} isRightCollapsed={isRightCollapsed} onMaximizeLeft={maximizeLeft} onMaximizeRight={maximizeRight} onReset={resetSplit} />
         </div>
@@ -85,8 +85,8 @@ function DocketControl({ isLeftCollapsed, isRightCollapsed, onMaximizeLeft, onMa
   return (
     <div
       className={cn(
-        "flex items-center gap-0.5 p-1 rounded-full shadow-2xl transition-all duration-300 ring-1 ring-white/20",
-        isLeftCollapsed || isRightCollapsed ? "bg-primary text-primary-foreground scale-110 opacity-100" : "bg-zinc-900/95 backdrop-blur-md scale-95 group-hover:scale-100 opacity-90 group-hover:opacity-100",
+        "flex items-center gap-0.5 p-1 rounded-full shadow-2xl transition-all duration-300 ring-1 ring-border",
+        isLeftCollapsed || isRightCollapsed ? "bg-primary text-primary-foreground scale-110 opacity-100" : "bg-popover text-popover-foreground scale-95 group-hover:scale-100 opacity-90 group-hover:opacity-100",
       )}
     >
       {!isLeftCollapsed && !isRightCollapsed && (
@@ -94,7 +94,7 @@ function DocketControl({ isLeftCollapsed, isRightCollapsed, onMaximizeLeft, onMa
           <Tooltip>
             <TooltipTrigger
               render={
-                <button onClick={onMaximizeLeft} className="p-1.5 hover:bg-white/10 rounded-full text-white/70 hover:text-white transition-colors">
+                <button onClick={onMaximizeLeft} className="p-1.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors">
                   <ArrowLeft01Icon className="w-3.5 h-3.5" />
                 </button>
               }
@@ -102,14 +102,14 @@ function DocketControl({ isLeftCollapsed, isRightCollapsed, onMaximizeLeft, onMa
             <TooltipContent side="top">Maximize Screen Share</TooltipContent>
           </Tooltip>
 
-          <div onDoubleClick={onReset} className="w-4 h-6 flex items-center justify-center cursor-col-resize text-white/30 hover:text-white/60">
+          <div onDoubleClick={onReset} className="w-4 h-6 flex items-center justify-center cursor-col-resize text-muted-foreground/30 hover:text-muted-foreground/60">
             <MoreVerticalIcon className="w-3.5 h-3.5" />
           </div>
 
           <Tooltip>
             <TooltipTrigger
               render={
-                <button onClick={onMaximizeRight} className="p-1.5 hover:bg-white/10 rounded-full text-white/70 hover:text-white transition-colors">
+                <button onClick={onMaximizeRight} className="p-1.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors">
                   <ArrowRight01Icon className="w-3.5 h-3.5" />
                 </button>
               }

@@ -3,7 +3,7 @@ import { Cancel01Icon, Search01Icon, ArrowDown01Icon, ArrowUp01Icon, Download01I
 import { TranscriptLine, IconButton, Input } from "../atomic";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
-import { getParticipantColor, getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { getParticipantColor, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface TranscriptEntry {
   id: string;
@@ -31,6 +31,7 @@ export interface TranscriptionPanelProps {
   variant?: "default" | "sidebar" | "mobile";
   localParticipantId?: string;
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
 }
 
@@ -179,7 +180,7 @@ function TurnSeparator() {
 }
 
 export const TranscriptionPanel = React.memo(
-  ({ transcripts, isLive = true, showSpeakerNames = true, showTimestamps = true, showConfidence = true, searchable = true, onExport, onCopyAll, onClose, position = "right", variant = "default", localParticipantId, participantColorSeed, className }: TranscriptionPanelProps) => {
+  ({ transcripts, isLive = true, showSpeakerNames = true, showTimestamps = true, showConfidence = true, searchable = true, onExport, onCopyAll, onClose, position = "right", variant = "default", localParticipantId, participantColorSeed, participantGradientPreference, className }: TranscriptionPanelProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -187,7 +188,7 @@ export const TranscriptionPanel = React.memo(
     const containerRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed ?? localParticipantId), [participantColorSeed, localParticipantId]);
+    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed ?? localParticipantId, participantGradientPreference), [participantColorSeed, participantGradientPreference, localParticipantId]);
 
     // Search matches
     const searchMatches = useMemo(() => findSearchMatches(transcripts, searchQuery), [transcripts, searchQuery]);
@@ -489,7 +490,7 @@ export const TranscriptionPanel = React.memo(
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col">
-            <div ref={containerRef} className={cn("rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px] flex-1", "bg-muted/30 backdrop-blur-sm border border-border/30")} onScroll={handleScroll}>
+            <div ref={containerRef} className={cn("rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px] flex-1", "bg-muted/50 border border-border/30")} onScroll={handleScroll}>
               {renderTranscriptContent()}
               {renderNewContentIndicator()}
             </div>

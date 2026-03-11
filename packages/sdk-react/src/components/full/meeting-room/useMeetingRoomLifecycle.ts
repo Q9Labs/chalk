@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import { useHaptics } from "../../../hooks/ui/useHaptics";
-
 interface UseMeetingRoomLifecycleOptions {
   enableTour: boolean;
   showTourOnFirstVisit: boolean;
   defaultChatOpen: boolean;
   onChatOpen?: () => void;
-  onToggleMute?: () => void;
-  onToggleVideo?: () => void;
   onLeave?: () => void;
   onTourComplete?: () => void;
   setShowTour: (show: boolean) => void;
@@ -17,10 +13,9 @@ interface UseMeetingRoomLifecycleOptions {
 
 const LEAVE_ANIMATION_MS = 600;
 
-export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defaultChatOpen, onChatOpen, onToggleMute, onToggleVideo, onLeave, onTourComplete, setShowTour, setIsExiting }: UseMeetingRoomLifecycleOptions) {
+export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defaultChatOpen, onChatOpen, onLeave, onTourComplete, setShowTour, setIsExiting }: UseMeetingRoomLifecycleOptions) {
   const leaveTimeoutRef = useRef<number | null>(null);
   const hasMarkedDefaultChatReadRef = useRef(false);
-  const { trigger } = useHaptics();
 
   const clearLeaveTimeout = useCallback(() => {
     if (leaveTimeoutRef.current !== null) {
@@ -65,35 +60,6 @@ export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defa
     hasMarkedDefaultChatReadRef.current = true;
     onChatOpen?.();
   }, [defaultChatOpen, onChatOpen]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) {
-        return;
-      }
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-      }
-      switch (event.key.toLowerCase()) {
-        case "m":
-          void trigger("selection");
-          onToggleMute?.();
-          break;
-        case "v":
-          void trigger("selection");
-          onToggleVideo?.();
-          break;
-        default:
-          break;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onToggleMute, onToggleVideo, trigger]);
 
   useEffect(() => clearLeaveTimeout, [clearLeaveTimeout]);
 

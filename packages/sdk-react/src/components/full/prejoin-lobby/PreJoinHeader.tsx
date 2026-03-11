@@ -32,7 +32,7 @@ export function PreJoinHeader({ roomName, isDarkMode, onToggleTheme }: PreJoinHe
         }}
         title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
         aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-        className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/10 text-(--foreground)"
+        className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-muted text-foreground"
       >
         {isDarkMode ? <Sun02Icon size={20} /> : <Moon02Icon size={20} />}
       </button>

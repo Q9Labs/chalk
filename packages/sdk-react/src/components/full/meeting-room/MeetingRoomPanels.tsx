@@ -1,4 +1,5 @@
 import { cn } from "../../../utils/cn";
+import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { ChatPanel, MobilePanel, ParticipantList, TranscriptionPanel } from "../../composite";
 import type { ChatMessage, MeetingPanel, Participant, TranscriptEntry } from "./types";
 
@@ -20,6 +21,7 @@ interface MeetingRoomPanelsProps {
   participantVolumes?: ReadonlyMap<string, number>;
   onParticipantVolumeChange?: (id: string, volume: number) => void;
   localParticipantColorSeed?: string;
+  localParticipantGradientPreference?: ParticipantGradientPreference;
 }
 
 const NOOP = () => {};
@@ -42,13 +44,14 @@ export function MeetingRoomPanels({
   participantVolumes,
   onParticipantVolumeChange,
   localParticipantColorSeed,
+  localParticipantGradientPreference,
 }: MeetingRoomPanelsProps) {
   const localParticipantId = allParticipants.find((participant) => participant.isLocal)?.id;
 
   return (
     <>
       {!isMobile && activePanel && (
-        <div className={cn("w-[360px] shrink-0 h-full rounded-3xl overflow-hidden flex flex-col bg-card/80 backdrop-blur-xl border border-border/50 shadow-xl transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]", "animate-in slide-in-from-right-10 fade-in duration-300")}>
+        <div className={cn("flex min-h-0 w-[360px] shrink-0 flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]", "animate-in slide-in-from-right-10 fade-in duration-300")}>
           {activePanel === "chat" && (
             <ChatPanel
               messages={chatMessages}
@@ -58,6 +61,7 @@ export function MeetingRoomPanels({
               localParticipantId={localParticipantId}
               onClose={onClosePanel}
               participantColorSeed={localParticipantColorSeed}
+              participantGradientPreference={localParticipantGradientPreference}
             />
           )}
           {activePanel === "participants" && (
@@ -73,9 +77,10 @@ export function MeetingRoomPanels({
               participantVolumes={participantVolumes}
               onParticipantVolumeChange={onParticipantVolumeChange}
               participantColorSeed={localParticipantColorSeed}
+              participantGradientPreference={localParticipantGradientPreference}
             />
           )}
-          {activePanel === "transcription" && <TranscriptionPanel transcripts={transcripts} onClose={onClosePanel} variant="sidebar" participantColorSeed={localParticipantColorSeed} />}
+          {activePanel === "transcription" && <TranscriptionPanel transcripts={transcripts} onClose={onClosePanel} variant="sidebar" participantColorSeed={localParticipantColorSeed} participantGradientPreference={localParticipantGradientPreference} />}
         </div>
       )}
 
@@ -89,6 +94,7 @@ export function MeetingRoomPanels({
             localParticipantId={localParticipantId}
             variant="mobile"
             participantColorSeed={localParticipantColorSeed}
+            participantGradientPreference={localParticipantGradientPreference}
           />
         </MobilePanel>
       )}
@@ -105,12 +111,13 @@ export function MeetingRoomPanels({
             participantVolumes={participantVolumes}
             onParticipantVolumeChange={onParticipantVolumeChange}
             participantColorSeed={localParticipantColorSeed}
+            participantGradientPreference={localParticipantGradientPreference}
           />
         </MobilePanel>
       )}
       {isMobile && activePanel === "transcription" && (
         <MobilePanel title="Transcript" onClose={onClosePanel}>
-          <TranscriptionPanel transcripts={transcripts} variant="mobile" participantColorSeed={localParticipantColorSeed} />
+          <TranscriptionPanel transcripts={transcripts} variant="mobile" participantColorSeed={localParticipantColorSeed} participantGradientPreference={localParticipantGradientPreference} />
         </MobilePanel>
       )}
     </>

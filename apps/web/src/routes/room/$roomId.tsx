@@ -58,6 +58,7 @@ export const Route = createFileRoute("/room/$roomId")({
 });
 
 function RoomPage() {
+  const { setIsDebugOpen } = Route.useRouteContext() as { setIsDebugOpen: (open: boolean) => void };
   const { roomId } = Route.useParams() as {
     roomId: string;
   };
@@ -259,6 +260,7 @@ function RoomPage() {
           layout: "grid",
           audioEnabled: defaults.audioEnabled,
         }}
+        onOpenDebug={() => setIsDebugOpen(true)}
         className="h-full w-full"
       />
 

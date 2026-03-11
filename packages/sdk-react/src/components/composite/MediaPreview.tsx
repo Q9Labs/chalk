@@ -35,7 +35,7 @@ export const MediaPreview = React.memo(({ videoTrack, audioLevel = 0, isVideoEna
         />
 
         <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
-          <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-md transition-colors", isAudioEnabled ? "bg-black/40" : "bg-red-500/20")}>
+          <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors", isAudioEnabled ? "bg-zinc-950/80" : "bg-red-500/20")}>
             <div className={cn("p-1 rounded-full", !isAudioEnabled && "text-red-500")}>{isAudioEnabled ? <Microphone01Icon size={14} className="text-white" /> : <MicrophoneOff01Icon size={14} />}</div>
             {isAudioEnabled && (
               <div className="w-24">

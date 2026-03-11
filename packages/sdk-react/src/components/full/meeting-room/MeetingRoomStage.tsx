@@ -2,6 +2,7 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useMemo } from "react";
 
 import { cn } from "../../../utils/cn";
+import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon } from "../../../utils/icons";
 import { ReactionBubble, VideoTile } from "../../atomic";
 import { NotificationStack, ScreenShareView, VideoGrid } from "../../composite";
@@ -26,6 +27,7 @@ interface MeetingRoomStageProps {
   activeReactions: readonly ActiveReaction[];
   isExiting: boolean;
   localParticipantColorSeed?: string;
+  localParticipantGradientPreference?: ParticipantGradientPreference;
 }
 
 export function MeetingRoomStage({
@@ -44,23 +46,38 @@ export function MeetingRoomStage({
   activeReactions,
   isExiting,
   localParticipantColorSeed,
+  localParticipantGradientPreference,
 }: MeetingRoomStageProps) {
-  const localParticipantColor = useMemo(() => localParticipantColorSeed ? getParticipantColor(localParticipantColorSeed).primary : undefined, [localParticipantColorSeed]);
+  const localParticipantColor = useMemo(() => localParticipantColorSeed ? getParticipantColor(localParticipantColorSeed, localParticipantGradientPreference).primary : undefined, [localParticipantColorSeed, localParticipantGradientPreference]);
+  const shouldSuppressLocalScreenSharePreview = Boolean(screenSharer?.isLocal && screenSharer.screenShareTrack);
+  const screenSharePanel = shouldSuppressLocalScreenSharePreview ? (
+    <div className="relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_transparent_38%),linear-gradient(180deg,_color-mix(in_oklab,var(--background)_96%,transparent),_color-mix(in_oklab,var(--background)_88%,var(--secondary)_12%))] p-6 text-center">
+      <div className="absolute inset-0 opacity-[0.12] [background-image:radial-gradient(circle,_var(--border)_1px,_transparent_1px)] [background-size:24px_24px]" />
+      <div className="absolute inset-x-[18%] top-1/2 h-px bg-primary/10 blur-sm" />
+      <div className="relative z-10 font-app max-w-xl">
+        <p className="text-sm font-semibold tracking-[-0.01em] text-primary/85">Screen share active</p>
+        <h2 className="font-display mt-5 text-[2.35rem] font-bold leading-[0.94] tracking-[-0.035em] text-foreground sm:text-[2.8rem]">Preview hidden in this window</h2>
+        <p className="mx-auto mt-5 max-w-lg text-[15px] font-medium leading-7 text-muted-foreground">Chalk hides your own shared screen here while you are presenting so opening the main window does not create the infinite mirror effect.</p>
+      </div>
+    </div>
+  ) : (
+    <ScreenShareView screenShareTrack={screenSharer?.screenShareTrack!} sharedByName={screenSharer?.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />
+  );
 
   return (
-    <div className={cn("flex-1 h-full min-h-0 relative flex rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]", isStageMode && layout === "sidebar" ? "flex-row" : "flex-col", isExiting && "chalk-animate-void-exit")}>
+    <div className={cn("relative flex h-full min-h-0 min-w-0 flex-1 rounded-3xl overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]", isStageMode && layout === "sidebar" ? "flex-row" : "flex-col", isExiting && "chalk-animate-void-exit")}>
       {isStageMode ? (
         <>
-          <div className="flex-1 relative min-h-0 min-w-0">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {isSplit && screenSharer?.screenShareTrack ? (
               <SplitStage
-                leftPanel={<ScreenShareView screenShareTrack={screenSharer.screenShareTrack} sharedByName={screenSharer.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />}
+                leftPanel={screenSharePanel}
                 rightPanel={<WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} localParticipantColor={localParticipantColor} />}
               />
             ) : enableWhiteboard && isWhiteboardOpen ? (
               <WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} localParticipantColor={localParticipantColor} />
             ) : (
-              <ScreenShareView screenShareTrack={screenSharer?.screenShareTrack!} sharedByName={screenSharer?.displayName || "Unknown"} participants={allParticipants} showThumbnails={false} />
+              screenSharePanel
             )}
 
             {allParticipants.length > 0 && (
@@ -111,7 +128,7 @@ export function MeetingRoomStage({
       )}
 
       <div className="absolute top-14 right-4 z-50">
-        <NotificationStack notifications={[]} onDismiss={() => {}} participantColorSeed={localParticipantColorSeed} />
+        <NotificationStack notifications={[]} onDismiss={() => {}} participantColorSeed={localParticipantColorSeed} participantGradientPreference={localParticipantGradientPreference} />
       </div>
 
       {activeReactions.length > 0 && (

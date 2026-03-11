@@ -4,7 +4,7 @@ import { MessageBubble } from "./MessageBubble";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import { Button } from "../ui";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt } from "./chat-types";
 
 export type { ChatAttachment, ChatMessage, ChatReadReceipt };
@@ -23,6 +23,7 @@ export interface ChatPanelProps {
   /** Variant for different layouts */
   variant?: "sidebar" | "mobile";
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
 }
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
@@ -58,7 +59,7 @@ const groupMessages = (messages: ChatMessage[]) => {
   return groups;
 };
 
-export const ChatPanel = React.memo(({ messages, onSendMessage, onSendMessageWithAttachments, onResolveAttachmentUrl, localParticipantId, onClose, disabled = false, placeholder = "Type a message...", title = "Chat", variant = "sidebar", participantColorSeed, className }: ChatPanelProps) => {
+export const ChatPanel = React.memo(({ messages, onSendMessage, onSendMessageWithAttachments, onResolveAttachmentUrl, localParticipantId, onClose, disabled = false, placeholder = "Type a message...", title = "Chat", variant = "sidebar", participantColorSeed, participantGradientPreference, className }: ChatPanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [inputValue, setInputValue] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -70,7 +71,7 @@ export const ChatPanel = React.memo(({ messages, onSendMessage, onSendMessageWit
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
   const messageGroups = useMemo(() => groupMessages(messages), [messages]);
 
@@ -160,7 +161,7 @@ export const ChatPanel = React.memo(({ messages, onSendMessage, onSendMessageWit
 
   return (
     <div
-      className={cn("flex flex-col h-full w-full", "bg-transparent text-card-foreground", !prefersReducedMotion && variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)}
+      className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden", "bg-transparent text-card-foreground", !prefersReducedMotion && variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)}
       data-tour="chat-panel"
       role="complementary"
       aria-label="Chat panel"
@@ -276,7 +277,7 @@ export const ChatPanel = React.memo(({ messages, onSendMessage, onSendMessageWit
               onKeyDown={handleKeyDown}
               placeholder={placeholder || "Write message..."}
               disabled={disabled || uploading}
-              className={cn("w-full py-3 px-5 resize-none outline-none rounded-2xl text-sm", "bg-muted/50 backdrop-blur-sm", "text-foreground", "placeholder:text-muted-foreground", "focus:ring-2 focus:ring-primary/50 focus:bg-muted/70", "transition-all")}
+              className={cn("w-full py-3 px-5 resize-none outline-none rounded-2xl text-sm", "bg-muted/50", "text-foreground", "placeholder:text-muted-foreground", "focus:ring-2 focus:ring-primary/50 focus:bg-muted/70", "transition-all")}
               style={{ minHeight: "44px", maxHeight: "120px" }}
               rows={1}
             />

@@ -117,3 +117,46 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@keyframes chalk-pop {
+  0% { 
+    transform: scale(0) rotate(var(--base-rot)); 
+    opacity: 0; 
+  }
+  70% { 
+    transform: scale(1.1) rotate(var(--base-rot)); 
+    opacity: 1; 
+  }
+  100% { 
+    transform: scale(1) rotate(var(--base-rot)); 
+    opacity: 1; 
+  }
+}
+
+@keyframes chalk-float {
+  0%, 100% { transform: translateY(0) rotate(var(--base-rot)); }
+  50% { transform: translateY(-4px) rotate(calc(var(--base-rot) + 2deg)); }
+}
+
+.chalk-group {
+  transform-origin: center;
+  transform-box: fill-box;
+  opacity: 0;
+  animation: chalk-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.chalk-float-layer {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: chalk-float 3s ease-in-out infinite;
+}
+
+.chalk-s1 { --base-rot: -20deg; animation-delay: 0.1s; }
+.chalk-s2 { --base-rot: -5deg;  animation-delay: 0.2s; }
+.chalk-s3 { --base-rot: 25deg;  animation-delay: 0.3s; }
+.chalk-s4 { --base-rot: 10deg;  animation-delay: 0.4s; }
+
+.chalk-f1 { animation-delay: 0.6s; }
+.chalk-f2 { animation-delay: 0.8s; }
+.chalk-f3 { animation-delay: 1.0s; }
+.chalk-f4 { animation-delay: 1.2s; }

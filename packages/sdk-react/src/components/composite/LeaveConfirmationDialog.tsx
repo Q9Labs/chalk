@@ -36,7 +36,7 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
   return (
     <div
       data-chalk
-      className={cn("chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4", "bg-background/80 backdrop-blur-sm", !prefersReducedMotion && "animate-in fade-in duration-200", className)}
+      className={cn("chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4", "bg-background/80", !prefersReducedMotion && "animate-in fade-in duration-200", className)}
       role="dialog"
       aria-modal="true"
       aria-labelledby="leave-modal-title"

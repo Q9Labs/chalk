@@ -125,6 +125,7 @@ export interface MeetingRoomProps {
   onLeave?: () => void;
   onTourComplete?: () => void;
   onAddPeople?: () => void;
+  onOpenDebug?: () => void;
   connectionState?: "connected" | "connecting" | "reconnecting" | "failed";
   onRetryConnection?: () => void;
   connectionSupportCode?: string;

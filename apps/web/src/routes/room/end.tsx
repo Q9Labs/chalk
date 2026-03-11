@@ -1,11 +1,12 @@
 import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, Card, CardDescription, CardHeader, CardTitle } from "@q9labs/chalk-ui";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Calendar, CheckCircle2, Clock, Home, RotateCcw, Star, Users, Video } from "lucide-react";
+import { Button } from "@q9labs/chalk-ui";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { Calendar, Clock, Home, RotateCcw, Star, Users, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTheme } from "../../context/theme";
 import { ChalkLogo } from "../../components/ChalkLogo";
+import { EdgeNetworkIllustration } from "../../components/EdgeNetworkIllustration";
 
 export const Route = createFileRoute("/room/end")({
   component: MeetingEndPage,
@@ -83,162 +84,151 @@ function MeetingEndPage() {
   const hasMeetingStats = meetingData.duration !== undefined || meetingData.participantCount !== undefined;
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 items-center justify-between px-4 sm:px-8">
-          <a href="/">
-            <ChalkLogo className="h-8 w-auto" />
-          </a>
-          <nav className="flex items-center gap-2 sm:gap-4">
-            <button type="button" onClick={toggleTheme} className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" aria-label="Toggle theme">
-              <HugeiconsIcon icon={theme === "dark" ? Sun01Icon : Moon02Icon} size={18} />
-            </button>
-            <Button size="sm" onClick={handleNewMeeting}>
-              <Video className="h-4 w-4 mr-2" />
-              New Meeting
-            </Button>
-          </nav>
+    <div className="font-app flex h-screen flex-col bg-background selection:bg-primary/20 overflow-hidden relative">
+      {/* Premium Background Atmosphere */}
+      <div className="fixed inset-0 pointer-events-none -z-10">
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/10 rounded-full blur-[140px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-blue-500/5 rounded-full blur-[140px]" />
+      </div>
+
+      {/* Background Illustration */}
+      <div className="absolute inset-0 z-0 opacity-40 dark:opacity-20 pointer-events-none">
+        <EdgeNetworkIllustration />
+      </div>
+
+      {/* Soft Floating Header */}
+      <header className="fixed top-0 z-50 w-full flex justify-center py-6 pointer-events-none">
+        <div className="container mx-auto px-6 max-w-6xl pointer-events-auto">
+          <div className="glass-hud px-8 h-16 rounded-full flex items-center justify-between border border-white/10 shadow-2xl backdrop-blur-2xl">
+            <Link to="/">
+              <ChalkLogo />
+            </Link>
+            <div className="flex items-center gap-4">
+              <button type="button" onClick={toggleTheme} className="p-2 text-muted-foreground hover:text-foreground transition-colors">
+                <HugeiconsIcon icon={theme === "dark" ? Sun01Icon : Moon02Icon} size={18} />
+              </button>
+              <Button size="sm" onClick={handleNewMeeting} className="rounded-full px-6 font-bold shadow-primary/20 hover:shadow-xl active:scale-95 transition-all">
+                New Meeting
+              </Button>
+            </div>
+          </div>
         </div>
       </header>
 
-      <main className="flex-1">
-        {/* Hero Section */}
-        <section className="py-16 sm:py-24">
-          <div className="container mx-auto px-4 sm:px-8">
-            <div className="max-w-2xl mx-auto text-center space-y-6">
-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <CheckCircle2 className="h-8 w-8" />
-              </div>
-
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Meeting ended</h1>
-
-              <p className="text-lg text-muted-foreground">Thanks for using Chalk. Your call has ended successfully.</p>
-            </div>
+      <main className="flex-1 flex flex-col items-center justify-center relative z-10 px-6">
+        <div className="max-w-4xl w-full text-center space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+          <div className="space-y-4">
+            <h1 className="text-6xl sm:text-8xl lg:text-[7.5rem] font-black tracking-tight leading-[0.85] text-foreground">
+              SESSION <br />
+              <span className="text-primary italic">COMPLETE.</span>
+            </h1>
+            <p className="text-xl lg:text-2xl text-muted-foreground font-medium max-w-2xl mx-auto">
+              Your call has ended successfully. See you on the edge.
+            </p>
           </div>
-        </section>
 
-        {/* Stats Bar */}
-        {hasMeetingStats && (
-          <section className="py-8 border-y bg-muted/30">
-            <div className="container mx-auto px-4 sm:px-8">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 text-center max-w-2xl mx-auto">
-                {meetingData.duration !== undefined && (
-                  <div className="flex flex-col items-center gap-2">
-                    <Clock className="h-6 w-6 text-primary" />
-                    <span className="text-2xl font-semibold">{formatDuration(meetingData.duration)}</span>
-                    <span className="text-sm text-muted-foreground">Duration</span>
-                  </div>
-                )}
-                {meetingData.participantCount !== undefined && (
-                  <div className="flex flex-col items-center gap-2">
-                    <Users className="h-6 w-6 text-primary" />
-                    <span className="text-2xl font-semibold">{meetingData.participantCount}</span>
-                    <span className="text-sm text-muted-foreground">Participant{meetingData.participantCount !== 1 ? "s" : ""}</span>
-                  </div>
-                )}
-                <div className="flex flex-col items-center gap-2">
-                  <Calendar className="h-6 w-6 text-primary" />
-                  <span className="text-2xl font-semibold">
-                    {new Date().toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
-                  <span className="text-sm text-muted-foreground">Date</span>
+          {/* Stats Pill */}
+          {hasMeetingStats && (
+            <div className="inline-flex items-center gap-8 px-8 py-4 glass-hud border border-white/10 rounded-full shadow-xl animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-200">
+              {meetingData.duration !== undefined && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-black uppercase tracking-widest">{formatDuration(meetingData.duration)}</span>
                 </div>
+              )}
+              {meetingData.participantCount !== undefined && (
+                <div className="flex items-center gap-2 border-l border-white/10 pl-8">
+                  <Users className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-black uppercase tracking-widest">{meetingData.participantCount} attendees</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2 border-l border-white/10 pl-8">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span className="text-sm font-black uppercase tracking-widest">
+                  {new Date().toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
               </div>
             </div>
-          </section>
-        )}
+          )}
 
-        {/* Feedback Section */}
-        <section className="py-16 sm:py-20">
-          <div className="container mx-auto px-4 sm:px-8">
-            <div className="max-w-md mx-auto">
-              <Card className="bg-background/60 backdrop-blur-sm">
-                <CardHeader className="text-center">
-                  <CardTitle className="text-xl">{feedbackSubmitted ? "Thanks for your feedback!" : "How was your experience?"}</CardTitle>
-                  {!feedbackSubmitted && <CardDescription className="text-base mt-2">Your feedback helps us improve Chalk</CardDescription>}
+          {/* Feedback Section */}
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-400">
+            <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-muted-foreground/50">
+              {feedbackSubmitted ? "Thanks for your feedback!" : "How was the quality?"}
+            </h3>
 
-                  {!feedbackSubmitted ? (
-                    <div className="flex justify-center gap-1 pt-4">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => handleRatingClick(star)}
-                          onMouseEnter={() => setHoveredRating(star)}
-                          onMouseLeave={() => setHoveredRating(0)}
-                          className="p-1.5 hover:scale-110 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          aria-label={`Rate ${star} star${star !== 1 ? "s" : ""}`}
-                        >
-                          <Star className={`h-8 w-8 transition-colors ${star <= displayRating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`} />
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="pt-4">
-                      <div className="flex justify-center gap-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <Star key={star} className={`h-6 w-6 ${star <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardHeader>
-              </Card>
-            </div>
-          </div>
-        </section>
-
-        {/* Actions Section */}
-        <section className="py-16 sm:py-20 bg-primary/5 border-t">
-          <div className="container mx-auto px-4 sm:px-8 text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl mb-4">What's next?</h2>
-            <p className="text-muted-foreground mb-8 max-w-md mx-auto">Start another meeting or head back to the homepage.</p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" className="h-12 px-8 text-base shadow-lg shadow-primary/20" onClick={handleNewMeeting}>
-                <Video className="h-5 w-5 mr-2" />
-                Start New Meeting
-              </Button>
-              <Button size="lg" variant="outline" className="h-12 px-8 text-base" onClick={handleGoHome}>
-                <Home className="h-5 w-5 mr-2" />
-                Back to Home
-              </Button>
-            </div>
-
-            {roomId && (
-              <div className="mt-8 pt-8 border-t border-border/50 max-w-md mx-auto">
-                <button type="button" onClick={handleRejoin} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  <RotateCcw className="h-4 w-4" />
-                  Rejoin previous meeting
+            <div className="flex justify-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  disabled={feedbackSubmitted}
+                  onClick={() => handleRatingClick(star)}
+                  onMouseEnter={() => setHoveredRating(star)}
+                  onMouseLeave={() => setHoveredRating(0)}
+                  className={`p-2 transition-all duration-300 focus:outline-none ${feedbackSubmitted ? "opacity-50 cursor-default" : "hover:scale-125 active:scale-95"}`}
+                  aria-label={`Rate ${star} star${star !== 1 ? "s" : ""}`}
+                >
+                  <Star
+                    className={`h-10 w-10 transition-colors ${
+                      star <= displayRating ? "fill-primary text-primary filter drop-shadow-[0_0_8px_rgba(var(--primary),0.5)]" : "text-muted-foreground/20"
+                    }`}
+                  />
                 </button>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
-        </section>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8 animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-600">
+            <Button size="lg" className="h-16 px-12 rounded-full text-lg font-black shadow-2xl shadow-primary/30 group relative overflow-hidden" onClick={handleNewMeeting}>
+              <div className="absolute inset-0 bg-primary/20 animate-pulse" />
+              <span className="relative flex items-center gap-2">
+                Start New Meeting
+                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </span>
+            </Button>
+            <Button size="lg" variant="outline" className="h-16 px-12 rounded-full text-lg font-black border-white/10 glass-hud hover:bg-white/5 transition-all" onClick={handleGoHome}>
+              <span className="flex items-center gap-2">
+                <Home className="h-5 w-5" />
+                Back to Home
+              </span>
+            </Button>
+          </div>
+
+          {roomId && (
+            <div className="animate-in fade-in duration-1000 delay-1000">
+              <button
+                type="button"
+                onClick={handleRejoin}
+                className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors group"
+              >
+                <RotateCcw className="h-3 w-3 group-hover:rotate-[-45deg] transition-transform" />
+                Rejoin previous session
+              </button>
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Footer */}
-      <footer className="border-t py-8 bg-muted/10">
-        <div className="container mx-auto px-4 sm:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <ChalkLogo className="h-6 w-auto opacity-75" />
-            <nav className="flex items-center gap-6 text-sm text-muted-foreground">
-              <a href="/docs" className="hover:text-foreground transition-colors">
-                Docs
-              </a>
-              <a href="/privacy" className="hover:text-foreground transition-colors">
-                Privacy
-              </a>
-              <a href="/terms" className="hover:text-foreground transition-colors">
-                Terms
-              </a>
-            </nav>
-            <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Chalk</p>
-          </div>
+      <footer className="fixed bottom-0 w-full py-10 px-12 pointer-events-none">
+        <div className="container mx-auto max-w-6xl flex flex-col md:flex-row justify-between items-center gap-8 pointer-events-auto">
+          <nav className="flex gap-12 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            <Link to="/documentation" className="hover:text-primary transition-colors">
+              Documentation
+            </Link>
+            <a href="/privacy" className="hover:text-primary transition-colors">
+              Privacy
+            </a>
+            <a href="/terms" className="hover:text-primary transition-colors">
+              Terms
+            </a>
+          </nav>
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30">© {new Date().getFullYear()} Chalk Edge Network</p>
         </div>
       </footer>
     </div>

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { MoreVerticalIcon, MicrophoneOff01Icon, Edit02Icon } from "../../../utils/icons";
 import { Avatar, AudioIndicator, HandRaiseIndicator, IconButton } from "../../atomic";
 import { cn } from "../../../utils/cn";
+import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import type { Participant, ParticipantListVariant } from "./ParticipantList";
 import { ParticipantOptionsMenu } from "./ParticipantOptionsMenu";
 
@@ -16,12 +17,13 @@ export interface ParticipantRowProps {
   onUpdateDisplayName?: (name: string) => void;
   participantVolumes?: ReadonlyMap<string, number>;
   onParticipantVolumeChange?: (id: string, volume: number) => void;
+  participantGradientPreference?: ParticipantGradientPreference;
   menuOpen: boolean;
   onMenuToggle: () => void;
   onMenuClose: () => void;
 }
 
-export function ParticipantRow({ participant, variant, canManageParticipants, onMuteParticipant, onRemoveParticipant, onMakeHost, onMakeCoHost, onUpdateDisplayName, participantVolumes, onParticipantVolumeChange, menuOpen, onMenuToggle, onMenuClose }: ParticipantRowProps) {
+export function ParticipantRow({ participant, variant, canManageParticipants, onMuteParticipant, onRemoveParticipant, onMakeHost, onMakeCoHost, onUpdateDisplayName, participantVolumes, onParticipantVolumeChange, participantGradientPreference, menuOpen, onMenuToggle, onMenuClose }: ParticipantRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(participant.displayName);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -57,7 +59,7 @@ export function ParticipantRow({ participant, variant, canManageParticipants, on
     <div className={cn("group flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors relative", variant === "sidebar" && "hover:bg-muted/50")}>
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="relative">
-          <Avatar name={participant.displayName} size="sm" className={cn(variant === "sidebar" && "w-9 h-9")} />
+          <Avatar name={participant.displayName} size="sm" className={cn(variant === "sidebar" && "w-9 h-9")} gradientPreference={participantGradientPreference} />
           {participant.isHandRaised && <HandRaiseIndicator raised={true} size="sm" className="-top-1 -right-1" />}
         </div>
 
@@ -121,7 +123,7 @@ export function ParticipantRow({ participant, variant, canManageParticipants, on
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className={cn("absolute right-0 top-full mt-1 w-64 rounded-lg shadow-xl z-20 overflow-hidden py-1", variant === "sidebar" ? "bg-popover/95 backdrop-blur-xl border border-border/50" : "bg-chalk-bg-surface border border-chalk-border-subtle")}>
+                <div className={cn("absolute right-0 top-full mt-1 w-64 rounded-lg shadow-xl z-20 overflow-hidden py-1", variant === "sidebar" ? "bg-popover border border-border/50" : "bg-chalk-bg-surface border border-chalk-border-subtle")}>
                   <ParticipantOptionsMenu
                     participant={participant}
                     variant={variant}

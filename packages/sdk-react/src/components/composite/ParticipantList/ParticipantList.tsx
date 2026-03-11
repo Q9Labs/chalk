@@ -4,7 +4,7 @@ import { Badge, IconButton, Input } from "../../atomic";
 import { Button } from "../../ui";
 import { usePrefersReducedMotion } from "../../../hooks/useMediaQuery";
 import { cn } from "../../../utils/cn";
-import { getParticipantThemeVariables } from "../../../utils/colorGenerator";
+import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { ParticipantRow } from "./ParticipantRow";
 
 export interface Participant {
@@ -36,6 +36,7 @@ export interface ParticipantListProps {
   /** Called when a participant's volume is changed via the slider. */
   onParticipantVolumeChange?: (id: string, volume: number) => void;
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
   variant?: ParticipantListVariant;
   title?: string;
@@ -57,6 +58,7 @@ export const ParticipantList = React.memo(
     participantVolumes,
     onParticipantVolumeChange,
     participantColorSeed,
+    participantGradientPreference,
     canManageParticipants = false,
     searchable = true,
     onClose,
@@ -67,7 +69,7 @@ export const ParticipantList = React.memo(
     const prefersReducedMotion = usePrefersReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
     const filteredParticipants = useMemo(() => {
       const uniqueParticipants = Array.from(new Map(participants.map((participant) => [getParticipantIdentity(participant), participant])).values());
@@ -112,6 +114,7 @@ export const ParticipantList = React.memo(
               onUpdateDisplayName={onUpdateDisplayName}
               participantVolumes={participantVolumes}
               onParticipantVolumeChange={onParticipantVolumeChange}
+              participantGradientPreference={participant.isLocal ? participantGradientPreference : undefined}
               menuOpen={activeMenuId === participant.id}
               onMenuToggle={() => setActiveMenuId((prev) => (prev === participant.id ? null : participant.id))}
               onMenuClose={() => setActiveMenuId(null)}

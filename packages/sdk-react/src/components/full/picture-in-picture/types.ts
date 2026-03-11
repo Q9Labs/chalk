@@ -1,8 +1,10 @@
 import type { MediaDevice } from "@q9labs/chalk-core";
+import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
 
-export type PictureInPicturePhase = "prejoin" | "meeting";
+export type PictureInPicturePhase = "prejoin" | "joining" | "meeting";
 
-export type PictureInPictureSourceKind = "participant" | "screen-share" | "placeholder";
+export type PictureInPictureSourceKind = "participant" | "screen-share" | "whiteboard" | "placeholder";
+export type PictureInPictureMeetingLayout = "single" | "split" | "grid" | "screen-share";
 
 export interface PictureInPictureSource {
   id: string;
@@ -14,9 +16,17 @@ export interface PictureInPictureSource {
   isMuted?: boolean;
   isLocal?: boolean;
   isSpeaking?: boolean;
+  isHandRaised?: boolean;
+  whiteboardSnapshot?: {
+    elements: readonly unknown[];
+    appState: Record<string, unknown>;
+    files: Record<string, unknown>;
+    key: string;
+  };
 }
 
 export interface PictureInPictureControls {
+  localParticipantGradientPreference?: ParticipantGradientPreference;
   audioInputDevices?: readonly MediaDevice[];
   audioOutputDevices?: readonly MediaDevice[];
   videoInputDevices?: readonly MediaDevice[];
@@ -41,5 +51,10 @@ export interface PictureInPictureControls {
   onToggleHandRaise?: () => void;
   onToggleWhiteboard?: () => void;
   onOpenReactions?: () => void;
+  onSendReaction?: (emoji: string) => void;
+  onJoin?: () => void;
   onLeave?: () => void;
+  loadingMessages?: readonly string[];
+  errorMessage?: string;
+  supportCode?: string;
 }

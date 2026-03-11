@@ -1,10 +1,12 @@
 import type React from "react";
-import { memo, useCallback, useEffect, useId, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 import { SettingsDialog } from "../composite/SettingsDialog";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
 import { useDraggable } from "../../hooks/ui/useDraggable";
+import { useHaptics } from "../../hooks/ui/useHaptics";
 import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -15,8 +17,7 @@ import { MeetingRoomControls } from "./meeting-room/MeetingRoomControls";
 import { MeetingRoomOverlays } from "./meeting-room/MeetingRoomOverlays";
 import { MeetingRoomPanels } from "./meeting-room/MeetingRoomPanels";
 import { MeetingRoomStage } from "./meeting-room/MeetingRoomStage";
-import { MeetingRoomTopBar } from "./meeting-room/MeetingRoomTopBar";
-import type { MeetingLayout, MeetingRoomProps } from "./meeting-room/types";
+import type { MeetingRoomProps } from "./meeting-room/types";
 import { useMeetingRoomBackgroundEffects } from "./meeting-room/useMeetingRoomBackgroundEffects";
 import { useMeetingRoomDerived } from "./meeting-room/useMeetingRoomDerived";
 import { useMeetingRoomLifecycle } from "./meeting-room/useMeetingRoomLifecycle";
@@ -42,6 +43,7 @@ function MeetingRoomBase({
   isHandRaised = false,
   isWhiteboardOpen = false,
   isRecording = false,
+  isTranscribing: _isTranscribing = false,
   recordingDuration: _recordingDuration = 0,
   meetingDuration = 0,
   canRecord = false,
@@ -90,7 +92,7 @@ function MeetingRoomBase({
   onLeave,
   onTourComplete,
   onAddPeople,
-  onOpenDebug,
+  onOpenDebug: _onOpenDebug,
   connectionState = "connected",
   onRetryConnection,
   connectionSupportCode,
@@ -108,9 +110,18 @@ function MeetingRoomBase({
   className,
 }: MeetingRoomProps): React.JSX.Element {
   const isMobile = useIsMobile();
+  const { trigger } = useHaptics();
   const containerRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
   const didHydrateDevicePreferencesRef = useRef(false);
+  const whiteboardApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  const whiteboardSnapshotKeyRef = useRef<string | null>(null);
+  const [whiteboardSnapshot, setWhiteboardSnapshot] = useState<null | {
+    elements: readonly unknown[];
+    appState: Record<string, unknown>;
+    files: Record<string, unknown>;
+    key: string;
+  }>(null);
   const { dragHandlers: pillDragHandlers } = useDraggable(pillRef, {
     boundaryRef: containerRef,
     snapToCorners: true,
@@ -160,14 +171,36 @@ function MeetingRoomBase({
     showInviteToastOnJoin: settings.experience.showInviteToast,
     onChatOpen,
   });
+
   const handleOpenSettings = useCallback(() => {
+    void trigger("selection");
     ui.setIsSettingsOpen(true);
-  }, [ui.setIsSettingsOpen]);
+  }, [trigger, ui.setIsSettingsOpen]);
+
+  const handleToggleMute = useCallback(() => {
+    void trigger("selection");
+    onToggleMute?.();
+  }, [onToggleMute, trigger]);
+
+  const handleToggleVideo = useCallback(() => {
+    void trigger("selection");
+    onToggleVideo?.();
+  }, [onToggleVideo, trigger]);
 
   useHotkey("Mod+K", handleOpenSettings, {
     enabled: !ui.isExiting,
     ignoreInputs: true,
     preventDefault: true,
+  });
+
+  useHotkey("M", handleToggleMute, {
+    enabled: !ui.isExiting,
+    ignoreInputs: true,
+  });
+
+  useHotkey("V", handleToggleVideo, {
+    enabled: !ui.isExiting,
+    ignoreInputs: true,
   });
 
   const roomTheme = settings.appearance.theme;
@@ -178,8 +211,6 @@ function MeetingRoomBase({
     showTourOnFirstVisit,
     defaultChatOpen,
     onChatOpen,
-    onToggleMute,
-    onToggleVideo,
     onLeave,
     onTourComplete,
     setShowTour: ui.setShowTour,
@@ -193,17 +224,96 @@ function MeetingRoomBase({
     isWhiteboardOpen,
   });
   const participantColorSeed = localParticipant.displayName || localParticipant.id;
+  const localParticipantGradientPreference = settings.appearance.profileGradient;
   const hasExternalPictureInPicture = typeof onTogglePictureInPicture === "function";
   const sharedPictureInPicture = useSharedPictureInPicture();
   const registerSharedPictureInPicture = sharedPictureInPicture?.register;
   const pictureInPictureOwnerId = useId();
-  const { source: pictureInPictureSource, previewSource } = useMemo(
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !enableWhiteboard || !isWhiteboardOpen) {
+      return;
+    }
+
+    let outerFrameId = 0;
+    let innerFrameId = 0;
+
+    outerFrameId = window.requestAnimationFrame(() => {
+      innerFrameId = window.requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(outerFrameId);
+      window.cancelAnimationFrame(innerFrameId);
+    };
+  }, [enableWhiteboard, isWhiteboardOpen, isSplit, ui.activePanel, ui.isFilmstripOpen, ui.layout]);
+
+  const captureWhiteboardSnapshot = useCallback(() => {
+    const api = whiteboardApiRef.current;
+    if (!api) {
+      return;
+    }
+
+    const elements = api.getSceneElementsIncludingDeleted();
+    const appState = api.getAppState() as Record<string, unknown>;
+    const files = (api.getFiles() ?? {}) as Record<string, unknown>;
+    const sceneVersion = elements.reduce((total, element) => total + (((element as { version?: number }).version ?? 0) as number), 0);
+    const nextKey = [
+      sceneVersion,
+      appState.scrollX ?? 0,
+      appState.scrollY ?? 0,
+      (appState.zoom as { value?: number } | undefined)?.value ?? 1,
+      Object.keys(files).length,
+    ].join(":");
+
+    if (whiteboardSnapshotKeyRef.current === nextKey) {
+      return;
+    }
+
+    whiteboardSnapshotKeyRef.current = nextKey;
+    setWhiteboardSnapshot({
+      elements,
+      appState,
+      files,
+      key: nextKey,
+    });
+  }, []);
+
+  const handleWhiteboardExcalidrawApiReady = useCallback(
+    (api: ExcalidrawImperativeAPI) => {
+      whiteboardApiRef.current = api;
+      captureWhiteboardSnapshot();
+      onWhiteboardExcalidrawApiReady?.(api);
+    },
+    [captureWhiteboardSnapshot, onWhiteboardExcalidrawApiReady],
+  );
+
+  useEffect(() => {
+    if (!enablePictureInPicture || !enableWhiteboard || !isWhiteboardOpen) {
+      whiteboardSnapshotKeyRef.current = null;
+      setWhiteboardSnapshot(null);
+      return;
+    }
+
+    captureWhiteboardSnapshot();
+    const intervalId = window.setInterval(captureWhiteboardSnapshot, 500);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [captureWhiteboardSnapshot, enablePictureInPicture, enableWhiteboard, isWhiteboardOpen]);
+
+  const { source: pictureInPictureSource, previewSource, participantSources, meetingLayout } = useMemo(
     () =>
       buildMeetingPictureInPictureSource({
         participants: allParticipants,
         localParticipant,
+        isWhiteboardOpen,
+        whiteboardSnapshot,
       }),
-    [allParticipants, localParticipant],
+    [allParticipants, isWhiteboardOpen, localParticipant, whiteboardSnapshot],
   );
   const pictureInPictureOptions = useMemo(
     () => ({
@@ -213,7 +323,10 @@ function MeetingRoomBase({
       displayName: localParticipant.displayName,
       source: pictureInPictureSource,
       previewSource,
+      participantSources,
+      meetingLayout,
       controls: {
+        localParticipantGradientPreference,
         isMuted,
         isVideoEnabled,
         isScreenSharing,
@@ -235,9 +348,11 @@ function MeetingRoomBase({
         onToggleMute,
         onToggleVideo,
         onToggleScreenShare,
+        onToggleRecording,
         onToggleHandRaise,
         onToggleWhiteboard,
         onOpenReactions: () => ui.setIsReactionPickerOpen(true),
+        onSendReaction,
         onLeave,
       },
     }),
@@ -246,6 +361,8 @@ function MeetingRoomBase({
       localParticipant.displayName,
       pictureInPictureSource,
       previewSource,
+      participantSources,
+      meetingLayout,
       isMuted,
       isVideoEnabled,
       isScreenSharing,
@@ -267,10 +384,13 @@ function MeetingRoomBase({
       onToggleMute,
       onToggleVideo,
       onToggleScreenShare,
+      onToggleRecording,
       onToggleHandRaise,
       onToggleWhiteboard,
       ui.setIsReactionPickerOpen,
+      onSendReaction,
       onLeave,
+      localParticipantGradientPreference,
       settings.experience.autoOpenPictureInPicture,
     ],
   );
@@ -378,13 +498,6 @@ function MeetingRoomBase({
     onAddPeople?.();
   }, [onAddPeople, ui.setShowInviteModal]);
 
-  const handleLayoutChange = useCallback(
-    (nextLayout: MeetingLayout) => {
-      ui.setLayout(nextLayout);
-      updateAppearanceSettings({ layout: nextLayout });
-    },
-    [ui.setLayout, updateAppearanceSettings],
-  );
 
   const handleFilmstripToggle = useCallback(() => {
     const nextValue = !ui.isFilmstripOpen;
@@ -392,11 +505,6 @@ function MeetingRoomBase({
     updateAppearanceSettings({ showFilmstrip: nextValue });
   }, [ui.isFilmstripOpen, ui.setIsFilmstripOpen, updateAppearanceSettings]);
 
-  const handleThemeToggle = useCallback(() => {
-    updateAppearanceSettings({
-      theme: settings.appearance.theme === "dark" ? "light" : "dark",
-    });
-  }, [settings.appearance.theme, updateAppearanceSettings]);
 
   const handleAudioInputPreference = useCallback(
     (deviceId: string) => {
@@ -443,34 +551,68 @@ function MeetingRoomBase({
       data-chalk
       className={cn("chalk-root chalk-theme-transition relative flex h-screen w-full flex-col overflow-hidden bg-background text-foreground", isMobile ? "p-2" : "p-0", className)}
       data-chalk-theme={roomTheme === "system" ? undefined : roomTheme}
-      style={getParticipantThemeVariables(participantColorSeed) as React.CSSProperties}
+      style={getParticipantThemeVariables(participantColorSeed, localParticipantGradientPreference) as React.CSSProperties}
     >
-      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "mix-blend-screen" : "mix-blend-multiply")}>
+      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "bg-[#050505]" : "bg-background")}>
         {settings.appearance.ambientBackground && (
-          <>
-            <div
-              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-10" : "opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
-              style={{
-                background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
-                filter: "blur(100px)",
-              }}
-            />
-            <div
-              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", settings.appearance.gradient === "darker" && isDarkMode ? "opacity-5" : "opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
-              style={{
-                background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
-                filter: "blur(120px)",
-              }}
-            />
-          </>
+          <div className={cn("absolute inset-0 transition-opacity duration-1000", settings.appearance.gradient === "darker" ? "opacity-100" : "opacity-100")}>
+            {settings.appearance.gradient === "darker" ? (
+              /* High-end moody mesh gradient for 'darker' mode */
+              <>
+                <div
+                  className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full opacity-[0.15]"
+                  style={{
+                    background: "radial-gradient(circle, var(--primary) 0%, transparent 70%)",
+                    filter: "blur(120px)",
+                  }}
+                />
+                <div
+                  className="absolute -bottom-[20%] -right-[10%] w-[60%] h-[60%] rounded-full opacity-[0.1]"
+                  style={{
+                    background: "radial-gradient(circle, var(--accent) 0%, transparent 70%)",
+                    filter: "blur(140px)",
+                  }}
+                />
+                <div
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] rounded-full opacity-[0.05]"
+                  style={{
+                    background: "radial-gradient(circle, var(--primary) 0%, transparent 60%)",
+                    filter: "blur(160px)",
+                  }}
+                />
+              </>
+            ) : (
+              /* Standard animated ambient background */
+              <div className={isDarkMode ? "mix-blend-screen" : "mix-blend-multiply"}>
+                <div
+                  className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkMode ? "opacity-40 dark:opacity-20" : "opacity-40", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
+                  style={{
+                    background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
+                    filter: "blur(100px)",
+                  }}
+                />
+                <div
+                  className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkMode ? "opacity-30 dark:opacity-10" : "opacity-30", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
+                  style={{
+                    background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
+                    filter: "blur(120px)",
+                  }}
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      <div className={cn("relative z-10 w-full", !reduceMotion && "animate-in fade-in slide-in-from-top-4 duration-700 ease-out fill-mode-both delay-100")}>
-        <MeetingRoomTopBar isMobile={isMobile} roomName={roomName} activePanel={ui.activePanel} layout={ui.layout} setLayout={handleLayoutChange} isDarkMode={isDarkMode} onToggleTheme={handleThemeToggle} pillRef={pillRef} pillDragHandlers={pillDragHandlers} />
-      </div>
+      {!isMobile && (
+        <div ref={pillRef} {...pillDragHandlers} className="absolute top-4 left-6 z-30">
+          <div className="px-3 py-1 rounded-full bg-muted/80 border border-border select-none shadow-sm">
+            <span className="text-xs font-medium text-foreground tracking-tight">{roomName}</span>
+          </div>
+        </div>
+      )}
 
-      <div className={cn("relative z-0 flex min-h-0 flex-1 flex-row overflow-hidden", !reduceMotion && "animate-in fade-in zoom-in-[0.98] duration-1000 ease-out fill-mode-both", isMobile ? "gap-2 pt-2" : "gap-4 px-4 pt-4", ui.isExiting && "pointer-events-none")}>
+      <div className={cn("relative z-0 flex min-h-0 flex-1 flex-row overflow-hidden", !reduceMotion && "animate-in fade-in duration-1000 ease-out fill-mode-both", isMobile ? "gap-2 pt-2 pb-2" : "gap-4 px-4 pt-4 pb-4", ui.isExiting && "pointer-events-none")}>
         <MeetingRoomStage
           isMobile={isMobile}
           layout={ui.layout}
@@ -483,10 +625,11 @@ function MeetingRoomBase({
           enableWhiteboard={enableWhiteboard}
           isWhiteboardOpen={isWhiteboardOpen}
           theme={roomTheme}
-          onWhiteboardExcalidrawApiReady={onWhiteboardExcalidrawApiReady}
+          onWhiteboardExcalidrawApiReady={handleWhiteboardExcalidrawApiReady}
           activeReactions={activeReactions}
           isExiting={ui.isExiting}
           localParticipantColorSeed={participantColorSeed}
+          localParticipantGradientPreference={localParticipantGradientPreference}
         />
 
         <MeetingRoomPanels
@@ -507,6 +650,7 @@ function MeetingRoomBase({
           participantVolumes={participantVolumes}
           onParticipantVolumeChange={onParticipantVolumeChange}
           localParticipantColorSeed={participantColorSeed}
+          localParticipantGradientPreference={localParticipantGradientPreference}
         />
       </div>
 
@@ -560,6 +704,7 @@ function MeetingRoomBase({
           onOpenSettings={handleOpenSettings}
           isExiting={ui.isExiting}
           localParticipantColorSeed={participantColorSeed}
+          localParticipantGradientPreference={localParticipantGradientPreference}
         />
       </div>
 

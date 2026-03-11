@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { PictureInPictureWindow } from "../../components/full/picture-in-picture/PictureInPictureWindow";
-import type { PictureInPictureControls, PictureInPicturePhase, PictureInPictureSource } from "../../components/full/picture-in-picture/types";
+import type { PictureInPictureControls, PictureInPictureMeetingLayout, PictureInPicturePhase, PictureInPictureSource } from "../../components/full/picture-in-picture/types";
 
 export interface UsePictureInPictureOptions {
   enabled?: boolean;
@@ -12,6 +12,8 @@ export interface UsePictureInPictureOptions {
   displayName?: string;
   source: PictureInPictureSource | null;
   previewSource?: PictureInPictureSource | null;
+  participantSources?: PictureInPictureSource[];
+  meetingLayout?: PictureInPictureMeetingLayout;
   controls: PictureInPictureControls;
 }
 
@@ -95,7 +97,7 @@ function copyStylesIntoPictureInPicture(targetDocument: Document) {
   syncThemeAttributes(targetDocument);
 }
 
-export function usePictureInPicture({ enabled = true, autoOpen = false, phase, roomName, displayName, source, previewSource, controls }: UsePictureInPictureOptions): UsePictureInPictureReturn {
+export function usePictureInPicture({ enabled = true, autoOpen = false, phase, roomName, displayName, source, previewSource, participantSources, meetingLayout, controls }: UsePictureInPictureOptions): UsePictureInPictureReturn {
   const [isActive, setIsActive] = useState(false);
   const [isAutoOpenPending, setIsAutoOpenPending] = useState(false);
   const pipWindowRef = useRef<DocumentPictureInPictureWindow | null>(null);
@@ -144,13 +146,15 @@ export function usePictureInPicture({ enabled = true, autoOpen = false, phase, r
         displayName={displayName}
         source={source}
         previewSource={previewSource}
+        participantSources={participantSources}
+        meetingLayout={meetingLayout}
         controls={controls}
         onReturnToTab={() => {
           window.focus();
         }}
       />,
     );
-  }, [controls, displayName, phase, previewSource, roomName, source]);
+  }, [controls, displayName, meetingLayout, participantSources, phase, previewSource, roomName, source]);
 
   const open = useCallback(async () => {
     if (!enabled || !api?.requestWindow) {

@@ -49,7 +49,7 @@ export const Thumbnail = React.memo(({ videoTrack, muted, size = "md", onClick, 
       <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
 
       {muted && (
-        <div className="absolute bottom-1 right-1 rounded-full bg-black/50 p-0.5 text-white backdrop-blur-sm">
+        <div className="absolute bottom-1 right-1 rounded-full bg-red-500/90 p-0.5 text-white shadow-sm">
           <MicrophoneOff01Icon size={10} />
         </div>
       )}

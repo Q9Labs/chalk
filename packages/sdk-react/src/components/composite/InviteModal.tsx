@@ -57,7 +57,7 @@ export const InviteModal = React.memo<InviteModalProps>(({ isOpen, onClose, meet
   if (!isOpen) return null;
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm", "bg-background/80", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
+    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4", "bg-background/80", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
       <div ref={modalRef} className={cn("w-full max-w-md overflow-hidden rounded-lg shadow-lg", "bg-card", "border border-border", !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200")}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 id="invite-modal-title" className="text-lg font-semibold text-card-foreground">

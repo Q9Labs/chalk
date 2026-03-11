@@ -59,6 +59,8 @@ export function SharedPictureInPictureProvider({ enabled = true, children }: { e
     displayName: registration?.options.displayName,
     source: registration?.options.source ?? null,
     previewSource: registration?.options.previewSource,
+    participantSources: registration?.options.participantSources,
+    meetingLayout: registration?.options.meetingLayout,
     controls: registration?.options.controls ?? EMPTY_CONTROLS,
   });
 

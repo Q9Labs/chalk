@@ -100,8 +100,17 @@ function PreJoinLobbyBase({
     isAudioEnabled: ui.isAudioEnabled,
     externalAudioLevel: audioLevel,
   });
+  const pictureInPictureRef = useRef<any>(null);
 
-  const participantGradient = useMemo(() => propParticipantGradient || getParticipantGradient(ui.displayName), [propParticipantGradient, ui.displayName]);
+  const handleJoin = useCallback(() => {
+    const pip = pictureInPictureRef.current;
+    if (enablePictureInPicture && settings.experience.autoOpenPictureInPicture && pip?.isSupported && !pip?.isActive) {
+      void pip?.open();
+    }
+    ui.handleJoin();
+  }, [enablePictureInPicture, settings.experience.autoOpenPictureInPicture, ui]);
+
+  const participantGradient = useMemo(() => propParticipantGradient || getParticipantGradient(ui.displayName, settings.appearance.profileGradient), [propParticipantGradient, settings.appearance.profileGradient, ui.displayName]);
   const hasExternalPictureInPicture = typeof onTogglePictureInPicture === "function";
   const sharedPictureInPicture = useSharedPictureInPicture();
   const registerSharedPictureInPicture = sharedPictureInPicture?.register;
@@ -119,11 +128,12 @@ function PreJoinLobbyBase({
   const pictureInPictureOptions = useMemo(
     () => ({
       autoOpen: settings.experience.autoOpenPictureInPicture,
-      phase: "prejoin" as const,
+      phase: isLoading ? ("joining" as const) : ("prejoin" as const),
       roomName,
       displayName: ui.displayName,
       source: pictureInPictureSource,
       controls: {
+        localParticipantGradientPreference: settings.appearance.profileGradient,
         isMuted: !ui.isAudioEnabled,
         isVideoEnabled: ui.isVideoEnabled,
         audioInputDevices,
@@ -137,6 +147,10 @@ function PreJoinLobbyBase({
         onVideoInputChange: onVideoDeviceChange,
         onToggleMute: ui.toggleAudio,
         onToggleVideo: ui.toggleVideo,
+        onJoin: handleJoin,
+        loadingMessages: JOINING_ROOM_MESSAGES,
+        errorMessage: ui.localError,
+        supportCode,
       },
     }),
     [
@@ -157,6 +171,10 @@ function PreJoinLobbyBase({
       onAudioInputChange,
       onAudioOutputChange,
       onVideoDeviceChange,
+      handleJoin,
+      isLoading,
+      supportCode,
+      ui.localError,
     ],
   );
 
@@ -195,22 +213,20 @@ function PreJoinLobbyBase({
     : sharedPictureInPicture
       ? sharedPictureInPicture
       : internalPictureInPicture;
+
+  useEffect(() => {
+    pictureInPictureRef.current = pictureInPicture;
+  }, [pictureInPicture]);
+
   const normalizedAudioLevel = Math.min(100, Math.max(0, activeAudioLevel * 100));
   const hasVideoDevices = effectiveVideoDevices.length > 0;
   const hasAudioInput = effectiveAudioInputDevices.length > 0;
   const hasAudioOutput = audioOutputDevices.length > 0;
 
-  const handleJoin = useCallback(() => {
-    if (enablePictureInPicture && settings.experience.autoOpenPictureInPicture && pictureInPicture.isSupported && !pictureInPicture.isActive) {
-      void pictureInPicture.open();
-    }
-    ui.handleJoin();
-  }, [enablePictureInPicture, settings.experience.autoOpenPictureInPicture, pictureInPicture, ui]);
-
   return (
-    <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName).primary } as React.CSSProperties}>
+    <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName, settings.appearance.profileGradient).primary } as React.CSSProperties}>
       <div className={cn("absolute inset-0 z-50 transition-all duration-1000 ease-in-out pointer-events-none", isLoading ? "opacity-100 pointer-events-auto" : "opacity-0")}>
-        <LoadingScreen message="Joining room..." className="w-full h-full" displayName={ui.displayName} supportingMessages={JOINING_ROOM_MESSAGES} />
+        <LoadingScreen message="Joining room..." className="w-full h-full" displayName={ui.displayName} supportingMessages={JOINING_ROOM_MESSAGES} gradientPreference={settings.appearance.profileGradient} />
       </div>
 
       <div className={cn("flex-1 flex flex-col w-full transition-all duration-700 ease-in-out", isLoading ? "opacity-0 scale-95 blur-sm" : "opacity-100 scale-100 blur-0")}>
@@ -252,6 +268,7 @@ function PreJoinLobbyBase({
               audioLevel={activeAudioLevel}
               normalizedAudioLevel={normalizedAudioLevel}
               participantGradient={participantGradient}
+              participantGradientPreference={settings.appearance.profileGradient}
               controls={
                 <PreJoinFloatingControls
                   dropdownRef={dropdownRef}

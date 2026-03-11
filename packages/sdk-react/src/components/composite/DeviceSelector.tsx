@@ -3,7 +3,7 @@ import { VolumeHighIcon } from "../../utils/icons";
 import { Select, AudioIndicator, Thumbnail, IconButton } from "../atomic";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;
 
@@ -20,14 +20,15 @@ export interface DeviceSelectorProps {
   audioLevel?: number;
   disabled?: boolean;
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
 }
 
-export const DeviceSelector = React.memo(({ type, devices, selectedDeviceId, onChange, label, previewTrack, audioLevel, disabled = false, participantColorSeed, className }: DeviceSelectorProps) => {
+export const DeviceSelector = React.memo(({ type, devices, selectedDeviceId, onChange, label, previewTrack, audioLevel, disabled = false, participantColorSeed, participantGradientPreference, className }: DeviceSelectorProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
-  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
   const options = devices.map((device, index) => ({
     label: device.label || `${type} ${index + 1}`,

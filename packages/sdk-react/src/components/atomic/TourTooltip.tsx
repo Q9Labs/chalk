@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { ArrowLeft01Icon, ArrowRight01Icon, Cancel01Icon } from "../../utils/icons";
+import { ArrowRight01Icon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 
@@ -44,45 +44,44 @@ export const TourTooltip = React.memo<TourTooltipProps>(({ title, description, s
   });
 
   return (
-    <div ref={tooltipRef} role="dialog" aria-label={title} className={cn("relative z-50 min-w-[320px] max-w-sm rounded-lg", "bg-popover border border-border", "shadow-lg p-6", "text-popover-foreground", !prefersReducedMotion && "chalk-animate-scale-in", className)}>
+    <div ref={tooltipRef} role="dialog" aria-label={title} className={cn("relative z-50 min-w-[320px] max-w-sm rounded-2xl", "bg-card border border-border", "shadow-2xl p-6", "text-card-foreground", !prefersReducedMotion && "chalk-animate-scale-in", className)}>
       <div className={arrowClasses} />
 
       <div className="flex justify-between items-start mb-4">
-        <h3 className="font-semibold text-lg">{title}</h3>
+        <h3 className="font-semibold text-lg leading-tight">{title}</h3>
         {showSkip && (
-          <button onClick={onSkip} className="text-muted-foreground hover:text-foreground transition-colors p-1" aria-label="Skip tour">
-            <Cancel01Icon size={16} />
+          <button onClick={onSkip} className="text-muted-foreground hover:text-foreground transition-colors p-1 -mt-1 -mr-1" aria-label="Skip tour">
+            <Cancel01Icon size={18} />
           </button>
         )}
       </div>
 
-      <div className="mb-6 text-muted-foreground text-base leading-relaxed">{description}</div>
+      <div className="mb-6 text-muted-foreground text-[15px] leading-relaxed">{description}</div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         {showProgress ? (
           <div className="flex gap-1.5" aria-label={`Step ${step} of ${totalSteps}`}>
             {Array.from({ length: totalSteps }).map((_, i) => (
-              <div key={i} className={cn("w-2 h-2 rounded-full transition-colors", i + 1 === step ? "bg-primary" : "bg-muted")} />
+              <div key={i} className={cn("w-1.5 h-1.5 rounded-full transition-all duration-300", i + 1 === step ? "bg-primary w-4" : "bg-muted")} />
             ))}
           </div>
         ) : (
           <div />
         )}
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           {step > 1 && (
-            <button onClick={onPrev} className={cn("flex items-center justify-center p-2 rounded-md", "text-muted-foreground hover:bg-muted hover:text-foreground", "transition-colors text-sm")} aria-label="Previous step">
-              <ArrowLeft01Icon size={16} className="mr-1" />
+            <button onClick={onPrev} className={cn("flex items-center justify-center py-2 px-3 rounded-xl", "text-muted-foreground hover:bg-muted hover:text-foreground", "transition-colors text-sm font-medium")} aria-label="Previous step">
               Back
             </button>
           )}
 
-          <button onClick={onNext} className={cn("flex items-center justify-center py-2 px-4 rounded-md", "bg-primary text-primary-foreground hover:bg-primary/90", "transition-colors text-sm font-medium")} aria-label={step === totalSteps ? "Finish tour" : "Next step"}>
+          <button onClick={onNext} className={cn("flex items-center justify-center py-2 px-4 rounded-xl", "bg-primary text-primary-foreground hover:opacity-90 transition-all shadow-md shadow-primary/20", "text-sm font-bold")} aria-label={step === totalSteps ? "Finish tour" : "Next step"}>
             {step === totalSteps ? (
-              "Finish"
+              "Got it"
             ) : (
               <>
-                Next <ArrowRight01Icon size={16} className="ml-1" />
+                Next <ArrowRight01Icon size={16} className="ml-1.5" />
               </>
             )}
           </button>

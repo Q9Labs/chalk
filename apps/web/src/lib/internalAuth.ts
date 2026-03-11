@@ -1,4 +1,4 @@
-import { APIClient, type RoomResource } from "@q9labs/chalk-core";
+import { APIClient } from "@q9labs/chalk-core";
 
 type JoinContextV1 = {
   joinToken: string;
@@ -192,15 +192,6 @@ export async function exchangeJoinToken(apiUrl: string, joinToken: string) {
     expires_in: response.data.expiresIn,
     room_name: response.data.roomName,
   };
-}
-
-export async function getRoomWithAccessToken(apiUrl: string, accessToken: string, roomId: string): Promise<RoomResource> {
-  const client = new APIClient({ apiUrl, token: accessToken });
-  const response = await client.getRoom(roomId);
-  if (!response.success || !response.data) {
-    throw new Error(response.error?.message ?? "failed to load room");
-  }
-  return response.data;
 }
 
 export function createWebTokenProvider(apiUrl: string) {

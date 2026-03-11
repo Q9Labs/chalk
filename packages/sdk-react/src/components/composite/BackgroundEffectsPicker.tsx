@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from "react";
 import { Cancel01Icon, Upload01Icon, Image01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface BackgroundEffect {
   id: string;
@@ -18,12 +18,13 @@ export interface BackgroundEffectsPickerProps {
   onCustomUpload?: (file: File) => void;
   disabled?: boolean;
   participantColorSeed?: string;
+  participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
 }
 
-export const BackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, onSelect, onCustomUpload, disabled = false, participantColorSeed, className }: BackgroundEffectsPickerProps) => {
+export const BackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, onSelect, onCustomUpload, disabled = false, participantColorSeed, participantGradientPreference, className }: BackgroundEffectsPickerProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();

@@ -15,7 +15,7 @@ export interface DiagnosticErrorSheetProps {
  * Handles different error types (auth, network, server) with unique visuals and actions.
  */
 export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ error, supportCode, onRetry, onBack, className }) => {
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   // Analyze error to determine the best human-readable message and actions
   const errorInfo = useMemo(() => {
@@ -56,7 +56,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
       />
 
       <div
-        className={cn("relative w-full max-w-lg bg-background border-t sm:border border-border shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-8 sm:zoom-in-95 duration-500 ease-out sm:rounded-3xl", "rounded-t-[32px]")}
+        className={cn("relative w-full max-w-lg bg-card border-t sm:border border-border shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-8 sm:zoom-in-95 duration-500 ease-out sm:rounded-3xl", "rounded-t-[32px]")}
         style={{
           background: "var(--chalk-lobby-glass-bg)",
           borderColor: "var(--chalk-lobby-glass-border)",
@@ -64,7 +64,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
         }}
       >
         {/* Mobile Drag Handle */}
-        <div className="sm:hidden w-full pt-4 flex justify-center">
+        <div className="sm:hidden w-full pt-4 flex justify-center text-foreground">
           <div className="w-12 h-1.5 bg-muted/30 rounded-full" />
         </div>
 
