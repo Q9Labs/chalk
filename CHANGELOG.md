@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Repo: session-log convention** — documented the `scratchpad/` + `chalk-<owner>-session-log-YYYY-MM-DD.md` rule in `AGENTS.md` so future sessions keep note files out of repo root.
 - **Repo: scratchpad note convention** — extended the repo note-file rule to cover handoffs, trackers, and reports too, with Chalk-style names under `scratchpad/`.
 - **Repo: native surface removal** — removed the iOS app, Android app, React Native SDK/package, native helper scripts, native planning artifacts, and related workspace/CI/docs wiring so Chalk is now web/package-only in-repo.
+- **Repo: app/test surface reduction** — removed the admin app, E2E harness, Next.js pages demo, and repo-owned stress tooling/artifacts so active workspace scope now centers on API, docs, web, and core packages.
 - **SDK-React: joining-room loading headlines** — the pre-join loading screen now rotates reassuring join-progress messages in the main headline slot instead of leaving a single static “Joining room...” label.
 - **SDK-React: Full-bleed Picture-in-Picture** — redesigned the Document PiP window to feature a full-bleed video stage, floating glassmorphism controls, and refined typography for maximum use of small space.
 - **SDK/API: remove screen annotations from screen sharing** — strip the incomplete shared-screen annotation protocol, state managers, React overlay/tooling, and demo flag wiring so screen sharing falls back to the stable non-annotated path.
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **SDK-Core: background-effects support state sync** — room attachment now pushes the media service’s computed state into session state, so Chromium-capable browsers no longer stay stuck on the default “unsupported” background-effects message.
+- **SDK background presets: localhost CORS breakage** — preset image backgrounds now ship as local SDK assets instead of loading from the Cloudflare RTK asset host, and failed image loads now report a concrete `BACKGROUND_IMAGE_LOAD_FAILED` error instead of opaque `[object Event]` telemetry.
 - **Web/API: localhost dashboard auth + SDK toast export** — restore the `toast` export on `@q9labs/chalk-react`, allow `X-Chalk-Local-Client-ID` through API CORS preflight, and default the local room route to camera/mic off unless stored join prefs explicitly opt in.
 - **SDK-React: pre-join camera/mic defaults** — the lobby now starts with camera and microphone off unless callers explicitly opt in via `defaults` or `initial*Enabled` props.
 - **SDK-React: meeting stage symbol regression** — restore the missing React/state imports used by the in-room stage so `useMemo`-driven whiteboard/stage state no longer crashes at runtime.

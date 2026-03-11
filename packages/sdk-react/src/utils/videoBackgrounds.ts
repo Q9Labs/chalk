@@ -1,25 +1,29 @@
 import type { VideoBackgroundEffect } from "@q9labs/chalk-core";
+import classroomBackgroundUrl from "../assets/backgrounds/bg_1.jpg";
+import studyBackgroundUrl from "../assets/backgrounds/bg_2.jpg";
+import libraryBackgroundUrl from "../assets/backgrounds/bg_3.jpg";
+import officeBackgroundUrl from "../assets/backgrounds/bg_4.jpg";
 
 export const VIDEO_BACKGROUND_PRESETS = [
   {
     id: "preset-classroom",
     name: "Classroom",
-    imageUrl: "https://rtk-assets.realtime.cloudflare.com/backgrounds/bg_1.jpg",
+    imageUrl: classroomBackgroundUrl,
   },
   {
     id: "preset-study",
     name: "Study",
-    imageUrl: "https://rtk-assets.realtime.cloudflare.com/backgrounds/bg_2.jpg",
+    imageUrl: studyBackgroundUrl,
   },
   {
     id: "preset-library",
     name: "Library",
-    imageUrl: "https://rtk-assets.realtime.cloudflare.com/backgrounds/bg_3.jpg",
+    imageUrl: libraryBackgroundUrl,
   },
   {
     id: "preset-office",
     name: "Office",
-    imageUrl: "https://rtk-assets.realtime.cloudflare.com/backgrounds/bg_4.jpg",
+    imageUrl: officeBackgroundUrl,
   },
 ] as const;
 

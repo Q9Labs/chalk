@@ -9,6 +9,20 @@ type VideoMiddlewareCapableSelf = {
 
 const DEFAULT_BLUR_STRENGTH = 50;
 
+const toBackgroundImageLoadError = (imageUrl: string, error: unknown): Error & { code: string; cause?: unknown } => {
+  if (error instanceof Error) {
+    return Object.assign(error, {
+      code: (error as Error & { code?: string }).code ?? "BACKGROUND_IMAGE_LOAD_FAILED",
+    });
+  }
+
+  const eventType = error instanceof Event && error.type ? ` (${error.type})` : "";
+  const wrapped = new Error(`Failed to load background image: ${imageUrl}${eventType}`) as Error & { code: string; cause?: unknown };
+  wrapped.code = "BACKGROUND_IMAGE_LOAD_FAILED";
+  wrapped.cause = error;
+  return wrapped;
+};
+
 const hasMiddlewareApis = (rtkClient: RealtimeKitClient | undefined): rtkClient is RealtimeKitClient & { self: VideoMiddlewareCapableSelf } => {
   if (!rtkClient) {
     return false;
@@ -70,7 +84,12 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
     const resolvedTransformer = await getTransformer(rtkClient);
     await removeAllVideoMiddlewares(rtkClient);
 
-    const middleware = effect.mode === "blur" ? await resolvedTransformer.createBackgroundBlurVideoMiddleware(effect.blurStrength ?? DEFAULT_BLUR_STRENGTH) : await resolvedTransformer.createStaticBackgroundVideoMiddleware(effect.imageUrl);
+    const middleware =
+      effect.mode === "blur"
+        ? await resolvedTransformer.createBackgroundBlurVideoMiddleware(effect.blurStrength ?? DEFAULT_BLUR_STRENGTH)
+        : await resolvedTransformer.createStaticBackgroundVideoMiddleware(effect.imageUrl).catch((error: unknown) => {
+            throw toBackgroundImageLoadError(effect.imageUrl, error);
+          });
 
     await rtkClient.self.addVideoMiddleware?.(middleware);
     selectedEffect = effect;
