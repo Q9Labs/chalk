@@ -61,6 +61,9 @@ type internalAuthQueriesStub struct {
 	createClaimCalls    int
 	createdTenant       db.Tenant
 	createdClaim        db.TenantClaim
+	claimBySecret       db.TenantClaim
+	bindTenantCalls     int
+	bindTenantErr       error
 }
 
 func (q *internalAuthQueriesStub) CreateInternalTenant(context.Context, db.CreateInternalTenantParams) (db.Tenant, error) {
@@ -93,7 +96,10 @@ func (q *internalAuthQueriesStub) GetInternalTenantByOwnerUserID(_ context.Conte
 }
 
 func (q *internalAuthQueriesStub) GetTenantClaimBySecretHash(context.Context, string) (db.TenantClaim, error) {
-	return db.TenantClaim{}, errors.New("claim not found")
+	if q.claimBySecret.ID == uuid.Nil {
+		return db.TenantClaim{}, errors.New("claim not found")
+	}
+	return q.claimBySecret, nil
 }
 
 func (q *internalAuthQueriesStub) GetUserByEmail(context.Context, string) (db.User, error) {
@@ -112,12 +118,16 @@ func (q *internalAuthQueriesStub) GetUserSessionByRefreshTokenHash(_ context.Con
 	}, nil
 }
 
-func (q *internalAuthQueriesStub) BindInternalTenantToOwner(context.Context, db.BindInternalTenantToOwnerParams) (db.Tenant, error) {
-	panic("unexpected BindInternalTenantToOwner")
+func (q *internalAuthQueriesStub) BindInternalTenantToOwner(_ context.Context, arg db.BindInternalTenantToOwnerParams) (db.Tenant, error) {
+	q.bindTenantCalls++
+	if q.bindTenantErr != nil {
+		return db.Tenant{}, q.bindTenantErr
+	}
+	return db.Tenant{ID: arg.ID}, nil
 }
 
 func (q *internalAuthQueriesStub) MarkTenantClaimUsed(context.Context, uuid.UUID) (db.TenantClaim, error) {
-	panic("unexpected MarkTenantClaimUsed")
+	return db.TenantClaim{}, nil
 }
 
 func (q *internalAuthQueriesStub) TouchUserSession(context.Context, uuid.UUID) error {
@@ -474,6 +484,10 @@ func TestInternalAuthAccessToken_PrefersLocalBootstrapTenantForSession(t *testin
 		sessionTokenHash: sha256Hex(sessionToken),
 		sessionUserID:    userID,
 		sessionID:        uuid.New(),
+		claimBySecret: db.TenantClaim{
+			ID:       uuid.New(),
+			TenantID: bootstrapTenantID,
+		},
 		tenantByOwner: db.Tenant{
 			ID: ownedTenantID,
 		},
@@ -507,4 +521,63 @@ func TestInternalAuthAccessToken_PrefersLocalBootstrapTenantForSession(t *testin
 	require.NoError(t, err)
 	require.Equal(t, bootstrapTenantID, claims.TenantID)
 	require.Equal(t, userID.String(), claims.Subject)
+	require.Equal(t, 1, queryStub.bindTenantCalls)
+}
+
+func TestInternalAuthAccessToken_IgnoresStaleLoopbackBootstrapForDifferentOwnerTenant(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	sessionToken := "session-token"
+	userID := uuid.New()
+	ownedTenantID := uuid.New()
+	staleBootstrapTenantID := uuid.New()
+	jwtService := infraAuth.NewJWTService(infraAuth.DefaultJWTConfig())
+	cacheStub := &internalAuthCacheStub{
+		values: map[string]string{
+			localClientTenantRedisKey(localLoopbackClientID): `{"tenant_id":"` + staleBootstrapTenantID.String() + `","claim_secret":"stale-claim-secret"}`,
+		},
+	}
+	queryStub := &internalAuthQueriesStub{
+		sessionTokenHash: sha256Hex(sessionToken),
+		sessionUserID:    userID,
+		sessionID:        uuid.New(),
+		claimBySecret: db.TenantClaim{
+			ID:       uuid.New(),
+			TenantID: staleBootstrapTenantID,
+		},
+		bindTenantErr: errors.New("already claimed"),
+		tenantByOwner: db.Tenant{
+			ID: ownedTenantID,
+		},
+	}
+
+	handler := NewInternalAuthHandler(
+		&config.Config{Server: config.ServerConfig{Env: "development"}},
+		queryStub,
+		jwtService,
+		infraAuth.NewAPIKeyService(),
+		cacheStub,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/v1/internal/auth/access-token", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set(localClientIDHeader, "browser-1")
+	req.AddCookie(&http.Cookie{Name: internalSessionCookieName, Value: sessionToken})
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.AccessToken(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, queryStub.getInternalCalls)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	accessToken, ok := body["access_token"].(string)
+	require.True(t, ok)
+	claims, err := jwtService.ValidateToken(accessToken)
+	require.NoError(t, err)
+	require.Equal(t, ownedTenantID, claims.TenantID)
+	require.NotEqual(t, staleBootstrapTenantID, claims.TenantID)
+	require.Equal(t, 1, queryStub.bindTenantCalls)
 }

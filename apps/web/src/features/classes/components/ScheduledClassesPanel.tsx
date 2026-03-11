@@ -250,7 +250,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
                     <Button variant="outline" size="sm" onClick={() => void sendGmailInvite(room)} className="h-9 w-9 p-0 border-border hover:bg-muted shrink-0 flex items-center justify-center group/gmail" aria-label="Send invite via Gmail">
                       <GmailIcon size={16} className="group-hover/gmail:scale-110 transition-transform" />
                     </Button>
-                    <Button disabled={!canEnter} onClick={() => window.open(`/room/${encodeURIComponent(room.id)}`, "_blank", "noopener,noreferrer")} size="sm" className="flex-1 h-9 font-bold text-xs">
+                    <Button disabled={!canEnter} onClick={() => window.open(`/room/${encodeURIComponent(room.id)}?auth=internal`, "_blank", "noopener,noreferrer")} size="sm" className="flex-1 h-9 font-bold text-xs">
                       <HugeiconsIcon icon={Video01Icon} size={14} className="mr-1.5" />
                       {room.status === "active" ? "Join Now" : "Enter Room"}
                     </Button>

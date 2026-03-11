@@ -87,6 +87,19 @@ export function getJoinContext(): JoinContextV1 | null {
   return isJoinContextActiveForCurrentRoom(ctx) ? ctx : null;
 }
 
+export function shouldUseInternalRoomAuth(pathname: string | undefined, search: string | undefined) {
+  if (!(pathname ?? "").startsWith("/room/")) {
+    return false;
+  }
+
+  const params = new URLSearchParams(search ?? "");
+  return params.get("auth") === "internal";
+}
+
+export function shouldPrimeTokenCache(pathname: string | undefined) {
+  return !(pathname ?? "").startsWith("/j/");
+}
+
 export function setJoinContext(ctx: JoinContextV1) {
   if (typeof window === "undefined") return;
   sessionStorage.setItem(JOIN_CONTEXT_KEY, JSON.stringify(ctx));

@@ -53,6 +53,7 @@ export const Route = createFileRoute("/room/$roomId")({
   validateSearch: z.object({
     roomName: z.string().optional(),
     autoJoin: z.coerce.boolean().optional(),
+    auth: z.enum(["internal"]).optional(),
   }),
 });
 
@@ -60,7 +61,7 @@ function RoomPage() {
   const { roomId } = Route.useParams() as {
     roomId: string;
   };
-  const { roomName, autoJoin } = Route.useSearch();
+  const { roomName, autoJoin, auth } = Route.useSearch();
   const navigate = useNavigate();
   const apiUrl = useMemo(() => getApiUrl(), []);
   const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
@@ -76,7 +77,7 @@ function RoomPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch Public Room Metadata to check schedule
+  // Fetch room metadata to check schedule and lock auth mode before join.
   useEffect(() => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(roomId)) {
@@ -87,7 +88,9 @@ function RoomPage() {
     let cancelled = false;
     (async () => {
       try {
-        const token = getJoinContext() ? await webTokenProvider() : await fetchInternalAccessToken(apiUrl);
+        const joinContext = getJoinContext();
+        const usingInternalAuth = !joinContext;
+        const token = joinContext ? await webTokenProvider() : await fetchInternalAccessToken(apiUrl);
         const res = await fetch(`${apiUrl}/api/v1/rooms/${roomId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -96,6 +99,15 @@ function RoomPage() {
         if (!res.ok) throw new Error("Room not found");
         const data = await res.json();
         if (!cancelled) {
+          if (usingInternalAuth && auth !== "internal") {
+            navigate({
+              to: "/room/$roomId",
+              params: { roomId },
+              search: (prev) => ({ ...prev, auth: "internal" }),
+              replace: true,
+            });
+            return;
+          }
           setRoomData(data);
           setIsCheckingRoom(false);
         }
@@ -109,7 +121,7 @@ function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [apiUrl, roomId, webTokenProvider]);
+  }, [apiUrl, auth, navigate, roomId, webTokenProvider]);
 
   // Load username and defaults from storage after mount
   useEffect(() => {

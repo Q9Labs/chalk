@@ -6,7 +6,7 @@ import { DebugDialog } from "../components/DebugDialog";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { createWebTokenProvider, getApiUrl, getJoinContext, isLocalHost, shouldPrimeTokenCache } from "../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, getJoinContext, isLocalHost, shouldPrimeTokenCache, shouldUseInternalRoomAuth } from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -104,7 +104,7 @@ function RootComponent() {
   );
   const tokenProvider = useMemo(
     () => async () => {
-      if (!isServer && window.location.pathname.startsWith("/room/") && getJoinContext()) {
+      if (!isServer && window.location.pathname.startsWith("/room/") && (getJoinContext() || shouldUseInternalRoomAuth(window.location.pathname, window.location.search))) {
         return webTokenProvider();
       }
       if (apiKeyTokenProvider) {

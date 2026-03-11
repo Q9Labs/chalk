@@ -267,28 +267,12 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 		if err == nil {
 			_ = h.queries.TouchUserSession(ctx, sess.ID)
 			subject = sess.UserID.String()
-
-			if hasLocalBootstrap && localBootstrap != nil && localBootstrap.TenantID != uuid.Nil {
-				tenantID = localBootstrap.TenantID
-				if localBootstrap.ClaimSecret != "" {
-					_ = h.tryClaimTenant(ctx, localBootstrap.ClaimSecret, sess.UserID)
-				}
-			} else if cachedTenantID, ok := h.getCachedInternalTenantByOwner(ctx, sess.UserID); ok {
-				tenantID = cachedTenantID
-			} else {
-				t, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(sess.UserID))
-				if err != nil {
-					created, err := h.createInternalTenant(ctx, &sess.UserID)
-					if err != nil || created == nil {
-						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create tenant"})
-						return
-					}
-					tenantID = created.ID
-				} else {
-					tenantID = t.ID
-					h.setCachedInternalTenantByOwner(ctx, sess.UserID, t.ID)
-				}
+			resolvedTenantID, resolveErr := h.resolveSessionTenantID(ctx, sess.UserID, localBootstrap, hasLocalBootstrap)
+			if resolveErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create tenant"})
+				return
 			}
+			tenantID = resolvedTenantID
 		}
 	}
 
@@ -344,6 +328,30 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 		"access_token": tokenPair.AccessToken,
 		"expires_in":   tokenPair.ExpiresIn,
 	})
+}
+
+func (h *InternalAuthHandler) resolveSessionTenantID(ctx context.Context, userID uuid.UUID, localBootstrap *localClientTenantBootstrap, hasLocalBootstrap bool) (uuid.UUID, error) {
+	if hasLocalBootstrap && localBootstrap != nil && localBootstrap.TenantID != uuid.Nil {
+		if localBootstrap.ClaimSecret != "" && h.tryClaimTenant(ctx, localBootstrap.ClaimSecret, userID) {
+			return localBootstrap.TenantID, nil
+		}
+	}
+
+	if cachedTenantID, ok := h.getCachedInternalTenantByOwner(ctx, userID); ok {
+		return cachedTenantID, nil
+	}
+
+	t, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(userID))
+	if err == nil {
+		h.setCachedInternalTenantByOwner(ctx, userID, t.ID)
+		return t.ID, nil
+	}
+
+	created, err := h.createInternalTenant(ctx, &userID)
+	if err != nil || created == nil {
+		return uuid.Nil, err
+	}
+	return created.ID, nil
 }
 
 func (h *InternalAuthHandler) getOrCreateUser(ctx context.Context, emailAddr string) (*db.User, error) {

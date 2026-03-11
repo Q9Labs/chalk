@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchInternalAccessToken, getJoinContext, getOrCreateLocalClientId, resolveApiUrl, setJoinContext, startMagicLink, verifyMagicLink } from "./internalAuth";
+import { fetchInternalAccessToken, getJoinContext, getOrCreateLocalClientId, resolveApiUrl, setJoinContext, shouldPrimeTokenCache, shouldUseInternalRoomAuth, startMagicLink, verifyMagicLink } from "./internalAuth";
 
 const originalWindow = globalThis.window;
 const originalLocalStorage = globalThis.localStorage;
@@ -208,6 +208,26 @@ describe("getJoinContext", () => {
     });
 
     expect(getJoinContext()).toBeNull();
+  });
+});
+
+describe("shouldPrimeTokenCache", () => {
+  it("skips eager token warmup on join-link routes", () => {
+    expect(shouldPrimeTokenCache("/j/join-token-123")).toBe(false);
+  });
+
+  it("allows eager token warmup on room routes", () => {
+    expect(shouldPrimeTokenCache("/room/math-101")).toBe(true);
+  });
+});
+
+describe("shouldUseInternalRoomAuth", () => {
+  it("uses internal auth for dashboard room links flagged with auth=internal", () => {
+    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "?auth=internal")).toBe(true);
+  });
+
+  it("does not force internal auth for regular room links", () => {
+    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "")).toBe(false);
   });
 });
 
