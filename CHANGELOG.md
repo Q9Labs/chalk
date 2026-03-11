@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-Core: background-effects support state sync** — room attachment now pushes the media service’s computed state into session state, so Chromium-capable browsers no longer stay stuck on the default “unsupported” background-effects message.
 - **Web/API: localhost dashboard auth + SDK toast export** — restore the `toast` export on `@q9labs/chalk-react`, allow `X-Chalk-Local-Client-ID` through API CORS preflight, and default the local room route to camera/mic off unless stored join prefs explicitly opt in.
 - **SDK-React: pre-join camera/mic defaults** — the lobby now starts with camera and microphone off unless callers explicitly opt in via `defaults` or `initial*Enabled` props.
 - **SDK-React: meeting stage symbol regression** — restore the missing React/state imports used by the in-room stage so `useMemo`-driven whiteboard/stage state no longer crashes at runtime.

@@ -67,8 +67,12 @@ export const attachRoomToManagersAndBridgeState = ({ room, setCurrentRoom, roomA
         yield* roomSvc.joinComplete(room);
         yield* participantSvc.attachRoom(room);
         yield* mediaSvc.pipe(Effect.andThen((ms) => ms.attachRoom(room)));
+        return yield* mediaSvc.pipe(Effect.andThen((ms) => ms.state));
       }),
     )
+    .then((mediaState) => {
+      stateUpdaters.updateMediaState(mediaState);
+    })
     .catch(() => {
       // ConferenceSession attachment failed - error already emitted via wide events in client
     });
