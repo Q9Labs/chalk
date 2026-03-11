@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -17,12 +18,23 @@ import (
 	"github.com/google/uuid"
 )
 
+type internalLinksRecordingService interface {
+	GetRecording(ctx context.Context, recordingID uuid.UUID) (*db.Recording, error)
+	GetRecordingWithRoomInfo(ctx context.Context, recordingID uuid.UUID) (*db.GetRecordingWithRoomInfoRow, error)
+	GetPresignedURL(ctx context.Context, recordingID uuid.UUID, expiresIn time.Duration) (string, error)
+}
+
+type internalLinksRoomService interface {
+	GetRoom(ctx context.Context, roomID uuid.UUID) (*db.Room, error)
+	GetRoomByName(ctx context.Context, name string, tenantID uuid.UUID) (*db.Room, error)
+}
+
 type InternalLinksHandler struct {
 	signingKey []byte
 	jwtService *infraAuth.JWTService
 	queries    *db.Queries
-	recSvc     *recording.Service
-	roomSvc    *room.Service
+	recSvc     internalLinksRecordingService
+	roomSvc    internalLinksRoomService
 }
 
 func NewInternalLinksHandler(signingKey string, jwtService *infraAuth.JWTService, queries *db.Queries, recSvc *recording.Service, roomSvc *room.Service) *InternalLinksHandler {
@@ -43,13 +55,19 @@ func (h *InternalLinksHandler) CreateJoinToken(c *gin.Context) {
 		return
 	}
 
-	roomName := strings.TrimSpace(c.Param("id"))
-	if roomName == "" {
+	roomIdentifier := strings.TrimSpace(c.Param("id"))
+	if roomIdentifier == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
 		return
 	}
 
-	token, err := links.SignJoinToken(h.signingKey, claims.TenantID, roomName, time.Now().Add(24*time.Hour))
+	resolvedRoom, roomTarget, err := h.resolveJoinRoom(c.Request.Context(), claims.TenantID, roomIdentifier)
+	if err != nil || resolvedRoom == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+
+	token, err := links.SignJoinToken(h.signingKey, claims.TenantID, roomTarget, time.Now().Add(24*time.Hour))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign join token"})
 		return
@@ -80,6 +98,12 @@ func (h *InternalLinksHandler) ExchangeJoinToken(c *gin.Context) {
 		return
 	}
 
+	resolvedRoom, roomTarget, err := h.resolveJoinRoom(c.Request.Context(), payload.TenantID, payload.RoomName)
+	if err != nil || resolvedRoom == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
+	}
+
 	tokenPair, err := h.jwtService.GenerateTokenPair(domainAuth.Claims{
 		Subject:     "join",
 		TenantID:    payload.TenantID,
@@ -94,7 +118,7 @@ func (h *InternalLinksHandler) ExchangeJoinToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": tokenPair.AccessToken,
 		"expires_in":   tokenPair.ExpiresIn,
-		"room_name":    payload.RoomName,
+		"room_name":    roomTarget,
 	})
 }
 
@@ -178,3 +202,23 @@ func (h *InternalLinksHandler) GetShare(c *gin.Context) {
 	})
 }
 
+func (h *InternalLinksHandler) resolveJoinRoom(ctx context.Context, tenantID uuid.UUID, roomIdentifier string) (*db.Room, string, error) {
+	trimmed := strings.TrimSpace(roomIdentifier)
+	if trimmed == "" || h.roomSvc == nil {
+		return nil, "", errors.New("room lookup unavailable")
+	}
+
+	if roomID, err := uuid.Parse(trimmed); err == nil {
+		room, getErr := h.roomSvc.GetRoom(ctx, roomID)
+		if getErr != nil || room == nil || room.TenantID != tenantID {
+			return nil, "", errors.New("room not found")
+		}
+		return room, room.ID.String(), nil
+	}
+
+	room, err := h.roomSvc.GetRoomByName(ctx, trimmed, tenantID)
+	if err != nil || room == nil || room.TenantID != tenantID {
+		return nil, "", errors.New("room not found")
+	}
+	return room, room.ID.String(), nil
+}

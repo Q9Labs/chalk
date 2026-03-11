@@ -124,6 +124,10 @@ function DashboardPage() {
   }, [sdkClient]);
 
   useEffect(() => {
+    clearJoinContext();
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {

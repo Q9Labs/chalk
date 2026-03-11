@@ -14,10 +14,10 @@
 
 import { useInteractions, useWhiteboard, VideoConference } from "@q9labs/chalk-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
-import { getApiUrl, getJoinContext } from "../../lib/internalAuth";
+import { createWebTokenProvider, fetchInternalAccessToken, getApiUrl, getJoinContext } from "../../lib/internalAuth";
 import { ChalkLogo } from "../../components/ChalkLogo";
 import { cn } from "../../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -62,6 +62,8 @@ function RoomPage() {
   };
   const { roomName, autoJoin } = Route.useSearch();
   const navigate = useNavigate();
+  const apiUrl = useMemo(() => getApiUrl(), []);
+  const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
 
   const [storedUserName, setStoredUserName] = useState<string>(() => getStoredUserName());
   const [roomData, setRoomData] = useState<any>(null);
@@ -76,11 +78,21 @@ function RoomPage() {
 
   // Fetch Public Room Metadata to check schedule
   useEffect(() => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(roomId)) {
+      setIsCheckingRoom(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
-        const url = getApiUrl();
-        const res = await fetch(`${url}/api/v1/public/rooms/${roomId}`);
+        const token = getJoinContext() ? await webTokenProvider() : await fetchInternalAccessToken(apiUrl);
+        const res = await fetch(`${apiUrl}/api/v1/rooms/${roomId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
         if (!res.ok) throw new Error("Room not found");
         const data = await res.json();
         if (!cancelled) {
@@ -97,7 +109,7 @@ function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [roomId]);
+  }, [apiUrl, roomId, webTokenProvider]);
 
   // Load username and defaults from storage after mount
   useEffect(() => {

@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Web/API: scheduled dashboard joins stay pinned to the right room/workspace** — internal auth now prefers the cached localhost workspace during session-backed dashboard use, join-link create/exchange validates the target room still exists for that tenant, dashboard entry clears stale invite-mode auth, and the room route now gates scheduled access via the authenticated room endpoint instead of a missing public metadata path.
 - **SDK-React: shared PiP render-loop fix** — hoisted stable omitted-prop defaults for `MeetingRoom` and `PreJoinLobby`, and made shared Picture-in-Picture registration idempotent so shared PiP no longer spirals into `Maximum update depth exceeded`.
 - **SDK-Core: background-effects support state sync** — room attachment now pushes the media service’s computed state into session state, so Chromium-capable browsers no longer stay stuck on the default “unsupported” background-effects message.
 - **Repo: low-signal test cleanup** — removed legacy/trivial UI smoke tests, meta/policy-only sdk-core tests, and the placeholder webhook E2E harness so the repo’s test surface better reflects active behavior.

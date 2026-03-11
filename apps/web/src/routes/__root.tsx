@@ -6,7 +6,7 @@ import { DebugDialog } from "../components/DebugDialog";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { createWebTokenProvider, getApiUrl, isLocalHost } from "../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, getJoinContext, isLocalHost, shouldPrimeTokenCache } from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -90,7 +90,8 @@ function RootComponent() {
 
   // Token provider: handles API key → JWT exchange and auto-refresh
   const apiKey = import.meta.env.VITE_CHALK_API_KEY;
-  const tokenProvider = useMemo(
+  const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
+  const apiKeyTokenProvider = useMemo(
     () =>
       apiKey
         ? createTokenProvider({
@@ -98,12 +99,25 @@ function RootComponent() {
             apiUrl,
             storage: "sessionStorage",
           })
-        : createWebTokenProvider(apiUrl),
+        : null,
     [apiKey, apiUrl],
+  );
+  const tokenProvider = useMemo(
+    () => async () => {
+      if (!isServer && window.location.pathname.startsWith("/room/") && getJoinContext()) {
+        return webTokenProvider();
+      }
+      if (apiKeyTokenProvider) {
+        return apiKeyTokenProvider();
+      }
+      return webTokenProvider();
+    },
+    [apiKeyTokenProvider, webTokenProvider],
   );
 
   useEffect(() => {
     if (isServer) return;
+    if (!shouldPrimeTokenCache(window.location.pathname)) return;
     // Prime token cache so first Join click avoids auth round-trip; fail-open by design.
     void tokenProvider().catch(() => {});
   }, [tokenProvider]);

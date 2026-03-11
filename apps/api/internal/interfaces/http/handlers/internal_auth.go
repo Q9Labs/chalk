@@ -258,6 +258,8 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 
 	var tenantID uuid.UUID
 	var subject string
+	localClientID := localClientBootstrapKey(c.Request, strings.TrimSpace(c.GetHeader(localClientIDHeader)))
+	localBootstrap, hasLocalBootstrap := h.getCachedLocalClientTenant(ctx, c.Request, localClientID)
 
 	// 1) Session cookie (logged in)
 	if sessionToken, err := c.Cookie(internalSessionCookieName); err == nil && sessionToken != "" {
@@ -266,7 +268,12 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 			_ = h.queries.TouchUserSession(ctx, sess.ID)
 			subject = sess.UserID.String()
 
-			if cachedTenantID, ok := h.getCachedInternalTenantByOwner(ctx, sess.UserID); ok {
+			if hasLocalBootstrap && localBootstrap != nil && localBootstrap.TenantID != uuid.Nil {
+				tenantID = localBootstrap.TenantID
+				if localBootstrap.ClaimSecret != "" {
+					_ = h.tryClaimTenant(ctx, localBootstrap.ClaimSecret, sess.UserID)
+				}
+			} else if cachedTenantID, ok := h.getCachedInternalTenantByOwner(ctx, sess.UserID); ok {
 				tenantID = cachedTenantID
 			} else {
 				t, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(sess.UserID))
@@ -298,8 +305,8 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 
 	// 3) No session/claim yet: create a temporary internal tenant + claim cookie.
 	if tenantID == uuid.Nil {
-		localClientID := localClientBootstrapKey(c.Request, strings.TrimSpace(c.GetHeader(localClientIDHeader)))
-		if bootstrap, ok := h.getCachedLocalClientTenant(ctx, c.Request, localClientID); ok {
+		if hasLocalBootstrap && localBootstrap != nil {
+			bootstrap := localBootstrap
 			tenantID = bootstrap.TenantID
 			subject = "claim:" + tenantID.String()
 			h.setCookie(c, internalClaimCookieName, bootstrap.ClaimSecret, time.Now().Add(localClientTenantTTL))
