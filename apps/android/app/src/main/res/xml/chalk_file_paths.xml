@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-	<!-- internal storage: {filesDir}/chalk-logs/* -->
-	<files-path name="chalk_logs" path="chalk-logs/" />
-</paths>
-

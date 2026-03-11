@@ -40,16 +40,13 @@ All apps & packages:
 
 - **sdk-core**: Client logic, WebRTC, room management (stable)
 - **sdk-react**: React hooks, components (stable)
-- **sdk-react-native**: React Native bindings (in-progress)
 - **ui**: Shared UI primitives (mostly unused)
 - **chalk-whiteboard**: Whiteboard features (stable)
 - **api**: Go backend API (`apps/api`, stable)
 - **terraform**: AWS IaC (`infrastructure/terraform`, stable)
 - **admin**: Admin management app (limited-access, for owner only)
 - **docs**: Chalk docs (`docs.chalk.q9labs.ai`, stable)
-  **Demo apps (`apps/web`, `apps/next-pages-demo`, `apps/mobile2`) are for testing only.**
-
-`apps/mobile` is deprecated and is soon to be deleted or replaced
+  **Demo apps (`apps/web`, `apps/next-pages-demo`) are for testing only.**
 
 After packages → export → use in demo apps for user testing.
 Sometimes (rarely) the user might want to directly work on the app and later create the sdk.
@@ -59,7 +56,7 @@ Never add client-side business logic to demo apps.
 ## SDK-First Guardrail
 
 - For any product behavior, bug fix, feature, UX, observability, auth, networking, retries, or error handling: implement first in the Chalk package that owns it.
-- Owner package examples: `sdk-core`, `sdk-react`, `sdk-react-native`, `chalk-whiteboard`, `ui` (not app-level first).
+- Owner package examples: `sdk-core`, `sdk-react`, `chalk-whiteboard`, `ui` (not app-level first).
 - Consumer apps should only do thin wiring/config, branding, and app-specific integration unless explicitly requested otherwise.
 - Do not ship app-only logic as the primary fix when it should live in a Chalk package.
 - If an app-only workaround is unavoidable, label it temporary and open/complete the SDK/package follow-up before closing the task.

@@ -3,7 +3,6 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "packages/sdk-react-native/example",
     "apps/e2e",
     "apps/web",
     "apps/docs",
@@ -16,11 +15,6 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "dev:web:pages": "bun run --cwd apps/web dev:pages",
-    "ios:build": "bash scripts/mobile/ios-build-sim.sh",
-    "ios:run": "bash scripts/mobile/ios-run-sim.sh",
-    "android:assemble": "bash scripts/mobile/android-assemble-debug.sh",
-    "android:install": "bash scripts/mobile/android-install-debug.sh",
-    "android:run": "bash scripts/mobile/android-run-debug.sh",
     "test": "turbo test",
     "test:join-stress:browser": "bash tests/scripts/run-agent-browser-join-stress.sh",
     "test:join-chaos:browser": "bash tests/scripts/run-agent-browser-chaos.sh",
@@ -45,9 +39,6 @@
     "typescript": "^5.7.2",
     "wrangler": "^4.54.0",
     "yaml": "^2.8.2"
-  },
-  "overrides": {
-    "react-native-reanimated": "~3.19.5"
   },
   "engines": {
     "node": ">=20"

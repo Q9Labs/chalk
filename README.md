@@ -9,15 +9,11 @@ chalk/
 ├── packages/
 │   ├── sdk-core/              # @q9labs/chalk-core — Vanilla JS/TS SDK
 │   ├── sdk-react/             # @q9labs/chalk-react — React hooks & components
-│   ├── sdk-react-native/      # @q9labs/chalk-react-native — React Native SDK
 │   ├── chalk-whiteboard/      # @q9labs/chalk-whiteboard — Excalidraw sync engine
 │   └── ui/                    # @q9labs/chalk-ui — Headless UI primitives (Base UI + Tailwind)
 ├── apps/
 │   ├── api/                   # Go backend (Gin, sqlc, Clean Architecture)
 │   ├── web/                   # Demo app (Vite + React 19 + TanStack Router)
-│   ├── ios/                   # Native iOS app (WIP)
-│   ├── android/               # Native Android app (WIP)
-│   ├── native/                # Native app specs + findings (living docs)
 │   ├── docs/                  # Documentation site (Astro + Starlight)
 │   └── e2e/                   # End-to-end test suite
 ├── infrastructure/
@@ -40,10 +36,6 @@ bun run check-types  # Type check
 bun run generate     # Generate OpenAPI types from apps/api/openapi.yaml
 ```
 
-### Mobile
-
-Native app specs + integration notes live in `apps/native/`.
-
 ## Architecture
 
 ### Backend
@@ -63,7 +55,6 @@ Native app specs + integration notes live in `apps/native/`.
 | ------------------ | ---------------------------------------------------- |
 | `sdk-core`         | Client logic, WebRTC, room management, token refresh |
 | `sdk-react`        | React hooks, context, Storybook component library    |
-| `sdk-react-native` | RN bindings, platform-specific hooks, RTCManager     |
 | `chalk-whiteboard` | Excalidraw sync engine + React integration           |
 | `ui`               | Headless primitives (Base UI + Tailwind)             |
 

@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Repo: session-log housekeeping** — moved root/native progress notes into `scratchpad/` and renamed them with Chalk-flavored `session-log` filenames for cleaner workspace organization.
+- **Repo: native surface removal** — removed the iOS app, Android app, React Native SDK/package, native helper scripts, native planning artifacts, and related workspace/CI/docs wiring so Chalk is now web/package-only in-repo.
 - **SDK-React: joining-room loading headlines** — the pre-join loading screen now rotates reassuring join-progress messages in the main headline slot instead of leaving a single static “Joining room...” label.
 - **SDK-React: Full-bleed Picture-in-Picture** — redesigned the Document PiP window to feature a full-bleed video stage, floating glassmorphism controls, and refined typography for maximum use of small space.
 - **SDK/API: remove screen annotations from screen sharing** — strip the incomplete shared-screen annotation protocol, state managers, React overlay/tooling, and demo flag wiring so screen sharing falls back to the stable non-annotated path.

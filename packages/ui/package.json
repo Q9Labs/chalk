@@ -25,10 +25,10 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @chalk/core && bun run build:types && bun run build:css",
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --external react --external @chalk/core && bun run build:types && bun run build:css",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
-    "dev": "bun run build:css && bun build ./src/index.ts --outdir ./dist --target node --external react --external react-native --external @chalk/core --watch",
+    "dev": "bun run build:css && bun build ./src/index.ts --outdir ./dist --target node --external react --external @chalk/core --watch",
     "test": "echo 'No tests configured yet'",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",
@@ -51,10 +51,5 @@
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
-  },
-  "peerDependenciesMeta": {
-    "react-native": {
-      "optional": true
-    }
   }
 }
