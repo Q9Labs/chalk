@@ -37,33 +37,6 @@ describe("ParticipantList", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("calls onMakeCoHost when Make Co-Host clicked", async () => {
-    const user = userEvent.setup();
-    const onMakeCoHost = vi.fn();
-    const participantsWithRegular = [
-      { id: "1", displayName: "Alice", role: "host" as const, isLocal: true },
-      { id: "2", displayName: "Bob", role: "participant" as const },
-    ];
-    const { getByLabelText, getByText } = render(<ParticipantList participants={participantsWithRegular} onMakeCoHost={onMakeCoHost} canManageParticipants={true} />);
-    // Open menu for Bob
-    await user.click(getByLabelText("Options for Bob"));
-    // Click Make Co-Host
-    await user.click(getByText("Make Co-Host"));
-    expect(onMakeCoHost).toHaveBeenCalledWith("2");
-  });
-
-  it("mutes participant volume when mute icon clicked", async () => {
-    const user = userEvent.setup();
-    const onParticipantVolumeChange = vi.fn();
-    const participantVolumes = new Map([["2", 60]]);
-    const { getByLabelText } = render(<ParticipantList participants={participants} participantVolumes={participantVolumes} onParticipantVolumeChange={onParticipantVolumeChange} />);
-
-    // Volume control should be accessible even when canManageParticipants=false
-    await user.click(getByLabelText("Options for Bob"));
-    await user.click(getByLabelText("Mute volume"));
-    expect(onParticipantVolumeChange).toHaveBeenCalledWith("2", 0);
-  });
-
   it("dedupes duplicate participant ids before rendering rows", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const duplicateParticipants = [

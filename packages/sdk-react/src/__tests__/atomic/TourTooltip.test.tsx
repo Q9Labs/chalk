@@ -37,8 +37,8 @@ describe("TourTooltip", () => {
     expect(onSkip).toHaveBeenCalledTimes(1);
   });
 
-  it('renders "Finish" on last step', () => {
+  it('renders "Got it" on last step', () => {
     const { getByText } = render(<TourTooltip {...defaultProps} step={3} />);
-    expect(getByText("Finish")).toBeDefined();
+    expect(getByText("Got it")).toBeDefined();
   });
 });

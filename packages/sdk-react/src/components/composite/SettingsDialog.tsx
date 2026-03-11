@@ -385,6 +385,7 @@ export const SettingsDialog = React.memo(
                     <button
                       type="button"
                       onClick={() => onUpdateAppearance({ profileGradient: { mode: "auto" } })}
+                      aria-label="Use automatic profile gradient"
                       className={cn(
                         "flex w-full items-center justify-between rounded-xl border p-3.5 transition-all",
                         profileGradientMode === "auto" ? "border-primary bg-primary/10 text-primary shadow-sm shadow-primary/10" : "border-border/50 bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-foreground",

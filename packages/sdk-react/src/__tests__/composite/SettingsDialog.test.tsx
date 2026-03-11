@@ -196,7 +196,7 @@ describe("SettingsDialog", () => {
   });
 
   it("makes the auto profile gradient option explicit", () => {
-    const { getByText, getByRole } = render(
+    const { getByText, getByLabelText } = render(
       <SettingsDialog
         isOpen
         onClose={() => {}}
@@ -213,9 +213,8 @@ describe("SettingsDialog", () => {
       fireEvent.click(getByText("Appearance"));
     });
 
-    expect(getByRole("button", { name: "Use automatic profile gradient" })).toBeDefined();
-    expect(getByText("Default")).toBeDefined();
-    expect(getByText("Auto")).toBeDefined();
+    expect(getByLabelText("Use automatic profile gradient")).toBeDefined();
+    expect(getByText("Automatic Identity")).toBeDefined();
   });
 
 });
