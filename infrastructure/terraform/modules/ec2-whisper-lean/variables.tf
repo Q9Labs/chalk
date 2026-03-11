@@ -23,7 +23,7 @@ variable "use_spot" {
 variable "spot_instance_type" {
   description = "Spot request type (one-time or persistent)"
   type        = string
-  default     = "persistent"
+  default     = "one-time"
 
   validation {
     condition     = contains(["one-time", "persistent"], var.spot_instance_type)

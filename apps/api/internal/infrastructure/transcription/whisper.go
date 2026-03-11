@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	whisperDefaultTimeout  = 2 * time.Hour
+	whisperDefaultTimeout  = 4 * time.Hour
 	whisperPollInterval    = 5 * time.Second
 	whisperResultKeyPrefix = "transcription:result:"
 	whisperTimeoutEnvVar   = "POST_MEETING_WHISPER_TIMEOUT"

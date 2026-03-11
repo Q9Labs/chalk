@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Whisper worker: stale-only processing recovery + duplicate job guard** — startup/periodic processing recovery now requeues only stale unlocked jobs, completed `job_id`s are pruned instead of replayed, active jobs hold renewable Redis locks, and API-side Whisper timeout default is raised to `4h` to better tolerate long recordings while queue churn burns down.
+
 - **Web/API: scheduled dashboard joins stay pinned to the right room/workspace** — internal auth now prefers the cached localhost workspace during session-backed dashboard use, join-link create/exchange validates the target room still exists for that tenant, dashboard entry clears stale invite-mode auth, and the room route now gates scheduled access via the authenticated room endpoint instead of a missing public metadata path.
 - **Web/API: localhost room auth now ignores stale shared loopback workspaces after login** — session-backed internal auth only reuses the loopback bootstrap when it can still be claimed for the current user; otherwise it falls back to the user’s actual owned tenant so fresh room IDs stop returning false `room not found` errors.
 - **SDK-React: whiteboard/chat panel resize stability** — opening the desktop chat panel while the whiteboard is already mounted now keeps the stage constrained, preserves the whiteboard viewport, and triggers a post-layout resize so the canvas does not overflow or jump upward.

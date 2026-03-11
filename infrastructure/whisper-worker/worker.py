@@ -15,8 +15,10 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import traceback
+import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -30,12 +32,20 @@ from observability import audio_url_meta, emit_event, setup_axiom_logging
 from otel import extract_context_from_traceparent, init_tracing
 from transcriber import WhisperTranscriber
 from worker_config import (
+    DONE_KEY_PREFIX,
+    DONE_TTL_SECONDS,
     GPU_METRICS_ENABLED,
     JOB_QUEUE,
     LOG_LEVEL,
     LOG_TRANSCRIPT,
     LOG_TRANSCRIPT_MAX_CHARS,
     POLL_TIMEOUT_SECONDS,
+    PROCESSING_HEARTBEAT_INTERVAL_SECONDS,
+    PROCESSING_LOCK_KEY_PREFIX,
+    PROCESSING_LOCK_TTL_SECONDS,
+    PROCESSING_RECOVERY_INTERVAL_SECONDS,
+    PROCESSING_RECOVERY_LOCK_KEY,
+    PROCESSING_RECOVERY_LOCK_TTL_SECONDS,
     PROCESSING_QUEUE,
     REDIS_CONNECT_TIMEOUT,
     REDIS_HEALTHCHECK_INTERVAL,
@@ -60,8 +70,10 @@ logger = logging.getLogger("whisper-worker")
 setup_axiom_logging(log_level=LOG_LEVEL)
 init_tracing(service_name="whisper-worker", env=os.getenv("ENVIRONMENT", "dev"))
 
+
 class WhisperWorker:
     def __init__(self) -> None:
+        self.worker_id = uuid.uuid4().hex
         self.redis = redis.from_url(
             REDIS_URL,
             decode_responses=True,
@@ -74,6 +86,89 @@ class WhisperWorker:
         self.metric_namespace = os.getenv("WHISPER_METRIC_NAMESPACE", "Chalk/Whisper")
         self.cloudwatch = boto3.client("cloudwatch", region_name=os.getenv("AWS_REGION") or None)
         self.enable_gpu_metrics = GPU_METRICS_ENABLED
+
+    def _result_key(self, job_id: str) -> str:
+        return f"{RESULT_KEY_PREFIX}{job_id}"
+
+    def _done_key(self, job_id: str) -> str:
+        return f"{DONE_KEY_PREFIX}{job_id}"
+
+    def _processing_lock_key(self, job_id: str) -> str:
+        return f"{PROCESSING_LOCK_KEY_PREFIX}{job_id}"
+
+    def _has_completed_job(self, job_id: str) -> bool:
+        try:
+            return bool(self.redis.exists(self._done_key(job_id)))
+        except Exception:
+            return False
+
+    def _mark_job_completed(self, job_id: str) -> None:
+        self.redis.setex(self._done_key(job_id), DONE_TTL_SECONDS, "completed")
+
+    def _acquire_processing_lock(self, job: TranscriptionJob) -> bool:
+        return bool(
+            self.redis.set(
+                self._processing_lock_key(job.job_id),
+                self.worker_id,
+                nx=True,
+                ex=PROCESSING_LOCK_TTL_SECONDS,
+            )
+        )
+
+    def _refresh_processing_lock(self, job: TranscriptionJob) -> None:
+        lock_key = self._processing_lock_key(job.job_id)
+        owner = self.redis.get(lock_key)
+        if owner == self.worker_id:
+            self.redis.expire(lock_key, PROCESSING_LOCK_TTL_SECONDS)
+
+    def _release_processing_lock(self, job: TranscriptionJob) -> None:
+        lock_key = self._processing_lock_key(job.job_id)
+        try:
+            owner = self.redis.get(lock_key)
+            if owner == self.worker_id:
+                self.redis.delete(lock_key)
+        except Exception as e:
+            emit_event(
+                logger,
+                level=logging.WARNING,
+                event={
+                    "event": "queue.lock_release_failed",
+                    "job_id": job.job_id,
+                    "error": str(e),
+                    "error_class": e.__class__.__name__,
+                    "error_stack": traceback.format_exc(),
+                },
+            )
+
+    def _start_processing_heartbeat(
+        self, job: TranscriptionJob
+    ) -> tuple[threading.Event, threading.Thread]:
+        stop_event = threading.Event()
+
+        def heartbeat() -> None:
+            while not stop_event.wait(PROCESSING_HEARTBEAT_INTERVAL_SECONDS):
+                try:
+                    self._refresh_processing_lock(job)
+                except Exception as e:
+                    emit_event(
+                        logger,
+                        level=logging.WARNING,
+                        event={
+                            "event": "queue.lock_refresh_failed",
+                            "job_id": job.job_id,
+                            "error": str(e),
+                            "error_class": e.__class__.__name__,
+                            "error_stack": traceback.format_exc(),
+                        },
+                    )
+
+        thread = threading.Thread(
+            target=heartbeat,
+            name=f"processing-heartbeat-{job.job_id}",
+            daemon=True,
+        )
+        thread.start()
+        return stop_event, thread
 
     def _compute_queue_wait_ms(self, created_at: Optional[str]) -> Optional[int]:
         if not created_at:
@@ -439,10 +534,12 @@ class WhisperWorker:
                 os.unlink(audio_path)
 
     def store_result(self, result: TranscriptionResult) -> None:
-        key = f"{RESULT_KEY_PREFIX}{result.job_id}"
+        key = self._result_key(result.job_id)
         result_dict = asdict(result)
         result_dict = {k: v for k, v in result_dict.items() if v is not None}
         self.redis.setex(key, RESULT_TTL_SECONDS, json.dumps(result_dict))
+        if result.status == "completed":
+            self._mark_job_completed(result.job_id)
 
     def publish_queue_metrics(self) -> None:
         try:
@@ -501,39 +598,96 @@ class WhisperWorker:
             )
 
     def requeue_processing_jobs(self) -> None:
-        # If the instance/container dies mid-job (common with Spot),
-        # we must requeue items left in the processing list so they're not lost.
+        # Recover only stale processing entries. Live jobs hold a short-lived lock
+        # refreshed by the owning worker, so a new worker must not blindly replay them.
         moved = 0
+        pruned_completed = 0
+        invalid = 0
+        checked = 0
+        lock_acquired = False
         try:
-            while True:
-                job_data = self.redis.rpoplpush(PROCESSING_QUEUE, JOB_QUEUE)
-                if job_data is None:
-                    break
-                moved += 1
+            lock_acquired = bool(
+                self.redis.set(
+                    PROCESSING_RECOVERY_LOCK_KEY,
+                    self.worker_id,
+                    nx=True,
+                    ex=PROCESSING_RECOVERY_LOCK_TTL_SECONDS,
+                )
+            )
+            if not lock_acquired:
+                return
+
+            for job_data in self.redis.lrange(PROCESSING_QUEUE, 0, -1):
+                checked += 1
+                try:
+                    job_dict = json.loads(job_data)
+                    job = TranscriptionJob(**job_dict)
+                except (json.JSONDecodeError, TypeError):
+                    removed = self.redis.lrem(PROCESSING_QUEUE, 1, job_data)
+                    if removed > 0:
+                        invalid += removed
+                    continue
+
+                if self._has_completed_job(job.job_id):
+                    removed = self.redis.lrem(PROCESSING_QUEUE, 1, job_data)
+                    if removed > 0:
+                        pruned_completed += removed
+                    continue
+
+                if self.redis.exists(self._processing_lock_key(job.job_id)):
+                    continue
+
+                removed = self.redis.lrem(PROCESSING_QUEUE, 1, job_data)
+                if removed > 0:
+                    self.redis.lpush(JOB_QUEUE, job_data)
+                    moved += removed
         except Exception as e:
             emit_event(
                 logger,
                 level=logging.WARNING,
                 event={
                     "event": "queue.requeue_processing_failed",
+                    "checked": checked,
                     "moved": moved,
+                    "deleted": pruned_completed + invalid,
                     "error": str(e),
                     "error_class": e.__class__.__name__,
                     "error_stack": traceback.format_exc(),
                 },
             )
             return
+        finally:
+            if lock_acquired:
+                try:
+                    owner = self.redis.get(PROCESSING_RECOVERY_LOCK_KEY)
+                    if owner == self.worker_id:
+                        self.redis.delete(PROCESSING_RECOVERY_LOCK_KEY)
+                except Exception:
+                    pass
 
-        if moved > 0:
+        if moved > 0 or pruned_completed > 0 or invalid > 0:
             emit_event(
                 logger,
                 level=logging.INFO,
-                event={"event": "queue.requeue_processing_done", "moved": moved},
+                event={
+                    "event": "queue.requeue_processing_done",
+                    "checked": checked,
+                    "moved": moved,
+                    "deleted": pruned_completed + invalid,
+                },
             )
 
     def ack_processing_job(self, job_data: str) -> None:
         try:
-            self.redis.lrem(PROCESSING_QUEUE, 1, job_data)
+            removed = self.redis.lrem(PROCESSING_QUEUE, 1, job_data)
+            if removed == 0:
+                emit_event(
+                    logger,
+                    level=logging.WARNING,
+                    event={
+                        "event": "queue.ack_missing",
+                    },
+                )
         except Exception as e:
             emit_event(
                 logger,
@@ -547,8 +701,13 @@ class WhisperWorker:
             )
 
     def run(self) -> None:
-        emit_event(logger, level=logging.INFO, event={"event": "worker.start"})
+        emit_event(
+            logger,
+            level=logging.INFO,
+            event={"event": "worker.start"},
+        )
         last_metric_time = 0.0
+        last_recovery_time = 0.0
         self.requeue_processing_jobs()
 
         while True:
@@ -558,6 +717,9 @@ class WhisperWorker:
                     self.publish_queue_metrics()
                     self.publish_gpu_metrics()
                     last_metric_time = now
+                if now - last_recovery_time >= PROCESSING_RECOVERY_INTERVAL_SECONDS:
+                    self.requeue_processing_jobs()
+                    last_recovery_time = now
 
                 job_data = self.redis.brpoplpush(
                     JOB_QUEUE,
@@ -584,8 +746,50 @@ class WhisperWorker:
                     self.ack_processing_job(job_data)
                     continue
 
+                if self._has_completed_job(job.job_id):
+                    emit_event(
+                        logger,
+                        level=logging.INFO,
+                        event={
+                            "event": "queue.job_already_completed",
+                            "job_id": job.job_id,
+                        },
+                    )
+                    self.ack_processing_job(job_data)
+                    continue
+
+                try:
+                    lock_acquired = self._acquire_processing_lock(job)
+                except Exception as e:
+                    emit_event(
+                        logger,
+                        level=logging.WARNING,
+                        event={
+                            "event": "queue.lock_acquire_failed",
+                            "job_id": job.job_id,
+                            "error": str(e),
+                            "error_class": e.__class__.__name__,
+                            "error_stack": traceback.format_exc(),
+                        },
+                    )
+                    self.ack_processing_job(job_data)
+                    continue
+
+                if not lock_acquired:
+                    emit_event(
+                        logger,
+                        level=logging.INFO,
+                        event={
+                            "event": "queue.job_locked_elsewhere",
+                            "job_id": job.job_id,
+                        },
+                    )
+                    self.ack_processing_job(job_data)
+                    continue
+
                 remaining = self.redis.llen(JOB_QUEUE)
                 use_batched = self.transcriber.should_use_batched(remaining)
+                heartbeat_stop, heartbeat_thread = self._start_processing_heartbeat(job)
 
                 try:
                     transcription_result = self.process_job(
@@ -595,6 +799,9 @@ class WhisperWorker:
                     )
                     self.store_result(transcription_result)
                 finally:
+                    heartbeat_stop.set()
+                    heartbeat_thread.join(timeout=PROCESSING_HEARTBEAT_INTERVAL_SECONDS)
+                    self._release_processing_lock(job)
                     self.ack_processing_job(job_data)
 
             except (redis.ConnectionError, redis.exceptions.TimeoutError) as e:

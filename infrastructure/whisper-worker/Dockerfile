@@ -32,11 +32,14 @@ ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 COPY requirements.txt .
 RUN uv pip install -r requirements.txt && rm -rf /tmp/uv-cache
 
-# Pre-download the Whisper model to bake it into the image
-# This avoids downloading on every container start
+# Optionally pre-download the Whisper model to bake it into the image.
+# Disabled by default so lower-memory builders can still produce the runtime image.
 ARG WHISPER_MODEL=distil-large-v3.5
+ARG PRELOAD_WHISPER_MODEL=false
 ENV WHISPER_MODEL=${WHISPER_MODEL}
-RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL}', device='cpu')"
+RUN if [ "${PRELOAD_WHISPER_MODEL}" = "true" ]; then \
+      python3 -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL}', device='cpu')"; \
+    fi
 
 # Copy worker script + modules
 COPY worker.py worker_types.py transcriber.py env_utils.py worker_config.py audio_download.py observability.py otel.py gpu_metrics.py .
