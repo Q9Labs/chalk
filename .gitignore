@@ -25,6 +25,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Caches
 .eslintcache
 .cache
+.bun-cache
+.gocache
+.tmp
+.agent-browser-home
+.turbo-prune-*
 *.tsbuildinfo
 .turbo
 .gradle
@@ -33,6 +38,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Android
 **/.idea
+**/.expo
+**/.expo-shared
+**/.metro-health-check*
+**/dist
+**/web-build
 
 # iOS / Xcode
 DerivedData

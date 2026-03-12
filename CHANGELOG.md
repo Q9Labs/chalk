@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Repo: local artifact ignore rules** — root ignore rules now cover Codex/browser caches, Go/build scratch dirs, Turbo prune output, and Expo-generated temp/export folders so routine local work stops polluting `git status`.
 - **Web: route fallback + room end flow refresh** — refreshed TanStack fallback surfaces and room end/index route wiring, including updated web hero assets and generated route tree updates.
 
 ### Fixed
