@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Infra: singleton whisper spot self-healing** — the lean whisper worker now runs behind a 1x1x1 Auto Scaling Group backed by one-time spot launch templates, so interrupted capacity is replaced automatically without leaving duplicate workers running at the same time.
 - **Web: PWA browser chrome + cache safety** — Chalk now keeps `theme-color` in sync with light/dark/nord theme changes, avoids service-worker caching of API/WebSocket traffic, and serves the manifest/service worker with revalidation-friendly cache headers.
 
 ## [0.0.74] - 2026-03-12

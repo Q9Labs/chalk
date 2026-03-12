@@ -1,11 +1,11 @@
 output "instance_id" {
   description = "Lean whisper worker EC2 instance ID"
-  value       = aws_instance.whisper.id
+  value       = try(data.aws_instances.whisper.ids[0], null)
 }
 
 output "public_ip" {
   description = "Lean whisper worker public IP"
-  value       = aws_instance.whisper.public_ip
+  value       = try(data.aws_instance.whisper[0].public_ip, null)
 }
 
 output "security_group_id" {
