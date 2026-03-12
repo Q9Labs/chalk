@@ -15,9 +15,13 @@ export function useMediaQuery(query: string): boolean {
     // Set initial value
     setMatches(mediaQuery.matches);
 
-    // Modern browsers
-    mediaQuery.addEventListener("change", handler);
-    return () => mediaQuery.removeEventListener("change", handler);
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handler);
+      return () => mediaQuery.removeEventListener("change", handler);
+    }
+
+    mediaQuery.addListener(handler);
+    return () => mediaQuery.removeListener(handler);
   }, [query]);
 
   return matches;

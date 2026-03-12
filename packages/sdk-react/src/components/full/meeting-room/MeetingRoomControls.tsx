@@ -204,7 +204,7 @@ export function MeetingRoomControls({
             onAudioInputChange={onAudioInputChange}
             onAudioOutputChange={onAudioOutputChange}
             onVideoInputChange={onVideoInputChange}
-            onToggleScreenShare={enableScreenShare ? onToggleScreenShare : undefined}
+            onToggleScreenShare={enableScreenShare && !isMobile ? onToggleScreenShare : undefined}
             onToggleRecording={enableRecording && canRecord ? onToggleRecording : undefined}
             onToggleHandRaise={enableHandRaise ? onToggleHandRaise : undefined}
             onToggleWhiteboard={enableWhiteboard ? onToggleWhiteboard : undefined}

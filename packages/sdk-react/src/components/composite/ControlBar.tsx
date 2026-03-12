@@ -343,11 +343,6 @@ export const ControlBar = React.memo(
 
             {/* Group 2: Interactions */}
             <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
-              {onToggleScreenShare && (
-                <button type="button" onClick={onToggleScreenShare} className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isScreenSharing ? "bg-primary text-primary-foreground" : "")} aria-label="Share Screen">
-                  {isScreenSharing ? <MonitorOffIcon className="w-5 h-5" /> : <Monitor01Icon className="w-5 h-5" />}
-                </button>
-              )}
               {onToggleHandRaise && (
                 <button type="button" onClick={onToggleHandRaise} className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isHandRaised ? "bg-primary text-primary-foreground" : "")} aria-label="Raise Hand">
                   <HandIcon className="w-5 h-5" />

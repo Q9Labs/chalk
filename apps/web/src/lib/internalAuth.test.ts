@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchInternalAccessToken, getJoinContext, getOrCreateLocalClientId, resolveApiUrl, setJoinContext, shouldPrimeTokenCache, shouldUseInternalRoomAuth, startMagicLink, verifyMagicLink } from "./internalAuth";
+import {
+  clearStoredChalkTokens,
+  fetchInternalAccessToken,
+  fetchInternalSession,
+  getJoinContext,
+  getOrCreateLocalClientId,
+  logoutInternalSession,
+  resolveApiUrl,
+  setJoinContext,
+  shouldPrimeTokenCache,
+  shouldUseInternalRoomAuth,
+  signInWithGoogleCode,
+} from "./internalAuth";
 
 const originalWindow = globalThis.window;
 const originalLocalStorage = globalThis.localStorage;
@@ -74,7 +86,9 @@ function restoreBrowserEnv() {
 
 describe("resolveApiUrl", () => {
   it("prefers localhost api when localhost is running with prod config", () => {
-    expect(resolveApiUrl("https://chalk-api.q9labs.ai", "localhost")).toBe("http://localhost:8080");
+    expect(resolveApiUrl("https://chalk-api.q9labs.ai", "localhost")).toBe(
+      "http://localhost:8080",
+    );
   });
 
   it("prefers localhost api when localhost has no explicit api url", () => {
@@ -82,53 +96,21 @@ describe("resolveApiUrl", () => {
   });
 
   it("keeps explicit local overrides", () => {
-    expect(resolveApiUrl("http://localhost:9090", "localhost")).toBe("http://localhost:9090");
+    expect(resolveApiUrl("http://localhost:9090", "localhost")).toBe(
+      "http://localhost:9090",
+    );
   });
 
   it("overrides any remote api host on localhost", () => {
-    expect(resolveApiUrl("https://staging-api.q9labs.ai", "localhost")).toBe("http://localhost:8080");
+    expect(resolveApiUrl("https://staging-api.q9labs.ai", "localhost")).toBe(
+      "http://localhost:8080",
+    );
   });
 
   it("keeps prod api on hosted origins", () => {
-    expect(resolveApiUrl("https://chalk-api.q9labs.ai", "chalk.q9labs.ai")).toBe("https://chalk-api.q9labs.ai");
-  });
-});
-
-describe("verifyMagicLink", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("dedupes concurrent verification requests for the same token", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    });
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
-
-    await Promise.all([verifyMagicLink("https://chalk-api.q9labs.ai", "token-123"), verifyMagicLink("https://chalk-api.q9labs.ai", "token-123")]);
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not cache failed verification attempts", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: "invalid or expired token" }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
-      });
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
-
-    await expect(verifyMagicLink("https://chalk-api.q9labs.ai", "token-456")).rejects.toThrow("invalid or expired token");
-
-    await expect(verifyMagicLink("https://chalk-api.q9labs.ai", "token-456")).resolves.toBeUndefined();
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      resolveApiUrl("https://chalk-api.q9labs.ai", "chalk.q9labs.ai"),
+    ).toBe("https://chalk-api.q9labs.ai");
   });
 });
 
@@ -182,6 +164,61 @@ describe("fetchInternalAccessToken", () => {
   });
 });
 
+describe("internal session helpers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns null for an unauthenticated session lookup", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 401,
+    } as Response);
+
+    await expect(
+      fetchInternalSession("https://chalk-api.q9labs.ai"),
+    ).resolves.toBeNull();
+  });
+
+  it("posts the google auth code for sign-in", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, user: { email: "hasan@q9labs.ai" } }),
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
+
+    await expect(
+      signInWithGoogleCode("https://chalk-api.q9labs.ai", "oauth-code"),
+    ).resolves.toEqual({ ok: true, user: { email: "hasan@q9labs.ai" } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://chalk-api.q9labs.ai/api/v1/internal/auth/google",
+      expect.objectContaining({
+        body: JSON.stringify({ code: "oauth-code" }),
+        credentials: "include",
+        method: "POST",
+        headers: expect.objectContaining({
+          "X-Requested-With": "XMLHttpRequest",
+        }),
+      }),
+    );
+  });
+
+  it("posts logout with credentials", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
+
+    await logoutInternalSession("https://chalk-api.q9labs.ai");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://chalk-api.q9labs.ai/api/v1/internal/auth/logout",
+      expect.objectContaining({
+        credentials: "include",
+        method: "POST",
+      }),
+    );
+  });
+});
+
 describe("getJoinContext", () => {
   afterEach(() => {
     restoreBrowserEnv();
@@ -216,6 +253,10 @@ describe("shouldPrimeTokenCache", () => {
     expect(shouldPrimeTokenCache("/j/join-token-123")).toBe(false);
   });
 
+  it("skips eager token warmup on dashboard routes", () => {
+    expect(shouldPrimeTokenCache("/dashboard")).toBe(false);
+  });
+
   it("allows eager token warmup on room routes", () => {
     expect(shouldPrimeTokenCache("/room/math-101")).toBe(true);
   });
@@ -223,39 +264,40 @@ describe("shouldPrimeTokenCache", () => {
 
 describe("shouldUseInternalRoomAuth", () => {
   it("uses internal auth for dashboard room links flagged with auth=internal", () => {
-    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "?auth=internal")).toBe(true);
+    expect(
+      shouldUseInternalRoomAuth(
+        "/room/2f0b302b-2449-43f5-ae3b-de57decb9f09",
+        "?auth=internal",
+      ),
+    ).toBe(true);
   });
 
   it("does not force internal auth for regular room links", () => {
-    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "")).toBe(false);
+    expect(
+      shouldUseInternalRoomAuth(
+        "/room/2f0b302b-2449-43f5-ae3b-de57decb9f09",
+        "",
+      ),
+    ).toBe(false);
   });
 });
 
-describe("startMagicLink", () => {
+describe("clearStoredChalkTokens", () => {
   afterEach(() => {
-    vi.restoreAllMocks();
     restoreBrowserEnv();
   });
 
-  it("requests dashboard as the default callback url", async () => {
-    installBrowserEnv("http://localhost:3000/dashboard");
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    });
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
+  it("removes sdk tokens from both browser stores", () => {
+    const env = installBrowserEnv("https://chalk.q9labs.ai/dashboard");
+    env.localStorage.setItem("chalk_access_token", "abc");
+    env.sessionStorage.setItem("chalk_refresh_token", "xyz");
+    env.localStorage.setItem("chalk_token_expires", "123");
 
-    await startMagicLink("https://chalk-api.q9labs.ai", "hasan@q9labs.ai");
+    clearStoredChalkTokens();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://chalk-api.q9labs.ai/api/v1/internal/auth/start",
-      expect.objectContaining({
-        body: JSON.stringify({
-          email: "hasan@q9labs.ai",
-          callback_url: "http://localhost:3000/dashboard",
-        }),
-      }),
-    );
+    expect(env.localStorage.getItem("chalk_access_token")).toBeNull();
+    expect(env.sessionStorage.getItem("chalk_refresh_token")).toBeNull();
+    expect(env.localStorage.getItem("chalk_token_expires")).toBeNull();
   });
 });
 
@@ -264,13 +306,18 @@ describe("getOrCreateLocalClientId", () => {
     restoreBrowserEnv();
   });
 
-  it("reuses the same id across calls on localhost", () => {
-    installBrowserEnv("http://localhost:3070/");
+  it("keeps a stable client id on localhost", () => {
+    installBrowserEnv("http://localhost:3070/dashboard");
 
     const first = getOrCreateLocalClientId();
     const second = getOrCreateLocalClientId();
 
     expect(first).toBeTruthy();
-    expect(second).toBe(first);
+    expect(first).toBe(second);
+  });
+
+  it("returns null on hosted origins", () => {
+    installBrowserEnv("https://chalk.q9labs.ai/dashboard");
+    expect(getOrCreateLocalClientId()).toBeNull();
   });
 });
