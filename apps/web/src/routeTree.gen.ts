@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as DocumentationRouteImport } from './routes/documentation'
 import { Route as DemoRouteImport } from './routes/demo'
@@ -27,6 +29,16 @@ import { Route as DocsAuthenticationRouteImport } from './routes/docs/authentica
 import { Route as DocsApiReferenceRouteImport } from './routes/docs/api-reference'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -119,6 +131,8 @@ export interface FileRoutesByFullPath {
   '/demo': typeof DemoRoute
   '/documentation': typeof DocumentationRoute
   '/new': typeof NewRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -138,6 +152,8 @@ export interface FileRoutesByTo {
   '/demo': typeof DemoRoute
   '/documentation': typeof DocumentationRoute
   '/new': typeof NewRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -158,6 +174,8 @@ export interface FileRoutesById {
   '/demo': typeof DemoRoute
   '/documentation': typeof DocumentationRoute
   '/new': typeof NewRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/docs/api-reference': typeof DocsApiReferenceRoute
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -179,6 +197,8 @@ export interface FileRouteTypes {
     | '/demo'
     | '/documentation'
     | '/new'
+    | '/privacy'
+    | '/terms'
     | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
@@ -198,6 +218,8 @@ export interface FileRouteTypes {
     | '/demo'
     | '/documentation'
     | '/new'
+    | '/privacy'
+    | '/terms'
     | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
@@ -217,6 +239,8 @@ export interface FileRouteTypes {
     | '/demo'
     | '/documentation'
     | '/new'
+    | '/privacy'
+    | '/terms'
     | '/auth/callback'
     | '/docs/api-reference'
     | '/docs/authentication'
@@ -237,6 +261,8 @@ export interface RootRouteChildren {
   DemoRoute: typeof DemoRoute
   DocumentationRoute: typeof DocumentationRoute
   NewRoute: typeof NewRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   DocsApiReferenceRoute: typeof DocsApiReferenceRoute
   DocsAuthenticationRoute: typeof DocsAuthenticationRoute
@@ -253,6 +279,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/new': {
       id: '/new'
       path: '/new'
@@ -381,6 +421,8 @@ const rootRouteChildren: RootRouteChildren = {
   DemoRoute: DemoRoute,
   DocumentationRoute: DocumentationRoute,
   NewRoute: NewRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   DocsApiReferenceRoute: DocsApiReferenceRoute,
   DocsAuthenticationRoute: DocsAuthenticationRoute,

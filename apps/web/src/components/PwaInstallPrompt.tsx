@@ -2,16 +2,17 @@ import { Button } from "@q9labs/chalk-ui";
 import { usePwaInstall } from "@q9labs/chalk-react";
 import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { readPwaInstallDismissal, registerPwaServiceWorker, shouldHidePwaPrompt, writePwaInstallDismissal } from "../lib/pwa";
+import { formatPwaBuildLabel, getPwaInstallPromptContent, type PwaBuildMeta, readPwaInstallDismissal, registerPwaServiceWorker, requestPwaBuildMeta, shouldHidePwaPrompt, writePwaInstallDismissal } from "../lib/pwa";
 
 export function PwaInstallPrompt() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const { canInstall, hasNativePrompt, isInstalled, promptInstall, requiresManualInstall } = usePwaInstall();
+  const { canInstall, hasNativePrompt, installPlatform, isInstalled, promptInstall, requiresManualInstall } = usePwaInstall();
   const [dismissed, setDismissed] = useState(() => readPwaInstallDismissal());
   const [isOfflineReady, setIsOfflineReady] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [waitingBuildMeta, setWaitingBuildMeta] = useState<PwaBuildMeta | null>(null);
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
 
   useEffect(() => {
@@ -36,6 +37,25 @@ export function PwaInstallPrompt() {
     let isMounted = true;
     let cleanupRegistrationListener = () => {};
     const cleanupInstallingListeners = new Map<ServiceWorker, () => void>();
+    const setWaitingUpdate = (worker: ServiceWorker | null) => {
+      if (!isMounted) {
+        return;
+      }
+
+      setWaitingWorker(worker);
+      setWaitingBuildMeta(null);
+      setUpdateAvailable(worker !== null);
+
+      if (!worker) {
+        return;
+      }
+
+      void requestPwaBuildMeta(worker).then((buildMeta) => {
+        if (isMounted) {
+          setWaitingBuildMeta(buildMeta);
+        }
+      });
+    };
 
     const attachInstallingListener = (registration: ServiceWorkerRegistration) => {
       const installing = registration.installing;
@@ -49,8 +69,7 @@ export function PwaInstallPrompt() {
         }
 
         if (navigator.serviceWorker.controller) {
-          setWaitingWorker(registration.waiting ?? installing);
-          setUpdateAvailable(true);
+          setWaitingUpdate(registration.waiting ?? installing);
           return;
         }
 
@@ -78,8 +97,7 @@ export function PwaInstallPrompt() {
         attachInstallingListener(registration);
 
         if (registration.waiting) {
-          setWaitingWorker(registration.waiting);
-          setUpdateAvailable(true);
+          setWaitingUpdate(registration.waiting);
         }
 
         const handleUpdateFound = () => {
@@ -127,6 +145,15 @@ export function PwaInstallPrompt() {
   }, [isInstalled]);
 
   const shouldHide = useMemo(() => shouldHidePwaPrompt(pathname), [pathname]);
+  const installPromptContent = useMemo(
+    () =>
+      getPwaInstallPromptContent({
+        hasNativePrompt,
+        installPlatform,
+        requiresManualInstall,
+      }),
+    [hasNativePrompt, installPlatform, requiresManualInstall],
+  );
   const showUpdatePrompt = updateAvailable && !shouldHide;
   const showInstallPrompt = !showUpdatePrompt && !shouldHide && !isInstalled && !dismissed && canInstall;
 
@@ -141,7 +168,8 @@ export function PwaInstallPrompt() {
         <div className="space-y-3">
           <div className="space-y-1">
             <p className="font-display text-base font-semibold text-foreground">Update ready</p>
-            <p className="text-muted-foreground">A fresher Chalk build is ready. Reload when you want the newest PWA shell and cached assets.</p>
+            <p className="text-muted-foreground">Reload for the newest meeting shell, cached assets, and install polish.</p>
+            <p className="text-xs font-medium text-foreground/70">{formatPwaBuildLabel(waitingBuildMeta)}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -153,13 +181,14 @@ export function PwaInstallPrompt() {
                 });
               }}
             >
-              Reload app
+              Reload to update
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={() => {
                 setUpdateAvailable(false);
+                setWaitingBuildMeta(null);
               }}
             >
               Later
@@ -175,12 +204,13 @@ export function PwaInstallPrompt() {
       <aside className="pointer-events-auto fixed bottom-4 left-4 z-50 max-w-sm rounded-2xl border border-border/70 bg-background/95 p-4 text-sm shadow-2xl backdrop-blur-xl">
         <div className="space-y-3">
           <div className="space-y-1">
-            <p className="font-display text-base font-semibold text-foreground">Install Chalk</p>
-            <p className="text-muted-foreground">{hasNativePrompt ? "Launch faster, keep meetings in their own window, and reopen Chalk like a desktop app." : "Use your browser menu and choose Add to Home Screen to keep Chalk one tap away."}</p>
+            <p className="font-display text-base font-semibold text-foreground">{installPromptContent.title}</p>
+            <p className="text-muted-foreground">{installPromptContent.description}</p>
+            {installPromptContent.badge && <p className="text-xs font-medium text-foreground/70">{installPromptContent.badge}</p>}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {hasNativePrompt ? (
+            {hasNativePrompt && installPromptContent.ctaLabel ? (
               <Button
                 size="sm"
                 onClick={() => {
@@ -191,13 +221,13 @@ export function PwaInstallPrompt() {
                   });
                 }}
               >
-                Install app
+                {installPromptContent.ctaLabel}
               </Button>
             ) : (
               <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">{requiresManualInstall ? "Manual install available" : "Install not available here"}</span>
             )}
             <Button size="sm" variant="ghost" onClick={handleDismiss}>
-              {requiresManualInstall ? "Got it" : "Later"}
+              {installPromptContent.dismissLabel}
             </Button>
           </div>
         </div>

@@ -1,11 +1,13 @@
-import { cpSync, existsSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
+import { execSync } from "node:child_process";
 
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
 const indexPath = resolve(clientDir, "index.html");
 const fallback404Path = resolve(clientDir, "404.html");
 const serviceWorkerPath = resolve(clientDir, "sw.js");
+const packageJsonPath = resolve(process.cwd(), "package.json");
 
 if (!existsSync(shellPath)) {
   throw new Error(`missing ${shellPath}; expected TanStack Start SPA build output to include _shell.html`);
@@ -14,6 +16,12 @@ if (!existsSync(shellPath)) {
 // Cloudflare Pages: ensure deep-link loads SPA shell (even if rewrites are not applied).
 cpSync(shellPath, indexPath);
 cpSync(shellPath, fallback404Path);
+
+const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+const buildMeta = {
+  commitHash: execSync("git rev-parse --short HEAD").toString().trim(),
+  version: packageJson.version || "0.0.0",
+};
 
 function collectClientFiles(dir) {
   return readdirSync(dir, {
@@ -38,7 +46,8 @@ const precacheUrls = Array.from(
 ).sort();
 
 const swSource = `
-const CACHE_NAME = "chalk-web-${Date.now()}";
+const BUILD_META = ${JSON.stringify(buildMeta, null, 2)};
+const CACHE_NAME = "chalk-web-${buildMeta.version}-${buildMeta.commitHash}";
 const APP_SHELL_URL = "/index.html";
 const PRECACHE_URLS = ${JSON.stringify(precacheUrls, null, 2)};
 const ASSET_EXT_RE = /\\.[a-z0-9]+$/i;
@@ -62,6 +71,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "GET_BUILD_META") {
+    event.ports?.[0]?.postMessage(BUILD_META);
+    return;
+  }
+
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
