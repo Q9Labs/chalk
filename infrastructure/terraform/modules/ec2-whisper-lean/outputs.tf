@@ -1,11 +1,11 @@
 output "instance_id" {
-  description = "Lean whisper worker EC2 instance ID"
-  value       = try(data.aws_instances.whisper.ids[0], null)
+  description = "Lean whisper worker EC2 instance ID when discovered out-of-band"
+  value       = null
 }
 
 output "public_ip" {
-  description = "Lean whisper worker public IP"
-  value       = try(data.aws_instance.whisper[0].public_ip, null)
+  description = "Lean whisper worker public IP when discovered out-of-band"
+  value       = null
 }
 
 output "security_group_id" {
