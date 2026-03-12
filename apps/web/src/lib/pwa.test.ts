@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getThemeColor, readPwaInstallDismissal, registerPwaServiceWorker, shouldHidePwaPrompt, syncThemeColor, writePwaInstallDismissal } from "./pwa";
 
@@ -93,5 +95,19 @@ describe("pwa helpers", () => {
 
     writePwaInstallDismissal(false);
     expect(readPwaInstallDismissal()).toBe(false);
+  });
+
+  it("ships chalk-branded web and mobile pwa icons", () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "public/manifest.json"), "utf8")) as {
+      icons: Array<{ src: string; purpose?: string }>;
+      shortcuts: Array<{ icons: Array<{ src: string }> }>;
+    };
+    const rootRouteSource = readFileSync(resolve(process.cwd(), "src/routes/__root.tsx"), "utf8");
+
+    expect(manifest.icons.map((icon) => icon.src)).toEqual(["/favicon.ico", "/chalk-icon-192.png", "/chalk-icon-512.png"]);
+    expect(manifest.icons.slice(1).every((icon) => icon.purpose === "any maskable")).toBe(true);
+    expect(manifest.shortcuts.flatMap((shortcut) => shortcut.icons.map((icon) => icon.src))).toEqual(["/chalk-icon-192.png", "/chalk-icon-192.png"]);
+    expect(rootRouteSource).toContain('href: "/apple-touch-icon.png"');
+    expect(rootRouteSource).not.toContain('href: "/logo192.png"');
   });
 });
