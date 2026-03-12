@@ -637,8 +637,8 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
       </div>
       
       {phase === "meeting" && (
-        <div className="relative z-10 flex shrink-0 items-center justify-center gap-2 pb-3 pt-3 px-4 bg-background border-t border-border shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
-          <div className="flex items-center gap-1 px-1.5 py-1 bg-muted rounded-full border border-border">
+        <div className="relative z-10 flex flex-wrap shrink-0 items-center justify-center gap-2 pb-3 pt-3 px-4 bg-background border-t border-border shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] overflow-hidden">
+          <div className="flex items-center shrink-0 gap-1 px-1.5 py-1 bg-muted rounded-full border border-border">
             {actionButtons
               .filter((b) => b.key === "mute" || b.key === "video")
               .map((btn) => (
@@ -647,7 +647,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
           </div>
 
           {actionButtons.some((b) => b.key === "screenshare" || b.key === "handraise" || b.key === "reactions") && (
-            <div className="flex items-center gap-1 px-1.5 py-1 bg-muted rounded-full border border-border">
+            <div className="flex items-center shrink-0 gap-1 px-1.5 py-1 bg-muted rounded-full border border-border">
               {actionButtons
                 .filter((b) => b.key === "screenshare" || b.key === "handraise" || b.key === "reactions")
                 .map((btn) => (
@@ -656,7 +656,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
             </div>
           )}
 
-          <div className="flex items-center gap-1 px-1.5 py-1 bg-muted rounded-full border border-border">
+          <div className="flex items-center shrink-0 gap-1 px-1.5 py-1 bg-muted rounded-full border border-border">
             {actionButtons
               .filter((b) => b.key === "return" || b.key === "leave")
               .map((btn) => (
