@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { syncThemeColor } from "../lib/pwa";
 
 type Theme = "dark" | "light" | "nord";
 
@@ -35,6 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.colorScheme = theme === "light" ? "light" : "dark";
     root.setAttribute("data-chalk-theme", theme);
     localStorage.setItem(STORAGE_KEY, theme);
+    syncThemeColor(theme);
   }, [theme]);
 
   const toggleTheme = () => {

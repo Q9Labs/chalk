@@ -3,10 +3,12 @@ import { ChalkProvider, type ChalkPostHogClient, createHttpIncidentReporter, use
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { DebugDialog } from "../components/DebugDialog";
+import { PwaInstallPrompt } from "../components/PwaInstallPrompt";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { createWebTokenProvider, getApiUrl, getJoinContext, isLocalHost, shouldPrimeTokenCache, shouldUseInternalRoomAuth } from "../lib/internalAuth";
+import { getThemeColor } from "../lib/pwa";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -26,10 +28,38 @@ export const Route = createRootRoute({
       },
       {
         name: "viewport",
-        content: "width=device-width, initial-scale=1",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
+      },
+      {
+        name: "application-name",
+        content: "Chalk",
       },
       {
         title: "Chalk",
+      },
+      {
+        name: "description",
+        content: "Ultra low-latency video conferencing for education.",
+      },
+      {
+        name: "theme-color",
+        content: getThemeColor("dark"),
+      },
+      {
+        name: "mobile-web-app-capable",
+        content: "yes",
+      },
+      {
+        name: "apple-mobile-web-app-capable",
+        content: "yes",
+      },
+      {
+        name: "apple-mobile-web-app-status-bar-style",
+        content: "black-translucent",
+      },
+      {
+        name: "apple-mobile-web-app-title",
+        content: "Chalk",
       },
     ],
     links: [
@@ -37,6 +67,18 @@ export const Route = createRootRoute({
         rel: "icon",
         type: "image/svg+xml",
         href: "/chalk-icon.svg",
+      },
+      {
+        rel: "icon",
+        href: "/favicon.ico",
+      },
+      {
+        rel: "manifest",
+        href: "/manifest.json",
+      },
+      {
+        rel: "apple-touch-icon",
+        href: "/logo192.png",
       },
       {
         rel: "stylesheet",
@@ -69,6 +111,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                   }
                   root.style.colorScheme = (theme === 'light' ? 'light' : 'dark');
                   root.setAttribute('data-chalk-theme', theme);
+                  var themeColor = theme === 'light' ? '#ffffff' : theme === 'nord' ? '#2e3440' : '#030303';
+                  document.querySelectorAll('meta[name="theme-color"]').forEach(function(meta) {
+                    meta.setAttribute('content', themeColor);
+                  });
                 } catch (e) {}
               })();
             `,
@@ -210,6 +256,7 @@ function RootComponent() {
       <ErrorProvider>
         <div className="overflow-hidden bg-background text-foreground">
           <Outlet context={{ setIsDebugOpen }} />
+          <PwaInstallPrompt />
           <WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
 
           {/* Version Trigger - Bottom Right */}

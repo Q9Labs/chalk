@@ -107,6 +107,7 @@ export {
   type UsePanelsReturn,
   type UsePictureInPictureOptions,
   type UsePictureInPictureReturn,
+  usePwaInstall,
   type UseParticipantsReturn,
   type UseRecordingReturn,
   // Types

@@ -10,6 +10,7 @@ export { useParticipantVolume, type UseParticipantVolumeReturn } from "./usePart
 export { useDraggable, type UseDraggableOptions } from "./useDraggable";
 export { useHaptics, type UseHapticsOptions, type UseHapticsReturn, type ChalkHapticInput, type ChalkHapticPreset, type ChalkHapticTriggerOptions } from "./useHaptics";
 export { usePictureInPicture, type UsePictureInPictureOptions, type UsePictureInPictureReturn } from "./usePictureInPicture";
+export { usePwaInstall } from "./usePwaInstall";
 
 // Re-export useTour from utilities (it's both UI and utility)
 export { useTour, type UseTourReturn, type TourStep } from "../useTour";

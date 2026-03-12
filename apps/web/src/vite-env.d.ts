@@ -19,6 +19,14 @@ declare module "@excalidraw/excalidraw/dist/prod/index.css?url" {
   export default url;
 }
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
+}
+
 // Build-time constants
 declare const __COMMIT_HASH__: string;
 declare const __BUILD_TIME__: string;

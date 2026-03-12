@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Web/SDK-React: PWA install + update support** — `apps/web` now ships a real Chalk web app manifest, root service worker, install/update/offline prompt shell, and a reusable `usePwaInstall` hook in `@q9labs/chalk-react` so host apps can detect installability and standalone mode without app-specific browser wiring.
+
 ### Changed
 
 - **Web: route fallback + room end flow refresh** — refreshed TanStack fallback surfaces and room end/index route wiring, including updated web hero assets and generated route tree updates.
 
 ### Fixed
+
+- **Web: PWA browser chrome + cache safety** — Chalk now keeps `theme-color` in sync with light/dark/nord theme changes, avoids service-worker caching of API/WebSocket traffic, and serves the manifest/service worker with revalidation-friendly cache headers.
 
 ## [0.0.74] - 2026-03-12
 
