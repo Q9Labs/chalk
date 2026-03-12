@@ -43,8 +43,8 @@ declare global {
   var documentPictureInPicture: DocumentPictureInPictureApi | undefined;
 }
 
-const PIP_WIDTH = 420;
-const PIP_HEIGHT = 460;
+const PIP_WIDTH = 340;
+const PIP_HEIGHT = 400;
 
 function hasTransientUserActivation() {
   if (typeof navigator === "undefined") {

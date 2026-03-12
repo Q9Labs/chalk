@@ -584,7 +584,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
               setIsReactionPickerOpen(false);
             }}
             position="top"
-            size="compact"
+            size="mini"
             className="absolute bottom-4 left-1/2 -translate-x-1/2"
           />
         )}
