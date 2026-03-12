@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Web: route fallback + room end flow refresh** — refreshed TanStack fallback surfaces and room end/index route wiring, including updated web hero assets and generated route tree updates.
+
 ### Fixed
 
 ## [0.0.74] - 2026-03-12

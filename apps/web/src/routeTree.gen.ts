@@ -16,7 +16,6 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs/index'
 import { Route as ShareTokenRouteImport } from './routes/share/$token'
-import { Route as RoomErrorRouteImport } from './routes/room/error'
 import { Route as RoomEndRouteImport } from './routes/room/end'
 import { Route as RoomRoomIdRouteImport } from './routes/room/$roomId'
 import { Route as JJoinTokenRouteImport } from './routes/j/$joinToken'
@@ -61,11 +60,6 @@ const DocsIndexRoute = DocsIndexRouteImport.update({
 const ShareTokenRoute = ShareTokenRouteImport.update({
   id: '/share/$token',
   path: '/share/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RoomErrorRoute = RoomErrorRouteImport.update({
-  id: '/room/error',
-  path: '/room/error',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RoomEndRoute = RoomEndRouteImport.update({
@@ -135,7 +129,6 @@ export interface FileRoutesByFullPath {
   '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
-  '/room/error': typeof RoomErrorRoute
   '/share/$token': typeof ShareTokenRoute
   '/docs': typeof DocsIndexRoute
 }
@@ -155,7 +148,6 @@ export interface FileRoutesByTo {
   '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
-  '/room/error': typeof RoomErrorRoute
   '/share/$token': typeof ShareTokenRoute
   '/docs': typeof DocsIndexRoute
 }
@@ -176,7 +168,6 @@ export interface FileRoutesById {
   '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
-  '/room/error': typeof RoomErrorRoute
   '/share/$token': typeof ShareTokenRoute
   '/docs/': typeof DocsIndexRoute
 }
@@ -198,7 +189,6 @@ export interface FileRouteTypes {
     | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
-    | '/room/error'
     | '/share/$token'
     | '/docs'
   fileRoutesByTo: FileRoutesByTo
@@ -218,7 +208,6 @@ export interface FileRouteTypes {
     | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
-    | '/room/error'
     | '/share/$token'
     | '/docs'
   id:
@@ -238,7 +227,6 @@ export interface FileRouteTypes {
     | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
-    | '/room/error'
     | '/share/$token'
     | '/docs/'
   fileRoutesById: FileRoutesById
@@ -259,7 +247,6 @@ export interface RootRouteChildren {
   JJoinTokenRoute: typeof JJoinTokenRoute
   RoomRoomIdRoute: typeof RoomRoomIdRoute
   RoomEndRoute: typeof RoomEndRoute
-  RoomErrorRoute: typeof RoomErrorRoute
   ShareTokenRoute: typeof ShareTokenRoute
   DocsIndexRoute: typeof DocsIndexRoute
 }
@@ -313,13 +300,6 @@ declare module '@tanstack/react-router' {
       path: '/share/$token'
       fullPath: '/share/$token'
       preLoaderRoute: typeof ShareTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/room/error': {
-      id: '/room/error'
-      path: '/room/error'
-      fullPath: '/room/error'
-      preLoaderRoute: typeof RoomErrorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/room/end': {
@@ -411,7 +391,6 @@ const rootRouteChildren: RootRouteChildren = {
   JJoinTokenRoute: JJoinTokenRoute,
   RoomRoomIdRoute: RoomRoomIdRoute,
   RoomEndRoute: RoomEndRoute,
-  RoomErrorRoute: RoomErrorRoute,
   ShareTokenRoute: ShareTokenRoute,
   DocsIndexRoute: DocsIndexRoute,
 }

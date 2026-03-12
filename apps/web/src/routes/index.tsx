@@ -2,11 +2,10 @@ import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Input } from "@q9labs/chalk-ui";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Globe, Lock, MonitorPlay, MousePointerClick, Video, ChevronRight } from "lucide-react";
+import { Globe, Lock, MonitorPlay, MousePointerClick } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "../context/theme";
 import { ChalkLogo } from "../components/ChalkLogo";
-import { EdgeNetworkIllustration } from "../components/EdgeNetworkIllustration";
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -19,161 +18,143 @@ function App() {
     navigate({ to: "/new" });
   };
 
-  const handleJoin = () => {
+  const handleJoin = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!meetingCode.trim()) return;
     const roomId = meetingCode.includes("/room/") ? (meetingCode.split("/room/")[1]?.split("?")[0] ?? meetingCode.trim()) : meetingCode.trim();
     navigate({ to: `/room/${roomId}` });
   };
 
   return (
-    <div className="font-app flex min-h-screen flex-col bg-background selection:bg-primary/20 overflow-x-hidden">
-      {/* Premium Background Atmosphere */}
-      <div className="fixed inset-0 pointer-events-none -z-10">
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/10 rounded-full blur-[140px]" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-blue-500/5 rounded-full blur-[140px]" />
-      </div>
-
-      {/* Soft Floating Header */}
-      <header className="sticky top-0 z-50 w-full flex justify-center py-6 pointer-events-none">
-        <div className="container mx-auto px-6 max-w-6xl pointer-events-auto">
-          <div className="glass-hud px-8 h-16 rounded-full flex items-center justify-between border border-white/10 shadow-2xl backdrop-blur-2xl">
+    <div className="font-app flex min-h-screen flex-col bg-background text-foreground relative overflow-x-hidden">
+      {/* Header */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between max-w-7xl">
+          <div className="flex items-center gap-6">
             <ChalkLogo />
-            <nav className="hidden md:flex items-center gap-10">
-              <Link to="/documentation" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+              <Link to="/documentation" className="text-muted-foreground hover:text-foreground transition-colors">
                 Documentation
               </Link>
-              <Link to="/dashboard" className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+              <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
                 Dashboard
               </Link>
             </nav>
-            <div className="flex items-center gap-4">
-              <button type="button" onClick={toggleTheme} className="p-2 text-muted-foreground hover:text-foreground transition-colors">
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={toggleTheme} className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-secondary transition-colors" aria-label="Toggle theme">
                 <HugeiconsIcon icon={theme === "dark" ? Sun01Icon : Moon02Icon} size={18} />
               </button>
-              <Button size="sm" onClick={handleStartMeeting} className="rounded-full px-6 font-bold shadow-primary/20 hover:shadow-xl active:scale-95 transition-all">
-                Join Now
-              </Button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1">
-        {/* Section 1: The Cinematic Hero */}
-        <section className="relative pt-20 pb-32 lg:pt-32 lg:pb-48 text-center overflow-visible">
-          {/* Background Illustration */}
-          <div className="absolute inset-0 z-0 opacity-60 dark:opacity-40">
-            <EdgeNetworkIllustration />
+      <main className="flex-1 w-full flex flex-col relative">
+        {/* Hero Section with contained background */}
+        <section className="relative w-full overflow-hidden border-b border-border/40">
+          {/* Background Image - Clean integration with theme-specific logic */}
+          <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center">
+            <div className="relative w-full h-full max-w-[1400px] flex items-center justify-center overflow-hidden p-4 sm:p-0">
+              {/* Dark/Nord Image - Vivid and impactful */}
+              <img 
+                src="/hero-1.png" 
+                alt="" 
+                className="hidden dark:block w-full h-auto object-contain sm:object-cover opacity-60 scale-90 transition-all duration-500"
+                style={{ 
+                  maskImage: 'radial-gradient(circle at center, black 20%, transparent 80%)',
+                  WebkitMaskImage: 'radial-gradient(circle at center, black 20%, transparent 80%)'
+                }}
+              />
+              {/* Light Mode Image - Hyper-subtle watermark, no gray haze */}
+              <img 
+                src="/hero-1.png" 
+                alt="" 
+                className="block dark:hidden w-full h-auto object-contain sm:object-cover opacity-[0.03] scale-100 filter grayscale transition-all duration-500"
+                style={{ 
+                  maskImage: 'radial-gradient(circle at center, black 10%, transparent 70%)',
+                  WebkitMaskImage: 'radial-gradient(circle at center, black 10%, transparent 70%)'
+                }}
+              />
+            </div>
           </div>
 
-          <div className="container relative z-10 mx-auto px-6 max-w-5xl space-y-12">
-            <h1 className="text-6xl sm:text-8xl lg:text-[7.5rem] font-black tracking-tight leading-[0.9] text-foreground animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-100">
-              Video calls, <br />
-              <span className="text-primary italic">refined.</span>
-            </h1>
-
-            <p className="text-xl lg:text-2xl text-muted-foreground max-w-2xl mx-auto font-medium leading-relaxed animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-200">
-              Experience the clarity of zero-latency communication. Built on the edge, designed for the future. No accounts, just connection.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-10 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
-              <Button size="lg" className="h-16 px-12 rounded-full text-lg font-black shadow-2xl shadow-primary/30 group relative overflow-hidden" onClick={handleStartMeeting}>
-                <div className="absolute inset-0 bg-primary/20 animate-pulse" />
-                <span className="relative flex items-center gap-2">
-                  Start Meeting
-                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </span>
-              </Button>
-              <div className="relative group">
-                <Input
-                  id="meeting-code"
-                  name="meetingCode"
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="Meeting Code..."
-                  value={meetingCode}
-                  onChange={(e) => setMeetingCode(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-                  className="h-16 w-64 bg-secondary/50 border-border/50 rounded-full pl-8 pr-14 focus:ring-8 focus:ring-primary/5 transition-all text-lg font-bold"
-                />
-                <button onClick={handleJoin} className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-primary text-white hover:scale-110 transition-all shadow-lg">
-                  <ArrowRight className="h-5 w-5" />
-                </button>
+          <div className="container relative z-10 mx-auto px-4 max-w-5xl py-24 lg:py-40 flex flex-col items-center">
+            <div className="space-y-10 flex flex-col items-center w-full">
+              <div className="space-y-6 flex flex-col items-center w-full text-center">
+                <h1 className="text-5xl lg:text-7xl font-bold tracking-tighter text-foreground leading-[1.1] max-w-4xl balance-text">
+                  Video meetings for modern teams.
+                </h1>
+                
+                <p className="text-xl text-foreground/70 dark:text-muted-foreground leading-relaxed max-w-2xl balance-text text-center mx-auto font-medium">
+                  High-fidelity audio and video routed through the edge. Experience communication without the friction.
+                </p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center items-center">
+                <Button size="lg" className="h-12 px-8 font-medium shadow-lg shadow-primary/20" onClick={handleStartMeeting}>
+                  New Meeting
+                </Button>
+                <form onSubmit={handleJoin} className="flex gap-2 w-full sm:w-auto justify-center">
+                  <Input
+                    type="text"
+                    placeholder="Enter code or link"
+                    value={meetingCode}
+                    onChange={(e) => setMeetingCode(e.target.value)}
+                    className="h-12 w-full sm:w-64 bg-background/60 backdrop-blur-xl border-border/50"
+                  />
+                  <Button type="submit" size="lg" variant="secondary" className="h-12 px-6 shadow-sm">
+                    Join
+                  </Button>
+                </form>
+              </div>
+              
+              <div className="flex items-center justify-center gap-8 text-sm font-semibold text-foreground/60 dark:text-foreground bg-background/30 backdrop-blur-xl px-6 py-2 rounded-full border border-border/40 shadow-sm">
+                <span className="flex items-center gap-2"><Lock className="h-4 w-4 text-primary" /> E2E Encrypted</span>
+                <span className="flex items-center gap-2"><Globe className="h-4 w-4 text-primary" /> No signup required</span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Section 2: Fluid Features */}
-        <section className="py-32 bg-secondary/30 relative border-y border-border/50">
-          <div className="container mx-auto px-6 max-w-6xl">
-            <div className="grid lg:grid-cols-3 gap-10">
-              {[
-                {
-                  icon: <MonitorPlay className="h-8 w-8" />,
-                  title: "Edge Delivery",
-                  desc: "High-fidelity audio and video routed through Cloudflare's global network.",
-                },
-                {
-                  icon: <MousePointerClick className="h-8 w-8" />,
-                  title: "Pure Frictionless",
-                  desc: "No downloads or signups. Send a link and start collaborating instantly.",
-                },
-                {
-                  icon: <Lock className="h-8 w-8" />,
-                  title: "Private & Ephemeral",
-                  desc: "End-to-end encrypted. We never store your media or session data. Ever.",
-                },
-              ].map((f, i) => (
-                <div key={i} className="bg-card p-12 rounded-[2.5rem] border border-border/50 shadow-sm hover:shadow-2xl transition-all duration-500 group">
-                  <div className="h-16 w-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-8 group-hover:scale-110 group-hover:rotate-6 transition-transform">{f.icon}</div>
-                  <h3 className="text-2xl font-black tracking-tight mb-4">{f.title}</h3>
-                  <p className="text-lg text-muted-foreground font-medium leading-relaxed">{f.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Section 3: Final Call */}
-        <section className="py-40 text-center relative overflow-hidden bg-background">
-          <div className="container mx-auto px-6 max-w-4xl space-y-12">
-            <h2 className="text-5xl sm:text-7xl font-black tracking-tight leading-none text-foreground">Ready to connect?</h2>
-            <p className="text-xl text-muted-foreground font-medium">Join thousands of teams meeting on the edge.</p>
-            <Button size="lg" className="h-20 px-16 rounded-full text-xl font-black shadow-2xl shadow-primary/30" onClick={handleStartMeeting}>
-              Launch Your Room
-            </Button>
-            <div className="flex flex-wrap justify-center gap-12 pt-16 text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/50">
-              <span className="flex items-center gap-2">
-                <Globe className="h-4 w-4" /> 250+ Cities
-              </span>
-              <span className="flex items-center gap-2">
-                <Lock className="h-4 w-4" /> Secure E2EE
-              </span>
-              <span className="flex items-center gap-2">
-                <Video className="h-4 w-4" /> HD 4K Ready
-              </span>
+        {/* Features Grid */}
+        <section className="bg-secondary/10 relative z-10">
+          <div className="container mx-auto px-4 max-w-7xl py-24">
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="p-8 bg-background rounded-2xl border border-border/50 shadow-sm transition-all hover:shadow-md hover:-translate-y-1">
+                <MonitorPlay className="h-8 w-8 text-primary mb-6" />
+                <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Edge Routing</h3>
+                <p className="text-muted-foreground leading-relaxed text-center md:text-left">Connections are routed through the closest data center globally, minimizing latency.</p>
+              </div>
+              <div className="p-8 bg-background rounded-2xl border border-border/50 shadow-sm transition-all hover:shadow-md hover:-translate-y-1">
+                <MousePointerClick className="h-8 w-8 text-primary mb-6" />
+                <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Zero Friction</h3>
+                <p className="text-muted-foreground leading-relaxed text-center md:text-left">No apps to download. Share a link and your participants can join instantly from any browser.</p>
+              </div>
+              <div className="p-8 bg-background rounded-2xl border border-border/50 shadow-sm transition-all hover:shadow-md hover:-translate-y-1">
+                <Lock className="h-8 w-8 text-primary mb-6" />
+                <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Absolute Privacy</h3>
+                <p className="text-muted-foreground leading-relaxed text-center md:text-left">Sessions are ephemeral and end-to-end encrypted. We never record or store your meetings.</p>
+              </div>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="py-20 px-12 border-t border-border/50">
-        <div className="container mx-auto max-w-6xl flex flex-col md:flex-row justify-between items-center gap-12">
-          <ChalkLogo className="text-foreground/50" />
-          <nav className="flex gap-12 text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-            <Link to="/documentation" className="hover:text-primary transition-colors">
-              Documentation
-            </Link>
-            <a href="/privacy" className="hover:text-primary transition-colors">
-              Privacy
-            </a>
-            <a href="/terms" className="hover:text-primary transition-colors">
-              Terms
-            </a>
+      <footer className="py-12 border-t border-border/40 bg-background relative z-10">
+        <div className="container mx-auto px-4 max-w-7xl flex flex-col md:flex-row justify-between items-center gap-8">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ChalkLogo className="h-5 w-auto grayscale opacity-50" />
+            <span>© {new Date().getFullYear()} Chalk</span>
+          </div>
+          <nav className="flex gap-8 text-sm text-muted-foreground">
+            <Link to="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
+            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
+            <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>
+            <a href="/documentation" className="md:hidden hover:text-foreground transition-colors">Docs</a>
           </nav>
-          <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground/30">© {new Date().getFullYear()} Chalk Edge Network</p>
         </div>
       </footer>
     </div>
