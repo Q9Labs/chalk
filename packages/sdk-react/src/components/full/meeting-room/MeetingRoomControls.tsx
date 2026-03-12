@@ -177,7 +177,7 @@ export function MeetingRoomControls({
         />
       )}
 
-      <div className="shrink-0 z-20 w-full flex justify-center mt-[-1px]">
+      <div className={cn("shrink-0 z-20 w-full flex justify-center", !isMobile && "mt-[-1px]")}>
         <div className="relative w-full">
           <ControlBar
             variant={isMobile ? "mobile" : "dock"}
@@ -225,7 +225,7 @@ export function MeetingRoomControls({
             onOpenMore={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
             participantColorSeed={localParticipantColorSeed}
             participantGradientPreference={localParticipantGradientPreference}
-            className={cn(isMobile ? "absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] touch-manipulation" : "", isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up")}
+            className={cn(isMobile ? "z-[60] touch-manipulation" : "", isExiting ? "chalk-animate-dock-down" : "chalk-animate-dock-up")}
           />
           {enableReactions && !isMobile && (
             <ReactionPicker

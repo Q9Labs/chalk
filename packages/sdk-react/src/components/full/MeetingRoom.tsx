@@ -550,11 +550,10 @@ function MeetingRoomBase({
     <div
       ref={containerRef}
       data-chalk
-      className={cn("chalk-root chalk-theme-transition relative flex h-screen w-full flex-col overflow-hidden bg-background text-foreground", isMobile ? "p-2" : "p-0", className)}
+      className={cn("chalk-root chalk-theme-transition relative flex h-screen w-full flex-col overflow-hidden bg-background text-foreground", "p-0", className)}
       data-chalk-theme={roomTheme === "system" ? undefined : roomTheme}
       style={getParticipantThemeVariables(participantColorSeed, localParticipantGradientPreference) as React.CSSProperties}
-    >
-      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "bg-[#050505]" : "bg-background")}>
+    >      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "bg-[#050505]" : "bg-background")}>
         {settings.appearance.ambientBackground && (
           <div className={cn("absolute inset-0 transition-opacity duration-1000", settings.appearance.gradient === "darker" ? "opacity-100" : "opacity-100")}>
             {settings.appearance.gradient === "darker" ? (
@@ -613,7 +612,7 @@ function MeetingRoomBase({
         </div>
       )}
 
-      <div className={cn("relative z-0 flex min-h-0 flex-1 flex-row overflow-hidden", !reduceMotion && "animate-in fade-in duration-1000 ease-out fill-mode-both", isMobile ? "gap-2 pt-2 pb-2" : "gap-4 px-4 pt-4 pb-4", ui.isExiting && "pointer-events-none")}>
+      <div className={cn("relative z-0 flex min-h-0 flex-1 flex-row overflow-hidden", !reduceMotion && "animate-in fade-in duration-1000 ease-out fill-mode-both", isMobile ? "gap-2 px-2 pt-2 pb-0" : "gap-4 px-4 pt-4 pb-4", ui.isExiting && "pointer-events-none")}>
         <MeetingRoomStage
           isMobile={isMobile}
           layout={ui.layout}

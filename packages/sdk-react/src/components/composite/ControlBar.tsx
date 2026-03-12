@@ -305,11 +305,11 @@ export const ControlBar = React.memo(
       }
     };
 
-    // Mobile variant: Minimal floating bar with Mic, Video, More, Leave
+    // Mobile variant: Dock section layout matching the screenshot
     if (variant === "mobile") {
       return (
         <div
-          className={cn("flex items-center justify-center gap-3 px-4 py-3 rounded-full mx-auto bg-zinc-950/95 shadow-xl", className)}
+          className={cn("flex flex-nowrap overflow-x-auto scrollbar-none items-center gap-2 w-full px-2 sm:px-4 py-3 bg-[#09090b]", className)}
           style={{
             ...(themeVariables as React.CSSProperties),
             paddingBottom: "max(12px, env(safe-area-inset-bottom))",
@@ -317,31 +317,59 @@ export const ControlBar = React.memo(
           role="toolbar"
           aria-label="Meeting controls"
         >
-          {/* Mic toggle */}
-          <button type="button" onClick={onToggleMute} className={cn("flex items-center justify-center w-12 h-12 rounded-full transition-all active:scale-95", isMuted ? "bg-red-500/20" : "bg-white/10")} aria-label={isMuted ? "Unmute" : "Mute"} aria-pressed={!isMuted}>
-            {isMuted ? <MicrophoneOff01Icon className="w-6 h-6 text-red-500" /> : <Microphone01Icon className="w-6 h-6 text-white" />}
-          </button>
+          <div className="flex items-center justify-center gap-1.5 min-w-min mx-auto">
+            {/* Group 1: Media Controls */}
+            <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
+              <button
+                type="button"
+                onClick={onToggleMute}
+                className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95", !isMuted ? "text-white" : "text-[#ef4444]")}
+                aria-label={isMuted ? "Unmute" : "Mute"}
+                aria-pressed={!isMuted}
+              >
+                {isMuted ? <MicrophoneOff01Icon className="w-5 h-5" /> : <Microphone01Icon className="w-5 h-5" />}
+              </button>
 
-          {/* Video toggle */}
-          <button
-            type="button"
-            onClick={onToggleVideo}
-            className={cn("flex items-center justify-center w-12 h-12 rounded-full transition-all active:scale-95", !isVideoEnabled ? "bg-red-500/20" : "bg-white/10")}
-            aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
-            aria-pressed={isVideoEnabled}
-          >
-            {isVideoEnabled ? <Video01Icon className="w-6 h-6 text-white" /> : <VideoOffIcon className="w-6 h-6 text-red-500" />}
-          </button>
+              <button
+                type="button"
+                onClick={onToggleVideo}
+                className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95", isVideoEnabled ? "text-white" : "text-[#ef4444]")}
+                aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
+                aria-pressed={isVideoEnabled}
+              >
+                {isVideoEnabled ? <Video01Icon className="w-5 h-5" /> : <VideoOffIcon className="w-5 h-5" />}
+              </button>
+            </div>
 
-          {/* More button */}
-          <button type="button" onClick={onOpenMore} className="flex items-center justify-center w-12 h-12 rounded-full bg-white/10 transition-all active:scale-95" aria-label="More options">
-            <MoreHorizontalIcon className="w-6 h-6 text-white" />
-          </button>
+            {/* Group 2: Interactions */}
+            <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
+              {onToggleScreenShare && (
+                <button type="button" onClick={onToggleScreenShare} className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isScreenSharing ? "bg-primary text-primary-foreground" : "")} aria-label="Share Screen">
+                  {isScreenSharing ? <MonitorOffIcon className="w-5 h-5" /> : <Monitor01Icon className="w-5 h-5" />}
+                </button>
+              )}
+              {onToggleHandRaise && (
+                <button type="button" onClick={onToggleHandRaise} className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isHandRaised ? "bg-primary text-primary-foreground" : "")} aria-label="Raise Hand">
+                  <HandIcon className="w-5 h-5" />
+                </button>
+              )}
+              {onOpenReactions && (
+                <button type="button" onClick={onOpenReactions} className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-[#FFD700]")} aria-label="Reactions">
+                  <ThumbsUpIcon className="w-5 h-5" />
+                </button>
+              )}
+            </div>
 
-          {/* Leave button */}
-          <button type="button" onClick={onLeave} className="flex items-center justify-center w-12 h-12 rounded-full bg-[#dc2626] hover:bg-[#b91c1c] transition-all active:scale-95" aria-label="Leave meeting">
-            <CallEnd01Icon className="w-5 h-5 text-white" />
-          </button>
+            {/* Group 3: More & Leave */}
+            <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
+              <button type="button" onClick={onOpenMore} className="flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white" aria-label="More options">
+                <MoreHorizontalIcon className="w-5 h-5" />
+              </button>
+              <button type="button" onClick={onLeave} className="flex items-center justify-center px-4 h-[44px] sm:h-[46px] rounded-full bg-[#ef4444] hover:bg-[#dc2626] transition-all active:scale-95 text-white shadow-lg" aria-label="Leave meeting">
+                <CallEnd01Icon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
         </div>
       );
     }
