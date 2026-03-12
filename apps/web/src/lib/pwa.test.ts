@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getThemeColor, readPwaInstallDismissal, registerPwaServiceWorker, shouldHidePwaPrompt, syncThemeColor, writePwaInstallDismissal } from "./pwa";
+import { formatPwaBuildLabel, getPwaInstallPromptContent, getThemeColor, readPwaInstallDismissal, registerPwaServiceWorker, requestPwaBuildMeta, shouldHidePwaPrompt, syncThemeColor, writePwaInstallDismissal } from "./pwa";
 
 describe("pwa helpers", () => {
   const originalServiceWorker = navigator.serviceWorker;
@@ -97,6 +97,62 @@ describe("pwa helpers", () => {
     expect(readPwaInstallDismissal()).toBe(false);
   });
 
+  it("formats install copy for native and manual install surfaces", () => {
+    expect(
+      getPwaInstallPromptContent({
+        hasNativePrompt: true,
+        installPlatform: "desktop",
+        requiresManualInstall: false,
+      }),
+    ).toMatchObject({
+      badge: "Desktop install",
+      ctaLabel: "Install app",
+      title: "Install Chalk",
+    });
+
+    expect(
+      getPwaInstallPromptContent({
+        hasNativePrompt: false,
+        installPlatform: "ios-safari",
+        requiresManualInstall: true,
+      }),
+    ).toMatchObject({
+      badge: "Safari Share -> Add to Home Screen",
+      dismissLabel: "Got it",
+      title: "Add Chalk to Home Screen",
+    });
+
+    expect(
+      getPwaInstallPromptContent({
+        hasNativePrompt: false,
+        installPlatform: "mac-safari",
+        requiresManualInstall: true,
+      }),
+    ).toMatchObject({
+      badge: "Safari File -> Add to Dock",
+      title: "Add Chalk to your Dock",
+    });
+  });
+
+  it("requests build metadata from a waiting service worker", async () => {
+    const worker = {
+      postMessage(_message: unknown, transfer: Transferable[]) {
+        const port = transfer[0] as MessagePort;
+        port.postMessage({
+          commitHash: "abc1234",
+          version: "0.1.0",
+        });
+      },
+    };
+
+    await expect(requestPwaBuildMeta(worker)).resolves.toEqual({
+      commitHash: "abc1234",
+      version: "0.1.0",
+    });
+    expect(formatPwaBuildLabel({ commitHash: "abc1234", version: "0.1.0" })).toBe("v0.1.0 · abc1234");
+    expect(formatPwaBuildLabel(null)).toBe("Fresh build");
+  });
+
   it("ships chalk-branded web and mobile pwa icons", () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "public/manifest.json"), "utf8")) as {
       icons: Array<{ src: string; purpose?: string }>;
@@ -104,9 +160,9 @@ describe("pwa helpers", () => {
     };
     const rootRouteSource = readFileSync(resolve(process.cwd(), "src/routes/__root.tsx"), "utf8");
 
-    expect(manifest.icons.map((icon) => icon.src)).toEqual(["/favicon.ico", "/chalk-icon-192.png", "/chalk-icon-512.png"]);
-    expect(manifest.icons.slice(1).every((icon) => icon.purpose === "any maskable")).toBe(true);
-    expect(manifest.shortcuts.flatMap((shortcut) => shortcut.icons.map((icon) => icon.src))).toEqual(["/chalk-icon-192.png", "/chalk-icon-192.png"]);
+    expect(manifest.icons.map((icon) => icon.src)).toEqual(["/favicon.ico", "/chalk-icon-192.png", "/chalk-icon-512.png", "/chalk-icon-maskable-192.png", "/chalk-icon-maskable-512.png"]);
+    expect(manifest.icons.map((icon) => icon.purpose ?? "default")).toEqual(["default", "any", "any", "maskable", "maskable"]);
+    expect(manifest.shortcuts.flatMap((shortcut) => shortcut.icons.map((icon) => icon.src))).toEqual(["/shortcut-new-192.png", "/shortcut-dashboard-192.png"]);
     expect(rootRouteSource).toContain('href: "/apple-touch-icon.png"');
     expect(rootRouteSource).not.toContain('href: "/logo192.png"');
   });

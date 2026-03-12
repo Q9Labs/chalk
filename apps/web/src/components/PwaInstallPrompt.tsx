@@ -206,7 +206,6 @@ export function PwaInstallPrompt() {
           <div className="space-y-1">
             <p className="font-display text-base font-semibold text-foreground">{installPromptContent.title}</p>
             <p className="text-muted-foreground">{installPromptContent.description}</p>
-            {installPromptContent.badge && <p className="text-xs font-medium text-foreground/70">{installPromptContent.badge}</p>}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -224,7 +223,7 @@ export function PwaInstallPrompt() {
                 {installPromptContent.ctaLabel}
               </Button>
             ) : (
-              <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">{requiresManualInstall ? "Manual install available" : "Install not available here"}</span>
+              <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">{installPromptContent.badge ?? "Install not available here"}</span>
             )}
             <Button size="sm" variant="ghost" onClick={handleDismiss}>
               {installPromptContent.dismissLabel}
