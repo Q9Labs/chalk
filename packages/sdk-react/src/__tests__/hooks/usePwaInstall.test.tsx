@@ -74,6 +74,21 @@ describe("usePwaInstall", () => {
 
     expect(result.current.canInstall).toBe(true);
     expect(result.current.hasNativePrompt).toBe(false);
+    expect(result.current.installPlatform).toBe("ios-safari");
+    expect(result.current.requiresManualInstall).toBe(true);
+  });
+
+  it("detects desktop Safari dock installs as a manual path", () => {
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    });
+
+    const { result } = renderHook(() => usePwaInstall());
+
+    expect(result.current.canInstall).toBe(true);
+    expect(result.current.hasNativePrompt).toBe(false);
+    expect(result.current.installPlatform).toBe("mac-safari");
     expect(result.current.requiresManualInstall).toBe(true);
   });
 
@@ -89,6 +104,7 @@ describe("usePwaInstall", () => {
 
     expect(result.current.isInstalled).toBe(true);
     expect(result.current.canInstall).toBe(false);
+    expect(result.current.installPlatform).toBe("desktop");
   });
 
   it("subscribes to legacy media query listeners when addEventListener is unavailable", () => {

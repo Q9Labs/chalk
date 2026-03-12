@@ -105,6 +105,7 @@ export {
   type UseMediaReturn,
   type UseNotificationsReturn,
   type UsePanelsReturn,
+  type PwaInstallPlatform,
   type UsePictureInPictureOptions,
   type UsePictureInPictureReturn,
   usePwaInstall,

@@ -12,6 +12,8 @@ type BeforeInstallPromptEvent = Event & {
 
 const DISPLAY_MODE_QUERY = "(display-mode: standalone)";
 
+export type PwaInstallPlatform = "android" | "desktop" | "ios-safari" | "mac-safari" | "unknown";
+
 function subscribeToDisplayModeChanges(mediaQuery: MediaQueryList | undefined, onChange: () => void) {
   if (!mediaQuery) {
     return () => {};
@@ -34,21 +36,44 @@ function isStandaloneMode() {
   return (window.matchMedia?.(DISPLAY_MODE_QUERY).matches ?? false) || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
 
-function supportsManualInstall() {
+function getInstallPlatform(): PwaInstallPlatform {
   if (typeof navigator === "undefined") {
-    return false;
+    return "unknown";
   }
 
   const userAgent = navigator.userAgent.toLowerCase();
-  const isAppleDevice = /iphone|ipad|ipod/.test(userAgent) || (/macintosh/.test(userAgent) && navigator.maxTouchPoints > 1);
+  const maxTouchPoints = navigator.maxTouchPoints ?? 0;
+  const isAppleTouchDevice = /iphone|ipad|ipod/.test(userAgent) || (/macintosh/.test(userAgent) && maxTouchPoints > 1);
+  const isMacDesktop = /macintosh/.test(userAgent) && maxTouchPoints <= 1;
   const isSafari = /safari/.test(userAgent) && !/crios|fxios|edgios|chrome|android/.test(userAgent);
 
-  return isAppleDevice && isSafari;
+  if (isAppleTouchDevice && isSafari) {
+    return "ios-safari";
+  }
+
+  if (isMacDesktop && isSafari) {
+    return "mac-safari";
+  }
+
+  if (/android/.test(userAgent)) {
+    return "android";
+  }
+
+  if (/macintosh|windows|linux|x11/.test(userAgent)) {
+    return "desktop";
+  }
+
+  return "unknown";
+}
+
+function supportsManualInstall(platform: PwaInstallPlatform) {
+  return platform === "ios-safari" || platform === "mac-safari";
 }
 
 export function usePwaInstall() {
   const [promptEvent, setPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(() => isStandaloneMode());
+  const installPlatform = useMemo(() => getInstallPlatform(), []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -101,14 +126,15 @@ export function usePwaInstall() {
 
   return useMemo(() => {
     const hasNativePrompt = promptEvent !== null;
-    const requiresManualInstall = !isInstalled && !hasNativePrompt && supportsManualInstall();
+    const requiresManualInstall = !isInstalled && !hasNativePrompt && supportsManualInstall(installPlatform);
 
     return {
       canInstall: !isInstalled && (hasNativePrompt || requiresManualInstall),
       hasNativePrompt,
+      installPlatform,
       requiresManualInstall,
       isInstalled,
       promptInstall,
     };
-  }, [isInstalled, promptEvent, promptInstall]);
+  }, [installPlatform, isInstalled, promptEvent, promptInstall]);
 }

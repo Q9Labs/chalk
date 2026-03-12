@@ -54,7 +54,7 @@ export { type UseLayoutReturn, useLayout } from "./ui/useLayout";
 export { type UsePictureInPictureOptions, type UsePictureInPictureReturn, usePictureInPicture } from "./ui/usePictureInPicture";
 export { type UseNotificationsReturn, useNotifications } from "./ui/useNotifications";
 export { type UsePanelsReturn, usePanels } from "./ui/usePanels";
-export { usePwaInstall } from "./ui/usePwaInstall";
+export { usePwaInstall, type PwaInstallPlatform } from "./ui/usePwaInstall";
 export { type UseWhatsNewReturn, type UseWhatsNewOptions, type WhatsNewData, useWhatsNew } from "./ui/useWhatsNew";
 export { type UseParticipantVolumeReturn, useParticipantVolume } from "./ui/useParticipantVolume";
 export { type AnnouncementPoliteness, type UseAnnouncerOptions, type UseAnnouncerReturn, useAnnouncer } from "./useAnnouncer";
