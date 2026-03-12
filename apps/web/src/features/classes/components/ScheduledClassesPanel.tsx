@@ -25,21 +25,21 @@ function toCountdown(targetMs: number, nowMs: number) {
   return `${minutes}m ${seconds}s`;
 }
 
-function toClassStartMs(room: RoomResource) {
+function toSessionStartMs(room: RoomResource) {
   if (!room.scheduledStartAt) return null;
   const startMs = new Date(room.scheduledStartAt).getTime();
   return Number.isFinite(startMs) ? startMs : null;
 }
 
 function toJoinAllowedAtMs(room: RoomResource) {
-  const startMs = toClassStartMs(room);
+  const startMs = toSessionStartMs(room);
   if (startMs === null) return null;
   const earlyJoinMs = Math.max(0, room.allowEarlyJoinMinutes ?? 0) * 60_000;
   return startMs - earlyJoinMs;
 }
 
 export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefresh }: ScheduledClassesPanelProps) {
-  const [className, setClassName] = useState("");
+  const [sessionName, setSessionName] = useState("");
   const [startAtLocal, setStartAtLocal] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [allowEarlyJoinMinutes, setAllowEarlyJoinMinutes] = useState("10");
@@ -52,20 +52,20 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
     return () => window.clearInterval(timer);
   }, []);
 
-  const classRooms = useMemo(() => {
+  const scheduledSessions = useMemo(() => {
     return [...rooms]
       .filter((room) => room.status === "scheduled" || room.status === "active")
       .sort((a, b) => {
-        const aMs = toClassStartMs(a) ?? new Date(a.createdAt).getTime();
-        const bMs = toClassStartMs(b) ?? new Date(b.createdAt).getTime();
+        const aMs = toSessionStartMs(a) ?? new Date(a.createdAt).getTime();
+        const bMs = toSessionStartMs(b) ?? new Date(b.createdAt).getTime();
         return aMs - bMs;
       });
   }, [rooms]);
 
-  async function createScheduledClass() {
-    const trimmedName = className.trim();
+  async function createScheduledSession() {
+    const trimmedName = sessionName.trim();
     if (!trimmedName) {
-      toast.error("Please enter a title for your class");
+      toast.error("Please enter a title for your session");
       return;
     }
 
@@ -75,7 +75,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
       return;
     }
     if (startDate.getTime() <= Date.now()) {
-      toast.error("Class start time must be in the future");
+      toast.error("Session start time must be in the future");
       return;
     }
 
@@ -91,13 +91,13 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
         scheduledEndAt: scheduledEndAt.toISOString(),
         allowEarlyJoinMinutes: earlyJoin,
       });
-      toast.success("Class successfully scheduled");
-      setClassName("");
+      toast.success("Session successfully scheduled");
+      setSessionName("");
       setStartAtLocal("");
       void onRefresh();
       setShowForm(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to schedule class");
+      toast.error(err instanceof Error ? err.message : "Failed to schedule session");
     } finally {
       setIsCreating(false);
     }
@@ -110,7 +110,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
 
       const timeStr = room.scheduledStartAt ? ` at ${new Date(room.scheduledStartAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "";
 
-      const message = `Join the session "${room.name || "Untitled Class"}"${timeStr}\n\nJoin link: ${inviteUrl}`;
+      const message = `Join the session "${room.name || "Untitled Session"}"${timeStr}\n\nJoin link: ${inviteUrl}`;
 
       await navigator.clipboard.writeText(message);
       toast.success("Invitation link copied");
@@ -139,7 +139,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
     <div className="space-y-6">
       <div className="flex items-center justify-between px-1">
         <div className="space-y-0.5">
-          <h3 className="text-lg font-bold tracking-tight text-foreground">Scheduled Classes</h3>
+          <h3 className="text-lg font-bold tracking-tight text-foreground">Scheduled Sessions</h3>
           <p className="text-sm text-muted-foreground">Plan and manage your upcoming live sessions</p>
         </div>
         <div className="flex items-center gap-2">
@@ -147,7 +147,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
             <RefreshCcw size={18} />
           </Button>
           <Button onClick={() => setShowForm(true)} variant="default" size="sm" className="h-9 font-semibold">
-            New Class
+            New Session
           </Button>
         </div>
       </div>
@@ -156,14 +156,14 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
         <DialogContent className="max-w-[500px]">
           <DialogClose />
           <DialogHeader>
-            <DialogTitle>Schedule a New Class</DialogTitle>
+            <DialogTitle>Schedule a New Session</DialogTitle>
             <DialogDescription>Fill in the details below to initialize your live session.</DialogDescription>
           </DialogHeader>
 
           <div className="p-6 pt-0 space-y-5">
             <div className="space-y-2">
-              <label className="text-[13px] font-bold text-foreground pl-0.5">Class Title</label>
-              <Input type="text" autoComplete="off" value={className} onChange={(e) => setClassName(e.target.value)} placeholder="e.g. Mathematics 101" className="h-11 border-border focus-visible:ring-primary/20" />
+              <label className="text-[13px] font-bold text-foreground pl-0.5">Session Title</label>
+              <Input type="text" autoComplete="off" value={sessionName} onChange={(e) => setSessionName(e.target.value)} placeholder="e.g. Team Standup" className="h-11 border-border focus-visible:ring-primary/20" />
             </div>
 
             <div className="space-y-2">
@@ -188,8 +188,8 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
             <Button variant="ghost" onClick={() => setShowForm(false)} className="font-semibold">
               Cancel
             </Button>
-            <Button disabled={isCreating} onClick={() => void createScheduledClass()} className="h-10 px-8 font-black shadow-lg shadow-primary/20">
-              {isCreating ? "Scheduling..." : "Create Class"}
+            <Button disabled={isCreating} onClick={() => void createScheduledSession()} className="h-10 px-8 font-black shadow-lg shadow-primary/20">
+              {isCreating ? "Scheduling..." : "Create Session"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -208,13 +208,13 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
             <Card key={i} className="h-32 border-border/50 bg-muted/20 animate-pulse shadow-none" />
           ))}
         </div>
-      ) : classRooms.length === 0 ? (
+      ) : scheduledSessions.length === 0 ? (
         <div className="border border-dashed border-border rounded-xl p-12 text-center bg-muted/10">
-          <p className="text-sm text-muted-foreground font-medium italic">No classes scheduled. Create one to get started.</p>
+          <p className="text-sm text-muted-foreground font-medium italic">No sessions scheduled. Create one to get started.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {classRooms.map((room) => {
+          {scheduledSessions.map((room) => {
             const joinAllowedAtMs = toJoinAllowedAtMs(room);
             const isTooEarly = room.status === "scheduled" && joinAllowedAtMs !== null && nowMs < joinAllowedAtMs;
             const canEnter = room.status === "active" || (room.status === "scheduled" && !isTooEarly);

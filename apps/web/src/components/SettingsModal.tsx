@@ -93,7 +93,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <div className="space-y-3">
                     <label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Display Name</label>
                     <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="E.g. Hasan" className="h-14 bg-muted/20 border-border/40 focus:border-primary/50 focus:ring-primary/10 transition-all font-bold text-base px-5 rounded-2xl" />
-                    <p className="text-[11px] font-medium text-muted-foreground/70 ml-1">This label will appear above your video feed in classrooms.</p>
+                    <p className="text-[11px] font-medium text-muted-foreground/70 ml-1">This label will appear above your video feed in meetings.</p>
                   </div>
 
                   <Separator className="opacity-30" />

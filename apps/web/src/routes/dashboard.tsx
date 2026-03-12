@@ -224,7 +224,7 @@ function DashboardPage() {
       setClassRooms(response.rooms);
     } catch (err) {
       setClassesError(
-        err instanceof Error ? err.message : "Failed to load classes",
+        err instanceof Error ? err.message : "Failed to load sessions",
       );
     } finally {
       setClassesLoading(false);

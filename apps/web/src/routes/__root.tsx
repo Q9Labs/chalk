@@ -39,7 +39,7 @@ export const Route = createRootRoute({
       },
       {
         name: "description",
-        content: "Ultra low-latency video conferencing for education.",
+        content: "Ultra low-latency video conferencing for real-time collaboration.",
       },
       {
         name: "theme-color",
