@@ -258,24 +258,6 @@ resource "aws_autoscaling_group" "whisper" {
   }
 }
 
-data "aws_instances" "whisper" {
-  instance_tags = {
-    Name = local.name
-  }
-
-  filter {
-    name   = "instance-state-name"
-    values = ["running"]
-  }
-
-  depends_on = [aws_autoscaling_group.whisper]
-}
-
-data "aws_instance" "whisper" {
-  count       = length(data.aws_instances.whisper.ids) > 0 ? 1 : 0
-  instance_id = data.aws_instances.whisper.ids[0]
-}
-
 resource "aws_cloudwatch_metric_alarm" "status_check" {
   alarm_name          = "${local.name}-status-check"
   alarm_description   = "Lean whisper worker has fewer than one in-service instance"
