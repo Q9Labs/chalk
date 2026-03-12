@@ -4,7 +4,7 @@ import { cn } from "../../../utils/cn";
 import { getParticipantColor, getParticipantGradient, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { Avatar, ControlButton } from "../../atomic";
 import { DeviceControlButton, ReactionPicker } from "../../composite";
-import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, Cancel01Icon, RefreshIcon, ArrowLeft01Icon } from "../../../utils/icons";
+import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, RefreshIcon, ArrowLeft01Icon, Shield01Icon, WifiOffIcon, InformationCircleIcon, ArrowDown01Icon, ArrowUp01Icon } from "../../../utils/icons";
 import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
 import { useMeetingRoomTheme } from "../meeting-room/useMeetingRoomTheme";
 import { LoadingScreen } from "../LoadingScreen";
@@ -312,7 +312,39 @@ function MeetingPictureInPictureLayout({
 
 export function PictureInPictureWindow({ phase, source, previewSource, participantSources, meetingLayout = "single", controls, onReturnToTab }: PictureInPictureWindowProps) {
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
+
+  const errorInfo = useMemo(() => {
+    if (!controls.errorMessage) return null;
+    const lowerError = controls.errorMessage.toLowerCase();
+
+    if (lowerError.includes("api key") || lowerError.includes("auth") || lowerError.includes("token")) {
+      return {
+        title: "Let's get you back in",
+        message: "It looks like your link expired or isn't quite right. No worries, request a new link to join.",
+        type: "auth" as const,
+        Icon: Shield01Icon,
+      };
+    }
+
+    if (lowerError.includes("timeout") || lowerError.includes("network") || lowerError.includes("reach")) {
+      return {
+        title: "Quick connection hiccup",
+        message: "We're having trouble reaching the network. A quick refresh usually does the trick.",
+        type: "network" as const,
+        Icon: WifiOffIcon,
+      };
+    }
+
+    return {
+      title: "Just a small bump in the road",
+      message: "We encountered a routine hiccup while getting you set up. Click try again.",
+      type: "server" as const,
+      Icon: InformationCircleIcon,
+    };
+  }, [controls.errorMessage]);
+
   const localParticipantGradientPreference = controls.localParticipantGradientPreference;
   const sourceGradientPreference = getSourceGradientPreference(source, localParticipantGradientPreference);
   const effectiveSourceGradientPreference = sourceGradientPreference ?? localParticipantGradientPreference;
@@ -443,64 +475,85 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
           </div>
         )}
 
-        {showErrorOverlay && (
-          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/10 backdrop-blur-[6px] p-4 animate-in fade-in duration-300">
+        {showErrorOverlay && errorInfo && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/40 backdrop-blur-[6px] p-4 animate-in fade-in duration-500 font-app">
             <div 
-              className="relative w-full max-w-[272px] overflow-hidden rounded-[24px] border border-white/10 bg-slate-950/72 px-4 pb-4 pt-3 text-center text-white shadow-[0_24px_60px_rgba(2,6,23,0.42)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-500 ease-out"
+              className="relative w-full max-w-[320px] max-h-[100%] overflow-y-auto scrollbar-none overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/72 px-5 pb-5 pt-6 text-center text-white shadow-[0_24px_60px_rgba(2,6,23,0.42)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-500 ease-[cubic-bezier(0.2,0,0,1)]"
               style={{
                 backdropFilter: "blur(40px)",
               }}
             >
-              <div
-                className="pointer-events-none absolute inset-x-8 top-0 h-16 rounded-full opacity-80 blur-2xl"
-                style={{ background: "radial-gradient(circle, rgba(239,68,68,0.16) 0%, transparent 72%)" }}
-              />
+              <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none -z-10" />
 
-              <div className="relative mb-3 flex justify-center">
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-                  <Cancel01Icon size={18} className="text-red-400" />
+              <div className="h-20 w-full flex items-center justify-center mb-4 relative">
+                <div className="absolute inset-0 flex items-center justify-center animate-friendly-float">
+                  <div className="absolute w-20 h-20 bg-primary/5 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
+                  <div className="absolute w-14 h-14 bg-primary/10 rounded-full animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]" />
+                  <div className="relative w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center shadow-lg shadow-primary/10 border border-primary/30 backdrop-blur-md">
+                    <errorInfo.Icon size={18} className="text-primary-foreground" />
+                  </div>
                 </div>
               </div>
 
-              <div className="mb-3 space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/45">Join issue</p>
-                <h2 className="text-[18px] font-semibold tracking-tight text-white">Unable to join room</h2>
-              </div>
-              <p className="mx-auto mb-4 max-w-[216px] text-[13px] leading-5 text-white/72">
-                {controls.errorMessage}
+              <h2 className="font-display text-xl font-bold tracking-tight text-white mb-2 leading-tight">{errorInfo.title}</h2>
+              <p className="mx-auto mb-5 max-w-[240px] text-xs leading-relaxed text-white/70">
+                {errorInfo.message}
               </p>
 
-              <div className="mb-4 space-y-2 text-left">
-                <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40">Technical details</p>
-                  <p className="mt-1.5 text-[11px] leading-4 text-white/88">{controls.errorMessage}</p>
-                </div>
-                {controls.supportCode && (
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40">Support code</p>
-                    <p className="mt-1.5 text-[11px] font-mono leading-4 text-white/88 break-all">{controls.supportCode}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className={cn("grid gap-2", controls.onJoin ? "grid-cols-2" : "grid-cols-1")}>
+              <div className="flex flex-col gap-2 w-full mb-5">
                 {controls.onJoin && (
                   <button
                     onClick={controls.onJoin}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-xs font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[13px] font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
                   >
-                    <RefreshIcon size={14} />
+                    <RefreshIcon size={16} />
                     Try Again
                   </button>
                 )}
                 <button
                   onClick={onReturnToTab}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] text-xs font-semibold text-white transition-all hover:bg-white/[0.06] active:scale-95"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] text-[13px] font-semibold text-white transition-all hover:bg-white/[0.06] active:scale-95"
                 >
-                  <ArrowLeft01Icon size={14} />
+                  <ArrowLeft01Icon size={16} />
                   Go Back
                 </button>
               </div>
+
+              <div className="w-full text-left">
+                <button onClick={() => setShowDetails(!showDetails)} className="flex items-center justify-center gap-1.5 mx-auto text-[11px] font-medium text-white/50 hover:text-white transition-all duration-200 group">
+                  {showDetails ? <ArrowUp01Icon size={12} /> : <ArrowDown01Icon size={12} />}
+                  <span>Technical details</span>
+                </button>
+
+                <div className={cn("grid transition-all duration-300 ease-in-out w-full", showDetails ? "grid-rows-[1fr] opacity-100 mt-4" : "grid-rows-[0fr] opacity-0")}>
+                  <div className="overflow-hidden min-h-0 space-y-2">
+                    {controls.supportCode && (
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40 mb-1.5">Support code</p>
+                        <p className="text-[11px] font-mono leading-4 text-white/88 break-all">{controls.supportCode}</p>
+                      </div>
+                    )}
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40 mb-1.5">Error Log</p>
+                      <pre className="text-[10px] leading-4 font-mono text-white/88 overflow-x-auto whitespace-pre-wrap max-h-24 scrollbar-thin">{controls.errorMessage}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <style
+                dangerouslySetInnerHTML={{
+                  __html: `
+                @keyframes friendly-float {
+                  0%, 100% { transform: translateY(0px) scale(1); }
+                  50% { transform: translateY(-4px) scale(1.02); }
+                }
+                .animate-friendly-float {
+                  animation: friendly-float 4s ease-in-out infinite;
+                }
+              `,
+                }}
+              />
             </div>
           </div>
         )}

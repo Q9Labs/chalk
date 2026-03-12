@@ -272,63 +272,94 @@ function DashboardPage() {
 
   if (state.kind === "login") {
     return (
-      <div className="font-app min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-background selection:bg-primary/20">
-        {/* Dynamic Luminescent Mesh Background */}
+      <div className="font-app min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-[#0A0A0B] selection:bg-primary/30">
+        {/* The Infinite Canvas - Dot Grid Texture */}
+        <div className="absolute inset-0 z-0 opacity-[0.15]" 
+          style={{ 
+            backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)`,
+            backgroundSize: '32px 32px' 
+          }} 
+        />
+        
+        {/* Subtle Slate Depth */}
         <div className="absolute inset-0 z-0">
-          <div className="absolute top-1/4 left-1/4 w-[40vw] h-[40vw] max-w-[600px] max-h-[600px] bg-primary/20 rounded-full blur-[100px] mix-blend-screen animate-pulse duration-[8000ms]" />
-          <div className="absolute bottom-1/4 right-1/4 w-[35vw] h-[35vw] max-w-[500px] max-h-[500px] bg-blue-500/10 rounded-full blur-[120px] mix-blend-screen animate-pulse duration-[10000ms] delay-1000" />
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 right-0 w-full h-full bg-gradient-to-tl from-blue-500/5 via-transparent to-transparent pointer-events-none" />
         </div>
 
-        {/* Glassmorphism Portal Card */}
-        <div className="w-full max-w-[420px] relative z-10">
-          <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent rounded-[2rem] border border-white/10 dark:from-white/5 dark:border-white/5 pointer-events-none" />
-
-          <Card className="bg-background/40 dark:bg-black/40 backdrop-blur-2xl border-white/20 dark:border-white/10 shadow-2xl rounded-[2rem] overflow-hidden">
-            <CardHeader className="text-center pb-8 pt-12">
-              <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center mb-6 shadow-inner">
-                <ChalkLogo className="scale-110" />
+        {/* The Portal Card */}
+        <div className="w-full max-w-[440px] relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
+          <Card className="bg-black/40 backdrop-blur-3xl border-white/[0.08] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] rounded-[2.5rem] overflow-hidden">
+            <CardHeader className="text-center pb-6 pt-14 px-10">
+              <div className="mx-auto mb-10 relative group">
+                {/* Hero Loader */}
+                <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
+                <ChalkLoader size={88} className="relative z-10" />
               </div>
-              <CardTitle className="text-3xl font-black tracking-tight mb-2">Welcome Back</CardTitle>
-              <CardDescription className="text-base text-foreground/60">Enter your email to securely access your workspace.</CardDescription>
+              
+              <div className="space-y-2">
+                <CardTitle className="text-4xl font-black tracking-tight text-white">
+                  Chalk <span className="text-primary/80">Portal</span>
+                </CardTitle>
+                <CardDescription className="text-sm font-medium text-white/40 tracking-wide uppercase px-4">
+                  Secure access to your creative workspace
+                </CardDescription>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-6 px-10 pb-12">
-              <div className="space-y-3">
-                <label className="text-xs font-bold uppercase tracking-widest text-foreground/50 ml-1">Work Email</label>
+
+            <CardContent className="space-y-8 px-10 pb-16">
+              <div className="space-y-4">
                 <div className="relative group">
-                  <Input
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && email.trim() && sendLink()}
-                    className="h-14 bg-background/50 border-white/20 dark:border-white/10 rounded-xl pl-4 pr-12 focus:ring-4 focus:ring-primary/20 transition-all font-medium text-lg placeholder:text-muted-foreground/50 shadow-inner"
-                    autoFocus
-                  />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary/40 group-focus-within:bg-primary group-focus-within:animate-pulse transition-colors" />
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 to-blue-500/50 rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition duration-500" />
+                  <div className="relative">
+                    <Input
+                      type="email"
+                      placeholder="Enter your work email…"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && email.trim() && sendLink()}
+                      className="h-16 bg-black/60 border-white/[0.1] rounded-2xl px-6 focus:ring-0 focus:border-primary/50 transition-all font-medium text-lg text-white placeholder:text-white/20 shadow-2xl"
+                      autoFocus
+                    />
+                    <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                      <div className={cn(
+                        "w-2 h-2 rounded-full transition-all duration-500",
+                        email.trim() ? "bg-primary shadow-[0_0_12px_rgba(27,182,166,0.8)] scale-110" : "bg-white/10"
+                      )} />
+                    </div>
                   </div>
                 </div>
+
+                <Button 
+                  onClick={sendLink} 
+                  disabled={!email.trim()} 
+                  className="w-full h-16 rounded-2xl font-black text-lg tracking-tight bg-white text-black hover:bg-white/90 active:scale-[0.98] transition-all shadow-2xl relative group overflow-hidden"
+                >
+                  <span className="relative z-10 flex items-center justify-center gap-3">
+                    Send Magic Link
+                    <div className="w-1.5 h-1.5 rounded-full bg-black/20 animate-pulse" />
+                  </span>
+                </Button>
               </div>
 
-              <Button onClick={sendLink} disabled={!email.trim()} className="w-full h-14 rounded-xl font-bold text-base shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all active:scale-[0.98] mt-2 relative overflow-hidden group">
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
-                <span className="relative">Send Magic Link</span>
-              </Button>
-
               {emailSent && (
-                <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                  <HugeiconsIcon icon={InformationCircleIcon} size={20} className="text-primary shrink-0 mt-0.5" />
-                  <p className="text-sm font-semibold text-primary/90 leading-snug">{emailSent}</p>
+                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 flex gap-4 animate-in zoom-in-95 fade-in duration-500">
+                  <HugeiconsIcon icon={InformationCircleIcon} size={22} className="text-primary shrink-0" />
+                  <p className="text-sm font-bold text-primary leading-snug">{emailSent}</p>
                 </div>
               )}
             </CardContent>
 
-            {/* Edge Security Footer */}
-            <div className="bg-gradient-to-b from-transparent to-background/50 p-6 text-center border-t border-border/20 backdrop-blur-sm">
-              <p className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em] flex items-center justify-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                Protected by Edge Security
-              </p>
+            {/* Tactical Footer */}
+            <div className="px-10 py-6 bg-white/[0.02] border-t border-white/[0.05] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" />
+                <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Edge Secure</span>
+              </div>
+              <div className="flex gap-4">
+                <div className="w-px h-3 bg-white/10" />
+                <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">v{__WEB_APP_VERSION__}</span>
+              </div>
             </div>
           </Card>
         </div>

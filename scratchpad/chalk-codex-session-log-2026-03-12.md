@@ -24,3 +24,4 @@
 [2026-03-12 05:13:42 PKT] LoadingScreen copy pass done. Added 3 calmer network/progress support lines in PreJoinLobby join rotation and extended LoadingScreen regression to assert the sequence ends on `Almost there...`.
 
 [2026-03-12 05:14:30 PKT] Leave dialog polish: match confirm red to dock leave button; add regression test.
+[2026-03-12 06:54:08 PKT] Consumer rollback attempt. For TH main / CollabDash main / ET main, latest `0.0.74` Amplify jobs had already failed before deploy, so prod stayed on prior successful builds. Triggered explicit Amplify `RETRY` on last successful main jobs (`TH #48 -> retry #50`, `CollabDash #107 -> retry #109`, `ET #51 -> retry #53`) to force rollback/redeploy; all three retries failed again in `BUILD`, with `DEPLOY` cancelled, so no production cutover occurred from the retries either. Safe conclusion: all three consumers remain on their last successful production deploys while main still points at the newer commits.
