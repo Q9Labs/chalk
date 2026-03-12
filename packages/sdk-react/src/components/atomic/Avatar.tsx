@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Facehash } from "facehash";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarGradient, getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
@@ -35,11 +36,12 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
   const { settings } = useMeetingRoomSettings();
   const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
   const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
-  const isGeneratedAvatarEnabled = settings.appearance.generatedAvatars && !src && Boolean(name);
+  const hasUploadedImage = Boolean(src) && !imageError;
+  const shouldShowGeneratedAvatar = settings.appearance.generatedAvatars && Boolean(name) && !hasUploadedImage;
 
   useEffect(() => {
     setImageError(false);
-  }, [src, name, isGeneratedAvatarEnabled]);
+  }, [src, name, settings.appearance.generatedAvatars]);
 
   const initials = useMemo(() => {
     if (!name || name.trim() === "") return "?";
@@ -59,29 +61,27 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
   const gradient = useMemo(() => (isDarkerGradient ? `linear-gradient(135deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantAvatarGradient(name || "unknown", gradientPreference)), [gradientPreference, name, isDarkerGradient, participantColors]);
   const { size: pxSize, fontSize } = sizeMap[size];
 
-  const facehashUrl = useMemo(() => {
-    if (!isGeneratedAvatarEnabled) return null;
-    const baseUrl = "https://facehash.dev/api/avatar";
-    const params = new URLSearchParams({
-      name: name || "guest",
-      size: String(pxSize * 2),
-      variant: "gradient",
-      format: "svg",
-      intensity3d: "dramatic",
-      enableBlink: "true",
-    });
-    return `${baseUrl}?${params.toString()}`;
-  }, [isGeneratedAvatarEnabled, name, pxSize]);
-
   return (
     <div className={cn("relative inline-flex shrink-0 rounded-full", className)} style={{ width: pxSize, height: pxSize, ...style }} role="img" aria-label={`Avatar for ${name || "Unknown"}`}>
-      {(src || facehashUrl) && !imageError ? (
+      {hasUploadedImage ? (
         <img
-          src={src || facehashUrl || ""}
+          src={src || ""}
           alt={name}
           className="h-full w-full rounded-full object-cover"
           onError={() => setImageError(true)}
         />
+      ) : shouldShowGeneratedAvatar ? (
+        <div aria-hidden="true" className="h-full w-full overflow-hidden rounded-full">
+          <Facehash
+            name={name || "guest"}
+            size={pxSize}
+            variant="gradient"
+            interactive
+            intensity3d="dramatic"
+            enableBlink
+            colors={[participantColors.primary, participantColors.gradientEnd, participantColors.secondary]}
+          />
+        </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center rounded-full text-white font-medium" style={{ fontSize, background: gradient }}>
           {initials}

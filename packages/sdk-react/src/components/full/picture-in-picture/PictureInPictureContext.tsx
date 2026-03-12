@@ -1,5 +1,5 @@
 import type React from "react";
-import { createContext, useCallback, useContext, useMemo, useState, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from "react";
 
 import { usePictureInPicture, type UsePictureInPictureOptions } from "../../../hooks/ui/usePictureInPicture";
 import type { PictureInPictureControls } from "./types";
@@ -23,9 +23,48 @@ const EMPTY_CONTROLS: PictureInPictureControls = {};
 
 const SharedPictureInPictureContext = createContext<SharedPictureInPictureValue | null>(null);
 
+function areEqualValues(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => areEqualValues(value, right[index]));
+  }
+
+  if (left && right && typeof left === "object" && typeof right === "object") {
+    const leftEntries = Object.entries(left);
+    const rightEntries = Object.entries(right);
+
+    if (leftEntries.length !== rightEntries.length) {
+      return false;
+    }
+
+    return leftEntries.every(([key, value]) => areEqualValues(value, (right as Record<string, unknown>)[key]));
+  }
+
+  return false;
+}
+
+function isSameRegistration(
+  current: SharedPictureInPictureRegistration | null,
+  ownerId: string,
+  options: UsePictureInPictureOptions,
+) {
+  return current?.ownerId === ownerId && areEqualValues(current.options, options);
+}
+
 export function SharedPictureInPictureProvider({ enabled = true, children }: { enabled?: boolean; children: React.ReactNode }) {
   const [registration, setRegistration] = useState<SharedPictureInPictureRegistration | null>(null);
   const pendingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pendingClearRef.current) {
+        clearTimeout(pendingClearRef.current);
+      }
+    };
+  }, []);
 
   const register = useCallback((ownerId: string, options: UsePictureInPictureOptions | null) => {
     if (options) {
@@ -34,7 +73,7 @@ export function SharedPictureInPictureProvider({ enabled = true, children }: { e
         pendingClearRef.current = null;
       }
       setRegistration((current) => {
-        if (current?.ownerId === ownerId && current.options === options) {
+        if (isSameRegistration(current, ownerId, options)) {
           return current;
         }
 

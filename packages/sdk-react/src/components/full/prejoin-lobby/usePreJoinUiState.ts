@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { JoinSettings } from "./types";
-
-export type PreJoinDropdown = "audio" | "video" | null;
 
 export interface UsePreJoinUiStateParams {
   userName: string;
@@ -14,7 +12,6 @@ export interface UsePreJoinUiStateParams {
   selectedAudioInput?: string;
   selectedAudioOutput?: string;
   onJoin: (settings: JoinSettings) => void;
-  dropdownRef: RefObject<HTMLDivElement | null>;
 }
 
 export interface UsePreJoinUiStateReturn {
@@ -23,13 +20,11 @@ export interface UsePreJoinUiStateReturn {
   isAudioEnabled: boolean;
   showSettings: boolean;
   localError?: string;
-  openDropdown: PreJoinDropdown;
   canJoin: boolean;
   setIsVideoEnabled: (value: boolean) => void;
   setIsAudioEnabled: (value: boolean) => void;
   setShowSettings: (value: boolean) => void;
   setLocalError: (value: string | undefined) => void;
-  setOpenDropdown: (value: PreJoinDropdown) => void;
   setDisplayNameFromInput: (value: string) => void;
   toggleVideo: () => void;
   toggleAudio: () => void;
@@ -37,13 +32,12 @@ export interface UsePreJoinUiStateReturn {
   handleJoin: () => void;
 }
 
-export function usePreJoinUiState({ userName, error, initialVideoEnabled, initialAudioEnabled, initialShowSettings, selectedVideoDevice, selectedAudioInput, selectedAudioOutput, onJoin, dropdownRef }: UsePreJoinUiStateParams): UsePreJoinUiStateReturn {
+export function usePreJoinUiState({ userName, error, initialVideoEnabled, initialAudioEnabled, initialShowSettings, selectedVideoDevice, selectedAudioInput, selectedAudioOutput, onJoin }: UsePreJoinUiStateParams): UsePreJoinUiStateReturn {
   const [displayName, setDisplayName] = useState(userName);
   const [isVideoEnabled, setIsVideoEnabled] = useState(initialVideoEnabled);
   const [isAudioEnabled, setIsAudioEnabled] = useState(initialAudioEnabled);
   const [showSettings, setShowSettings] = useState(initialShowSettings);
   const [localError, setLocalError] = useState<string | undefined>(error);
-  const [openDropdown, setOpenDropdown] = useState<PreJoinDropdown>(null);
   const displayNameTouchedRef = useRef(false);
 
   useEffect(() => {
@@ -55,19 +49,6 @@ export function usePreJoinUiState({ userName, error, initialVideoEnabled, initia
       setDisplayName(userName);
     }
   }, [userName]);
-
-  useEffect(() => {
-    if (!openDropdown) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setOpenDropdown(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openDropdown, dropdownRef]);
 
   const setDisplayNameFromInput = useCallback((value: string) => {
     displayNameTouchedRef.current = true;
@@ -106,13 +87,11 @@ export function usePreJoinUiState({ userName, error, initialVideoEnabled, initia
     isAudioEnabled,
     showSettings,
     localError,
-    openDropdown,
     canJoin: displayName.trim().length > 0,
     setIsVideoEnabled,
     setIsAudioEnabled,
     setShowSettings,
     setLocalError,
-    setOpenDropdown,
     setDisplayNameFromInput,
     toggleVideo,
     toggleAudio,

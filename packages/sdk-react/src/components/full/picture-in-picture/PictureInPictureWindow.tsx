@@ -3,7 +3,7 @@ import { useEffect, useRef, useMemo, useState } from "react";
 import { cn } from "../../../utils/cn";
 import { getParticipantColor, getParticipantGradient, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { Avatar, ControlButton } from "../../atomic";
-import { ReactionPicker } from "../../composite";
+import { DeviceControlButton, ReactionPicker } from "../../composite";
 import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, Cancel01Icon, RefreshIcon, ArrowLeft01Icon } from "../../../utils/icons";
 import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
 import { useMeetingRoomTheme } from "../meeting-room/useMeetingRoomTheme";
@@ -255,6 +255,10 @@ function getMeetingLayoutClass(layout: PictureInPictureMeetingLayout, count: num
   return "grid-cols-2 grid-rows-2";
 }
 
+function getPictureInPictureTileKey(source: PictureInPictureSource, index: number) {
+  return `${source.kind}:${source.id}:${index}`;
+}
+
 function MeetingPictureInPictureLayout({
   source,
   participantSources,
@@ -272,8 +276,8 @@ function MeetingPictureInPictureLayout({
         <PictureInPictureTile source={source} className="min-w-0 flex-1 shadow-2xl" gradientPreference={getSourceGradientPreference(source, localParticipantGradientPreference)} />
         {participantSources.length > 0 && (
           <div className="flex w-24 shrink-0 flex-col gap-3">
-            {participantSources.map((participant) => (
-              <PictureInPictureTile key={participant.id} source={participant} className="flex-1 shadow-xl" gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)} />
+            {participantSources.map((participant, index) => (
+              <PictureInPictureTile key={getPictureInPictureTileKey(participant, index)} source={participant} className="flex-1 shadow-xl" gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)} />
             ))}
           </div>
         )}
@@ -291,7 +295,7 @@ function MeetingPictureInPictureLayout({
     >
       {tiles.map((participant, index) => (
         <PictureInPictureTile
-          key={participant.id}
+          key={getPictureInPictureTileKey(participant, index)}
           source={participant}
           gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)}
           className={cn(
@@ -301,7 +305,7 @@ function MeetingPictureInPictureLayout({
           )}
         />
       ))}
-      {meetingLayout === "grid" && tiles.length === 3 && <div className="hidden" aria-hidden="true" />}
+      {meetingLayout === "grid" && tiles.length === 3 && <div key="grid-filler" className="hidden" aria-hidden="true" />}
     </div>
   );
 }
@@ -311,6 +315,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
   const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
   const localParticipantGradientPreference = controls.localParticipantGradientPreference;
   const sourceGradientPreference = getSourceGradientPreference(source, localParticipantGradientPreference);
+  const effectiveSourceGradientPreference = sourceGradientPreference ?? localParticipantGradientPreference;
   const actionButtons = useMemo(() => {
     const base = [
       {
@@ -379,8 +384,8 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
   }, [controls, onReturnToTab, phase]);
 
   const participantThemeVariables = useMemo(
-    () => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown", sourceGradientPreference),
-    [source?.title, source?.id, sourceGradientPreference],
+    () => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown", effectiveSourceGradientPreference) as React.CSSProperties & Record<"--primary" | "--primary-foreground", string>,
+    [source?.title, source?.id, effectiveSourceGradientPreference],
   );
   const { settings } = useMeetingRoomSettings();
   const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
@@ -417,7 +422,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
           <MeetingPictureInPictureLayout source={source} participantSources={participantSources ?? []} meetingLayout={meetingLayout} localParticipantGradientPreference={localParticipantGradientPreference} />
         )}
         {phase === "prejoin" && (
-          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={sourceGradientPreference ?? localParticipantGradientPreference} />
+          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={effectiveSourceGradientPreference} />
         )}
 
         {phase === "prejoin" && !showErrorOverlay && (
@@ -433,7 +438,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                className="w-full h-full min-h-0" 
                message="Joining room..."
                supportingMessages={controls.loadingMessages}
-               gradientPreference={sourceGradientPreference ?? localParticipantGradientPreference}
+               gradientPreference={effectiveSourceGradientPreference}
              />
           </div>
         )}
@@ -533,30 +538,43 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
 
         {phase === "prejoin" && !showErrorOverlay && (
           <div className="absolute inset-x-0 bottom-6 flex justify-center items-center px-4 pointer-events-none">
-            <div className="flex items-center gap-1.5 p-1.5 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl pointer-events-auto">
-              <div className="flex items-center gap-1 px-1 border-r border-white/10">
-                <ControlButton
-                  icon={controls.isMuted ? <MicrophoneOff01Icon size={18} className="text-[#dc2626]" /> : <Microphone01Icon size={18} className="text-white" />}
-                  label={controls.isMuted ? "Unmute" : "Mute"}
-                  active={!controls.isMuted}
-                  onClick={controls.onToggleMute}
+            <div
+              className={cn(
+                "pointer-events-auto flex items-center gap-1.5 rounded-full border px-1.5 py-1.5 shadow-2xl",
+                isDarkMode ? "dark border-white/10 bg-black/60 backdrop-blur-xl" : "border-black/[0.08] bg-white/80 backdrop-blur-[18px]",
+              )}
+            >
+              <div className="flex items-center gap-1 px-1">
+                <DeviceControlButton
+                  type="mic"
+                  isActive={!controls.isMuted}
+                  onToggle={controls.onToggleMute ?? (() => {})}
+                  devices={controls.audioInputDevices ?? []}
+                  selectedDeviceId={controls.selectedAudioInput}
+                  onDeviceChange={controls.onAudioInputChange ?? (() => {})}
+                  className="!pointer-events-auto"
+                  haptic="medium"
                   size="sm"
-                  className="hover:bg-white/10"
-                  hideTooltip
                 />
-                <ControlButton
-                  icon={controls.isVideoEnabled ? <Video01Icon size={18} className="text-white" /> : <VideoOffIcon size={18} className="text-[#dc2626]" />}
-                  label={controls.isVideoEnabled ? "Stop Video" : "Start Video"}
-                  active={controls.isVideoEnabled}
-                  onClick={controls.onToggleVideo}
+                <DeviceControlButton
+                  type="video"
+                  isActive={Boolean(controls.isVideoEnabled)}
+                  onToggle={controls.onToggleVideo ?? (() => {})}
+                  devices={controls.videoInputDevices ?? []}
+                  selectedDeviceId={controls.selectedVideoInput}
+                  onDeviceChange={controls.onVideoInputChange ?? (() => {})}
+                  className="!pointer-events-auto"
+                  haptic="medium"
                   size="sm"
-                  className="hover:bg-white/10"
-                  hideTooltip
                 />
               </div>
               <button
                 onClick={controls.onJoin}
-                className="h-9 px-6 bg-primary text-primary-foreground font-semibold rounded-full hover:scale-105 active:scale-95 transition-all shadow-lg text-sm"
+                className="h-9 rounded-full px-6 text-sm font-semibold shadow-lg transition-all hover:scale-105 active:scale-95"
+                style={{
+                  backgroundColor: participantThemeVariables["--primary"],
+                  color: participantThemeVariables["--primary-foreground"],
+                }}
               >
                 Join Now
               </button>

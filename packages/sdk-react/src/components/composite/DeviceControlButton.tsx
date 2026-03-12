@@ -74,10 +74,11 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
   };
 
   const isMic = type === "mic";
+  const chevronSizeClass = size === "sm" ? "h-9 px-1.5" : size === "lg" ? "h-14 px-2.5" : "h-11 px-1.5";
 
   const icon = isMic ? isActive ? <Microphone01Icon /> : <MicrophoneOff01Icon className="text-[#dc2626]" /> : isActive ? <Video01Icon /> : <VideoOffIcon className="text-[#dc2626]" />;
 
-  const label = isMic ? (isActive ? "Mute" : "Unmute") : isActive ? "Stop Video" : "Start Video";
+  const label = isMic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   const dropdownLabel = isMic ? "Microphone" : "Camera";
 
   return (
@@ -91,10 +92,13 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
           type="button"
           onClick={toggleDropdown}
           disabled={disabled || (devices.length === 0 && (!secondaryDevices || secondaryDevices.length === 0))}
+          title={`Select ${dropdownLabel.toLowerCase()}`}
+          aria-label={`Select ${dropdownLabel.toLowerCase()}`}
           className={cn(
-            "chalk-button-tactile h-11 px-1.5 flex items-center justify-center rounded-r-full transition-all duration-300 ease-out",
+            "chalk-button-tactile flex items-center justify-center rounded-r-full transition-all duration-300 ease-out",
             "bg-black/5 dark:bg-white/10 shadow-lg hover:brightness-110 border-l border-black/5 dark:border-white/5",
             "text-foreground",
+            chevronSizeClass,
             isOpen && "brightness-110",
             disabled && "cursor-not-allowed opacity-50",
           )}

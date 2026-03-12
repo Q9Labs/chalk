@@ -1,22 +1,16 @@
 import type React from "react";
-import { useMemo, type RefObject } from "react";
+import { useMemo } from "react";
 
-import { ArrowDown01Icon, Microphone01Icon, MicrophoneOff01Icon, MoreVerticalIcon, PictureInPictureIcon, Video01Icon, VideoOffIcon } from "../../../utils/icons";
+import { PictureInPictureIcon, Settings01Icon } from "../../../utils/icons";
 import { useHaptics } from "../../../hooks/ui/useHaptics";
 import { cn } from "../../../utils/cn";
-import type { PreJoinDropdown } from "./usePreJoinUiState";
-
-const AUDIO_DEVICE_MENU_ID = "prejoin-audio-device-menu";
-const VIDEO_DEVICE_MENU_ID = "prejoin-video-device-menu";
+import { ControlButton } from "../../atomic/ControlButton";
+import { DeviceControlButton } from "../../composite/DeviceControlButton";
+import type { MediaDevice } from "@q9labs/chalk-core";
 
 interface PreJoinFloatingControlsProps {
-  dropdownRef: RefObject<HTMLDivElement | null>;
-  openDropdown: PreJoinDropdown;
-  setOpenDropdown: (value: PreJoinDropdown) => void;
   isAudioEnabled: boolean;
   isVideoEnabled: boolean;
-  hasAudioInput: boolean;
-  hasVideoDevices: boolean;
   effectiveAudioInputDevices: MediaDeviceInfo[];
   effectiveVideoDevices: MediaDeviceInfo[];
   selectedAudioInput?: string;
@@ -33,13 +27,8 @@ interface PreJoinFloatingControlsProps {
 }
 
 export function PreJoinFloatingControls({
-  dropdownRef,
-  openDropdown,
-  setOpenDropdown,
   isAudioEnabled,
   isVideoEnabled,
-  hasAudioInput,
-  hasVideoDevices,
   effectiveAudioInputDevices,
   effectiveVideoDevices,
   selectedAudioInput,
@@ -57,173 +46,86 @@ export function PreJoinFloatingControls({
   const { trigger } = useHaptics();
   const selectedAudioInputDevice = useMemo(() => effectiveAudioInputDevices.find((device) => device.deviceId === selectedAudioInput), [effectiveAudioInputDevices, selectedAudioInput]);
   const selectedVideoDeviceInfo = useMemo(() => effectiveVideoDevices.find((device) => device.deviceId === selectedVideoDevice), [effectiveVideoDevices, selectedVideoDevice]);
-  const dropdownDevices = openDropdown === "audio" ? effectiveAudioInputDevices : effectiveVideoDevices;
+
+  // Cast native MediaDeviceInfo to Chalk MediaDevice
+  const audioDevices = effectiveAudioInputDevices as unknown as MediaDevice[];
+  const videoDevices = effectiveVideoDevices as unknown as MediaDevice[];
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-3 touch-manipulation" ref={dropdownRef}>
-      <div className="flex gap-4 px-4 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none shadow-sm">
-        {isAudioEnabled && selectedAudioInputDevice && <span className="text-[10px] text-white/70 font-medium tracking-wide uppercase truncate max-w-[120px]">Mic: {selectedAudioInputDevice.label || "Default"}</span>}
-        {isVideoEnabled && selectedVideoDeviceInfo && <span className="text-[10px] text-white/70 font-medium tracking-wide uppercase truncate max-w-[120px]">Cam: {selectedVideoDeviceInfo.label || "Default"}</span>}
+    <div className="absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-3 touch-manipulation">
+      <div
+        className="pointer-events-none flex translate-y-2 gap-4 rounded-full border px-4 py-1.5 opacity-0 shadow-2xl transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[16px] dark:backdrop-blur-xl"
+      >
+        {isAudioEnabled && selectedAudioInputDevice && (
+          <span className="max-w-[140px] truncate text-[10px] font-medium uppercase tracking-wide text-foreground">
+            Mic: {selectedAudioInputDevice.label || "Default"}
+          </span>
+        )}
+        {isVideoEnabled && selectedVideoDeviceInfo && (
+          <span className="max-w-[140px] truncate text-[10px] font-medium uppercase tracking-wide text-foreground">
+            Cam: {selectedVideoDeviceInfo.label || "Default"}
+          </span>
+        )}
       </div>
 
-      {openDropdown && (
-        <div
-          id={openDropdown === "audio" ? AUDIO_DEVICE_MENU_ID : VIDEO_DEVICE_MENU_ID}
-          role="menu"
-          aria-label={openDropdown === "audio" ? "Microphone devices" : "Camera devices"}
-          className="absolute bottom-full mb-14 w-64 rounded-xl border border-border shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 duration-200 bg-popover text-popover-foreground"
-          style={{
-            left: openDropdown === "audio" ? "0" : "auto",
-            right: openDropdown === "video" ? "0" : "auto",
-          }}
-        >
-          <div className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b border-border">{openDropdown === "audio" ? "Microphone" : "Camera"}</div>
-          <div className="py-2 max-h-[240px] overflow-y-auto">
-            {dropdownDevices.map((device) => {
-              const isSelected = openDropdown === "audio" ? selectedAudioInput === device.deviceId : selectedVideoDevice === device.deviceId;
-              return (
-                <button
-                  type="button"
-                  key={device.deviceId}
-                  role="menuitemradio"
-                  aria-checked={isSelected}
-                  onClick={() => {
-                    void trigger("selection");
-                    if (openDropdown === "audio") {
-                      onAudioInputChange(device.deviceId);
-                    } else {
-                      onVideoDeviceChange(device.deviceId);
-                    }
-                    setOpenDropdown(null);
-                  }}
-                  className={cn("w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center gap-3 outline-none focus-visible:bg-black/5 dark:focus-visible:bg-white/10", isSelected ? "bg-primary/20 text-primary" : "text-foreground/90 hover:bg-black/5 dark:hover:bg-white/10")}
-                >
-                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                  <span className={cn("truncate", !isSelected && "ml-[18px]")}>{device.label || `${openDropdown === "audio" ? "Microphone" : "Camera"} ${device.deviceId.slice(0, 5)}`}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <div
-        className="flex items-center gap-4 px-3 py-2 rounded-full relative group"
-        style={{
-          background: "var(--chalk-lobby-glass-bg)",
-          backdropFilter: "blur(20px)",
-          border: "1px solid var(--chalk-lobby-glass-border)",
-          boxShadow: "var(--chalk-shadow-md)",
-        }}
+        className="relative flex items-center gap-1.5 rounded-full border p-1.5 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500 bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[18px] dark:backdrop-blur-xl"
       >
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              void trigger(isAudioEnabled ? "medium" : "selection");
-              onToggleAudio();
-            }}
-            title={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
-            aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
-            className={cn(
-              "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-90 touch-manipulation",
-              !isAudioEnabled ? "bg-red-500 text-white hover:bg-red-600" : "bg-black/5 dark:bg-white/10 text-foreground hover:bg-black/10 dark:hover:bg-white/20",
-            )}
-          >
-            {isAudioEnabled ? <Microphone01Icon size={20} /> : <MicrophoneOff01Icon size={20} />}
-          </button>
-          {hasAudioInput && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                void trigger("selection");
-                setOpenDropdown(openDropdown === "audio" ? null : "audio");
-              }}
-              title="Select microphone"
-              aria-label="Select microphone"
-              aria-haspopup="menu"
-              aria-controls={AUDIO_DEVICE_MENU_ID}
-              aria-expanded={openDropdown === "audio"}
-              className={cn(
-                "w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-primary/10",
-                openDropdown === "audio" ? "bg-black/10 dark:bg-white/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5",
-              )}
-            >
-              <ArrowDown01Icon size={14} className={cn("transition-transform", openDropdown === "audio" && "rotate-180")} />
-            </button>
-          )}
+        <div className="flex items-center gap-1.5 pl-1">
+          <DeviceControlButton
+            type="mic"
+            isActive={isAudioEnabled}
+            onToggle={onToggleAudio}
+            devices={audioDevices}
+            selectedDeviceId={selectedAudioInput}
+            onDeviceChange={onAudioInputChange}
+            className="!pointer-events-auto"
+            haptic="medium"
+            size="sm"
+          />
+
+          <DeviceControlButton
+            type="video"
+            isActive={isVideoEnabled}
+            onToggle={onToggleVideo}
+            devices={videoDevices}
+            selectedDeviceId={selectedVideoDevice}
+            onDeviceChange={onVideoDeviceChange}
+            className="!pointer-events-auto"
+            haptic="medium"
+            size="sm"
+          />
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
+        <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />
+
+        <div className="flex items-center gap-1.5 pr-1">
+          <ControlButton
+            icon={<Settings01Icon size={20} className="text-foreground" />}
+            label="Settings"
             onClick={() => {
-              void trigger(isVideoEnabled ? "medium" : "selection");
-              onToggleVideo();
+              void trigger("selection");
+              onToggleSettings();
             }}
-            title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
-            aria-label={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
-            className={cn(
-              "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-90 touch-manipulation",
-              !isVideoEnabled ? "bg-red-500 text-white hover:bg-red-600" : "bg-black/5 dark:bg-white/10 text-foreground hover:bg-black/10 dark:hover:bg-white/20",
-            )}
-          >
-            {isVideoEnabled ? <Video01Icon size={20} /> : <VideoOffIcon size={20} />}
-          </button>
-          {hasVideoDevices && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                void trigger("selection");
-                setOpenDropdown(openDropdown === "video" ? null : "video");
+            size="sm"
+            className="border-0 bg-transparent text-foreground shadow-none hover:bg-black/5 dark:hover:bg-white/10"
+            hideTooltip
+          />
+
+          {enablePictureInPicture && isPictureInPictureSupported && onTogglePictureInPicture ? (
+            <ControlButton
+              icon={<PictureInPictureIcon size={20} className={cn("text-foreground", isPictureInPictureActive && "text-primary-foreground")} />}
+              label={isPictureInPictureActive ? "Close picture in picture" : "Open picture in picture"}
+              active={isPictureInPictureActive}
+              onClick={() => {
+                void onTogglePictureInPicture();
               }}
-              title="Select camera"
-              aria-label="Select camera"
-              aria-haspopup="menu"
-              aria-controls={VIDEO_DEVICE_MENU_ID}
-              aria-expanded={openDropdown === "video"}
-              className={cn(
-                "w-8 h-11 rounded-r-full -ml-1 flex items-center justify-center transition-all duration-200 outline-none focus-visible:bg-primary/10",
-                openDropdown === "video" ? "bg-black/10 dark:bg-white/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5",
-              )}
-            >
-              <ArrowDown01Icon size={14} className={cn("transition-transform", openDropdown === "video" && "rotate-180")} />
-            </button>
-          )}
+              size="sm"
+              className={cn("border-0 shadow-none", isPictureInPictureActive ? "bg-primary" : "bg-transparent text-foreground hover:bg-black/5 dark:hover:bg-white/10")}
+              hideTooltip
+            />
+          ) : null}
         </div>
-
-        <div className="w-px h-6 bg-black/10 dark:bg-white/20 mx-1" />
-
-        <button
-          type="button"
-          onClick={() => {
-            void trigger("selection");
-            onToggleSettings();
-          }}
-          title="Settings"
-          aria-label="Settings"
-          className="w-11 h-11 rounded-full flex items-center justify-center bg-black/5 dark:bg-white/10 text-foreground hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-90"
-        >
-          <MoreVerticalIcon size={18} />
-        </button>
-        {enablePictureInPicture && isPictureInPictureSupported && onTogglePictureInPicture ? (
-          <button
-            type="button"
-            onClick={() => {
-              void onTogglePictureInPicture();
-            }}
-            title={isPictureInPictureActive ? "Close picture in picture" : "Open picture in picture"}
-            aria-label={isPictureInPictureActive ? "Close picture in picture" : "Open picture in picture"}
-            className={cn(
-              "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-90",
-              isPictureInPictureActive ? "bg-primary text-primary-foreground" : "bg-black/5 dark:bg-white/10 text-foreground hover:bg-black/10 dark:hover:bg-white/20",
-            )}
-          >
-            <PictureInPictureIcon size={18} />
-          </button>
-        ) : null}
       </div>
     </div>
   );

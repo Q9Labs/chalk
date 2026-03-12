@@ -182,7 +182,7 @@
 
   /* Lobby-specific - Dark mode */
   --chalk-lobby-gradient: linear-gradient(135deg, #0d3d38 0%, #0f2744 50%, #1a1a2e 100%);
-  --chalk-lobby-glass-bg: rgba(255, 255, 255, 0.08);
+  --chalk-lobby-glass-bg: rgba(0, 0, 0, 0.6);
   --chalk-lobby-glass-border: rgba(255, 255, 255, 0.12);
   --chalk-lobby-avatar-glow: rgba(27, 182, 166, 0.5);
 }

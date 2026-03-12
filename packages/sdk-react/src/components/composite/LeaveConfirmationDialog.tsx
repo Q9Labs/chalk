@@ -70,8 +70,8 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
             <button
               onClick={onConfirm}
               className={cn(
-                "flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none text-destructive-foreground",
-                "bg-destructive hover:opacity-90 shadow-sm",
+                "flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none text-white",
+                "bg-[#dc2626] shadow-lg hover:bg-[#b91c1c]",
                 "focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 "active:scale-[0.98]",
               )}

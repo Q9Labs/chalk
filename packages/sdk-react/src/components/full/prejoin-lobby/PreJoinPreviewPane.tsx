@@ -36,13 +36,7 @@ export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAu
 
         <div className="absolute top-4 left-4 z-20">
           <div
-            className="flex items-center gap-3 px-3 py-2 rounded-full"
-            style={{
-              background: "var(--chalk-lobby-glass-bg)",
-              borderColor: "var(--chalk-lobby-glass-border)",
-              backdropFilter: "blur(16px)",
-              border: "1px solid var(--chalk-lobby-glass-border)",
-            }}
+            className="flex items-center gap-3 px-3 py-2 rounded-full border bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[16px] dark:backdrop-blur-xl shadow-sm"
           >
             <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors", isAudioEnabled ? "bg-primary shadow-[0_0_8px_var(--primary)]" : "bg-muted-foreground/40")} />
             <span className="text-sm font-medium text-foreground">{displayName || "You"}</span>

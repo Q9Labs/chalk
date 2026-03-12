@@ -34,8 +34,13 @@ describe("PreJoinLobby", () => {
     const { getByLabelText } = render(<PreJoinLobby onJoin={() => {}} roomName="Big Meeting" />);
     await act(async () => {});
 
-    expect(getByLabelText("Unmute microphone")).toBeDefined();
-    expect(getByLabelText("Turn on camera")).toBeDefined();
+    const audioButton = getByLabelText("Unmute microphone");
+    const videoButton = getByLabelText("Turn on camera");
+
+    expect(audioButton).toBeDefined();
+    expect(videoButton).toBeDefined();
+    expect(audioButton.className).toContain("h-9");
+    expect(videoButton.className).toContain("h-9");
   });
 
   it("renders with shared picture-in-picture enabled without re-render loops", async () => {
@@ -245,11 +250,11 @@ describe("PreJoinLobby", () => {
       requestWindow: vi.fn(),
     } as any;
 
-    const { getByLabelText, getByRole } = render(<PreJoinLobby onJoin={() => {}} enablePictureInPicture={true} initialVideoEnabled={false} initialAudioEnabled={false} />);
+    const { getByLabelText, getByRole, getByText } = render(<PreJoinLobby onJoin={() => {}} enablePictureInPicture={true} initialVideoEnabled={false} initialAudioEnabled={false} />);
     await act(async () => {});
 
-    // Open settings modal
     fireEvent.click(getByLabelText("Settings"));
+    fireEvent.click(getByText("Experience"));
 
     expect(getByRole("switch", { name: "Auto-open Picture-in-Picture" })).toBeDefined();
     expect(getByRole("button", { name: "Open Picture-in-Picture now" })).toBeDefined();

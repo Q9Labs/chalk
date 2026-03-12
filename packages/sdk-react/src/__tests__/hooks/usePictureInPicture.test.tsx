@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useMemo } from "react";
 
 import { SharedPictureInPictureProvider, useSharedPictureInPicture } from "../../components/full/picture-in-picture/PictureInPictureContext";
 import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
@@ -157,6 +157,33 @@ function SharedRegistrar({
   );
 }
 
+function UnstableSharedRegistrar() {
+  const pip = useSharedPictureInPicture();
+  const registerPictureInPicture = pip?.register;
+  const ownerId = useId();
+  const controls = {};
+  const options = useMemo(
+    () => ({
+      phase: "meeting" as const,
+      roomName: "PiP Room",
+      displayName: "Hasan",
+      source: MEETING_SOURCE,
+      controls,
+    }),
+    [controls],
+  );
+
+  useEffect(() => {
+    registerPictureInPicture?.(ownerId, options);
+
+    return () => {
+      registerPictureInPicture?.(ownerId, null);
+    };
+  }, [options, ownerId, registerPictureInPicture]);
+
+  return <span>{pip?.phase ?? "none"}</span>;
+}
+
 describe("usePictureInPicture", () => {
   afterEach(() => {
     window.documentPictureInPicture = originalDocumentPictureInPicture;
@@ -284,5 +311,21 @@ describe("usePictureInPicture", () => {
       expect(getByText("shared-active")).toBeDefined();
       expect(requestWindow).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("ignores equivalent shared registrations when callers rebuild options objects", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <SharedPictureInPictureProvider enabled>
+        <UnstableSharedRegistrar />
+      </SharedPictureInPictureProvider>,
+    );
+
+    await waitFor(() => {
+      expect(consoleError.mock.calls.some(([message]) => String(message).includes("Maximum update depth exceeded"))).toBe(false);
+    });
+
+    consoleError.mockRestore();
   });
 });

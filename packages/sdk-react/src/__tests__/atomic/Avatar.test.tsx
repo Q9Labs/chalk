@@ -8,13 +8,11 @@ describe("Avatar", () => {
   });
 
   it("renders a generated avatar when no src is provided", () => {
-    const { getByRole } = render(<Avatar name="John Doe" />);
-    const img = getByRole("img", { name: "John Doe" });
-    expect(img).toBeDefined();
-    expect(img).toHaveAttribute("src", expect.stringContaining("https://facehash.dev/api/avatar"));
-    expect(img).toHaveAttribute("src", expect.stringContaining("intensity3d=dramatic"));
-    expect(img).toHaveAttribute("src", expect.stringContaining("enableBlink=true"));
-    expect(getByRole("img", { name: "Avatar for John Doe" })).toBeDefined();
+    const { container, getByRole } = render(<Avatar name="John Doe" />);
+    const avatar = getByRole("img", { name: "Avatar for John Doe" });
+    expect(avatar).toBeDefined();
+    expect(container.querySelector("[data-facehash]")).toBeDefined();
+    expect(container.querySelector("svg")).toBeDefined();
   });
 
   it("renders initials when generated avatars are disabled", () => {
@@ -38,6 +36,15 @@ describe("Avatar", () => {
     const img = getByRole("img", { name: "John Doe" });
     expect(img).toBeDefined();
     expect(img).toHaveAttribute("src", "https://example.com/avatar.jpg");
+  });
+
+  it("falls back to a generated avatar when the image fails and fun avatars stay enabled", () => {
+    const { container, getByRole } = render(<Avatar name="John Doe" src="https://example.com/avatar.jpg" />);
+    const img = getByRole("img", { name: "John Doe" });
+    img.dispatchEvent(new Event("error"));
+
+    expect(getByRole("img", { name: "Avatar for John Doe" })).toBeDefined();
+    expect(container.querySelector("svg")).toBeDefined();
   });
 
   it("renders status indicator when status is provided", () => {

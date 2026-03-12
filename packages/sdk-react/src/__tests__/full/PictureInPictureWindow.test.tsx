@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, vi } from "bun:test";
 import { render } from "@testing-library/react";
 
 import { PictureInPictureWindow } from "../../components/full/picture-in-picture/PictureInPictureWindow";
@@ -66,6 +66,26 @@ describe("PictureInPictureWindow", () => {
     expect(getAllByTestId("pip-tile")).toHaveLength(3);
   });
 
+  it("avoids key warnings when participant sources reuse ids", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { getAllByTestId } = render(
+      <PictureInPictureWindow
+        phase="meeting"
+        source={participant("teacher")}
+        participantSources={[participant("dup"), participant("dup"), participant("teacher")]}
+        meetingLayout="grid"
+        controls={{}}
+        onReturnToTab={() => {}}
+      />,
+    );
+
+    expect(getAllByTestId("pip-tile")).toHaveLength(3);
+    expect(consoleError.mock.calls.some(([message]) => String(message).includes('Each child in a list should have a unique "key" prop.'))).toBe(false);
+
+    consoleError.mockRestore();
+  });
+
   it("shows a join error in prejoin PiP", () => {
     const { getByText, getAllByText, queryByText } = render(
       <PictureInPictureWindow
@@ -99,5 +119,33 @@ describe("PictureInPictureWindow", () => {
     expect(container.firstChild).toHaveStyle({
       "--primary": "#ff00aa",
     });
+  });
+
+  it("reuses device selector controls in prejoin PiP", () => {
+    const { getByLabelText } = render(
+      <PictureInPictureWindow
+        phase="prejoin"
+        source={participant("hasan")}
+        controls={{
+          isMuted: true,
+          isVideoEnabled: false,
+          audioInputDevices: [{ deviceId: "mic-1", kind: "audioinput", label: "Built-in Mic" }] as any,
+          videoInputDevices: [{ deviceId: "cam-1", kind: "videoinput", label: "Front Camera" }] as any,
+          selectedAudioInput: "mic-1",
+          selectedVideoInput: "cam-1",
+          onToggleMute: () => {},
+          onToggleVideo: () => {},
+          onAudioInputChange: () => {},
+          onVideoInputChange: () => {},
+          onJoin: () => {},
+        }}
+        onReturnToTab={() => {}}
+      />,
+    );
+
+    expect(getByLabelText("Select microphone")).toBeDefined();
+    expect(getByLabelText("Select camera")).toBeDefined();
+    expect(getByLabelText("Unmute microphone")).toBeDefined();
+    expect(getByLabelText("Turn on camera")).toBeDefined();
   });
 });

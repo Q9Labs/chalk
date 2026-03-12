@@ -33,7 +33,7 @@ describe("LoadingScreen", () => {
   it("rotates supporting messages", async () => {
     vi.useFakeTimers();
 
-    const supportingMessages = ["Checking devices...", "Syncing settings...", "Almost there..."];
+    const supportingMessages = ["Checking devices...", "Syncing settings...", "Testing your connection...", "Preparing your preview...", "Opening a low-latency route...", "Almost there..."];
     const { getByText, queryByText } = render(<LoadingScreen message="Joining room..." supportingMessages={supportingMessages} />);
 
     expect(getByText("Joining room...")).toBeDefined();
@@ -44,6 +44,12 @@ describe("LoadingScreen", () => {
 
     expect(queryByText("Joining room...")).toBeNull();
     expect(getByText("Checking devices...")).toBeDefined();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1800 * 5);
+    });
+
+    expect(getByText("Almost there...")).toBeDefined();
   });
 });
 

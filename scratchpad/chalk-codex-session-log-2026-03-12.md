@@ -18,3 +18,9 @@
 - 03:24 PKT: sdk-react avatar-gradient polish. Made the Auto swatch visually explicit with default/from-name affordance and added 5 more shared preset gradients without changing the single resolver path.
 - 2026-03-12 04:09 PKT: sdk-react fun-avatar controls. Added persisted `appearance.generatedAvatars`, wired Avatar facehash fallback behind the toggle, upgraded facehash requests to `intensity3d=dramatic` + `enableBlink=true`, updated settings/tests/changelog, and skipped agent-browser verification per user direction after local app page crashes on `localhost`.
 - 2026-03-12 04:24 PKT: prod webhook/transcript incident closed. Whisper fix scope only: stale-only processing recovery, completed-job idempotency, `4h` API timeout, one-time spot default, Dockerfile no-prewarm fallback for low-memory builders. Ops: cancelled old persistent spot requests, terminated duplicate/stale whisper instances, rolled replacement host `i-07e651a377565eea0` to image digest `sha256:ad19a20ba34243bad49b3db602835c6908c2f8c49497bbb8d61b6f25c91ed3a7`, and verified via Axiom/SSM that webhook delivery stayed healthy, post-fix duplicate runs were `0`, and no new Axiom column-limit errors appeared.
+- 2026-03-12 04:26 PKT: sdk-react facehash/prejoin follow-up. Swapped avatar fallback from static FaceHash API image to the package React renderer so hover interactivity works again, and tightened PreJoinLobby mic/camera controls to the smaller PiP-style button treatment with clearer labels/device picks.
+
+[2026-03-12 05:08:28 PKT] LoadingScreen copy pass: add 3 joining messages; keep Almost there last; update tests.
+[2026-03-12 05:13:42 PKT] LoadingScreen copy pass done. Added 3 calmer network/progress support lines in PreJoinLobby join rotation and extended LoadingScreen regression to assert the sequence ends on `Almost there...`.
+
+[2026-03-12 05:14:30 PKT] Leave dialog polish: match confirm red to dock leave button; add regression test.

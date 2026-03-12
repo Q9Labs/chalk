@@ -12,8 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **SDK-React: fun avatar toggle + richer FaceHash styling** — meeting Appearance settings now let each participant switch generated FaceHash avatars on or off locally, and the generated avatar fallback now requests dramatic 3D intensity with blinking enabled.
+- **SDK-React: interactive FaceHash fallback** — avatar fallbacks now render via FaceHash's React component instead of the static image endpoint, so the generated avatars keep their hover interaction while preserving the same local toggle, dramatic 3D intensity, and blink settings.
+- **SDK-React: pre-join floating controls polish** — lobby camera/microphone controls now reuse the tighter PiP-style button sizing, clearer camera/mic labels, and inline device dropdown affordances.
 
 ### Fixed
+
+- **SDK-React: leave confirmation dialog destructive CTA** — the leave-confirmation modal now uses the same vivid red button treatment as the in-room dock leave control, so destructive actions read consistently in dark surfaces.
 
 ## [0.0.73] - 2026-03-12
 

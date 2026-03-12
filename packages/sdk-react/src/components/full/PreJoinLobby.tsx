@@ -3,8 +3,10 @@ import { memo, useCallback, useEffect, useId, useMemo, useRef } from "react";
 
 import { cn } from "../../utils/cn";
 import { getParticipantGradient, getParticipantColor } from "../../utils/colorGenerator";
+import { applyThemeToDocument } from "../../utils/theme";
 import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
+import { SettingsDialog } from "../composite/SettingsDialog";
 import { DiagnosticErrorSheet } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
 import { buildPreJoinPictureInPictureSource } from "./picture-in-picture";
@@ -13,14 +15,21 @@ import { PreJoinFloatingControls } from "./prejoin-lobby/PreJoinFloatingControls
 import { PreJoinHeader } from "./prejoin-lobby/PreJoinHeader";
 import { PreJoinJoinPanel } from "./prejoin-lobby/PreJoinJoinPanel";
 import { PreJoinPreviewPane } from "./prejoin-lobby/PreJoinPreviewPane";
-import { PreJoinSettingsModal } from "./prejoin-lobby/PreJoinSettingsModal";
 import type { PreJoinLobbyProps } from "./prejoin-lobby/types";
 import { usePreJoinAudioMeter } from "./prejoin-lobby/usePreJoinAudioMeter";
 import { usePreJoinMedia } from "./prejoin-lobby/usePreJoinMedia";
 import { usePreJoinTheme } from "./prejoin-lobby/usePreJoinTheme";
 import { usePreJoinUiState } from "./prejoin-lobby/usePreJoinUiState";
 
-const JOINING_ROOM_MESSAGES = ["Checking your camera and mic...", "Syncing room settings...", "Choosing the fastest route...", "Almost there..."];
+const JOINING_ROOM_MESSAGES = [
+  "Checking your camera and mic...",
+  "Syncing room settings...",
+  "Testing your connection...",
+  "Preparing your preview...",
+  "Opening a low-latency route...",
+  "Choosing the fastest route...",
+  "Almost there...",
+] as const;
 const EMPTY_LIST = [] as never[];
 const NOOP = () => {};
 
@@ -56,9 +65,45 @@ function PreJoinLobbyBase({
   className,
 }: PreJoinLobbyProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const { settings, updateExperienceSettings } = useMeetingRoomSettings();
+  const { settings, updateAudioSettings, updateVideoSettings, updateAppearanceSettings, updateExperienceSettings } = useMeetingRoomSettings({
+    defaults: {
+      appearance: {
+        theme: initialTheme,
+      },
+    },
+  });
+  const { isDarkMode, toggleTheme } = usePreJoinTheme({ initialTheme });
+  const handleToggleTheme = useCallback(() => {
+    const nextTheme = isDarkMode ? "light" : "dark";
+    toggleTheme();
+    updateAppearanceSettings({
+      theme: nextTheme,
+    });
+  }, [isDarkMode, toggleTheme, updateAppearanceSettings]);
+  const resolvedSelectedVideoDevice = selectedVideoDevice ?? settings.video.selectedInput;
+  const resolvedSelectedAudioInput = selectedAudioInput ?? settings.audio.selectedInput;
+  const resolvedSelectedAudioOutput = selectedAudioOutput ?? settings.audio.selectedOutput;
+  const handleVideoInputPreference = useCallback(
+    (deviceId: string) => {
+      updateVideoSettings({ selectedInput: deviceId });
+      onVideoDeviceChange(deviceId);
+    },
+    [onVideoDeviceChange, updateVideoSettings],
+  );
+  const handleAudioInputPreference = useCallback(
+    (deviceId: string) => {
+      updateAudioSettings({ selectedInput: deviceId });
+      onAudioInputChange(deviceId);
+    },
+    [onAudioInputChange, updateAudioSettings],
+  );
+  const handleAudioOutputPreference = useCallback(
+    (deviceId: string) => {
+      updateAudioSettings({ selectedOutput: deviceId });
+      onAudioOutputChange(deviceId);
+    },
+    [onAudioOutputChange, updateAudioSettings],
+  );
 
   const ui = usePreJoinUiState({
     userName,
@@ -66,14 +111,12 @@ function PreJoinLobbyBase({
     initialVideoEnabled,
     initialAudioEnabled,
     initialShowSettings,
-    selectedVideoDevice,
-    selectedAudioInput,
-    selectedAudioOutput,
+    selectedVideoDevice: resolvedSelectedVideoDevice,
+    selectedAudioInput: resolvedSelectedAudioInput,
+    selectedAudioOutput: resolvedSelectedAudioOutput,
     onJoin,
-    dropdownRef,
   });
 
-  const { isDarkMode, toggleTheme } = usePreJoinTheme({ initialTheme });
   const handleVideoUnavailable = useCallback(() => {
     ui.setIsVideoEnabled(false);
   }, [ui.setIsVideoEnabled]);
@@ -86,8 +129,8 @@ function PreJoinLobbyBase({
     audioTrack,
     videoDevices,
     audioInputDevices,
-    selectedVideoDevice,
-    selectedAudioInput,
+    selectedVideoDevice: resolvedSelectedVideoDevice,
+    selectedAudioInput: resolvedSelectedAudioInput,
     isVideoEnabled: ui.isVideoEnabled,
     isAudioEnabled: ui.isAudioEnabled,
     onVideoUnavailable: handleVideoUnavailable,
@@ -108,7 +151,7 @@ function PreJoinLobbyBase({
       void pip?.open();
     }
     ui.handleJoin();
-  }, [enablePictureInPicture, settings.experience.autoOpenPictureInPicture, ui]);
+  }, [enablePictureInPicture, settings.experience.autoOpenPictureInPicture, ui.handleJoin]);
 
   const participantGradient = useMemo(() => propParticipantGradient || getParticipantGradient(ui.displayName, settings.appearance.profileGradient), [propParticipantGradient, settings.appearance.profileGradient, ui.displayName]);
   const hasExternalPictureInPicture = typeof onTogglePictureInPicture === "function";
@@ -136,15 +179,15 @@ function PreJoinLobbyBase({
         localParticipantGradientPreference: settings.appearance.profileGradient,
         isMuted: !ui.isAudioEnabled,
         isVideoEnabled: ui.isVideoEnabled,
-        audioInputDevices,
+        audioInputDevices: effectiveAudioInputDevices,
         audioOutputDevices,
-        videoInputDevices: videoDevices,
-        selectedAudioInput,
-        selectedAudioOutput,
-        selectedVideoInput: selectedVideoDevice,
-        onAudioInputChange,
-        onAudioOutputChange,
-        onVideoInputChange: onVideoDeviceChange,
+        videoInputDevices: effectiveVideoDevices,
+        selectedAudioInput: resolvedSelectedAudioInput,
+        selectedAudioOutput: resolvedSelectedAudioOutput,
+        selectedVideoInput: resolvedSelectedVideoDevice,
+        onAudioInputChange: handleAudioInputPreference,
+        onAudioOutputChange: handleAudioOutputPreference,
+        onVideoInputChange: handleVideoInputPreference,
         onToggleMute: ui.toggleAudio,
         onToggleVideo: ui.toggleVideo,
         onJoin: handleJoin,
@@ -162,15 +205,15 @@ function PreJoinLobbyBase({
       ui.isVideoEnabled,
       ui.toggleAudio,
       ui.toggleVideo,
-      audioInputDevices,
+      effectiveAudioInputDevices,
       audioOutputDevices,
-      videoDevices,
-      selectedAudioInput,
-      selectedAudioOutput,
-      selectedVideoDevice,
-      onAudioInputChange,
-      onAudioOutputChange,
-      onVideoDeviceChange,
+      effectiveVideoDevices,
+      resolvedSelectedAudioInput,
+      resolvedSelectedAudioOutput,
+      resolvedSelectedVideoDevice,
+      handleAudioInputPreference,
+      handleAudioOutputPreference,
+      handleVideoInputPreference,
       handleJoin,
       isLoading,
       supportCode,
@@ -219,9 +262,6 @@ function PreJoinLobbyBase({
   }, [pictureInPicture]);
 
   const normalizedAudioLevel = Math.min(100, Math.max(0, activeAudioLevel * 100));
-  const hasVideoDevices = effectiveVideoDevices.length > 0;
-  const hasAudioInput = effectiveAudioInputDevices.length > 0;
-  const hasAudioOutput = audioOutputDevices.length > 0;
 
   return (
     <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName, settings.appearance.profileGradient).primary } as React.CSSProperties}>
@@ -230,33 +270,53 @@ function PreJoinLobbyBase({
       </div>
 
       <div className={cn("flex-1 flex flex-col w-full transition-all duration-700 ease-in-out", isLoading ? "opacity-0 scale-95 blur-sm" : "opacity-100 scale-100 blur-0")}>
-        <PreJoinSettingsModal
+        <SettingsDialog
           isOpen={ui.showSettings}
           onClose={() => ui.setShowSettings(false)}
-          hasVideoDevices={hasVideoDevices}
-          hasAudioInput={hasAudioInput}
-          hasAudioOutput={hasAudioOutput}
-          videoDevices={effectiveVideoDevices}
-          audioInputDevices={effectiveAudioInputDevices}
-          audioOutputDevices={audioOutputDevices}
-          selectedVideoDevice={selectedVideoDevice}
-          selectedAudioInput={selectedAudioInput}
-          selectedAudioOutput={selectedAudioOutput}
-          onVideoDeviceChange={onVideoDeviceChange}
-          onAudioInputChange={onAudioInputChange}
-          onAudioOutputChange={onAudioOutputChange}
-          isAudioEnabled={ui.isAudioEnabled}
-          audioLevel={activeAudioLevel}
-          isLoading={isLoading}
+          settings={settings}
+          onUpdateAudio={(updates) => {
+            const { selectedInput, selectedOutput, ...rest } = updates;
+            if (Object.keys(rest).length > 0) {
+              updateAudioSettings(rest);
+            }
+            if (selectedInput) {
+              handleAudioInputPreference(selectedInput);
+            }
+            if (selectedOutput) {
+              handleAudioOutputPreference(selectedOutput);
+            }
+          }}
+          onUpdateVideo={(updates) => {
+            const { selectedInput, ...rest } = updates;
+            if (Object.keys(rest).length > 0) {
+              updateVideoSettings(rest);
+            }
+            if (selectedInput) {
+              handleVideoInputPreference(selectedInput);
+            }
+          }}
+          onUpdateAppearance={(updates) => {
+            updateAppearanceSettings(updates);
+            if (updates.theme === "light" || updates.theme === "dark") {
+              applyThemeToDocument(updates.theme);
+            }
+          }}
+          onUpdateExperience={updateExperienceSettings}
           enablePictureInPicture={enablePictureInPicture}
           isPictureInPictureSupported={pictureInPicture.isSupported}
           isPictureInPictureActive={pictureInPicture.isActive}
-          onOpenPictureInPicture={pictureInPicture.toggle}
-          autoOpenPictureInPicture={settings.experience.autoOpenPictureInPicture}
-          onAutoOpenPictureInPictureChange={(checked: boolean) => updateExperienceSettings({ autoOpenPictureInPicture: checked })}
+          onOpenPictureInPicture={pictureInPicture.isSupported && !pictureInPicture.isActive ? pictureInPicture.toggle : undefined}
+          audioInputDevices={effectiveAudioInputDevices}
+          audioOutputDevices={audioOutputDevices}
+          videoInputDevices={effectiveVideoDevices}
+          audioLevel={activeAudioLevel}
+          videoTrack={activeVideoTrack}
+          reducedMotion={settings.appearance.reducedMotion}
+          participantColorSeed={ui.displayName}
+          isDarkMode={isDarkMode}
         />
 
-        <PreJoinHeader roomName={roomName} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
+        <PreJoinHeader roomName={roomName} isDarkMode={isDarkMode} onToggleTheme={handleToggleTheme} />
 
         <div className="flex-1 w-full max-w-6xl mx-auto flex items-center px-6 pb-12">
           <div className="grid w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-10 items-center">
@@ -271,19 +331,14 @@ function PreJoinLobbyBase({
               participantGradientPreference={settings.appearance.profileGradient}
               controls={
                 <PreJoinFloatingControls
-                  dropdownRef={dropdownRef}
-                  openDropdown={ui.openDropdown}
-                  setOpenDropdown={ui.setOpenDropdown}
                   isAudioEnabled={ui.isAudioEnabled}
                   isVideoEnabled={ui.isVideoEnabled}
-                  hasAudioInput={hasAudioInput}
-                  hasVideoDevices={hasVideoDevices}
                   effectiveAudioInputDevices={effectiveAudioInputDevices}
                   effectiveVideoDevices={effectiveVideoDevices}
-                  selectedAudioInput={selectedAudioInput}
-                  selectedVideoDevice={selectedVideoDevice}
-                  onAudioInputChange={onAudioInputChange}
-                  onVideoDeviceChange={onVideoDeviceChange}
+                  selectedAudioInput={resolvedSelectedAudioInput}
+                  selectedVideoDevice={resolvedSelectedVideoDevice}
+                  onAudioInputChange={handleAudioInputPreference}
+                  onVideoDeviceChange={handleVideoInputPreference}
                   onToggleAudio={ui.toggleAudio}
                   onToggleVideo={ui.toggleVideo}
                   onToggleSettings={ui.toggleSettings}
