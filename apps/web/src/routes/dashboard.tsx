@@ -15,6 +15,7 @@ import { ChalkLogo } from "../components/ChalkLogo";
 import { SettingsModal } from "../components/SettingsModal";
 import { useProfileAvatar } from "../lib/useProfileAvatar";
 import { Logout01Icon } from "@hugeicons/core-free-icons";
+import { ChalkLoader } from "../components/ChalkLoader";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
