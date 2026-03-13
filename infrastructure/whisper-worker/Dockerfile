@@ -20,7 +20,8 @@ RUN mkdir -p /var/log && touch /var/log/whisper-worker.log
 # Install uv (Python package manager)
 ENV UV_NO_MODIFY_PATH=1
 ENV UV_CACHE_DIR=/tmp/uv-cache
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ARG UV_VERSION=0.10.9
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
 # Create virtualenv + install deps

@@ -22,3 +22,8 @@
 2026-03-13 19:07 PKT
 - backlog cleanup: collapsed `infrastructure/whisper-worker/BACKLOG.md` to short parking lot
 - removed speculative/stale detail; file now explicitly non-authoritative
+
+2026-03-13 19:14 PKT
+- tooling cleanup: standardized whisper-worker guidance on `uv` only
+- pinned Docker install path to `uv` `0.10.9` after checking current stable official docs/releases
+- kept dependency install command on `uv pip install -r requirements.txt` after `uv pip sync` left runtime deps incomplete locally (`av` missing on smoke)

@@ -8,6 +8,7 @@ Keep docs minimal. Source of truth is the code in this directory and the Terrafo
 - implementation: `whisper_worker/`
 - tests: `tests/`
 - runtime/deploy config: `infrastructure/terraform/` + `.github/workflows/whisper-worker.yml`
+- Python env/deps: `uv` only
 
 ## Read First
 
@@ -24,6 +25,14 @@ python3 -m py_compile infrastructure/whisper-worker/*.py infrastructure/whisper-
 python3 -m unittest infrastructure/whisper-worker/tests/test_worker_queue.py
 ```
 
+## Local Setup
+
+```bash
+cd infrastructure/whisper-worker
+uv venv .venv
+uv pip install -r requirements.txt
+```
+
 ## Local Smoke
 
 ```bash
@@ -37,6 +46,8 @@ infrastructure/whisper-worker/transcribe_file.py <audio-file> --expect-contains 
 
 ## Notes
 
+- `pip` is not the workflow here; use `uv`
+- install deps with `uv pip install -r requirements.txt`
 - Docker still runs `python3 worker.py`
 - keep wrappers thin; move behavior into `whisper_worker/`
 - do not treat this doc as a contract if code says otherwise
