@@ -18,3 +18,7 @@
 2026-03-13 19:03 PKT
 - docs cleanup: collapsed `infrastructure/whisper-worker/AGENTS.md` to minimal layout/verify/smoke note
 - preference applied: docs point to code + Terraform as source of truth; removed extra operational narrative
+
+2026-03-13 19:07 PKT
+- backlog cleanup: collapsed `infrastructure/whisper-worker/BACKLOG.md` to short parking lot
+- removed speculative/stale detail; file now explicitly non-authoritative
