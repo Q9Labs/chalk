@@ -14,3 +14,7 @@
 - follow-up structure: moved implementation into `whisper_worker/` package; moved tests into `tests/`
 - compatibility: kept root `worker.py` and `transcribe_file.py` as thin wrappers so Docker/local commands stay stable
 - docs: updated ops compile command and noted new runtime layout
+
+2026-03-13 19:03 PKT
+- docs cleanup: collapsed `infrastructure/whisper-worker/AGENTS.md` to minimal layout/verify/smoke note
+- preference applied: docs point to code + Terraform as source of truth; removed extra operational narrative
