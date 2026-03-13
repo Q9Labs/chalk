@@ -10,8 +10,12 @@ from urllib.error import HTTPError, URLError
 from .audio_download import download_audio
 from .observability import audio_url_meta, emit_event
 from .otel import extract_context_from_traceparent
-from .worker_config import LOG_TRANSCRIPT, LOG_TRANSCRIPT_MAX_CHARS
+from .worker_config import LOG_TRANSCRIPT, LOG_TRANSCRIPT_MAX_CHARS, MAX_JOB_AGE_SECONDS
 from .worker_types import TranscriptionJob, TranscriptionResult
+
+
+class JobExpiredError(RuntimeError):
+    pass
 
 
 class TranscriptionJobProcessor:
@@ -73,6 +77,12 @@ class TranscriptionJobProcessor:
             )
 
             with span_context:
+                if self._is_job_expired(queue_wait_ms):
+                    error_stage = "queue"
+                    raise JobExpiredError(
+                        f"job exceeded max age of {MAX_JOB_AGE_SECONDS}s before processing"
+                    )
+
                 error_stage = "download"
                 try:
                     audio_path, download_http_status, download_size_bytes = self._download_audio(
@@ -179,6 +189,12 @@ class TranscriptionJobProcessor:
         finally:
             if audio_path and os.path.exists(audio_path):
                 os.unlink(audio_path)
+
+    @staticmethod
+    def _is_job_expired(queue_wait_ms: int | None) -> bool:
+        if queue_wait_ms is None:
+            return False
+        return queue_wait_ms > (MAX_JOB_AGE_SECONDS * 1000)
 
     def _download_audio(self, audio_url: str, *, tracer):
         span_context = (

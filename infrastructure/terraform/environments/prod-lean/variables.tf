@@ -291,7 +291,7 @@ variable "whisper_enabled" {
 variable "whisper_instance_type" {
   description = "Lean whisper worker EC2 instance type"
   type        = string
-  default     = "c7i.large"
+  default     = "c7i.xlarge"
 }
 
 variable "whisper_use_spot" {
@@ -327,7 +327,7 @@ variable "whisper_compute_type" {
 variable "whisper_cpu_threads" {
   description = "Whisper worker CPU threads"
   type        = number
-  default     = 2
+  default     = 4
 }
 
 variable "whisper_gpu_metrics_enabled" {

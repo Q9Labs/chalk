@@ -263,6 +263,38 @@ class WhisperWorkerQueueTests(unittest.TestCase):
         self.assertGreaterEqual(len(cloudwatch.calls), 1)
         self.assertEqual(cloudwatch.calls[-1]["MetricData"][2]["MetricName"], "TranscriptionsFailed")
 
+    def test_process_job_fails_fast_when_job_is_too_old(self) -> None:
+        worker, transcriber, cloudwatch = self._make_worker()
+
+        download_calls: list[str] = []
+
+        def _download_audio(url: str):
+            download_calls.append(url)
+            raise AssertionError("expired jobs should not download audio")
+
+        worker.job_processor.download_audio = _download_audio
+        transcriber.result_factory = lambda: (_ for _ in ()).throw(
+            AssertionError("expired jobs should not reach transcriber")
+        )
+
+        result = worker.process_job(
+            self.worker_module.TranscriptionJob(
+                job_id="job-expired",
+                audio_url="https://example.com/old.wav",
+                created_at="2026-03-13T00:00:00Z",
+            ),
+            queue_depth=1,
+            use_batched=False,
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error_stage, "queue")
+        self.assertEqual(result.error_class, "JobExpiredError")
+        self.assertIn("max age", result.error)
+        self.assertEqual(download_calls, [])
+        self.assertGreaterEqual(len(cloudwatch.calls), 1)
+        self.assertEqual(cloudwatch.calls[-1]["MetricData"][2]["MetricName"], "TranscriptionsFailed")
+
 
 if __name__ == "__main__":
     unittest.main()
