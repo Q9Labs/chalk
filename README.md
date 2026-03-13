@@ -34,6 +34,22 @@ bun run check-types  # Type check
 bun run generate     # Generate OpenAPI types from apps/api/openapi.yaml
 ```
 
+## Local Code Index
+
+Open-source, local-first code embeddings for faster repo navigation:
+
+```bash
+ollama pull embeddinggemma
+bun run code:index
+bun run code:search "join flow retry"
+```
+
+- Index stored in `.code-index/index.json` (gitignored)
+- Model default: `embeddinggemma`
+- Re-runs reuse unchanged chunk embeddings automatically
+- Override model: `CODE_INDEX_MODEL=nomic-embed-text bun run code:index`
+- Narrow scope while testing: `bun run code:index README.md packages/sdk-core/src`
+
 ## Architecture
 
 ### Backend

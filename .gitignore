@@ -10,6 +10,7 @@ dist
 coverage
 *.lcov
 .scratchpad/
+.code-index/
 # Logs
 logs
 *.log

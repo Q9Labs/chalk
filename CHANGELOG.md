@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Repo: local semantic code index CLI** — add a Bun-based `code:index` / `code:search` / `code:stats` workflow backed by Ollama embedding models, with repo-aware chunking and gitignored local index artifacts for faster AI-assisted code navigation.
 - **Web/SDK-React: PWA install + update support** — `apps/web` now ships a real Chalk web app manifest, root service worker, install/update/offline prompt shell, and a reusable `usePwaInstall` hook in `@q9labs/chalk-react` so host apps can detect installability and standalone mode without app-specific browser wiring.
 
 ### Changed
