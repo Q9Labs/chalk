@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-React: local React test dependency alignment** — pinned `packages/sdk-react` test-time `react` and `react-dom` dev dependencies to the same version so Bun stops resolving an incompatible pair during workspace test runs.
 - **Infra: singleton whisper spot self-healing** — the lean whisper worker now runs behind a 1x1x1 Auto Scaling Group backed by one-time spot launch templates, so interrupted capacity is replaced automatically without leaving duplicate workers running at the same time.
 - **Web: PWA browser chrome + cache safety** — Chalk now keeps `theme-color` in sync with light/dark/nord theme changes, avoids service-worker caching of API/WebSocket traffic, and serves the manifest/service worker with revalidation-friendly cache headers.
 - **Web: Chalk favicon + mobile PWA icons** — the web shell, install manifest, and Apple touch icon now all use the official Chalk mark instead of the leftover starter raster assets.
