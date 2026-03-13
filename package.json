@@ -13,15 +13,11 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "dev:web:pages": "bun run --cwd apps/web dev:pages",
-    "test": "bun run test:scripts && turbo test",
+    "test": "turbo test",
     "lint": "turbo lint",
     "check-types": "turbo check-types",
     "clean": "turbo clean && rm -rf node_modules",
-    "generate": "turbo run generate:types",
-    "code:index": "bun run ./scripts/code-index.ts index",
-    "code:search": "bun run ./scripts/code-index.ts search",
-    "code:stats": "bun run ./scripts/code-index.ts stats",
-    "test:scripts": "bun test ./scripts"
+    "generate": "turbo run generate:types"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
