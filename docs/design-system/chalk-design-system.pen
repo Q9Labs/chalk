@@ -1,0 +1,1916 @@
+{
+  "version": "0.1",
+  "children": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "content": "Chalk Pencil Design System",
+              "fill": "#0F172A",
+              "fontFamily": "Sora",
+              "fontSize": 40,
+              "fontWeight": "700",
+              "id": "mjJJW",
+              "name": "title",
+              "type": "text"
+            },
+            {
+              "content": "Dedicated system file. Two separate layers. Core for neutral embedded conferencing UI. Brand for first-party Chalk expression.",
+              "fill": "#475569",
+              "fontFamily": "Figtree Variable",
+              "fontSize": 18,
+              "fontWeight": "normal",
+              "id": "gbEXy",
+              "lineHeight": 1.4,
+              "name": "subtitle",
+              "textGrowth": "fixed-width",
+              "type": "text",
+              "width": "fill_container"
+            }
+          ],
+          "gap": 8,
+          "id": "9rJRg",
+          "layout": "vertical",
+          "name": "header",
+          "type": "frame",
+          "width": "fill_container"
+        },
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "content": "Chalk Core System",
+                  "fill": "#0F172A",
+                  "fontFamily": "Sora",
+                  "fontSize": 28,
+                  "fontWeight": "700",
+                  "id": "57EA1",
+                  "name": "coreTitle",
+                  "type": "text"
+                },
+                {
+                  "content": "Neutral, professional, white-label friendly embedded conferencing system for sdk-react.",
+                  "fill": "#475569",
+                  "fontFamily": "Inter",
+                  "fontSize": 15,
+                  "fontWeight": "normal",
+                  "id": "wuvHJ",
+                  "lineHeight": 1.45,
+                  "name": "coreDesc",
+                  "textGrowth": "fixed-width",
+                  "type": "text",
+                  "width": "fill_container"
+                },
+                {
+                  "children": [
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Foundations",
+                              "fill": "#0F172A",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "z1Onv",
+                              "type": "text"
+                            },
+                            {
+                              "content": "Semantic roles first. Neutral embedded palette, meeting-specific surfaces, radius, elevation, motion.",
+                              "fill": "#64748B",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "lBZm3",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "qilvY",
+                          "layout": "vertical",
+                          "name": "cfHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "content": "Semantic Colors",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 15,
+                                  "fontWeight": "700",
+                                  "id": "BNLgS",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "background foreground card primary muted border ring",
+                                  "fill": "#64748B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "fGIbq",
+                                  "lineHeight": 1.45,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "qgvFj",
+                              "layout": "vertical",
+                              "name": "cfSem",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#E3EAF2",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Meeting Surfaces",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 15,
+                                  "fontWeight": "700",
+                                  "id": "cwbuy",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "stage tile controls glass lobby speaking accent",
+                                  "fill": "#64748B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "CXTZy",
+                                  "lineHeight": 1.45,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "rKgWL",
+                              "layout": "vertical",
+                              "name": "cfMeet",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#E3EAF2",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Shape / Motion",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 15,
+                                  "fontWeight": "700",
+                                  "id": "zK5Vi",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "radius scale shadow tiers 150/200/300ms motion reduced-motion safe",
+                                  "fill": "#64748B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "a27o9",
+                                  "lineHeight": 1.45,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "0n5zX",
+                              "layout": "vertical",
+                              "name": "cfShape",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#E3EAF2",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "ZilEd",
+                          "name": "cfGrid",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#F5F7FB",
+                      "gap": 16,
+                      "id": "RwooK",
+                      "layout": "vertical",
+                      "name": "Core Foundations",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#E3EAF2",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Typography",
+                              "fill": "#0F172A",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "NCTBh",
+                              "type": "text"
+                            },
+                            {
+                              "content": "Thin neutral type ownership for embedded UI. Functional over expressive.",
+                              "fill": "#64748B",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "35wNm",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "goIJD",
+                          "layout": "vertical",
+                          "name": "ctHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "content": "Core Heading",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 26,
+                                  "fontWeight": "700",
+                                  "id": "G3dIX",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "Room title, panel heading, primary hierarchy.",
+                                  "fill": "#64748B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "eK5lf",
+                                  "lineHeight": 1.4,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 6,
+                              "id": "uXoyH",
+                              "layout": "vertical",
+                              "name": "ctHero",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#E3EAF2",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Core body copy stays calm and highly legible.",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 15,
+                                  "fontWeight": "normal",
+                                  "id": "6s7mQ",
+                                  "lineHeight": 1.45,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                },
+                                {
+                                  "content": "Labels, meta text, help text, muted body.",
+                                  "fill": "#64748B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "xDXnK",
+                                  "lineHeight": 1.4,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 6,
+                              "id": "Y84t8",
+                              "layout": "vertical",
+                              "name": "ctBody",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#E3EAF2",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "c2VLs",
+                          "layout": "vertical",
+                          "name": "ctStyles",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#F5F7FB",
+                      "gap": 16,
+                      "id": "s8M1F",
+                      "layout": "vertical",
+                      "name": "Core Typography",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#E3EAF2",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Primitives",
+                              "fill": "#0F172A",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "Oa6KB",
+                              "type": "text"
+                            },
+                            {
+                              "content": "Reusable core building blocks for conferencing surfaces.",
+                              "fill": "#64748B",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "slZQu",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "TTTLU",
+                          "layout": "vertical",
+                          "name": "cpHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "fill": "#44A3A3",
+                                  "height": 10,
+                                  "id": "AGTm6",
+                                  "type": "ellipse",
+                                  "width": 10
+                                },
+                                {
+                                  "content": "Mute",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600",
+                                  "id": "cYLm5",
+                                  "type": "text"
+                                }
+                              ],
+                              "cornerRadius": 999,
+                              "fill": "#FFFFFFCC",
+                              "gap": 10,
+                              "id": "Kf4Mw",
+                              "name": "Core/Primitive/Control Pill",
+                              "padding": [
+                                10,
+                                14
+                              ],
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D9E6EE",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Glass Panel",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 16,
+                                  "fontWeight": "700",
+                                  "id": "1NJ25",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "Overlay / floating pane / lobby chrome.",
+                                  "fill": "#475569",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "Y1OzX",
+                                  "lineHeight": 1.4,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "effect": {
+                                "radius": 18,
+                                "type": "background_blur"
+                              },
+                              "fill": "#FFFFFFB8",
+                              "gap": 8,
+                              "id": "M1c4R",
+                              "layout": "vertical",
+                              "name": "Core/Primitive/Glass Panel",
+                              "padding": 16,
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#FFFFFF66",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "Th6OQ",
+                          "name": "cpRow1",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "children": [
+                                    {
+                                      "content": "Participant Tile",
+                                      "fill": "#F8FAFC",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 14,
+                                      "fontWeight": "600",
+                                      "id": "HXjNe",
+                                      "type": "text"
+                                    },
+                                    {
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "fill": "#22C55E",
+                                          "height": 8,
+                                          "id": "io5Kf",
+                                          "type": "ellipse",
+                                          "width": 8
+                                        },
+                                        {
+                                          "content": "Speaking",
+                                          "fill": "#DCFCE7",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 12,
+                                          "fontWeight": "600",
+                                          "id": "vUgd8",
+                                          "type": "text"
+                                        }
+                                      ],
+                                      "gap": 6,
+                                      "id": "Y8uh5",
+                                      "type": "frame"
+                                    }
+                                  ],
+                                  "id": "ZvXSp",
+                                  "justifyContent": "space_between",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                },
+                                {
+                                  "cornerRadius": 12,
+                                  "fill": {
+                                    "colors": [
+                                      {
+                                        "color": "#20344A",
+                                        "position": 0
+                                      },
+                                      {
+                                        "color": "#0F172A",
+                                        "position": 1
+                                      }
+                                    ],
+                                    "enabled": true,
+                                    "gradientType": "linear",
+                                    "rotation": 180,
+                                    "size": {
+                                      "height": 1
+                                    },
+                                    "type": "gradient"
+                                  },
+                                  "height": 120,
+                                  "id": "Lm41o",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#111827",
+                              "gap": 12,
+                              "id": "Wyavs",
+                              "layout": "vertical",
+                              "name": "Core/Primitive/Participant Tile",
+                              "padding": 16,
+                              "reusable": true,
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "fill": "#22C55E",
+                                  "height": 8,
+                                  "id": "Dpvr7",
+                                  "type": "ellipse",
+                                  "width": 8
+                                },
+                                {
+                                  "content": "Connected",
+                                  "fill": "#14532D",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600",
+                                  "id": "BkQjr",
+                                  "type": "text"
+                                }
+                              ],
+                              "cornerRadius": 999,
+                              "fill": "#E9FFF1",
+                              "gap": 8,
+                              "id": "YEhtI",
+                              "name": "Core/Primitive/Status Chip",
+                              "padding": [
+                                8,
+                                12
+                              ],
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#B7EBC8",
+                                "thickness": 1
+                              },
+                              "type": "frame"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "A5XC4",
+                          "name": "cpRow2",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#F5F7FB",
+                      "gap": 16,
+                      "id": "I3lbz",
+                      "layout": "vertical",
+                      "name": "Core Primitives",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#E3EAF2",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Composition Shells",
+                              "fill": "#0F172A",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "qTNLq",
+                              "type": "text"
+                            },
+                            {
+                              "content": "Layout scaffolds for lobby, meeting, and side-panel flows. Not finished screens.",
+                              "fill": "#64748B",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "FWFVf",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "pwc39",
+                          "layout": "vertical",
+                          "name": "ccHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "children": [
+                                    {
+                                      "content": "Preview Slot",
+                                      "fill": "#0F172A",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 18,
+                                      "fontWeight": "700",
+                                      "id": "2RFqm",
+                                      "name": "previewTitle",
+                                      "type": "text"
+                                    },
+                                    {
+                                      "content": "camera preview / identity / readiness",
+                                      "fill": "#475569",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 13,
+                                      "fontWeight": "normal",
+                                      "id": "s0zsw",
+                                      "lineHeight": 1.4,
+                                      "name": "previewBody",
+                                      "textGrowth": "fixed-width",
+                                      "type": "text",
+                                      "width": "fill_container"
+                                    }
+                                  ],
+                                  "gap": 10,
+                                  "height": "fill_container",
+                                  "id": "jxyDy",
+                                  "justifyContent": "center",
+                                  "layout": "vertical",
+                                  "name": "preview",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                },
+                                {
+                                  "children": [
+                                    {
+                                      "content": "Controls Slot",
+                                      "fill": "#111827",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 16,
+                                      "fontWeight": "700",
+                                      "id": "v7gHU",
+                                      "name": "controlsTitle",
+                                      "type": "text"
+                                    },
+                                    {
+                                      "content": "device checks / join CTA / permissions",
+                                      "fill": "#64748B",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 13,
+                                      "fontWeight": "normal",
+                                      "id": "h0g95",
+                                      "lineHeight": 1.4,
+                                      "name": "controlsBody",
+                                      "textGrowth": "fixed-width",
+                                      "type": "text",
+                                      "width": "fill_container"
+                                    }
+                                  ],
+                                  "cornerRadius": 14,
+                                  "fill": "#FFFFFFCC",
+                                  "gap": 10,
+                                  "height": "fill_container",
+                                  "id": "OerRH",
+                                  "layout": "vertical",
+                                  "name": "controls",
+                                  "padding": 16,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "fill": "#E3EAF2",
+                                    "thickness": 1
+                                  },
+                                  "type": "frame",
+                                  "width": 260
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#EFF8F8",
+                              "gap": 16,
+                              "height": 220,
+                              "id": "xZIZH",
+                              "name": "Core/Composition/Lobby Shell",
+                              "padding": 16,
+                              "reusable": true,
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "children": [
+                                    {
+                                      "children": [
+                                        {
+                                          "content": "Stage Slot",
+                                          "fill": "#F8FAFC",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 18,
+                                          "fontWeight": "700",
+                                          "id": "aJiZB",
+                                          "name": "stageTitle",
+                                          "type": "text"
+                                        },
+                                        {
+                                          "content": "active speaker / grid / content share",
+                                          "fill": "#CBD5E1",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 13,
+                                          "fontWeight": "normal",
+                                          "id": "gIlRb",
+                                          "lineHeight": 1.4,
+                                          "name": "stageBody",
+                                          "textGrowth": "fixed-width",
+                                          "type": "text",
+                                          "width": "fill_container"
+                                        }
+                                      ],
+                                      "cornerRadius": 14,
+                                      "fill": "#111827",
+                                      "gap": 8,
+                                      "height": "fill_container",
+                                      "id": "yiOQU",
+                                      "layout": "vertical",
+                                      "name": "stage",
+                                      "padding": 16,
+                                      "type": "frame",
+                                      "width": "fill_container"
+                                    },
+                                    {
+                                      "children": [
+                                        {
+                                          "content": "Panel Slot",
+                                          "fill": "#F8FAFC",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 16,
+                                          "fontWeight": "700",
+                                          "id": "xpNgI",
+                                          "name": "panelTitle",
+                                          "type": "text"
+                                        },
+                                        {
+                                          "content": "participants / chat / info",
+                                          "fill": "#CBD5E1",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 13,
+                                          "fontWeight": "normal",
+                                          "id": "TPuCE",
+                                          "lineHeight": 1.4,
+                                          "name": "panelBody",
+                                          "textGrowth": "fixed-width",
+                                          "type": "text",
+                                          "width": "fill_container"
+                                        }
+                                      ],
+                                      "cornerRadius": 14,
+                                      "fill": "#FFFFFF14",
+                                      "gap": 10,
+                                      "height": "fill_container",
+                                      "id": "J2e4G",
+                                      "layout": "vertical",
+                                      "name": "panel",
+                                      "padding": 14,
+                                      "type": "frame",
+                                      "width": 220
+                                    }
+                                  ],
+                                  "gap": 12,
+                                  "height": "fill_container",
+                                  "id": "1rF41",
+                                  "name": "meetingTop",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                },
+                                {
+                                  "children": [
+                                    {
+                                      "cornerRadius": 999,
+                                      "fill": "#FFFFFFE6",
+                                      "height": 40,
+                                      "id": "JWPkw",
+                                      "name": "dock1",
+                                      "type": "frame",
+                                      "width": 120
+                                    },
+                                    {
+                                      "cornerRadius": 999,
+                                      "fill": "#FFFFFFE6",
+                                      "height": 40,
+                                      "id": "Tn52h",
+                                      "name": "dock2",
+                                      "type": "frame",
+                                      "width": 120
+                                    },
+                                    {
+                                      "cornerRadius": 999,
+                                      "fill": "#FFFFFFE6",
+                                      "height": 40,
+                                      "id": "QpbQd",
+                                      "name": "dock3",
+                                      "type": "frame",
+                                      "width": 120
+                                    }
+                                  ],
+                                  "gap": 10,
+                                  "id": "t2LkW",
+                                  "justifyContent": "center",
+                                  "name": "dock",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#0F172A",
+                              "gap": 12,
+                              "height": 260,
+                              "id": "HvIRX",
+                              "layout": "vertical",
+                              "name": "Core/Composition/Meeting Shell",
+                              "padding": 16,
+                              "reusable": true,
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Side Panel Shell",
+                                  "fill": "#111827",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 16,
+                                  "fontWeight": "700",
+                                  "id": "3blbw",
+                                  "name": "sideTitle",
+                                  "type": "text"
+                                },
+                                {
+                                  "fill": "#E2E8F0",
+                                  "height": 1,
+                                  "id": "tFB5V",
+                                  "name": "sideDivider",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                },
+                                {
+                                  "content": "header / scroll region / actions",
+                                  "fill": "#64748B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "KaQVP",
+                                  "lineHeight": 1.4,
+                                  "name": "sideBody",
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                },
+                                {
+                                  "cornerRadius": 12,
+                                  "fill": "#F8FAFC",
+                                  "height": 88,
+                                  "id": "KCU78",
+                                  "name": "sideArea",
+                                  "stroke": {
+                                    "align": "inside",
+                                    "fill": "#E3EAF2",
+                                    "thickness": 1
+                                  },
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "m0Soc",
+                              "layout": "vertical",
+                              "name": "Core/Composition/Side Panel Shell",
+                              "padding": 16,
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#E3EAF2",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "JrWTr",
+                          "layout": "vertical",
+                          "name": "ccShells",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#F5F7FB",
+                      "gap": 16,
+                      "id": "tD0YK",
+                      "layout": "vertical",
+                      "name": "Core Composition Shells",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#E3EAF2",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    }
+                  ],
+                  "gap": 16,
+                  "id": "gbPCX",
+                  "layout": "vertical",
+                  "name": "coreSections",
+                  "type": "frame",
+                  "width": "fill_container"
+                }
+              ],
+              "cornerRadius": 16,
+              "fill": "#FFFFFF",
+              "gap": 20,
+              "id": "mFAg0",
+              "layout": "vertical",
+              "name": "Chalk Core System",
+              "padding": 24,
+              "stroke": {
+                "align": "inside",
+                "fill": "#D8E1EA",
+                "thickness": 1
+              },
+              "type": "frame",
+              "width": "fill_container"
+            },
+            {
+              "children": [
+                {
+                  "content": "Chalk Brand System",
+                  "fill": "#0F172A",
+                  "fontFamily": "Sora",
+                  "fontSize": 28,
+                  "fontWeight": "700",
+                  "id": "6NBkG",
+                  "name": "brandTitle",
+                  "type": "text"
+                },
+                {
+                  "content": "First-party Chalk product shell and marketing expression for apps/web.",
+                  "fill": "#475569",
+                  "fontFamily": "Inter",
+                  "fontSize": 15,
+                  "fontWeight": "normal",
+                  "id": "O5F2A",
+                  "lineHeight": 1.45,
+                  "name": "brandDesc",
+                  "textGrowth": "fixed-width",
+                  "type": "text",
+                  "width": "fill_container"
+                },
+                {
+                  "children": [
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Foundations",
+                              "fill": "#11212B",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "ckCip",
+                              "type": "text"
+                            },
+                            {
+                              "content": "First-party brand layer: typography expression, route themes, product-shell surfaces, and dashboard/marketing chrome.",
+                              "fill": "#5B7283",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "fXjFi",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "88KLB",
+                          "layout": "vertical",
+                          "name": "bfHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "content": "Brand Tokens",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 15,
+                                  "fontWeight": "700",
+                                  "id": "SFTg1",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "font-app Figtree Variable, font-display Sora, primary #1bb6a6, nord alternate",
+                                  "fill": "#5B7283",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "t3ji5",
+                                  "lineHeight": 1.45,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "XbxeX",
+                              "layout": "vertical",
+                              "name": "bfType",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Surface Ownership",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 15,
+                                  "fontWeight": "700",
+                                  "id": "uVfPq",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "dashboards product shell landing sections navigation chrome",
+                                  "fill": "#5B7283",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "ZM5QH",
+                                  "lineHeight": 1.45,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "2iPcW",
+                              "layout": "vertical",
+                              "name": "bfSurface",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Theme Layering",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 15,
+                                  "fontWeight": "700",
+                                  "id": "BTaGP",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "default brand + nord route theme. Brand layers on top of shared system shape.",
+                                  "fill": "#5B7283",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "n6XFR",
+                                  "lineHeight": 1.45,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "HbWZs",
+                              "layout": "vertical",
+                              "name": "bfThemes",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "WxRji",
+                          "name": "bfGrid",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#EAF4F3",
+                      "gap": 16,
+                      "id": "dnUle",
+                      "layout": "vertical",
+                      "name": "Brand Foundations",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#D7E8E5",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Typography",
+                              "fill": "#11212B",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "x9SIH",
+                              "type": "text"
+                            },
+                            {
+                              "content": "More personality than core. Display contrast for headings, calmer app copy underneath.",
+                              "fill": "#5B7283",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "FDYdh",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "egwi7",
+                          "layout": "vertical",
+                          "name": "btHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "content": "Brand Display",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Sora",
+                                  "fontSize": 28,
+                                  "fontWeight": "700",
+                                  "id": "VWU4j",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "Display token: Sora. Hero, section title, page-level emphasis.",
+                                  "fill": "#5B7283",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "NHcRV",
+                                  "lineHeight": 1.4,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 6,
+                              "id": "t1pRw",
+                              "layout": "vertical",
+                              "name": "btDisplay",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "App Typography",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 16,
+                                  "fontWeight": "600",
+                                  "id": "ti8kK",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "App token: Figtree Variable in source system. Used for nav, UI, dashboard copy.",
+                                  "fill": "#5B7283",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "UKwZI",
+                                  "lineHeight": 1.4,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 6,
+                              "id": "4P1FG",
+                              "layout": "vertical",
+                              "name": "btApp",
+                              "padding": 16,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "Sd1h6",
+                          "layout": "vertical",
+                          "name": "btStyles",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#EAF4F3",
+                      "gap": 16,
+                      "id": "ER0jY",
+                      "layout": "vertical",
+                      "name": "Brand Typography",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#D7E8E5",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Primitives",
+                              "fill": "#11212B",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "hmTao",
+                              "type": "text"
+                            },
+                            {
+                              "content": "Reusable first-party building blocks for app shell and branded product surfaces.",
+                              "fill": "#5B7283",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "i3tcd",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "rJs7K",
+                          "layout": "vertical",
+                          "name": "bpHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "content": "Primary Action",
+                                  "fill": "#F5FFFD",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "700",
+                                  "id": "sn7cD",
+                                  "type": "text"
+                                }
+                              ],
+                              "cornerRadius": 999,
+                              "fill": "#1BB6A6",
+                              "gap": 10,
+                              "id": "LgRLe",
+                              "justifyContent": "center",
+                              "name": "Brand/Primitive/Button Primary",
+                              "padding": [
+                                12,
+                                16
+                              ],
+                              "reusable": true,
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Dashboard Card",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 16,
+                                  "fontWeight": "700",
+                                  "id": "TC7ts",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "Product-shell surface with stronger brand polish than core.",
+                                  "fill": "#5B7283",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal",
+                                  "id": "wxAXw",
+                                  "lineHeight": 1.4,
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#FFFFFF",
+                              "gap": 8,
+                              "id": "WOHDw",
+                              "layout": "vertical",
+                              "name": "Brand/Primitive/Dashboard Card",
+                              "padding": 16,
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "oUIAw",
+                          "name": "bpRow1",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "fill": "#1BB6A6",
+                                  "height": 10,
+                                  "id": "ZW5MR",
+                                  "type": "ellipse",
+                                  "width": 10
+                                },
+                                {
+                                  "content": "Navigation Item",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600",
+                                  "id": "Eui9s",
+                                  "type": "text"
+                                }
+                              ],
+                              "cornerRadius": 12,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "L74TR",
+                              "name": "Brand/Primitive/Nav Item",
+                              "padding": [
+                                12,
+                                14
+                              ],
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "content": "nord ready",
+                                  "fill": "#166C67",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 13,
+                                  "fontWeight": "600",
+                                  "id": "kikFZ",
+                                  "type": "text"
+                                }
+                              ],
+                              "cornerRadius": 999,
+                              "fill": "#E7F9F6",
+                              "gap": 8,
+                              "id": "hO4X9",
+                              "name": "Brand/Primitive/Theme Chip",
+                              "padding": [
+                                8,
+                                12
+                              ],
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#B8E7E0",
+                                "thickness": 1
+                              },
+                              "type": "frame"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "QHIjL",
+                          "name": "bpRow2",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#EAF4F3",
+                      "gap": 16,
+                      "id": "3zGZu",
+                      "layout": "vertical",
+                      "name": "Brand Primitives",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#D7E8E5",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "content": "Composition Shells",
+                              "fill": "#11212B",
+                              "fontFamily": "Sora",
+                              "fontSize": 20,
+                              "fontWeight": "700",
+                              "id": "N9IHu",
+                              "type": "text"
+                            },
+                            {
+                              "content": "Scaffolds for authenticated shell, dashboard sections, and marketing-like layouts.",
+                              "fill": "#5B7283",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal",
+                              "id": "cZGZ6",
+                              "lineHeight": 1.45,
+                              "textGrowth": "fixed-width",
+                              "type": "text",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 6,
+                          "id": "2mIIK",
+                          "layout": "vertical",
+                          "name": "bcHead",
+                          "type": "frame",
+                          "width": "fill_container"
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "content": "App Shell",
+                                      "fill": "#11212B",
+                                      "fontFamily": "Sora",
+                                      "fontSize": 18,
+                                      "fontWeight": "700",
+                                      "id": "gUZyy",
+                                      "name": "appTitle",
+                                      "type": "text"
+                                    },
+                                    {
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "content": "brand chrome",
+                                          "fill": "#166C67",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 12,
+                                          "fontWeight": "600",
+                                          "id": "i5JdF",
+                                          "type": "text"
+                                        }
+                                      ],
+                                      "cornerRadius": 999,
+                                      "fill": "#E7F9F6",
+                                      "gap": 8,
+                                      "id": "QcUpj",
+                                      "name": "appChip",
+                                      "padding": [
+                                        8,
+                                        12
+                                      ],
+                                      "type": "frame"
+                                    }
+                                  ],
+                                  "id": "2G5vL",
+                                  "justifyContent": "space_between",
+                                  "name": "appTop",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                },
+                                {
+                                  "children": [
+                                    {
+                                      "children": [
+                                        {
+                                          "content": "Navigation Slot",
+                                          "fill": "#11212B",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 14,
+                                          "fontWeight": "600",
+                                          "id": "j3cgb",
+                                          "name": "navLabel",
+                                          "type": "text"
+                                        }
+                                      ],
+                                      "cornerRadius": 12,
+                                      "fill": "#F7FBFA",
+                                      "gap": 10,
+                                      "height": "fill_container",
+                                      "id": "Ol85L",
+                                      "layout": "vertical",
+                                      "name": "appNav",
+                                      "padding": 12,
+                                      "stroke": {
+                                        "align": "inside",
+                                        "fill": "#D7E8E5",
+                                        "thickness": 1
+                                      },
+                                      "type": "frame",
+                                      "width": 180
+                                    },
+                                    {
+                                      "children": [
+                                        {
+                                          "content": "Content Slot",
+                                          "fill": "#11212B",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 14,
+                                          "fontWeight": "600",
+                                          "id": "lpwgW",
+                                          "name": "mainLabel",
+                                          "type": "text"
+                                        }
+                                      ],
+                                      "cornerRadius": 12,
+                                      "fill": "#FFFFFF",
+                                      "gap": 10,
+                                      "height": "fill_container",
+                                      "id": "eTYRx",
+                                      "layout": "vertical",
+                                      "name": "appMain",
+                                      "padding": 14,
+                                      "stroke": {
+                                        "align": "inside",
+                                        "fill": "#D7E8E5",
+                                        "thickness": 1
+                                      },
+                                      "type": "frame",
+                                      "width": "fill_container"
+                                    }
+                                  ],
+                                  "gap": 12,
+                                  "height": 160,
+                                  "id": "CPP0X",
+                                  "name": "appBody",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#FFFFFF",
+                              "gap": 12,
+                              "id": "qN8LE",
+                              "layout": "vertical",
+                              "name": "Brand/Composition/App Shell",
+                              "padding": 16,
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Dashboard Section",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Sora",
+                                  "fontSize": 18,
+                                  "fontWeight": "700",
+                                  "id": "csTHN",
+                                  "name": "dashTitle",
+                                  "type": "text"
+                                },
+                                {
+                                  "children": [
+                                    {
+                                      "cornerRadius": 12,
+                                      "fill": "#F7FBFA",
+                                      "height": 96,
+                                      "id": "QNy31",
+                                      "name": "dashCard1",
+                                      "stroke": {
+                                        "align": "inside",
+                                        "fill": "#D7E8E5",
+                                        "thickness": 1
+                                      },
+                                      "type": "frame",
+                                      "width": "fill_container"
+                                    },
+                                    {
+                                      "cornerRadius": 12,
+                                      "fill": "#F7FBFA",
+                                      "height": 96,
+                                      "id": "4OlEF",
+                                      "name": "dashCard2",
+                                      "stroke": {
+                                        "align": "inside",
+                                        "fill": "#D7E8E5",
+                                        "thickness": 1
+                                      },
+                                      "type": "frame",
+                                      "width": "fill_container"
+                                    },
+                                    {
+                                      "cornerRadius": 12,
+                                      "fill": "#F7FBFA",
+                                      "height": 96,
+                                      "id": "D4ziN",
+                                      "name": "dashCard3",
+                                      "stroke": {
+                                        "align": "inside",
+                                        "fill": "#D7E8E5",
+                                        "thickness": 1
+                                      },
+                                      "type": "frame",
+                                      "width": "fill_container"
+                                    }
+                                  ],
+                                  "gap": 12,
+                                  "id": "3CFfB",
+                                  "name": "dashCards",
+                                  "type": "frame",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#FFFFFF",
+                              "gap": 10,
+                              "id": "P6vqr",
+                              "layout": "vertical",
+                              "name": "Brand/Composition/Dashboard Section",
+                              "padding": 16,
+                              "reusable": true,
+                              "stroke": {
+                                "align": "inside",
+                                "fill": "#D7E8E5",
+                                "thickness": 1
+                              },
+                              "type": "frame",
+                              "width": "fill_container"
+                            },
+                            {
+                              "children": [
+                                {
+                                  "content": "Marketing Section",
+                                  "fill": "#11212B",
+                                  "fontFamily": "Sora",
+                                  "fontSize": 22,
+                                  "fontWeight": "700",
+                                  "id": "Z7CdC",
+                                  "name": "marketingTitle",
+                                  "type": "text"
+                                },
+                                {
+                                  "content": "Display-led section scaffold for landing and narrative product surfaces.",
+                                  "fill": "#5B7283",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "normal",
+                                  "id": "v9Itb",
+                                  "lineHeight": 1.45,
+                                  "name": "marketingBody",
+                                  "textGrowth": "fixed-width",
+                                  "type": "text",
+                                  "width": "fill_container"
+                                }
+                              ],
+                              "cornerRadius": 16,
+                              "fill": "#E7F9F6",
+                              "gap": 10,
+                              "id": "wdImS",
+                              "layout": "vertical",
+                              "name": "Brand/Composition/Marketing Section",
+                              "padding": 18,
+                              "reusable": true,
+                              "type": "frame",
+                              "width": "fill_container"
+                            }
+                          ],
+                          "gap": 12,
+                          "id": "yuQif",
+                          "layout": "vertical",
+                          "name": "bcShells",
+                          "type": "frame",
+                          "width": "fill_container"
+                        }
+                      ],
+                      "cornerRadius": 12,
+                      "fill": "#EAF4F3",
+                      "gap": 16,
+                      "id": "KxMCg",
+                      "layout": "vertical",
+                      "name": "Brand Composition Shells",
+                      "padding": 20,
+                      "stroke": {
+                        "align": "inside",
+                        "fill": "#D7E8E5",
+                        "thickness": 1
+                      },
+                      "type": "frame",
+                      "width": "fill_container"
+                    }
+                  ],
+                  "gap": 16,
+                  "id": "91QUv",
+                  "layout": "vertical",
+                  "name": "brandSections",
+                  "type": "frame",
+                  "width": "fill_container"
+                }
+              ],
+              "cornerRadius": 16,
+              "fill": "#FFFFFF",
+              "gap": 20,
+              "id": "0eexc",
+              "layout": "vertical",
+              "name": "Chalk Brand System",
+              "padding": 24,
+              "stroke": {
+                "align": "inside",
+                "fill": "#D8E1EA",
+                "thickness": 1
+              },
+              "type": "frame",
+              "width": "fill_container"
+            }
+          ],
+          "gap": 28,
+          "id": "aCKsw",
+          "name": "systems",
+          "type": "frame",
+          "width": "fill_container"
+        }
+      ],
+      "fill": "#F7F8FA",
+      "gap": 32,
+      "id": "tP3zz",
+      "layout": "vertical",
+      "name": "Chalk Design Systems",
+      "padding": 40,
+      "type": "frame",
+      "width": 3200,
+      "x": 0,
+      "y": 0
+    }
+  ]
+}
