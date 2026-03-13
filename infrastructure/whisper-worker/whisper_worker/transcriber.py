@@ -6,6 +6,8 @@ import time
 from dataclasses import asdict
 from typing import Optional
 
+import numpy as np
+
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 
 from .env_utils import (
@@ -42,6 +44,10 @@ def _looks_like_oom(error: Exception) -> bool:
     return any(marker in msg for marker in markers)
 
 
+def _audio_duration_seconds(audio: np.ndarray, sample_rate: int = 16000) -> int:
+    return int(round(audio.shape[0] / sample_rate))
+
+
 class WhisperTranscriber:
     def __init__(self):
         self.model_name = os.getenv("WHISPER_MODEL", "distil-large-v3.5")
@@ -72,6 +78,15 @@ class WhisperTranscriber:
         )
         self.language_detection_threshold = min(
             1.0, max(0.0, env_float("WHISPER_LANGUAGE_DETECTION_THRESHOLD", 0.5))
+        )
+        self.no_speech_threshold = min(
+            1.0, max(0.0, env_float("WHISPER_NO_SPEECH_THRESHOLD", 0.6))
+        )
+        self.silence_rms_threshold = max(
+            0.0, env_float("WHISPER_SILENCE_RMS_THRESHOLD", 1e-4)
+        )
+        self.silence_peak_threshold = max(
+            0.0, env_float("WHISPER_SILENCE_PEAK_THRESHOLD", 1e-3)
         )
 
         # Segment-level timestamps are desired; keep timestamps enabled by default.
@@ -114,6 +129,9 @@ class WhisperTranscriber:
                 "condition_on_previous_text": self.condition_on_previous_text,
                 "language_detection_segments": self.language_detection_segments,
                 "language_detection_threshold": self.language_detection_threshold,
+                "no_speech_threshold": self.no_speech_threshold,
+                "silence_rms_threshold": self.silence_rms_threshold,
+                "silence_peak_threshold": self.silence_peak_threshold,
                 "batched_enabled": self.batched_enabled,
                 "batched_min_queue_depth": self.batched_min_queue_depth,
             },
@@ -167,6 +185,17 @@ class WhisperTranscriber:
             processing_time_seconds=processing_time_seconds,
         )
 
+    def _is_effective_silence(self, audio_path: str) -> tuple[bool, int]:
+        audio = decode_audio(audio_path, sampling_rate=16000)
+        duration_seconds = _audio_duration_seconds(audio)
+        if audio.size == 0:
+            return True, duration_seconds
+
+        rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64))))
+        peak = float(np.max(np.abs(audio)))
+        is_silence = rms <= self.silence_rms_threshold and peak <= self.silence_peak_threshold
+        return is_silence, duration_seconds
+
     def transcribe(
         self,
         audio_path: str,
@@ -209,6 +238,7 @@ class WhisperTranscriber:
                 without_timestamps=self.without_timestamps,
                 word_timestamps=False,
                 chunk_length=self.chunk_length_seconds,
+                no_speech_threshold=self.no_speech_threshold,
                 condition_on_previous_text=self.condition_on_previous_text,
                 language_detection_segments=self.language_detection_segments,
                 language_detection_threshold=self.language_detection_threshold,
@@ -229,11 +259,9 @@ class WhisperTranscriber:
             )
 
         except Exception as e:
-            # v1.2.1 edge-case: silent audio + VAD can yield empty features and crash language detection.
-            # Requirement: treat silent/near-silent recordings as completed with empty transcript.
-            if "max() arg is an empty sequence" in str(e):
-                audio = decode_audio(audio_path, sampling_rate=16000)
-                duration_seconds = int(round(audio.shape[0] / 16000))
+            # Silent/near-silent recordings should resolve to an empty completed result.
+            is_silence, duration_seconds = self._is_effective_silence(audio_path)
+            if is_silence:
                 self.last_no_speech = True
                 return self._empty_result(
                     duration_seconds=duration_seconds,
@@ -268,6 +296,7 @@ class WhisperTranscriber:
                     word_timestamps=False,
                     batch_size=batch_size,
                     chunk_length=self.chunk_length_seconds,
+                    no_speech_threshold=self.no_speech_threshold,
                     language_detection_segments=self.language_detection_segments,
                     language_detection_threshold=self.language_detection_threshold,
                 )
@@ -289,11 +318,9 @@ class WhisperTranscriber:
                 )
 
             except Exception as e:
-                # v1.2.1 edge-case: silent audio + VAD can yield empty features and crash language detection.
-                # Requirement: treat silent/near-silent recordings as completed with empty transcript.
-                if "max() arg is an empty sequence" in str(e):
-                    audio = decode_audio(audio_path, sampling_rate=16000)
-                    duration_seconds = int(round(audio.shape[0] / 16000))
+                # Silent/near-silent recordings should resolve to an empty completed result.
+                is_silence, duration_seconds = self._is_effective_silence(audio_path)
+                if is_silence:
                     self.last_no_speech = True
                     self.last_batch_size = batch_size
                     self.last_oom_retries = oom_retries

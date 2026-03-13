@@ -27,3 +27,11 @@
 - tooling cleanup: standardized whisper-worker guidance on `uv` only
 - pinned Docker install path to `uv` `0.10.9` after checking current stable official docs/releases
 - kept dependency install command on `uv pip install -r requirements.txt` after `uv pip sync` left runtime deps incomplete locally (`av` missing on smoke)
+
+2026-03-13 19:33 PKT
+- follow-up implementation batch:
+- resilient downloader: retries/backoff + suffix inference + cleanup tests
+- no-speech handling: explicit silence detection instead of exception-string contract
+- test surface: added downloader tests, transcriber no-speech tests, worker integration test
+- healthcheck: Docker now runs `python -m whisper_worker.healthcheck`
+- verify: py_compile pass, 12 worker tests pass in uv venv, healthcheck OK, real speech smoke OK

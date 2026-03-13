@@ -22,7 +22,7 @@ Keep docs minimal. Source of truth is the code in this directory and the Terrafo
 
 ```bash
 python3 -m py_compile infrastructure/whisper-worker/*.py infrastructure/whisper-worker/whisper_worker/*.py infrastructure/whisper-worker/tests/*.py
-python3 -m unittest infrastructure/whisper-worker/tests/test_worker_queue.py
+infrastructure/whisper-worker/.venv/bin/python -m unittest infrastructure/whisper-worker/tests/test_audio_download.py infrastructure/whisper-worker/tests/test_transcriber.py infrastructure/whisper-worker/tests/test_worker_queue.py infrastructure/whisper-worker/tests/test_worker_integration.py
 ```
 
 ## Local Setup

@@ -52,9 +52,9 @@ ENV WHISPER_DEVICE=cuda
 ENV WHISPER_COMPUTE_TYPE=float16
 ENV LOG_LEVEL=INFO
 
-# Health check - verify faster-whisper imports successfully
+# Health check - boot the worker runtime graph without loading the whisper model
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-    CMD python3 -c "from faster_whisper import WhisperModel; print('OK')" || exit 1
+    CMD python3 -m whisper_worker.healthcheck || exit 1
 
 # Run worker
 CMD ["python3", "worker.py"]
