@@ -1,29 +1,24 @@
-# Chalk Infrastructure - Terraform
+# Chalk Terraform
 
-Terraform infrastructure for Chalk control-plane.
+Minimal orientation only. Source of truth lives in the Terraform files.
 
-## Stacks
+## Scope
 
-### Active (`environments/prod-lean`)
+- keep `bootstrap/`
+- keep `environments/prod-lean/`
+- keep only modules used by `environments/prod-lean/`
 
-- EC2 `t4g.micro` (single instance)
-- PlanetScale Postgres
-- Upstash Redis
-- Cloudflare R2
-- Cloudflare DNS + Caddy TLS on origin
-- SSM Parameter Store for runtime env/secrets
-- Minimal CloudWatch alarms
+## Usage
 
-## Quick Start
-
-### 1) Bootstrap state backend (one-time)
+Bootstrap remote state once:
 
 ```bash
 cd infrastructure/terraform/bootstrap
-terraform init && terraform apply
+terraform init
+terraform apply
 ```
 
-### 2) Deploy lean prod
+Work on the active environment:
 
 ```bash
 cd infrastructure/terraform/environments/prod-lean
@@ -32,35 +27,13 @@ terraform plan
 terraform apply
 ```
 
-## Structure
+## Ground truth
 
-```text
-infrastructure/terraform/
-├── bootstrap/
-├── modules/
-│   ├── ec2-api-lean/
-│   └── ...
-└── environments/
-    ├── dev/
-    └── prod-lean/
-```
+For current inputs, providers, outputs, and resources, read:
 
-## CI/CD
+- `bootstrap/main.tf`
+- `environments/prod-lean/main.tf`
+- `environments/prod-lean/variables.tf`
+- `environments/prod-lean/outputs.tf`
 
-- `infra-lean.yml`: lean infra plan/apply/destroy.
-- `api-lean.yml`: arm64 image build + EC2 SSM restart deploy.
-
-## Requirements
-
-- Terraform >= 1.9
-- AWS provider ~> 5.80
-- Cloudflare provider ~> 5
-- Upstash provider ~> 2.1
-- PlanetScale provider = 1.0.0-rc1
-
-## Notes
-
-- `prod` Terraform environment is deprecated and removed.
-- Lean stack is designed for cost-first control-plane operation.
-- Media-layer cost is separate from this Terraform scope.
-- For cutover/decommission flow, see `docs/infrastructure/lean-cutover-runbook.md`.
+This README stays intentionally small to reduce drift.

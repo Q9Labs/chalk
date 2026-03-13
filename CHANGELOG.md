@@ -938,3 +938,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Glass effects**: New CSS variables for backdrop-blur surfaces (`--chalk-bg-glass`, `--chalk-bg-control`)
   - **Control buttons**: Glass morphism with layered shadows and smooth hover scale (1.04x)
 - **Test pipeline resource fix** - stop forcing workspace builds before `turbo test`, so running tests no longer fans out into `docs`/`admin`/`web` builds and unnecessary parallel memory pressure.
+
+## Unreleased
+
+### Changed
+
+- Removed the legacy Terraform dev environment and unused non-lean modules, keeping only `bootstrap`, `prod-lean`, and the modules they depend on.
+- Trimmed root and Terraform README files down to stable orientation notes so active behavior stays defined by source files instead of drifting docs.
