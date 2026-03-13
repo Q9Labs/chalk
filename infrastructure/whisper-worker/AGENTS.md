@@ -24,7 +24,7 @@
    - `bun run --cwd apps/docs build`
    - `cd infrastructure/terraform && terraform fmt -check -recursive`
    - `cd infrastructure/terraform/environments/prod-lean && AWS_PROFILE=q9labs AWS_REGION=us-east-1 terraform init -input=false && terraform validate`
-   - `python3 -m py_compile infrastructure/whisper-worker/*.py`
+   - `python3 -m py_compile infrastructure/whisper-worker/*.py infrastructure/whisper-worker/whisper_worker/*.py infrastructure/whisper-worker/tests/*.py`
 3. Update `CHANGELOG.md` under `[Unreleased]`.
 4. Commit (Conventional Commits) and push to `master`.
 5. Build image: `gh workflow run whisper-worker.yml` and wait for green.
@@ -98,5 +98,9 @@
 
 ## Notes
 
+- Python runtime layout:
+  - root keeps thin entrypoints: `worker.py`, `transcribe_file.py`
+  - implementation lives in package: `infrastructure/whisper-worker/whisper_worker/`
+  - tests live in: `infrastructure/whisper-worker/tests/`
 - Do not log full `audio_url`. Only scheme/host is recorded.
 - High-cardinality `job_id` is expected in Axiom.

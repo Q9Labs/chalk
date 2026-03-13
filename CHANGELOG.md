@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Whisper worker: modular runtime + local transcription smoke path** — split the Python worker into focused queue, metrics, and job-processing modules, added regression coverage for successful job cleanup plus HTTP download diagnostics, and introduced a local `transcribe_file.py` smoke harness used to verify real audio transcription output on CPU.
+- **Whisper worker: modular runtime + packaged layout + local transcription smoke path** — split the Python worker into focused queue, metrics, and job-processing modules under a dedicated `whisper_worker/` package, added regression coverage for successful job cleanup plus HTTP download diagnostics, and introduced a local `transcribe_file.py` smoke harness used to verify real audio transcription output on CPU.
 - **React: aligned local pins to the latest safe 19.2.x line** — moved `packages/sdk-react` test-time `react`/`react-dom` pins and `apps/web`'s exact React pins to `19.2.4` so local installs stay on the patched line while preserving version alignment during workspace tests.
 - **Infra: singleton whisper spot self-healing** — the lean whisper worker now runs behind a 1x1x1 Auto Scaling Group backed by one-time spot launch templates, so interrupted capacity is replaced automatically without leaving duplicate workers running at the same time.
 - **Web: PWA browser chrome + cache safety** — Chalk now keeps `theme-color` in sync with light/dark/nord theme changes, avoids service-worker caching of API/WebSocket traffic, and serves the manifest/service worker with revalidation-friendly cache headers.

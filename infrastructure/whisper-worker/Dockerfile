@@ -41,8 +41,9 @@ RUN if [ "${PRELOAD_WHISPER_MODEL}" = "true" ]; then \
       python3 -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL}', device='cpu')"; \
     fi
 
-# Copy worker script + modules
-COPY worker.py worker_types.py transcriber.py env_utils.py worker_config.py audio_download.py observability.py otel.py gpu_metrics.py worker_queue.py worker_metrics.py job_processor.py transcribe_file.py .
+# Copy worker entrypoints + package
+COPY worker.py transcribe_file.py .
+COPY whisper_worker ./whisper_worker
 
 # Default environment variables
 ENV REDIS_URL=redis://localhost:6379

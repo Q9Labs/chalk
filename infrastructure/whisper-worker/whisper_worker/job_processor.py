@@ -7,11 +7,11 @@ import traceback
 from contextlib import nullcontext
 from urllib.error import HTTPError, URLError
 
-from audio_download import download_audio
-from observability import audio_url_meta, emit_event
-from otel import extract_context_from_traceparent
-from worker_config import LOG_TRANSCRIPT, LOG_TRANSCRIPT_MAX_CHARS
-from worker_types import TranscriptionJob, TranscriptionResult
+from .audio_download import download_audio
+from .observability import audio_url_meta, emit_event
+from .otel import extract_context_from_traceparent
+from .worker_config import LOG_TRANSCRIPT, LOG_TRANSCRIPT_MAX_CHARS
+from .worker_types import TranscriptionJob, TranscriptionResult
 
 
 class TranscriptionJobProcessor:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from env_utils import env_bool, env_float, env_int
+from .env_utils import env_bool, env_float, env_int
 
 JOB_QUEUE = "transcription:jobs"
 PROCESSING_QUEUE = "transcription:jobs:processing"

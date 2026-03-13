@@ -12,7 +12,8 @@ import unittest
 from urllib.error import HTTPError
 
 
-WORKER_DIR = pathlib.Path(__file__).resolve().parent
+TESTS_DIR = pathlib.Path(__file__).resolve().parent
+WORKER_DIR = TESTS_DIR.parent
 
 
 class _FakeRedis:
@@ -107,26 +108,26 @@ def _load_worker_module():
     fake_redis.from_url = lambda *args, **kwargs: None
     sys.modules["redis"] = fake_redis
 
-    fake_audio_download = types.ModuleType("audio_download")
+    fake_audio_download = types.ModuleType("whisper_worker.audio_download")
     fake_audio_download.download_audio = lambda url: (_ for _ in ()).throw(NotImplementedError)
-    sys.modules["audio_download"] = fake_audio_download
+    sys.modules["whisper_worker.audio_download"] = fake_audio_download
 
-    fake_gpu_metrics = types.ModuleType("gpu_metrics")
+    fake_gpu_metrics = types.ModuleType("whisper_worker.gpu_metrics")
     fake_gpu_metrics.read_gpu_metrics = lambda: None
-    sys.modules["gpu_metrics"] = fake_gpu_metrics
+    sys.modules["whisper_worker.gpu_metrics"] = fake_gpu_metrics
 
-    fake_observability = types.ModuleType("observability")
+    fake_observability = types.ModuleType("whisper_worker.observability")
     fake_observability.audio_url_meta = lambda url: {}
     fake_observability.emit_event = lambda *args, **kwargs: None
     fake_observability.setup_axiom_logging = lambda **kwargs: None
-    sys.modules["observability"] = fake_observability
+    sys.modules["whisper_worker.observability"] = fake_observability
 
-    fake_otel = types.ModuleType("otel")
+    fake_otel = types.ModuleType("whisper_worker.otel")
     fake_otel.extract_context_from_traceparent = lambda traceparent: None
     fake_otel.init_tracing = lambda **kwargs: None
-    sys.modules["otel"] = fake_otel
+    sys.modules["whisper_worker.otel"] = fake_otel
 
-    fake_transcriber = types.ModuleType("transcriber")
+    fake_transcriber = types.ModuleType("whisper_worker.transcriber")
 
     class _FakeWhisperTranscriber:
         multilingual = False
@@ -141,7 +142,7 @@ def _load_worker_module():
             return False
 
     fake_transcriber.WhisperTranscriber = _FakeWhisperTranscriber
-    sys.modules["transcriber"] = fake_transcriber
+    sys.modules["whisper_worker.transcriber"] = fake_transcriber
 
     spec = importlib.util.spec_from_file_location("worker_under_test", WORKER_DIR / "worker.py")
     module = importlib.util.module_from_spec(spec)

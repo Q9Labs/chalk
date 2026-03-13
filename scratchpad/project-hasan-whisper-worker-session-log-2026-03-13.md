@@ -9,3 +9,8 @@
 - added: `transcribe_file.py` local smoke CLI with `--expect-contains`
 - tests: queue tests expanded to cover success cleanup + HTTP download diagnostics
 - local smoke: generated AIFF via `say`; first phrase transcribed `Chalk` as `Shock`; reran with simpler phrase and got expected transcript match
+
+2026-03-13 18:52 PKT
+- follow-up structure: moved implementation into `whisper_worker/` package; moved tests into `tests/`
+- compatibility: kept root `worker.py` and `transcribe_file.py` as thin wrappers so Docker/local commands stay stable
+- docs: updated ops compile command and noted new runtime layout

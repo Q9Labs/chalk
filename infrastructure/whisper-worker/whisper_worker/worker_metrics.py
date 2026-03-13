@@ -5,9 +5,9 @@ import os
 import traceback
 from datetime import datetime, timezone
 
-from gpu_metrics import read_gpu_metrics
-from observability import emit_event
-from worker_config import GPU_METRICS_ENABLED, JOB_QUEUE, PROCESSING_QUEUE
+from .gpu_metrics import read_gpu_metrics
+from .observability import emit_event
+from .worker_config import GPU_METRICS_ENABLED, JOB_QUEUE, PROCESSING_QUEUE
 
 
 class WorkerMetricsPublisher:

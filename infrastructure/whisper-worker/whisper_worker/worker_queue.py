@@ -6,8 +6,8 @@ import threading
 import traceback
 from dataclasses import asdict
 
-from observability import emit_event
-from worker_config import (
+from .observability import emit_event
+from .worker_config import (
     DONE_KEY_PREFIX,
     DONE_TTL_SECONDS,
     JOB_QUEUE,
@@ -20,7 +20,7 @@ from worker_config import (
     RESULT_KEY_PREFIX,
     RESULT_TTL_SECONDS,
 )
-from worker_types import TranscriptionJob, TranscriptionResult
+from .worker_types import TranscriptionJob, TranscriptionResult
 
 
 class WorkerQueue:

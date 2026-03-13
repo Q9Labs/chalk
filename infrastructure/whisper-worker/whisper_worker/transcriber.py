@@ -8,14 +8,14 @@ from typing import Optional
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 
-from env_utils import (
+from .env_utils import (
     env_bool,
     env_bool_relaxed,
     env_float,
     env_int,
     env_optional_positive_int,
 )
-from worker_types import TranscriptionResult, TranscriptionSegment
+from .worker_types import TranscriptionResult, TranscriptionSegment
 
 logger = logging.getLogger("whisper-worker")
 
