@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
+import multiprocessing
 import traceback
 from dataclasses import asdict
+
+import redis
 
 from .observability import emit_event
 from .worker_config import (
@@ -17,10 +19,50 @@ from .worker_config import (
     PROCESSING_QUEUE,
     PROCESSING_RECOVERY_LOCK_KEY,
     PROCESSING_RECOVERY_LOCK_TTL_SECONDS,
+    REDIS_CONNECT_TIMEOUT,
+    REDIS_HEALTHCHECK_INTERVAL,
+    REDIS_RETRY_ON_TIMEOUT,
+    REDIS_SOCKET_TIMEOUT,
+    REDIS_URL,
     RESULT_KEY_PREFIX,
     RESULT_TTL_SECONDS,
 )
 from .worker_types import TranscriptionJob, TranscriptionResult
+
+
+def _create_heartbeat_redis_client():
+    return redis.from_url(
+        REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=REDIS_CONNECT_TIMEOUT,
+        socket_timeout=REDIS_SOCKET_TIMEOUT,
+        retry_on_timeout=REDIS_RETRY_ON_TIMEOUT,
+        health_check_interval=REDIS_HEALTHCHECK_INTERVAL,
+    )
+
+
+def _processing_heartbeat_loop(job_id: str, worker_id: str, stop_event) -> None:
+    logger = logging.getLogger("whisper-worker")
+    lock_key = f"{PROCESSING_LOCK_KEY_PREFIX}{job_id}"
+    redis_client = _create_heartbeat_redis_client()
+
+    while not stop_event.wait(PROCESSING_HEARTBEAT_INTERVAL_SECONDS):
+        try:
+            owner = redis_client.get(lock_key)
+            if owner == worker_id:
+                redis_client.expire(lock_key, PROCESSING_LOCK_TTL_SECONDS)
+        except Exception as error:
+            emit_event(
+                logger,
+                level=logging.WARNING,
+                event={
+                    "event": "queue.lock_refresh_failed",
+                    "job_id": job_id,
+                    "error": str(error),
+                    "error_class": error.__class__.__name__,
+                    "error_stack": traceback.format_exc(),
+                },
+            )
 
 
 class WorkerQueue:
@@ -82,33 +124,16 @@ class WorkerQueue:
                 },
             )
 
-    def start_processing_heartbeat(self, job_id: str) -> tuple[threading.Event, threading.Thread]:
-        stop_event = threading.Event()
-
-        def heartbeat() -> None:
-            while not stop_event.wait(PROCESSING_HEARTBEAT_INTERVAL_SECONDS):
-                try:
-                    self.refresh_processing_lock(job_id)
-                except Exception as error:
-                    emit_event(
-                        self.logger,
-                        level=logging.WARNING,
-                        event={
-                            "event": "queue.lock_refresh_failed",
-                            "job_id": job_id,
-                            "error": str(error),
-                            "error_class": error.__class__.__name__,
-                            "error_stack": traceback.format_exc(),
-                        },
-                    )
-
-        thread = threading.Thread(
-            target=heartbeat,
+    def start_processing_heartbeat(self, job_id: str):
+        stop_event = multiprocessing.Event()
+        process = multiprocessing.Process(
+            target=_processing_heartbeat_loop,
+            args=(job_id, self.worker_id, stop_event),
             name=f"processing-heartbeat-{job_id}",
             daemon=True,
         )
-        thread.start()
-        return stop_event, thread
+        process.start()
+        return stop_event, process
 
     def store_result(self, result: TranscriptionResult) -> None:
         result_dict = asdict(result)
