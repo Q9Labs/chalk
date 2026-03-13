@@ -3,10 +3,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import logging
+import os
 import pathlib
 import sys
+import tempfile
 import types
 import unittest
+from urllib.error import HTTPError
 
 
 WORKER_DIR = pathlib.Path(__file__).resolve().parent
@@ -59,6 +62,35 @@ class _FakeRedis:
     def lpush(self, key: str, value: str) -> int:
         self.lists.setdefault(key, []).insert(0, value)
         return len(self.lists[key])
+
+    def llen(self, key: str) -> int:
+        return len(self.lists.get(key, []))
+
+
+class _FakeCloudWatch:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def put_metric_data(self, **kwargs) -> None:
+        self.calls.append(kwargs)
+
+
+class _FakeTranscriber:
+    def __init__(self) -> None:
+        self.multilingual = False
+        self.chunk_length_seconds = 0
+        self.condition_on_previous_text = False
+        self.last_inference_mode = "single"
+        self.last_batch_size = None
+        self.last_oom_retries = 0
+        self.last_no_speech = False
+        self.result_factory = lambda: None
+
+    def should_use_batched(self, remaining: int) -> bool:
+        return False
+
+    def transcribe(self, audio_path: str, *, language: str | None, use_batched: bool):
+        return self.result_factory()
 
 
 def _load_worker_module():
@@ -124,13 +156,19 @@ class WhisperWorkerQueueTests(unittest.TestCase):
         cls.worker_module = _load_worker_module()
 
     def _make_worker(self):
-        worker = self.worker_module.WhisperWorker.__new__(self.worker_module.WhisperWorker)
+        transcriber = _FakeTranscriber()
+        cloudwatch = _FakeCloudWatch()
+        worker = self.worker_module.WhisperWorker(
+            redis_client=_FakeRedis(),
+            transcriber=transcriber,
+            cloudwatch_client=cloudwatch,
+        )
         worker.worker_id = "worker-1"
-        worker.redis = _FakeRedis()
-        return worker
+        worker.queue.worker_id = "worker-1"
+        return worker, transcriber, cloudwatch
 
     def test_requeue_processing_jobs_moves_only_unlocked_jobs(self) -> None:
-        worker = self._make_worker()
+        worker, _, _ = self._make_worker()
 
         stale_job = json.dumps({"job_id": "stale", "audio_url": "https://example.com/a"})
         locked_job = json.dumps({"job_id": "locked", "audio_url": "https://example.com/b"})
@@ -150,7 +188,7 @@ class WhisperWorkerQueueTests(unittest.TestCase):
         self.assertEqual(worker.redis.lists[self.worker_module.PROCESSING_QUEUE], [locked_job])
 
     def test_store_result_marks_only_completed_jobs_done(self) -> None:
-        worker = self._make_worker()
+        worker, _, _ = self._make_worker()
 
         completed = self.worker_module.TranscriptionResult(job_id="done", status="completed", text="ok")
         failed = self.worker_module.TranscriptionResult(job_id="failed", status="failed", error="boom")
@@ -162,6 +200,67 @@ class WhisperWorkerQueueTests(unittest.TestCase):
         self.assertIn(worker._result_key("failed"), worker.redis.kv)
         self.assertIn(worker._done_key("done"), worker.redis.kv)
         self.assertNotIn(worker._done_key("failed"), worker.redis.kv)
+
+    def test_process_job_success_cleans_up_temp_file_and_publishes_metrics(self) -> None:
+        worker, transcriber, cloudwatch = self._make_worker()
+
+        temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        temp_audio.write(b"audio")
+        temp_audio.close()
+
+        def _download_audio(url: str):
+            return temp_audio.name, 200, 4
+
+        transcriber.result_factory = lambda: self.worker_module.TranscriptionResult(
+            job_id="",
+            status="completed",
+            text="hello chalk",
+            segments=[],
+            language="en",
+            duration_seconds=2,
+            word_count=2,
+            processing_time_seconds=0.4,
+        )
+        worker.job_processor.download_audio = _download_audio
+
+        result = worker.process_job(
+            self.worker_module.TranscriptionJob(
+                job_id="job-1",
+                audio_url="file:///tmp/fake.wav",
+            ),
+            queue_depth=1,
+            use_batched=False,
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.text, "hello chalk")
+        self.assertFalse(os.path.exists(temp_audio.name))
+        self.assertGreaterEqual(len(cloudwatch.calls), 1)
+        self.assertEqual(cloudwatch.calls[-1]["MetricData"][2]["MetricName"], "TranscriptionsCompleted")
+
+    def test_process_job_http_error_sets_download_diagnostics(self) -> None:
+        worker, _, cloudwatch = self._make_worker()
+
+        def _download_audio(url: str):
+            raise HTTPError(url, 404, "not found", hdrs=None, fp=None)
+
+        worker.job_processor.download_audio = _download_audio
+
+        result = worker.process_job(
+            self.worker_module.TranscriptionJob(
+                job_id="job-404",
+                audio_url="https://example.com/missing.wav",
+            ),
+            queue_depth=3,
+            use_batched=False,
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error_stage, "download")
+        self.assertEqual(result.download_http_status, 404)
+        self.assertEqual(result.download_size_bytes, 0)
+        self.assertGreaterEqual(len(cloudwatch.calls), 1)
+        self.assertEqual(cloudwatch.calls[-1]["MetricData"][2]["MetricName"], "TranscriptionsFailed")
 
 
 if __name__ == "__main__":

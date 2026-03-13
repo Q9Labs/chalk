@@ -1,0 +1,11 @@
+2026-03-13 18:18 PKT
+- task: refactor `infrastructure/whisper-worker`
+- goals: structure up, code quality up, add regression tests, run local transcription with audio input/output proof
+- context: `worker.py` monolith at 843 LOC; existing coverage only queue recovery/store-result
+- constraints: dirty repo; isolate scope to whisper worker files only
+
+2026-03-13 18:39 PKT
+- refactor: split worker into orchestrator + `worker_queue.py` + `worker_metrics.py` + `job_processor.py`
+- added: `transcribe_file.py` local smoke CLI with `--expect-contains`
+- tests: queue tests expanded to cover success cleanup + HTTP download diagnostics
+- local smoke: generated AIFF via `say`; first phrase transcribed `Chalk` as `Shock`; reran with simpler phrase and got expected transcript match

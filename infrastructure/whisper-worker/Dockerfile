@@ -42,7 +42,7 @@ RUN if [ "${PRELOAD_WHISPER_MODEL}" = "true" ]; then \
     fi
 
 # Copy worker script + modules
-COPY worker.py worker_types.py transcriber.py env_utils.py worker_config.py audio_download.py observability.py otel.py gpu_metrics.py .
+COPY worker.py worker_types.py transcriber.py env_utils.py worker_config.py audio_download.py observability.py otel.py gpu_metrics.py worker_queue.py worker_metrics.py job_processor.py transcribe_file.py .
 
 # Default environment variables
 ENV REDIS_URL=redis://localhost:6379
@@ -50,7 +50,7 @@ ENV WHISPER_DEVICE=cuda
 ENV WHISPER_COMPUTE_TYPE=float16
 ENV LOG_LEVEL=INFO
 
-# Health check - verify model can be loaded
+# Health check - verify faster-whisper imports successfully
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
     CMD python3 -c "from faster_whisper import WhisperModel; print('OK')" || exit 1
 
