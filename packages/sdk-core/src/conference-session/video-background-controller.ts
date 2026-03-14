@@ -1,6 +1,7 @@
 import RealtimeKitVideoBackgroundTransformer from "@cloudflare/realtimekit-virtual-background";
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import type { VideoBackgroundEffect } from "../types/entities/media.ts";
+import { resolveBackgroundImageSource } from "./resolve-background-image-source.ts";
 
 type VideoMiddlewareCapableSelf = {
   addVideoMiddleware?: (middleware: unknown) => Promise<unknown>;
@@ -43,6 +44,7 @@ export const isConferenceSessionVideoBackgroundSupported = (rtkClient?: Realtime
 export const createConferenceSessionVideoBackgroundController = (deps: { getRtkClient: () => RealtimeKitClient | undefined }) => {
   let transformer: RealtimeKitVideoBackgroundTransformer | null = null;
   let selectedEffect: VideoBackgroundEffect = { mode: "none" };
+  let revokeResolvedBackgroundImage: (() => void) | undefined;
 
   const getTransformer = async (rtkClient: RealtimeKitClient) => {
     if (transformer) {
@@ -62,11 +64,15 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
   const clearBackgroundEffect = async (): Promise<boolean> => {
     const rtkClient = deps.getRtkClient();
     if (!hasMiddlewareApis(rtkClient)) {
+      revokeResolvedBackgroundImage?.();
+      revokeResolvedBackgroundImage = undefined;
       selectedEffect = { mode: "none" };
       return false;
     }
 
     await removeAllVideoMiddlewares(rtkClient);
+    revokeResolvedBackgroundImage?.();
+    revokeResolvedBackgroundImage = undefined;
     selectedEffect = { mode: "none" };
     return true;
   };
@@ -84,12 +90,26 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
     const resolvedTransformer = await getTransformer(rtkClient);
     await removeAllVideoMiddlewares(rtkClient);
 
-    const middleware =
-      effect.mode === "blur"
-        ? await resolvedTransformer.createBackgroundBlurVideoMiddleware(effect.blurStrength ?? DEFAULT_BLUR_STRENGTH)
-        : await resolvedTransformer.createStaticBackgroundVideoMiddleware(effect.imageUrl).catch((error: unknown) => {
+    const middleware = effect.mode === "blur"
+      ? await resolvedTransformer.createBackgroundBlurVideoMiddleware(effect.blurStrength ?? DEFAULT_BLUR_STRENGTH)
+      : await (async () => {
+          const resolvedImage = await resolveBackgroundImageSource(effect.imageUrl).catch((error: unknown) => {
             throw toBackgroundImageLoadError(effect.imageUrl, error);
           });
+
+          try {
+            const staticMiddleware = await resolvedTransformer.createStaticBackgroundVideoMiddleware(resolvedImage.imageUrl).catch((error: unknown) => {
+              throw toBackgroundImageLoadError(effect.imageUrl, error);
+            });
+
+            revokeResolvedBackgroundImage?.();
+            revokeResolvedBackgroundImage = resolvedImage.revoke;
+            return staticMiddleware;
+          } catch (error) {
+            resolvedImage.revoke?.();
+            throw error;
+          }
+        })();
 
     await rtkClient.self.addVideoMiddleware?.(middleware);
     selectedEffect = effect;

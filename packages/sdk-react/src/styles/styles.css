@@ -188,22 +188,62 @@
 }
 
 /* =============================================================================
-   Base Styles
+   Base Styles & Scoped Reset
    ============================================================================= */
 
-.chalk-root {
+:where([data-chalk], .chalk-root) {
   font-family: var(--chalk-font-family);
   color: var(--foreground);
   background: var(--background);
   line-height: 1.5;
+  font-size: 16px;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  isolation: isolate;
 }
 
-.chalk-root *,
-.chalk-root *::before,
-.chalk-root *::after {
+:where([data-chalk], .chalk-root),
+:where([data-chalk], .chalk-root) *,
+:where([data-chalk], .chalk-root) *::before,
+:where([data-chalk], .chalk-root) *::after {
   box-sizing: border-box;
+}
+
+:where([data-chalk], .chalk-root) :where(h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
+  margin: 0;
+}
+
+:where([data-chalk], .chalk-root) :where(ul, ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where([data-chalk], .chalk-root) :where(button, input, optgroup, select, textarea) {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+  margin: 0;
+}
+
+:where([data-chalk], .chalk-root) :where(button, [type='button'], [type='reset'], [type='submit']) {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+:where([data-chalk], .chalk-root) :where(img, svg, video, canvas, audio, iframe, embed, object) {
+  display: block;
+  vertical-align: middle;
+}
+
+:where([data-chalk], .chalk-root) :where(img, video) {
+  max-width: 100%;
+  height: auto;
 }
 
 /* =============================================================================
