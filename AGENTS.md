@@ -1,6 +1,6 @@
 # Chalk
 
-Ultra low-latency video conferencing for education (Built ontop of Cloudflare RealtimeKit, leveraging Cloudflare's global network).
+Ultra low-latency video conferencing (Built ontop of Cloudflare RealtimeKit, leveraging Cloudflare's global network).
 Monorepo: Turbo + Bun. Packages → GitHub Packages `@q9labs/*`.
 
 ## Commands
@@ -18,10 +18,11 @@ cd apps/api && go run ./cmd/main.go # Run API server
 - For UX changes or any user-facing feature/behavior change, do both: add/update the appropriate automated tests and verify in a real browser flow with the Agent Browser CLI.
 - Use Agent Browser to exercise the changed flow end-to-end the way a user would: load the app, navigate the affected surfaces, interact with controls, and confirm the visible result.
 - During browser verification, check realistic viewport scale/zoom/layout conditions as well, so spacing, overflow, clipping, responsiveness, and visual hierarchy are validated under normal viewing conditions.
-- Prefer verifying in the Chalk demo/user-facing app that exposes the changed behavior after the package-level implementation is complete.
+- Prefer verifying in the Chalk demo/user-facing app (`apps/web`, `http://localhost:3070`) that exposes the changed behavior after the package-level implementation is complete.
 - Do not treat browser verification as optional for user-facing work unless the feature cannot be exercised locally; if blocked, state exactly what prevented Agent Browser testing.
 - Agent Browser verification does not replace automated coverage. Keep writing tests wherever they fit; for bug fixes or previously broken behavior, add a regression test when feasible. Browser testing is the user-level proof on top.
 - UI polish note: for in-product placeholders/empty states/guard rails, keep typography on-brand with Chalk theme tokens (`font-app`, `font-display` where applicable) and verify both light + dark mode before closing.
+- Take screenshots with the Agent Browser for an extra level of verification
 
 ## Cost Formulas (Quick Reference)
 
@@ -46,7 +47,7 @@ All apps & packages:
 - **api**: Go backend API (`apps/api`, stable)
 - **terraform**: AWS IaC (`infrastructure/terraform`, stable)
 - **docs**: Chalk docs (`docs.chalk.q9labs.ai`, stable)
-  **Demo apps (`apps/web`) are for testing only.**
+- **web**: Chalk brand facing application + application to test before releasing to consumers (`apps/web`)
 
 After packages → export → use in demo apps for user testing.
 Sometimes (rarely) the user might want to directly work on the app and later create the sdk.
@@ -60,14 +61,20 @@ Never add client-side business logic to demo apps.
 - Consumer apps should only do thin wiring/config, branding, and app-specific integration unless explicitly requested otherwise.
 - Do not ship app-only logic as the primary fix when it should live in a Chalk package.
 - If an app-only workaround is unavoidable, label it temporary and open/complete the SDK/package follow-up before closing the task.
+- Keep product language consistent & role-neutral by default; avoid `student` / `teacher` framing unless an integration explicitly requires it, and prefer the existing neutral terms already used in the codebase for consistency.
 
 ## Skills
 
 - `release` — release skill (project only).
 
-## Whisper Rollback Note
+## Whisper Rollback Note (old)
 
 - If Whisper load/latency regresses on `c7i.large`, upgrade back to `c7i.xlarge` (spot).
+
+## Async Autonomy Note
+
+- If Hasan says he's stepping away for a few hours: proceed autonomously end-to-end.
+- Finish implementation, run the full gate, and do browser verification without waiting for another prompt.
 
 ## Artsy Vibe Note (On-Demand Mode)
 
