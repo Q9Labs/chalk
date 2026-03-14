@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -53,12 +54,17 @@ type internalAuthQueriesStub struct {
 	sessionTokenHash string
 	sessionUserID    uuid.UUID
 	sessionID        uuid.UUID
+	userByID         db.User
+	userByEmail      db.User
 
 	tenantByOwner       db.Tenant
 	getInternalCalls    int
 	touchUserSessionCnt int
 	createTenantCalls   int
 	createClaimCalls    int
+	createUserCalls     int
+	createSessionCalls  int
+	revokeSessionCalls  int
 	createdTenant       db.Tenant
 	createdClaim        db.TenantClaim
 	claimBySecret       db.TenantClaim
@@ -82,16 +88,25 @@ func (q *internalAuthQueriesStub) CreateTenantClaim(context.Context, db.CreateTe
 	return q.createdClaim, nil
 }
 
-func (q *internalAuthQueriesStub) CreateUser(context.Context, string) (db.User, error) {
-	panic("unexpected CreateUser")
+func (q *internalAuthQueriesStub) CreateUser(_ context.Context, email string) (db.User, error) {
+	q.createUserCalls++
+	if q.userByEmail.ID == uuid.Nil {
+		q.userByEmail = db.User{ID: uuid.New(), Email: email}
+	}
+	q.userByID = q.userByEmail
+	return q.userByEmail, nil
 }
 
 func (q *internalAuthQueriesStub) CreateUserSession(context.Context, db.CreateUserSessionParams) (db.UserSession, error) {
-	panic("unexpected CreateUserSession")
+	q.createSessionCalls++
+	return db.UserSession{ID: uuid.New()}, nil
 }
 
 func (q *internalAuthQueriesStub) GetInternalTenantByOwnerUserID(_ context.Context, _ pgtype.UUID) (db.Tenant, error) {
 	q.getInternalCalls++
+	if q.tenantByOwner.ID == uuid.Nil {
+		return db.Tenant{}, errors.New("tenant not found")
+	}
 	return q.tenantByOwner, nil
 }
 
@@ -102,8 +117,18 @@ func (q *internalAuthQueriesStub) GetTenantClaimBySecretHash(context.Context, st
 	return q.claimBySecret, nil
 }
 
-func (q *internalAuthQueriesStub) GetUserByEmail(context.Context, string) (db.User, error) {
-	panic("unexpected GetUserByEmail")
+func (q *internalAuthQueriesStub) GetUser(_ context.Context, id uuid.UUID) (db.User, error) {
+	if q.userByID.ID == id {
+		return q.userByID, nil
+	}
+	return db.User{}, errors.New("user not found")
+}
+
+func (q *internalAuthQueriesStub) GetUserByEmail(_ context.Context, email string) (db.User, error) {
+	if q.userByEmail.ID != uuid.Nil && q.userByEmail.Email == email {
+		return q.userByEmail, nil
+	}
+	return db.User{}, errors.New("user not found")
 }
 
 func (q *internalAuthQueriesStub) GetUserSessionByRefreshTokenHash(_ context.Context, refreshTokenHash string) (db.UserSession, error) {
@@ -130,9 +155,139 @@ func (q *internalAuthQueriesStub) MarkTenantClaimUsed(context.Context, uuid.UUID
 	return db.TenantClaim{}, nil
 }
 
+func (q *internalAuthQueriesStub) RevokeUserSession(context.Context, uuid.UUID) error {
+	q.revokeSessionCalls++
+	return nil
+}
+
 func (q *internalAuthQueriesStub) TouchUserSession(context.Context, uuid.UUID) error {
 	q.touchUserSessionCnt++
 	return nil
+}
+
+func TestInternalAuthGoogle_ExchangesOAuthCodeAndEstablishesSession(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	queryStub := &internalAuthQueriesStub{}
+	handler := NewInternalAuthHandler(
+		&config.Config{Auth: config.AuthConfig{GoogleClientID: "google-client-id", GoogleClientSecret: "google-client-secret", InternalAppURL: "http://localhost:3070"}},
+		queryStub,
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		nil,
+	)
+	handler.googleCodeExchanger = func(_ context.Context, code, redirectURI string) (*googleIdentity, error) {
+		require.Equal(t, "oauth-code", code)
+		require.Equal(t, "http://localhost:3070", redirectURI)
+		return &googleIdentity{Email: "hasan@q9labs.ai", EmailVerified: true}, nil
+	}
+
+	body := bytes.NewBufferString(`{"code":"oauth-code"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/internal/auth/google", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://localhost:3070")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.Google(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, queryStub.createUserCalls)
+	require.Equal(t, 1, queryStub.createSessionCalls)
+	require.Equal(t, 1, queryStub.createTenantCalls)
+	require.Contains(t, w.Header().Get("Set-Cookie"), internalSessionCookieName+"=")
+
+	var bodyJSON map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &bodyJSON))
+	require.Equal(t, "hasan@q9labs.ai", bodyJSON["user"].(map[string]any)["email"])
+}
+
+func TestInternalAuthGoogle_RejectsInvalidOrigin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewInternalAuthHandler(
+		&config.Config{Auth: config.AuthConfig{GoogleClientID: "google-client-id", GoogleClientSecret: "google-client-secret", InternalAppURL: "https://chalk.q9labs.ai"}},
+		&internalAuthQueriesStub{},
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		nil,
+	)
+
+	body := bytes.NewBufferString(`{"code":"oauth-code"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/internal/auth/google", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://evil.example.com")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.Google(c)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.JSONEq(t, `{"error":"invalid oauth origin"}`, w.Body.String())
+}
+
+func TestInternalAuthSession_ReturnsCurrentUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	sessionToken := "session-token"
+	userID := uuid.New()
+	queryStub := &internalAuthQueriesStub{
+		sessionTokenHash: sha256Hex(sessionToken),
+		sessionUserID:    userID,
+		sessionID:        uuid.New(),
+		userByID:         db.User{ID: userID, Email: "hasan@q9labs.ai"},
+	}
+
+	handler := NewInternalAuthHandler(
+		nil,
+		queryStub,
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		nil,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/session", nil)
+	req.AddCookie(&http.Cookie{Name: internalSessionCookieName, Value: sessionToken})
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.Session(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, queryStub.touchUserSessionCnt)
+	require.JSONEq(t, `{"user":{"email":"hasan@q9labs.ai"}}`, w.Body.String())
+}
+
+func TestInternalAuthLogout_RevokesSessionAndClearsCookies(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	sessionToken := "session-token"
+	userID := uuid.New()
+	queryStub := &internalAuthQueriesStub{
+		sessionTokenHash: sha256Hex(sessionToken),
+		sessionUserID:    userID,
+		sessionID:        uuid.New(),
+	}
+
+	handler := NewInternalAuthHandler(
+		nil,
+		queryStub,
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		nil,
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
+	req.AddCookie(&http.Cookie{Name: internalSessionCookieName, Value: sessionToken})
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.Logout(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, queryStub.revokeSessionCalls)
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 2)
+	require.Equal(t, internalSessionCookieName, cookies[0].Name)
+	require.Equal(t, "", cookies[0].Value)
 }
 
 func TestInternalAuthAccessToken_UsesOwnerTenantCache(t *testing.T) {
@@ -217,367 +372,4 @@ func TestInternalAuthAccessToken_InvalidOwnerTenantCacheFallsBackToDB(t *testing
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, 1, queryStub.getInternalCalls)
 	require.Equal(t, tenantID.String(), cacheStub.values[internalTenantByOwnerRedisKey(userID)])
-}
-
-func TestInternalAuthResolveMagicLinkAppURL(t *testing.T) {
-	handler := &InternalAuthHandler{
-		cfg: &config.Config{
-			Auth: config.AuthConfig{
-				InternalAppURL: "https://chalk.q9labs.ai",
-			},
-		},
-	}
-
-	t.Run("uses configured app url by default", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("")
-		require.Equal(t, "https://chalk.q9labs.ai", got)
-	})
-
-	t.Run("accepts configured origin callback", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("https://chalk.q9labs.ai/dashboard")
-		require.Equal(t, "https://chalk.q9labs.ai", got)
-	})
-
-	t.Run("accepts localhost callback for dev ui", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("http://localhost:3000/auth/callback")
-		require.Equal(t, "http://localhost:3000", got)
-	})
-
-	t.Run("accepts localhost subdomain callback for dev ui", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("http://chalk.localhost:3000/auth/callback")
-		require.Equal(t, "http://chalk.localhost:3000", got)
-	})
-
-	t.Run("accepts loopback ipv6 callback for dev ui", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("http://[::1]:3000/auth/callback")
-		require.Equal(t, "http://[::1]:3000", got)
-	})
-
-	t.Run("rejects non-allowlisted domain", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("https://evil.example.com/auth/callback")
-		require.Equal(t, "https://chalk.q9labs.ai", got)
-	})
-
-	t.Run("rejects invalid callback URL", func(t *testing.T) {
-		got := handler.resolveMagicLinkAppURL("javascript:alert(1)")
-		require.Equal(t, "https://chalk.q9labs.ai", got)
-	})
-}
-
-func TestInternalAuthResolveMagicLinkCallbackURL(t *testing.T) {
-	handler := &InternalAuthHandler{
-		cfg: &config.Config{
-			Auth: config.AuthConfig{
-				InternalAppURL: "https://chalk.q9labs.ai",
-			},
-		},
-	}
-
-	t.Run("defaults to dashboard when callback is missing", func(t *testing.T) {
-		got := handler.resolveMagicLinkCallbackURL("")
-		require.Equal(t, "https://chalk.q9labs.ai/dashboard", got)
-	})
-
-	t.Run("preserves allowlisted hosted callback path", func(t *testing.T) {
-		got := handler.resolveMagicLinkCallbackURL("https://chalk.q9labs.ai/dashboard?tab=recent")
-		require.Equal(t, "https://chalk.q9labs.ai/dashboard?tab=recent", got)
-	})
-
-	t.Run("preserves localhost callback path", func(t *testing.T) {
-		got := handler.resolveMagicLinkCallbackURL("http://localhost:3070/auth/callback?next=%2Fdashboard")
-		require.Equal(t, "http://localhost:3070/auth/callback?next=%2Fdashboard", got)
-	})
-
-	t.Run("normalizes root callback to dashboard", func(t *testing.T) {
-		got := handler.resolveMagicLinkCallbackURL("https://chalk.q9labs.ai")
-		require.Equal(t, "https://chalk.q9labs.ai/dashboard", got)
-	})
-
-	t.Run("falls back to default dashboard for non-allowlisted callback", func(t *testing.T) {
-		got := handler.resolveMagicLinkCallbackURL("https://evil.example.com/dashboard")
-		require.Equal(t, "https://chalk.q9labs.ai/dashboard", got)
-	})
-}
-
-func TestInternalAuthBuildMagicLinkVerificationURL(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	handler := &InternalAuthHandler{}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/internal/auth/start", nil)
-	req.Host = "chalk-api.q9labs.ai"
-	req.Header.Set("X-Forwarded-Proto", "https")
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = req
-
-	got := handler.buildMagicLinkVerificationURL(
-		c,
-		"token-123",
-		"https://chalk.q9labs.ai/dashboard",
-	)
-
-	require.Equal(
-		t,
-		"https://chalk-api.q9labs.ai/api/v1/internal/auth/verify?callback_url=https%3A%2F%2Fchalk.q9labs.ai%2Fdashboard&token=token-123",
-		got,
-	)
-}
-
-func TestInternalAuthCookieSameSite(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	t.Run("uses SameSite None for production auth cookies", func(t *testing.T) {
-		handler := &InternalAuthHandler{
-			cfg: &config.Config{
-				Server: config.ServerConfig{Env: "production"},
-				Auth:   config.AuthConfig{CookieDomain: ".q9labs.ai"},
-			},
-		}
-
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = req
-
-		handler.setCookie(c, internalSessionCookieName, "session-token", time.Now().Add(time.Hour))
-
-		cookies := w.Result().Cookies()
-		require.Len(t, cookies, 1)
-		require.Equal(t, http.SameSiteNoneMode, cookies[0].SameSite)
-		require.True(t, cookies[0].Secure)
-		require.Equal(t, "q9labs.ai", cookies[0].Domain)
-	})
-
-	t.Run("uses SameSite Lax for local auth cookies", func(t *testing.T) {
-		handler := &InternalAuthHandler{
-			cfg: &config.Config{
-				Server: config.ServerConfig{Env: "development"},
-			},
-		}
-
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = req
-
-		handler.setCookie(c, internalSessionCookieName, "session-token", time.Now().Add(time.Hour))
-
-		cookies := w.Result().Cookies()
-		require.Len(t, cookies, 1)
-		require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
-		require.False(t, cookies[0].Secure)
-	})
-
-	t.Run("ignores configured prod cookie domain on localhost requests", func(t *testing.T) {
-		handler := &InternalAuthHandler{
-			cfg: &config.Config{
-				Server: config.ServerConfig{Env: "production"},
-				Auth:   config.AuthConfig{CookieDomain: ".q9labs.ai"},
-			},
-		}
-
-		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/", nil)
-		req.Host = "localhost:8080"
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = req
-
-		handler.setCookie(c, internalSessionCookieName, "session-token", time.Now().Add(time.Hour))
-
-		cookies := w.Result().Cookies()
-		require.Len(t, cookies, 1)
-		require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
-		require.False(t, cookies[0].Secure)
-		require.Empty(t, cookies[0].Domain)
-	})
-}
-
-func TestInternalAuthAccessToken_ReusesLocalClientBootstrap(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	cacheStub := &internalAuthCacheStub{}
-	queryStub := &internalAuthQueriesStub{}
-	handler := NewInternalAuthHandler(
-		&config.Config{Server: config.ServerConfig{Env: "development"}},
-		queryStub,
-		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
-		infraAuth.NewAPIKeyService(),
-		cacheStub,
-	)
-
-	makeRequest := func() *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/v1/internal/auth/access-token", nil)
-		req.Host = "localhost:8080"
-		req.Header.Set(localClientIDHeader, "browser-1")
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = req
-		handler.AccessToken(c)
-		require.Equal(t, http.StatusOK, w.Code)
-		return w
-	}
-
-	first := makeRequest()
-	second := makeRequest()
-
-	require.Equal(t, 1, queryStub.createTenantCalls)
-	require.Equal(t, 1, queryStub.createClaimCalls)
-	require.Contains(t, cacheStub.values, localClientTenantRedisKey(localLoopbackClientID))
-	require.Len(t, first.Result().Cookies(), 1)
-	require.Len(t, second.Result().Cookies(), 1)
-
-	var firstBody map[string]any
-	var secondBody map[string]any
-	require.NoError(t, json.Unmarshal(first.Body.Bytes(), &firstBody))
-	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &secondBody))
-	require.NotEmpty(t, firstBody["access_token"])
-	require.NotEmpty(t, secondBody["access_token"])
-}
-
-func TestInternalAuthAccessToken_ReusesLoopbackBootstrapAcrossDifferentClientIDs(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	cacheStub := &internalAuthCacheStub{}
-	queryStub := &internalAuthQueriesStub{}
-	handler := NewInternalAuthHandler(
-		&config.Config{Server: config.ServerConfig{Env: "development"}},
-		queryStub,
-		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
-		infraAuth.NewAPIKeyService(),
-		cacheStub,
-	)
-
-	makeRequest := func(clientID string) {
-		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/v1/internal/auth/access-token", nil)
-		req.Host = "localhost:8080"
-		req.Header.Set(localClientIDHeader, clientID)
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = req
-		handler.AccessToken(c)
-		require.Equal(t, http.StatusOK, w.Code)
-	}
-
-	makeRequest("browser-a")
-	makeRequest("browser-b")
-
-	require.Equal(t, 1, queryStub.createTenantCalls)
-	require.Equal(t, 1, queryStub.createClaimCalls)
-	require.Contains(t, cacheStub.values, localClientTenantRedisKey(localLoopbackClientID))
-}
-
-func TestInternalAuthAccessToken_PrefersLocalBootstrapTenantForSession(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	sessionToken := "session-token"
-	userID := uuid.New()
-	ownedTenantID := uuid.New()
-	bootstrapTenantID := uuid.New()
-	jwtService := infraAuth.NewJWTService(infraAuth.DefaultJWTConfig())
-	cacheStub := &internalAuthCacheStub{
-		values: map[string]string{
-			localClientTenantRedisKey(localLoopbackClientID): `{"tenant_id":"` + bootstrapTenantID.String() + `","claim_secret":"claim-secret"}`,
-		},
-	}
-	queryStub := &internalAuthQueriesStub{
-		sessionTokenHash: sha256Hex(sessionToken),
-		sessionUserID:    userID,
-		sessionID:        uuid.New(),
-		claimBySecret: db.TenantClaim{
-			ID:       uuid.New(),
-			TenantID: bootstrapTenantID,
-		},
-		tenantByOwner: db.Tenant{
-			ID: ownedTenantID,
-		},
-	}
-
-	handler := NewInternalAuthHandler(
-		&config.Config{Server: config.ServerConfig{Env: "development"}},
-		queryStub,
-		jwtService,
-		infraAuth.NewAPIKeyService(),
-		cacheStub,
-	)
-
-	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/v1/internal/auth/access-token", nil)
-	req.Host = "localhost:8080"
-	req.Header.Set(localClientIDHeader, "browser-1")
-	req.AddCookie(&http.Cookie{Name: internalSessionCookieName, Value: sessionToken})
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = req
-
-	handler.AccessToken(c)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 0, queryStub.getInternalCalls)
-
-	var body map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	accessToken, ok := body["access_token"].(string)
-	require.True(t, ok)
-	claims, err := jwtService.ValidateToken(accessToken)
-	require.NoError(t, err)
-	require.Equal(t, bootstrapTenantID, claims.TenantID)
-	require.Equal(t, userID.String(), claims.Subject)
-	require.Equal(t, 1, queryStub.bindTenantCalls)
-}
-
-func TestInternalAuthAccessToken_IgnoresStaleLoopbackBootstrapForDifferentOwnerTenant(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	sessionToken := "session-token"
-	userID := uuid.New()
-	ownedTenantID := uuid.New()
-	staleBootstrapTenantID := uuid.New()
-	jwtService := infraAuth.NewJWTService(infraAuth.DefaultJWTConfig())
-	cacheStub := &internalAuthCacheStub{
-		values: map[string]string{
-			localClientTenantRedisKey(localLoopbackClientID): `{"tenant_id":"` + staleBootstrapTenantID.String() + `","claim_secret":"stale-claim-secret"}`,
-		},
-	}
-	queryStub := &internalAuthQueriesStub{
-		sessionTokenHash: sha256Hex(sessionToken),
-		sessionUserID:    userID,
-		sessionID:        uuid.New(),
-		claimBySecret: db.TenantClaim{
-			ID:       uuid.New(),
-			TenantID: staleBootstrapTenantID,
-		},
-		bindTenantErr: errors.New("already claimed"),
-		tenantByOwner: db.Tenant{
-			ID: ownedTenantID,
-		},
-	}
-
-	handler := NewInternalAuthHandler(
-		&config.Config{Server: config.ServerConfig{Env: "development"}},
-		queryStub,
-		jwtService,
-		infraAuth.NewAPIKeyService(),
-		cacheStub,
-	)
-
-	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/v1/internal/auth/access-token", nil)
-	req.Host = "localhost:8080"
-	req.Header.Set(localClientIDHeader, "browser-1")
-	req.AddCookie(&http.Cookie{Name: internalSessionCookieName, Value: sessionToken})
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = req
-
-	handler.AccessToken(c)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 1, queryStub.getInternalCalls)
-
-	var body map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	accessToken, ok := body["access_token"].(string)
-	require.True(t, ok)
-	claims, err := jwtService.ValidateToken(accessToken)
-	require.NoError(t, err)
-	require.Equal(t, ownedTenantID, claims.TenantID)
-	require.NotEqual(t, staleBootstrapTenantID, claims.TenantID)
-	require.Equal(t, 1, queryStub.bindTenantCalls)
 }

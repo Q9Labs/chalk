@@ -70,9 +70,12 @@ jobs:
           fi
 
       - name: Build web app
-        run: cd out && bun run build --filter=web 2>&1 | tee build.log
+        run: |
+          rm -f out/apps/web/.env.local
+          cd out && bun run build --filter=web 2>&1 | tee build.log
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
+          VITE_GOOGLE_CLIENT_ID: 520998158013-9imcfo2tk5lpis830euphcm07q8p9nr8.apps.googleusercontent.com
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Check build exit code

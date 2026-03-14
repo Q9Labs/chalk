@@ -67,11 +67,10 @@ type APIConfig struct {
 }
 
 type AuthConfig struct {
-	// Resend magic-link auth (internal tenants)
-	ResendAPIKey    string
-	ResendFromEmail string
-	// Where the magic link lands (SPA callback route).
-	InternalAppURL string
+	// Google auth (internal tenants)
+	GoogleClientID     string
+	GoogleClientSecret string
+	InternalAppURL     string
 
 	// Cookie settings (cross-subdomain in prod).
 	CookieDomain string
@@ -79,8 +78,7 @@ type AuthConfig struct {
 	// HMAC signing key for join/share tokens.
 	LinkSigningKey string
 
-	MagicLinkTTLMinutes int // default 15
-	SessionTTLDays      int // default 30
+	SessionTTLDays int // default 30
 }
 
 type JWTConfig struct {
@@ -205,13 +203,12 @@ func Load() (*Config, error) {
 			PublicURL: getEnv("API_PUBLIC_URL", ""),
 		},
 		Auth: AuthConfig{
-			ResendAPIKey:        getEnv("RESEND_API_KEY", ""),
-			ResendFromEmail:     getEnv("RESEND_FROM_EMAIL", ""),
-			InternalAppURL:      getEnv("INTERNAL_APP_URL", "http://localhost:3070"),
-			CookieDomain:        getEnv("AUTH_COOKIE_DOMAIN", ""),
-			LinkSigningKey:      getEnv("AUTH_LINK_SIGNING_KEY", getEnv("JWT_SIGNING_KEY", "development-secret-key")),
-			MagicLinkTTLMinutes: getEnvInt("AUTH_MAGIC_LINK_TTL_MINUTES", 15),
-			SessionTTLDays:      getEnvInt("AUTH_SESSION_TTL_DAYS", 30),
+			GoogleClientID:     getEnv("AUTH_GOOGLE_CLIENT_ID", ""),
+			GoogleClientSecret: getEnv("AUTH_GOOGLE_CLIENT_SECRET", ""),
+			InternalAppURL:     getEnv("INTERNAL_APP_URL", "http://localhost:3070"),
+			CookieDomain:       getEnv("AUTH_COOKIE_DOMAIN", ""),
+			LinkSigningKey:     getEnv("AUTH_LINK_SIGNING_KEY", getEnv("JWT_SIGNING_KEY", "development-secret-key")),
+			SessionTTLDays:     getEnvInt("AUTH_SESSION_TTL_DAYS", 30),
 		},
 		JWT: JWTConfig{
 			SigningKey:    getEnv("JWT_SIGNING_KEY", "development-secret-key"),

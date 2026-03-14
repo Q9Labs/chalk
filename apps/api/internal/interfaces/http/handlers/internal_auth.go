@@ -7,9 +7,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
-	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -17,11 +17,13 @@ import (
 	"github.com/Q9Labs/chalk/internal/config"
 	domainAuth "github.com/Q9Labs/chalk/internal/domain/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
-	"github.com/Q9Labs/chalk/internal/infrastructure/email"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/oauth2"
+	googleoauth "golang.org/x/oauth2/google"
+	"google.golang.org/api/idtoken"
 )
 
 const (
@@ -33,6 +35,8 @@ const (
 	localLoopbackClientID     = "loopback-shared"
 )
 
+var errGoogleAuthNotConfigured = errors.New("google auth is not configured")
+
 type internalAuthQueries interface {
 	CreateInternalTenant(ctx context.Context, arg db.CreateInternalTenantParams) (db.Tenant, error)
 	CreateTenantClaim(ctx context.Context, arg db.CreateTenantClaimParams) (db.TenantClaim, error)
@@ -40,10 +44,12 @@ type internalAuthQueries interface {
 	CreateUserSession(ctx context.Context, arg db.CreateUserSessionParams) (db.UserSession, error)
 	GetInternalTenantByOwnerUserID(ctx context.Context, ownerUserID pgtype.UUID) (db.Tenant, error)
 	GetTenantClaimBySecretHash(ctx context.Context, secretHash string) (db.TenantClaim, error)
+	GetUser(ctx context.Context, id uuid.UUID) (db.User, error)
 	GetUserByEmail(ctx context.Context, lower string) (db.User, error)
 	GetUserSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (db.UserSession, error)
 	BindInternalTenantToOwner(ctx context.Context, arg db.BindInternalTenantToOwnerParams) (db.Tenant, error)
 	MarkTenantClaimUsed(ctx context.Context, id uuid.UUID) (db.TenantClaim, error)
+	RevokeUserSession(ctx context.Context, id uuid.UUID) error
 	TouchUserSession(ctx context.Context, id uuid.UUID) error
 }
 
@@ -53,18 +59,36 @@ type internalAuthCache interface {
 	Del(ctx context.Context, keys ...string) error
 }
 
+type googleIDTokenValidator func(ctx context.Context, rawToken, audience string) (*idtoken.Payload, error)
+
+type googleIdentity struct {
+	Email         string
+	EmailVerified bool
+}
+
+type googleCodeExchanger func(ctx context.Context, code, redirectURI string) (*googleIdentity, error)
+
 type InternalAuthHandler struct {
-	cfg          *config.Config
-	queries      internalAuthQueries
-	jwtService   *auth.JWTService
-	apiKeySvc    *auth.APIKeyService
-	redis        internalAuthCache
-	resendClient *email.ResendClient
+	cfg                  *config.Config
+	queries              internalAuthQueries
+	jwtService           *auth.JWTService
+	apiKeySvc            *auth.APIKeyService
+	redis                internalAuthCache
+	googleTokenValidator googleIDTokenValidator
+	googleCodeExchanger  googleCodeExchanger
 }
 
 type localClientTenantBootstrap struct {
 	TenantID    uuid.UUID `json:"tenant_id"`
 	ClaimSecret string    `json:"claim_secret"`
+}
+
+type googleAuthRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+type internalAuthUserResponse struct {
+	Email string `json:"email"`
 }
 
 func NewInternalAuthHandler(
@@ -74,185 +98,103 @@ func NewInternalAuthHandler(
 	apiKeySvc *auth.APIKeyService,
 	redisClient internalAuthCache,
 ) *InternalAuthHandler {
-	var resendClient *email.ResendClient
-	if cfg != nil && cfg.Auth.ResendAPIKey != "" && cfg.Auth.ResendFromEmail != "" {
-		resendClient = email.NewResendClient(cfg.Auth.ResendAPIKey, cfg.Auth.ResendFromEmail)
+	h := &InternalAuthHandler{
+		cfg:                  cfg,
+		queries:              queries,
+		jwtService:           jwtService,
+		apiKeySvc:            apiKeySvc,
+		redis:                redisClient,
+		googleTokenValidator: idtoken.Validate,
 	}
-
-	return &InternalAuthHandler{
-		cfg:          cfg,
-		queries:      queries,
-		jwtService:   jwtService,
-		apiKeySvc:    apiKeySvc,
-		redis:        redisClient,
-		resendClient: resendClient,
-	}
+	h.googleCodeExchanger = h.exchangeGoogleCode
+	return h
 }
 
-type startInternalAuthRequest struct {
-	Email       string `json:"email" binding:"required"`
-	CallbackURL string `json:"callback_url"`
-}
-
-// POST /api/v1/internal/auth/start
-func (h *InternalAuthHandler) Start(c *gin.Context) {
-	var req startInternalAuthRequest
+// POST /api/v1/internal/auth/google
+func (h *InternalAuthHandler) Google(c *gin.Context) {
+	var req googleAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	emailAddr := strings.ToLower(strings.TrimSpace(req.Email))
-	if _, err := mail.ParseAddress(emailAddr); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email"})
+	if strings.TrimSpace(c.GetHeader("X-Requested-With")) != "XMLHttpRequest" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing oauth request header"})
 		return
 	}
 
-	if h.redis == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis not configured"})
+	redirectURI := h.resolveGoogleRedirectURI(c.Request)
+	if redirectURI == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid oauth origin"})
 		return
 	}
-	if h.resendClient == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "email provider not configured"})
+	if h.googleCodeExchanger == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": errGoogleAuthNotConfigured.Error()})
 		return
 	}
 
-	magicToken, err := randomToken(32)
+	identity, err := h.googleCodeExchanger(c.Request.Context(), strings.TrimSpace(req.Code), redirectURI)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		status := http.StatusUnauthorized
+		if errors.Is(err, errGoogleAuthNotConfigured) {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	if !identity.EmailVerified {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "google account email is not verified"})
 		return
 	}
 
-	ttl := 15 * time.Minute
-	if h.cfg != nil && h.cfg.Auth.MagicLinkTTLMinutes > 0 {
-		ttl = time.Duration(h.cfg.Auth.MagicLinkTTLMinutes) * time.Minute
-	}
-
-	key := magicLinkRedisKey(magicToken)
-	if err := h.redis.Set(c.Request.Context(), key, emailAddr, ttl); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store token"})
+	user, err := h.getOrCreateUser(c.Request.Context(), strings.ToLower(identity.Email))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
 		return
 	}
 
-	callbackURL := h.resolveMagicLinkCallbackURL(req.CallbackURL)
-	link := h.buildMagicLinkVerificationURL(c, magicToken, callbackURL)
-
-	if err := h.resendClient.SendMagicLink(c.Request.Context(), emailAddr, link); err != nil {
-		_ = h.redis.Del(c.Request.Context(), key)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send email"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"ok": true})
-}
-
-type verifyInternalAuthRequest struct {
-	Token string `json:"token" binding:"required"`
-}
-
-// GET|POST /api/v1/internal/auth/verify
-func (h *InternalAuthHandler) Verify(c *gin.Context) {
-	if c.Request.Method == http.MethodGet {
-		h.verifyBrowserRedirect(c)
-		return
-	}
-
-	var req verifyInternalAuthRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	tenant, status, message := h.completeMagicLinkVerification(c, req.Token)
-	if status != 0 {
-		c.JSON(status, gin.H{"error": message})
+	tenant, err := h.establishSession(c, user.ID)
+	if err != nil || tenant == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to establish session"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok":        true,
 		"tenant_id": tenant.ID,
+		"user": internalAuthUserResponse{
+			Email: user.Email,
+		},
 	})
 }
 
-func (h *InternalAuthHandler) verifyBrowserRedirect(c *gin.Context) {
-	token := strings.TrimSpace(c.Query("token"))
-	callbackURL := h.resolveMagicLinkCallbackURL(c.Query("callback_url"))
-
-	if token == "" {
-		c.Redirect(http.StatusSeeOther, appendURLQuery(callbackURL, "error", "Missing token"))
-		return
-	}
-
-	_, status, message := h.completeMagicLinkVerification(c, token)
+// GET /api/v1/internal/auth/session
+func (h *InternalAuthHandler) Session(c *gin.Context) {
+	user, status, message := h.currentUser(c.Request.Context(), c)
 	if status != 0 {
-		c.Redirect(http.StatusSeeOther, appendURLQuery(callbackURL, "error", message))
+		c.JSON(status, gin.H{"error": message})
 		return
 	}
 
-	c.Redirect(http.StatusSeeOther, callbackURL)
+	c.JSON(http.StatusOK, gin.H{
+		"user": internalAuthUserResponse{Email: user.Email},
+	})
 }
 
-func (h *InternalAuthHandler) completeMagicLinkVerification(c *gin.Context, token string) (*db.Tenant, int, string) {
-	if h.redis == nil {
-		return nil, http.StatusInternalServerError, "redis not configured"
+// POST /api/v1/internal/auth/logout
+func (h *InternalAuthHandler) Logout(c *gin.Context) {
+	if sessionToken, err := c.Cookie(internalSessionCookieName); err == nil && strings.TrimSpace(sessionToken) != "" {
+		if sess, lookupErr := h.queries.GetUserSessionByRefreshTokenHash(c.Request.Context(), sha256Hex(sessionToken)); lookupErr == nil {
+			_ = h.queries.RevokeUserSession(c.Request.Context(), sess.ID)
+		}
 	}
 
-	key := magicLinkRedisKey(token)
-	emailAddr, err := h.redis.Get(c.Request.Context(), key)
-	if err != nil || emailAddr == "" {
-		return nil, http.StatusBadRequest, "invalid or expired token"
-	}
-	_ = h.redis.Del(c.Request.Context(), key) // single-use
-
-	user, err := h.getOrCreateUser(c.Request.Context(), emailAddr)
-	if err != nil {
-		return nil, http.StatusInternalServerError, "failed to create user"
-	}
-
-	// If this browser has an unclaimed internal tenant, bind it to the user.
-	if claimSecret, err := c.Cookie(internalClaimCookieName); err == nil && claimSecret != "" {
-		_ = h.tryClaimTenant(c.Request.Context(), claimSecret, user.ID)
-	}
-
-	// Ensure user has a workspace tenant (hard 1:1 enforced in DB for internal).
-	tenant, err := h.ensureInternalTenantForUser(c.Request.Context(), user.ID)
-	if err != nil || tenant == nil {
-		return nil, http.StatusInternalServerError, "failed to resolve tenant"
-	}
-
-	refresh, err := randomToken(48)
-	if err != nil {
-		return nil, http.StatusInternalServerError, "failed to create session"
-	}
-
-	sessionTTL := 30 * 24 * time.Hour
-	if h.cfg != nil && h.cfg.Auth.SessionTTLDays > 0 {
-		sessionTTL = time.Duration(h.cfg.Auth.SessionTTLDays) * 24 * time.Hour
-	}
-
-	_, err = h.queries.CreateUserSession(c.Request.Context(), db.CreateUserSessionParams{
-		UserID:           user.ID,
-		RefreshTokenHash: sha256Hex(refresh),
-		ExpiresAt:        time.Now().Add(sessionTTL),
-		IpAddress:        nil,
-		UserAgent:        strPtr(c.Request.UserAgent()),
-	})
-	if err != nil {
-		return nil, http.StatusInternalServerError, "failed to create session"
-	}
-
-	h.setCookie(c, internalSessionCookieName, refresh, time.Now().Add(sessionTTL))
-	// Clear claim cookie after successful login.
+	h.clearCookie(c, internalSessionCookieName)
 	h.clearCookie(c, internalClaimCookieName)
-
-	return tenant, 0, ""
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // GET /api/v1/internal/auth/access-token
-// Mints a tenant-scoped Chalk JWT based on either:
-// - user session cookie (email login), or
-// - internal tenant claim cookie (pre-login)
 func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -261,7 +203,6 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 	localClientID := localClientBootstrapKey(c.Request, strings.TrimSpace(c.GetHeader(localClientIDHeader)))
 	localBootstrap, hasLocalBootstrap := h.getCachedLocalClientTenant(ctx, c.Request, localClientID)
 
-	// 1) Session cookie (logged in)
 	if sessionToken, err := c.Cookie(internalSessionCookieName); err == nil && sessionToken != "" {
 		sess, err := h.queries.GetUserSessionByRefreshTokenHash(ctx, sha256Hex(sessionToken))
 		if err == nil {
@@ -276,7 +217,6 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 		}
 	}
 
-	// 2) Claim cookie (pre-login)
 	if tenantID == uuid.Nil {
 		if claimSecret, err := c.Cookie(internalClaimCookieName); err == nil && claimSecret != "" {
 			claim, err := h.queries.GetTenantClaimBySecretHash(ctx, sha256Hex(claimSecret))
@@ -287,7 +227,6 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 		}
 	}
 
-	// 3) No session/claim yet: create a temporary internal tenant + claim cookie.
 	if tenantID == uuid.Nil {
 		if hasLocalBootstrap && localBootstrap != nil {
 			bootstrap := localBootstrap
@@ -302,11 +241,9 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 			}
 			tenantID = tenant.ID
 			subject = "claim:" + tenant.ID.String()
-
 			if localClientID != "" {
 				h.setCachedLocalClientTenant(ctx, c.Request, localClientID, tenant.ID, claimSecret)
 			}
-
 			h.setCookie(c, internalClaimCookieName, claimSecret, time.Now().Add(localClientTenantTTL))
 		}
 	}
@@ -330,23 +267,185 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 	})
 }
 
+func (h *InternalAuthHandler) exchangeGoogleCode(ctx context.Context, code, redirectURI string) (*googleIdentity, error) {
+	googleClientID := strings.TrimSpace(h.googleClientID())
+	googleClientSecret := strings.TrimSpace(h.googleClientSecret())
+	if googleClientID == "" || googleClientSecret == "" {
+		return nil, errGoogleAuthNotConfigured
+	}
+	if h.googleTokenValidator == nil {
+		return nil, errGoogleAuthNotConfigured
+	}
+
+	conf := &oauth2.Config{
+		ClientID:     googleClientID,
+		ClientSecret: googleClientSecret,
+		RedirectURL:  redirectURI,
+		Scopes:       []string{"openid", "email", "profile"},
+		Endpoint:     googleoauth.Endpoint,
+	}
+
+	token, err := conf.Exchange(ctx, code)
+	if err != nil {
+		return nil, errors.New("invalid google authorization code")
+	}
+
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok || strings.TrimSpace(rawIDToken) == "" {
+		return nil, errors.New("google id token missing")
+	}
+
+	payload, err := h.googleTokenValidator(ctx, rawIDToken, googleClientID)
+	if err != nil {
+		return nil, errors.New("invalid google id token")
+	}
+	if !isGoogleIssuer(payload.Issuer) {
+		return nil, errors.New("invalid google issuer")
+	}
+
+	emailAddr, ok := claimString(payload.Claims, "email")
+	if !ok || emailAddr == "" {
+		return nil, errors.New("google account email missing")
+	}
+
+	return &googleIdentity{
+		Email:         strings.ToLower(emailAddr),
+		EmailVerified: claimBool(payload.Claims, "email_verified"),
+	}, nil
+}
+
+func (h *InternalAuthHandler) resolveGoogleRedirectURI(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		referer := strings.TrimSpace(r.Header.Get("Referer"))
+		refererOrigin, ok := normalizedOrigin(referer)
+		if ok {
+			origin = refererOrigin
+		}
+	}
+	origin, ok := normalizedOrigin(origin)
+	if !ok {
+		return ""
+	}
+	if !h.isAllowedGoogleOrigin(origin) {
+		return ""
+	}
+	return origin
+}
+
+func (h *InternalAuthHandler) isAllowedGoogleOrigin(origin string) bool {
+	if h.cfg != nil {
+		configuredOrigin, ok := normalizedOrigin(h.cfg.Auth.InternalAppURL)
+		if ok && strings.EqualFold(origin, configuredOrigin) {
+			return true
+		}
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return isLocalHostForInternalAuth(parsed.Hostname())
+}
+
+func normalizedOrigin(rawURL string) (string, bool) {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return "", false
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", false
+	}
+	if parsed.Host == "" {
+		return "", false
+	}
+	return parsed.Scheme + "://" + parsed.Host, true
+}
+
+func (h *InternalAuthHandler) currentUser(ctx context.Context, c *gin.Context) (*db.User, int, string) {
+	sess, status, message := h.currentSession(ctx, c)
+	if status != 0 {
+		return nil, status, message
+	}
+	user, err := h.queries.GetUser(ctx, sess.UserID)
+	if err != nil {
+		return nil, http.StatusUnauthorized, "not authenticated"
+	}
+	return &user, 0, ""
+}
+
+func (h *InternalAuthHandler) currentSession(ctx context.Context, c *gin.Context) (*db.UserSession, int, string) {
+	sessionToken, err := c.Cookie(internalSessionCookieName)
+	if err != nil || strings.TrimSpace(sessionToken) == "" {
+		return nil, http.StatusUnauthorized, "not authenticated"
+	}
+	sess, err := h.queries.GetUserSessionByRefreshTokenHash(ctx, sha256Hex(sessionToken))
+	if err != nil {
+		return nil, http.StatusUnauthorized, "not authenticated"
+	}
+	_ = h.queries.TouchUserSession(ctx, sess.ID)
+	return &sess, 0, ""
+}
+
+func (h *InternalAuthHandler) establishSession(c *gin.Context, userID uuid.UUID) (*db.Tenant, error) {
+	ctx := c.Request.Context()
+	if claimSecret, err := c.Cookie(internalClaimCookieName); err == nil && claimSecret != "" {
+		_ = h.tryClaimTenant(ctx, claimSecret, userID)
+	}
+	tenant, err := h.ensureInternalTenantForUser(ctx, userID)
+	if err != nil || tenant == nil {
+		return nil, err
+	}
+
+	refresh, err := randomToken(48)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionTTL := 30 * 24 * time.Hour
+	if h.cfg != nil && h.cfg.Auth.SessionTTLDays > 0 {
+		sessionTTL = time.Duration(h.cfg.Auth.SessionTTLDays) * 24 * time.Hour
+	}
+
+	_, err = h.queries.CreateUserSession(ctx, db.CreateUserSessionParams{
+		UserID:           userID,
+		RefreshTokenHash: sha256Hex(refresh),
+		ExpiresAt:        time.Now().Add(sessionTTL),
+		IpAddress:        nil,
+		UserAgent:        strPtr(c.Request.UserAgent()),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	h.setCookie(c, internalSessionCookieName, refresh, time.Now().Add(sessionTTL))
+	h.clearCookie(c, internalClaimCookieName)
+	return tenant, nil
+}
+
 func (h *InternalAuthHandler) resolveSessionTenantID(ctx context.Context, userID uuid.UUID, localBootstrap *localClientTenantBootstrap, hasLocalBootstrap bool) (uuid.UUID, error) {
 	if hasLocalBootstrap && localBootstrap != nil && localBootstrap.TenantID != uuid.Nil {
 		if localBootstrap.ClaimSecret != "" && h.tryClaimTenant(ctx, localBootstrap.ClaimSecret, userID) {
 			return localBootstrap.TenantID, nil
 		}
 	}
-
 	if cachedTenantID, ok := h.getCachedInternalTenantByOwner(ctx, userID); ok {
 		return cachedTenantID, nil
 	}
-
 	t, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(userID))
 	if err == nil {
 		h.setCachedInternalTenantByOwner(ctx, userID, t.ID)
 		return t.ID, nil
 	}
-
 	created, err := h.createInternalTenant(ctx, &userID)
 	if err != nil || created == nil {
 		return uuid.Nil, err
@@ -359,10 +458,8 @@ func (h *InternalAuthHandler) getOrCreateUser(ctx context.Context, emailAddr str
 	if err == nil {
 		return &existing, nil
 	}
-
 	created, err := h.queries.CreateUser(ctx, emailAddr)
 	if err != nil {
-		// Race: user was created concurrently.
 		existing, err2 := h.queries.GetUserByEmail(ctx, emailAddr)
 		if err2 == nil {
 			return &existing, nil
@@ -385,10 +482,9 @@ func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUse
 	if err != nil {
 		return nil, err
 	}
-	_ = apiKey // internal tenants should never return/share plaintext keys
+	_ = apiKey
 
 	tenantCfg := []byte(`{"force_recording":true,"recording_retention_days":7,"allow_early_join":true,"transcription_enabled":true}`)
-
 	var claimedAt *time.Time
 	if ownerUserID != nil {
 		now := time.Now()
@@ -420,12 +516,10 @@ func (h *InternalAuthHandler) createInternalTenantWithClaim(ctx context.Context)
 	if err != nil {
 		return nil, "", err
 	}
-
 	secret, err := randomToken(32)
 	if err != nil {
 		return nil, "", err
 	}
-
 	_, err = h.queries.CreateTenantClaim(ctx, db.CreateTenantClaimParams{
 		TenantID:   tenant.ID,
 		SecretHash: sha256Hex(secret),
@@ -434,7 +528,6 @@ func (h *InternalAuthHandler) createInternalTenantWithClaim(ctx context.Context)
 	if err != nil {
 		return nil, "", err
 	}
-
 	return tenant, secret, nil
 }
 
@@ -443,16 +536,13 @@ func (h *InternalAuthHandler) tryClaimTenant(ctx context.Context, claimSecret st
 	if err != nil {
 		return false
 	}
-
 	_, err = h.queries.BindInternalTenantToOwner(ctx, db.BindInternalTenantToOwnerParams{
 		ID:          claim.TenantID,
 		OwnerUserID: pgUUID(userID),
 	})
 	if err != nil {
-		// Either already claimed or not internal
 		return false
 	}
-
 	h.setCachedInternalTenantByOwner(ctx, userID, claim.TenantID)
 	_, _ = h.queries.MarkTenantClaimUsed(ctx, claim.ID)
 	return true
@@ -461,15 +551,7 @@ func (h *InternalAuthHandler) tryClaimTenant(ctx context.Context, claimSecret st
 func (h *InternalAuthHandler) setCookie(c *gin.Context, name, value string, expiresAt time.Time) {
 	secure := h.cookieSecure(c.Request)
 	c.SetSameSite(h.cookieSameSite(c.Request))
-	c.SetCookie(
-		name,
-		value,
-		int(time.Until(expiresAt).Seconds()),
-		"/",
-		h.cookieDomain(c.Request),
-		secure,
-		true, // httpOnly
-	)
+	c.SetCookie(name, value, int(time.Until(expiresAt).Seconds()), "/", h.cookieDomain(c.Request), secure, true)
 }
 
 func (h *InternalAuthHandler) clearCookie(c *gin.Context, name string) {
@@ -502,6 +584,20 @@ func (h *InternalAuthHandler) cookieSameSite(r *http.Request) http.SameSite {
 	return http.SameSiteLaxMode
 }
 
+func (h *InternalAuthHandler) googleClientID() string {
+	if h.cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(h.cfg.Auth.GoogleClientID)
+}
+
+func (h *InternalAuthHandler) googleClientSecret() string {
+	if h.cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(h.cfg.Auth.GoogleClientSecret)
+}
+
 func internalTenantByOwnerRedisKey(ownerUserID uuid.UUID) string {
 	return "internal_auth:tenant_by_owner:v1:" + ownerUserID.String()
 }
@@ -510,18 +606,15 @@ func (h *InternalAuthHandler) getCachedInternalTenantByOwner(ctx context.Context
 	if h.redis == nil {
 		return uuid.Nil, false
 	}
-
 	value, err := h.redis.Get(ctx, internalTenantByOwnerRedisKey(ownerUserID))
 	if err != nil || value == "" {
 		return uuid.Nil, false
 	}
-
 	tenantID, parseErr := uuid.Parse(value)
 	if parseErr != nil {
 		_ = h.redis.Del(ctx, internalTenantByOwnerRedisKey(ownerUserID))
 		return uuid.Nil, false
 	}
-
 	return tenantID, true
 }
 
@@ -530,10 +623,6 @@ func (h *InternalAuthHandler) setCachedInternalTenantByOwner(ctx context.Context
 		return
 	}
 	_ = h.redis.Set(ctx, internalTenantByOwnerRedisKey(ownerUserID), tenantID.String(), internalTenantCacheTTL)
-}
-
-func magicLinkRedisKey(token string) string {
-	return "internal_auth:magic:" + sha256Hex(token)
 }
 
 func localClientTenantRedisKey(clientID string) string {
@@ -551,23 +640,19 @@ func (h *InternalAuthHandler) getCachedLocalClientTenant(ctx context.Context, r 
 	if h.redis == nil || clientID == "" || !isLocalRequest(r) {
 		return nil, false
 	}
-
 	payload, err := h.redis.Get(ctx, localClientTenantRedisKey(clientID))
 	if err != nil || payload == "" {
 		return nil, false
 	}
-
 	var bootstrap localClientTenantBootstrap
 	if err := json.Unmarshal([]byte(payload), &bootstrap); err != nil {
 		_ = h.redis.Del(ctx, localClientTenantRedisKey(clientID))
 		return nil, false
 	}
-
 	if bootstrap.TenantID == uuid.Nil || strings.TrimSpace(bootstrap.ClaimSecret) == "" {
 		_ = h.redis.Del(ctx, localClientTenantRedisKey(clientID))
 		return nil, false
 	}
-
 	return &bootstrap, true
 }
 
@@ -575,16 +660,53 @@ func (h *InternalAuthHandler) setCachedLocalClientTenant(ctx context.Context, r 
 	if h.redis == nil || clientID == "" || claimSecret == "" || !isLocalRequest(r) {
 		return
 	}
-
-	payload, err := json.Marshal(localClientTenantBootstrap{
-		TenantID:    tenantID,
-		ClaimSecret: claimSecret,
-	})
+	payload, err := json.Marshal(localClientTenantBootstrap{TenantID: tenantID, ClaimSecret: claimSecret})
 	if err != nil {
 		return
 	}
-
 	_ = h.redis.Set(ctx, localClientTenantRedisKey(clientID), string(payload), localClientTenantTTL)
+}
+
+func isGoogleIssuer(issuer string) bool {
+	normalized := strings.TrimSpace(issuer)
+	return normalized == "https://accounts.google.com" || normalized == "accounts.google.com"
+}
+
+func claimString(claims map[string]interface{}, key string) (string, bool) {
+	if claims == nil {
+		return "", false
+	}
+	value, ok := claims[key]
+	if !ok {
+		return "", false
+	}
+	text, ok := value.(string)
+	if !ok {
+		return "", false
+	}
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return "", false
+	}
+	return trimmed, true
+}
+
+func claimBool(claims map[string]interface{}, key string) bool {
+	if claims == nil {
+		return false
+	}
+	value, ok := claims[key]
+	if !ok {
+		return false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
 }
 
 func sha256Hex(s string) string {
@@ -597,105 +719,12 @@ func randomToken(bytesLen int) (string, error) {
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	// url-safe, no padding
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func strPtr(s string) *string { return &s }
 
-func (h *InternalAuthHandler) resolveMagicLinkCallbackURL(requestedCallbackURL string) string {
-	appURL := h.resolveMagicLinkAppURL(requestedCallbackURL)
-	defaultCallbackURL := appURL + "/dashboard"
-
-	trimmed := strings.TrimSpace(requestedCallbackURL)
-	if trimmed == "" {
-		return defaultCallbackURL
-	}
-
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return defaultCallbackURL
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return defaultCallbackURL
-	}
-	if parsed.Host == "" {
-		return defaultCallbackURL
-	}
-
-	origin := parsed.Scheme + "://" + parsed.Host
-	if !h.isAllowedMagicLinkOrigin(origin) {
-		return defaultCallbackURL
-	}
-
-	parsed.User = nil
-	parsed.Fragment = ""
-	if strings.TrimSpace(parsed.Path) == "" || parsed.Path == "/" {
-		parsed.Path = "/dashboard"
-	}
-
-	return parsed.String()
-}
-
-func (h *InternalAuthHandler) buildMagicLinkVerificationURL(c *gin.Context, token, callbackURL string) string {
-	verifyURL := requestOrigin(c.Request) + "/api/v1/internal/auth/verify"
-	verifyURL = appendURLQuery(verifyURL, "token", token)
-	return appendURLQuery(verifyURL, "callback_url", callbackURL)
-}
-
-func (h *InternalAuthHandler) resolveMagicLinkAppURL(requestedCallbackURL string) string {
-	defaultAppURL := "http://localhost:3070"
-	if h.cfg != nil && h.cfg.Auth.InternalAppURL != "" {
-		defaultAppURL = strings.TrimRight(h.cfg.Auth.InternalAppURL, "/")
-	}
-
-	requestedOrigin, ok := normalizedOrigin(requestedCallbackURL)
-	if !ok {
-		return defaultAppURL
-	}
-	if !h.isAllowedMagicLinkOrigin(requestedOrigin) {
-		return defaultAppURL
-	}
-	return requestedOrigin
-}
-
-func (h *InternalAuthHandler) isAllowedMagicLinkOrigin(origin string) bool {
-	if h.cfg != nil {
-		configuredOrigin, ok := normalizedOrigin(h.cfg.Auth.InternalAppURL)
-		if ok && strings.EqualFold(origin, configuredOrigin) {
-			return true
-		}
-	}
-
-	parsed, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-
-	return isLocalMagicLinkHost(parsed.Hostname())
-}
-
-func normalizedOrigin(rawURL string) (string, bool) {
-	trimmed := strings.TrimSpace(rawURL)
-	if trimmed == "" {
-		return "", false
-	}
-
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return "", false
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", false
-	}
-	if parsed.Host == "" {
-		return "", false
-	}
-
-	return parsed.Scheme + "://" + parsed.Host, true
-}
-
-func isLocalMagicLinkHost(host string) bool {
+func isLocalHostForInternalAuth(host string) bool {
 	normalizedHost := strings.ToLower(strings.TrimSpace(host))
 	if normalizedHost == "" {
 		return false
@@ -703,16 +732,18 @@ func isLocalMagicLinkHost(host string) bool {
 	if normalizedHost == "localhost" || strings.HasSuffix(normalizedHost, ".localhost") {
 		return true
 	}
-
 	ip := net.ParseIP(normalizedHost)
 	return ip != nil && ip.IsLoopback()
+}
+
+func isLocalMagicLinkHost(host string) bool {
+	return isLocalHostForInternalAuth(host)
 }
 
 func isLocalRequest(r *http.Request) bool {
 	if r == nil {
 		return false
 	}
-
 	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
 	if host == "" {
 		host = strings.TrimSpace(r.Host)
@@ -720,32 +751,18 @@ func isLocalRequest(r *http.Request) bool {
 	if host == "" {
 		return false
 	}
-
 	parsedHost := host
 	if strings.Contains(host, "://") {
 		if parsed, err := url.Parse(host); err == nil {
 			parsedHost = parsed.Host
 		}
 	}
-
 	hostname := parsedHost
 	if value, _, err := net.SplitHostPort(parsedHost); err == nil {
 		hostname = value
 	}
 	hostname = strings.Trim(hostname, "[]")
-	return isLocalMagicLinkHost(hostname)
-}
-
-func appendURLQuery(rawURL, key, value string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-
-	query := parsed.Query()
-	query.Set(key, value)
-	parsed.RawQuery = query.Encode()
-	return parsed.String()
+	return isLocalHostForInternalAuth(hostname)
 }
 
 func requestOrigin(r *http.Request) string {
@@ -757,12 +774,10 @@ func requestOrigin(r *http.Request) string {
 			scheme = "http"
 		}
 	}
-
 	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
 	if host == "" {
 		host = strings.TrimSpace(r.Host)
 	}
-
 	return scheme + "://" + host
 }
 

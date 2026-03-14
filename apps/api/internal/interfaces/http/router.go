@@ -295,9 +295,9 @@ func (r *Router) setupRoutes() {
 			internalAuth := handlers.NewInternalAuthHandler(r.appConfig, r.queries, r.jwtService, r.apiKeyService, r.redisClient)
 			authGroup := internal.Group("/auth")
 			{
-				authGroup.POST("/start", internalAuth.Start)
-				authGroup.GET("/verify", internalAuth.Verify)
-				authGroup.POST("/verify", internalAuth.Verify)
+				authGroup.POST("/google", internalAuth.Google)
+				authGroup.GET("/session", internalAuth.Session)
+				authGroup.POST("/logout", internalAuth.Logout)
 				authGroup.GET("/access-token", internalAuth.AccessToken)
 			}
 
