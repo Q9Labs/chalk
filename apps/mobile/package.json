@@ -12,6 +12,7 @@
     "test": "echo 'No tests configured yet'"
   },
   "dependencies": {
+    "@babel/runtime": "^7.28.4",
     "@cloudflare/realtimekit-react-native": "^0.3.1",
     "@expo/vector-icons": "^15.0.2",
     "@hugeicons/core-free-icons": "^4.0.0",
@@ -22,6 +23,7 @@
     "expo-dev-client": "^55.0.16",
     "expo-linking": "^55.0.7",
     "expo-secure-store": "~55.0.8",
+    "expo-splash-screen": "~55.0.10",
     "expo-status-bar": "~55.0.4",
     "react": "19.2.0",
     "react-native": "0.83.2",
