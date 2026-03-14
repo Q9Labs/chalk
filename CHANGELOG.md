@@ -11,11 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Web/SDK-React: PWA install + update support** — `apps/web` now ships a real Chalk web app manifest, root service worker, install/update/offline prompt shell, and a reusable `usePwaInstall` hook in `@q9labs/chalk-react` so host apps can detect installability and standalone mode without app-specific browser wiring.
 - **Docs: canonical Chalk design system reference** — added `docs/design-system/chalk-design-system.md` as the source-of-truth doc for Chalk's current design system, including `sdk-react` core ownership, `apps/web` brand-layer ownership, current mobile drift, and the normalized token model future work should converge toward.
 - **Docs: Chalk Pencil design-system file** — added `docs/design-system/chalk-design-system.pen` as a dedicated Pencil artifact with separate Core and Brand system sections, reusable primitives, and composition shells for design-system assembly work.
+- **SDK-React-Native: initial workspace scaffold** — added `@q9labs/chalk-react-native`, React Native runtime shims in `sdk-core`, and a new Expo-based `apps/mobile` demo app for native Chalk integration work.
 
 ### Changed
 
 - **Repo: local artifact ignore rules** — root ignore rules now cover Codex/browser caches, Go/build scratch dirs, Turbo prune output, and Expo-generated temp/export folders so routine local work stops polluting `git status`.
 - **Web: route fallback + room end flow refresh** — refreshed TanStack fallback surfaces and room end/index route wiring, including updated web hero assets and generated route tree updates.
+- **API: internal auth flow migrated to Google OAuth** — internal dashboard auth now exchanges Google auth codes, serves session/logout endpoints, and removes the previous magic-link email dependency.
+- **Web: dashboard shell redesign** — `apps/web` dashboard and root shell received a darker editorial visual refresh, with simplified web-app meta handling and updated empty/loading surfaces.
+- **Docs: site brand refresh + design-system expansion** — the Astro docs splash, assets, and custom theme styling now align with the current Chalk brand direction, and the design-system doc adds tactile, layering, shell, and status guidance for core UI work.
+- **CI: web build auth envs** — the web workflow now clears stray local env files before building and injects the Google client ID needed by the updated internal auth flow.
 
 ### Fixed
 
