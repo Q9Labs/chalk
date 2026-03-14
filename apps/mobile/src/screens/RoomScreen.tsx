@@ -1,16 +1,5 @@
 import { ChalkNativeProvider, useConnection, useParticipants, useSession } from "@q9labs/chalk-react-native";
-import { HugeiconsIcon } from "@hugeicons/react-native";
-import { 
-  Mic01Icon, 
-  MicOff01Icon, 
-  VideoIcon, 
-  VideoOffIcon, 
-  ComputerScreenShareIcon, 
-  WavingHand01Icon, 
-  ThumbsUpIcon, 
-  Home01Icon, 
-  Cancel01Icon 
-} from "@hugeicons/core-free-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { JoiningLoadingScreen } from "../components/JoiningLoadingScreen";
@@ -206,7 +195,7 @@ function MeetingRuntime({ route, onBack }: { route: RoomRoute; onBack: () => voi
             <Text style={styles.selfPillName}>{localParticipant?.role === "host" || route.role === "host" ? "Host" : localParticipant?.displayName || route.joinDraft.displayName}</Text>
             {isMuted && (
               <View style={styles.micOffIndicator}>
-                <HugeiconsIcon icon={MicOff01Icon} size={12} color="white" />
+                <Ionicons name="mic-off" size={12} color="white" />
               </View>
             )}
           </View>
@@ -216,31 +205,31 @@ function MeetingRuntime({ route, onBack }: { route: RoomRoute; onBack: () => voi
       <View style={styles.bottomDock}>
         <View style={styles.controlPill}>
           <Pressable onPress={handleToggleAudio} style={[styles.controlButton, isMuted && styles.controlButtonDanger]}>
-            <HugeiconsIcon icon={isMuted ? MicOff01Icon : Mic01Icon} size={24} color="white" />
+            <Ionicons name={isMuted ? "mic-off" : "mic"} size={22} color="white" />
           </Pressable>
           <Pressable onPress={handleToggleVideo} style={[styles.controlButton, isCameraOff && styles.controlButtonDanger]}>
-            <HugeiconsIcon icon={isCameraOff ? VideoOffIcon : VideoIcon} size={24} color="white" />
+            <Ionicons name={isCameraOff ? "videocam-off" : "videocam"} size={22} color="white" />
           </Pressable>
         </View>
 
         <View style={styles.controlPill}>
           <Pressable style={styles.controlButton}>
-            <HugeiconsIcon icon={ComputerScreenShareIcon} size={24} color="white" />
+            <MaterialCommunityIcons name="monitor-share" size={22} color="white" />
           </Pressable>
           <Pressable onPress={handleToggleHand} style={[styles.controlButton, handRaised && styles.controlButtonActive]}>
-            <HugeiconsIcon icon={WavingHand01Icon} size={24} color={handRaised ? Theme.colors.primary : "white"} />
+            <MaterialCommunityIcons name="hand-front-right" size={22} color={handRaised ? Theme.colors.primary : "white"} />
           </Pressable>
           <Pressable style={styles.controlButton}>
-            <HugeiconsIcon icon={ThumbsUpIcon} size={24} color="#facc15" />
+            <Ionicons name="thumbs-up" size={22} color="#facc15" />
           </Pressable>
         </View>
 
         <View style={styles.controlPill}>
-          <Pressable onPress={onBack} style={styles.controlButton}>
-            <HugeiconsIcon icon={Home01Icon} size={24} color="white" />
+          <Pressable onPress={() => void handleLeave()} style={styles.controlButton}>
+            <Ionicons name="home" size={22} color="white" />
           </Pressable>
           <Pressable onPress={handleLeave} style={[styles.controlButton, styles.controlButtonEndCall]}>
-            <HugeiconsIcon icon={Cancel01Icon} size={24} color="white" />
+            <MaterialCommunityIcons name="phone-hangup" size={24} color="white" />
           </Pressable>
         </View>
       </View>

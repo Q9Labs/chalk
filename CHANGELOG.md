@@ -950,7 +950,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the mobile lobby/room screens use icon names that exist in Hugeicons 3.x so Expo resolves and renders them correctly.
+- Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the Android mobile lobby/room screens stay on the stable Expo icon components to avoid the native LobbyScreen crash seen with the Hugeicons renderer path.
 
 ### Changed
 

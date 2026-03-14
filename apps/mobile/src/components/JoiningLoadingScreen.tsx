@@ -61,7 +61,7 @@ export function JoiningLoadingScreen({
   }, [messages]);
 
   useEffect(() => {
-    Animated.parallel([
+    const animation = Animated.parallel([
       Animated.timing(contentOpacity, {
         toValue: 1,
         duration: 900,
@@ -109,7 +109,13 @@ export function JoiningLoadingScreen({
       Animated.loop(createDotAnimation(dot1, 0)),
       Animated.loop(createDotAnimation(dot2, 150)),
       Animated.loop(createDotAnimation(dot3, 300)),
-    ]).start();
+    ]);
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
   }, [auraOpacity, auraScale, contentOpacity, contentScale, dot1, dot2, dot3]);
 
   const activeMessage = messages[messageIndex] ?? message;
