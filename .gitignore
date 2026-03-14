@@ -28,6 +28,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .bun-cache
 .gocache
 .tmp
+.stryker-tmp
+reports/mutation
+apps/web/reports
 .agent-browser-home
 .turbo-prune-*
 *.tsbuildinfo

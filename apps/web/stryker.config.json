@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "testRunner": "vitest",
+  "coverageAnalysis": "perTest",
+  "concurrency": 1,
+  "mutate": ["src/lib/avatarGradient.ts"],
+  "testFiles": ["src/lib/avatarGradient.test.ts"],
+  "vitest": {
+    "related": false,
+    "configFile": "vitest.stryker.config.ts"
+  }
+}

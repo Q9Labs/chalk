@@ -203,3 +203,47 @@ When we continue, use this order:
 
 Mutation testing asks the only question coverage cannot:
 "If the code were wrong in a realistic way, would our tests notice?"
+
+## Chalk Rep 1 Results - 2026-03-15
+
+Target:
+- `apps/web/src/lib/avatarGradient.ts`
+
+Harness:
+- `apps/web/stryker.config.json`
+- `apps/web/vitest.stryker.config.ts`
+- `apps/web/package.json` script: `test:mutation:avatar-gradient`
+
+Dependency/setup findings:
+- Stryker plugin auto-discovery did not work reliably with the Bun install layout here.
+- Explicit `plugins: ["@stryker-mutator/vitest-runner"]` fixed runner loading.
+- Using the main `vite.config.ts` inside the Stryker sandbox failed because it imports workspace package metadata outside the app boundary.
+- A tiny dedicated `vitest.stryker.config.ts` solved that cleanly.
+
+Score progression:
+- initial score: `40.40%`
+- improved score after test strengthening: `85.43%`
+
+What improved coverage-wise:
+- blank + whitespace fallback paths in `getAvatarSeed`
+- blank/single/email/punctuation branches in `getAvatarInitials`
+- malformed/default handling in `sanitizeAvatarGradientPreference`
+- server/client storage behavior
+- event dispatch behavior
+- exact CSS/derived/preset gradient payload assertions instead of only stability checks
+
+What the first report taught us:
+- a "stable for same seed" assertion is too weak for hash-based selection logic
+- imported constants in tests can hide constant-string mutants
+- storage/event helper branches are easy to miss without explicit side-effect assertions
+
+Remaining survivor pattern summary:
+- some survivors look equivalent or low-value:
+  - fallback string literals behind always-truthy branches
+  - trim/regex variants neutralized by existing normalization/filtering
+  - sanitize/default branches that still collapse to the same default object
+- one hash arithmetic mutant still survives; good candidate for a later deeper rep if we want to stress exact preset selection further
+
+Next best targets after this rep:
+- `packages/sdk-core/src/events.ts` for the smallest SDK-first loop
+- `packages/sdk-core/src/transforms.ts` for the highest-signal pure-logic SDK rep
