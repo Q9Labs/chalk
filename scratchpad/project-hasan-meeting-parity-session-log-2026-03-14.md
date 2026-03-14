@@ -60,3 +60,11 @@
   - `bun run check-types`
   - `bun run lint`
   - `bun run test`
+
+## 2026-03-14 23:19:14 PKT
+
+- follow-up cleanup:
+  - removed dead app-local meeting UI files now that `apps/mobile/App.tsx` routes exclusively through `@q9labs/chalk-react-native`
+  - removed obsolete `room` route shape and manual lobby->room helper code from `apps/mobile/src/lib/chalk.ts`
+- intent:
+  - make the mobile app unmistakably thin so future work cannot drift back into app-local meeting logic

@@ -13,12 +13,6 @@ export type JoinContext = {
   expiresAtMs?: number;
 };
 
-export type JoinDraft = {
-  displayName: string;
-  audioEnabled: boolean;
-  videoEnabled: boolean;
-};
-
 type BaseMeetingRoute = {
   roomId: string;
   role: "host" | "participant";
@@ -31,14 +25,7 @@ export type LobbyRoute = BaseMeetingRoute & {
   kind: "lobby";
 };
 
-export type RoomRoute = BaseMeetingRoute & {
-  kind: "room";
-  joinDraft: JoinDraft;
-};
-
-export type MeetingRoute = RoomRoute;
-
-export type MobileRoute = { kind: "home" } | LobbyRoute | RoomRoute;
+export type MobileRoute = { kind: "home" } | LobbyRoute;
 
 const hostTokenStorage: TokenStorage = {
   get: async (key) => SecureStore.getItemAsync(`${HOST_TOKEN_STORAGE_PREFIX}${key}`),
@@ -187,30 +174,6 @@ export function createMeetingLobbyRoute(): LobbyRoute {
     role: "host",
     source: "new-meeting",
   };
-}
-
-export function buildRoomRoute(route: LobbyRoute, draft: JoinDraft): RoomRoute {
-  return {
-    kind: "room",
-    roomId: route.roomId,
-    role: route.role,
-    joinToken: route.joinToken,
-    roomName: route.roomName,
-    source: route.source,
-    joinDraft: {
-      displayName: draft.displayName.trim() || (route.role === "host" ? "Host" : "Guest"),
-      audioEnabled: draft.audioEnabled,
-      videoEnabled: draft.videoEnabled,
-    },
-  };
-}
-
-export function getLobbySupport(route: LobbyRoute): { canJoin: boolean; reason?: string } {
-  if (route.joinToken) {
-    return { canJoin: true };
-  }
-
-  return { canJoin: true };
 }
 
 export function parseInputDestination(input: string): LobbyRoute | null {

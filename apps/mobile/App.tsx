@@ -1,8 +1,8 @@
-import { ChalkNativeProvider, NativeVideoConference, type NativeVideoConferencePhase } from "@q9labs/chalk-react-native";
+import { ChalkNativeProvider, NativeVideoConference } from "@q9labs/chalk-react-native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
-import { clearJoinContext, getApiUrl, getHostTokenProvider, getJoinAccessToken, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute, type RoomRoute } from "./src/lib/chalk";
+import { clearJoinContext, getApiUrl, getHostTokenProvider, getJoinAccessToken, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
 import { HomeScreen } from "./src/screens/HomeScreen";
 
 export default function App(): React.JSX.Element {
@@ -55,7 +55,7 @@ export default function App(): React.JSX.Element {
     <>
       <StatusBar style="light" />
       {route.kind === "home" ? <HomeScreen onNavigate={openLobby} /> : null}
-      {route.kind === "lobby" || route.kind === "room" ? <MeetingScreen key={`${route.kind}:${route.roomId}:${route.joinToken ?? route.source}`} onClose={() => void goHome()} route={route} /> : null}
+      {route.kind === "lobby" ? <MeetingScreen key={`${route.roomId}:${route.joinToken ?? route.source}`} onClose={() => void goHome()} route={route} /> : null}
     </>
   );
 }
@@ -64,7 +64,7 @@ function MeetingScreen({
   route,
   onClose,
 }: {
-  route: LobbyRoute | RoomRoute;
+  route: LobbyRoute;
   onClose: () => void;
 }): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
@@ -77,19 +77,17 @@ function MeetingScreen({
 
     return getHostTokenProvider(apiUrl) ?? undefined;
   }, [apiUrl, route.joinToken]);
-  const initialPhase = (route.kind === "room" ? "joining" : "lobby") satisfies NativeVideoConferencePhase;
 
   return (
     <ChalkNativeProvider apiUrl={apiUrl} debug tokenProvider={tokenProvider} wsUrl={wsUrl}>
       <NativeVideoConference
-        autoJoin={route.kind === "room"}
-        initialJoinSettings={route.kind === "room" ? route.joinDraft : undefined}
-        initialPhase={initialPhase}
+        autoJoin={false}
+        initialPhase="lobby"
         onClose={onClose}
         roomId={route.roomId}
         roomName={route.roomName}
         role={route.role}
-        userName={route.kind === "room" ? route.joinDraft.displayName : route.role === "host" ? "Host" : "Guest"}
+        userName={route.role === "host" ? "Host" : "Guest"}
       />
     </ChalkNativeProvider>
   );

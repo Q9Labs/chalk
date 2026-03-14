@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs: site brand refresh + design-system expansion** — the Astro docs splash, assets, and custom theme styling now align with the current Chalk brand direction, and the design-system doc adds tactile, layering, shell, and status guidance for core UI work.
 - **CI: web build auth envs** — the web workflow now clears stray local env files before building and injects the Google client ID needed by the updated internal auth flow.
 - **Mobile app: package-first meeting wiring** — `apps/mobile` now keeps room auth/deeplink routing in-app but delegates lobby, joining, room, panels, and end-state UX to `@q9labs/chalk-react-native` turnkey components, matching the web app’s thin-consumer architecture more closely.
+- **Mobile app: legacy manual meeting path removed** — deleted the old app-local `LobbyScreen`, `RoomScreen`, and joining-screen implementation plus obsolete room-route helpers, leaving the Expo app with a single SDK-driven meeting path.
 
 ### Fixed
 
