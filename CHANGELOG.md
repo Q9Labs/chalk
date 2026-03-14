@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 ### Fixed
+- **SDK-React-Native/mobile: Hugeicons prejoin lobby patched** — aligned the mobile app and native SDK on Hugeicons core `4.x`, replaced stale prejoin icon symbols with the current exported names, and deferred join/cancel screen swaps until after keyboard/interaction teardown so the Hugeicons-backed lobby stays stable on Expo Android.
 
 ## [0.0.75] - 2026-03-14
 

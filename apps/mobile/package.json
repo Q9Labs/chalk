@@ -14,7 +14,7 @@
   "dependencies": {
     "@cloudflare/realtimekit-react-native": "^0.3.1",
     "@expo/vector-icons": "^15.0.2",
-    "@hugeicons/core-free-icons": "^3.1.0",
+    "@hugeicons/core-free-icons": "^4.0.0",
     "@hugeicons/react-native": "^1.0.13",
     "@q9labs/chalk-core": "workspace:^",
     "@q9labs/chalk-react-native": "workspace:^",
