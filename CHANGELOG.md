@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs: canonical Chalk design system reference** — added `docs/design-system/chalk-design-system.md` as the source-of-truth doc for Chalk's current design system, including `sdk-react` core ownership, `apps/web` brand-layer ownership, current mobile drift, and the normalized token model future work should converge toward.
 - **Docs: Chalk Pencil design-system file** — added `docs/design-system/chalk-design-system.pen` as a dedicated Pencil artifact with separate Core and Brand system sections, reusable primitives, and composition shells for design-system assembly work.
 - **SDK-React-Native: initial workspace scaffold** — added `@q9labs/chalk-react-native`, React Native runtime shims in `sdk-core`, and a new Expo-based `apps/mobile` demo app for native Chalk integration work.
+- **SDK-React-Native: turnkey native meeting flow** — `@q9labs/chalk-react-native` now exports parity-oriented native hooks plus turnkey `NativeVideoConference`, `NativePreJoinLobby`, `NativeMeetingRoom`, `NativeMeetingPanel`, `NativeMediaView`, joining, and end-screen components so native apps can compose Chalk meeting UX from the package instead of rebuilding room flow in-app.
 
 ### Changed
 
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Web: dashboard shell redesign** — `apps/web` dashboard and root shell received a darker editorial visual refresh, with simplified web-app meta handling and updated empty/loading surfaces.
 - **Docs: site brand refresh + design-system expansion** — the Astro docs splash, assets, and custom theme styling now align with the current Chalk brand direction, and the design-system doc adds tactile, layering, shell, and status guidance for core UI work.
 - **CI: web build auth envs** — the web workflow now clears stray local env files before building and injects the Google client ID needed by the updated internal auth flow.
+- **Mobile app: package-first meeting wiring** — `apps/mobile` now keeps room auth/deeplink routing in-app but delegates lobby, joining, room, panels, and end-state UX to `@q9labs/chalk-react-native` turnkey components, matching the web app’s thin-consumer architecture more closely.
 
 ### Fixed
 

@@ -1,10 +1,9 @@
+import { ChalkNativeProvider, NativeVideoConference, type NativeVideoConferencePhase } from "@q9labs/chalk-react-native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
-import { clearJoinContext, getApiUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute, type RoomRoute } from "./src/lib/chalk";
+import { clearJoinContext, getApiUrl, getHostTokenProvider, getJoinAccessToken, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute, type RoomRoute } from "./src/lib/chalk";
 import { HomeScreen } from "./src/screens/HomeScreen";
-import { LobbyScreen } from "./src/screens/LobbyScreen";
-import { RoomScreen } from "./src/screens/RoomScreen";
 
 export default function App(): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
@@ -52,16 +51,46 @@ export default function App(): React.JSX.Element {
     setRoute(nextRoute);
   };
 
-  const openRoom = (nextRoute: RoomRoute) => {
-    setRoute(nextRoute);
-  };
-
   return (
     <>
       <StatusBar style="light" />
       {route.kind === "home" ? <HomeScreen onNavigate={openLobby} /> : null}
-      {route.kind === "lobby" ? <LobbyScreen onBack={() => void goHome()} onJoin={openRoom} route={route} /> : null}
-      {route.kind === "room" ? <RoomScreen onBack={() => void goHome()} route={route} /> : null}
+      {route.kind === "lobby" || route.kind === "room" ? <MeetingScreen key={`${route.kind}:${route.roomId}:${route.joinToken ?? route.source}`} onClose={() => void goHome()} route={route} /> : null}
     </>
+  );
+}
+
+function MeetingScreen({
+  route,
+  onClose,
+}: {
+  route: LobbyRoute | RoomRoute;
+  onClose: () => void;
+}): React.JSX.Element {
+  const apiUrl = useMemo(() => getApiUrl(), []);
+  const wsUrl = useMemo(() => getWsUrl(apiUrl), [apiUrl]);
+  const tokenProvider = useMemo(() => {
+    if (route.joinToken) {
+      const joinToken = route.joinToken;
+      return async () => getJoinAccessToken(apiUrl, joinToken);
+    }
+
+    return getHostTokenProvider(apiUrl) ?? undefined;
+  }, [apiUrl, route.joinToken]);
+  const initialPhase = (route.kind === "room" ? "joining" : "lobby") satisfies NativeVideoConferencePhase;
+
+  return (
+    <ChalkNativeProvider apiUrl={apiUrl} debug tokenProvider={tokenProvider} wsUrl={wsUrl}>
+      <NativeVideoConference
+        autoJoin={route.kind === "room"}
+        initialJoinSettings={route.kind === "room" ? route.joinDraft : undefined}
+        initialPhase={initialPhase}
+        onClose={onClose}
+        roomId={route.roomId}
+        roomName={route.roomName}
+        role={route.role}
+        userName={route.kind === "room" ? route.joinDraft.displayName : route.role === "host" ? "Host" : "Guest"}
+      />
+    </ChalkNativeProvider>
   );
 }

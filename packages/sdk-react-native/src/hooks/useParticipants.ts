@@ -1,14 +1,16 @@
-import type { Participant, ParticipantState } from "@q9labs/chalk-core";
+import type { ParticipantState } from "@q9labs/chalk-core";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 
+type RoomParticipant = ParticipantState["participants"][number];
+
 export interface UseParticipantsReturn {
-  participants: readonly Participant[];
-  localParticipant: Participant | null;
-  remoteParticipants: readonly Participant[];
-  activeSpeaker: Participant | null;
+  participants: readonly RoomParticipant[];
+  localParticipant: RoomParticipant | null;
+  remoteParticipants: readonly RoomParticipant[];
+  activeSpeaker: RoomParticipant | null;
   participantCount: number;
-  getParticipant: (id: string) => Participant | undefined;
+  getParticipant: (id: string) => RoomParticipant | undefined;
   updateDisplayName: (name: string) => Promise<void>;
 }
 
