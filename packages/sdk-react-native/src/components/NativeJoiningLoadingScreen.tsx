@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { getParticipantColor } from "@q9labs/chalk-core";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../ui/theme";
+import { NativeFaceAvatar } from "./NativeFaceAvatar";
+import { NativeGradientSurface } from "./NativeGradientSurface";
 
 export interface NativeJoiningLoadingScreenProps {
   displayName: string;
@@ -28,15 +31,29 @@ export function NativeJoiningLoadingScreen({
   }, [supportingMessages]);
 
   const activeSupportingMessage = supportingMessages[messageIndex] ?? null;
+  const colors = useMemo(() => getParticipantColor(displayName), [displayName]);
 
   return (
     <View style={styles.screen}>
-      <View style={styles.card}>
-        <Text style={styles.eyebrow}>Connecting</Text>
-        <Text style={styles.title}>{displayName || "Guest"}</Text>
-        <Text style={styles.body}>{message}</Text>
-        <ActivityIndicator color={Theme.colors.primary} size="large" />
-        {activeSupportingMessage ? <Text style={styles.supporting}>{activeSupportingMessage}</Text> : null}
+      <NativeGradientSurface participantId={displayName} opacity={0.14} />
+      <View style={styles.content}>
+        <NativeFaceAvatar name={displayName} size={140} />
+
+        <View style={styles.textContainer}>
+          <Text style={styles.title}>{displayName || "Guest"}</Text>
+          <Text style={styles.body}>{message}</Text>
+        </View>
+
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator color={colors.primary} size="large" />
+          <View style={styles.supportingContainer}>
+            {activeSupportingMessage ? (
+              <Text style={styles.supporting}>{activeSupportingMessage}</Text>
+            ) : (
+              <Text style={styles.supporting}>Please wait...</Text>
+            )}
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -48,36 +65,45 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.background,
     alignItems: "center",
     justifyContent: "center",
-    padding: Theme.spacing["2xl"],
+    padding: 24,
   },
-  card: {
+  content: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 40,
     width: "100%",
     maxWidth: 420,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    borderRadius: Theme.radius["2xl"],
-    backgroundColor: Theme.colors.card,
-    padding: Theme.spacing["2xl"],
-    alignItems: "center",
-    gap: Theme.spacing.lg,
   },
-  eyebrow: {
-    ...Theme.typography.eyebrow,
-    color: Theme.colors.primary,
+  textContainer: {
+    alignItems: "center",
+    gap: 8,
   },
   title: {
-    ...Theme.typography.title,
     color: Theme.colors.foreground,
+    fontSize: 32,
+    fontWeight: "800",
     textAlign: "center",
+    letterSpacing: -0.5,
   },
   body: {
-    ...Theme.typography.body,
     color: Theme.colors.mutedForeground,
+    fontSize: 18,
+    fontWeight: "500",
     textAlign: "center",
   },
+  loaderContainer: {
+    alignItems: "center",
+    gap: 20,
+    height: 80, // Fixed height to prevent layout shifts when text changes
+  },
+  supportingContainer: {
+    height: 24,
+    justifyContent: "center",
+  },
   supporting: {
-    ...Theme.typography.meta,
-    color: Theme.colors.mutedForeground,
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 15,
+    fontWeight: "500",
     textAlign: "center",
   },
 });

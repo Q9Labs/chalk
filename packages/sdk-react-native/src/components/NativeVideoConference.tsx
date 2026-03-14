@@ -75,7 +75,6 @@ export function NativeVideoConference({
   const joinedAtRef = useRef<Date | null>(null);
   const didEmitJoinRef = useRef(false);
   const didEmitEndRef = useRef(false);
-  const previousStatusRef = useRef(room.status);
 
   const buildEndData = useCallback((): NativeMeetingEndData => {
     const joinedAt = joinedAtRef.current ?? new Date();
@@ -161,10 +160,7 @@ export function NativeVideoConference({
   }, [connection.isConnected, joinSettings.displayName, onJoin, phase, role, roomId]);
 
   useEffect(() => {
-    const previousStatus = previousStatusRef.current;
-    previousStatusRef.current = room.status;
-
-    if (phase === "meeting" && previousStatus === "connected" && (room.status === "disconnected" || room.status === "failed")) {
+    if (phase === "meeting" && (room.status === "disconnected" || room.status === "failed")) {
       finalizeMeeting();
     }
   }, [finalizeMeeting, phase, room.status]);

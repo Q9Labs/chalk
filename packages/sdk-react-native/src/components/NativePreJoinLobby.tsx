@@ -1,18 +1,22 @@
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { 
-  Mic01Icon, 
-  MicOff01Icon, 
-  VideoIcon, 
-  VideoOffIcon, 
-  Settings01Icon, 
-  Grid02Icon, 
-  Sun01Icon, 
-  Moon01Icon, 
-  ArrowDown01Icon 
+import { RTCView } from "@cloudflare/react-native-webrtc";
+import {
+  ArrowDown01Icon,
+  Mic01Icon,
+  MicOff01Icon,
+  Moon01Icon,
+  Settings01Icon,
+  Sun01Icon,
+  VideoIcon,
+  VideoOffIcon,
 } from "@hugeicons/core-free-icons";
+import { getParticipantColor } from "@q9labs/chalk-core";
 import { useMemo, useState } from "react";
 import { InteractionManager, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { usePreJoinPreview } from "../hooks/usePreJoinPreview";
 import { Theme } from "../ui/theme";
+import { NativeFaceAvatar } from "./NativeFaceAvatar";
+import { NativeGradientSurface } from "./NativeGradientSurface";
 
 export interface NativeJoinSettings {
   displayName: string;
@@ -45,7 +49,8 @@ export function NativePreJoinLobby({
   const [audioEnabled, setAudioEnabled] = useState(initialAudioEnabled);
   const [videoEnabled, setVideoEnabled] = useState(initialVideoEnabled);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const previewLabel = useMemo(() => (displayName.trim().charAt(0) || "H").toUpperCase(), [displayName]);
+  const colors = useMemo(() => getParticipantColor(displayName), [displayName]);
+  const { previewError, previewStream } = usePreJoinPreview(videoEnabled);
 
   const safelyChangeScreen = (action: () => void) => {
     Keyboard.dismiss();
@@ -59,7 +64,6 @@ export function NativePreJoinLobby({
       <ScrollView bounces={false} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Pressable onPress={onCancel ? () => safelyChangeScreen(onCancel) : undefined} style={styles.brandRow}>
-            {/* Provide a colorful placeholder block for Chalk logo since we can't depend on app assets easily */}
             <View style={styles.logoBlock}>
               <View style={styles.logoStripeBlue} />
               <View style={styles.logoStripeYellow} />
@@ -70,7 +74,7 @@ export function NativePreJoinLobby({
 
           <View style={styles.headerDivider} />
 
-          <Text style={styles.headerTitle} numberOfLines={1}>
+          <Text numberOfLines={1} style={styles.headerTitle}>
             {roomName || "Meeting On Chalk"}
           </Text>
 
@@ -80,29 +84,30 @@ export function NativePreJoinLobby({
         </View>
 
         <View style={styles.previewContainer}>
-          <View style={styles.previewGlow} />
+          <View style={[styles.previewGlow, { backgroundColor: colors.primary }]} />
           <View style={styles.previewSurface}>
+            {!previewStream ? <NativeGradientSurface borderRadius={32} participantId={displayName} /> : null}
+            {previewStream ? <RTCView mirror objectFit="cover" streamURL={previewStream.toURL()} style={StyleSheet.absoluteFillObject} zOrder={1} /> : null}
+
             <View style={styles.previewBadge}>
-              <View style={styles.previewBadgeDot} />
+              <View style={[styles.previewBadgeDot, { backgroundColor: colors.primary }]} />
               <Text style={styles.previewBadgeText}>{role === "host" ? "Host" : "Guest"}</Text>
             </View>
 
-            <View style={styles.previewAvatar}>
-              <View style={styles.previewEyesRow}>
-                <View style={styles.previewEyeDot} />
-                <View style={styles.previewEyeDot} />
+            {!previewStream ? (
+              <View style={styles.previewAvatarWrap}>
+                <NativeFaceAvatar name={displayName} size={120} />
               </View>
-              <Text style={styles.previewAvatarText}>{previewLabel}</Text>
-            </View>
+            ) : null}
 
             <View style={styles.previewControls}>
               <View style={styles.mediaGroup}>
-                <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={styles.mediaToggle}>
+                <Pressable onPress={() => setAudioEnabled((current) => !current)} style={styles.mediaToggle}>
                   <HugeiconsIcon color={audioEnabled ? "white" : "#ef4444"} icon={audioEnabled ? Mic01Icon : MicOff01Icon} size={20} strokeWidth={1.8} />
                   <HugeiconsIcon color="rgba(255,255,255,0.4)" icon={ArrowDown01Icon} size={14} strokeWidth={1.8} />
                 </Pressable>
                 <View style={styles.controlDivider} />
-                <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={styles.mediaToggle}>
+                <Pressable onPress={() => setVideoEnabled((current) => !current)} style={styles.mediaToggle}>
                   <HugeiconsIcon color={videoEnabled ? "white" : "#ef4444"} icon={videoEnabled ? VideoIcon : VideoOffIcon} size={20} strokeWidth={1.8} />
                   <HugeiconsIcon color="rgba(255,255,255,0.4)" icon={ArrowDown01Icon} size={14} strokeWidth={1.8} />
                 </Pressable>
@@ -112,10 +117,6 @@ export function NativePreJoinLobby({
 
               <Pressable style={styles.iconButton}>
                 <HugeiconsIcon color="white" icon={Settings01Icon} size={20} strokeWidth={1.8} />
-              </Pressable>
-
-              <Pressable style={[styles.iconButton, styles.iconButtonActive]}>
-                <HugeiconsIcon color="#22c55e" icon={Grid02Icon} size={20} strokeWidth={1.8} />
               </Pressable>
             </View>
           </View>
@@ -134,6 +135,7 @@ export function NativePreJoinLobby({
           />
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {previewError && videoEnabled ? <Text style={styles.error}>Camera preview unavailable: {previewError}</Text> : null}
 
           <Pressable
             onPress={() =>
@@ -145,7 +147,7 @@ export function NativePreJoinLobby({
                 }),
               )
             }
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
           >
             <Text style={styles.primaryButtonText}>Ask to join</Text>
           </Pressable>
@@ -227,15 +229,14 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     bottom: 0,
-    backgroundColor: "#22c55e",
     borderRadius: 32,
-    opacity: 0.15,
+    opacity: 0.18,
     transform: [{ scale: 1.05 }],
   },
   previewSurface: {
     height: 240,
     borderRadius: 32,
-    backgroundColor: "#26c25b",
+    backgroundColor: "#0f172a",
     padding: 20,
     justifyContent: "space-between",
     overflow: "hidden",
@@ -254,39 +255,15 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#22c55e",
   },
   previewBadgeText: {
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
   },
-  previewAvatar: {
+  previewAvatarWrap: {
     alignSelf: "center",
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
     marginTop: -10,
-  },
-  previewEyesRow: {
-    flexDirection: "row",
-    gap: 36,
-    marginBottom: 2,
-  },
-  previewEyeDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#ffffff",
-  },
-  previewAvatarText: {
-    color: "#ffffff",
-    fontSize: 40,
-    fontWeight: "400",
   },
   previewControls: {
     alignSelf: "center",
@@ -328,9 +305,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconButtonActive: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-  },
   joinPanel: {
     gap: 16,
     marginTop: 8,
@@ -365,11 +339,9 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#22c55e",
     borderRadius: 30,
     height: 60,
     marginTop: 4,
-    shadowColor: "#22c55e",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

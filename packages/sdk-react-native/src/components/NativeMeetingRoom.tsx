@@ -1,6 +1,19 @@
-import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
+import type { LayoutMode, ParticipantState } from "@q9labs/chalk-core";
+import { getParticipantColor, getParticipantInitial } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import {
+  Cancel01Icon,
+  ComputerScreenShareIcon,
+  Home01Icon,
+  Mic01Icon,
+  MicOff01Icon,
+  ThumbsUpIcon,
+  Video01Icon,
+  VideoOffIcon,
+  WavingHand01Icon,
+} from "@hugeicons/core-free-icons";
 import { useChalkSession } from "../context/chalk-native-provider";
 import { useChat } from "../hooks/useChat";
 import { useDevices } from "../hooks/useDevices";
@@ -9,12 +22,12 @@ import { useLayout } from "../hooks/useLayout";
 import { useMedia } from "../hooks/useMedia";
 import { usePanels } from "../hooks/usePanels";
 import { useParticipants } from "../hooks/useParticipants";
-import { useRecording } from "../hooks/useRecording";
-import { useRoom } from "../hooks/useRoom";
 import { useScreenShare } from "../hooks/useScreenShare";
 import { useTranscripts } from "../hooks/useTranscripts";
 import { useWhiteboard } from "../hooks/useWhiteboard";
 import { Theme } from "../ui/theme";
+import { NativeFaceAvatar } from "./NativeFaceAvatar";
+import { NativeGradientSurface } from "./NativeGradientSurface";
 import { NativeMediaView } from "./NativeMediaView";
 import { NativeMeetingPanel, type NativeMeetingPanelName } from "./NativeMeetingPanel";
 
@@ -39,26 +52,21 @@ export interface NativeMeetingRoomProps {
   onEndForAll?: () => void | Promise<void>;
 }
 
-const REACTION_EMOJIS: readonly ReactionEmoji[] = ["👍", "🎉", "❤️", "😂"];
-
-export function NativeMeetingRoom({ roomName, features, onLeave, onEndForAll }: NativeMeetingRoomProps): React.JSX.Element {
-  const enabled = { chat: true, participants: true, transcripts: true, settings: true, screenShare: true, recording: true, reactions: true, handRaise: true, whiteboard: true, ...features };
+export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JSX.Element {
   const { removeParticipant, muteParticipant, unmuteParticipant } = useChalkSession();
-  const room = useRoom();
   const media = useMedia();
   const devices = useDevices();
   const participants = useParticipants();
   const chat = useChat();
   const transcripts = useTranscripts();
   const interactions = useInteractions();
-  const recording = useRecording();
   const screenShare = useScreenShare();
   const layout = useLayout();
   const panels = usePanels();
   const whiteboard = useWhiteboard();
+
   const [chatDraft, setChatDraft] = useState("");
   const [sheetPanel, setSheetPanel] = useState<NativeMeetingPanelName | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const isHost = (participants.localParticipant?.role ?? "participant") === "host";
   const panel = sheetPanel ?? (panels.activePanel as Exclude<typeof panels.activePanel, null> | null);
@@ -66,8 +74,9 @@ export function NativeMeetingRoom({ roomName, features, onLeave, onEndForAll }: 
     () => pickStageParticipant(screenShare.sharerParticipantId, participants.remoteParticipants, participants.localParticipant, participants.activeSpeaker),
     [screenShare.sharerParticipantId, participants.remoteParticipants, participants.localParticipant, participants.activeSpeaker],
   );
-  const stageTrack = screenShare.isActive ? screenShare.videoTrack ?? stageParticipant?.screenShareTrack ?? stageParticipant?.videoTrack ?? null : stageParticipant?.videoTrack ?? participants.localParticipant?.videoTrack ?? null;
-  const localPreviewTrack = participants.localParticipant?.videoTrack ?? null;
+  const stageTrack = screenShare.isActive
+    ? screenShare.videoTrack ?? stageParticipant?.screenShareTrack ?? stageParticipant?.videoTrack ?? null
+    : stageParticipant?.videoTrack ?? participants.localParticipant?.videoTrack ?? null;
 
   useEffect(() => {
     if (panels.activePanel === "chat") {
@@ -76,11 +85,10 @@ export function NativeMeetingRoom({ roomName, features, onLeave, onEndForAll }: 
   }, [panels.activePanel, chat]);
 
   const runAsync = useCallback(async (action: () => Promise<unknown>) => {
-    setError(null);
     try {
       await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Action failed");
+      console.warn("NativeMeetingRoom async action failed:", cause);
     }
   }, []);
 
@@ -103,71 +111,83 @@ export function NativeMeetingRoom({ roomName, features, onLeave, onEndForAll }: 
     panels.closePanel();
   }, [panels]);
 
+  const stageName = stageParticipant?.displayName || "Participant";
+  const selfName = participants.localParticipant?.displayName || "Guest";
+  const isMuted = !media.isAudioEnabled;
+  const isCameraOff = !media.isVideoEnabled;
+  const handRaised = interactions.isHandRaised;
+  const selfColors = useMemo(() => getParticipantColor(selfName), [selfName]);
+
   return (
-    <View style={styles.screen}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.eyebrow}>{room.status === "reconnecting" ? "Reconnecting" : "Meeting room"}</Text>
-          <Text style={styles.title}>{roomName || room.roomName || room.roomId || "Chalk meeting"}</Text>
-        </View>
-        <Text style={styles.meta}>{participants.participantCount} people</Text>
-      </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <View style={styles.stageArea}>
+    <View style={styles.roomScreen}>
+      <View style={styles.stageFrame}>
         {layout.layout === "grid" ? (
           <ScrollView contentContainerStyle={styles.grid}>
             {participants.participants.map((participant) => (
               <View key={participant.id} style={styles.gridTile}>
-                <NativeMediaView label={participant.displayName} participant={participant as any} track={participant.videoTrack ?? participant.screenShareTrack} />
+                <NativeMediaView label={participant.displayName} participant={participant as RoomParticipant} track={participant.videoTrack ?? participant.screenShareTrack} />
               </View>
             ))}
           </ScrollView>
         ) : (
-          <>
-            <NativeMediaView emphasizeMuted label={screenShare.isActive ? `${stageParticipant?.displayName || "Participant"} presenting` : undefined} participant={stageParticipant as any} track={stageTrack} />
-            {participants.localParticipant && stageParticipant?.id !== participants.localParticipant.id ? (
-              <View style={styles.localPreview}>
-                <NativeMediaView emphasizeMuted label="You" mirror participant={participants.localParticipant as any} track={localPreviewTrack} />
+          <View style={styles.stageSurface}>
+            <NativeGradientSurface borderRadius={36} participantId={stageName} />
+            {stageTrack ? (
+              <View style={styles.stageVideoContainer}>
+                <NativeMediaView participant={stageParticipant as RoomParticipant} track={stageTrack} zOrder={0} />
               </View>
-            ) : null}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-              {participants.remoteParticipants.map((participant) => (
-                <View key={participant.id} style={styles.stripTile}>
-                  <NativeMediaView label={participant.displayName} participant={participant as any} track={participant.screenShareTrack ?? participant.videoTrack} />
+            ) : (
+              <View style={styles.stageCenter}>
+                <NativeFaceAvatar name={stageName} size={160} />
+              </View>
+            )}
+
+            <View style={styles.selfPill}>
+              <View style={[styles.selfAvatar, { backgroundColor: selfColors.primary }]}>
+                <Text style={styles.selfAvatarText}>{getParticipantInitial(selfName)}</Text>
+              </View>
+              <Text style={styles.selfPillName}>{isHost ? "Host" : selfName}</Text>
+              {isMuted ? (
+                <View style={styles.micOffIndicator}>
+                  <HugeiconsIcon color="white" icon={MicOff01Icon} size={12} />
                 </View>
-              ))}
-            </ScrollView>
-          </>
+              ) : null}
+            </View>
+          </View>
         )}
       </View>
 
-      {interactions.activeReactions.length > 0 ? (
-        <View style={styles.reactionRow}>
-          {interactions.activeReactions.slice(0, 4).map((reaction) => (
-            <View key={`${reaction.participantId}-${reaction.timestamp.toISOString()}`} style={styles.reactionBadge}>
-              <Text style={styles.reactionText}>{reaction.emoji}</Text>
-            </View>
-          ))}
+      <View style={styles.bottomDock}>
+        <View style={styles.controlPill}>
+          <Pressable onPress={() => void runAsync(media.toggleAudio)} style={[styles.controlButton, isMuted && styles.controlButtonDanger]}>
+            <HugeiconsIcon color="white" icon={isMuted ? MicOff01Icon : Mic01Icon} size={24} />
+          </Pressable>
+          <Pressable onPress={() => void runAsync(media.toggleVideo)} style={[styles.controlButton, isCameraOff && styles.controlButtonDanger]}>
+            <HugeiconsIcon color="white" icon={isCameraOff ? VideoOffIcon : Video01Icon} size={24} />
+          </Pressable>
         </View>
-      ) : null}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controls}>
-        <ControlButton active={media.isAudioEnabled} label={media.isAudioEnabled ? "Mic on" : "Mic off"} onPress={() => void runAsync(media.toggleAudio)} />
-        <ControlButton active={media.isVideoEnabled} label={media.isVideoEnabled ? "Cam on" : "Cam off"} onPress={() => void runAsync(media.toggleVideo)} />
-        {enabled.screenShare ? <ControlButton active={screenShare.isLocalSharing} label={screenShare.isLocalSharing ? "Stop share" : "Share"} onPress={() => void runAsync(() => screenShare.toggle())} /> : null}
-        {enabled.recording ? <ControlButton active={recording.isRecording} label={recording.isRecording ? `Recording ${recording.durationSeconds}s` : "Record"} onPress={() => void runAsync(recording.toggle)} /> : null}
-        {enabled.handRaise ? <ControlButton active={interactions.isHandRaised} label={interactions.isHandRaised ? "Lower hand" : "Raise hand"} onPress={interactions.toggleHand} /> : null}
-        {enabled.reactions ? REACTION_EMOJIS.map((emoji) => <ControlButton key={emoji} label={emoji} onPress={() => interactions.sendReaction(emoji)} />) : null}
-        {enabled.chat ? <ControlButton active={panel === "chat"} label={`Chat ${chat.unreadCount > 0 ? `(${chat.unreadCount})` : ""}`.trim()} onPress={() => openSheet("chat")} /> : null}
-        {enabled.participants ? <ControlButton active={panel === "participants"} label="People" onPress={() => openSheet("participants")} /> : null}
-        {enabled.transcripts ? <ControlButton active={panel === "transcripts"} label="Transcript" onPress={() => openSheet("transcripts")} /> : null}
-        {enabled.settings ? <ControlButton active={panel === "settings"} label={layout.layout === "grid" ? "Grid" : "Layout"} onPress={() => openSheet("settings")} /> : null}
-        {enabled.whiteboard ? <ControlButton active={panel === "whiteboard" || whiteboard.isOpen} label="Whiteboard" onPress={() => openSheet("whiteboard")} /> : null}
-        <ControlButton label="Leave" tone="danger" onPress={() => void runAsync(async () => onLeave())} />
-        {isHost && onEndForAll ? <ControlButton label="End for all" tone="danger" onPress={() => void runAsync(async () => onEndForAll())} /> : null}
-      </ScrollView>
+        <View style={styles.controlPill}>
+          <Pressable onPress={() => void runAsync(() => screenShare.toggle())} style={[styles.controlButton, screenShare.isLocalSharing && styles.controlButtonActive]}>
+            <HugeiconsIcon color="white" icon={ComputerScreenShareIcon} size={24} />
+          </Pressable>
+          <Pressable onPress={interactions.toggleHand} style={[styles.controlButton, handRaised && styles.controlButtonActive]}>
+            <HugeiconsIcon color={handRaised ? Theme.colors.primary : "white"} icon={WavingHand01Icon} size={24} />
+          </Pressable>
+          <Pressable onPress={() => interactions.sendReaction("👍")} style={styles.controlButton}>
+            <HugeiconsIcon color="#facc15" icon={ThumbsUpIcon} size={24} />
+          </Pressable>
+        </View>
+
+        <View style={styles.controlPill}>
+          <Pressable onPress={() => openSheet("settings")} style={styles.controlButton}>
+            <HugeiconsIcon color="white" icon={Home01Icon} size={24} />
+          </Pressable>
+          <Pressable onPress={() => void runAsync(async () => onLeave())} style={[styles.controlButton, styles.controlButtonEndCall]}>
+            <HugeiconsIcon color="white" icon={Cancel01Icon} size={24} />
+          </Pressable>
+        </View>
+      </View>
 
       <NativeMeetingPanel
         cameras={devices.cameras}
@@ -227,123 +247,115 @@ function pickStageParticipant(
   return activeSpeaker ?? remoteParticipants.find((participant) => participant.videoTrack) ?? remoteParticipants[0] ?? localParticipant;
 }
 
-function ControlButton({
-  label,
-  onPress,
-  active = false,
-  tone = "neutral",
-}: {
-  label: string;
-  onPress: () => void;
-  active?: boolean;
-  tone?: "neutral" | "danger";
-}): React.JSX.Element {
-  return (
-    <Pressable onPress={onPress} style={[styles.controlButton, active && styles.controlButtonActive, tone === "danger" && styles.controlButtonDanger]}>
-      <Text style={styles.controlButtonText}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  screen: {
+  roomScreen: {
     flex: 1,
-    backgroundColor: Theme.colors.background,
+    backgroundColor: "#000000",
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  stageFrame: {
+    flex: 1,
+    borderRadius: 36,
+    overflow: "hidden",
+    backgroundColor: "#101314",
+  },
+  stageSurface: {
+    flex: 1,
+    backgroundColor: "#0f172a",
+  },
+  stageVideoContainer: {
+    flex: 1,
+    borderRadius: 36,
+    overflow: "hidden",
+  },
+  stageCenter: {
+    flex: 1,
     alignItems: "center",
-    paddingHorizontal: Theme.spacing.lg,
-    paddingTop: Theme.spacing["3xl"],
-    paddingBottom: Theme.spacing.md,
+    justifyContent: "center",
   },
-  eyebrow: {
-    ...Theme.typography.eyebrow,
-    color: Theme.colors.primary,
-  },
-  title: {
-    ...Theme.typography.heading,
-    color: Theme.colors.foreground,
-  },
-  meta: {
-    ...Theme.typography.meta,
-    color: Theme.colors.mutedForeground,
-  },
-  error: {
-    ...Theme.typography.meta,
-    color: Theme.colors.error,
-    paddingHorizontal: Theme.spacing.lg,
-    paddingBottom: Theme.spacing.sm,
-  },
-  stageArea: {
-    flex: 1,
-    paddingHorizontal: Theme.spacing.lg,
-    paddingBottom: Theme.spacing.md,
-    gap: Theme.spacing.md,
-  },
-  localPreview: {
+  selfPill: {
     position: "absolute",
-    right: Theme.spacing["2xl"],
-    bottom: Theme.spacing["2xl"],
-    width: 108,
-    height: 144,
+    left: 16,
+    bottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingLeft: 6,
+    paddingRight: 10,
+    paddingVertical: 6,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
-  strip: {
-    gap: Theme.spacing.sm,
+  selfAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  stripTile: {
-    width: 120,
-    height: 84,
+  selfAvatarText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  selfPillName: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  micOffIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#ef4444",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomDock: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+    gap: 8,
+  },
+  controlPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#111111",
+    borderRadius: 28,
+    padding: 4,
+    gap: 4,
+  },
+  controlButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  controlButtonActive: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  controlButtonDanger: {
+    backgroundColor: "#ef4444",
+  },
+  controlButtonEndCall: {
+    backgroundColor: "#ef4444",
+    width: 64,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: Theme.spacing.md,
+    padding: 16,
   },
   gridTile: {
     width: "48.5%",
     aspectRatio: 0.78,
-  },
-  reactionRow: {
-    flexDirection: "row",
-    gap: Theme.spacing.sm,
-    paddingHorizontal: Theme.spacing.lg,
-    paddingBottom: Theme.spacing.sm,
-  },
-  reactionBadge: {
-    borderRadius: Theme.radius.full,
-    backgroundColor: Theme.colors.glassSurface,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
-  },
-  reactionText: {
-    fontSize: 20,
-  },
-  controls: {
-    gap: Theme.spacing.sm,
-    paddingHorizontal: Theme.spacing.lg,
-    paddingBottom: Theme.spacing.md,
-  },
-  controlButton: {
-    borderRadius: Theme.radius.full,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.controlsBackground,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.md,
-  },
-  controlButtonActive: {
-    backgroundColor: Theme.colors.primary,
-    borderColor: Theme.colors.primary,
-  },
-  controlButtonDanger: {
-    backgroundColor: Theme.colors.error,
-    borderColor: Theme.colors.error,
-  },
-  controlButtonText: {
-    color: Theme.colors.foreground,
-    fontSize: 13,
-    fontWeight: "700",
   },
 });

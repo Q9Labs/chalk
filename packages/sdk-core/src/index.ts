@@ -30,6 +30,16 @@ export { EventEmitter } from "./events.ts";
 // ConferenceSession
 export { ConferenceSession, type ConferenceSessionEvents, type Transcript } from "./room.ts";
 export { camelToSnake, camelToSnakeString, snakeToCamel, snakeToCamelString } from "./transforms.ts";
+export {
+  getParticipantAvatarGradient,
+  getParticipantBorder,
+  getParticipantColor,
+  getParticipantGradient,
+  getParticipantInitial,
+  getParticipantThemeVariables,
+  PARTICIPANT_GRADIENT_PRESETS,
+} from "./utils/participant-colors.ts";
+export type { ParticipantGradientPreference } from "./utils/participant-colors.ts";
 // WebSocket client (for advanced/React Native integrations)
 export { WSClient } from "./ws-client.ts";
 

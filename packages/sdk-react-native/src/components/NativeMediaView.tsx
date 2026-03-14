@@ -1,16 +1,19 @@
 import type { Participant } from "@q9labs/chalk-core";
-import { MediaStream, RTCView } from "@cloudflare/react-native-webrtc";
+import { MediaStream, RTCView, type MediaStreamTrack as NativeMediaStreamTrack } from "@cloudflare/react-native-webrtc";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Theme } from "../ui/theme";
+import { NativeFaceAvatar } from "./NativeFaceAvatar";
+import { NativeGradientSurface } from "./NativeGradientSurface";
 
 interface NativeMediaViewProps {
   participant: Participant | null;
-  track: MediaStreamTrack | null | undefined;
+  track: MediaStreamTrack | NativeMediaStreamTrack | null | undefined;
   label?: string;
   mirror?: boolean;
   objectFit?: "cover" | "contain";
   emphasizeMuted?: boolean;
+  zOrder?: number;
 }
 
 export function NativeMediaView({
@@ -20,28 +23,27 @@ export function NativeMediaView({
   mirror = false,
   objectFit = "cover",
   emphasizeMuted = false,
+  zOrder = 0,
 }: NativeMediaViewProps): React.JSX.Element {
   const stream = useMemo(() => {
     if (!track) {
       return null;
     }
 
-    return new MediaStream([track]);
+    return new MediaStream([track as NativeMediaStreamTrack]);
   }, [track]);
 
   const name = participant?.displayName?.trim() || label || "Participant";
-  const initial = name.charAt(0).toUpperCase() || "C";
   const isMuted = emphasizeMuted && participant ? !participant.audioEnabled : false;
 
   return (
     <View style={styles.surface}>
-      {stream ? <RTCView mirror={mirror} objectFit={objectFit} streamURL={stream.toURL()} style={StyleSheet.absoluteFillObject} /> : null}
+      {stream ? <RTCView mirror={mirror} objectFit={objectFit} streamURL={stream.toURL()} style={StyleSheet.absoluteFillObject} zOrder={Math.max(1, zOrder)} /> : null}
 
       {!stream ? (
         <View style={styles.fallback}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
-          </View>
+          <NativeGradientSurface borderRadius={Theme.radius.xl} opacity={0.92} participantId={name} />
+          <NativeFaceAvatar name={name} size={88} textSize={34} />
         </View>
       ) : null}
 
@@ -71,19 +73,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-  },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  avatarText: {
-    color: Theme.colors.foreground,
-    fontSize: 34,
-    fontWeight: "700",
   },
   badgeRow: {
     position: "absolute",
