@@ -1,0 +1,171 @@
+---
+title: Transcription
+description: Post-meeting transcription API
+---
+
+## Queue Transcription
+
+```http
+POST /api/v1/recordings/{id}/transcribe
+```
+
+Queues a transcription job for the specified recording.
+
+### Request
+
+```json
+{
+  "room_id": "room_abc123",
+  "provider": "whisper"
+}
+```
+
+| Field      | Type   | Required | Description                                            |
+| ---------- | ------ | -------- | ------------------------------------------------------ |
+| `room_id`  | string | Yes      | ID of the room                                         |
+| `provider` | string | No       | Transcription provider (uses default if not specified) |
+
+### Response
+
+```json
+{
+  "transcript_id": "txn_abc123",
+  "status": "pending"
+}
+```
+
+## Get Transcript by Recording ID
+
+```http
+GET /api/v1/recordings/{id}/transcript
+```
+
+Retrieves the transcript for a specific recording.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "txn_abc123",
+    "recording_id": "rec_abc123",
+    "room_id": "room_abc123",
+    "status": "completed",
+    "provider": "whisper",
+    "content": {
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 5.2,
+          "text": "Welcome to today's lecture.",
+          "speaker": "speaker_1"
+        }
+      ]
+    },
+    "created_at": "2026-01-06T12:00:00Z",
+    "completed_at": "2026-01-06T12:05:00Z"
+  }
+}
+```
+
+## Get Transcript by ID
+
+```http
+GET /api/v1/transcription/{id}
+```
+
+Retrieves a transcript by its transcript ID.
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "txn_abc123",
+    "recording_id": "rec_abc123",
+    "room_id": "room_abc123",
+    "status": "completed",
+    "provider": "whisper",
+    "content": {
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 5.2,
+          "text": "Welcome to today's lecture.",
+          "speaker": "speaker_1"
+        }
+      ]
+    },
+    "created_at": "2026-01-06T12:00:00Z",
+    "completed_at": "2026-01-06T12:05:00Z"
+  }
+}
+```
+
+## List Providers
+
+```http
+GET /api/v1/transcription/providers
+```
+
+Lists available transcription providers.
+
+### Response
+
+```json
+{
+  "providers": [
+    {
+      "id": "whisper",
+      "name": "OpenAI Whisper",
+      "supported_languages": ["en", "es", "fr", "de", "ar"]
+    },
+    {
+      "id": "deepgram",
+      "name": "Deepgram",
+      "supported_languages": ["en", "es", "fr"]
+    }
+  ],
+  "default_provider": "whisper"
+}
+```
+
+## List Room Transcripts
+
+```http
+GET /api/v1/rooms/{id}/post-meeting-transcripts
+```
+
+Lists all post-meeting transcripts for a specific room.
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "txn_abc123",
+      "recording_id": "rec_abc123",
+      "status": "completed",
+      "provider": "whisper",
+      "created_at": "2026-01-06T12:00:00Z"
+    },
+    {
+      "id": "txn_def456",
+      "recording_id": "rec_def456",
+      "status": "pending",
+      "provider": "whisper",
+      "created_at": "2026-01-07T10:00:00Z"
+    }
+  ]
+}
+```
+
+## Transcript Status
+
+| Status       | Description                  |
+| ------------ | ---------------------------- |
+| `pending`    | Job queued, waiting to start |
+| `processing` | Transcription in progress    |
+| `completed`  | Transcript ready             |
+| `failed`     | Transcription failed         |

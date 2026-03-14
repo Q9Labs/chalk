@@ -1,0 +1,189 @@
+---
+title: Participants
+description: Participant management API
+---
+
+## Add Participant
+
+```http
+POST /api/v1/rooms/{id}/participants
+```
+
+The room `{id}` can be either a UUID or a room name. If the room doesn't exist and `allow_early_join` is enabled in tenant config, the room will be created automatically.
+
+### Request
+
+```json
+{
+  "display_name": "John Doe",
+  "external_user_id": "user_123",
+  "role": "participant"
+}
+```
+
+| Field              | Type   | Required | Description                                    |
+| ------------------ | ------ | -------- | ---------------------------------------------- |
+| `display_name`     | string | Yes      | Display name shown to other participants       |
+| `external_user_id` | string | No       | Your application's user identifier             |
+| `role`             | string | No       | Participant role (e.g., "host", "participant") |
+
+### Response
+
+```json
+{
+  "participant": {
+    "id": "p_abc123",
+    "room_id": "room_abc123",
+    "display_name": "John Doe",
+    "external_user_id": "user_123",
+    "role": "participant"
+  },
+  "room": {
+    "id": "room_abc123",
+    "name": "CS101 Lecture",
+    "status": "active"
+  },
+  "room_created": false,
+  "tenant_config": {},
+  "access_token": "eyJhbG...",
+  "refresh_token": "eyJhbG...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "auth_token": "eyJhbG...",
+  "should_start_recording": false
+}
+```
+
+| Field                    | Description                                    |
+| ------------------------ | ---------------------------------------------- |
+| `room_created`           | `true` if room was auto-created via early join |
+| `access_token`           | JWT for SDK authentication                     |
+| `auth_token`             | JWT for API authentication                     |
+| `should_start_recording` | Indicates if client should initiate recording  |
+
+## List Participants
+
+```http
+GET /api/v1/rooms/{id}/participants
+```
+
+### Query Parameters
+
+| Parameter | Type    | Default | Description                                 |
+| --------- | ------- | ------- | ------------------------------------------- |
+| `active`  | boolean | false   | If `true`, returns only active participants |
+
+### Response
+
+```json
+{
+  "participants": [
+    {
+      "id": "p_abc123",
+      "display_name": "John Doe",
+      "external_user_id": "user_123",
+      "role": "host",
+      "joined_at": "2026-01-06T10:00:00Z"
+    },
+    {
+      "id": "p_def456",
+      "display_name": "Jane Smith",
+      "role": "participant",
+      "joined_at": "2026-01-06T10:05:00Z"
+    }
+  ]
+}
+```
+
+## Remove Participant
+
+```http
+DELETE /api/v1/rooms/{id}/participants/{pid}
+```
+
+Kicks the participant from the room.
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Refresh Participant Token
+
+```http
+POST /api/v1/rooms/{id}/participants/{pid}/token
+```
+
+Generates new tokens for an existing participant.
+
+### Response
+
+```json
+{
+  "access_token": "eyJhbG...",
+  "refresh_token": "eyJhbG...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "auth_token": "eyJhbG..."
+}
+```
+
+## Bulk Add Participants
+
+```http
+POST /api/v1/rooms/{id}/participants/bulk
+```
+
+Add multiple participants to a room in a single request.
+
+### Request
+
+```json
+{
+  "participants": [
+    {
+      "display_name": "Alice",
+      "external_user_id": "user_001",
+      "role": "participant"
+    },
+    {
+      "display_name": "Bob",
+      "external_user_id": "user_002",
+      "role": "participant"
+    }
+  ]
+}
+```
+
+### Response
+
+```json
+{
+  "results": [
+    {
+      "participant_id": "p_abc123",
+      "success": true,
+      "access_token": "eyJhbG...",
+      "auth_token": "eyJhbG..."
+    },
+    {
+      "participant_id": "p_def456",
+      "success": true,
+      "access_token": "eyJhbG...",
+      "auth_token": "eyJhbG..."
+    }
+  ]
+}
+```
+
+Failed additions include an `error` field:
+
+```json
+{
+  "results": [
+    {
+      "success": false,
+      "error": "display_name is required"
+    }
+  ]
+}
+```
