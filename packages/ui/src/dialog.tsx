@@ -1,6 +1,7 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { X } from "lucide-react";
 import type * as React from "react";
+import { getPortalChalkTheme } from "./lib/chalk-portal-theme";
 import { cn } from "./lib/utils";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -20,13 +21,17 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 }
 
 function DialogContent({ className, children, ...props }: DialogPrimitive.Popup.Props) {
+  const chalkTheme = getPortalChalkTheme();
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-chalk=""
+        data-chalk-theme={chalkTheme}
         className={cn(
-          "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-card ring-border fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl p-0 shadow-2xl ring-1 duration-300 outline-none overflow-hidden",
+          "chalk-root data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-card ring-border fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl p-0 shadow-2xl ring-1 duration-300 outline-none overflow-hidden",
           className,
         )}
         {...props}

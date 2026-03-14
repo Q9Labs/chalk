@@ -6,6 +6,7 @@ import { usePrefersReducedMotion, useMediaQuery } from "../../hooks/useMediaQuer
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarGradient, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
 import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
+import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { IconButton, Input, Toggle, VolumeSlider } from "../atomic";
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
@@ -159,6 +160,7 @@ export const SettingsDialog = React.memo(
     isDarkMode = false,
   }: SettingsDialogProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
+    const portalTheme = resolvePortalThemeFromDocument();
     const isDesktop = useMediaQuery("(min-width: 768px)");
     const disableMotion = prefersReducedMotion || reducedMotion;
     const [activeSection, setActiveSection] = useState<SectionId>("audio");
@@ -546,7 +548,10 @@ export const SettingsDialog = React.memo(
         <Dialog.Portal>
           <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-background/80", !disableMotion && "animate-in fade-in duration-200")} />
           <Dialog.Popup
+            data-chalk
+            data-chalk-theme={portalTheme}
             className={cn(
+              "chalk-root",
               "fixed inset-0 z-[101] flex flex-col overflow-hidden bg-card text-card-foreground shadow-2xl md:inset-x-4 md:top-1/2 md:h-[min(720px,calc(100vh-2rem))] md:-translate-y-1/2 md:rounded-[28px] md:border md:border-border md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
               !disableMotion && "animate-in fade-in duration-300 ease-out",
               !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",

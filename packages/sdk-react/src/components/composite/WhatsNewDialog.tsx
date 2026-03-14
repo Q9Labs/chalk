@@ -4,6 +4,7 @@ import { cn } from "../../utils/cn";
 import { Clock01Icon, SparklesIcon, TickDouble01Icon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import type { WhatsNewData } from "../../hooks/ui/useWhatsNew";
+import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { ReleaseBadge } from "../atomic/ReleaseBadge";
 
 export interface WhatsNewDialogProps {
@@ -51,6 +52,7 @@ export interface WhatsNewDialogProps {
  */
 export const WhatsNewDialog = React.memo<WhatsNewDialogProps>(({ isOpen, onClose, releases, currentIndex, onNext, onPrev, onSkipAll, onLater, className }) => {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const portalTheme = resolvePortalThemeFromDocument();
   const modalRef = useRef<HTMLDivElement>(null);
 
   const total = releases.length;
@@ -98,7 +100,7 @@ export const WhatsNewDialog = React.memo<WhatsNewDialogProps>(({ isOpen, onClose
   });
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4", "bg-background/80", className)} role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
+    <div data-chalk data-chalk-theme={portalTheme} className={cn("chalk-root fixed inset-0 z-50 flex items-center justify-center p-4", "bg-background/80", className)} role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
       <div ref={modalRef} tabIndex={-1} className={cn("w-full max-w-3xl overflow-hidden rounded-xl shadow-lg", "bg-card", "border border-border", "flex flex-col max-h-[85vh]", !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200")}>
         {/* Main content: Image left (40%), Content right (60%) */}
         <div className="flex flex-1 min-h-0">

@@ -4,6 +4,7 @@ import { cn } from "../../utils/cn";
 import { CircleIcon, FileTextIcon, HandIcon, Message01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Edit02Icon, CallEnd01Icon, Settings01Icon, SmileIcon, UserGroupIcon, Video01Icon, VideoOffIcon, PictureInPictureIcon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { resolvePortalThemeFromDocument } from "../../utils/theme";
 
 export interface MobileControlSheetProps {
   isOpen: boolean;
@@ -95,6 +96,7 @@ export const MobileControlSheet = React.memo(
     const [isDragging, setIsDragging] = useState(false);
     const touchStartRef = useRef<{ y: number; time: number } | null>(null);
     const themeVariables = getParticipantThemeVariables(participantColorSeed, participantGradientPreference);
+    const portalTheme = resolvePortalThemeFromDocument();
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
       const touch = e.touches[0];
@@ -260,7 +262,9 @@ export const MobileControlSheet = React.memo(
 
           {/* Sheet */}
           <Dialog.Popup
-            className={cn("fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-card text-card-foreground", !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out", isOpen ? "translate-y-0" : "translate-y-full", className)}
+            data-chalk
+            data-chalk-theme={portalTheme}
+            className={cn("chalk-root", "fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-card text-card-foreground", !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out", isOpen ? "translate-y-0" : "translate-y-full", className)}
             style={{
               ...(themeVariables as React.CSSProperties),
               transform: isOpen && translateY > 0 ? `translateY(${translateY}px)` : undefined,

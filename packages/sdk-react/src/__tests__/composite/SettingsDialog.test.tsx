@@ -102,6 +102,17 @@ describe("SettingsDialog", () => {
     expect(getByRole("dialog", { name: "Meeting settings" }).className).not.toContain("max-h-");
   });
 
+  it("propagates the Chalk theme onto the portaled dialog shell", () => {
+    document.documentElement.setAttribute("data-chalk-theme", "dark");
+
+    try {
+      const { getByRole } = render(<SettingsDialog isOpen onClose={() => {}} settings={settings} onUpdateAudio={() => {}} onUpdateVideo={() => {}} onUpdateAppearance={() => {}} onUpdateExperience={() => {}} />);
+      expect(getByRole("dialog", { name: "Meeting settings" }).getAttribute("data-chalk-theme")).toBe("dark");
+    } finally {
+      document.documentElement.removeAttribute("data-chalk-theme");
+    }
+  });
+
   it("renders background effects when enabled and supported", () => {
     const onSelectBackgroundEffect = vi.fn();
     const { getByText, getByRole } = render(

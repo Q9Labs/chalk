@@ -3,6 +3,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { ArrowLeft02Icon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { resolvePortalThemeFromDocument } from "../../utils/theme";
 
 export interface MobilePanelProps {
   title: string;
@@ -20,6 +21,7 @@ const SWIPE_VELOCITY_THRESHOLD = 0.5;
 
 export const MobilePanel = React.memo(({ title, onClose, children, showBackButton = true, className, isOpen = true }: MobilePanelProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const portalTheme = resolvePortalThemeFromDocument();
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartRef = useRef<{ x: number; time: number } | null>(null);
@@ -74,7 +76,9 @@ export const MobilePanel = React.memo(({ title, onClose, children, showBackButto
       <Dialog.Portal>
         <Dialog.Backdrop className={cn("fixed inset-0 bg-black/50 z-40", !prefersReducedMotion && "transition-opacity duration-300")} />
         <Dialog.Popup
-          className={cn("fixed inset-0 z-50 flex flex-col bg-card", !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out", !isDragging && translateX === 0 && !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
+          data-chalk
+          data-chalk-theme={portalTheme}
+          className={cn("chalk-root", "fixed inset-0 z-50 flex flex-col bg-card", !prefersReducedMotion && !isDragging && "transition-transform duration-300 ease-out", !isDragging && translateX === 0 && !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
           style={{
             transform: translateX > 0 ? `translateX(${translateX}px)` : undefined,
             // Safe area insets for iOS

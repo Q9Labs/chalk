@@ -42,6 +42,15 @@ export const resolveThemeFromDocument = ({ defaultTheme = "light", allowSystem =
   return defaultTheme;
 };
 
+export const resolvePortalThemeFromDocument = ({ defaultTheme = "light", allowSystem = true }: ResolveThemeOptions = {}): ThemeMode => {
+  if (typeof document === "undefined") return defaultTheme;
+
+  const portalTheme = normalizeTheme(document.querySelector<HTMLElement>("[data-chalk-theme]")?.getAttribute("data-chalk-theme"));
+  if (portalTheme) return portalTheme;
+
+  return resolveThemeFromDocument({ defaultTheme, allowSystem });
+};
+
 export const applyThemeToDocument = (theme: ThemeMode): void => {
   if (typeof document === "undefined") return;
 

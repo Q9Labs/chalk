@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { CallEnd01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { resolvePortalThemeFromDocument } from "../../utils/theme";
 
 export interface LeaveConfirmationDialogProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ export interface LeaveConfirmationDialogProps {
 
 export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(({ isOpen, onClose, onConfirm, className }: LeaveConfirmationDialogProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const portalTheme = resolvePortalThemeFromDocument();
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,6 +38,7 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
   return (
     <div
       data-chalk
+      data-chalk-theme={portalTheme}
       className={cn("chalk-root fixed inset-0 z-[100] flex items-center justify-center p-4", "bg-background/80", !prefersReducedMotion && "animate-in fade-in duration-200", className)}
       role="dialog"
       aria-modal="true"
