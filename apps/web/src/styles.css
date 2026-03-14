@@ -108,14 +108,66 @@
   --color-background: var(--background);
 }
 
+/* The Infinite Canvas - Global UI Refinement */
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border/50 outline-ring/50;
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-[#0A0A0B] text-foreground antialiased selection:bg-primary/30;
   }
+}
+
+/* Chalk Wipe Transition Mask */
+.chalk-wipe-container {
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes chalk-wipe-reveal {
+  0% { mask-position: 100% 0; }
+  100% { mask-position: 0 0; }
+}
+
+.chalk-wipe-active {
+  mask-image: linear-gradient(to right, black 50%, transparent 100%);
+  mask-size: 200% 100%;
+  animation: chalk-wipe-reveal 0.6s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+/* Live Sketch Dashboard - Textured Surface */
+.slate-canvas {
+  background-color: #0A0A0B;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0);
+  background-size: 32px 32px;
+}
+
+.slate-card {
+  @apply bg-black/40 backdrop-blur-xl border border-white/[0.05] hover:border-white/[0.1] transition-all duration-300;
+  box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.5);
+}
+
+.slate-card-active {
+  @apply border-primary/30 bg-primary/[0.03] shadow-[0_0_30px_-10px_rgba(27,182,166,0.2)];
+}
+
+/* Skeleton Sketch Animation */
+@keyframes sketch-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.995); }
+  50% { opacity: 0.5; transform: scale(1); }
+}
+
+.sketch-loading {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(255, 255, 255, 0.03) 10px,
+    rgba(255, 255, 255, 0.03) 20px
+  );
+  animation: sketch-pulse 2s ease-in-out infinite;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
 @keyframes chalk-pop {

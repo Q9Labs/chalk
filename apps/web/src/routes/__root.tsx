@@ -3,12 +3,10 @@ import { ChalkProvider, type ChalkPostHogClient, createHttpIncidentReporter, use
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { DebugDialog } from "../components/DebugDialog";
-import { PwaInstallPrompt } from "../components/PwaInstallPrompt";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { createWebTokenProvider, getApiUrl, getJoinContext, isLocalHost, shouldPrimeTokenCache, shouldUseInternalRoomAuth } from "../lib/internalAuth";
-import { getThemeColor } from "../lib/pwa";
+import { createWebTokenProvider, getApiUrl, isLocalHost } from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -28,38 +26,10 @@ export const Route = createRootRoute({
       },
       {
         name: "viewport",
-        content: "width=device-width, initial-scale=1, viewport-fit=cover",
-      },
-      {
-        name: "application-name",
-        content: "Chalk",
+        content: "width=device-width, initial-scale=1",
       },
       {
         title: "Chalk",
-      },
-      {
-        name: "description",
-        content: "Ultra low-latency video conferencing for real-time collaboration.",
-      },
-      {
-        name: "theme-color",
-        content: getThemeColor("dark"),
-      },
-      {
-        name: "mobile-web-app-capable",
-        content: "yes",
-      },
-      {
-        name: "apple-mobile-web-app-capable",
-        content: "yes",
-      },
-      {
-        name: "apple-mobile-web-app-status-bar-style",
-        content: "black-translucent",
-      },
-      {
-        name: "apple-mobile-web-app-title",
-        content: "Chalk",
       },
     ],
     links: [
@@ -67,18 +37,6 @@ export const Route = createRootRoute({
         rel: "icon",
         type: "image/svg+xml",
         href: "/chalk-icon.svg",
-      },
-      {
-        rel: "icon",
-        href: "/favicon.ico",
-      },
-      {
-        rel: "shortcut icon",
-        href: "/favicon.ico",
-      },
-      {
-        rel: "manifest",
-        href: "/manifest.json",
       },
       {
         rel: "apple-touch-icon",
@@ -115,10 +73,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                   }
                   root.style.colorScheme = (theme === 'light' ? 'light' : 'dark');
                   root.setAttribute('data-chalk-theme', theme);
-                  var themeColor = theme === 'light' ? '#ffffff' : theme === 'nord' ? '#2e3440' : '#030303';
-                  document.querySelectorAll('meta[name="theme-color"]').forEach(function(meta) {
-                    meta.setAttribute('content', themeColor);
-                  });
                 } catch (e) {}
               })();
             `,
@@ -140,15 +94,12 @@ function RootComponent() {
   const apiHost = useMemo(() => new URL(apiUrl).hostname, [apiUrl]);
   const isLocalApi = useMemo(() => isLocalHost(apiHost), [apiHost]);
   // WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
-  // Note: Production uses separate subdomain because API Gateway doesn't support
-  // mixing HTTP and WebSocket APIs on the same custom domain
   const configuredWsUrl = import.meta.env.VITE_WS_URL;
   const wsUrl =
     (!isLocalApi && configuredWsUrl) ||
     (apiUrl
       ? (() => {
           const api = new URL(apiUrl);
-          // Production: use dedicated WebSocket subdomain (direct to ALB)
           if (api.host === "chalk-api.q9labs.ai") {
             return "wss://chalk-ws.q9labs.ai/ws";
           }
@@ -160,8 +111,7 @@ function RootComponent() {
 
   // Token provider: handles API key → JWT exchange and auto-refresh
   const apiKey = import.meta.env.VITE_CHALK_API_KEY;
-  const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
-  const apiKeyTokenProvider = useMemo(
+  const tokenProvider = useMemo(
     () =>
       apiKey
         ? createTokenProvider({
@@ -169,25 +119,12 @@ function RootComponent() {
             apiUrl,
             storage: "sessionStorage",
           })
-        : null,
+        : createWebTokenProvider(apiUrl),
     [apiKey, apiUrl],
-  );
-  const tokenProvider = useMemo(
-    () => async () => {
-      if (!isServer && window.location.pathname.startsWith("/room/") && (getJoinContext() || shouldUseInternalRoomAuth(window.location.pathname, window.location.search))) {
-        return webTokenProvider();
-      }
-      if (apiKeyTokenProvider) {
-        return apiKeyTokenProvider();
-      }
-      return webTokenProvider();
-    },
-    [apiKeyTokenProvider, webTokenProvider],
   );
 
   useEffect(() => {
     if (isServer) return;
-    if (!shouldPrimeTokenCache(window.location.pathname)) return;
     // Prime token cache so first Join click avoids auth round-trip; fail-open by design.
     void tokenProvider().catch(() => {});
   }, [tokenProvider]);
@@ -258,9 +195,10 @@ function RootComponent() {
   const content = (
     <ThemeProvider>
       <ErrorProvider>
-        <div className="overflow-hidden bg-background text-foreground">
-          <Outlet context={{ setIsDebugOpen }} />
-          <PwaInstallPrompt />
+        <div className="overflow-hidden bg-[#0A0A0B] text-foreground">
+          <div className="chalk-wipe-container chalk-wipe-active min-h-screen">
+            <Outlet />
+          </div>
           <WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
 
           {/* Version Trigger - Bottom Right */}
