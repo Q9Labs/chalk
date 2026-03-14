@@ -13,6 +13,7 @@ describe("PreJoinLobby", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     navigator.mediaDevices.getUserMedia = originalGetUserMedia;
+    localStorage.clear();
     document.documentElement.className = "";
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-chalk-theme");
@@ -189,6 +190,40 @@ describe("PreJoinLobby", () => {
       expect(getUserMedia).toHaveBeenCalledTimes(2);
     });
     expect(firstTrack.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps camera enabled when a stale preferred camera id fails on first mobile request", async () => {
+    const fallbackTrack = { stop: vi.fn() };
+    const getUserMedia = vi.fn().mockImplementation((constraints: MediaStreamConstraints) => {
+      const videoConstraint = constraints.video;
+      if (typeof videoConstraint === "object" && videoConstraint && "deviceId" in videoConstraint) {
+        return Promise.reject(new DOMException("stale camera", "OverconstrainedError"));
+      }
+
+      return Promise.resolve({
+        getTracks: () => [fallbackTrack],
+        getVideoTracks: () => [fallbackTrack],
+        getAudioTracks: () => [],
+      });
+    });
+    navigator.mediaDevices.getUserMedia = getUserMedia as any;
+
+    const { getByLabelText } = render(<PreJoinLobby onJoin={() => {}} initialVideoEnabled={false} initialAudioEnabled={false} selectedVideoDevice="stale-camera" />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(getByLabelText("Turn on camera"));
+    });
+
+    await waitFor(() => {
+      expect(getByLabelText("Turn off camera")).toBeDefined();
+    });
+    expect(getUserMedia).toHaveBeenNthCalledWith(1, {
+      video: { deviceId: { exact: "stale-camera" } },
+    });
+    expect(getUserMedia).toHaveBeenNthCalledWith(2, {
+      video: true,
+    });
   });
 
   it("shows picture in picture control when supported and enabled", async () => {

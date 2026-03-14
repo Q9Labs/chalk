@@ -32,11 +32,42 @@ const stopOtherTracks = (stream: MediaStream, keepTrack?: MediaStreamTrack) => {
   }
 };
 
+async function getUserMediaWithPreferredDevice(
+  getUserMedia: MediaDevices["getUserMedia"],
+  kind: "audio" | "video",
+  preferredDeviceId: string | undefined,
+  allowDefaultFallback: boolean,
+): Promise<MediaStream> {
+  const primaryConstraints = preferredDeviceId
+    ? ({
+        [kind]: { deviceId: { exact: preferredDeviceId } },
+      } as MediaStreamConstraints)
+    : ({
+        [kind]: true,
+      } as MediaStreamConstraints);
+
+  try {
+    return await getUserMedia(primaryConstraints);
+  } catch (error) {
+    if (!preferredDeviceId || !allowDefaultFallback) {
+      throw error;
+    }
+
+    return getUserMedia({
+      [kind]: true,
+    } as MediaStreamConstraints);
+  }
+}
+
 export function usePreJoinMedia({ videoTrack, audioTrack, videoDevices, audioInputDevices, selectedVideoDevice, selectedAudioInput, isVideoEnabled, isAudioEnabled, onVideoUnavailable, onAudioUnavailable, videoRef }: UsePreJoinMediaParams): UsePreJoinMediaReturn {
   const [localVideoTrack, setLocalVideoTrack] = useState<MediaStreamTrack | null>(null);
   const [localAudioTrack, setLocalAudioTrack] = useState<MediaStreamTrack | null>(null);
   const [localVideoDevices, setLocalVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [localAudioInputDevices, setLocalAudioInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const localVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  localVideoTrackRef.current = localVideoTrack;
+  localAudioTrackRef.current = localAudioTrack;
 
   const enumerateDevices = useCallback(async () => {
     try {
@@ -78,10 +109,7 @@ export function usePreJoinMedia({ videoTrack, audioTrack, videoDevices, audioInp
 
     let cancelled = false;
 
-    void mediaDevices
-      .getUserMedia({
-        video: selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : true,
-      })
+    void getUserMediaWithPreferredDevice(mediaDevices.getUserMedia.bind(mediaDevices), "video", selectedVideoDevice, !videoTrack && localVideoTrackRef.current === null)
       .then((stream) => {
         if (cancelled) {
           stopOtherTracks(stream);
@@ -129,10 +157,7 @@ export function usePreJoinMedia({ videoTrack, audioTrack, videoDevices, audioInp
 
     let cancelled = false;
 
-    void mediaDevices
-      .getUserMedia({
-        audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true,
-      })
+    void getUserMediaWithPreferredDevice(mediaDevices.getUserMedia.bind(mediaDevices), "audio", selectedAudioInput, !audioTrack && localAudioTrackRef.current === null)
       .then((stream) => {
         if (cancelled) {
           stopOtherTracks(stream);
@@ -162,11 +187,6 @@ export function usePreJoinMedia({ videoTrack, audioTrack, videoDevices, audioInp
       cancelled = true;
     };
   }, [isAudioEnabled, audioTrack, selectedAudioInput, enumerateDevices, onAudioUnavailable]);
-
-  const localVideoTrackRef = useRef(localVideoTrack);
-  const localAudioTrackRef = useRef(localAudioTrack);
-  localVideoTrackRef.current = localVideoTrack;
-  localAudioTrackRef.current = localAudioTrack;
 
   useEffect(() => {
     return () => {

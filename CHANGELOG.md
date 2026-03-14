@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SDK-React: mobile pre-join camera toggle fallback** — the pre-join lobby now ignores stale stored device ids when live device lists disagree, and first-run camera/mic activation falls back to the browser default device instead of flickering back off after an exact-device `getUserMedia` failure on mobile browsers.
 - **Whisper worker: expire replayed jobs + harden long-job lock liveness** — worker now fails over-age queued/recovered jobs before re-downloading/transcribing them, refreshes processing locks from a separate heartbeat process instead of an in-process thread, and lean prod whisper defaults are restored to `c7i.xlarge` with `4` CPU threads to reduce long-recording stalls on `c7i.large`.
 - **Whisper worker: modular runtime + packaged layout + local transcription smoke path** — split the Python worker into focused queue, metrics, and job-processing modules under a dedicated `whisper_worker/` package, added regression coverage for successful job cleanup plus HTTP download diagnostics, and introduced a local `transcribe_file.py` smoke harness used to verify real audio transcription output on CPU.
 - **React: aligned local pins to the latest safe 19.2.x line** — moved `packages/sdk-react` test-time `react`/`react-dom` pins and `apps/web`'s exact React pins to `19.2.4` so local installs stay on the patched line while preserving version alignment during workspace tests.

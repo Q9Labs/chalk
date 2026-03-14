@@ -33,6 +33,18 @@ const JOINING_ROOM_MESSAGES = [
 const EMPTY_LIST = [] as never[];
 const NOOP = () => {};
 
+function resolvePreferredDeviceId(preferredDeviceId: string | undefined, devices: readonly MediaDeviceInfo[]): string | undefined {
+  if (!preferredDeviceId) {
+    return undefined;
+  }
+
+  if (devices.length === 0) {
+    return preferredDeviceId;
+  }
+
+  return devices.some((device) => device.deviceId === preferredDeviceId) ? preferredDeviceId : undefined;
+}
+
 function PreJoinLobbyBase({
   roomName,
   userName = "Guest",
@@ -80,9 +92,9 @@ function PreJoinLobbyBase({
       theme: nextTheme,
     });
   }, [isDarkMode, toggleTheme, updateAppearanceSettings]);
-  const resolvedSelectedVideoDevice = selectedVideoDevice ?? settings.video.selectedInput;
-  const resolvedSelectedAudioInput = selectedAudioInput ?? settings.audio.selectedInput;
-  const resolvedSelectedAudioOutput = selectedAudioOutput ?? settings.audio.selectedOutput;
+  const resolvedSelectedVideoDevice = useMemo(() => resolvePreferredDeviceId(selectedVideoDevice ?? settings.video.selectedInput, videoDevices), [selectedVideoDevice, settings.video.selectedInput, videoDevices]);
+  const resolvedSelectedAudioInput = useMemo(() => resolvePreferredDeviceId(selectedAudioInput ?? settings.audio.selectedInput, audioInputDevices), [selectedAudioInput, settings.audio.selectedInput, audioInputDevices]);
+  const resolvedSelectedAudioOutput = useMemo(() => resolvePreferredDeviceId(selectedAudioOutput ?? settings.audio.selectedOutput, audioOutputDevices), [selectedAudioOutput, settings.audio.selectedOutput, audioOutputDevices]);
   const handleVideoInputPreference = useCallback(
     (deviceId: string) => {
       updateVideoSettings({ selectedInput: deviceId });
