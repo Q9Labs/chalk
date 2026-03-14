@@ -1,17 +1,20 @@
 import { createTokenProvider } from "@q9labs/chalk-core";
-import { ChalkProvider, useChalkClient, VideoPlayer, ChalkLogo } from "@q9labs/chalk-react";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, HugeiconsIcon, Input } from "@q9labs/chalk-ui";
+import { ChalkProvider, useChalk } from "@q9labs/chalk-react";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Input } from "@q9labs/chalk-ui";
 import { Archive01Icon, Calendar01Icon, CheckmarkCircle01Icon, Clock01Icon, Database01Icon, Download01Icon, File02Icon, Home01Icon, InformationCircleIcon, Logout01Icon, Moon02Icon, Search01Icon, Settings03Icon, Share01Icon, Sun01Icon, Video01Icon, AlertCircleIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTheme } from "../context/theme";
-import { fetchInternalAccessToken, getApiUrl, startMagicLink } from "../lib/internalAuth";
+import { fetchInternalAccessToken, getApiUrl, logoutInternalSession, startGoogleOAuthSignIn } from "../lib/internalAuth";
 import { useProfileAvatar } from "../lib/useProfileAvatar";
 import { cn } from "../lib/utils";
 import { ScheduledClassesPanel } from "../features/classes/components/ScheduledClassesPanel";
 import { SettingsModal } from "../components/SettingsModal";
 import { ChalkLoader } from "../components/ChalkLoader";
+import { ChalkLogo } from "../components/ChalkLogo";
+import { VideoPlayer } from "../components/VideoPlayer";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard")({
@@ -76,8 +79,7 @@ async function downloadRecording(meetingId: string, token: string) {
 function DashboardPage() {
   const apiUrl = getApiUrl();
   const [state, setState] = useState<{ kind: "loading" } | { kind: "login" } | { kind: "ready"; data: MeetingsResponse; token: string } | { kind: "error"; message: string }>({ kind: "loading" });
-  const [email, setEmail] = useState("");
-  const [emailSent, setEmailSent] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
@@ -132,18 +134,26 @@ function DashboardPage() {
     return state.data.meetings.find((m) => m.id === selectedId);
   }, [state, selectedId]);
 
-  const sendLink = async () => {
+  const startGoogleSignIn = async () => {
     try {
-      await startMagicLink(apiUrl, email);
-      setEmailSent(`Check ${email} for your secure portal link.`);
+      setIsSigningIn(true);
+      await startGoogleOAuthSignIn(apiUrl);
+      window.location.reload();
     } catch (e: any) {
       toast.error(e.message);
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("chalk_internal_token");
-    window.location.reload();
+  const handleLogout = async () => {
+    try {
+      await logoutInternalSession(apiUrl);
+    } catch (error: any) {
+      toast.error(error?.message ?? "logout failed");
+    } finally {
+      window.location.reload();
+    }
   };
 
   const userEmail = useMemo(() => {
@@ -159,7 +169,7 @@ function DashboardPage() {
   const avatarProfile = useProfileAvatar(userEmail);
 
   // Mock for classes panel integration
-  const sdkClient = useChalkClient();
+  const sdkClient = useChalk();
   const [classRooms, setClassRooms] = useState([]);
   const [classesLoading, setClassesLoading] = useState(false);
   const [classesError, setClassesError] = useState<Error | null>(null);
@@ -262,45 +272,33 @@ function DashboardPage() {
 
             <CardContent className="space-y-8 px-10 pb-16">
               <div className="space-y-4">
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 to-blue-500/50 rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition duration-500" />
-                  <div className="relative">
-                    <Input
-                      type="email"
-                      placeholder="Enter your work email…"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && email.trim() && sendLink()}
-                      className="h-16 bg-black/60 border-white/[0.1] rounded-2xl px-6 focus:ring-0 focus:border-primary/50 transition-all font-medium text-lg text-white placeholder:text-white/20 shadow-2xl"
-                      autoFocus
-                    />
-                    <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                      <div className={cn(
-                        "w-2 h-2 rounded-full transition-all duration-500",
-                        email.trim() ? "bg-primary shadow-[0_0_12px_rgba(27,182,166,0.8)] scale-110" : "bg-white/10"
-                      )} />
-                    </div>
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={sendLink} 
-                  disabled={!email.trim()} 
+                <Button
+                  onClick={startGoogleSignIn}
+                  disabled={isSigningIn}
                   className="w-full h-16 rounded-2xl font-black text-lg tracking-tight bg-white text-black hover:bg-white/90 active:scale-[0.98] transition-all shadow-2xl relative group overflow-hidden"
                 >
                   <span className="relative z-10 flex items-center justify-center gap-3">
-                    Send Magic Link
-                    <div className="w-1.5 h-1.5 rounded-full bg-black/20 animate-pulse" />
+                    {isSigningIn ? (
+                      <>
+                        <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                        Connecting Google
+                      </>
+                    ) : (
+                      <>
+                        Continue with Google
+                        <div className="w-1.5 h-1.5 rounded-full bg-black/20 animate-pulse" />
+                      </>
+                    )}
                   </span>
                 </Button>
-              </div>
 
-              {emailSent && (
                 <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 flex gap-4 animate-in zoom-in-95 fade-in duration-500">
                   <HugeiconsIcon icon={InformationCircleIcon} size={22} className="text-primary shrink-0" />
-                  <p className="text-sm font-bold text-primary leading-snug">{emailSent}</p>
+                  <p className="text-sm font-bold text-primary leading-snug">
+                    Use your Chalk Google workspace account. Session cookies stay on this device until you sign out.
+                  </p>
                 </div>
-              )}
+              </div>
             </CardContent>
 
             {/* Tactical Footer */}
