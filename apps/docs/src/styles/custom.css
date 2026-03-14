@@ -1,8 +1,19 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono&display=swap");
 @import "tailwindcss";
 
 :root {
+  /* Chalk Design System Tokens */
+  --chalk-primary: #1bb6a6;
+  --chalk-bg: #030303;
+  --chalk-border: rgba(255, 255, 255, 0.08);
+  
+  /* Starlight Variable Overrides */
+  --sl-font-body: "Inter", sans-serif;
+  --sl-font-headings: "Sora", sans-serif;
+  --sl-font-mono: "JetBrains Mono", monospace;
+
   --sl-color-accent-low: #0d3b42;
-  --sl-color-accent: #0d9488;
+  --sl-color-accent: var(--chalk-primary);
   --sl-color-accent-high: #5eead4;
   --sl-color-white: #ffffff;
   --sl-color-gray-1: #eceef2;
@@ -11,20 +22,124 @@
   --sl-color-gray-4: #545861;
   --sl-color-gray-5: #353841;
   --sl-color-gray-6: #24272f;
-  --sl-color-black: #17181c;
+  --sl-color-black: var(--chalk-bg);
+  
+  --sl-content-width: 68rem;
 }
 
-:root[data-theme="light"] {
-  --sl-color-accent-low: #ccfbf1;
-  --sl-color-accent: #0d9488;
-  --sl-color-accent-high: #0f766e;
-  --sl-color-white: #17181c;
-  --sl-color-gray-1: #24272f;
-  --sl-color-gray-2: #353841;
-  --sl-color-gray-3: #545861;
-  --sl-color-gray-4: #888b96;
-  --sl-color-gray-5: #c0c2c7;
-  --sl-color-gray-6: #eceef2;
-  --sl-color-gray-7: #f5f6f8;
-  --sl-color-black: #ffffff;
+/* Base Styles */
+body {
+  background-color: var(--sl-color-black);
+  color: var(--sl-color-gray-2);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient Background */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: 
+    radial-gradient(circle at 50% -20%, rgba(27, 182, 166, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 0% 100%, rgba(27, 182, 166, 0.03) 0%, transparent 40%);
+  z-index: -1;
+}
+
+/* Header Glassmorphism */
+header {
+  border-bottom: 1px solid var(--chalk-border) !important;
+  background-color: rgba(3, 3, 3, 0.7) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+}
+
+/* Sidebar Styling */
+.sidebar-content {
+  background-color: transparent !important;
+}
+
+.sidebar-content a {
+  font-size: 0.9rem !important;
+  transition: all 0.2s ease !important;
+  border-radius: 0.5rem !important;
+  padding: 0.4rem 0.75rem !important;
+  color: var(--sl-color-gray-3) !important;
+}
+
+.sidebar-content a[aria-current="page"] {
+  background-color: rgba(27, 182, 166, 0.1) !important;
+  color: var(--chalk-primary) !important;
+  font-weight: 600 !important;
+}
+
+.sidebar-content a:hover:not([aria-current="page"]) {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: var(--sl-color-white) !important;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5 {
+  color: var(--sl-color-white);
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+h1 { font-size: 2.75rem !important; }
+
+/* Code Blocks */
+pre {
+  background-color: #0a0a0a !important;
+  border: 1px solid var(--chalk-border) !important;
+  border-radius: 12px !important;
+}
+
+/* Hero Section Refinement */
+.hero h1 {
+  font-size: clamp(3rem, 8vw, 5rem) !important;
+  background: linear-gradient(to bottom, #fff 40%, #888);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1 !important;
+  letter-spacing: -0.05em !important;
+}
+
+.tagline {
+  font-size: 1.25rem !important;
+  color: var(--sl-color-gray-3) !important;
+}
+
+/* Action Buttons */
+.action-button.primary {
+  background: var(--chalk-primary) !important;
+  color: #000 !important;
+  border-radius: 99px !important;
+  font-weight: 600 !important;
+}
+
+.action-button.minimal {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 99px !important;
+}
+
+/* Feature Cards */
+.card {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 16px !important;
+  transition: all 0.3s ease !important;
+}
+
+.card:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(27, 182, 166, 0.3) !important;
+  transform: translateY(-4px);
+}
+
+.card .title {
+  color: #fff !important;
+  font-weight: 700 !important;
 }

@@ -136,20 +136,76 @@ Motion rule:
 - keep reduced-motion support intact
 - avoid decorative motion that obscures legibility in meeting UI
 
-### 4. `sdk-react core`: typography
+### 4. `sdk-react core`: tactile & auditory feedback
 
-Current core ownership is thin:
+Chalk is a high-latency-sensitive application where interaction feedback is critical to perceived performance.
 
-- `--chalk-font-family`: `"Inter", "Avenir Next", "Avenir", "Helvetica Neue", "Segoe UI", sans-serif`
-- package stylesheet imports `Inter`
+| Preset | Context | Feedback Type |
+| --- | --- | --- |
+| `selection` | toggle mic/camera, open panel, switch tab | light tap |
+| `impact` | reaction burst, hand raise, join meeting | medium impact |
+| `success` | meeting joined, invite copied, recording started | double-tap / rising tone |
+| `error` | connection lost, hardware error, recording failed | stutter-tap / falling tone |
 
-Important nuance:
+Rule:
+- haptics should respect `prefers-reduced-motion`
+- auditory feedback should be tied to the `useSoundEffects` hook
+- tactile feedback should be tied to the `useHaptics` hook
 
-- some `sdk-react` components use `font-app` and `font-display`
-- those are defined in `apps/web/src/styles.css`, not in the package stylesheet
-- that is current dependency drift, not a clean core ownership boundary
+### 5. `sdk-react core`: layering & z-index
 
-### 5. `sdk-react core`: theme behavior
+To prevent "z-index wars", Chalk uses a semantic layering strategy.
+
+| Layer | Z-Index | Usage |
+| --- | --- | --- |
+| `base` | `0` | background, stage base |
+| `tiled` | `10` | video tiles, content share |
+| `overlay` | `20` | name tags, connection quality, tile-relative chrome |
+| `dock` | `30` | floating ControlBar, reaction picker |
+| `panel` | `40` | slide-out sidebars (Chat, Participants, Transcription) |
+| `dialog` | `50` | settings, invite modal, hardware selector |
+| `popover` | `60` | tooltips, context menus, dropdowns |
+| `toast` | `70` | notifications, error banners |
+
+### 6. `sdk-react core`: structural layout (The "Chalk Shell")
+
+The conferencing UI is organized into four main structural zones.
+
+- **Stage**: The primary immersive area for video tiles and shared content.
+- **Dock**: The bottom-centered floating control bar for primary meeting actions.
+- **Header**: The top-aligned meeting information and participant count.
+- **Chrome**: Identity-linked overlays that persist across layout shifts (PiP, meeting status).
+
+### 7. `sdk-react core`: typography
+
+| Role | Intent | Style |
+| --- | --- | --- |
+| `label-participant` | Identity on video tiles | `text-xs font-medium tracking-tight` |
+| `text-transcript` | High-readability conversation text | `text-base leading-relaxed tracking-normal` |
+| `heading-display` | Large meeting or room titles | `text-2xl font-bold tracking-tight` |
+| `mono-system` | Technical/debug indicators | `font-mono text-[10px] uppercase` |
+
+Drift Note: `sdk-react` currently uses `font-app` and `font-display` from the brand layer in some places. These should be aliased to the semantic roles above within the core package.
+
+### 8. `sdk-react core`: status palette
+
+| State | Signal | Style |
+| --- | --- | --- |
+| `active` | online / joined | `--success` |
+| `speaking` | high-signal activity | `--chalk-accent-speaking` + pulse animation |
+| `hand-raised` | attention request | `--warning` + bounce animation |
+| `recording` | persistent activity | `oklch(0.577 0.245 27.325)` + recording pulse |
+| `muted` | disabled / offline | `--muted-foreground` |
+
+### 9. `sdk-react core`: glass & surfaces
+
+| Surface | Transparency | Usage |
+| --- | --- | --- |
+| `glass-surface` | `0.72` | Panels, tooltips, floating bars |
+| `glass-elevated` | `0.92` | ControlBar, active popovers |
+| `glass-stage` | `0.40` | Chrome sitting directly over active video |
+
+### 10. `sdk-react core`: theme behavior
 
 Theme mode rules:
 

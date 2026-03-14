@@ -1,9 +1,9 @@
 ---
-title: Chalk Documentation
-description: Ultra low-latency video conferencing SDK for education
+title: ""
+description: Ultra low-latency video infrastructure for high-stakes learning.
 template: splash
 hero:
-  tagline: Ultra low-latency video conferencing built on Cloudflare RealtimeKit
+  tagline: The Infrastructure for High-Stakes Learning.
   image:
     file: ../../assets/chalk-logo.svg
   actions:
@@ -11,51 +11,25 @@ hero:
       link: /getting-started/
       icon: right-arrow
       variant: primary
-    - text: View on GitHub
-      link: https://github.com/q9labs/chalk
-      icon: external
+    - text: API Reference
+      link: /api/
+      icon: rocket
+      variant: minimal
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-## Features
-
 <CardGrid stagger>
-  <Card title="Low Latency" icon="rocket">
-    Built on Cloudflare's global edge network for sub-100ms latency worldwide.
+  <Card title="React SDK" icon="rocket">
+    Turnkey components for web-based tutoring and virtual classrooms. Launch in minutes.
   </Card>
-  <Card title="Education First" icon="pencil">
-    Designed for virtual classrooms, tutoring, and online lectures.
+  <Card title="Rest API" icon="setting">
+    Programmatically manage rooms, participants, and session metadata at global scale.
   </Card>
-  <Card title="Turnkey Components" icon="laptop">
-    Zero-config VideoConference component with lobby, meeting room, and end screen.
+  <Card title="Enterprise Auth" icon="lock">
+    Secure rooms with JWT-based authentication, role-based access, and granular permissions.
   </Card>
-  <Card title="Recording & Transcription" icon="document">
-    Built-in recording with automatic transcription and AI summaries.
+  <Card title="Sub-100ms Latency" icon="document">
+    Leverage Cloudflare RealtimeKit for global, low-latency video delivery worldwide.
   </Card>
 </CardGrid>
-
-## Quick Start
-
-```bash
-bun add @q9labs/chalk-react
-```
-
-```tsx
-import { ChalkProvider, VideoConference } from "@q9labs/chalk-react";
-import "@q9labs/chalk-react/styles.css";
-
-function App() {
-  return (
-    <ChalkProvider apiUrl="https://api.chalk.q9labs.ai" token={jwt}>
-      <VideoConference roomId="room-123" userName="Alice" role="host" features={{ recording: true, whiteboard: true }} onEnd={(data) => console.log("Meeting ended:", data.duration)} />
-    </ChalkProvider>
-  );
-}
-```
-
-## Package
-
-| Package               | Description                                      |
-| --------------------- | ------------------------------------------------ |
-| `@q9labs/chalk-react` | React SDK with turnkey VideoConference component |

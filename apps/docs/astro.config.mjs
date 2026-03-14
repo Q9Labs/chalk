@@ -11,6 +11,7 @@ export default defineConfig({
       title: "Chalk",
       logo: {
         src: "./src/assets/chalk-logo.svg",
+        replacesTitle: true,
       },
       social: {
         github: "https://github.com/q9labs/chalk",
