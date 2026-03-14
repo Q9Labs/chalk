@@ -1,3 +1,4 @@
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { buildRoomRoute, getLobbySupport, type LobbyRoute, type RoomRoute } from "../lib/chalk";
@@ -44,18 +45,19 @@ export function LobbyScreen({ route, onBack, onJoin }: LobbyScreenProps): React.
 
         <View style={styles.headerDivider} />
 
-        <Text style={styles.headerTitle}>{route.roomName || "Meeting On Chalk"}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{route.roomName || "Meeting On Chalk"}</Text>
 
         <Pressable onPress={() => setIsDarkMode((current) => !current)} style={styles.themeButton}>
-          <Text style={styles.themeButtonText}>{isDarkMode ? "Sun" : "Moon"}</Text>
+          <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={22} color="white" />
         </Pressable>
       </View>
 
-      <View style={styles.previewShell}>
+      <View style={styles.previewContainer}>
+        <View style={styles.previewGlow} />
         <View style={styles.previewSurface}>
           <View style={styles.previewBadge}>
             <View style={styles.previewBadgeDot} />
-            <Text style={styles.previewBadgeText}>{displayName.trim() || "Host"}</Text>
+            <Text style={styles.previewBadgeText}>{route.role === "host" ? "Host" : "Guest"}</Text>
           </View>
 
           <View style={styles.previewAvatar}>
@@ -67,10 +69,27 @@ export function LobbyScreen({ route, onBack, onJoin }: LobbyScreenProps): React.
           </View>
 
           <View style={styles.previewControls}>
-            <ControlPill active={audioEnabled} label={audioEnabled ? "Mic" : "Mic off"} onPress={() => setAudioEnabled((current) => !current)} />
-            <ControlPill active={videoEnabled} label={videoEnabled ? "Cam" : "Cam off"} onPress={() => setVideoEnabled((current) => !current)} />
-            <ControlPill active={false} label="Set" onPress={() => {}} />
-            <ControlPill active label="Grid" onPress={() => {}} />
+            <View style={styles.mediaGroup}>
+              <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={styles.mediaToggle}>
+                <Ionicons name={audioEnabled ? "mic" : "mic-off"} size={20} color={audioEnabled ? "white" : "#ef4444"} />
+                <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.4)" />
+              </Pressable>
+              <View style={styles.controlDivider} />
+              <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={styles.mediaToggle}>
+                <Ionicons name={videoEnabled ? "videocam" : "videocam-off"} size={20} color={videoEnabled ? "white" : "#ef4444"} />
+                <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.4)" />
+              </Pressable>
+            </View>
+            
+            <View style={styles.controlDividerVertical} />
+            
+            <Pressable style={styles.iconButton}>
+              <Ionicons name="settings-outline" size={20} color="white" />
+            </Pressable>
+            
+            <Pressable style={[styles.iconButton, styles.iconButtonActive]}>
+              <MaterialCommunityIcons name="grid-large" size={20} color="#22c55e" />
+            </Pressable>
           </View>
         </View>
       </View>
@@ -78,6 +97,7 @@ export function LobbyScreen({ route, onBack, onJoin }: LobbyScreenProps): React.
       <View style={styles.joinPanel}>
         <Text style={styles.sectionTitle}>Ready to join?</Text>
         <Text style={styles.subtitle}>You&apos;ll be in a waiting room before entering the call</Text>
+        
         <TextInput
           onChangeText={setDisplayName}
           placeholder="Enter your name"
@@ -86,7 +106,7 @@ export function LobbyScreen({ route, onBack, onJoin }: LobbyScreenProps): React.
           value={displayName}
         />
 
-        {!support.canJoin && support.reason ? <Text style={styles.warning}>{support.reason}</Text> : null}
+        {support.canJoin === false && support.reason ? <Text style={styles.warning}>{support.reason}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable onPress={handleJoin} style={[styles.primaryButton, !support.canJoin && styles.buttonDisabled]}>
@@ -101,200 +121,194 @@ export function LobbyScreen({ route, onBack, onJoin }: LobbyScreenProps): React.
   );
 }
 
-function ControlPill({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}): React.JSX.Element {
-  return (
-    <Pressable onPress={onPress} style={[styles.controlPill, active ? styles.controlPillActive : null]}>
-      <Text style={[styles.controlPillText, active ? styles.controlPillTextActive : styles.controlPillTextInactive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: {
     flexGrow: 1,
     backgroundColor: Theme.colors.background,
-    paddingHorizontal: 24,
-    paddingTop: 18,
+    paddingHorizontal: 20,
+    paddingTop: 60,
     paddingBottom: 24,
-    gap: 18,
+    gap: 32,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 16,
     minHeight: 48,
   },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexShrink: 0,
+    gap: 10,
   },
   logo: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
   },
   brandText: {
     color: Theme.colors.foreground,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
-    textTransform: "lowercase",
+    letterSpacing: -0.5,
   },
   headerDivider: {
     width: 1,
-    height: 24,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    height: 20,
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   headerTitle: {
     flex: 1,
-    color: "#8f96a3",
+    color: "rgba(255,255,255,0.85)",
     fontSize: 16,
-    fontWeight: "700",
-    textAlign: "center",
+    fontWeight: "600",
   },
   themeButton: {
-    minWidth: 44,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "flex-end",
+    justifyContent: "center",
   },
-  themeButtonText: {
-    color: "#d4d8df",
-    fontSize: 12,
-    fontWeight: "700",
+  previewContainer: {
+    position: "relative",
+    paddingVertical: 10,
   },
-  previewShell: {
-    marginTop: 10,
-    paddingHorizontal: 0,
-    paddingVertical: 18,
-    borderRadius: 34,
-    shadowColor: "#19ff7f",
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
+  previewGlow: {
+    position: "absolute",
+    top: 0,
+    left: 10,
+    right: 10,
+    bottom: 0,
+    backgroundColor: "#22c55e",
+    borderRadius: 32,
+    opacity: 0.15,
+    transform: [{ scale: 1.05 }],
   },
   previewSurface: {
-    height: 174,
-    borderRadius: 20,
-    backgroundColor: "#26c95b",
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 20,
+    height: 240,
+    borderRadius: 32,
+    backgroundColor: "#26c25b",
+    padding: 20,
     justifyContent: "space-between",
+    overflow: "hidden",
   },
   previewBadge: {
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.26)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   previewBadgeDot: {
     width: 10,
     height: 10,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 5,
+    backgroundColor: "#22c55e",
   },
   previewBadgeText: {
-    color: "#f4fff6",
-    fontSize: 18,
-    fontWeight: "700",
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   previewAvatar: {
     alignSelf: "center",
-    width: 110,
-    height: 110,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: -6,
+    gap: 6,
+    marginTop: -10,
   },
   previewEyesRow: {
     flexDirection: "row",
-    gap: 34,
+    gap: 36,
+    marginBottom: 2,
   },
   previewEyeDot: {
-    width: 16,
-    height: 16,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "#eff9ee",
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#ffffff",
   },
   previewInitial: {
-    color: "#ecfff0",
-    fontSize: 34,
+    color: "#ffffff",
+    fontSize: 40,
     fontWeight: "400",
   },
   previewControls: {
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 24,
+    padding: 6,
     gap: 8,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(16,20,21,0.82)",
-    paddingHorizontal: 8,
-    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.1)",
   },
-  controlPill: {
-    minWidth: 56,
-    borderRadius: Theme.radius.full,
+  mediaGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  mediaToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    height: 36,
+  },
+  controlDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  controlDividerVertical: {
+    width: 1,
+    height: 24,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
   },
-  controlPillActive: {
-    backgroundColor: "rgba(61, 224, 120, 0.18)",
-  },
-  controlPillText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  controlPillTextActive: {
-    color: "#f5fff7",
-  },
-  controlPillTextInactive: {
-    color: "#d95d62",
+  iconButtonActive: {
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   joinPanel: {
     gap: 16,
-    marginTop: 10,
+    marginTop: 8,
   },
   sectionTitle: {
     color: Theme.colors.foreground,
-    fontSize: 30,
+    fontSize: 36,
     fontWeight: "700",
-    letterSpacing: -0.8,
+    letterSpacing: -1,
   },
   subtitle: {
-    color: "#8f96a3",
-    fontSize: 16,
-    lineHeight: 24,
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 18,
+    lineHeight: 26,
+    marginBottom: 10,
   },
   input: {
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "#131927",
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: "#0d1117",
     color: Theme.colors.foreground,
-    paddingHorizontal: 16,
-    fontSize: 16,
+    paddingHorizontal: 20,
+    fontSize: 18,
+    fontWeight: "600",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.1)",
   },
   warning: {
     ...Theme.typography.meta,
@@ -307,14 +321,15 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.colors.primary,
-    borderRadius: Theme.radius.full,
-    height: 48,
-    marginTop: 2,
+    backgroundColor: "#22c55e",
+    borderRadius: 30,
+    height: 60,
+    marginTop: 4,
+    ...Theme.shadows.md,
   },
   primaryButtonText: {
-    color: Theme.colors.primaryForeground,
-    fontSize: 16,
+    color: "#ffffff",
+    fontSize: 18,
     fontWeight: "800",
   },
   buttonDisabled: {
@@ -324,11 +339,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     alignItems: "center",
-    paddingTop: 32,
+    paddingTop: 40,
+    paddingBottom: 20,
   },
   footerText: {
-    color: "rgba(255,255,255,0.22)",
+    color: "rgba(255,255,255,0.25)",
     fontSize: 12,
     fontWeight: "600",
+    letterSpacing: 0.5,
   },
 });
