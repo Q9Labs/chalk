@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.0.75] - 2026-03-14
+
+### Added
 - **Web/SDK-React: PWA install + update support** — `apps/web` now ships a real Chalk web app manifest, root service worker, install/update/offline prompt shell, and a reusable `usePwaInstall` hook in `@q9labs/chalk-react` so host apps can detect installability and standalone mode without app-specific browser wiring.
 - **Docs: canonical Chalk design system reference** — added `docs/design-system/chalk-design-system.md` as the source-of-truth doc for Chalk's current design system, including `sdk-react` core ownership, `apps/web` brand-layer ownership, current mobile drift, and the normalized token model future work should converge toward.
 - **Docs: Chalk Pencil design-system file** — added `docs/design-system/chalk-design-system.pen` as a dedicated Pencil artifact with separate Core and Brand system sections, reusable primitives, and composition shells for design-system assembly work.
