@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Chalk",
+    "slug": "chalk-mobile",
+    "scheme": "chalk",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#f4f1eb"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-dev-client",
+      "expo-secure-store",
+      "@cloudflare/realtimekit-react-native"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.q9labs.chalk.mobile"
+    },
+    "android": {
+      "package": "ai.q9labs.chalk.mobile"
+    },
+    "extra": {
+      "apiUrl": "https://chalk-api.q9labs.ai"
+    }
+  }
+}

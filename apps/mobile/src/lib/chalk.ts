@@ -1,0 +1,270 @@
+import { APIClient, createTokenProvider, type TokenStorage } from "@q9labs/chalk-core";
+import * as SecureStore from "expo-secure-store";
+
+const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
+const HOST_TOKEN_STORAGE_PREFIX = "chalk_mobile_host_token_";
+const PROD_API_URL = "https://chalk-api.q9labs.ai";
+const PROD_WS_URL = "wss://chalk-ws.q9labs.ai/ws";
+
+export type JoinContext = {
+  joinToken: string;
+  roomName?: string;
+  accessToken?: string;
+  expiresAtMs?: number;
+};
+
+export type JoinDraft = {
+  displayName: string;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+};
+
+type BaseMeetingRoute = {
+  roomId: string;
+  role: "host" | "participant";
+  joinToken?: string;
+  roomName?: string;
+  source: "new-meeting" | "join-link" | "direct-room";
+};
+
+export type LobbyRoute = BaseMeetingRoute & {
+  kind: "lobby";
+};
+
+export type RoomRoute = BaseMeetingRoute & {
+  kind: "room";
+  joinDraft: JoinDraft;
+};
+
+export type MeetingRoute = RoomRoute;
+
+export type MobileRoute = { kind: "home" } | LobbyRoute | RoomRoute;
+
+const hostTokenStorage: TokenStorage = {
+  get: async (key) => SecureStore.getItemAsync(`${HOST_TOKEN_STORAGE_PREFIX}${key}`),
+  set: async (key, value) => {
+    await SecureStore.setItemAsync(`${HOST_TOKEN_STORAGE_PREFIX}${key}`, value);
+  },
+  remove: async (key) => {
+    await SecureStore.deleteItemAsync(`${HOST_TOKEN_STORAGE_PREFIX}${key}`);
+  },
+};
+
+let cachedHostTokenProvider: (() => Promise<string>) | null = null;
+let cachedHostTokenProviderKey: string | null = null;
+
+export function getApiUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
+  return configured || PROD_API_URL;
+}
+
+export function getWsUrl(apiUrl = getApiUrl()): string | undefined {
+  const configured = process.env.EXPO_PUBLIC_WS_URL?.trim();
+  if (configured) {
+    return configured;
+  }
+
+  try {
+    const api = new URL(apiUrl);
+    if (api.host === "chalk-api.q9labs.ai") {
+      return PROD_WS_URL;
+    }
+
+    const wsProtocol = api.protocol === "https:" ? "wss:" : "ws:";
+    return `${wsProtocol}//${api.host}/ws`;
+  } catch {
+    return undefined;
+  }
+}
+
+export function getHostApiKey(): string | null {
+  const configured = process.env.EXPO_PUBLIC_CHALK_API_KEY?.trim();
+  return configured || null;
+}
+
+export function canCreateMeeting(): boolean {
+  return getHostApiKey() !== null;
+}
+
+export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | null {
+  const apiKey = getHostApiKey();
+  if (!apiKey) {
+    return null;
+  }
+
+  const cacheKey = `${apiUrl}:${apiKey}`;
+  if (cachedHostTokenProvider && cachedHostTokenProviderKey === cacheKey) {
+    return cachedHostTokenProvider;
+  }
+
+  cachedHostTokenProvider = createTokenProvider({
+    apiKey,
+    apiUrl,
+    storage: hostTokenStorage,
+  });
+  cachedHostTokenProviderKey = cacheKey;
+  return cachedHostTokenProvider;
+}
+
+export async function getJoinContext(): Promise<JoinContext | null> {
+  const raw = await SecureStore.getItemAsync(JOIN_CONTEXT_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as JoinContext;
+    if (parsed.expiresAtMs && Date.now() >= parsed.expiresAtMs) {
+      await clearJoinContext();
+      return null;
+    }
+    return parsed;
+  } catch {
+    await clearJoinContext();
+    return null;
+  }
+}
+
+export async function setJoinContext(context: JoinContext): Promise<void> {
+  await SecureStore.setItemAsync(JOIN_CONTEXT_KEY, JSON.stringify(context));
+}
+
+export async function clearJoinContext(): Promise<void> {
+  await SecureStore.deleteItemAsync(JOIN_CONTEXT_KEY);
+}
+
+export async function resolveJoinToken(joinToken: string, apiUrl: string): Promise<LobbyRoute> {
+  const client = new APIClient({ apiUrl });
+  const response = await client.exchangeJoinToken(joinToken);
+  if (!response.success || !response.data) {
+    throw new Error(response.error?.message ?? "Invalid join link");
+  }
+
+  const context: JoinContext = {
+    joinToken,
+    roomName: response.data.roomName,
+    accessToken: response.data.accessToken,
+    expiresAtMs: Date.now() + response.data.expiresIn * 1000,
+  };
+  await setJoinContext(context);
+
+  return {
+    kind: "lobby",
+    roomId: response.data.roomName,
+    role: "participant",
+    joinToken,
+    roomName: response.data.roomName,
+    source: "join-link",
+  };
+}
+
+export async function getJoinAccessToken(apiUrl: string, joinToken: string): Promise<string> {
+  const context = await getJoinContext();
+  if (
+    context?.joinToken === joinToken &&
+    context.accessToken &&
+    context.expiresAtMs &&
+    Date.now() < context.expiresAtMs - 5_000
+  ) {
+    return context.accessToken;
+  }
+
+  await resolveJoinToken(joinToken, apiUrl);
+  const nextContext = await getJoinContext();
+  if (!nextContext?.accessToken) {
+    throw new Error("Join token exchange did not return an access token");
+  }
+
+  return nextContext.accessToken;
+}
+
+export function createMeetingLobbyRoute(): LobbyRoute {
+  const roomId = `instant-meeting-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    kind: "lobby",
+    roomId,
+    roomName: roomId,
+    role: "host",
+    source: "new-meeting",
+  };
+}
+
+export function buildRoomRoute(route: LobbyRoute, draft: JoinDraft): RoomRoute {
+  return {
+    kind: "room",
+    roomId: route.roomId,
+    role: route.role,
+    joinToken: route.joinToken,
+    roomName: route.roomName,
+    source: route.source,
+    joinDraft: {
+      displayName: draft.displayName.trim() || (route.role === "host" ? "Host" : "Guest"),
+      audioEnabled: draft.audioEnabled,
+      videoEnabled: draft.videoEnabled,
+    },
+  };
+}
+
+export function getLobbySupport(route: LobbyRoute): { canJoin: boolean; reason?: string } {
+  if (route.joinToken) {
+    return { canJoin: true };
+  }
+
+  return { canJoin: true };
+}
+
+export function parseInputDestination(input: string): LobbyRoute | null {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = parseUrlLike(trimmed);
+  if (parsed) {
+    return parsed;
+  }
+
+  return {
+    kind: "lobby",
+    roomId: trimmed,
+    roomName: trimmed,
+    role: "participant",
+    source: "direct-room",
+  };
+}
+
+export function parseUrlLike(url: string): LobbyRoute | null {
+  try {
+    const parsed = new URL(url);
+    const pathSegments =
+      parsed.protocol === "chalk:"
+        ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)]
+        : parsed.pathname.split("/").filter(Boolean);
+    const [head, tail] = pathSegments;
+
+    if (head === "j" && tail) {
+      return {
+        kind: "lobby",
+        roomId: tail,
+        role: "participant",
+        joinToken: tail,
+        source: "join-link",
+      };
+    }
+
+    if (head === "room" && tail) {
+      const roomId = decodeURIComponent(tail);
+      return {
+        kind: "lobby",
+        roomId,
+        roomName: roomId,
+        role: "participant",
+        source: "direct-room",
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}

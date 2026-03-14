@@ -43,6 +43,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 **/.metro-health-check*
 **/dist
 **/web-build
+apps/mobile/.env.local
+apps/mobile/.turbo
+apps/mobile/android/app/.cxx
+apps/mobile/android/app/debug.keystore
+packages/sdk-react-native/.turbo
+packages/sdk-react-native/dist
+packages/sdk-react-native/tsconfig.tsbuildinfo
 
 # iOS / Xcode
 DerivedData

@@ -1,0 +1,32 @@
+{
+  "name": "@q9labs/chalk-mobile",
+  "private": true,
+  "main": "./index.ts",
+  "scripts": {
+    "start": "expo start --clear",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "build": "expo export --platform ios --output-dir dist/ios && expo export --platform android --output-dir dist/android",
+    "check-types": "tsc --noEmit",
+    "lint": "echo 'No linter configured yet'",
+    "test": "echo 'No tests configured yet'"
+  },
+  "dependencies": {
+    "@cloudflare/realtimekit-react-native": "^0.3.1",
+    "@q9labs/chalk-core": "workspace:^",
+    "@q9labs/chalk-react-native": "workspace:^",
+    "expo": "^55.0.6",
+    "expo-dev-client": "^55.0.16",
+    "expo-linking": "^55.0.7",
+    "expo-secure-store": "~55.0.8",
+    "expo-status-bar": "~55.0.4",
+    "react": "19.2.0",
+    "react-native": "0.83.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.4",
+    "@types/react": "~19.2.10",
+    "babel-preset-expo": "^55.0.11",
+    "typescript": "^5.7.2"
+  }
+}

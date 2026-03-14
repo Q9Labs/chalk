@@ -1,0 +1,50 @@
+{
+  "name": "@q9labs/chalk-react-native",
+  "version": "0.0.74",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "packages/sdk-react-native"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @q9labs/chalk-core && bun run build:types",
+    "build:types": "tsc --project tsconfig.json",
+    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @q9labs/chalk-core --watch",
+    "test": "echo 'No tests configured yet'",
+    "check-types": "tsc --noEmit",
+    "lint": "echo 'No linter configured yet'",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@q9labs/chalk-core": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "@cloudflare/realtimekit-react-native": "^0.3.1",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-native": ">=0.77"
+  }
+}

@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "packages/*",
+    "apps/mobile",
     "apps/web",
     "apps/docs"
   ],
@@ -10,6 +11,9 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
+    "dev:mobile": "bun run --cwd apps/mobile start",
+    "dev:mobile:android": "bun run --cwd apps/mobile android",
+    "dev:mobile:ios": "bun run --cwd apps/mobile ios",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "dev:web:pages": "bun run --cwd apps/web dev:pages",
