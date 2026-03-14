@@ -26,8 +26,10 @@ const PRESET_NAMES = Object.freeze(Object.keys(defaultPatterns)) as readonly Cha
 export function useHaptics({ enabled = true, respectReducedMotion = true }: UseHapticsOptions = {}): UseHapticsReturn {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger: rawTrigger, cancel: rawCancel, isSupported } = useWebHaptics();
+  const hasNativeVibration = typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
+  const supportsHaptics = isSupported || hasNativeVibration;
 
-  const isEnabled = enabled && (!respectReducedMotion || !prefersReducedMotion) && isSupported;
+  const isEnabled = enabled && (!respectReducedMotion || !prefersReducedMotion) && supportsHaptics;
 
   const trigger = useCallback<UseHapticsReturn["trigger"]>(
     (input = "selection", options) => {
@@ -35,9 +37,14 @@ export function useHaptics({ enabled = true, respectReducedMotion = true }: UseH
         return Promise.resolve();
       }
 
+      if (!isSupported && hasNativeVibration) {
+        navigator.vibrate(8);
+        return Promise.resolve();
+      }
+
       return rawTrigger(input, options) ?? Promise.resolve();
     },
-    [isEnabled, rawTrigger],
+    [hasNativeVibration, isEnabled, isSupported, rawTrigger],
   );
 
   const cancel = useCallback(() => {

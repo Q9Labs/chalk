@@ -9,6 +9,28 @@ const createSession = (): ChalkSession =>
   });
 
 describe("ChalkSession lifecycle listener graph", () => {
+  it("constructs safely when window exists without DOM event APIs", () => {
+    const originalWindow = globalThis.window;
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      writable: true,
+      value: { innerWidth: 390 },
+    });
+
+    try {
+      const session = createSession();
+      expect(session.ui.getState().isMobileView).toBe(false);
+      session.dispose();
+    } finally {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        writable: true,
+        value: originalWindow,
+      });
+    }
+  });
+
   it("keeps a single external forwarding graph when setup runs multiple times", () => {
     const session = createSession();
 

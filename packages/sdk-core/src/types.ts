@@ -68,6 +68,8 @@ export const err = <E>(error: E): Err<E> => ({ ok: false, error });
  */
 export type TokenProvider = () => Promise<string>;
 
+export type RealtimeKitLoader = import("./realtimekit/runtime").RealtimeKitLoader;
+
 /**
  * Configuration options for ConferenceClient
  *
@@ -130,6 +132,14 @@ export interface ConferenceClientConfig {
    * @default 'wss://api.chalk.dev/ws'
    */
   wsUrl?: string;
+
+  /**
+   * Optional RealtimeKit module loader.
+   * Defaults to the web RealtimeKit package.
+   *
+   * Use this to provide a platform-specific loader, such as React Native.
+   */
+  realtimeKitLoader?: import("./realtimekit/runtime").RealtimeKitLoader;
 
   /**
    * Enable debug logging to console

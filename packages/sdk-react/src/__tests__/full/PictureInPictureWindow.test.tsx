@@ -96,8 +96,8 @@ describe("PictureInPictureWindow", () => {
       />,
     );
 
-    expect(getByText("Unable to join room")).toBeDefined();
-    expect(getAllByText("Failed to join room")).toHaveLength(2);
+    expect(getByText("Just a small bump in the road")).toBeDefined();
+    expect(getAllByText("Failed to join room")).toHaveLength(1);
     expect(getByText("Technical details")).toBeDefined();
     expect(getByText("Support code")).toBeDefined();
     expect(getByText("CHK-123")).toBeDefined();

@@ -21,6 +21,8 @@
 
 // API client (for React Native SDK which uses its own RTK integration)
 export { APIClient } from "./api-client.ts";
+export { importWebRealtimeKit } from "./realtimekit/runtime.ts";
+export type { RealtimeKitInitConfig, RealtimeKitLoader, RealtimeKitStatic } from "./realtimekit/runtime.ts";
 // Main client
 export { ConferenceClient } from "./client.ts";
 // Event emitter (for advanced use cases)

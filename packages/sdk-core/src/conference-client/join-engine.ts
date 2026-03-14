@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import { ConnectionError, TimeoutError } from "../effect/errors.ts";
+import type { RealtimeKitStatic } from "../realtimekit/runtime.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "../rtk-join-policy.ts";
 import { WideEventContext } from "../wide-events/context.ts";
 import { wideEvents } from "../wide-events/index.ts";
-import type RealtimeKitClient from "@cloudflare/realtimekit";
 
 export type RtkJoinPolicySelection = ReturnType<typeof getRtkJoinPolicyForCurrentCohort>;
 
@@ -47,9 +47,7 @@ export const createRealtimeKitInitEffect = (
   authToken: string,
   audio: boolean,
   video: boolean,
-  loadRealtimeKitClient: () => Promise<{
-    init: (config: { authToken: string; defaults: { audio: boolean; video: boolean } }) => Promise<RealtimeKitClient>;
-  }>,
+  loadRealtimeKitClient: () => Promise<RealtimeKitStatic>,
 ) =>
   Effect.tryPromise({
     try: async () => {

@@ -1,5 +1,6 @@
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { ChalkErrorCode, type ChalkError, type MediaDevice, type MediaDeviceKind, type Participant } from "../types.ts";
+import { canEnumerateMediaDevices, enumerateMediaDevices } from "../utils/media-devices";
 
 interface DeviceControllerDeps {
   getRtkClient: () => RealtimeKitClient | undefined;
@@ -10,8 +11,12 @@ interface DeviceControllerDeps {
 
 export const createConferenceSessionDeviceController = (deps: DeviceControllerDeps) => {
   const getDevices = async (): Promise<MediaDevice[]> => {
+    if (!canEnumerateMediaDevices()) {
+      return [];
+    }
+
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
+      const devices = await enumerateMediaDevices();
       return devices.map((device) => ({
         deviceId: device.deviceId,
         label: device.label || `${device.kind} (${device.deviceId.slice(0, 8)})`,

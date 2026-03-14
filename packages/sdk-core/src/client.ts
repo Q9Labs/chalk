@@ -28,6 +28,7 @@ import { createJoinLock, isJoinTimeoutError, waitForJoinWithTimeout } from "./co
 import { ConnectionError } from "./effect/errors.ts";
 import { EventEmitter } from "./events.ts";
 import { ChalkPostHogSessionReplay, type ChalkPostHogConfig } from "./posthog.ts";
+import { importWebRealtimeKit, type RealtimeKitStatic } from "./realtimekit/runtime.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
 import { ConferenceSession } from "./room.ts";
 import type { ChalkError, ConferenceClientConfig, CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, JoinSessionConfig, RoomResource, ScheduleRoomOptions, SessionConnectionState } from "./types.ts";
@@ -45,11 +46,12 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
   private readonly tokenProvider?: ConferenceClientConfig["tokenProvider"];
   private readonly debug: boolean;
   private readonly demoMode: boolean;
+  private readonly realtimeKitLoader: NonNullable<ConferenceClientConfig["realtimeKitLoader"]>;
   private currentSession: ConferenceSession | null = null;
   private currentWsClient: WSClient | null = null;
   private readonly postHogSessionReplay = new ChalkPostHogSessionReplay();
   private readonly joinLock: JoinLock = createJoinLock();
-  private realtimeKitClientPromise: Promise<(typeof import("@cloudflare/realtimekit"))["default"]> | null = null;
+  private realtimeKitClientPromise: Promise<RealtimeKitStatic> | null = null;
 
   constructor(config: ConferenceClientConfig) {
     super();
@@ -59,6 +61,7 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     this.demoMode = config.demoMode ?? false;
     this.wsUrl = config.wsUrl ?? deriveWsUrl(apiUrl);
     this.tokenProvider = config.tokenProvider;
+    this.realtimeKitLoader = config.realtimeKitLoader ?? importWebRealtimeKit;
     this.postHogSessionReplay.configure(config.posthog);
 
     const hasAuth = config.token || config.tokenProvider || config.apiKey || this.debug;
@@ -96,7 +99,7 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
   }
 
   private _importRealtimeKitClient() {
-    return import("@cloudflare/realtimekit").then((module) => module.default);
+    return this.realtimeKitLoader();
   }
 
   private _getRealtimeKitClient() {
@@ -171,7 +174,7 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     });
   }
 
-  private async initRealtimeKitClient(authToken: string, audio: boolean, video: boolean) {
+  private async initRealtimeKitClient(authToken: string, audio: boolean, video: boolean): Promise<any> {
     return Effect.runPromise(this._initRealtimeKitEffect(authToken, audio, video)).catch((error) => {
       if (error instanceof ConnectionError) {
         throw new Error(`RealtimeKit initialization failed: ${error.message}`);

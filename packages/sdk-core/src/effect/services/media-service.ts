@@ -16,6 +16,7 @@ import { MediaError, RoomError } from "../errors";
 import { LoggerService } from "../services";
 import type { MediaEvent, MediaState, MediaDeviceData, VideoBackgroundEffectData } from "../schemas/manager-state";
 import { isConferenceSessionVideoBackgroundSupported } from "../../conference-session/video-background-controller";
+import { canEnumerateMediaDevices, enumerateMediaDevices } from "../../utils/media-devices";
 import { RoomInstanceService } from "./room-instance";
 
 /** Previous device for undo functionality */
@@ -374,8 +375,15 @@ export const MediaServiceLive = Layer.effect(
       }),
 
       refreshDevices: Effect.gen(function* () {
+        if (!canEnumerateMediaDevices()) {
+          const devices: MediaDeviceData[] = [];
+          yield* SubscriptionRef.update(stateRef, (s) => ({ ...s, devices }));
+          yield* PubSub.publish(eventBus, { _tag: "DevicesChanged", devices });
+          return devices;
+        }
+
         const rawDevices = yield* Effect.tryPromise({
-          try: () => navigator.mediaDevices.enumerateDevices(),
+          try: () => enumerateMediaDevices(),
           catch: (err) =>
             new MediaError({
               code: "DEVICE_NOT_FOUND",

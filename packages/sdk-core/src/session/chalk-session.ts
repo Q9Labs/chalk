@@ -25,7 +25,7 @@ import { TypedEventEmitter } from "../utils/typed-emitter";
 import { wideEvents } from "../wide-events/index";
 import type { ChalkIncident, ChalkIncidentBreadcrumb, ChalkIncidentConfig, ChalkIncidentInput, ChalkIncidentSource } from "../incident.ts";
 import type { ChalkPostHogConfig } from "../posthog.ts";
-import type { CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, RoomResource, ScheduleRoomOptions } from "../types.ts";
+import type { CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, RealtimeKitLoader, RoomResource, ScheduleRoomOptions } from "../types.ts";
 import { createDefaultMediaState, createDefaultParticipantState, createDefaultRoomState, createSessionStateApis, type MediaSessionApi, type ParticipantSessionApi, type RoomSessionApi, type SessionStateUpdaters } from "./chalk-session-state";
 import { ChalkSessionIncidentPipeline } from "./chalk-session-incidents";
 import { attachRoomToManagersAndBridgeState } from "./chalk-session-bridges";
@@ -40,6 +40,8 @@ export interface ChalkSessionConfig {
   token?: string;
   /** Token provider for refresh */
   tokenProvider?: () => Promise<string>;
+  /** Optional platform-specific RealtimeKit loader override. */
+  realtimeKitLoader?: RealtimeKitLoader;
   /**
    * API key (deprecated; prefer `token` or `tokenProvider`).
    * @deprecated Will be removed in v2.
@@ -133,6 +135,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       wsUrl: config.wsUrl,
       token: config.token,
       tokenProvider: config.tokenProvider,
+      realtimeKitLoader: config.realtimeKitLoader,
       apiKey: config.apiKey,
       debug,
       demoMode: config.demoMode,

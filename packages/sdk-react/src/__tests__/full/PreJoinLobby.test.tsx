@@ -133,7 +133,7 @@ describe("PreJoinLobby", () => {
   it("shows diagnostic error sheet when error prop is provided", async () => {
     const { getByText } = render(<PreJoinLobby onJoin={() => {}} error="Failed to get camera" supportCode="CHK-20260302-101010-001" initialVideoEnabled={false} initialAudioEnabled={false} />);
     await act(async () => {});
-    expect(getByText("Something went wrong")).toBeDefined();
+    expect(getByText("Just a small bump in the road")).toBeDefined();
     expect(getByText("Support Code")).toBeDefined();
     expect(getByText("CHK-20260302-101010-001")).toBeDefined();
     expect(getByText("Failed to get camera")).toBeDefined();

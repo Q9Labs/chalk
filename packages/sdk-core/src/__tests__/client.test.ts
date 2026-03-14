@@ -168,6 +168,23 @@ describe("ConferenceClient", () => {
         new ConferenceClient({ apiUrl: DEFAULT_API_URL, debug: true });
       }).not.toThrow();
     });
+
+    it("should use a custom RealtimeKit loader when provided", async () => {
+      let loadCount = 0;
+      const client = new ConferenceClient({
+        apiUrl: DEFAULT_API_URL,
+        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
+        realtimeKitLoader: async () => {
+          loadCount += 1;
+          return {
+            init: async () => createMockRtkClient() as any,
+          };
+        },
+      });
+
+      await expect(client.preloadRealtimeKit()).resolves.toBe(true);
+      expect(loadCount).toBe(1);
+    });
   });
 
   describe("connection status", () => {
@@ -390,6 +407,25 @@ describe("ConferenceClient", () => {
   });
 
   describe("realtimekit preload", () => {
+    it("uses a custom RTK loader when provided", async () => {
+      const init = mock(async () => createMockRtkClient() as any);
+      const customLoader = mock(async () => ({ init }));
+      const client = new ConferenceClient({
+        apiUrl: DEFAULT_API_URL,
+        wsUrl: "",
+        token: "chalk_access_token",
+        realtimeKitLoader: customLoader,
+      });
+
+      const preloaded = await client.preloadRealtimeKit();
+      expect(preloaded).toBe(true);
+
+      await Effect.runPromise((client as any)._initRealtimeKitEffect("rtk_token", true, false));
+
+      expect(customLoader).toHaveBeenCalledTimes(1);
+      expect(init).toHaveBeenCalledTimes(1);
+    });
+
     it("reuses preloaded RTK module for join initialization", async () => {
       const client = new ConferenceClient({
         apiUrl: DEFAULT_API_URL,

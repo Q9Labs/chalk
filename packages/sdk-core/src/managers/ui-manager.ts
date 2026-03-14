@@ -56,6 +56,14 @@ export interface UIManagerEvents {
 
 const NOTIFICATION_DISMISS_MS = 5000;
 
+const canListenToWindowEvents = (): boolean =>
+  typeof window !== "undefined" &&
+  typeof window.addEventListener === "function" &&
+  typeof window.removeEventListener === "function";
+
+const getWindowInnerWidth = (): number | null =>
+  typeof window !== "undefined" && typeof window.innerWidth === "number" ? window.innerWidth : null;
+
 /**
  * Manages UI state - layout, panels, notifications
  */
@@ -81,7 +89,7 @@ export class UIManager extends StateContainer<UIState> {
     this.boundDetectMobileView = this.detectMobileView.bind(this);
 
     // Detect mobile on init
-    if (typeof window !== "undefined") {
+    if (canListenToWindowEvents()) {
       this.detectMobileView();
       window.addEventListener("resize", this.boundDetectMobileView);
     }
@@ -93,7 +101,12 @@ export class UIManager extends StateContainer<UIState> {
   }
 
   private detectMobileView(): void {
-    const isMobile = window.innerWidth < 768;
+    const innerWidth = getWindowInnerWidth();
+    if (innerWidth === null) {
+      return;
+    }
+
+    const isMobile = innerWidth < 768;
     if (this.getState().isMobileView !== isMobile) {
       this.setState({ isMobileView: isMobile });
     }
@@ -235,7 +248,7 @@ export class UIManager extends StateContainer<UIState> {
     }
 
     // SDKCORE-MED-06: Remove resize listener using stored bound reference
-    if (typeof window !== "undefined") {
+    if (canListenToWindowEvents()) {
       window.removeEventListener("resize", this.boundDetectMobileView);
     }
 
