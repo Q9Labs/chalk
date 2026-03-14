@@ -948,6 +948,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the mobile lobby/room screens use icon names that exist in Hugeicons 3.x so Expo resolves and renders them correctly.
+
 ### Changed
 
 - Removed the legacy Terraform dev environment and unused non-lean modules, keeping only `bootstrap`, `prod-lean`, and the modules they depend on.

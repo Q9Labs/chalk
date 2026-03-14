@@ -1,4 +1,15 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { 
+  Mic01Icon, 
+  MicOff01Icon, 
+  VideoIcon, 
+  VideoOffIcon, 
+  Settings01Icon, 
+  Grid02Icon, 
+  Sun01Icon, 
+  Moon01Icon, 
+  ArrowDown01Icon 
+} from "@hugeicons/core-free-icons";
 import { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { buildRoomRoute, getLobbySupport, type LobbyRoute, type RoomRoute } from "../lib/chalk";
@@ -48,7 +59,7 @@ export function LobbyScreen({ route, onBack, onJoin }: LobbyScreenProps): React.
         <Text style={styles.headerTitle} numberOfLines={1}>{route.roomName || "Meeting On Chalk"}</Text>
 
         <Pressable onPress={() => setIsDarkMode((current) => !current)} style={styles.themeButton}>
-          <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={22} color="white" />
+          <HugeiconsIcon icon={isDarkMode ? Sun01Icon : Moon01Icon} size={22} color="white" />
         </Pressable>
       </View>
 
@@ -71,24 +82,24 @@ export function LobbyScreen({ route, onBack, onJoin }: LobbyScreenProps): React.
           <View style={styles.previewControls}>
             <View style={styles.mediaGroup}>
               <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={styles.mediaToggle}>
-                <Ionicons name={audioEnabled ? "mic" : "mic-off"} size={20} color={audioEnabled ? "white" : "#ef4444"} />
-                <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.4)" />
+                <HugeiconsIcon icon={audioEnabled ? Mic01Icon : MicOff01Icon} size={20} color={audioEnabled ? "white" : "#ef4444"} />
+                <HugeiconsIcon icon={ArrowDown01Icon} size={14} color="rgba(255,255,255,0.4)" />
               </Pressable>
               <View style={styles.controlDivider} />
               <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={styles.mediaToggle}>
-                <Ionicons name={videoEnabled ? "videocam" : "videocam-off"} size={20} color={videoEnabled ? "white" : "#ef4444"} />
-                <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.4)" />
+                <HugeiconsIcon icon={videoEnabled ? VideoIcon : VideoOffIcon} size={20} color={videoEnabled ? "white" : "#ef4444"} />
+                <HugeiconsIcon icon={ArrowDown01Icon} size={14} color="rgba(255,255,255,0.4)" />
               </Pressable>
             </View>
             
             <View style={styles.controlDividerVertical} />
             
             <Pressable style={styles.iconButton}>
-              <Ionicons name="settings-outline" size={20} color="white" />
+              <HugeiconsIcon icon={Settings01Icon} size={20} color="white" />
             </Pressable>
             
             <Pressable style={[styles.iconButton, styles.iconButtonActive]}>
-              <MaterialCommunityIcons name="grid-large" size={20} color="#22c55e" />
+              <HugeiconsIcon icon={Grid02Icon} size={20} color="#22c55e" />
             </Pressable>
           </View>
         </View>
