@@ -366,6 +366,18 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 	CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_room_id ON webhook_deliveries(room_id);
 
 	-- ============================================================================
+	-- MIGRATION 013: Screen annotations
+	-- ============================================================================
+	ALTER TABLE rooms
+	ADD COLUMN IF NOT EXISTS screen_annotation_state JSONB;
+
+	COMMENT ON COLUMN rooms.screen_annotation_state IS 'Screen annotation state JSON (share session, items, access mode)';
+
+	CREATE INDEX IF NOT EXISTS idx_rooms_screen_annotation_state
+	ON rooms USING GIN (screen_annotation_state)
+	WHERE screen_annotation_state IS NOT NULL;
+
+	-- ============================================================================
 	-- MIGRATION 014: Whisper job history
 	-- ============================================================================
 	CREATE TABLE IF NOT EXISTS whisper_transcription_jobs (

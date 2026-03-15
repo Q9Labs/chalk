@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 ### Fixed
+- **API: embedded screen-annotation migration restored** — added runtime migration `013` back into the embedded Postgres bootstrap so local/prod boot paths create `rooms.screen_annotation_state` before generated room queries reference it, preventing add-participant/join failures from schema drift.
+- **SDK-Core/SDK-React/SDK-React-Native: shared avatar recipe contract** — introduced a single `sdk-core` participant avatar recipe derived from the web FaceHash treatment, then switched web avatar rendering, profile-gradient preview initials, and native avatar/self-pill surfaces to consume the same initials, face colors, and darker/avatar gradient semantics instead of rebuilding them per platform.
 - **SDK-Core/SDK-React/SDK-React-Native: shared participant identity visuals** — moved the name-hashed participant gradient/avatar palette logic into `sdk-core`, re-exported it for web, and wired the same generated gradients into native lobby/joining/meeting identity surfaces so mobile now follows the web avatar color rules.
 - **SDK-React-Native/mobile: animated native avatar + lobby preview path** — the native lobby/joining/meeting fallback avatar now blinks and pulses like the web facehash treatment, the mobile-only extra preview control was removed, and the native prejoin flow now opens a real `react-native-webrtc` local camera preview stream with stricter video-track validation.
 - **SDK-React-Native/mobile: leave flow end-screen handoff** — leaving a native room now finalizes into the end screen through a normal screen swap instead of a modal layered over the RTC surface, reducing the Android case where the call visually stayed mounted after disconnect while controls were already dead.
@@ -987,6 +989,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mobile host meeting creation now pre-creates the room with a friendly human-readable name and carries the returned room UUID separately, so lobby UI no longer shows the old opaque `instant-meeting-*` identifier as the room title.
 - Join-token exchange now returns both the canonical room UUID and the friendly room name, so mobile can display intelligible titles without treating the room label as the room identifier.
 - Tenant access-token minting now stamps `role=host` as well as host permissions, so mobile `New meeting` can create rooms again after the room pre-create flow started using the host-only `/rooms` endpoint. Mobile host token cache key bumped to evict stale no-role tokens on device.
+- Mobile host meeting creation now self-heals one stale `host role required` failure by clearing the cached host JWT set and retrying room creation once, so already-stored pre-fix tokens stop blocking `New meeting`.
 
 ### Changed
 
