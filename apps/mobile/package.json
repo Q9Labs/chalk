@@ -6,10 +6,15 @@
     "start": "expo start --clear",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "prebuild:android": "expo prebuild --platform android --no-install",
+    "prebuild:android:production": "CHALK_APP_VARIANT=production expo prebuild --platform android --clean --no-install",
+    "prebuild:ios": "expo prebuild --platform ios --no-install",
+    "prebuild:ios:production": "CHALK_APP_VARIANT=production expo prebuild --platform ios --clean --no-install",
     "build": "expo export --platform ios --output-dir dist/ios && expo export --platform android --output-dir dist/android",
+    "build:android:release": "cd android && ./gradlew bundleRelease",
     "check-types": "tsc --noEmit",
-    "lint": "echo 'No linter configured yet'",
-    "test": "echo 'No tests configured yet'"
+    "lint": "bunx oxfmt --check . && tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",
@@ -32,6 +37,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.28.4",
+    "@types/bun": "latest",
     "@types/react": "~19.2.10",
     "babel-preset-expo": "^55.0.11",
     "typescript": "^5.7.2"

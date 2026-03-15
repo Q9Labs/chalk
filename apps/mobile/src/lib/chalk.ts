@@ -1,8 +1,11 @@
-import { APIClient, createFriendlyRoomName, createTokenProvider, humanizeRoomName, type TokenStorage } from "@q9labs/chalk-core";
+import { APIClient, createFriendlyRoomName, createTokenProvider, humanizeRoomName } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
+import { NativeModules } from "react-native";
+import { createStorageScopeId, resolveDeviceLocalUrl } from "./mobile-runtime";
+import { createHostTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY, LEGACY_HOST_TOKEN_PREFIXES } from "./host-token-storage";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
-const HOST_TOKEN_STORAGE_PREFIX = "chalk_mobile_host_token_v2_";
+const HOST_ROLE_REQUIRED_ERROR = "host role required";
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 const PROD_WS_URL = "wss://chalk-ws.q9labs.ai/ws";
 
@@ -27,28 +30,18 @@ export type LobbyRoute = BaseMeetingRoute & {
 
 export type MobileRoute = { kind: "home" } | LobbyRoute;
 
-const hostTokenStorage: TokenStorage = {
-  get: async (key) => SecureStore.getItemAsync(`${HOST_TOKEN_STORAGE_PREFIX}${key}`),
-  set: async (key, value) => {
-    await SecureStore.setItemAsync(`${HOST_TOKEN_STORAGE_PREFIX}${key}`, value);
-  },
-  remove: async (key) => {
-    await SecureStore.deleteItemAsync(`${HOST_TOKEN_STORAGE_PREFIX}${key}`);
-  },
-};
-
 let cachedHostTokenProvider: (() => Promise<string>) | null = null;
 let cachedHostTokenProviderKey: string | null = null;
 
 export function getApiUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
-  return configured || PROD_API_URL;
+  return resolveDeviceLocalUrl(configured || PROD_API_URL, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL);
 }
 
 export function getWsUrl(apiUrl = getApiUrl()): string | undefined {
   const configured = process.env.EXPO_PUBLIC_WS_URL?.trim();
   if (configured) {
-    return configured;
+    return resolveDeviceLocalUrl(configured, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL);
   }
 
   try {
@@ -79,7 +72,7 @@ export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | 
     return null;
   }
 
-  const cacheKey = `${apiUrl}:${apiKey}`;
+  const cacheKey = `${apiUrl}:${createStorageScopeId(apiUrl, apiKey)}`;
   if (cachedHostTokenProvider && cachedHostTokenProviderKey === cacheKey) {
     return cachedHostTokenProvider;
   }
@@ -87,10 +80,25 @@ export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | 
   cachedHostTokenProvider = createTokenProvider({
     apiKey,
     apiUrl,
-    storage: hostTokenStorage,
+    storage: createHostTokenStorage(apiUrl, apiKey),
   });
   cachedHostTokenProviderKey = cacheKey;
   return cachedHostTokenProvider;
+}
+
+async function clearHostAuthState(apiUrl: string): Promise<void> {
+  const apiKey = getHostApiKey();
+  cachedHostTokenProvider = null;
+  cachedHostTokenProviderKey = null;
+
+  const removals = LEGACY_HOST_TOKEN_PREFIXES.flatMap((prefix) => [HOST_ACCESS_TOKEN_KEY, HOST_REFRESH_TOKEN_KEY, HOST_EXPIRES_KEY].map((key) => SecureStore.deleteItemAsync(`${prefix}${key}`)));
+
+  if (apiKey) {
+    const storage = createHostTokenStorage(apiUrl, apiKey);
+    removals.push(Promise.resolve(storage.remove(HOST_ACCESS_TOKEN_KEY)), Promise.resolve(storage.remove(HOST_REFRESH_TOKEN_KEY)), Promise.resolve(storage.remove(HOST_EXPIRES_KEY)));
+  }
+
+  await Promise.all(removals);
 }
 
 export async function getJoinContext(): Promise<JoinContext | null> {
@@ -150,12 +158,7 @@ export async function resolveJoinToken(joinToken: string, apiUrl: string): Promi
 
 export async function getJoinAccessToken(apiUrl: string, joinToken: string): Promise<string> {
   const context = await getJoinContext();
-  if (
-    context?.joinToken === joinToken &&
-    context.accessToken &&
-    context.expiresAtMs &&
-    Date.now() < context.expiresAtMs - 5_000
-  ) {
+  if (context?.joinToken === joinToken && context.accessToken && context.expiresAtMs && Date.now() < context.expiresAtMs - 5_000) {
     return context.accessToken;
   }
 
@@ -169,15 +172,24 @@ export async function getJoinAccessToken(apiUrl: string, joinToken: string): Pro
 }
 
 export async function createMeetingLobbyRoute(apiUrl: string): Promise<LobbyRoute> {
-  const tokenProvider = getHostTokenProvider(apiUrl);
-  if (!tokenProvider) {
-    throw new Error("Meeting creation is currently restricted.");
-  }
-
   const friendlyRoom = createFriendlyRoomName();
   const roomName = friendlyRoom.label;
-  const client = new APIClient({ apiUrl, tokenProvider });
-  const response = await client.createRoom({ name: roomName });
+  const createRoom = async () => {
+    const tokenProvider = getHostTokenProvider(apiUrl);
+    if (!tokenProvider) {
+      throw new Error("Meeting creation is currently restricted.");
+    }
+
+    const client = new APIClient({ apiUrl, tokenProvider });
+    return client.createRoom({ name: roomName });
+  };
+
+  let response = await createRoom();
+  if (!response.success && response.error?.message?.toLowerCase() === HOST_ROLE_REQUIRED_ERROR) {
+    await clearHostAuthState(apiUrl);
+    response = await createRoom();
+  }
+
   if (!response.success || !response.data) {
     throw new Error(response.error?.message ?? "Unable to create meeting");
   }
@@ -214,10 +226,7 @@ export function parseInputDestination(input: string): LobbyRoute | null {
 export function parseUrlLike(url: string): LobbyRoute | null {
   try {
     const parsed = new URL(url);
-    const pathSegments =
-      parsed.protocol === "chalk:"
-        ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)]
-        : parsed.pathname.split("/").filter(Boolean);
+    const pathSegments = parsed.protocol === "chalk:" ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)] : parsed.pathname.split("/").filter(Boolean);
     const [head, tail] = pathSegments;
 
     if (head === "j" && tail) {
