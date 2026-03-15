@@ -18,6 +18,21 @@ Bundle output:
 
 - `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab`
 
+## Secret-backed Android CI build
+
+Preferred when the prod host key must come from GitHub, not local env:
+
+1. Trigger workflow:
+   - `.github/workflows/mobile-android-release.yml`
+2. Workflow injects:
+   - `EXPO_PUBLIC_API_URL=https://chalk-api.q9labs.ai`
+   - `EXPO_PUBLIC_WS_URL=wss://chalk-ws.q9labs.ai/ws`
+   - `EXPO_PUBLIC_CHALK_API_KEY=${{ secrets.VITE_CHALK_API_KEY }}`
+3. Workflow rebuilds signing files from GitHub Secrets:
+   - `ANDROID_UPLOAD_KEYSTORE_BASE64`
+   - `ANDROID_KEYSTORE_PROPERTIES`
+4. Download the produced signed AAB artifact, then upload/promote with `gplay` if the workflow itself is not publishing yet
+
 ## Google Play service account
 
 Google-owned step. One-time.
@@ -46,6 +61,13 @@ Already prepared locally on this machine:
 - local service-account key path: `apps/mobile/.gplay/service-account.json`
 - Android upload keystore: `apps/mobile/android/app/chalk-upload-key.jks`
 - Android signing props: `apps/mobile/android/app/keystore.properties`
+
+GitHub Secrets expected for CI build/publish:
+
+- `VITE_CHALK_API_KEY`
+- `ANDROID_UPLOAD_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PROPERTIES`
+- `GPLAY_SERVICE_ACCOUNT_JSON` if CI upload is enabled later
 
 ## First internal upload
 

@@ -7,7 +7,9 @@
 - grant `chalk-mobile-gplay@project-for-gws-cli-1.iam.gserviceaccount.com` access to the app
 - create upload keystore from `android/app/keystore.properties.example`
 - add real `keystore.properties` locally
+- or provide `ANDROID_UPLOAD_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PROPERTIES` in GitHub Secrets for CI builds
 - confirm `bundleRelease` succeeds
+- confirm release build host key comes from `VITE_CHALK_API_KEY` secret, not local `.env.local`
 - verify `SYSTEM_ALERT_WINDOW` is not required before release
 - verify screen share still works with current foreground-service permissions
 - confirm production build has no cleartext HTTP dependency

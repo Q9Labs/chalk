@@ -1,0 +1,86 @@
+name: Mobile Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: Release notes for Play/internal testing
+        required: false
+        default: Internal testing build with production mobile release env.
+        type: string
+
+concurrency:
+  group: mobile-android-release
+  cancel-in-progress: false
+
+jobs:
+  build-android-release:
+    name: Build Android Release AAB
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_API_URL: https://chalk-api.q9labs.ai
+      EXPO_PUBLIC_WS_URL: wss://chalk-ws.q9labs.ai/ws
+      EXPO_PUBLIC_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
+      CHALK_APP_VARIANT: production
+      NODE_ENV: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Assert release env contract
+        run: |
+          test -n "$EXPO_PUBLIC_CHALK_API_KEY"
+          test "$EXPO_PUBLIC_API_URL" = "https://chalk-api.q9labs.ai"
+          test "$EXPO_PUBLIC_WS_URL" = "wss://chalk-ws.q9labs.ai/ws"
+
+      - name: Recreate Android signing files
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PROPERTIES: ${{ secrets.ANDROID_KEYSTORE_PROPERTIES }}
+        run: |
+          test -n "$ANDROID_UPLOAD_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PROPERTIES"
+          printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > apps/mobile/android/app/chalk-upload-key.jks
+          printf '%s' "$ANDROID_KEYSTORE_PROPERTIES" > apps/mobile/android/app/keystore.properties
+
+      - name: Remove local-only env file
+        run: rm -f apps/mobile/.env.local
+
+      - name: Mobile gate
+        run: |
+          bun run --cwd apps/mobile lint
+          bun run --cwd apps/mobile check-types
+          bun run --cwd apps/mobile test
+          bun run --cwd packages/sdk-react-native check-types
+          bun run --cwd packages/sdk-react-native test
+
+      - name: Build signed Android bundle
+        run: bun run --cwd apps/mobile build:android:release
+
+      - name: Generate checksums
+        run: |
+          cd apps/mobile/android/app/build/outputs/bundle/release
+          sha256sum app-release.aab > app-release.aab.sha256
+
+      - name: Upload Android release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-release-aab
+          path: |
+            apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+            apps/mobile/android/app/build/outputs/bundle/release/app-release.aab.sha256
+          retention-days: 7
