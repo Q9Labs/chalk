@@ -176,7 +176,7 @@ export class ChalkError extends Error {
   /**
    * Create error from a DOMException (browser media errors)
    */
-  static fromDOMException(err: DOMException): ChalkError {
+  static fromDOMException(err: Pick<DOMException, "name" | "message"> & { constraint?: string }): ChalkError {
     switch (err.name) {
       case "NotAllowedError":
         return new ChalkError(ChalkErrorCode.MEDIA_PERMISSION_DENIED, "Permission denied for media device", { cause: err, recoverable: true });
@@ -191,6 +191,19 @@ export class ChalkError extends Error {
       default:
         return new ChalkError(ChalkErrorCode.UNKNOWN, err.message, { cause: err });
     }
+  }
+
+  private static isDOMExceptionLike(err: unknown): err is Pick<DOMException, "name" | "message"> & { constraint?: string } {
+    if (!err || typeof err !== "object") {
+      return false;
+    }
+
+    if (typeof DOMException !== "undefined" && err instanceof DOMException) {
+      return true;
+    }
+
+    const candidate = err as { name?: unknown; message?: unknown };
+    return typeof candidate.name === "string" && typeof candidate.message === "string";
   }
 
   /**
@@ -224,7 +237,7 @@ export class ChalkError extends Error {
     if (err instanceof ChalkError) {
       return err;
     }
-    if (err instanceof DOMException) {
+    if (ChalkError.isDOMExceptionLike(err)) {
       return ChalkError.fromDOMException(err);
     }
     if (err instanceof Error) {

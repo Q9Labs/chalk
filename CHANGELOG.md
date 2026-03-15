@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 ### Fixed
+- **SDK-Core/mobile: safe DOMException handling in React Native** — shared error normalization now guards the browser-only `DOMException` global and still maps DOMException-shaped media/join errors on React Native, preventing native join failures from bouncing users back to lobby with `property DOMException doesn't exist`.
 - **Mobile: stale host-token self-heal for new meetings** — `apps/mobile` now scopes cached host auth by API URL + key fingerprint and, if room creation still returns `host role required`, clears the stored host auth state and retries once so previously cached bad tenant tokens stop blocking `New meeting`.
 - **API: embedded screen-annotation migration restored** — added runtime migration `013` back into the embedded Postgres bootstrap so local/prod boot paths create `rooms.screen_annotation_state` before generated room queries reference it, preventing add-participant/join failures from schema drift.
 - **SDK-Core/SDK-React/SDK-React-Native: shared avatar recipe contract** — introduced a single `sdk-core` participant avatar recipe derived from the web FaceHash treatment, then switched web avatar rendering, profile-gradient preview initials, and native avatar/self-pill surfaces to consume the same initials, face colors, and darker/avatar gradient semantics instead of rebuilding them per platform.
