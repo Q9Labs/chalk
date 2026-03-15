@@ -1,4 +1,4 @@
-import { APIClient, createTokenProvider, type TokenStorage } from "@q9labs/chalk-core";
+import { APIClient, createFriendlyRoomName, createTokenProvider, humanizeRoomName, type TokenStorage } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
@@ -127,9 +127,12 @@ export async function resolveJoinToken(joinToken: string, apiUrl: string): Promi
     throw new Error(response.error?.message ?? "Invalid join link");
   }
 
+  const roomId = response.data.roomId || response.data.roomName;
+  const roomName = humanizeRoomName(response.data.roomName || roomId);
+
   const context: JoinContext = {
     joinToken,
-    roomName: response.data.roomName,
+    roomName,
     accessToken: response.data.accessToken,
     expiresAtMs: Date.now() + response.data.expiresIn * 1000,
   };
@@ -137,10 +140,10 @@ export async function resolveJoinToken(joinToken: string, apiUrl: string): Promi
 
   return {
     kind: "lobby",
-    roomId: response.data.roomName,
+    roomId,
     role: "participant",
     joinToken,
-    roomName: response.data.roomName,
+    roomName,
     source: "join-link",
   };
 }
@@ -165,12 +168,24 @@ export async function getJoinAccessToken(apiUrl: string, joinToken: string): Pro
   return nextContext.accessToken;
 }
 
-export function createMeetingLobbyRoute(): LobbyRoute {
-  const roomId = `instant-meeting-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+export async function createMeetingLobbyRoute(apiUrl: string): Promise<LobbyRoute> {
+  const tokenProvider = getHostTokenProvider(apiUrl);
+  if (!tokenProvider) {
+    throw new Error("Meeting creation is currently restricted.");
+  }
+
+  const friendlyRoom = createFriendlyRoomName();
+  const roomName = friendlyRoom.label;
+  const client = new APIClient({ apiUrl, tokenProvider });
+  const response = await client.createRoom({ name: roomName });
+  if (!response.success || !response.data) {
+    throw new Error(response.error?.message ?? "Unable to create meeting");
+  }
+
   return {
     kind: "lobby",
-    roomId,
-    roomName: roomId,
+    roomId: response.data.id,
+    roomName: response.data.name?.trim() || roomName,
     role: "host",
     source: "new-meeting",
   };
@@ -190,7 +205,7 @@ export function parseInputDestination(input: string): LobbyRoute | null {
   return {
     kind: "lobby",
     roomId: trimmed,
-    roomName: trimmed,
+    roomName: humanizeRoomName(trimmed),
     role: "participant",
     source: "direct-room",
   };
@@ -220,7 +235,7 @@ export function parseUrlLike(url: string): LobbyRoute | null {
       return {
         kind: "lobby",
         roomId,
-        roomName: roomId,
+        roomName: humanizeRoomName(roomId),
         role: "participant",
         source: "direct-room",
       };

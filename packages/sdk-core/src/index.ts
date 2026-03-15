@@ -149,6 +149,13 @@ export type { ChalkSessionConfig, ChalkSessionEvents } from "./session/chalk-ses
 export { ChalkSession } from "./session/chalk-session.ts";
 export * as session from "./session/index.ts";
 export * as state from "./state/index.ts";
+export {
+  createFriendlyRoomIdentity,
+  createFriendlyRoomName,
+  humanizeRoomName,
+  type FriendlyRoomIdentity,
+  type FriendlyRoomName,
+} from "./utils/friendly-room-name.ts";
 // State container base class
 export { StateContainer } from "./state/state-container.ts";
 // Whiteboard types

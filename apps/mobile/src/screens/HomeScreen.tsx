@@ -13,6 +13,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
+  const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
 
   const handleOpenInput = async () => {
     const destination = parseInputDestination(input);
@@ -38,14 +39,21 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
     onNavigate(destination);
   };
 
-  const handleNewMeeting = () => {
+  const handleNewMeeting = async () => {
     if (!createEnabled) {
       setError("Create meeting is disabled in this build. Join by link is still available.");
       return;
     }
 
-    setError(null);
-    onNavigate(createMeetingLobbyRoute());
+    try {
+      setError(null);
+      setIsCreatingMeeting(true);
+      onNavigate(await createMeetingLobbyRoute(apiUrl));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to create meeting");
+    } finally {
+      setIsCreatingMeeting(false);
+    }
   };
 
   return (
@@ -85,8 +93,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
           <Text style={styles.supportingCopy}>
             Creates a host-capable lobby when this build has the Chalk API key configured, matching the web app&apos;s instant meeting model.
           </Text>
-          <Pressable disabled={!createEnabled} onPress={handleNewMeeting} style={[styles.primaryButton, !createEnabled && styles.buttonDisabled]}>
-            <Text style={styles.primaryButtonText}>{createEnabled ? "Create meeting" : "Create disabled"}</Text>
+          <Pressable disabled={!createEnabled || isCreatingMeeting} onPress={() => void handleNewMeeting()} style={[styles.primaryButton, (!createEnabled || isCreatingMeeting) && styles.buttonDisabled]}>
+            <Text style={styles.primaryButtonText}>{isCreatingMeeting ? "Creating meeting..." : createEnabled ? "Create meeting" : "Create disabled"}</Text>
           </Pressable>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}

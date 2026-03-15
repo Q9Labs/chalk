@@ -102,3 +102,41 @@ func TestInternalLinksExchangeJoinToken_ReturnsNotFoundWhenRoomIsMissing(t *test
 	require.Equal(t, http.StatusNotFound, w.Code)
 	require.JSONEq(t, `{"error":"room not found"}`, w.Body.String())
 }
+
+func TestInternalLinksExchangeJoinToken_ReturnsCanonicalRoomIdentity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tenantID := uuid.New()
+	roomID := uuid.New()
+	roomName := "Phantom Tea"
+	handler := &InternalLinksHandler{
+		signingKey: []byte("test-signing-key"),
+		jwtService: auth.NewJWTService(auth.DefaultJWTConfig()),
+		roomSvc: &internalLinksRoomServiceStub{
+			roomByID: map[uuid.UUID]db.Room{
+				roomID: {
+					ID:       roomID,
+					TenantID: tenantID,
+					Name:     &roomName,
+				},
+			},
+		},
+	}
+
+	joinToken, err := links.SignJoinToken([]byte("test-signing-key"), tenantID, roomID.String(), time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/public/join-token/exchange", strings.NewReader(`{"join_token":"`+joinToken+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.ExchangeJoinToken(c)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, roomID.String(), body["room_id"])
+	require.Equal(t, roomName, body["room_name"])
+}

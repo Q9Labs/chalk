@@ -358,6 +358,7 @@ export interface CreateJoinTokenResponse {
 export interface ExchangeJoinTokenResponse {
   accessToken: string;
   expiresIn: number;
+  roomId: string;
   roomName: string;
 }
 

@@ -107,14 +107,16 @@ describe("client-room-ops", () => {
         data: {
           accessToken: "jwt_123",
           expiresIn: 900,
-          roomName: "room_uuid_6",
+          roomId: "room_uuid_6",
+          roomName: "Phantom Tea",
         },
       }),
     };
 
     await expect(exchangeJoinToken(apiClient as any, "tok_abc")).resolves.toMatchObject({
       accessToken: "jwt_123",
-      roomName: "room_uuid_6",
+      roomId: "room_uuid_6",
+      roomName: "Phantom Tea",
     });
   });
 

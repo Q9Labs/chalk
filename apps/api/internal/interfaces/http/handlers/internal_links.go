@@ -118,7 +118,8 @@ func (h *InternalLinksHandler) ExchangeJoinToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": tokenPair.AccessToken,
 		"expires_in":   tokenPair.ExpiresIn,
-		"room_name":    roomTarget,
+		"room_id":      resolvedRoom.ID.String(),
+		"room_name":    resolvedRoomName(resolvedRoom, roomTarget),
 	})
 }
 
@@ -221,4 +222,15 @@ func (h *InternalLinksHandler) resolveJoinRoom(ctx context.Context, tenantID uui
 		return nil, "", errors.New("room not found")
 	}
 	return room, room.ID.String(), nil
+}
+
+func resolvedRoomName(room *db.Room, fallback string) string {
+	if room != nil && room.Name != nil {
+		trimmed := strings.TrimSpace(*room.Name)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+
+	return fallback
 }

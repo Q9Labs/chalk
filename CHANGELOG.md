@@ -983,6 +983,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the Android mobile lobby/room screens stay on the stable Expo icon components to avoid the native LobbyScreen crash seen with the Hugeicons renderer path.
+- Mobile host meeting creation now pre-creates the room with a friendly human-readable name and carries the returned room UUID separately, so lobby UI no longer shows the old opaque `instant-meeting-*` identifier as the room title.
+- Join-token exchange now returns both the canonical room UUID and the friendly room name, so mobile can display intelligible titles without treating the room label as the room identifier.
 
 ### Changed
 
