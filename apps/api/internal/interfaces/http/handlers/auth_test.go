@@ -293,3 +293,16 @@ func TestGetCurrentClaims_InContext(t *testing.T) {
 	assert.True(t, exists)
 	assert.Equal(t, expectedClaims, claims)
 }
+
+func TestBuildTenantHostClaims_SetsHostRole(t *testing.T) {
+	tenantID := uuid.New()
+
+	claims := buildTenantHostClaims("tenant-subject", tenantID)
+
+	assert.Equal(t, "tenant-subject", claims.Subject)
+	assert.Equal(t, tenantID, claims.TenantID)
+	assert.Equal(t, "host", claims.Role)
+	assert.True(t, claims.Permissions.CanMute)
+	assert.True(t, claims.Permissions.CanKick)
+	assert.True(t, claims.Permissions.CanRecord)
+}

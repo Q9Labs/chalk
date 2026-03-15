@@ -2,7 +2,7 @@ import { APIClient, createFriendlyRoomName, createTokenProvider, humanizeRoomNam
 import * as SecureStore from "expo-secure-store";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
-const HOST_TOKEN_STORAGE_PREFIX = "chalk_mobile_host_token_";
+const HOST_TOKEN_STORAGE_PREFIX = "chalk_mobile_host_token_v2_";
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 const PROD_WS_URL = "wss://chalk-ws.q9labs.ai/ws";
 

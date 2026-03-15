@@ -77,11 +77,7 @@ func (h *AuthHandler) Token(c *gin.Context) {
 	}
 
 	// Generate token pair
-	claims := auth.Claims{
-		Subject:     matchedTenant.ID.String(),
-		TenantID:    matchedTenant.ID,
-		Permissions: auth.DefaultHostPermissions(), // Tenant-level tokens get full permissions
-	}
+	claims := buildTenantHostClaims(matchedTenant.ID.String(), matchedTenant.ID)
 
 	tokenPair, err := h.jwtService.GenerateTokenPair(claims)
 	if err != nil {
@@ -129,11 +125,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	// Generate new token pair
-	claims := auth.Claims{
-		Subject:     subject,
-		TenantID:    tenantID,
-		Permissions: auth.DefaultHostPermissions(),
-	}
+	claims := buildTenantHostClaims(subject, tenantID)
 
 	tokenPair, err := h.jwtService.GenerateTokenPair(claims)
 	if err != nil {
@@ -167,6 +159,15 @@ func (h *AuthHandler) GenerateParticipantToken(tenantID, roomID, participantID u
 	}
 
 	return h.jwtService.GenerateTokenPair(claims)
+}
+
+func buildTenantHostClaims(subject string, tenantID uuid.UUID) auth.Claims {
+	return auth.Claims{
+		Subject:     subject,
+		TenantID:    tenantID,
+		Role:        "host",
+		Permissions: auth.DefaultHostPermissions(),
+	}
 }
 
 // GetCurrentTenant is a helper to get the tenant from middleware context
