@@ -1,19 +1,11 @@
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RTCView } from "@cloudflare/react-native-webrtc";
-import { 
-  Mic01Icon, 
-  MicOff01Icon, 
-  Video01Icon, 
-  VideoOffIcon, 
-  Settings01Icon, 
-  ArrowRight01Icon,
-  Sun01Icon,
-  Moon01Icon
-} from "@hugeicons/core-free-icons";
-import { useMemo, useState, useRef } from "react";
-import { Animated, KeyboardAvoidingView, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon, ArrowLeft01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
+import { useEffect, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { usePreJoinPreview } from "../hooks/usePreJoinPreview";
 import { Theme } from "../ui/theme";
+import { NativeFaceAvatar } from "./NativeFaceAvatar";
 
 export interface NativeJoinSettings {
   displayName: string;
@@ -29,37 +21,31 @@ export interface NativePreJoinLobbyProps {
   initialVideoEnabled?: boolean;
   error?: string | null;
   logo?: React.ReactNode;
+  joinDisabled?: boolean;
   onJoin: (settings: NativeJoinSettings) => void;
   onCancel?: () => void;
 }
 
-export function NativePreJoinLobby({
-  roomName,
-  role = "participant",
-  userName = role === "host" ? "Host" : "Guest",
-  initialAudioEnabled = true,
-  initialVideoEnabled = true,
-  error,
-  logo,
-  onJoin,
-  onCancel,
-}: NativePreJoinLobbyProps): React.JSX.Element {
+export function NativePreJoinLobby({ roomName, role = "participant", userName = role === "host" ? "Host" : "Guest", initialAudioEnabled = true, initialVideoEnabled = true, error, joinDisabled = false, onJoin, onCancel }: NativePreJoinLobbyProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(userName);
   const [audioEnabled, setAudioEnabled] = useState(initialAudioEnabled);
   const [videoEnabled, setVideoEnabled] = useState(initialVideoEnabled);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const previewLabel = useMemo(() => (displayName.trim().charAt(0) || "C").toUpperCase(), [displayName]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const { previewError, previewStream } = usePreJoinPreview(videoEnabled);
 
-  // Swipe to Join State
-  const pan = useRef(new Animated.Value(0)).current;
-  const swipeContainerWidth = useRef(0);
-  const swipeHandleWidth = 64;
-  const joinTriggered = useRef(false);
+  useEffect(() => {
+    if (!joinDisabled) {
+      setIsSubmitting(false);
+    }
+  }, [joinDisabled]);
 
   const handleJoin = () => {
-    if (joinTriggered.current) return;
-    joinTriggered.current = true;
+    if (joinDisabled || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
     onJoin({
       displayName,
       audioEnabled,
@@ -67,154 +53,65 @@ export function NativePreJoinLobby({
     });
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        pan.stopAnimation();
-      },
-      onPanResponderMove: (_, gesture) => {
-        if (swipeContainerWidth.current > 0 && !joinTriggered.current) {
-          const maxX = swipeContainerWidth.current - swipeHandleWidth;
-          const newX = Math.max(0, Math.min(gesture.dx, maxX));
-          pan.setValue(newX);
-        }
-      },
-      onPanResponderRelease: (_, gesture) => {
-        if (joinTriggered.current) return;
-        
-        const maxX = swipeContainerWidth.current - swipeHandleWidth;
-        // Trigger join if swiped more than 75%
-        if (gesture.dx > maxX * 0.75) {
-          Animated.spring(pan, {
-            toValue: maxX,
-            useNativeDriver: false,
-            bounciness: 0,
-          }).start(() => {
-            handleJoin();
-          });
-        } else {
-          Animated.spring(pan, {
-            toValue: 0,
-            useNativeDriver: false,
-            friction: 6,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.screen}>
       <View style={styles.content}>
-        
-        <View style={styles.header}>
-          <Pressable onPress={onCancel} style={styles.brandRow}>
-            {logo ? logo : (
-              <View style={styles.logoPlaceholder}>
-                <Text style={styles.brandText}>chalk</Text>
+        {/* Ultra-Clean Top Bar */}
+        <View style={styles.topBar}>
+          <Pressable onPress={onCancel} style={styles.topIconButton}>
+            <HugeiconsIcon icon={ArrowLeft01Icon} size={24} color="white" />
+          </Pressable>
+          <Text style={styles.brandText}>chalk</Text>
+          <Pressable style={styles.topIconButton}>
+            <HugeiconsIcon icon={Settings01Icon} size={22} color="white" />
+          </Pressable>
+        </View>
+
+        {/* Hero Preview Box */}
+        <View style={styles.previewContainer}>
+          <View style={styles.previewSurface}>
+            {previewStream && videoEnabled ? (
+              <RTCView mirror objectFit="cover" streamURL={previewStream.toURL()} style={styles.previewVideo} zOrder={0} />
+            ) : (
+              <View style={styles.avatarContainer}>
+                <NativeFaceAvatar name={displayName} size={140} />
               </View>
             )}
-            {!logo && <Text style={styles.brandText}>chalk</Text>}
-          </Pressable>
 
-          <View style={styles.headerDivider} />
+            <View style={styles.toggleOverlay}>
+              <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={[styles.toggleCircle, !audioEnabled && styles.toggleCircleOff]}>
+                <HugeiconsIcon icon={audioEnabled ? Mic01Icon : MicOff01Icon} size={24} color="white" />
+              </Pressable>
+              <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={[styles.toggleCircle, !videoEnabled && styles.toggleCircleOff]}>
+                <HugeiconsIcon icon={videoEnabled ? Video01Icon : VideoOffIcon} size={24} color="white" />
+              </Pressable>
+            </View>
+          </View>
 
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {roomName || "Meeting On Chalk"}
+          {previewError && videoEnabled ? <Text style={styles.previewError}>{previewError}</Text> : null}
+        </View>
+
+        {/* Info Area */}
+        <View style={styles.infoArea}>
+          <Text style={styles.roomName} numberOfLines={1}>
+            {roomName}
           </Text>
+          <Text style={styles.roleText}>{role === "host" ? "You're the host" : "Ready to join?"}</Text>
+        </View>
 
-          <Pressable onPress={() => setIsDarkMode((current) => !current)} style={styles.themeButton}>
-            <HugeiconsIcon icon={isDarkMode ? Sun01Icon : Moon01Icon} size={22} color="white" />
+        {/* Action Area */}
+        <View style={styles.footer}>
+          <View style={styles.inputCard}>
+            <Text style={styles.inputLabel}>Display Name</Text>
+            <TextInput onChangeText={setDisplayName} placeholder="Your name" placeholderTextColor="rgba(255,255,255,0.2)" style={styles.nameInput} value={displayName} maxLength={30} returnKeyType="join" onSubmitEditing={handleJoin} />
+          </View>
+
+          {error ? <Text style={styles.globalError}>{error}</Text> : null}
+
+          <Pressable disabled={joinDisabled || isSubmitting} onPress={handleJoin} style={[styles.joinButton, (joinDisabled || isSubmitting) && styles.joinButtonDisabled]}>
+            <Text style={styles.joinButtonText}>{isSubmitting || joinDisabled ? "Joining..." : "Join Meeting"}</Text>
           </Pressable>
         </View>
-
-        <View style={styles.previewIslandContainer}>
-          <View style={styles.previewGlow} />
-          <View style={styles.previewIsland}>
-            {previewStream ? <RTCView mirror objectFit="cover" streamURL={previewStream.toURL()} style={styles.previewVideo} zOrder={0} /> : null}
-            <View style={styles.previewShade} />
-            
-            <View style={styles.islandHeader}>
-              <View style={styles.islandBadge}>
-                <View style={styles.islandBadgeDot} />
-                <Text style={styles.islandBadgeText}>{role === "host" ? "Host" : "Guest"}</Text>
-              </View>
-              <Pressable style={styles.islandSettingsButton}>
-                <HugeiconsIcon icon={Settings01Icon} size={20} color="white" />
-              </Pressable>
-            </View>
-
-            {!previewStream ? (
-              <View style={styles.islandAvatar}>
-                <View style={styles.eyesRow}>
-                  <View style={styles.eyeDot} />
-                  <View style={styles.eyeDot} />
-                </View>
-                <Text style={styles.islandAvatarText}>{previewLabel}</Text>
-              </View>
-            ) : <View style={styles.previewSpacer} />}
-
-            <View style={styles.islandControls}>
-              <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={[styles.islandToggle, !audioEnabled && styles.islandToggleOff]}>
-                <HugeiconsIcon 
-                  icon={audioEnabled ? Mic01Icon : MicOff01Icon} 
-                  size={24} 
-                  color={audioEnabled ? "#000" : "#fff"} 
-                />
-              </Pressable>
-              <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={[styles.islandToggle, !videoEnabled && styles.islandToggleOff]}>
-                <HugeiconsIcon 
-                  icon={videoEnabled ? Video01Icon : VideoOffIcon} 
-                  size={24} 
-                  color={videoEnabled ? "#000" : "#fff"} 
-                />
-              </Pressable>
-            </View>
-
-          </View>
-        </View>
-
-        <View style={styles.detailsContainer}>
-          <Text style={styles.roomTitle} numberOfLines={2}>{roomName || "Meeting On Chalk"}</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Name</Text>
-            <TextInput
-              onChangeText={setDisplayName}
-              placeholder="Enter your name"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              style={styles.minimalInput}
-              value={displayName}
-              maxLength={30}
-              returnKeyType="done"
-            />
-          </View>
-          
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {previewError && videoEnabled ? <Text style={styles.error}>Camera preview unavailable: {previewError}</Text> : null}
-        </View>
-
-        <View style={styles.swipeArea}>
-          <View 
-            style={styles.swipeTrack} 
-            onLayout={(e) => { swipeContainerWidth.current = e.nativeEvent.layout.width; }}
-          >
-            <Text style={styles.swipePlaceholderText}>Swipe to join</Text>
-            
-            <Animated.View
-              style={[
-                styles.swipeHandle,
-                { transform: [{ translateX: pan }] }
-              ]}
-              {...panResponder.panHandlers}
-            >
-              <HugeiconsIcon icon={ArrowRight01Icon} size={28} color="#000" />
-            </Animated.View>
-          </View>
-        </View>
-
       </View>
     </KeyboardAvoidingView>
   );
@@ -223,259 +120,162 @@ export function NativePreJoinLobby({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#030406",
+    backgroundColor: Theme.colors.background,
   },
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: Platform.OS === "ios" ? 50 : 20,
     paddingBottom: 40,
+  },
+
+  // Top Bar
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
+    height: 56,
+    marginBottom: 16,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    height: 48,
-  },
-  brandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  logoPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  brandText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    textTransform: "lowercase",
-  },
-  headerDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  headerTitle: {
-    flex: 1,
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  themeButton: {
+  topIconButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
-  
-  previewIslandContainer: {
-    flex: 1, // Let it take available space without scrolling
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 10,
-    position: "relative",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
-  previewGlow: {
-    position: "absolute",
-    width: "100%",
-    maxWidth: 380,
-    aspectRatio: 0.85,
-    backgroundColor: "#22c55e",
-    borderRadius: 48,
-    opacity: 0.15,
-    transform: [{ scale: 1.05 }],
+  brandText: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.5,
   },
-  previewIsland: {
+
+  // Preview Area
+  previewContainer: {
+    flex: 1,
+    maxHeight: 480,
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  previewSurface: {
     width: "100%",
-    maxWidth: 380,
-    aspectRatio: 0.85,
-    backgroundColor: "#26c95b",
-    borderRadius: 48,
+    aspectRatio: 3 / 4,
+    backgroundColor: "#111114",
+    borderRadius: 36,
     overflow: "hidden",
-    padding: 24,
-    justifyContent: "space-between",
-    shadowColor: "#19ff7f",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 30,
-    elevation: 10,
-    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    position: "relative",
   },
   previewVideo: {
     ...StyleSheet.absoluteFillObject,
   },
-  previewShade: {
+  avatarContainer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.14)",
-  },
-  islandHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    zIndex: 2,
-  },
-  islandBadge: {
-    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 8,
+    justifyContent: "center",
+    backgroundColor: "#0f0f12",
   },
-  islandBadgeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#4ade80",
+  toggleOverlay: {
+    position: "absolute",
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 20,
   },
-  islandBadgeText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  islandSettingsButton: {
-    backgroundColor: "rgba(0,0,0,0.3)",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  toggleCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
-  islandAvatar: {
-    alignSelf: "center",
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2,
+  toggleCircleOff: {
+    backgroundColor: Theme.colors.error,
+    borderColor: Theme.colors.error,
   },
-  previewSpacer: {
-    flex: 1,
-  },
-  eyesRow: {
-    flexDirection: "row",
-    gap: 40,
-    marginBottom: 4,
-    marginTop: -10,
-  },
-  eyeDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
-  },
-  islandAvatarText: {
-    color: "#fff",
-    fontSize: 56,
-    fontWeight: "500",
-  },
-  islandControls: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 16,
-    zIndex: 2,
-  },
-  islandToggle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  islandToggleOff: {
-    backgroundColor: "#ef4444", // Bright red for high contrast
+  previewError: {
+    color: Theme.colors.error,
+    fontSize: 12,
+    marginTop: 12,
+    textAlign: "center",
+    fontWeight: "600",
   },
 
-  detailsContainer: {
-    marginVertical: 10,
-    gap: 16,
-  },
-  roomTitle: {
-    color: "#fff",
-    fontSize: 32,
-    fontWeight: "800",
-    letterSpacing: -1,
-  },
-  inputGroup: {
-    flexDirection: "row",
+  // Info Area
+  infoArea: {
     alignItems: "center",
-    borderBottomWidth: 2,
-    borderColor: "rgba(255,255,255,0.1)",
-    paddingBottom: 8,
+    marginBottom: 24,
+    gap: 4,
   },
-  inputLabel: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 18,
-    fontWeight: "600",
-    marginRight: 16,
-  },
-  minimalInput: {
-    flex: 1,
-    color: "#fff",
+  roomName: {
+    color: Theme.colors.foreground,
     fontSize: 22,
     fontWeight: "700",
-    padding: 0,
+    textAlign: "center",
   },
-  error: {
-    color: "#ef4444",
+  roleText: {
+    color: Theme.colors.mutedForeground,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
   },
 
-  swipeArea: {
-    marginTop: 10,
+  // Footer
+  footer: {
+    gap: 16,
   },
-  swipeTrack: {
-    height: 72,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 36,
-    justifyContent: "center",
-    position: "relative",
-    overflow: "hidden",
+  inputCard: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.06)",
   },
-  swipePlaceholderText: {
-    position: "absolute",
-    width: "100%",
-    textAlign: "center",
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+  inputLabel: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 6,
   },
-  swipeHandle: {
-    width: 64,
+  nameInput: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+    padding: 0,
+  },
+  joinButton: {
+    backgroundColor: Theme.colors.primary,
     height: 64,
-    backgroundColor: "#22c55e",
-    borderRadius: 32,
-    position: "absolute",
-    left: 4,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#22c55e",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-    zIndex: 10,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  joinButtonDisabled: {
+    opacity: 0.7,
+  },
+  joinButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  globalError: {
+    color: Theme.colors.error,
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 ### Fixed
+- **SDK-React-Native/mobile: duplicate lobby joins now ignored locally** — the native prejoin flow now latches the first join intent, disables the join CTA immediately, and blocks any second `session.join()` attempt while a join is already pending/connecting, preventing lobby fallbacks like `Already connected to a room` from accidental duplicate submits.
 - **SDK-Core/mobile: safe DOMException handling in React Native** — shared error normalization now guards the browser-only `DOMException` global and still maps DOMException-shaped media/join errors on React Native, preventing native join failures from bouncing users back to lobby with `property DOMException doesn't exist`.
 - **Mobile: stale host-token self-heal for new meetings** — `apps/mobile` now scopes cached host auth by API URL + key fingerprint and, if room creation still returns `host role required`, clears the stored host auth state and retries once so previously cached bad tenant tokens stop blocking `New meeting`.
 - **API: embedded screen-annotation migration restored** — added runtime migration `013` back into the embedded Postgres bootstrap so local/prod boot paths create `rooms.screen_annotation_state` before generated room queries reference it, preventing add-participant/join failures from schema drift.

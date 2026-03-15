@@ -12,6 +12,7 @@ import { NativeEndScreen, type NativeMeetingEndData } from "./NativeEndScreen";
 import { NativeJoiningLoadingScreen } from "./NativeJoiningLoadingScreen";
 import { NativeMeetingRoom, type NativeMeetingRoomFeatures } from "./NativeMeetingRoom";
 import { NativePreJoinLobby, type NativeJoinSettings } from "./NativePreJoinLobby";
+import { canStartNativeJoin } from "../utils/native-join-guard";
 
 export type NativeVideoConferencePhase = "lobby" | "joining" | "meeting" | "end";
 
@@ -38,21 +39,7 @@ export interface NativeVideoConferenceProps {
   onError?: (error: ChalkError) => void;
 }
 
-export function NativeVideoConference({
-  roomId,
-  roomName,
-  userName,
-  role = "participant",
-  autoJoin = false,
-  initialPhase,
-  initialJoinSettings,
-  features,
-  onJoin,
-  onLeave,
-  onEnd,
-  onClose,
-  onError,
-}: NativeVideoConferenceProps): React.JSX.Element {
+export function NativeVideoConference({ roomId, roomName, userName, role = "participant", autoJoin = false, initialPhase, initialJoinSettings, features, onJoin, onLeave, onEnd, onClose, onError }: NativeVideoConferenceProps): React.JSX.Element {
   const session = useSession();
   const connection = useConnection();
   const room = useRoom();
@@ -61,7 +48,7 @@ export function NativeVideoConference({
   const transcripts = useTranscripts();
   const defaultSettings = useMemo<NativeJoinSettings>(
     () => ({
-      displayName: initialJoinSettings?.displayName?.trim() || userName || (role === "host" ? "Host" : "Guest"),
+      displayName: initialJoinSettings?.displayName?.trim() || userName || "Chalker",
       audioEnabled: initialJoinSettings?.audioEnabled ?? true,
       videoEnabled: initialJoinSettings?.videoEnabled ?? true,
     }),
@@ -75,6 +62,7 @@ export function NativeVideoConference({
   const joinedAtRef = useRef<Date | null>(null);
   const didEmitJoinRef = useRef(false);
   const didEmitEndRef = useRef(false);
+  const pendingJoinRequestRef = useRef(initialPhase === "joining" || autoJoin);
 
   const buildEndData = useCallback((): NativeMeetingEndData => {
     const joinedAt = joinedAtRef.current ?? new Date();
@@ -128,6 +116,7 @@ export function NativeVideoConference({
           return;
         }
 
+        pendingJoinRequestRef.current = false;
         setJoinError(cause instanceof Error ? cause.message : "Unable to join room");
         setPhase("lobby");
       });
@@ -146,6 +135,7 @@ export function NativeVideoConference({
       joinedAtRef.current = new Date();
     }
 
+    pendingJoinRequestRef.current = false;
     setPhase("meeting");
 
     if (!didEmitJoinRef.current) {
@@ -167,6 +157,11 @@ export function NativeVideoConference({
 
   const startJoin = useCallback(
     (settings: NativeJoinSettings) => {
+      if (!canStartNativeJoin(phase, connection.isJoining, connection.isConnected, pendingJoinRequestRef.current)) {
+        return;
+      }
+
+      pendingJoinRequestRef.current = true;
       didEmitEndRef.current = false;
       setEndData(null);
       setJoinSettings({
@@ -177,25 +172,33 @@ export function NativeVideoConference({
       setPhase("joining");
       setJoinNonce((current) => current + 1);
     },
-    [defaultSettings.displayName],
+    [connection.isConnected, connection.isJoining, defaultSettings.displayName, phase],
   );
 
   const retryJoin = useCallback(() => {
+    if (connection.isJoining || connection.isConnected || pendingJoinRequestRef.current) {
+      return;
+    }
+
+    pendingJoinRequestRef.current = true;
     setPhase("joining");
     setJoinNonce((current) => current + 1);
-  }, []);
+  }, [connection.isConnected, connection.isJoining]);
 
   const handleLeave = useCallback(async () => {
+    pendingJoinRequestRef.current = false;
     finalizeMeeting();
     await connection.leave();
   }, [connection, finalizeMeeting]);
 
   const handleEndForAll = useCallback(async () => {
+    pendingJoinRequestRef.current = false;
     finalizeMeeting();
     await connection.leave({ endForAll: true });
   }, [connection, finalizeMeeting]);
 
   const handleRejoin = useCallback(() => {
+    pendingJoinRequestRef.current = true;
     didEmitJoinRef.current = false;
     didEmitEndRef.current = false;
     joinedAtRef.current = null;
@@ -210,6 +213,7 @@ export function NativeVideoConference({
         error={joinError}
         initialAudioEnabled={joinSettings.audioEnabled}
         initialVideoEnabled={joinSettings.videoEnabled}
+        joinDisabled={pendingJoinRequestRef.current || connection.isJoining}
         onCancel={onClose}
         onJoin={startJoin}
         role={role}
@@ -220,13 +224,7 @@ export function NativeVideoConference({
   }
 
   if (phase === "joining" && !joinError) {
-    return (
-      <NativeJoiningLoadingScreen
-        displayName={joinSettings.displayName}
-        message={`Joining ${roomName || roomId}`}
-        supportingMessages={["Preparing your media...", "Syncing room settings...", "Picking the fastest route...", "Opening the room..."]}
-      />
-    );
+    return <NativeJoiningLoadingScreen displayName={joinSettings.displayName} message={`Joining ${roomName || roomId}`} supportingMessages={["Preparing your media...", "Syncing room settings...", "Picking the fastest route...", "Opening the room..."]} />;
   }
 
   if (phase === "joining" && joinError) {
