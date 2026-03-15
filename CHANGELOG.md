@@ -988,6 +988,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- build(mobile): bump Android/iOS mobile build to `0.0.2` / `2` after first Play upload reserved version code `1`
+
 ### Fixed
 
 - Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the Android mobile lobby/room screens stay on the stable Expo icon components to avoid the native LobbyScreen crash seen with the Hugeicons renderer path.
