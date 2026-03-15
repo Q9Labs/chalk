@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mobile: Android+iOS release scaffolding** — `apps/mobile` now ships production-aware Expo config (`app.config.ts`), EAS profiles, Android release-signing scaffold, debug-only cleartext handling, iOS prebuild project files, mobile runtime helper tests, and release checklist docs so internal alpha/store-prep work can happen from a consistent native baseline instead of an ad-hoc dev-client setup.
 
 ### Changed
+- **Mobile/Android: internal release advanced to build 3** — bumped the Expo/app-store version metadata to `0.0.3` / Android `versionCode 3` / iOS `buildNumber 3` so a fresh internal-testing upload can carry the release URL fallback fix without colliding with the previously published Play build numbers.
 ### Fixed
 - **Mobile: release builds no longer ship dead localhost API/WS endpoints** — the React Native runtime now treats `localhost`/`127.0.0.1` mobile env URLs as dev-only, rewrites them to the Metro host during local device sessions, and falls back to Chalk production API/WebSocket endpoints when no Metro host exists so Play/TestFlight builds stop failing `New Meeting` with `Network request failed`.
 - **SDK-React-Native/mobile: duplicate lobby joins now ignored locally** — the native prejoin flow now latches the first join intent, disables the join CTA immediately, and blocks any second `session.join()` attempt while a join is already pending/connecting, preventing lobby fallbacks like `Already connected to a room` from accidental duplicate submits.
