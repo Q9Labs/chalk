@@ -3,17 +3,7 @@ import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import {
-  CallEnd01Icon,
-  ComputerScreenShareIcon,
-  MoreHorizontalIcon,
-  Mic01Icon,
-  MicOff01Icon,
-  SmileIcon,
-  Video01Icon,
-  VideoOffIcon,
-  WavingHand01Icon,
-} from "@hugeicons/core-free-icons";
+import { CallEnd01Icon, ComputerScreenShareIcon, MoreHorizontalIcon, Mic01Icon, MicOff01Icon, SmileIcon, Video01Icon, VideoOffIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
 import { useChalkSession } from "../context/chalk-native-provider";
 import { useChat } from "../hooks/useChat";
 import { useDevices } from "../hooks/useDevices";
@@ -53,7 +43,7 @@ export interface NativeMeetingRoomProps {
   onEndForAll?: () => void | Promise<void>;
 }
 
-export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JSX.Element {
+export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps): React.JSX.Element {
   const { removeParticipant, muteParticipant, unmuteParticipant } = useChalkSession();
   const media = useMedia();
   const devices = useDevices();
@@ -119,6 +109,7 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
   const isCameraOff = !media.isVideoEnabled;
   const handRaised = interactions.isHandRaised;
   const selfAvatarRecipe = useMemo(() => getParticipantAvatarRecipe(selfName), [selfName]);
+  const screenShareEnabled = features?.screenShare !== false;
 
   return (
     <View style={styles.roomScreen}>
@@ -170,9 +161,11 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
         </View>
 
         <View style={styles.controlPill}>
-          <Pressable onPress={() => void runAsync(() => screenShare.toggle())} style={[styles.controlButton, screenShare.isLocalSharing && styles.controlButtonActive]}>
-            <HugeiconsIcon color="white" icon={ComputerScreenShareIcon} size={24} />
-          </Pressable>
+          {screenShareEnabled ? (
+            <Pressable onPress={() => void runAsync(() => screenShare.toggle())} style={[styles.controlButton, screenShare.isLocalSharing && styles.controlButtonActive]}>
+              <HugeiconsIcon color="white" icon={ComputerScreenShareIcon} size={24} />
+            </Pressable>
+          ) : null}
           <Pressable onPress={interactions.toggleHand} style={[styles.controlButton, handRaised && styles.controlButtonActive]}>
             <HugeiconsIcon color={handRaised ? Theme.colors.primary : "white"} icon={WavingHand01Icon} size={24} />
           </Pressable>

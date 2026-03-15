@@ -1007,3 +1007,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Removed the legacy Terraform dev environment and unused non-lean modules, keeping only `bootstrap`, `prod-lean`, and the modules they depend on.
 - Trimmed root and Terraform README files down to stable orientation notes so active behavior stays defined by source files instead of drifting docs.
+- mobile(android): bump release metadata to 0.0.7 / versionCode 7 while stripping Android foreground-service declarations from the alpha build to clear Play review blockers without policy video uploads

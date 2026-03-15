@@ -1,8 +1,9 @@
 import { ChalkNativeProvider, NativeVideoConference } from "@q9labs/chalk-react-native";
+import { Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
-import { clearJoinContext, getApiUrl, getHostTokenProvider, getJoinAccessToken, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
+import { clearJoinContext, getApiUrl, getHostTokenProvider, getJoinAccessToken, getWsUrl, type LobbyRoute, type MobileRoute, parseUrlLike, resolveJoinToken } from "./src/lib/chalk";
 import { HomeScreen } from "./src/screens/HomeScreen";
 
 export default function App(): React.JSX.Element {
@@ -60,13 +61,7 @@ export default function App(): React.JSX.Element {
   );
 }
 
-function MeetingScreen({
-  route,
-  onClose,
-}: {
-  route: LobbyRoute;
-  onClose: () => void;
-}): React.JSX.Element {
+function MeetingScreen({ route, onClose }: { route: LobbyRoute; onClose: () => void }): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
   const wsUrl = useMemo(() => getWsUrl(apiUrl), [apiUrl]);
   const tokenProvider = useMemo(() => {
@@ -80,15 +75,7 @@ function MeetingScreen({
 
   return (
     <ChalkNativeProvider apiUrl={apiUrl} debug tokenProvider={tokenProvider} wsUrl={wsUrl}>
-      <NativeVideoConference
-        autoJoin={false}
-        initialPhase="lobby"
-        onClose={onClose}
-        roomId={route.roomId}
-        roomName={route.roomName}
-        role={route.role}
-        userName={route.role === "host" ? "Host" : "Guest"}
-      />
+      <NativeVideoConference autoJoin={false} features={{ screenShare: Platform.OS !== "android" }} initialPhase="lobby" onClose={onClose} roomId={route.roomId} roomName={route.roomName} role={route.role} userName={route.role === "host" ? "Host" : "Guest"} />
     </ChalkNativeProvider>
   );
 }
