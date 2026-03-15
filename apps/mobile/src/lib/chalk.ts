@@ -35,13 +35,13 @@ let cachedHostTokenProviderKey: string | null = null;
 
 export function getApiUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
-  return resolveDeviceLocalUrl(configured || PROD_API_URL, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL);
+  return resolveDeviceLocalUrl(configured || PROD_API_URL, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL, PROD_API_URL);
 }
 
 export function getWsUrl(apiUrl = getApiUrl()): string | undefined {
   const configured = process.env.EXPO_PUBLIC_WS_URL?.trim();
   if (configured) {
-    return resolveDeviceLocalUrl(configured, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL);
+    return resolveDeviceLocalUrl(configured, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL, PROD_WS_URL);
   }
 
   try {

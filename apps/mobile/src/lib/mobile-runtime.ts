@@ -26,15 +26,30 @@ export function stripTrailingSlash(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
-export function resolveDeviceLocalUrl(url: string, scriptUrl?: string | null): string {
+export function isDeviceLocalHostname(hostname: string): boolean {
+  return LOCAL_HOSTNAMES.has(hostname);
+}
+
+export function isDeviceLocalUrl(url: string): boolean {
+  try {
+    return isDeviceLocalHostname(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function resolveDeviceLocalUrl(url: string, scriptUrl?: string | null, fallbackUrl?: string): string {
   try {
     const parsed = new URL(url);
-    if (!LOCAL_HOSTNAMES.has(parsed.hostname)) {
+    if (!isDeviceLocalHostname(parsed.hostname)) {
       return stripTrailingSlash(url);
     }
 
     const metroHost = getMetroHostFromScriptUrl(scriptUrl);
-    if (!metroHost || LOCAL_HOSTNAMES.has(metroHost)) {
+    if (!metroHost || isDeviceLocalHostname(metroHost)) {
+      if (fallbackUrl) {
+        return stripTrailingSlash(fallbackUrl);
+      }
       return stripTrailingSlash(url);
     }
 
