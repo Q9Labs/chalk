@@ -993,6 +993,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 - build(mobile): bump Android/iOS mobile build to `0.0.2` / `2` after first Play upload reserved version code `1`
+- fix(web): add static privacy policy pages under `/privacy` and `/privacy-policy` so external checks receive `200` instead of a SPA deep-link `404`
 
 ### Fixed
 
