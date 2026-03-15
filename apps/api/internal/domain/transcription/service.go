@@ -18,9 +18,9 @@ type StorageClient interface {
 
 // Service handles post-meeting transcription operations.
 type Service struct {
-	queries   *db.Queries
-	registry  *ProviderRegistry
-	r2Client  StorageClient
+	queries  *db.Queries
+	registry *ProviderRegistry
+	r2Client StorageClient
 }
 
 // NewService creates a new transcription service.
@@ -172,7 +172,13 @@ func (s *Service) ProcessTranscription(ctx context.Context, transcriptID uuid.UU
 		"provider", providerName)
 
 	transcribeStart := time.Now()
-	result, err := provider.Transcribe(ctx, audioURL)
+	result, err := provider.Transcribe(ctx, TranscriptionRequest{
+		AudioURL:         audioURL,
+		AudioStoragePath: *recording.StoragePath,
+		TranscriptID:     transcriptID,
+		RecordingID:      transcript.RecordingID,
+		RoomID:           transcript.RoomID,
+	})
 	transcribeDuration := time.Since(transcribeStart)
 
 	if err != nil {

@@ -89,7 +89,7 @@ func (q *Queries) AdminGetOverview(ctx context.Context) (AdminGetOverviewRow, er
 
 const adminGetRoom = `-- name: AdminGetRoom :one
 SELECT
-    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes,
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state,
     t.name AS tenant_name,
     (SELECT COUNT(*) FROM participants p WHERE p.room_id = r.id AND p.left_at IS NULL) AS active_participant_count
 FROM rooms r
@@ -113,6 +113,7 @@ type AdminGetRoomRow struct {
 	ScheduledStartAt       pgtype.Timestamptz `db:"scheduled_start_at" json:"scheduled_start_at"`
 	ScheduledEndAt         pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
 	AllowEarlyJoinMinutes  int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
+	ScreenAnnotationState  []byte             `db:"screen_annotation_state" json:"screen_annotation_state"`
 	TenantName             string             `db:"tenant_name" json:"tenant_name"`
 	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
 }
@@ -136,6 +137,7 @@ func (q *Queries) AdminGetRoom(ctx context.Context, id uuid.UUID) (AdminGetRoomR
 		&i.ScheduledStartAt,
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
+		&i.ScreenAnnotationState,
 		&i.TenantName,
 		&i.ActiveParticipantCount,
 	)
@@ -383,7 +385,7 @@ func (q *Queries) AdminListRoomParticipants(ctx context.Context, roomID uuid.UUI
 
 const adminListRooms = `-- name: AdminListRooms :many
 SELECT
-    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes,
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state,
     t.name AS tenant_name,
     (SELECT COUNT(*) FROM participants p WHERE p.room_id = r.id AND p.left_at IS NULL) AS active_participant_count
 FROM rooms r
@@ -413,6 +415,7 @@ type AdminListRoomsRow struct {
 	ScheduledStartAt       pgtype.Timestamptz `db:"scheduled_start_at" json:"scheduled_start_at"`
 	ScheduledEndAt         pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
 	AllowEarlyJoinMinutes  int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
+	ScreenAnnotationState  []byte             `db:"screen_annotation_state" json:"screen_annotation_state"`
 	TenantName             string             `db:"tenant_name" json:"tenant_name"`
 	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
 }
@@ -442,6 +445,7 @@ func (q *Queries) AdminListRooms(ctx context.Context, arg AdminListRoomsParams) 
 			&i.ScheduledStartAt,
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
+			&i.ScreenAnnotationState,
 			&i.TenantName,
 			&i.ActiveParticipantCount,
 		); err != nil {

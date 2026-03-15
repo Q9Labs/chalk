@@ -80,6 +80,14 @@ func (c *Client) Exists(ctx context.Context, keys ...string) (int64, error) {
 	return c.client.Exists(ctx, keys...).Result()
 }
 
+func (c *Client) LLen(ctx context.Context, key string) (int64, error) {
+	return c.client.LLen(ctx, key).Result()
+}
+
+func (c *Client) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	return c.client.LRange(ctx, key, start, stop).Result()
+}
+
 // GetClient returns the underlying Redis client for advanced operations
 func (c *Client) GetClient() *redis.Client {
 	return c.client

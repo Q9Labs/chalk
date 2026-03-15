@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **API/Admin: durable Whisper job history + live processing visibility** — Whisper queue submissions now persist per-job metadata and terminal outcomes in Postgres (`whisper_transcription_jobs`) without storing presigned audio URLs, and admin endpoints now expose paginated history, live processing job metadata, and queue/processing counts for practical ops visibility without external analytics tooling.
 
 ### Changed
 ### Fixed
@@ -15,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-React-Native/mobile: animated native avatar + lobby preview path** — the native lobby/joining/meeting fallback avatar now blinks and pulses like the web facehash treatment, the mobile-only extra preview control was removed, and the native prejoin flow now opens a real `react-native-webrtc` local camera preview stream with stricter video-track validation.
 - **SDK-React-Native/mobile: leave flow end-screen handoff** — leaving a native room now finalizes into the end screen through a normal screen swap instead of a modal layered over the RTC surface, reducing the Android case where the call visually stayed mounted after disconnect while controls were already dead.
 - **SDK-React-Native/mobile: native leave no longer re-enters the room** — the native conference shell now only auto-promotes from `joining -> meeting` once the room actually finishes joining, so tapping the red end button cannot race back into the live meeting view while the transport is still briefly connected.
+- **SDK-React-Native/mobile: room shell imports the native platform helper again** — restored the missing React Native `Platform` import used by the room dock spacing, clearing the immediate `Platform doesn't exist` runtime/build failure in the native meeting room.
 
 ## [0.0.76] - 2026-03-15
 

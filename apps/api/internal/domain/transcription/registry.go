@@ -1,8 +1,6 @@
 package transcription
 
-import (
-	goredis "github.com/redis/go-redis/v9"
-)
+import goredis "github.com/redis/go-redis/v9"
 
 // RegistryConfig holds configuration for the provider registry.
 type RegistryConfig struct {
@@ -13,19 +11,21 @@ type RegistryConfig struct {
 
 // ProviderRegistry manages transcription provider availability and creation.
 type ProviderRegistry struct {
-	groqAPIKey     string
-	whisperEnabled bool
-	whisperQueue   string
-	redis          *goredis.Client
+	groqAPIKey      string
+	whisperEnabled  bool
+	whisperQueue    string
+	whisperJobStore WhisperJobStore
+	redis           *goredis.Client
 }
 
 // NewProviderRegistry creates a new provider registry.
-func NewProviderRegistry(cfg RegistryConfig, redis *goredis.Client) *ProviderRegistry {
+func NewProviderRegistry(cfg RegistryConfig, redis *goredis.Client, whisperJobStore WhisperJobStore) *ProviderRegistry {
 	return &ProviderRegistry{
-		groqAPIKey:     cfg.GroqAPIKey,
-		whisperEnabled: cfg.WhisperEnabled,
-		whisperQueue:   cfg.WhisperQueue,
-		redis:          redis,
+		groqAPIKey:      cfg.GroqAPIKey,
+		whisperEnabled:  cfg.WhisperEnabled,
+		whisperQueue:    cfg.WhisperQueue,
+		whisperJobStore: whisperJobStore,
+		redis:           redis,
 	}
 }
 
@@ -93,7 +93,7 @@ func (r *ProviderRegistry) CreateProvider(providerName string, tenantAPIKey stri
 		if r.redis == nil || r.whisperQueue == "" {
 			return nil, ErrWhisperNotAvailable
 		}
-		return newWhisperProviderFromRegistry(r.redis, r.whisperQueue), nil
+		return newWhisperProviderFromRegistry(r.redis, r.whisperQueue, r.whisperJobStore), nil
 
 	default:
 		return nil, ErrNoProviderAvailable

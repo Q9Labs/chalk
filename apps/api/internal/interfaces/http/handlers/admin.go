@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	redisinfra "github.com/Q9Labs/chalk/internal/infrastructure/redis"
 	"github.com/Q9Labs/chalk/internal/infrastructure/s3"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -15,14 +18,18 @@ import (
 type AdminHandler struct {
 	queries            *db.Queries
 	apiKeyService      *auth.APIKeyService
+	redisClient        *redisinfra.Client
 	corsOriginsService *s3.CORSOriginsService
+	whisperQueueKey    string
 }
 
-func NewAdminHandler(queries *db.Queries, apiKeyService *auth.APIKeyService, corsOriginsService *s3.CORSOriginsService) *AdminHandler {
+func NewAdminHandler(queries *db.Queries, apiKeyService *auth.APIKeyService, redisClient *redisinfra.Client, corsOriginsService *s3.CORSOriginsService, whisperQueueKey string) *AdminHandler {
 	return &AdminHandler{
 		queries:            queries,
 		apiKeyService:      apiKeyService,
+		redisClient:        redisClient,
 		corsOriginsService: corsOriginsService,
+		whisperQueueKey:    whisperQueueKey,
 	}
 }
 
@@ -67,6 +74,122 @@ func (h *AdminHandler) Overview(c *gin.Context) {
 		"webhook_stats": webhookStats,
 		"storage_stats": storageStats,
 	})
+}
+
+// GET /api/v1/admin/whisper-jobs
+func (h *AdminHandler) ListWhisperJobs(c *gin.Context) {
+	limit, offset := parsePagination(c)
+	jobs, err := h.queries.AdminListWhisperTranscriptionJobs(c.Request.Context(), db.AdminListWhisperTranscriptionJobsParams{
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, jobs)
+}
+
+// GET /api/v1/admin/whisper-jobs/processing
+func (h *AdminHandler) ListProcessingWhisperJobs(c *gin.Context) {
+	jobIDs, err := h.listProcessingWhisperJobIDs(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(jobIDs) == 0 {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+
+	jobs, err := h.queries.AdminListWhisperTranscriptionJobsByWhisperJobIDs(c.Request.Context(), jobIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, jobs)
+}
+
+// GET /api/v1/admin/whisper-jobs/stats
+func (h *AdminHandler) WhisperJobStats(c *gin.Context) {
+	stats, err := h.queries.AdminGetWhisperTranscriptionJobStats(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	queuedLive, processingLive, err := h.getLiveWhisperQueueDepths(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"queued_live":     queuedLive,
+		"processing_live": processingLive,
+		"recorded":        stats,
+	})
+}
+
+type whisperProcessingJob struct {
+	JobID string `json:"job_id"`
+}
+
+func (h *AdminHandler) getLiveWhisperQueueDepths(ctx context.Context) (int64, int64, error) {
+	if h.redisClient == nil || h.whisperQueueKey == "" {
+		return 0, 0, nil
+	}
+
+	queued, err := h.redisClient.LLen(ctx, h.whisperQueueKey)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	processing, err := h.redisClient.LLen(ctx, h.whisperQueueKey+":processing")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return queued, processing, nil
+}
+
+func (h *AdminHandler) listProcessingWhisperJobIDs(ctx context.Context) ([]uuid.UUID, error) {
+	if h.redisClient == nil || h.whisperQueueKey == "" {
+		return nil, nil
+	}
+
+	payloads, err := h.redisClient.LRange(ctx, h.whisperQueueKey+":processing", 0, -1)
+	if err != nil {
+		return nil, err
+	}
+	return parseWhisperProcessingJobIDs(payloads), nil
+}
+
+func parseWhisperProcessingJobIDs(payloads []string) []uuid.UUID {
+	jobIDs := make([]uuid.UUID, 0, len(payloads))
+	seen := make(map[uuid.UUID]struct{}, len(payloads))
+
+	for _, payload := range payloads {
+		var job whisperProcessingJob
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			slog.Warn("[chalk] skipping malformed whisper processing payload", "error", err)
+			continue
+		}
+
+		jobID, err := uuid.Parse(job.JobID)
+		if err != nil {
+			slog.Warn("[chalk] skipping whisper processing payload with invalid job id", "job_id", job.JobID, "error", err)
+			continue
+		}
+		if _, ok := seen[jobID]; ok {
+			continue
+		}
+
+		seen[jobID] = struct{}{}
+		jobIDs = append(jobIDs, jobID)
+	}
+
+	return jobIDs
 }
 
 // GET /api/v1/admin/tenants
@@ -408,7 +531,7 @@ func (h *AdminHandler) Usage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"meeting_durations": durations,
+		"meeting_durations":   durations,
 		"storage_by_provider": storage,
 	})
 }

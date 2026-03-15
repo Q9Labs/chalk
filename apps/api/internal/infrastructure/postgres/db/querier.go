@@ -22,6 +22,7 @@ type Querier interface {
 	AdminGetRoom(ctx context.Context, id uuid.UUID) (AdminGetRoomRow, error)
 	AdminGetStorageByProvider(ctx context.Context) ([]AdminGetStorageByProviderRow, error)
 	AdminGetWebhookStats(ctx context.Context) (AdminGetWebhookStatsRow, error)
+	AdminGetWhisperTranscriptionJobStats(ctx context.Context) (AdminGetWhisperTranscriptionJobStatsRow, error)
 	AdminListAuditLogs(ctx context.Context, arg AdminListAuditLogsParams) ([]AdminListAuditLogsRow, error)
 	AdminListRecordings(ctx context.Context, arg AdminListRecordingsParams) ([]AdminListRecordingsRow, error)
 	AdminListRoomParticipants(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
@@ -29,6 +30,8 @@ type Querier interface {
 	AdminListTenants(ctx context.Context, arg AdminListTenantsParams) ([]AdminListTenantsRow, error)
 	AdminListTranscripts(ctx context.Context, arg AdminListTranscriptsParams) ([]AdminListTranscriptsRow, error)
 	AdminListWebhookDeliveries(ctx context.Context, arg AdminListWebhookDeliveriesParams) ([]AdminListWebhookDeliveriesRow, error)
+	AdminListWhisperTranscriptionJobs(ctx context.Context, arg AdminListWhisperTranscriptionJobsParams) ([]AdminListWhisperTranscriptionJobsRow, error)
+	AdminListWhisperTranscriptionJobsByWhisperJobIDs(ctx context.Context, dollar_1 []uuid.UUID) ([]AdminListWhisperTranscriptionJobsByWhisperJobIDsRow, error)
 	AdminUpdateWhiteboardConfig(ctx context.Context, arg AdminUpdateWhiteboardConfigParams) (Tenant, error)
 	ArchiveRecording(ctx context.Context, id uuid.UUID) (Recording, error)
 	ArchiveRecordingWithPath(ctx context.Context, arg ArchiveRecordingWithPathParams) (Recording, error)
@@ -81,6 +84,8 @@ type Querier interface {
 	// Webhook Deliveries Queries
 	// CRUD operations for webhook delivery tracking
 	CreateWebhookDelivery(ctx context.Context, arg CreateWebhookDeliveryParams) (WebhookDelivery, error)
+	// Whisper transcription job history
+	CreateWhisperTranscriptionJob(ctx context.Context, arg CreateWhisperTranscriptionJobParams) (WhisperTranscriptionJob, error)
 	DeactivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	DeleteOldAuditLogs(ctx context.Context, createdAt time.Time) error
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
@@ -167,6 +172,9 @@ type Querier interface {
 	MarkTenantClaimUsed(ctx context.Context, id uuid.UUID) (TenantClaim, error)
 	MarkWebhookDelivered(ctx context.Context, id uuid.UUID) error
 	MarkWebhookSending(ctx context.Context, id uuid.UUID) error
+	MarkWhisperTranscriptionJobCompleted(ctx context.Context, arg MarkWhisperTranscriptionJobCompletedParams) error
+	MarkWhisperTranscriptionJobFailed(ctx context.Context, arg MarkWhisperTranscriptionJobFailedParams) error
+	MarkWhisperTranscriptionJobTimedOut(ctx context.Context, arg MarkWhisperTranscriptionJobTimedOutParams) error
 	ParticipantLeave(ctx context.Context, id uuid.UUID) (Participant, error)
 	ParticipantLeaveByCloudflareID(ctx context.Context, cloudflareParticipantID string) (Participant, error)
 	ReactivateRoom(ctx context.Context, arg ReactivateRoomParams) (Room, error)

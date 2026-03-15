@@ -175,7 +175,7 @@ func main() {
 		GroqAPIKey:     cfg.PostMeeting.GroqAPIKey,
 		WhisperEnabled: cfg.PostMeeting.WhisperEnabled,
 		WhisperQueue:   cfg.PostMeeting.WhisperRedisQueue,
-	}, redisClient.GetClient())
+	}, redisClient.GetClient(), transcription.NewPostgresWhisperJobStore(queries))
 
 	var transcriptionService *transcription.Service
 	if storageR2 != nil {

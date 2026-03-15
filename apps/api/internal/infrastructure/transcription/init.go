@@ -14,7 +14,7 @@ func init() {
 		return NewGroqProvider(apiKey)
 	})
 
-	domain.RegisterWhisperFactory(func(redis *goredis.Client, queueKey string) domain.Provider {
-		return NewWhisperProvider(redis, queueKey)
+	domain.RegisterWhisperFactory(func(redis *goredis.Client, queueKey string, store domain.WhisperJobStore) domain.Provider {
+		return NewWhisperProvider(redis, queueKey, store)
 	})
 }

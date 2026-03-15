@@ -36,7 +36,9 @@ func NewGroqProvider(apiKey string) *GroqProvider {
 	}
 }
 
-func (p *GroqProvider) Transcribe(ctx context.Context, audioURL string) (*domain.TranscriptionResult, error) {
+func (p *GroqProvider) Transcribe(ctx context.Context, request domain.TranscriptionRequest) (*domain.TranscriptionResult, error) {
+	audioURL := request.AudioURL
+
 	slog.Debug("[chalk] Groq: starting transcription",
 		"url_length", len(audioURL),
 		"model", "whisper-large-v3-turbo")

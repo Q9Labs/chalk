@@ -372,7 +372,7 @@ func (r *Router) setupRoutes() {
 		// Admin dashboard endpoints
 		if r.appConfig.Admin.Enabled {
 			adminMw := middleware.NewAdminMiddleware(&r.appConfig.Admin)
-			adminHandler := handlers.NewAdminHandler(r.queries, r.apiKeyService, r.corsOriginsService)
+			adminHandler := handlers.NewAdminHandler(r.queries, r.apiKeyService, r.redisClient, r.corsOriginsService, r.appConfig.PostMeeting.WhisperRedisQueue)
 			admin := v1.Group("/admin")
 			admin.Use(adminMw.RequireAdmin())
 			{
@@ -391,6 +391,9 @@ func (r *Router) setupRoutes() {
 				admin.GET("/rooms/:id", adminHandler.GetRoom)
 				admin.GET("/recordings", adminHandler.ListRecordings)
 				admin.GET("/transcripts", adminHandler.ListTranscripts)
+				admin.GET("/whisper-jobs", adminHandler.ListWhisperJobs)
+				admin.GET("/whisper-jobs/processing", adminHandler.ListProcessingWhisperJobs)
+				admin.GET("/whisper-jobs/stats", adminHandler.WhisperJobStats)
 				admin.GET("/webhooks", adminHandler.ListWebhooks)
 				admin.GET("/audit-logs", adminHandler.ListAuditLogs)
 				admin.GET("/usage", adminHandler.Usage)

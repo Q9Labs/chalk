@@ -25,6 +25,38 @@ type AuditLog struct {
 	CreatedAt    time.Time   `db:"created_at" json:"created_at"`
 }
 
+type ChatAttachment struct {
+	ID                      uuid.UUID   `db:"id" json:"id"`
+	RoomID                  uuid.UUID   `db:"room_id" json:"room_id"`
+	MessageID               pgtype.UUID `db:"message_id" json:"message_id"`
+	UploadedByParticipantID uuid.UUID   `db:"uploaded_by_participant_id" json:"uploaded_by_participant_id"`
+	FileName                string      `db:"file_name" json:"file_name"`
+	MimeType                string      `db:"mime_type" json:"mime_type"`
+	SizeBytes               int64       `db:"size_bytes" json:"size_bytes"`
+	Kind                    string      `db:"kind" json:"kind"`
+	StorageKey              string      `db:"storage_key" json:"storage_key"`
+	Status                  string      `db:"status" json:"status"`
+	CreatedAt               time.Time   `db:"created_at" json:"created_at"`
+}
+
+type ChatMessage struct {
+	ID                  uuid.UUID `db:"id" json:"id"`
+	RoomID              uuid.UUID `db:"room_id" json:"room_id"`
+	SenderParticipantID uuid.UUID `db:"sender_participant_id" json:"sender_participant_id"`
+	SenderIdentityKey   string    `db:"sender_identity_key" json:"sender_identity_key"`
+	SenderDisplayName   string    `db:"sender_display_name" json:"sender_display_name"`
+	Content             string    `db:"content" json:"content"`
+	CreatedAt           time.Time `db:"created_at" json:"created_at"`
+}
+
+type ChatMessageRead struct {
+	MessageID           uuid.UUID `db:"message_id" json:"message_id"`
+	ReaderParticipantID uuid.UUID `db:"reader_participant_id" json:"reader_participant_id"`
+	ReaderIdentityKey   string    `db:"reader_identity_key" json:"reader_identity_key"`
+	ReaderDisplayName   string    `db:"reader_display_name" json:"reader_display_name"`
+	ReadAt              time.Time `db:"read_at" json:"read_at"`
+}
+
 type Participant struct {
 	ID                      uuid.UUID          `db:"id" json:"id"`
 	RoomID                  uuid.UUID          `db:"room_id" json:"room_id"`
@@ -90,6 +122,8 @@ type Room struct {
 	ScheduledStartAt      pgtype.Timestamptz `db:"scheduled_start_at" json:"scheduled_start_at"`
 	ScheduledEndAt        pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
 	AllowEarlyJoinMinutes int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
+	// Screen annotation state JSON (share session, items, access mode)
+	ScreenAnnotationState []byte `db:"screen_annotation_state" json:"screen_annotation_state"`
 }
 
 type Tenant struct {
@@ -170,6 +204,34 @@ type WebhookDelivery struct {
 	NextRetryAt  pgtype.Timestamptz `db:"next_retry_at" json:"next_retry_at"`
 	DeliveredAt  pgtype.Timestamptz `db:"delivered_at" json:"delivered_at"`
 	CreatedAt    time.Time          `db:"created_at" json:"created_at"`
+}
+
+type WhisperTranscriptionJob struct {
+	ID                            uuid.UUID          `db:"id" json:"id"`
+	TranscriptID                  uuid.UUID          `db:"transcript_id" json:"transcript_id"`
+	RecordingID                   uuid.UUID          `db:"recording_id" json:"recording_id"`
+	RoomID                        uuid.UUID          `db:"room_id" json:"room_id"`
+	Provider                      string             `db:"provider" json:"provider"`
+	WhisperJobID                  uuid.UUID          `db:"whisper_job_id" json:"whisper_job_id"`
+	QueueKey                      string             `db:"queue_key" json:"queue_key"`
+	AudioStoragePath              string             `db:"audio_storage_path" json:"audio_storage_path"`
+	Traceparent                   *string            `db:"traceparent" json:"traceparent"`
+	LanguageHint                  *string            `db:"language_hint" json:"language_hint"`
+	Status                        string             `db:"status" json:"status"`
+	QueueDepthAtEnqueue           *int64             `db:"queue_depth_at_enqueue" json:"queue_depth_at_enqueue"`
+	ProcessingQueueDepthAtEnqueue *int64             `db:"processing_queue_depth_at_enqueue" json:"processing_queue_depth_at_enqueue"`
+	QueueDepthAtTimeout           *int64             `db:"queue_depth_at_timeout" json:"queue_depth_at_timeout"`
+	ProcessingQueueDepthAtTimeout *int64             `db:"processing_queue_depth_at_timeout" json:"processing_queue_depth_at_timeout"`
+	ResultLanguage                *string            `db:"result_language" json:"result_language"`
+	DurationSeconds               *int32             `db:"duration_seconds" json:"duration_seconds"`
+	WordCount                     *int32             `db:"word_count" json:"word_count"`
+	ErrorMessage                  *string            `db:"error_message" json:"error_message"`
+	ErrorClass                    *string            `db:"error_class" json:"error_class"`
+	ErrorStage                    *string            `db:"error_stage" json:"error_stage"`
+	DownloadHttpStatus            *int32             `db:"download_http_status" json:"download_http_status"`
+	DownloadSizeBytes             *int64             `db:"download_size_bytes" json:"download_size_bytes"`
+	CreatedAt                     time.Time          `db:"created_at" json:"created_at"`
+	CompletedAt                   pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
 }
 
 type WhiteboardPermission struct {
