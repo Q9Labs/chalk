@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK-Core/SDK-React/SDK-React-Native: shared participant identity visuals** — moved the name-hashed participant gradient/avatar palette logic into `sdk-core`, re-exported it for web, and wired the same generated gradients into native lobby/joining/meeting identity surfaces so mobile now follows the web avatar color rules.
 - **SDK-React-Native/mobile: animated native avatar + lobby preview path** — the native lobby/joining/meeting fallback avatar now blinks and pulses like the web facehash treatment, the mobile-only extra preview control was removed, and the native prejoin flow now opens a real `react-native-webrtc` local camera preview stream with stricter video-track validation.
 - **SDK-React-Native/mobile: leave flow end-screen handoff** — leaving a native room now finalizes into the end screen through a normal screen swap instead of a modal layered over the RTC surface, reducing the Android case where the call visually stayed mounted after disconnect while controls were already dead.
+- **SDK-React-Native/mobile: native leave no longer re-enters the room** — the native conference shell now only auto-promotes from `joining -> meeting` once the room actually finishes joining, so tapping the red end button cannot race back into the live meeting view while the transport is still briefly connected.
 
 ## [0.0.76] - 2026-03-15
 

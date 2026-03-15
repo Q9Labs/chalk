@@ -138,7 +138,7 @@ export function NativeVideoConference({
   }, [connection, joinNonce, joinSettings.audioEnabled, joinSettings.displayName, joinSettings.videoEnabled, phase, role, roomId]);
 
   useEffect(() => {
-    if (!connection.isConnected || phase === "meeting") {
+    if (phase !== "joining" || !connection.isConnected) {
       return;
     }
 
