@@ -8,7 +8,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       name: "Chalk",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "0.0.3",
+      version: "0.0.4",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
@@ -22,7 +22,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       ios: {
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "3",
+        buildNumber: "4",
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you during meetings.",
@@ -32,7 +32,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       },
       android: {
         package: "ai.q9labs.chalk.mobile",
-        versionCode: 3,
+        versionCode: 4,
         adaptiveIcon: {
           foregroundImage: "./assets/icon.png",
           backgroundColor: "#0b0c14",
