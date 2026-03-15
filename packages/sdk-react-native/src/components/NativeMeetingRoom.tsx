@@ -1,15 +1,15 @@
-import type { LayoutMode, ParticipantState } from "@q9labs/chalk-core";
+import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
 import { getParticipantColor, getParticipantInitial } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import {
-  Cancel01Icon,
+  CallEnd01Icon,
   ComputerScreenShareIcon,
-  Home01Icon,
+  MoreHorizontalIcon,
   Mic01Icon,
   MicOff01Icon,
-  ThumbsUpIcon,
+  SmileIcon,
   Video01Icon,
   VideoOffIcon,
   WavingHand01Icon,
@@ -30,6 +30,7 @@ import { NativeFaceAvatar } from "./NativeFaceAvatar";
 import { NativeGradientSurface } from "./NativeGradientSurface";
 import { NativeMediaView } from "./NativeMediaView";
 import { NativeMeetingPanel, type NativeMeetingPanelName } from "./NativeMeetingPanel";
+import { NativeReactionPicker } from "./NativeReactionPicker";
 
 type RoomParticipant = ParticipantState["participants"][number];
 
@@ -67,6 +68,7 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
 
   const [chatDraft, setChatDraft] = useState("");
   const [sheetPanel, setSheetPanel] = useState<NativeMeetingPanelName | null>(null);
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
 
   const isHost = (participants.localParticipant?.role ?? "participant") === "host";
   const panel = sheetPanel ?? (panels.activePanel as Exclude<typeof panels.activePanel, null> | null);
@@ -122,13 +124,13 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
     <View style={styles.roomScreen}>
       <View style={styles.stageFrame}>
         {layout.layout === "grid" ? (
-          <ScrollView contentContainerStyle={styles.grid}>
+          <View style={styles.grid}>
             {participants.participants.map((participant) => (
               <View key={participant.id} style={styles.gridTile}>
                 <NativeMediaView label={participant.displayName} participant={participant as RoomParticipant} track={participant.videoTrack ?? participant.screenShareTrack} />
               </View>
             ))}
-          </ScrollView>
+          </View>
         ) : (
           <View style={styles.stageSurface}>
             <NativeGradientSurface borderRadius={36} participantId={stageName} />
@@ -149,7 +151,7 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
               <Text style={styles.selfPillName}>{isHost ? "Host" : selfName}</Text>
               {isMuted ? (
                 <View style={styles.micOffIndicator}>
-                  <HugeiconsIcon color="white" icon={MicOff01Icon} size={12} />
+                  <HugeiconsIcon color="white" icon={MicOff01Icon} size={10} />
                 </View>
               ) : null}
             </View>
@@ -174,20 +176,26 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
           <Pressable onPress={interactions.toggleHand} style={[styles.controlButton, handRaised && styles.controlButtonActive]}>
             <HugeiconsIcon color={handRaised ? Theme.colors.primary : "white"} icon={WavingHand01Icon} size={24} />
           </Pressable>
-          <Pressable onPress={() => interactions.sendReaction("👍")} style={styles.controlButton}>
-            <HugeiconsIcon color="#facc15" icon={ThumbsUpIcon} size={24} />
+          <Pressable onPress={() => setReactionPickerOpen(true)} style={styles.controlButton}>
+            <HugeiconsIcon color="#facc15" icon={SmileIcon} size={24} />
           </Pressable>
         </View>
 
         <View style={styles.controlPill}>
           <Pressable onPress={() => openSheet("settings")} style={styles.controlButton}>
-            <HugeiconsIcon color="white" icon={Home01Icon} size={24} />
+            <HugeiconsIcon color="white" icon={MoreHorizontalIcon} size={24} />
           </Pressable>
           <Pressable onPress={() => void runAsync(async () => onLeave())} style={[styles.controlButton, styles.controlButtonEndCall]}>
-            <HugeiconsIcon color="white" icon={Cancel01Icon} size={24} />
+            <HugeiconsIcon color="white" icon={CallEnd01Icon} size={24} />
           </Pressable>
         </View>
       </View>
+
+      <NativeReactionPicker
+        isOpen={reactionPickerOpen}
+        onClose={() => setReactionPickerOpen(false)}
+        onSelect={(emoji) => interactions.sendReaction(emoji as ReactionEmoji)}
+      />
 
       <NativeMeetingPanel
         cameras={devices.cameras}
@@ -251,9 +259,9 @@ const styles = StyleSheet.create({
   roomScreen: {
     flex: 1,
     backgroundColor: "#000000",
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
   stageFrame: {
     flex: 1,
@@ -281,36 +289,36 @@ const styles = StyleSheet.create({
     bottom: 16,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingLeft: 6,
+    gap: 8,
+    paddingLeft: 4,
     paddingRight: 10,
-    paddingVertical: 6,
-    borderRadius: 24,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.6)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
   selfAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   selfAvatarText: {
     color: "#ffffff",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
   },
   selfPillName: {
     color: "#ffffff",
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "600",
   },
   micOffIndicator: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: "#ef4444",
     alignItems: "center",
     justifyContent: "center",
@@ -318,22 +326,23 @@ const styles = StyleSheet.create({
   bottomDock: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     marginTop: 12,
-    gap: 8,
+    gap: 6,
+    width: "100%",
   },
   controlPill: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#111111",
-    borderRadius: 28,
+    borderRadius: 32,
     padding: 4,
-    gap: 4,
+    gap: 2,
   },
   controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
@@ -346,9 +355,10 @@ const styles = StyleSheet.create({
   },
   controlButtonEndCall: {
     backgroundColor: "#ef4444",
-    width: 64,
+    width: 52,
   },
   grid: {
+    flex: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: Theme.spacing.md,
