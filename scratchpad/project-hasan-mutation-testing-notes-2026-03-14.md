@@ -247,3 +247,48 @@ Remaining survivor pattern summary:
 Next best targets after this rep:
 - `packages/sdk-core/src/events.ts` for the smallest SDK-first loop
 - `packages/sdk-core/src/transforms.ts` for the highest-signal pure-logic SDK rep
+
+## Chalk Rep 2 Results - 2026-03-15
+
+Target:
+- `packages/sdk-core/src/utils/participant-colors.ts`
+
+Harness:
+- `packages/sdk-core/stryker.participant-avatar.config.json`
+- `packages/sdk-core/vitest.stryker.config.ts`
+- `packages/sdk-core/package.json` script: `test:mutation:participant-avatar-recipe`
+- focused spec: `packages/sdk-core/mutation/participant-colors.mutation.test.ts`
+
+Important setup finding:
+- Stryker would not mutate `sdk-core` source when invoked from `apps/web`; targeting `../../packages/sdk-core/...` only produced a dry run.
+- package-local harness fixed that cleanly.
+- `bunx --package ...` was not reliable here; Bun resolved the wrong binary. The stable script is the explicit monorepo binary path: `../../apps/web/node_modules/.bin/stryker run stryker.participant-avatar.config.json`.
+
+Score progression:
+- first score: `42.48%`
+- after first strengthening pass: `77.78%`
+- after second strengthening pass: `84.97%`
+
+What improved coverage-wise:
+- exact custom avatar recipe contract, not just stability
+- exact custom border alpha derivation
+- invalid custom hex fallback behavior
+- deterministic seeded palette mapping for a broader name set
+- exported preset list shape
+- theme helper output for both dark and light foreground branches
+
+What this report taught us:
+- for hash-based palette logic, `same input => same output` is too weak
+- exact representative seed snapshots kill more real mutants than generic determinism tests
+- mixed-responsibility utility files create mutation noise; unrelated helpers drag coverage down even when the target behavior is strong
+- package-local Stryker configs are safer in this monorepo than cross-package mutation globs
+
+Remaining survivor pattern summary:
+- hash arithmetic internals still survive; likely needs a larger curated seed matrix if we want to push higher
+- some `getReadableTextColor` math survivors likely deserve a dedicated helper-focused rep instead of piggybacking on avatar tests
+- some initials normalization survivors look equivalent because the current normalization pipeline collapses them to the same observable output
+
+Recommendation:
+- keep this harness
+- treat `~85%` as good enough for this mixed utility file
+- if we want to go higher, split future reps by helper responsibility instead of piling more assertions onto one spec

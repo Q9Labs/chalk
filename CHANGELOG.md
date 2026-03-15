@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **API/Admin: durable Whisper job history + live processing visibility** — Whisper queue submissions now persist per-job metadata and terminal outcomes in Postgres (`whisper_transcription_jobs`) without storing presigned audio URLs, and admin endpoints now expose paginated history, live processing job metadata, and queue/processing counts for practical ops visibility without external analytics tooling.
+- **SDK-Core: local mutation-testing harness for participant avatar recipe** — `packages/sdk-core` now includes a focused Stryker + Vitest harness for `src/utils/participant-colors.ts` plus dedicated mutation specs around the shared avatar recipe contract, improving the targeted mutation score from `42.48%` to `84.97%`.
 
 ### Changed
 ### Fixed
