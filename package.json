@@ -11,9 +11,10 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
-    "dev:mobile": "bun run --cwd apps/mobile start",
-    "dev:mobile:android": "bun run --cwd apps/mobile android",
+    "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; bun run --cwd apps/mobile start'",
+    "dev:mobile:android": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; bun run --cwd apps/mobile android'",
     "dev:mobile:ios": "bun run --cwd apps/mobile ios",
+    "postinstall": "bun run scripts/patch-realtimekit-react-native.ts",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "dev:web:pages": "bun run --cwd apps/web dev:pages",
