@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { MeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
 import { usePrefersReducedMotion, useMediaQuery } from "../../hooks/useMediaQuery";
 import { cn } from "../../utils/cn";
-import { getParticipantAvatarGradient, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
+import { getParticipantAvatarRecipe, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
 import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { IconButton, Input, Toggle, VolumeSlider } from "../atomic";
@@ -176,22 +176,10 @@ export const SettingsDialog = React.memo(
       () => PARTICIPANT_GRADIENT_PRESETS.find((preset) => preset.from.toLowerCase() === resolvedProfileFrom.toLowerCase() && preset.to.toLowerCase() === resolvedProfileTo.toLowerCase()) ?? null,
       [resolvedProfileFrom, resolvedProfileTo],
     );
-    const profilePreviewGradient = useMemo(
-      () => getParticipantAvatarGradient(participantColorSeed, { mode: profileGradientMode, from: resolvedProfileFrom, to: resolvedProfileTo }),
+    const profilePreviewRecipe = useMemo(
+      () => getParticipantAvatarRecipe(participantColorSeed?.trim() || "You", { mode: profileGradientMode, from: resolvedProfileFrom, to: resolvedProfileTo }),
       [participantColorSeed, profileGradientMode, resolvedProfileFrom, resolvedProfileTo],
     );
-    const profilePreviewInitials = useMemo(() => {
-      const previewName = participantColorSeed?.trim() || "You";
-      return (
-        previewName
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((part) => part[0] || "")
-          .join("")
-          .toUpperCase() || "Y"
-      );
-    }, [participantColorSeed]);
     const effectiveAudioInputDevices = useMemo(() => mergeDevices(audioInputDevices, detectedDevices.audioinput), [audioInputDevices, detectedDevices.audioinput]);
     const effectiveAudioOutputDevices = useMemo(() => mergeDevices(audioOutputDevices, detectedDevices.audiooutput), [audioOutputDevices, detectedDevices.audiooutput]);
     const effectiveVideoInputDevices = useMemo(() => mergeDevices(videoInputDevices, detectedDevices.videoinput), [detectedDevices.videoinput, videoInputDevices]);
@@ -370,10 +358,10 @@ export const SettingsDialog = React.memo(
                   <div className="mb-4 flex items-center gap-4">
                     <div
                       className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold text-white shadow-lg ring-1 ring-white/20"
-                      style={{ background: profilePreviewGradient }}
+                      style={{ background: profilePreviewRecipe.avatarGradient }}
                       aria-hidden="true"
                     >
-                      {profilePreviewInitials}
+                      {profilePreviewRecipe.initials}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-bold text-foreground">{participantColorSeed?.trim() || "You"}</div>

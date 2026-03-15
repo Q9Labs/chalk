@@ -137,6 +137,46 @@ export function getParticipantBorder(participantId?: string, preference?: Partic
   return getParticipantColor(participantId, preference).border;
 }
 
+function buildParticipantAvatarInitials(name?: string): string {
+  if (!name || name.trim() === "") {
+    return "?";
+  }
+
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "?";
+  }
+
+  return (
+    parts
+      .slice(0, 2)
+      .map((part) => part[0] || "")
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
+
+export function getParticipantAvatarRecipe(participantId?: string, preference?: ParticipantGradientPreference) {
+  const colors = getParticipantColor(participantId, preference);
+
+  return {
+    avatarGradient: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.gradientEnd} 100%)`,
+    colors,
+    darkerAvatarGradient: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+    facehashColors: [colors.primary, colors.gradientEnd, colors.secondary] as const,
+    gradientStops: [
+      { color: colors.primary, offset: "0%" },
+      { color: colors.gradientEnd, offset: "50%" },
+      { color: colors.secondary, offset: "100%" },
+    ] as const,
+    initials: buildParticipantAvatarInitials(participantId),
+  };
+}
+
 export function getParticipantInitial(name?: string): string {
   const value = name?.trim();
   return (value?.charAt(0) || "C").toUpperCase();

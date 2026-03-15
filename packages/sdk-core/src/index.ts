@@ -32,6 +32,7 @@ export { ConferenceSession, type ConferenceSessionEvents, type Transcript } from
 export { camelToSnake, camelToSnakeString, snakeToCamel, snakeToCamelString } from "./transforms.ts";
 export {
   getParticipantAvatarGradient,
+  getParticipantAvatarRecipe,
   getParticipantBorder,
   getParticipantColor,
   getParticipantGradient,

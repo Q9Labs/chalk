@@ -1,5 +1,6 @@
 export {
   getParticipantAvatarGradient,
+  getParticipantAvatarRecipe,
   getParticipantBorder,
   getParticipantColor,
   getParticipantGradient,

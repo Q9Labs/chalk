@@ -1,4 +1,4 @@
-import { getParticipantColor, getParticipantInitial, type ParticipantGradientPreference } from "@q9labs/chalk-core";
+import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "@q9labs/chalk-core";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { NativeGradientSurface } from "./NativeGradientSurface";
@@ -20,8 +20,7 @@ function NativeFaceAvatarBase({
 }: NativeFaceAvatarProps): React.JSX.Element {
   const blinkScale = useRef(new Animated.Value(1)).current;
   const glowScale = useRef(new Animated.Value(1)).current;
-  const colors = useMemo(() => getParticipantColor(name, gradientPreference), [gradientPreference, name]);
-  const initial = useMemo(() => getParticipantInitial(name), [name]);
+  const avatarRecipe = useMemo(() => getParticipantAvatarRecipe(name, gradientPreference), [gradientPreference, name]);
   const resolvedTextSize = textSize ?? Math.round(size * 0.34);
 
   useEffect(() => {
@@ -90,7 +89,7 @@ function NativeFaceAvatarBase({
         style={[
           styles.glow,
           {
-            backgroundColor: colors.primary,
+            backgroundColor: avatarRecipe.colors.primary,
             borderRadius: size / 2,
             height: size * 0.72,
             opacity: 0.18,
@@ -100,13 +99,13 @@ function NativeFaceAvatarBase({
         ]}
       />
       <View style={[styles.avatar, { borderRadius: size / 2, height: size, width: size }]}>
-        <NativeGradientSurface angle="diagonal" borderRadius={size / 2} gradientPreference={gradientPreference} participantId={name} />
+        <NativeGradientSurface angle="diagonal" borderRadius={size / 2} gradientPreference={gradientPreference} participantId={name} variant="avatar" />
         <View style={styles.face}>
           <View style={[styles.eyesRow, { gap: size * 0.18 }]}>
             <Animated.View style={[styles.eye, { borderRadius: size * 0.05, height: size * 0.1, transform: [{ scaleY: blinkScale }], width: size * 0.1 }]} />
             <Animated.View style={[styles.eye, { borderRadius: size * 0.05, height: size * 0.1, transform: [{ scaleY: blinkScale }], width: size * 0.1 }]} />
           </View>
-          <Text style={[styles.initial, { fontSize: resolvedTextSize }]}>{initial}</Text>
+          <Text style={[styles.initial, { fontSize: resolvedTextSize }]}>{avatarRecipe.initials}</Text>
         </View>
       </View>
     </Animated.View>

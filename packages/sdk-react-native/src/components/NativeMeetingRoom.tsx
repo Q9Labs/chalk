@@ -1,5 +1,5 @@
 import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
-import { getParticipantColor, getParticipantInitial } from "@q9labs/chalk-core";
+import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
@@ -118,7 +118,7 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
   const isMuted = !media.isAudioEnabled;
   const isCameraOff = !media.isVideoEnabled;
   const handRaised = interactions.isHandRaised;
-  const selfColors = useMemo(() => getParticipantColor(selfName), [selfName]);
+  const selfAvatarRecipe = useMemo(() => getParticipantAvatarRecipe(selfName), [selfName]);
 
   return (
     <View style={styles.roomScreen}>
@@ -145,8 +145,8 @@ export function NativeMeetingRoom({ onLeave }: NativeMeetingRoomProps): React.JS
             )}
 
             <View style={styles.selfPill}>
-              <View style={[styles.selfAvatar, { backgroundColor: selfColors.primary }]}>
-                <Text style={styles.selfAvatarText}>{getParticipantInitial(selfName)}</Text>
+              <View style={[styles.selfAvatar, { backgroundColor: selfAvatarRecipe.colors.primary }]}>
+                <Text style={styles.selfAvatarText}>{selfAvatarRecipe.initials}</Text>
               </View>
               <Text style={styles.selfPillName}>{isHost ? "Host" : selfName}</Text>
               {isMuted ? (

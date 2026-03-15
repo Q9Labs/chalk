@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Facehash } from "facehash";
 import { cn } from "../../utils/cn";
-import { getParticipantAvatarGradient, getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
 import { useMeetingRoomTheme } from "../full/meeting-room/useMeetingRoomTheme";
 
@@ -43,22 +43,8 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
     setImageError(false);
   }, [src, name, settings.appearance.generatedAvatars]);
 
-  const initials = useMemo(() => {
-    if (!name || name.trim() === "") return "?";
-    const cleanName = name.trim();
-    const parts = cleanName.split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return "?";
-    return (
-      parts
-        .slice(0, 2)
-        .map((n) => n[0] || "")
-        .join("")
-        .toUpperCase() || "?"
-    );
-  }, [name]);
-
-  const participantColors = useMemo(() => getParticipantColor(name || "unknown", gradientPreference), [gradientPreference, name]);
-  const gradient = useMemo(() => (isDarkerGradient ? `linear-gradient(135deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantAvatarGradient(name || "unknown", gradientPreference)), [gradientPreference, name, isDarkerGradient, participantColors]);
+  const avatarRecipe = useMemo(() => getParticipantAvatarRecipe(name || "unknown", gradientPreference), [gradientPreference, name]);
+  const gradient = useMemo(() => (isDarkerGradient ? avatarRecipe.darkerAvatarGradient : avatarRecipe.avatarGradient), [avatarRecipe, isDarkerGradient]);
   const { size: pxSize, fontSize } = sizeMap[size];
 
   return (
@@ -79,12 +65,12 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
             interactive
             intensity3d="dramatic"
             enableBlink
-            colors={[participantColors.primary, participantColors.gradientEnd, participantColors.secondary]}
+            colors={[...avatarRecipe.facehashColors]}
           />
         </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center rounded-full text-white font-medium" style={{ fontSize, background: gradient }}>
-          {initials}
+          {avatarRecipe.initials}
         </div>
       )}
       {status && (
