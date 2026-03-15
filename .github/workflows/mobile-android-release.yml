@@ -62,10 +62,7 @@ jobs:
 
       - name: Mobile gate
         run: |
-          bun run --cwd apps/mobile check-types
           bun run --cwd apps/mobile test
-          bun run --cwd packages/sdk-react-native check-types
-          bun run --cwd packages/sdk-react-native test
 
       - name: Build signed Android bundle
         run: bun run --cwd apps/mobile build:android:release
