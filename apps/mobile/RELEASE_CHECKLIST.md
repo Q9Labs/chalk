@@ -2,6 +2,9 @@
 
 ## Android
 
+- create Play Console app `ai.q9labs.chalk.mobile` if it does not exist yet
+- link Google Cloud project `project-for-gws-cli-1` under `Setup -> API access`
+- grant `chalk-mobile-gplay@project-for-gws-cli-1.iam.gserviceaccount.com` access to the app
 - create upload keystore from `android/app/keystore.properties.example`
 - add real `keystore.properties` locally
 - confirm `bundleRelease` succeeds

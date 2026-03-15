@@ -7,7 +7,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "prebuild:android": "expo prebuild --platform android --no-install",
-    "prebuild:android:production": "CHALK_APP_VARIANT=production expo prebuild --platform android --clean --no-install",
+    "prebuild:android:production": "CHALK_APP_VARIANT=production expo prebuild --platform android --no-install",
     "prebuild:ios": "expo prebuild --platform ios --no-install",
     "prebuild:ios:production": "CHALK_APP_VARIANT=production expo prebuild --platform ios --clean --no-install",
     "build": "expo export --platform ios --output-dir dist/ios && expo export --platform android --output-dir dist/android",

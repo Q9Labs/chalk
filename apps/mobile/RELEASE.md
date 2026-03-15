@@ -1,50 +1,79 @@
-# Chalk Mobile Release Checklist
+# Chalk Mobile Android Release
 
-## Android
+## Local release build
 
-- Create `apps/mobile/android/app/keystore.properties` from `keystore.properties.example`
-- Add upload keystore `.jks` file locally or via CI secret mount
-- Confirm release build uses upload key, not debug signing
-- Keep cleartext traffic debug-only
-- Verify only required permissions remain in the final merged manifest
-- Set Play Store listing assets
-- Set privacy policy URL
-- Complete Play Console data safety + app content
-- Run device QA:
+1. Generate or refresh the upload keystore
+   - local file: `apps/mobile/android/app/chalk-upload-key.jks`
+   - local config: `apps/mobile/android/app/keystore.properties`
+   - template: `apps/mobile/android/app/keystore.properties.example`
+2. Build signed bundle
+   - `bun run --cwd apps/mobile build:android:release`
+
+Optional native refresh only when intentionally regenerating Android files:
+
+- `bun run --cwd apps/mobile prebuild:android:production`
+- do not use `--clean` for release refreshes; it wipes manual Android signing customizations
+
+Bundle output:
+
+- `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab`
+
+## Google Play service account
+
+Google-owned step. One-time.
+
+1. In Google Play Console:
+   - create the Play app first if `ai.q9labs.chalk.mobile` does not exist yet
+   - `Setup -> API access`
+   - link Google Cloud project `project-for-gws-cli-1` if not linked
+   - create or select service account
+   - service account: `chalk-mobile-gplay@project-for-gws-cli-1.iam.gserviceaccount.com`
+   - grant app access to `ai.q9labs.chalk.mobile`
+   - grant release permissions needed for internal track uploads
+2. Download the JSON key
+3. Save it locally outside git, or inside ignored path like:
+   - `apps/mobile/.gplay/service-account.json`
+
+CLI setup:
+
+- `cd apps/mobile`
+- `gplay auth login --service-account .gplay/service-account.json --local`
+- `gplay auth doctor`
+
+Already prepared locally on this machine:
+
+- local auth config: `apps/mobile/.gplay/config.json`
+- local service-account key path: `apps/mobile/.gplay/service-account.json`
+- Android upload keystore: `apps/mobile/android/app/chalk-upload-key.jks`
+- Android signing props: `apps/mobile/android/app/keystore.properties`
+
+## First internal upload
+
+From `apps/mobile`:
+
+1. Create signed bundle
+   - `bun run build:android:release`
+2. Upload to internal track
+   - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --release-notes "Initial Android internal test build" --changes-not-sent-for-review`
+
+## Optional metadata
+
+If store listing files/screenshots exist:
+
+- `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --listings-dir .gplay/listings --screenshots-dir .gplay/screenshots`
+
+## Required human checks before wider rollout
+
+- Play listing assets
+- privacy policy URL
+- data safety
+- app content declarations
+- real device QA:
   - create meeting
   - join meeting
-  - 2-way audio/video
+  - audio/video both ways
   - chat
   - transcripts
-  - leave/end
   - reconnect
-  - background/foreground
   - speaker routing
   - screen share
-
-### Build
-
-- Local release bundle: `bun run build:android:release`
-- Production prebuild sync: `bun run prebuild:android:production`
-
-## iOS
-
-- Native project now exists under `apps/mobile/ios`
-- Set Apple team / signing in Xcode or EAS credentials
-- Verify `NSCameraUsageDescription` + `NSMicrophoneUsageDescription`
-- Add ReplayKit broadcast extension if shipping mobile-originated screen share
-- Set App Store Connect listing assets + privacy policy
-- Run device QA on at least two real iPhones if possible
-- Ship internal TestFlight first
-
-### Build
-
-- Production prebuild sync: `bun run prebuild:ios:production`
-- Open in Xcode for signing + archive: `open ios/Chalk.xcodeproj`
-
-## Known External Blockers
-
-- Android upload keystore secrets are not in the repo
-- Apple signing team / certificates are not in the repo
-- Store metadata, privacy policy URL, and listing assets still require human/account setup
-- Final publish confidence still needs multi-device QA, not just one phone

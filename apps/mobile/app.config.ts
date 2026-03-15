@@ -15,6 +15,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       assetBundlePatterns: ["**/*"],
       plugins: [...(isProductionBuild ? [] : ["expo-dev-client"]), "expo-secure-store", "@cloudflare/realtimekit-react-native"],
       splash: {
+        image: "./assets/icon.png",
         resizeMode: "contain",
         backgroundColor: "#f4f1eb",
       },
