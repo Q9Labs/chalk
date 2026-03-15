@@ -21,4 +21,20 @@ describe("createExpoConfig", () => {
     ]);
     expect(config.expo.extra.wsUrl).toBeDefined();
   });
+
+  it("forces production API and WS URLs when local env values leak into production builds", () => {
+    const originalApiUrl = process.env.EXPO_PUBLIC_API_URL;
+    const originalWsUrl = process.env.EXPO_PUBLIC_WS_URL;
+
+    process.env.EXPO_PUBLIC_API_URL = "http://localhost:8080";
+    process.env.EXPO_PUBLIC_WS_URL = "ws://localhost:8080/ws";
+
+    const config = createExpoConfig("production");
+
+    expect(config.expo.extra.apiUrl).toBe("https://chalk-api.q9labs.ai");
+    expect(config.expo.extra.wsUrl).toBe("wss://chalk-ws.q9labs.ai/ws");
+
+    process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
+    process.env.EXPO_PUBLIC_WS_URL = originalWsUrl;
+  });
 });

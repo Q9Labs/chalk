@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createStorageScopeId, getMetroHostFromScriptUrl, isDeviceLocalUrl, resolveDeviceLocalUrl } from "./mobile-runtime";
+import { createStorageScopeId, getMetroHostFromScriptUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl } from "./mobile-runtime";
 
 describe("mobile runtime helpers", () => {
   it("derives a stable scoped token namespace", () => {
@@ -23,6 +23,26 @@ describe("mobile runtime helpers", () => {
   it("falls back to production URLs when release builds still carry localhost env values", () => {
     expect(resolveDeviceLocalUrl("http://localhost:8080", null, "https://chalk-api.q9labs.ai")).toBe("https://chalk-api.q9labs.ai");
     expect(resolveDeviceLocalUrl("ws://127.0.0.1:8080/ws", undefined, "wss://chalk-ws.q9labs.ai/ws")).toBe("wss://chalk-ws.q9labs.ai/ws");
+  });
+
+  it("hard-forces production URLs when release builds disallow device-local hosts", () => {
+    expect(
+      resolveAppRuntimeUrl({
+        configuredUrl: "http://localhost:8080",
+        scriptUrl: "file:///android_asset/index.android.bundle",
+        fallbackUrl: "https://chalk-api.q9labs.ai",
+        allowDeviceLocal: false,
+      }),
+    ).toBe("https://chalk-api.q9labs.ai");
+
+    expect(
+      resolveAppRuntimeUrl({
+        configuredUrl: "ws://localhost:8080/ws",
+        scriptUrl: "file:///android_asset/index.android.bundle",
+        fallbackUrl: "wss://chalk-ws.q9labs.ai/ws",
+        allowDeviceLocal: false,
+      }),
+    ).toBe("wss://chalk-ws.q9labs.ai/ws");
   });
 
   it("detects local device URLs", () => {

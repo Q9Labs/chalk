@@ -59,3 +59,16 @@ export function resolveDeviceLocalUrl(url: string, scriptUrl?: string | null, fa
     return stripTrailingSlash(url);
   }
 }
+
+export function resolveAppRuntimeUrl({ configuredUrl, scriptUrl, fallbackUrl, allowDeviceLocal }: { configuredUrl?: string | null; scriptUrl?: string | null; fallbackUrl: string; allowDeviceLocal: boolean }): string {
+  const candidate = configuredUrl?.trim();
+  if (!candidate) {
+    return stripTrailingSlash(fallbackUrl);
+  }
+
+  if (!allowDeviceLocal && isDeviceLocalUrl(candidate)) {
+    return stripTrailingSlash(fallbackUrl);
+  }
+
+  return resolveDeviceLocalUrl(candidate, scriptUrl, fallbackUrl);
+}

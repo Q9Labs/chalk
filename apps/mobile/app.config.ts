@@ -1,14 +1,30 @@
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+
+function isLocalUrl(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    return LOCAL_HOSTNAMES.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development") {
   const isProductionBuild = buildProfile === "production";
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || "https://chalk-api.q9labs.ai";
-  const wsUrl = process.env.EXPO_PUBLIC_WS_URL?.trim() || "wss://chalk-ws.q9labs.ai/ws";
+  const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  const configuredWsUrl = process.env.EXPO_PUBLIC_WS_URL?.trim();
+  const apiUrl = isProductionBuild && isLocalUrl(configuredApiUrl) ? "https://chalk-api.q9labs.ai" : configuredApiUrl || "https://chalk-api.q9labs.ai";
+  const wsUrl = isProductionBuild && isLocalUrl(configuredWsUrl) ? "wss://chalk-ws.q9labs.ai/ws" : configuredWsUrl || "wss://chalk-ws.q9labs.ai/ws";
 
   return {
     expo: {
       name: "Chalk",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "0.0.7",
+      version: "0.0.8",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
@@ -22,7 +38,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       ios: {
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "7",
+        buildNumber: "8",
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you during meetings.",
@@ -32,7 +48,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       },
       android: {
         package: "ai.q9labs.chalk.mobile",
-        versionCode: 7,
+        versionCode: 8,
         adaptiveIcon: {
           foregroundImage: "./assets/icon.png",
           backgroundColor: "#0b0c14",

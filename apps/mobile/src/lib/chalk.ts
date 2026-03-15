@@ -1,7 +1,7 @@
 import { APIClient, createFriendlyRoomName, createTokenProvider, humanizeRoomName } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
 import { NativeModules } from "react-native";
-import { createStorageScopeId, resolveDeviceLocalUrl } from "./mobile-runtime";
+import { createStorageScopeId, resolveAppRuntimeUrl } from "./mobile-runtime";
 import { createHostTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY, LEGACY_HOST_TOKEN_PREFIXES } from "./host-token-storage";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
@@ -35,13 +35,23 @@ let cachedHostTokenProviderKey: string | null = null;
 
 export function getApiUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
-  return resolveDeviceLocalUrl(configured || PROD_API_URL, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL, PROD_API_URL);
+  return resolveAppRuntimeUrl({
+    configuredUrl: configured,
+    scriptUrl: NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL,
+    fallbackUrl: PROD_API_URL,
+    allowDeviceLocal: __DEV__,
+  });
 }
 
 export function getWsUrl(apiUrl = getApiUrl()): string | undefined {
   const configured = process.env.EXPO_PUBLIC_WS_URL?.trim();
   if (configured) {
-    return resolveDeviceLocalUrl(configured, NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL, PROD_WS_URL);
+    return resolveAppRuntimeUrl({
+      configuredUrl: configured,
+      scriptUrl: NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL,
+      fallbackUrl: PROD_WS_URL,
+      allowDeviceLocal: __DEV__,
+    });
   }
 
   try {
