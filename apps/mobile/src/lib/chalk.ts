@@ -1,11 +1,12 @@
-import { APIClient, createFriendlyRoomName, createTokenProvider, humanizeRoomName } from "@q9labs/chalk-core";
+import { APIClient, createTokenProvider, humanizeRoomName } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
 import { NativeModules } from "react-native";
-import { createStorageScopeId, resolveAppRuntimeUrl } from "./mobile-runtime";
-import { createHostTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY, LEGACY_HOST_TOKEN_PREFIXES } from "./host-token-storage";
+import { createStorageScopeId, isDeviceLocalUrl, resolveAppRuntimeUrl } from "./mobile-runtime";
+import { createHostTokenStorage } from "./host-token-storage";
+import { createNewMeetingLobbyRoute } from "./meeting-route";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
-const HOST_ROLE_REQUIRED_ERROR = "host role required";
+const LOCAL_DEV_HOST_API_KEY_KEY = "chalk_mobile_local_dev_host_api_key_v1";
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 const PROD_WS_URL = "wss://chalk-ws.q9labs.ai/ws";
 
@@ -32,6 +33,7 @@ export type MobileRoute = { kind: "home" } | LobbyRoute;
 
 let cachedHostTokenProvider: (() => Promise<string>) | null = null;
 let cachedHostTokenProviderKey: string | null = null;
+let cachedLocalDevHostApiKey: string | null | undefined;
 
 export function getApiUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -73,15 +75,15 @@ export function getHostApiKey(): string | null {
 }
 
 export function canCreateMeeting(): boolean {
-  return getHostApiKey() !== null;
+  return getHostApiKey() !== null || canBootstrapLocalHostKey();
 }
 
-export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | null {
-  const apiKey = getHostApiKey();
-  if (!apiKey) {
-    return null;
-  }
+function canBootstrapLocalHostKey(): boolean {
+  const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  return __DEV__ && !!configuredApiUrl && isDeviceLocalUrl(configuredApiUrl);
+}
 
+function getTokenProviderForKey(apiUrl: string, apiKey: string): () => Promise<string> {
   const cacheKey = `${apiUrl}:${createStorageScopeId(apiUrl, apiKey)}`;
   if (cachedHostTokenProvider && cachedHostTokenProviderKey === cacheKey) {
     return cachedHostTokenProvider;
@@ -96,19 +98,69 @@ export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | 
   return cachedHostTokenProvider;
 }
 
-async function clearHostAuthState(apiUrl: string): Promise<void> {
-  const apiKey = getHostApiKey();
-  cachedHostTokenProvider = null;
-  cachedHostTokenProviderKey = null;
-
-  const removals = LEGACY_HOST_TOKEN_PREFIXES.flatMap((prefix) => [HOST_ACCESS_TOKEN_KEY, HOST_REFRESH_TOKEN_KEY, HOST_EXPIRES_KEY].map((key) => SecureStore.deleteItemAsync(`${prefix}${key}`)));
-
-  if (apiKey) {
-    const storage = createHostTokenStorage(apiUrl, apiKey);
-    removals.push(Promise.resolve(storage.remove(HOST_ACCESS_TOKEN_KEY)), Promise.resolve(storage.remove(HOST_REFRESH_TOKEN_KEY)), Promise.resolve(storage.remove(HOST_EXPIRES_KEY)));
+async function getLocalDevHostApiKey(): Promise<string | null> {
+  if (cachedLocalDevHostApiKey !== undefined) {
+    return cachedLocalDevHostApiKey;
   }
 
-  await Promise.all(removals);
+  cachedLocalDevHostApiKey = await SecureStore.getItemAsync(LOCAL_DEV_HOST_API_KEY_KEY);
+  return cachedLocalDevHostApiKey;
+}
+
+async function setLocalDevHostApiKey(apiKey: string): Promise<void> {
+  cachedLocalDevHostApiKey = apiKey;
+  await SecureStore.setItemAsync(LOCAL_DEV_HOST_API_KEY_KEY, apiKey);
+}
+
+async function createLocalDevHostApiKey(apiUrl: string): Promise<string> {
+  const response = await fetch(`${apiUrl}/api/v1/tenants`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: `Chalk Mobile Local ${new Date().toISOString()}`,
+      max_concurrent_rooms: 100,
+      max_participants_per_room: 20,
+      max_recording_duration_minutes: 120,
+    }),
+  });
+
+  const data = (await response.json().catch(() => null)) as { api_key?: string; error?: string } | null;
+
+  if (!response.ok || !data?.api_key) {
+    throw new Error(data?.error ?? "Local host bootstrap failed");
+  }
+
+  await setLocalDevHostApiKey(data.api_key);
+  return data.api_key;
+}
+
+export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | null {
+  const configuredApiKey = getHostApiKey();
+  if (!configuredApiKey && !canBootstrapLocalHostKey()) {
+    return null;
+  }
+
+  return async () => {
+    let apiKey = configuredApiKey ?? (canBootstrapLocalHostKey() ? await getLocalDevHostApiKey() : null);
+
+    if (!apiKey) {
+      apiKey = await createLocalDevHostApiKey(apiUrl);
+    }
+
+    try {
+      return await getTokenProviderForKey(apiUrl, apiKey)();
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      if (!canBootstrapLocalHostKey() || !message.includes("invalid api key")) {
+        throw error;
+      }
+
+      apiKey = await createLocalDevHostApiKey(apiUrl);
+      return getTokenProviderForKey(apiUrl, apiKey)();
+    }
+  };
 }
 
 export async function getJoinContext(): Promise<JoinContext | null> {
@@ -181,36 +233,8 @@ export async function getJoinAccessToken(apiUrl: string, joinToken: string): Pro
   return nextContext.accessToken;
 }
 
-export async function createMeetingLobbyRoute(apiUrl: string): Promise<LobbyRoute> {
-  const friendlyRoom = createFriendlyRoomName();
-  const roomName = friendlyRoom.label;
-  const createRoom = async () => {
-    const tokenProvider = getHostTokenProvider(apiUrl);
-    if (!tokenProvider) {
-      throw new Error("Meeting creation is currently restricted.");
-    }
-
-    const client = new APIClient({ apiUrl, tokenProvider });
-    return client.createRoom({ name: roomName });
-  };
-
-  let response = await createRoom();
-  if (!response.success && response.error?.message?.toLowerCase() === HOST_ROLE_REQUIRED_ERROR) {
-    await clearHostAuthState(apiUrl);
-    response = await createRoom();
-  }
-
-  if (!response.success || !response.data) {
-    throw new Error(response.error?.message ?? "Unable to create meeting");
-  }
-
-  return {
-    kind: "lobby",
-    roomId: response.data.id,
-    roomName: response.data.name?.trim() || roomName,
-    role: "host",
-    source: "new-meeting",
-  };
+export async function createMeetingLobbyRoute(_apiUrl: string): Promise<LobbyRoute> {
+  return createNewMeetingLobbyRoute();
 }
 
 export function parseInputDestination(input: string): LobbyRoute | null {
