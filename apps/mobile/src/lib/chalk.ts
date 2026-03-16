@@ -1,7 +1,7 @@
 import { APIClient, createTokenProvider, humanizeRoomName } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
 import { NativeModules } from "react-native";
-import { createStorageScopeId, isDeviceLocalUrl, resolveAppRuntimeUrl } from "./mobile-runtime";
+import { createStorageScopeId, isConfiguredLocalApiUrl, resolveAppRuntimeUrl } from "./mobile-runtime";
 import { createHostTokenStorage } from "./host-token-storage";
 import { createNewMeetingLobbyRoute } from "./meeting-route";
 
@@ -78,9 +78,8 @@ export function canCreateMeeting(): boolean {
   return getHostApiKey() !== null || canBootstrapLocalHostKey();
 }
 
-function canBootstrapLocalHostKey(): boolean {
-  const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  return __DEV__ && !!configuredApiUrl && isDeviceLocalUrl(configuredApiUrl);
+export function canBootstrapLocalHostKey(configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim()): boolean {
+  return isConfiguredLocalApiUrl(configuredApiUrl);
 }
 
 function getTokenProviderForKey(apiUrl: string, apiKey: string): () => Promise<string> {

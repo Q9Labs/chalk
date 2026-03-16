@@ -38,6 +38,11 @@ export function isDeviceLocalUrl(url: string): boolean {
   }
 }
 
+export function isConfiguredLocalApiUrl(configuredUrl?: string | null): boolean {
+  const candidate = configuredUrl?.trim();
+  return !!candidate && isDeviceLocalUrl(candidate);
+}
+
 export function resolveDeviceLocalUrl(url: string, scriptUrl?: string | null, fallbackUrl?: string): string {
   try {
     const parsed = new URL(url);

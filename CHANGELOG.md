@@ -1003,6 +1003,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Mobile `New meeting` now mirrors web by generating the instant-meeting route locally and entering the lobby immediately instead of failing early on a pre-create API call from the home screen. Added regression coverage for the pure route generator.
+- Mobile local host bootstrap no longer depends on `__DEV__`; any build still pointed at a local API can now self-heal stale host keys at join time instead of bouncing the lobby with `Token exchange failed: {"error":"invalid API key"}`.
 - Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the Android mobile lobby/room screens stay on the stable Expo icon components to avoid the native LobbyScreen crash seen with the Hugeicons renderer path.
 - Mobile host meeting creation now pre-creates the room with a friendly human-readable name and carries the returned room UUID separately, so lobby UI no longer shows the old opaque `instant-meeting-*` identifier as the room title.
 - Join-token exchange now returns both the canonical room UUID and the friendly room name, so mobile can display intelligible titles without treating the room label as the room identifier.
