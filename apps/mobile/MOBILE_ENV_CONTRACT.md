@@ -11,6 +11,7 @@ Required release env:
 Rules:
 
 - treat `apps/mobile/.env.local` as dev-only
+- if local mobile host auth drifts, run `bun run mobile:sync-local-env`
 - never trust a local host key for Play/TestFlight builds
 - Android signing material stays in GitHub Secrets, recreated only on the runner
 - Play upload credentials stay in GitHub Secrets or local ignored files, never git

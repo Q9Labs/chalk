@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Mobile/Android: internal release advanced to build 4** — bumped the Expo/app-store version metadata to `0.0.4` / Android `versionCode 4` / iOS `buildNumber 4` so a fresh internal-testing upload can carry the release URL fallback fix after Play burned version code `3` during the first successful bundle upload attempt.
 ### Fixed
+- **Mobile/local-dev: stale mobile host keys now self-heal from local web env** — added `bun run mobile:sync-local-env`, which validates the local Chalk host key against `http://localhost:8080`, reuses the valid key from `apps/web/.env.local` when present, or mints a fresh local tenant key and syncs both web/mobile env files so `New meeting` stops failing in simulator/device local runs from env drift.
 - **Mobile/Android: release builds now source the prod host key from CI secrets** — Android release automation now injects `EXPO_PUBLIC_CHALK_API_KEY` from GitHub Actions secret `VITE_CHALK_API_KEY` alongside forced production API/WS URLs, so Play internal builds can create new meetings in prod without relying on stale local env files.
 - **Mobile: production builds now hard-block device-local API/WS envs** — Android/iOS release builds now force Chalk production API and WebSocket endpoints whenever `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_WS_URL` still point at `localhost`, so store builds cannot regress into `New Meeting -> Network Error` from leaked local env files.
 - **Mobile/Android: release APK builds no longer fail inside RealtimeKit resources** — added a repo-level postinstall patch that injects the missing `blob_provider_authority` string resource into `@cloudflare/realtimekit-react-native`, so signed `assembleRelease` builds stop failing in `:cloudflare_realtimekit-react-native:verifyReleaseResources` on fresh installs.
@@ -1000,6 +1001,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Mobile `New meeting` now mirrors web by generating the instant-meeting route locally and entering the lobby immediately instead of failing early on a pre-create API call from the home screen. Added regression coverage for the pure route generator.
 - Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the Android mobile lobby/room screens stay on the stable Expo icon components to avoid the native LobbyScreen crash seen with the Hugeicons renderer path.
 - Mobile host meeting creation now pre-creates the room with a friendly human-readable name and carries the returned room UUID separately, so lobby UI no longer shows the old opaque `instant-meeting-*` identifier as the room title.
 - Join-token exchange now returns both the canonical room UUID and the friendly room name, so mobile can display intelligible titles without treating the room label as the room identifier.
