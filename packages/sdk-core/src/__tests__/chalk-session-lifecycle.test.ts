@@ -80,4 +80,40 @@ describe("ChalkSession lifecycle listener graph", () => {
     expect(session.room._emitter.listenerCount("error")).toBe(0);
     expect(session.media._emitter.listenerCount("error")).toBe(0);
   });
+
+  it("deduplicates duplicate joins for the same input room after a successful connect", async () => {
+    const session = createSession();
+    let joinCalls = 0;
+
+    (session as any)._runtime = {
+      runPromise: async () => undefined,
+      dispose: () => undefined,
+    };
+
+    (session as any).client = {
+      joinSession: async () => {
+        joinCalls += 1;
+        return {
+          id: "connected-room-id",
+        };
+      },
+      disconnect: () => undefined,
+      on: () => () => undefined,
+    };
+
+    (session as any).attachRoomToManagers = () => {
+      session.room._state = {
+        ...session.room._state,
+        status: "connected",
+        roomId: "connected-room-id",
+      };
+    };
+
+    await session.join("room-alias", { userName: "Hasan" });
+    await session.join("room-alias", { userName: "Hasan" });
+
+    expect(joinCalls).toBe(1);
+
+    session.dispose();
+  });
 });

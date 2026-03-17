@@ -5,6 +5,7 @@ import { resolveBackgroundImageSource } from "../conference-session/resolve-back
 describe("resolveBackgroundImageSource", () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
+  const originalUrl = globalThis.URL;
   const createObjectUrl = mock(() => "blob:resolved-background");
   const revokeObjectUrl = mock(() => {});
 
@@ -30,6 +31,11 @@ describe("resolveBackgroundImageSource", () => {
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: originalWindow,
+    });
+
+    Object.defineProperty(globalThis, "URL", {
+      configurable: true,
+      value: originalUrl,
     });
 
     createObjectUrl.mockClear();

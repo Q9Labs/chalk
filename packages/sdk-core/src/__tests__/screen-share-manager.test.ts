@@ -15,16 +15,18 @@ class MockRoom extends EventEmitter {
   public participants = new Map<string, ParticipantLike>();
   public stopCalled = false;
   private readonly emitParticipantUpdatedOnStart: boolean;
+  private readonly startResult: boolean;
 
-  constructor(localParticipant: ParticipantLike, options?: { emitParticipantUpdatedOnStart?: boolean }) {
+  constructor(localParticipant: ParticipantLike, options?: { emitParticipantUpdatedOnStart?: boolean; startResult?: boolean }) {
     super();
     this.localParticipant = localParticipant;
     this.participants.set(localParticipant.id, localParticipant);
     this.emitParticipantUpdatedOnStart = options?.emitParticipantUpdatedOnStart ?? false;
+    this.startResult = options?.startResult ?? true;
   }
 
   async startScreenShare(): Promise<boolean> {
-    if (!this.localParticipant) return false;
+    if (!this.localParticipant || !this.startResult) return false;
     this.localParticipant.isScreenSharing = true;
     if (this.emitParticipantUpdatedOnStart) {
       this.emit("participant.updated", {
@@ -123,6 +125,35 @@ describe("ScreenShareManager", () => {
       isStarting: false,
       isLocalSharer: true,
       sharerParticipantId: "local",
+    });
+  });
+
+  it("does not emit a second generic error when the room already failed screen-share start", async () => {
+    const room = new MockRoom(
+      {
+        id: "local",
+        isLocal: true,
+        isScreenSharing: false,
+      },
+      { startResult: false },
+    );
+
+    const manager = new ScreenShareManager();
+    manager.attachRoom(room as any);
+
+    const errors: unknown[] = [];
+    manager.on("error", (error) => {
+      errors.push(error);
+    });
+
+    const started = await manager.start();
+
+    expect(started).toBe(false);
+    expect(errors).toEqual([]);
+    expect(manager.getState()).toMatchObject({
+      isActive: false,
+      isStarting: false,
+      isLocalSharer: false,
     });
   });
 });

@@ -6,6 +6,7 @@ import { createConferenceSessionVideoBackgroundController } from "../conference-
 describe("createConferenceSessionVideoBackgroundController", () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
+  const originalUrl = globalThis.URL;
   const originalInit = RealtimeKitVideoBackgroundTransformer.init;
   const originalIsSupported = RealtimeKitVideoBackgroundTransformer.isSupported;
   const createObjectUrl = mock(() => "blob:resolved-background");
@@ -33,6 +34,11 @@ describe("createConferenceSessionVideoBackgroundController", () => {
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: originalWindow,
+    });
+
+    Object.defineProperty(globalThis, "URL", {
+      configurable: true,
+      value: originalUrl,
     });
 
     RealtimeKitVideoBackgroundTransformer.init = originalInit;

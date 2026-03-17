@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import { ChalkError } from "../errors/chalk-error.ts";
 import { createConferenceSessionMediaController } from "../conference-session/media-controls.ts";
 
 describe("createConferenceSessionMediaController", () => {
@@ -60,5 +61,55 @@ describe("createConferenceSessionMediaController", () => {
         details: { name: "AbortError" },
       }),
     );
+
+    const emittedError = emitError.mock.calls[0]?.[0];
+    expect(emittedError).toBeInstanceOf(ChalkError);
+    expect(emittedError?.cause).toMatchObject({
+      name: "AbortError",
+      message: "Screen share was cancelled",
+    });
+  });
+
+  it("preserves the original screen-share failure as the emitted cause", async () => {
+    const participant = {
+      id: "local",
+      isScreenSharing: false,
+      screenShareTrack: undefined,
+      screenShareAudioTrack: undefined,
+    } as any;
+
+    const emitError = mock(() => {});
+    const enableScreenShare = mock(async () => {
+      const err = new Error("Could not start video source");
+      (err as any).name = "NotReadableError";
+      throw err;
+    });
+
+    const controller = createConferenceSessionMediaController({
+      getRtkClient: () =>
+        ({
+          self: {
+            enableScreenShare,
+          },
+        }) as any,
+      getLocalParticipant: () => participant,
+      emitError,
+      emitParticipantUpdated: () => {},
+    });
+
+    const started = await controller.startScreenShare();
+
+    expect(started).toBe(false);
+    const emittedError = emitError.mock.calls[0]?.[0];
+    expect(emittedError).toBeInstanceOf(ChalkError);
+    expect(emittedError).toMatchObject({
+      code: "SCREEN_SHARE_FAILED",
+      message: "Could not start video source",
+      details: { name: "NotReadableError" },
+    });
+    expect(emittedError?.cause).toMatchObject({
+      name: "NotReadableError",
+      message: "Could not start video source",
+    });
   });
 });
