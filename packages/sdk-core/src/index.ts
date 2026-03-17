@@ -224,5 +224,14 @@ export { createTokenProvider } from "./token-provider.ts";
 // Webhooks
 // ============================================================================
 
-export { chalkWebhookMiddleware, createWebhookHandler, type WebhookEvent, type WebhookHandlerOptions } from "./webhooks/index.ts";
+export {
+  chalkWebhookMiddleware,
+  chalkWebhookParserErrorMiddleware,
+  createWebhookHandler,
+  normalizeChalkSignatureHeader,
+  type ChalkWebhookExpressOptions,
+  type ChalkWebhookParserErrorOptions,
+  type WebhookEvent,
+  type WebhookHandlerOptions,
+} from "./webhooks/index.ts";
 export { WebhookError, WebhookMeeting, WebhookPayload, WebhookRecording, WebhookTranscript } from "./webhooks/schemas.ts";
