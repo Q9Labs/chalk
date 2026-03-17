@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.0.77] - 2026-03-17
+
+### Added
+- **SDK-Core: strict Chalk webhook Express adapter** — `@q9labs/chalk-core` now ships a hardened Express webhook adapter with exact 400/401/413/415 responses, parser-error middleware, raw-hex signature normalization, and request-attached delivery/body metadata so consumers do not have to hand-roll verification plumbing.
+- **Mobile/E2E: Maestro Android new-meeting flow scaffold** — added repo-local Maestro flows for `ai.q9labs.chalk.mobile` that reset camera/mic permissions, drive `New meeting -> lobby -> Join Meeting`, and capture numbered screenshots into a stable local test-output directory for emulator verification.
 - **API/Admin: durable Whisper job history + live processing visibility** — Whisper queue submissions now persist per-job metadata and terminal outcomes in Postgres (`whisper_transcription_jobs`) without storing presigned audio URLs, and admin endpoints now expose paginated history, live processing job metadata, and queue/processing counts for practical ops visibility without external analytics tooling.
 - **SDK-Core: local mutation-testing harness for participant avatar recipe** — `packages/sdk-core` now includes a focused Stryker + Vitest harness for `src/utils/participant-colors.ts` plus dedicated mutation specs around the shared avatar recipe contract, improving the targeted mutation score from `42.48%` to `84.97%`.
 - **Mobile/Android: Play upload lane scaffolded** — `apps/mobile` now has real release signing config, ignored local keystore paths, a generated upload keystore + repo-local `gplay` auth scaffold, Android splash image generation from Expo config, and release docs that name the exact Google Cloud project/service account needed for Play uploads.
@@ -17,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Mobile/Android: internal release advanced to build 4** — bumped the Expo/app-store version metadata to `0.0.4` / Android `versionCode 4` / iOS `buildNumber 4` so a fresh internal-testing upload can carry the release URL fallback fix after Play burned version code `3` during the first successful bundle upload attempt.
 ### Fixed
+- **API: webhook delivery logs now expose final payload presence** — final Chalk post-meeting webhook delivery logs now include whether the delivered payload actually contained recording, transcript, summary, action items, and errors, making tenant incident triage possible from the last delivery event alone.
+- **SDK-Core: screen-share diagnostics now keep the real browser failure** — screen-share start errors now preserve the original DOMException as the emitted `cause`/details, and the manager no longer emits a second generic `Failed to start screen sharing` error that was masking the first useful failure in copied diagnostics.
 - **Mobile/local-dev: host auth now self-heals at join time** — when a local simulator/device build still carries a stale `EXPO_PUBLIC_CHALK_API_KEY`, the mobile host token provider now detects `invalid API key` from the local API, mints a fresh local tenant key on the fly, stores it in SecureStore, and retries so host joins stop failing in lobby with `Token exchange failed: {"error":"invalid API key"}`.
 - **Mobile/local-dev: stale mobile host keys now self-heal from local web env** — added `bun run mobile:sync-local-env`, which validates the local Chalk host key against `http://localhost:8080`, reuses the valid key from `apps/web/.env.local` when present, or mints a fresh local tenant key and syncs both web/mobile env files so `New meeting` stops failing in simulator/device local runs from env drift.
 - **Mobile/Android: release builds now source the prod host key from CI secrets** — Android release automation now injects `EXPO_PUBLIC_CHALK_API_KEY` from GitHub Actions secret `VITE_CHALK_API_KEY` alongside forced production API/WS URLs, so Play internal builds can create new meetings in prod without relying on stale local env files.
