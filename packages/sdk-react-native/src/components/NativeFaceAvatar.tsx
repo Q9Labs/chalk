@@ -11,13 +11,7 @@ export interface NativeFaceAvatarProps {
   textSize?: number;
 }
 
-function NativeFaceAvatarBase({
-  name,
-  size = 120,
-  gradientPreference,
-  audioLevel = 0,
-  textSize,
-}: NativeFaceAvatarProps): React.JSX.Element {
+function NativeFaceAvatarBase({ name, size = 120, gradientPreference, audioLevel = 0, textSize }: NativeFaceAvatarProps): React.JSX.Element {
   const blinkScale = useRef(new Animated.Value(1)).current;
   const glowScale = useRef(new Animated.Value(1)).current;
   const avatarRecipe = useMemo(() => getParticipantAvatarRecipe(name, gradientPreference), [gradientPreference, name]);

@@ -1,12 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { 
-  Clock01Icon, 
-  UserGroupIcon, 
-  Message01Icon, 
-  TextFontIcon,
-  CheckmarkCircle01Icon
-} from "@hugeicons/core-free-icons";
+import { Clock01Icon, UserGroupIcon, Message01Icon, TextFontIcon, CheckmarkCircle01Icon, ArrowRight01Icon, Home01Icon } from "@hugeicons/core-free-icons";
 import { Theme } from "../ui/theme";
 
 export interface NativeMeetingEndData {
@@ -27,46 +21,52 @@ export interface NativeEndScreenProps {
 export function NativeEndScreen({ data, onRejoin, onGoHome }: NativeEndScreenProps): React.JSX.Element {
   return (
     <View style={styles.screen}>
-      <View style={styles.card}>
-        <View style={styles.iconContainer}>
-          <View style={styles.iconGlow} />
-          <HugeiconsIcon icon={CheckmarkCircle01Icon} size={48} color="#22c55e" />
-        </View>
-        
-        <Text style={styles.eyebrow}>You've left the meeting</Text>
-        <Text style={styles.title} numberOfLines={2}>{data.roomName}</Text>
-        
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <HugeiconsIcon icon={Clock01Icon} size={20} color={Theme.colors.mutedForeground} />
-            <Text style={styles.statValue}>{formatDuration(data.durationSeconds)}</Text>
-            <Text style={styles.statLabel}>Duration</Text>
+      <View style={styles.content}>
+        {/* Success Header */}
+        <View style={styles.header}>
+          <View style={styles.iconCircle}>
+            <HugeiconsIcon icon={CheckmarkCircle01Icon} size={40} color={Theme.colors.success} />
           </View>
-          <View style={styles.statCard}>
-            <HugeiconsIcon icon={UserGroupIcon} size={20} color={Theme.colors.mutedForeground} />
-            <Text style={styles.statValue}>{data.participantCount}</Text>
-            <Text style={styles.statLabel}>People</Text>
-          </View>
-          <View style={styles.statCard}>
-            <HugeiconsIcon icon={Message01Icon} size={20} color={Theme.colors.mutedForeground} />
-            <Text style={styles.statValue}>{data.chatCount}</Text>
-            <Text style={styles.statLabel}>Messages</Text>
-          </View>
-          <View style={styles.statCard}>
-            <HugeiconsIcon icon={TextFontIcon} size={20} color={Theme.colors.mutedForeground} />
-            <Text style={styles.statValue}>{data.transcriptCount}</Text>
-            <Text style={styles.statLabel}>Lines</Text>
-          </View>
+          <Text style={styles.eyebrow}>Meeting Complete</Text>
+          <Text style={styles.title} numberOfLines={2}>
+            {data.roomName}
+          </Text>
         </View>
 
+        {/* Stats Grid - Cleaner, more integrated */}
+        <View style={styles.statsContainer}>
+          <StatItem icon={Clock01Icon} label="Duration" value={formatDuration(data.durationSeconds)} />
+          <StatItem icon={UserGroupIcon} label="Participants" value={data.participantCount.toString()} />
+          <StatItem icon={Message01Icon} label="Messages" value={data.chatCount.toString()} />
+          <StatItem icon={TextFontIcon} label="Transcript" value={`${data.transcriptCount} lines`} />
+        </View>
+
+        {/* Actions */}
         <View style={styles.actions}>
           <Pressable onPress={onRejoin} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Rejoin meeting</Text>
+            <Text style={styles.primaryButtonText}>Rejoin Meeting</Text>
+            <HugeiconsIcon icon={ArrowRight01Icon} size={20} color="white" />
           </Pressable>
+
           <Pressable onPress={onGoHome} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Back to home</Text>
+            <HugeiconsIcon icon={Home01Icon} size={20} color={Theme.colors.mutedForeground} />
+            <Text style={styles.secondaryButtonText}>Back to Home</Text>
           </Pressable>
         </View>
+      </View>
+    </View>
+  );
+}
+
+function StatItem({ icon, label, value }: { icon: any; label: string; value: string }) {
+  return (
+    <View style={styles.statRow}>
+      <View style={styles.statIconBox}>
+        <HugeiconsIcon icon={icon} size={20} color={Theme.colors.primary} />
+      </View>
+      <View style={styles.statTextContainer}>
+        <Text style={styles.statLabel}>{label}</Text>
+        <Text style={styles.statValue}>{value}</Text>
       </View>
     </View>
   );
@@ -79,6 +79,11 @@ function formatDuration(seconds: number) {
 
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
+  if (minutes > 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  }
   return `${minutes}m ${String(remainingSeconds).padStart(2, "0")}s`;
 }
 
@@ -86,112 +91,112 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: Theme.colors.background,
-    alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    paddingHorizontal: 24,
   },
-  card: {
+  content: {
     width: "100%",
-    maxWidth: 420,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 32,
-    backgroundColor: "#131927",
-    padding: 32,
-    alignItems: "center",
-    gap: 20,
+    maxWidth: 400,
+    alignSelf: "center",
   },
-  iconContainer: {
-    position: "relative",
+  header: {
     alignItems: "center",
-    justifyContent: "center",
+    marginBottom: 40,
+  },
+  iconCircle: {
     width: 80,
     height: 80,
-    marginBottom: 8,
-  },
-  iconGlow: {
-    position: "absolute",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#22c55e",
-    opacity: 0.15,
-    transform: [{ scale: 1.5 }],
+    borderRadius: 40,
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
   },
   eyebrow: {
-    color: "#22c55e",
-    fontSize: 14,
-    fontWeight: "700",
+    color: Theme.colors.success,
+    fontSize: 13,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 1.5,
+    marginBottom: 8,
   },
   title: {
-    color: Theme.colors.foreground,
-    fontSize: 28,
+    color: "white",
+    fontSize: 32,
     fontWeight: "800",
     textAlign: "center",
     letterSpacing: -0.5,
   },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    width: "100%",
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  statCard: {
-    flex: 1,
-    minWidth: "45%",
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    padding: 16,
-    alignItems: "center",
-    gap: 6,
+  statsContainer: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 24,
+    padding: 24,
+    gap: 20,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.06)",
+    marginBottom: 40,
+  },
+  statRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  statIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(27, 182, 166, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statTextContainer: {
+    flex: 1,
   },
   statLabel: {
     color: Theme.colors.mutedForeground,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
+    marginBottom: 2,
   },
   statValue: {
-    color: Theme.colors.foreground,
-    fontSize: 20,
+    color: "white",
+    fontSize: 17,
     fontWeight: "700",
   },
   actions: {
-    width: "100%",
     gap: 12,
-    marginTop: 8,
   },
   primaryButton: {
-    width: "100%",
+    backgroundColor: Theme.colors.primary,
+    height: 64,
+    borderRadius: 20,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#22c55e",
-    borderRadius: 24,
-    height: 56,
+    gap: 10,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 8,
   },
   primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
+    color: "white",
+    fontSize: 18,
     fontWeight: "800",
   },
   secondaryButton: {
-    width: "100%",
+    height: 60,
+    borderRadius: 20,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    gap: 10,
     backgroundColor: "transparent",
-    height: 56,
   },
   secondaryButtonText: {
-    color: Theme.colors.foreground,
+    color: Theme.colors.mutedForeground,
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
   },
 });

@@ -16,15 +16,7 @@ interface NativeMediaViewProps {
   zOrder?: number;
 }
 
-export function NativeMediaView({
-  participant,
-  track,
-  label,
-  mirror = false,
-  objectFit = "cover",
-  emphasizeMuted = false,
-  zOrder = 0,
-}: NativeMediaViewProps): React.JSX.Element {
+export function NativeMediaView({ participant, track, label, mirror = false, objectFit = "cover", emphasizeMuted = false, zOrder = 0 }: NativeMediaViewProps): React.JSX.Element {
   const stream = useMemo(() => {
     if (!track) {
       return null;

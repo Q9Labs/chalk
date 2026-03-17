@@ -1,9 +1,8 @@
-import { getParticipantColor } from "@q9labs/chalk-core";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Easing, StyleSheet, Text, View, Platform } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { Theme } from "../ui/theme";
 import { NativeFaceAvatar } from "./NativeFaceAvatar";
-import { NativeGradientSurface } from "./NativeGradientSurface";
 
 export interface NativeJoiningLoadingScreenProps {
   displayName: string;
@@ -11,12 +10,10 @@ export interface NativeJoiningLoadingScreenProps {
   supportingMessages?: readonly string[];
 }
 
-export function NativeJoiningLoadingScreen({
-  displayName,
-  message = "Joining room...",
-  supportingMessages = [],
-}: NativeJoiningLoadingScreenProps): React.JSX.Element {
+export function NativeJoiningLoadingScreen({ displayName, message = "Joining room...", supportingMessages = [] }: NativeJoiningLoadingScreenProps): React.JSX.Element {
   const [messageIndex, setMessageIndex] = useState(0);
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (supportingMessages.length <= 1) {
@@ -25,35 +22,70 @@ export function NativeJoiningLoadingScreen({
 
     const intervalId = setInterval(() => {
       setMessageIndex((current) => (current + 1) % supportingMessages.length);
-    }, 1400);
+    }, 2500);
 
     return () => clearInterval(intervalId);
   }, [supportingMessages]);
 
-  const activeSupportingMessage = supportingMessages[messageIndex] ?? null;
-  const colors = useMemo(() => getParticipantColor(displayName), [displayName]);
+  useEffect(() => {
+    // Rotation for the loading ring
+    Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ).start();
+
+    // Initial fade in
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, [rotateAnim, fadeAnim]);
+
+  const spin = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const activeSupportingMessage = supportingMessages[messageIndex] ?? "Initializing...";
 
   return (
     <View style={styles.screen}>
-      <NativeGradientSurface participantId={displayName} opacity={0.14} />
-      <View style={styles.content}>
-        <NativeFaceAvatar name={displayName} size={140} />
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        {/* Centered Hero Section */}
+        <View style={styles.heroWrapper}>
+          <Animated.View style={[styles.ringContainer, { transform: [{ rotate: spin }] }]}>
+            <Svg height="180" width="180" viewBox="0 0 100 100">
+              <Circle cx="50" cy="50" r="48" stroke="rgba(255,255,255,0.05)" strokeWidth="2" fill="none" />
+              <Circle cx="50" cy="50" r="48" stroke={Theme.colors.primary} strokeWidth="2" strokeDasharray="60 200" strokeLinecap="round" fill="none" />
+            </Svg>
+          </Animated.View>
 
-        <View style={styles.textContainer}>
-          <Text style={styles.title}>{displayName || "Guest"}</Text>
-          <Text style={styles.body}>{message}</Text>
-        </View>
-
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator color={colors.primary} size="large" />
-          <View style={styles.supportingContainer}>
-            {activeSupportingMessage ? (
-              <Text style={styles.supporting}>{activeSupportingMessage}</Text>
-            ) : (
-              <Text style={styles.supporting}>Please wait...</Text>
-            )}
+          <View style={styles.avatarInner}>
+            <NativeFaceAvatar name={displayName} size={120} />
           </View>
         </View>
+
+        {/* Clean Typography */}
+        <View style={styles.infoArea}>
+          <Text style={styles.messageText}>{message}</Text>
+          <Text style={styles.participantName}>{displayName}</Text>
+        </View>
+
+        {/* Subtle Supporting Label */}
+        <View style={styles.statusBadge}>
+          <View style={styles.dot} />
+          <Text style={styles.supportingText}>{activeSupportingMessage}</Text>
+        </View>
+      </Animated.View>
+
+      {/* Minimal Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.brandText}>chalk</Text>
       </View>
     </View>
   );
@@ -62,48 +94,78 @@ export function NativeJoiningLoadingScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: Theme.colors.background,
+    backgroundColor: "#08080a", // Solid, professional dark
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
   },
   content: {
     alignItems: "center",
-    justifyContent: "center",
-    gap: 40,
     width: "100%",
-    maxWidth: 420,
+    paddingHorizontal: 40,
   },
-  textContainer: {
+  heroWrapper: {
+    width: 180,
+    height: 180,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 40,
+  },
+  ringContainer: {
+    position: "absolute",
+  },
+  avatarInner: {
+    zIndex: 2,
+  },
+  infoArea: {
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 32,
+  },
+  messageText: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "700",
+    textAlign: "center",
+    letterSpacing: -0.2,
+  },
+  participantName: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 16,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  statusBadge: {
+    flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
-  title: {
-    color: Theme.colors.foreground,
-    fontSize: 32,
-    fontWeight: "800",
-    textAlign: "center",
-    letterSpacing: -0.5,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.colors.primary,
   },
-  body: {
-    color: Theme.colors.mutedForeground,
+  supportingText: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  footer: {
+    position: "absolute",
+    bottom: Platform.OS === "ios" ? 60 : 40,
+  },
+  brandText: {
+    color: "rgba(255,255,255,0.1)",
     fontSize: 18,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  loaderContainer: {
-    alignItems: "center",
-    gap: 20,
-    height: 80, // Fixed height to prevent layout shifts when text changes
-  },
-  supportingContainer: {
-    height: 24,
-    justifyContent: "center",
-  },
-  supporting: {
-    color: "rgba(255,255,255,0.4)",
-    fontSize: 15,
-    fontWeight: "500",
-    textAlign: "center",
+    fontWeight: "800",
+    letterSpacing: -0.5,
   },
 });

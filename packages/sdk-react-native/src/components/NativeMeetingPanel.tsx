@@ -1,5 +1,7 @@
 import type { ChatMessage, LayoutMode, MediaDevice, ParticipantState, Transcript } from "@q9labs/chalk-core";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Modal, TouchableWithoutFeedback, Platform } from "react-native";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { Cancel01Icon, Settings01Icon, Chat01Icon, UserGroupIcon, TextFontIcon, Presentation01Icon, CheckmarkCircle01Icon, Refresh01Icon } from "@hugeicons/core-free-icons";
 import { Theme } from "../ui/theme";
 
 export type NativeMeetingPanelName = "chat" | "participants" | "settings" | "transcripts" | "whiteboard";
@@ -76,332 +78,516 @@ export function NativeMeetingPanel({
   onUnmuteParticipant,
   onRemoveParticipant,
 }: NativeMeetingPanelProps): React.JSX.Element | null {
-  if (!panel) {
-    return null;
-  }
-
   return (
-    <View style={styles.sheet}>
-      <View style={styles.sheetHeader}>
-        <Text style={styles.sheetTitle}>{panelTitle(panel)}</Text>
-        <Pressable onPress={onClose} style={styles.closeButton}>
-          <Text style={styles.closeButtonText}>Close</Text>
-        </Pressable>
-      </View>
+    <Modal animationType="slide" transparent={true} visible={!!panel} onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.backdrop}>
+          <TouchableWithoutFeedback>
+            <View style={styles.sheet}>
+              <View style={styles.dragHandle} />
 
-      <ScrollView contentContainerStyle={styles.sheetContent}>
-        {panel === "chat" ? (
-          <>
-            {messages.length === 0 ? <Text style={styles.emptyText}>No messages yet.</Text> : null}
-            {messages.map((message) => (
-              <View key={message.id} style={styles.messageCard}>
-                <Text style={styles.messageAuthor}>{message.senderName}</Text>
-                <Text style={styles.messageBody}>{message.content}</Text>
+              <View style={styles.sheetHeader}>
+                <View style={styles.titleRow}>
+                  <HugeiconsIcon icon={panelIcon(panel)} size={20} color={Theme.colors.primary} />
+                  <Text style={styles.sheetTitle}>{panelTitle(panel)}</Text>
+                </View>
+                <Pressable onPress={onClose} style={styles.closeButton}>
+                  <HugeiconsIcon icon={Cancel01Icon} size={20} color={Theme.colors.mutedForeground} />
+                </Pressable>
               </View>
-            ))}
-            <View style={styles.composerRow}>
-              <TextInput
-                onChangeText={onChatDraftChange}
-                onSubmitEditing={onSendMessage}
-                placeholder="Send a message"
-                placeholderTextColor={Theme.colors.placeholder}
-                style={styles.input}
-                value={chatDraft}
-              />
-              <Pressable onPress={onSendMessage} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Send</Text>
-              </Pressable>
-            </View>
-          </>
-        ) : null}
 
-        {panel === "participants" ? (
-          <>
-            {participants.map((participant) => {
-              const isLocal = participant.id === localParticipantId;
-              const audioOn = participant.audioEnabled;
-              const videoOn = participant.videoEnabled;
-
-              return (
-                <View key={participant.id} style={styles.listCard}>
-                  <View style={styles.participantMeta}>
-                    <Text style={styles.messageAuthor}>
-                      {participant.displayName}
-                      {isLocal ? " (You)" : ""}
-                    </Text>
-                    <Text style={styles.metaText}>
-                      {participant.role} · {audioOn ? "mic on" : "mic off"} · {videoOn ? "cam on" : "cam off"}
-                      {participant.handRaised ? " · hand raised" : ""}
-                      {participant.isScreenSharing ? " · presenting" : ""}
-                    </Text>
-                  </View>
-                  {isHost && !isLocal ? (
-                    <View style={styles.row}>
-                      <Pressable onPress={() => (audioOn ? onMuteParticipant(participant.id) : onUnmuteParticipant(participant.id))} style={styles.secondaryButton}>
-                        <Text style={styles.secondaryButtonText}>{audioOn ? "Mute" : "Unmute"}</Text>
-                      </Pressable>
-                      <Pressable onPress={() => onRemoveParticipant(participant.id)} style={styles.dangerButton}>
-                        <Text style={styles.primaryButtonText}>Remove</Text>
+              <ScrollView contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator={false}>
+                {panel === "chat" && (
+                  <View style={styles.chatContainer}>
+                    {messages.length === 0 ? (
+                      <View style={styles.emptyState}>
+                        <HugeiconsIcon icon={Chat01Icon} size={40} color={Theme.colors.muted} />
+                        <Text style={styles.emptyText}>No messages yet.</Text>
+                      </View>
+                    ) : null}
+                    {messages.map((message) => (
+                      <View key={message.id} style={styles.messageCard}>
+                        <Text style={styles.messageAuthor}>{message.senderName}</Text>
+                        <Text style={styles.messageBody}>{message.content}</Text>
+                      </View>
+                    ))}
+                    <View style={styles.composerRow}>
+                      <TextInput onChangeText={onChatDraftChange} onSubmitEditing={onSendMessage} placeholder="Send a message" placeholderTextColor={Theme.colors.placeholder} style={styles.input} value={chatDraft} />
+                      <Pressable onPress={onSendMessage} style={styles.sendButton}>
+                        <HugeiconsIcon icon={Chat01Icon} size={20} color="white" />
                       </Pressable>
                     </View>
-                  ) : null}
-                </View>
-              );
-            })}
-          </>
-        ) : null}
+                  </View>
+                )}
 
-        {panel === "transcripts" ? (
-          <>
-            {transcripts.length === 0 ? <Text style={styles.emptyText}>No transcript lines yet.</Text> : null}
-            {transcripts.map((transcript) => (
-              <View key={transcript.id} style={styles.messageCard}>
-                <Text style={styles.messageAuthor}>{transcript.speakerName}</Text>
-                <Text style={styles.messageBody}>{transcript.text}</Text>
-              </View>
-            ))}
-          </>
-        ) : null}
+                {panel === "participants" && (
+                  <View style={styles.listContainer}>
+                    {participants.map((participant) => {
+                      const isLocal = participant.id === localParticipantId;
+                      return (
+                        <View key={participant.id} style={styles.participantRow}>
+                          <View style={styles.participantInfo}>
+                            <View style={[styles.avatarCircle, { backgroundColor: Theme.colors.secondary }]}>
+                              <Text style={styles.avatarText}>{(participant.displayName?.charAt(0) || "P").toUpperCase()}</Text>
+                            </View>
+                            <View style={styles.participantMeta}>
+                              <Text style={styles.participantName}>
+                                {participant.displayName}
+                                {isLocal ? " (You)" : ""}
+                              </Text>
+                              <Text style={styles.metaText}>
+                                {participant.role} · {participant.audioEnabled ? "Unmuted" : "Muted"}
+                              </Text>
+                            </View>
+                          </View>
+                          {isHost && !isLocal ? (
+                            <View style={styles.actionButtons}>
+                              <Pressable onPress={() => (participant.audioEnabled ? onMuteParticipant(participant.id) : onUnmuteParticipant(participant.id))} style={styles.iconActionButton}>
+                                <Text style={styles.actionButtonText}>{participant.audioEnabled ? "Mute" : "Unmute"}</Text>
+                              </Pressable>
+                              <Pressable onPress={() => onRemoveParticipant(participant.id)} style={[styles.iconActionButton, styles.dangerActionButton]}>
+                                <Text style={styles.dangerActionButtonText}>Remove</Text>
+                              </Pressable>
+                            </View>
+                          ) : null}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
 
-        {panel === "settings" ? (
-          <>
-            <Text style={styles.sectionLabel}>Layout</Text>
-            <View style={styles.rowWrap}>
-              {(["auto", "grid", "spotlight", "speaker"] as const).map((option) => (
-                <Pressable key={option} onPress={() => onSetLayout(option)} style={[styles.chip, layout === option && styles.chipActive]}>
-                  <Text style={[styles.chipText, layout === option && styles.chipTextActive]}>{option}</Text>
-                </Pressable>
-              ))}
+                {panel === "settings" && (
+                  <View style={styles.settingsContainer}>
+                    <Text style={styles.sectionLabel}>Layout</Text>
+                    <View style={styles.rowWrap}>
+                      {(["auto", "grid", "spotlight", "speaker"] as const).map((option) => (
+                        <Pressable key={option} onPress={() => onSetLayout(option)} style={[styles.chip, layout === option && styles.chipActive]}>
+                          <Text style={[styles.chipText, layout === option && styles.chipTextActive]}>{option.charAt(0).toUpperCase() + option.slice(1)}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <Text style={styles.sectionLabel}>Camera</Text>
+                    <DeviceList devices={cameras} selectedId={selectedCamera} onSelect={onSelectCamera} />
+
+                    <Text style={styles.sectionLabel}>Microphone</Text>
+                    <DeviceList devices={microphones} selectedId={selectedMicrophone} onSelect={onSelectMicrophone} />
+
+                    <Text style={styles.sectionLabel}>Speaker</Text>
+                    <DeviceList devices={speakers} selectedId={selectedSpeaker} onSelect={onSelectSpeaker} />
+
+                    <Pressable onPress={onRefreshDevices} style={styles.refreshButton}>
+                      <HugeiconsIcon icon={Refresh01Icon} size={16} color={Theme.colors.primary} />
+                      <Text style={styles.refreshButtonText}>{isRefreshingDevices ? "Refreshing..." : "Refresh Devices"}</Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {panel === "transcripts" && (
+                  <View style={styles.chatContainer}>
+                    {transcripts.length === 0 ? (
+                      <View style={styles.emptyState}>
+                        <HugeiconsIcon icon={TextFontIcon} size={40} color={Theme.colors.muted} />
+                        <Text style={styles.emptyText}>No transcript lines yet.</Text>
+                      </View>
+                    ) : null}
+                    {transcripts.map((t) => (
+                      <View key={t.id} style={styles.messageCard}>
+                        <Text style={styles.messageAuthor}>{t.speakerName}</Text>
+                        <Text style={styles.messageBody}>{t.text}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {panel === "whiteboard" && (
+                  <View style={styles.whiteboardContainer}>
+                    <View style={styles.statusCard}>
+                      <View style={styles.statusHeader}>
+                        <HugeiconsIcon icon={Presentation01Icon} size={24} color={Theme.colors.primary} />
+                        <Text style={styles.statusTitle}>Whiteboard</Text>
+                      </View>
+                      <Text style={styles.metaText}>Mode: {whiteboardCanDraw ? "Collaborative" : "View Only"}</Text>
+                      <Text style={styles.metaText}>
+                        Elements: {whiteboardElementCount} · Active: {whiteboardParticipantCount}
+                      </Text>
+                    </View>
+                    <View style={styles.buttonGrid}>
+                      <Pressable onPress={onToggleWhiteboard} style={styles.primaryPanelButton}>
+                        <Text style={styles.primaryButtonText}>{whiteboardOpen ? "Close Board" : "Open Board"}</Text>
+                      </Pressable>
+                      <View style={styles.row}>
+                        <Pressable onPress={onRequestWhiteboardSync} style={styles.secondaryPanelButton}>
+                          <Text style={styles.secondaryButtonText}>Sync</Text>
+                        </Pressable>
+                        <Pressable onPress={onClearWhiteboard} style={styles.secondaryPanelButton}>
+                          <Text style={styles.secondaryButtonText}>Clear</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </ScrollView>
             </View>
-
-            <Text style={styles.sectionLabel}>Camera</Text>
-            <DeviceList devices={cameras} selectedId={selectedCamera} onSelect={onSelectCamera} />
-
-            <Text style={styles.sectionLabel}>Microphone</Text>
-            <DeviceList devices={microphones} selectedId={selectedMicrophone} onSelect={onSelectMicrophone} />
-
-            <Text style={styles.sectionLabel}>Speaker</Text>
-            <DeviceList devices={speakers} selectedId={selectedSpeaker} onSelect={onSelectSpeaker} />
-
-            <Pressable onPress={onRefreshDevices} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>{isRefreshingDevices ? "Refreshing..." : "Refresh devices"}</Text>
-            </Pressable>
-          </>
-        ) : null}
-
-        {panel === "whiteboard" ? (
-          <>
-            <View style={styles.listCard}>
-              <Text style={styles.messageAuthor}>{whiteboardOpen ? "Whiteboard open" : "Whiteboard closed"}</Text>
-              <Text style={styles.metaText}>
-                Draw: {whiteboardCanDraw ? "allowed" : "read only"} · Elements: {whiteboardElementCount} · Open peers: {whiteboardParticipantCount}
-              </Text>
-            </View>
-            <View style={styles.row}>
-              <Pressable onPress={onToggleWhiteboard} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>{whiteboardOpen ? "Close" : "Open"}</Text>
-              </Pressable>
-              <Pressable onPress={onRequestWhiteboardSync} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Sync</Text>
-              </Pressable>
-              <Pressable onPress={onClearWhiteboard} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Clear</Text>
-              </Pressable>
-            </View>
-          </>
-        ) : null}
-      </ScrollView>
-    </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
   );
 }
 
-function DeviceList({
-  devices,
-  selectedId,
-  onSelect,
-}: {
-  devices: readonly MediaDevice[];
-  selectedId: string | null;
-  onSelect: (deviceId: string) => void;
-}): React.JSX.Element {
+function DeviceList({ devices, selectedId, onSelect }: { devices: readonly MediaDevice[]; selectedId: string | null; onSelect: (deviceId: string) => void }): React.JSX.Element {
   if (devices.length === 0) {
-    return <Text style={styles.emptyText}>No devices reported.</Text>;
+    return <Text style={styles.emptyText}>No devices detected.</Text>;
   }
 
   return (
-    <View style={styles.rowWrap}>
-      {devices.map((device) => (
-        <Pressable key={device.deviceId} onPress={() => onSelect(device.deviceId)} style={[styles.chip, selectedId === device.deviceId && styles.chipActive]}>
-          <Text style={[styles.chipText, selectedId === device.deviceId && styles.chipTextActive]}>{device.label || device.deviceId}</Text>
-        </Pressable>
-      ))}
+    <View style={styles.deviceList}>
+      {devices.map((device) => {
+        const isSelected = selectedId === device.deviceId;
+        return (
+          <Pressable key={device.deviceId} onPress={() => onSelect(device.deviceId)} style={[styles.deviceItem, isSelected && styles.deviceItemSelected]}>
+            <Text style={[styles.deviceItemText, isSelected && styles.deviceItemTextSelected]} numberOfLines={1}>
+              {device.label || "Default Device"}
+            </Text>
+            {isSelected && <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} color={Theme.colors.primary} />}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
-function panelTitle(panel: NativeMeetingPanelName): string {
+function panelTitle(panel: NativeMeetingPanelName | null): string {
   switch (panel) {
     case "chat":
       return "Chat";
     case "participants":
       return "Participants";
     case "settings":
-      return "Settings";
+      return "Meeting Settings";
     case "transcripts":
       return "Transcripts";
     case "whiteboard":
       return "Whiteboard";
+    default:
+      return "";
+  }
+}
+
+function panelIcon(panel: NativeMeetingPanelName | null): any {
+  switch (panel) {
+    case "chat":
+      return Chat01Icon;
+    case "participants":
+      return UserGroupIcon;
+    case "settings":
+      return Settings01Icon;
+    case "transcripts":
+      return TextFontIcon;
+    case "whiteboard":
+      return Presentation01Icon;
+    default:
+      return Settings01Icon;
   }
 }
 
 const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
   sheet: {
-    borderTopWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.card,
-    maxHeight: 420,
+    backgroundColor: Theme.colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "85%",
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginTop: 12,
   },
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Theme.spacing.lg,
-    paddingVertical: Theme.spacing.md,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   sheetTitle: {
-    ...Theme.typography.subheading,
+    fontSize: 18,
+    fontWeight: "700",
     color: Theme.colors.foreground,
   },
   closeButton: {
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
-  },
-  closeButtonText: {
-    ...Theme.typography.label,
-    color: Theme.colors.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sheetContent: {
-    paddingHorizontal: Theme.spacing.lg,
-    paddingBottom: Theme.spacing["2xl"],
-    gap: Theme.spacing.md,
+    padding: 20,
   },
-  row: {
-    flexDirection: "row",
-    gap: Theme.spacing.sm,
+
+  // Settings specific
+  settingsContainer: {
+    gap: 20,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.colors.mutedForeground,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   rowWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: Theme.spacing.sm,
-  },
-  listCard: {
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    borderRadius: Theme.radius.lg,
-    backgroundColor: Theme.colors.secondary,
-    padding: Theme.spacing.md,
-    gap: Theme.spacing.sm,
-  },
-  participantMeta: {
-    gap: Theme.spacing.xs,
-  },
-  messageCard: {
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    borderRadius: Theme.radius.lg,
-    backgroundColor: Theme.colors.secondary,
-    padding: Theme.spacing.md,
-    gap: Theme.spacing.xs,
-  },
-  messageAuthor: {
-    ...Theme.typography.label,
-    color: Theme.colors.foreground,
-  },
-  messageBody: {
-    ...Theme.typography.body,
-    color: Theme.colors.foreground,
-  },
-  metaText: {
-    ...Theme.typography.meta,
-    color: Theme.colors.mutedForeground,
-  },
-  composerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Theme.spacing.sm,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    borderRadius: Theme.radius.lg,
-    backgroundColor: Theme.colors.secondary,
-    color: Theme.colors.foreground,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.md,
-  },
-  sectionLabel: {
-    ...Theme.typography.label,
-    color: Theme.colors.foreground,
-    marginTop: Theme.spacing.sm,
+    gap: 8,
   },
   chip: {
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    borderRadius: Theme.radius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
     backgroundColor: Theme.colors.secondary,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   chipActive: {
-    backgroundColor: Theme.colors.primary,
+    backgroundColor: "rgba(27, 182, 166, 0.15)",
     borderColor: Theme.colors.primary,
   },
   chipText: {
-    ...Theme.typography.meta,
-    color: Theme.colors.foreground,
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.colors.mutedForeground,
   },
   chipTextActive: {
-    color: Theme.colors.primaryForeground,
+    color: Theme.colors.primary,
   },
-  primaryButton: {
+  deviceList: {
+    gap: 8,
+  },
+  deviceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: Theme.colors.secondary,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  deviceItemSelected: {
+    borderColor: Theme.colors.primary,
+    backgroundColor: "rgba(27, 182, 166, 0.05)",
+  },
+  deviceItemText: {
+    fontSize: 14,
+    color: Theme.colors.foreground,
+    flex: 1,
+    marginRight: 10,
+  },
+  deviceItemTextSelected: {
+    fontWeight: "600",
+  },
+  refreshButton: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Theme.radius.lg,
+    gap: 8,
+    marginTop: 8,
+    padding: 12,
+  },
+  refreshButtonText: {
+    color: Theme.colors.primary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  // Chat
+  chatContainer: {
+    minHeight: 300,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyText: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 14,
+  },
+  messageCard: {
+    marginBottom: 16,
+    gap: 4,
+  },
+  messageAuthor: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.colors.primary,
+  },
+  messageBody: {
+    fontSize: 15,
+    color: Theme.colors.foreground,
+    lineHeight: 20,
+  },
+  composerRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 20,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: Theme.colors.secondary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: Theme.colors.foreground,
+    fontSize: 15,
+  },
+  sendButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     backgroundColor: Theme.colors.primary,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Participants
+  listContainer: {
+    gap: 16,
+  },
+  participantRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  participantInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    color: Theme.colors.foreground,
+    fontWeight: "700",
+  },
+  participantMeta: {
+    gap: 2,
+  },
+  participantName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Theme.colors.foreground,
+  },
+  metaText: {
+    fontSize: 13,
+    color: Theme.colors.mutedForeground,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  iconActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  actionButtonText: {
+    color: Theme.colors.foreground,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  dangerActionButton: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+  },
+  dangerActionButtonText: {
+    color: Theme.colors.error,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  // Whiteboard
+  whiteboardContainer: {
+    gap: 20,
+  },
+  statusCard: {
+    backgroundColor: Theme.colors.secondary,
+    padding: 20,
+    borderRadius: 16,
+    gap: 8,
+  },
+  statusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 4,
+  },
+  statusTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Theme.colors.foreground,
+  },
+  buttonGrid: {
+    gap: 12,
+  },
+  primaryPanelButton: {
+    backgroundColor: Theme.colors.primary,
+    height: 52,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
   primaryButtonText: {
-    color: Theme.colors.primaryForeground,
-    fontSize: 14,
-    fontWeight: "800",
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700",
   },
-  secondaryButton: {
+  secondaryPanelButton: {
+    flex: 1,
+    backgroundColor: Theme.colors.secondary,
+    height: 52,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Theme.radius.lg,
     borderWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.secondary,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.md,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   secondaryButtonText: {
     color: Theme.colors.foreground,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
   },
-  dangerButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Theme.radius.lg,
-    backgroundColor: Theme.colors.error,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.md,
-  },
-  emptyText: {
-    ...Theme.typography.meta,
-    color: Theme.colors.mutedForeground,
+  row: {
+    flexDirection: "row",
+    gap: 12,
   },
 });
