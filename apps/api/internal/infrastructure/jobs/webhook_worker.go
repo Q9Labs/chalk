@@ -3,12 +3,14 @@ package jobs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"time"
@@ -86,6 +88,7 @@ func (w *WebhookWorker) deliverWebhook(ctx context.Context, delivery db.WebhookD
 		"payload_size": len(delivery.Payload),
 		"raw_body":     string(delivery.Payload),
 	}
+	annotateWebhookDeliveryPayload(evt, delivery)
 	// Log total elapsed since first attempt on retries
 	if attempt > 1 && !delivery.CreatedAt.IsZero() {
 		evt["total_elapsed_ms"] = time.Since(delivery.CreatedAt).Milliseconds()
@@ -269,4 +272,58 @@ func mapToSlogAttrs(m map[string]any) []any {
 		attrs = append(attrs, k, v)
 	}
 	return attrs
+}
+
+func annotateWebhookDeliveryPayload(evt map[string]any, delivery db.WebhookDelivery) {
+	if delivery.RecordingID.Valid {
+		evt["recording_id"] = uuid.UUID(delivery.RecordingID.Bytes)
+	}
+	if delivery.TranscriptID.Valid {
+		evt["transcript_id"] = uuid.UUID(delivery.TranscriptID.Bytes)
+	}
+
+	var payload webhook.WebhookPayload
+	if err := json.Unmarshal(delivery.Payload, &payload); err != nil {
+		evt["payload_parse_error"] = err.Error()
+		return
+	}
+
+	evt["payload_event"] = payload.Event
+	evt["meeting_id"] = payload.Meeting.ID
+	if payload.Meeting.Name != "" {
+		evt["meeting_name"] = payload.Meeting.Name
+	}
+	evt["participant_count"] = payload.Meeting.ParticipantCount
+	evt["has_recording"] = payload.Recording != nil
+	evt["has_transcript"] = payload.Transcript != nil
+	evt["has_summary"] = payload.Summary != nil && strings.TrimSpace(*payload.Summary) != ""
+	evt["has_action_items"] = len(payload.ActionItems) > 0
+	evt["has_errors"] = len(payload.Errors) > 0
+	evt["action_items_count"] = len(payload.ActionItems)
+	evt["errors_count"] = len(payload.Errors)
+
+	if payload.Recording != nil {
+		evt["payload_recording_id"] = payload.Recording.ID
+		evt["duration_seconds"] = payload.Recording.DurationSeconds
+		evt["file_size"] = payload.Recording.SizeBytes
+		if payload.Recording.DownloadURL != "" {
+			if parsed, err := neturl.Parse(payload.Recording.DownloadURL); err == nil {
+				evt["audio_url_host"] = parsed.Host
+				evt["audio_url_scheme"] = parsed.Scheme
+			}
+		}
+	}
+
+	if payload.Transcript != nil {
+		evt["payload_transcript_id"] = payload.Transcript.ID
+		evt["transcript_chars"] = len(payload.Transcript.Text)
+		evt["word_count"] = payload.Transcript.WordCount
+		evt["language"] = payload.Transcript.Language
+		evt["provider"] = payload.Transcript.Provider
+		evt["segments_count"] = len(payload.Transcript.Segments)
+	}
+
+	if payload.Summary != nil {
+		evt["summary_length"] = len(strings.TrimSpace(*payload.Summary))
+	}
 }
