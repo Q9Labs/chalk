@@ -233,7 +233,7 @@ function RoomPage() {
       <VideoConference
         roomId={roomId}
         roomName={roomName || "Meeting On Chalk"}
-        userName={storedUserName || (role === "host" ? "Host" : "Guest")}
+        userName={storedUserName || "Chalker"}
         autoJoin={autoJoin}
         onJoin={(data) => {
           console.log("Joined: ", data);

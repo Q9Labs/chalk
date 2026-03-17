@@ -111,12 +111,12 @@ describe("PreJoinLobby", () => {
     expect(onJoin.mock.calls[0][0].displayName).toBe("Hasan");
   });
 
-  it("allows clearing the default Guest name", async () => {
+  it("allows clearing the default Chalker name", async () => {
     const { getByPlaceholderText } = render(<PreJoinLobby onJoin={() => {}} initialVideoEnabled={false} initialAudioEnabled={false} />);
     await act(async () => {});
 
     const input = getByPlaceholderText("Enter your name") as HTMLInputElement;
-    expect(input.value).toBe("Guest");
+    expect(input.value).toBe("Chalker");
 
     await act(async () => {
       fireEvent.change(input, { target: { value: "" } });

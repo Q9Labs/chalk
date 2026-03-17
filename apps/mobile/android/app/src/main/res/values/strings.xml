@@ -1,5 +1,5 @@
 <resources>
   <string name="app_name">Chalk</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
-  <string name="blob_provider_authority">com.cloudflare.realtimekit.expo.blobs-c3925282-fe1a-46f7-8353-478689e9818b</string>
+  <string name="blob_provider_authority">com.cloudflare.realtimekit.expo.blobs-121b8ba8-dc92-465d-938d-fc3fa2142457</string>
 </resources>

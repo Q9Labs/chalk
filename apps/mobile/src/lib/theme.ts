@@ -39,7 +39,7 @@ export const Theme = {
     controlsBackground: "rgba(26, 26, 26, 0.92)",
     speakingAccent: "#22c55e",
     glassSurface: "rgba(18, 18, 26, 0.72)",
-    
+
     // Legacy mapping (to be phased out)
     eyebrow: "#1bb6a6",
     placeholder: "#3f3f46",

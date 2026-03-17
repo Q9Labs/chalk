@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, SafeAreaView, Linking } from "react-native";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { Settings01Icon, KeyboardIcon, Add01Icon } from "@hugeicons/core-free-icons";
 import { canCreateMeeting, createMeetingLobbyRoute, getApiUrl, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
 import { Theme } from "../lib/theme";
+import { ChalkLogoElements } from "../components/ChalkLogoElements";
 
 export interface HomeScreenProps {
   onNavigate: (route: LobbyRoute) => void;
@@ -18,7 +21,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
   const handleOpenInput = async () => {
     const destination = parseInputDestination(input);
     if (!destination) {
-      setError("Paste a Chalk join link or meeting destination.");
+      setError("Please enter a valid code or link.");
       return;
     }
 
@@ -29,7 +32,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
         setIsResolving(true);
         onNavigate(await resolveJoinToken(destination.joinToken, apiUrl));
       } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : String(nextError));
+        setError(nextError instanceof Error ? nextError.message : "Invalid meeting code");
       } finally {
         setIsResolving(false);
       }
@@ -41,7 +44,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
 
   const handleNewMeeting = async () => {
     if (!createEnabled) {
-      setError("Create meeting is disabled in this build. Join by link is still available.");
+      setError("Meeting creation is currently restricted.");
       return;
     }
 
@@ -56,196 +59,235 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
     }
   };
 
+  const handleOpenWebsite = () => {
+    void Linking.openURL("https://chalk.q9labs.ai");
+  };
+
   return (
-    <ScrollView bounces={false} contentContainerStyle={styles.screen}>
-      <View style={styles.hero}>
-        <View style={styles.brandRow}>
-          <Text style={styles.logo}>CHALK</Text>
-          <Text style={styles.versionPill}>meeting-first mobile</Text>
-        </View>
-
-        <View style={styles.copyBlock}>
-          <Text style={styles.eyebrow}>Official mobile</Text>
-          <Text style={styles.title}>Join fast. Stay clear. Keep the room stable.</Text>
-          <Text style={styles.body}>
-            Mobile V1 is focused on the meeting itself: lobby, room, chat, transcripts, and connection correctness.
-          </Text>
-        </View>
-
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Join a meeting</Text>
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={setInput}
-            placeholder="Paste a Chalk join link or room destination"
-            placeholderTextColor={Theme.colors.placeholder}
-            style={styles.input}
-            value={input}
-          />
-          <Pressable disabled={isResolving || !input.trim()} onPress={() => void handleOpenInput()} style={[styles.secondaryButton, (!input.trim() || isResolving) && styles.buttonDisabled]}>
-            <Text style={styles.secondaryButtonText}>{isResolving ? "Resolving..." : "Open lobby"}</Text>
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
+        <View style={styles.header}>
+          <Text style={styles.brandLogo}>chalk</Text>
+          <Pressable style={styles.iconButton}>
+            <HugeiconsIcon icon={Settings01Icon} size={22} color={Theme.colors.foreground} />
           </Pressable>
+        </View>
 
-          <View style={styles.divider} />
+        <ScrollView bounces={true} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.heroSection}>
+            <View style={styles.illustrationFrame}>
+              <View style={styles.glow} />
+              <ChalkLogoElements size={100} />
+            </View>
+            <Text style={styles.heroTitle}>Video meetings for everyone</Text>
+            <Text style={styles.heroSubtitle}>Connect, collaborate, and celebrate from anywhere with Chalk.</Text>
+          </View>
 
-          <Text style={styles.panelTitle}>Start a meeting</Text>
-          <Text style={styles.supportingCopy}>
-            Creates a host-capable lobby when this build has the Chalk API key configured, matching the web app&apos;s instant meeting model.
+          <View style={styles.actionSection}>
+            <Pressable disabled={!createEnabled || isCreatingMeeting} onPress={() => void handleNewMeeting()} style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, (!createEnabled || isCreatingMeeting) && styles.buttonDisabled]}>
+              <HugeiconsIcon icon={Add01Icon} size={20} color="white" />
+              <Text style={styles.primaryButtonText}>{isCreatingMeeting ? "Starting..." : "New meeting"}</Text>
+            </Pressable>
+
+            <View style={styles.inputWrapper}>
+              <View style={styles.inputContainer}>
+                <HugeiconsIcon icon={KeyboardIcon} size={20} color={Theme.colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={(text) => {
+                    setInput(text);
+                    if (error) setError(null);
+                  }}
+                  placeholder="Enter a code or link"
+                  placeholderTextColor={Theme.colors.placeholder}
+                  style={styles.input}
+                  value={input}
+                />
+                {input.length > 0 && (
+                  <Pressable onPress={() => void handleOpenInput()} style={styles.joinAction} disabled={isResolving}>
+                    <Text style={styles.joinActionText}>{isResolving ? "..." : "Join"}</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+
+            {error ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
+
+        <Pressable onPress={handleOpenWebsite} style={styles.footer}>
+          <Text style={styles.footerText}>
+            Learn more at <Text style={styles.footerLink}>chalk.q9labs.ai</Text>
           </Text>
-          <Pressable disabled={!createEnabled || isCreatingMeeting} onPress={() => void handleNewMeeting()} style={[styles.primaryButton, (!createEnabled || isCreatingMeeting) && styles.buttonDisabled]}>
-            <Text style={styles.primaryButtonText}>{isCreatingMeeting ? "Creating meeting..." : createEnabled ? "Create meeting" : "Create disabled"}</Text>
-          </Pressable>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-        </View>
-
-        <View style={styles.badgeRow}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>Lobby first</Text>
-          </View>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>Chat + transcript</Text>
-          </View>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>Realtime focus</Text>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flexGrow: 1,
+  container: {
+    flex: 1,
     backgroundColor: Theme.colors.background,
   },
-  hero: {
+  flex: {
     flex: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: Theme.spacing["2xl"],
-    paddingTop: 64,
-    paddingBottom: 40,
-    gap: Theme.spacing["3xl"],
   },
-  brandRow: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: Theme.spacing.md,
+    paddingHorizontal: 24,
+    paddingVertical: 20, // Increased to avoid status bar overlap
+    marginTop: Platform.OS === "android" ? 10 : 0, // Extra margin for Android
   },
-  logo: {
+  brandLogo: {
+    fontSize: 24,
+    fontWeight: "800",
     color: Theme.colors.foreground,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 4,
+    letterSpacing: -1,
   },
-  versionPill: {
-    color: Theme.colors.primary,
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  copyBlock: {
-    gap: Theme.spacing.lg,
-  },
-  eyebrow: {
-    ...Theme.typography.eyebrow,
-    color: Theme.colors.primary,
-  },
-  title: {
-    ...Theme.typography.title,
-    color: Theme.colors.foreground,
-    fontSize: 36,
-    lineHeight: 42,
-  },
-  body: {
-    ...Theme.typography.body,
-    color: Theme.colors.mutedForeground,
-  },
-  panel: {
-    backgroundColor: Theme.colors.card,
-    borderRadius: Theme.radius["2xl"],
-    padding: Theme.spacing.xl,
-    gap: Theme.spacing.md,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-  },
-  panelTitle: {
-    ...Theme.typography.subheading,
-    color: Theme.colors.foreground,
-  },
-  input: {
-    borderRadius: Theme.radius.lg,
-    backgroundColor: Theme.colors.secondary,
-    color: Theme.colors.foreground,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-  },
-  secondaryButton: {
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.05)",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.colors.secondary,
-    borderRadius: Theme.radius.lg,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
   },
-  secondaryButtonText: {
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 20,
+  },
+  heroSection: {
+    alignItems: "center",
+    marginBottom: 48,
+  },
+  illustrationFrame: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(27, 182, 166, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 32,
+    position: "relative",
+  },
+  glow: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: Theme.colors.primary,
+    opacity: 0.1,
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: "800",
     color: Theme.colors.foreground,
-    fontSize: 15,
-    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 12,
+    letterSpacing: -0.5,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: Theme.colors.mutedForeground,
+    textAlign: "center",
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  actionSection: {
+    gap: 16,
   },
   primaryButton: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.colors.primary,
-    borderRadius: Theme.radius.lg,
-    paddingVertical: 15,
-    ...Theme.shadows.md,
+    height: 56,
+    borderRadius: 16,
+    gap: 10,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonPressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
   },
   primaryButtonText: {
-    color: Theme.colors.primaryForeground,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  supportingCopy: {
-    ...Theme.typography.meta,
-    color: Theme.colors.mutedForeground,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Theme.colors.border,
-    marginVertical: Theme.spacing.xs,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Theme.spacing.sm,
-  },
-  badge: {
-    borderRadius: Theme.radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "rgba(27, 182, 166, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(27, 182, 166, 0.2)",
-  },
-  badgeText: {
-    color: Theme.colors.primary,
-    fontSize: 12,
+    color: "white",
+    fontSize: 17,
     fontWeight: "700",
   },
-  buttonDisabled: {
-    opacity: 0.45,
+  inputWrapper: {
+    marginTop: 8,
   },
-  error: {
-    ...Theme.typography.label,
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    height: 56,
+    paddingHorizontal: 16,
+  },
+  inputIcon: {
+    marginRight: 12,
+    marginTop: Platform.OS === "android" ? 2 : 0, // Small adjustment for icon alignment
+  },
+  input: {
+    flex: 1,
+    color: Theme.colors.foreground,
+    fontSize: 16,
+    fontWeight: "500",
+    paddingVertical: 0, // Fixes vertical alignment on some platforms
+    height: "100%",
+  },
+  joinAction: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 10,
+  },
+  joinActionText: {
+    color: Theme.colors.primary,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  errorContainer: {
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  errorText: {
     color: Theme.colors.error,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  footer: {
+    paddingVertical: 24,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.03)",
+  },
+  footerText: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 13,
+  },
+  footerLink: {
+    color: Theme.colors.primary,
+    fontWeight: "600",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

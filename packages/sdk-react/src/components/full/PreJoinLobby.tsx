@@ -47,7 +47,7 @@ function resolvePreferredDeviceId(preferredDeviceId: string | undefined, devices
 
 function PreJoinLobbyBase({
   roomName,
-  userName = "Guest",
+  userName = "Chalker",
   onJoin,
   onCancel,
   videoTrack,

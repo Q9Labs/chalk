@@ -95,9 +95,9 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
             </div>
           </div>
 
-          <h2 className="font-display text-[1.6rem] font-bold tracking-tight text-foreground mb-3 leading-tight">{errorInfo.title}</h2>
+          <h2 className="font-display text-[1.6rem] font-bold tracking-tight text-foreground mb-4 leading-snug">{errorInfo.title}</h2>
 
-          <p className="text-[15px] text-muted-foreground max-w-[300px] leading-relaxed mb-8">{errorInfo.message}</p>
+          <p className="text-[15px] text-muted-foreground max-w-[320px] leading-normal mb-8">{errorInfo.message}</p>
 
           {/* Actions */}
           <div className="flex flex-col w-full gap-3 mb-6">

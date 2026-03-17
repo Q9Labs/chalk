@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": ["expo/types"],
+    "types": ["bun", "expo/types"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],

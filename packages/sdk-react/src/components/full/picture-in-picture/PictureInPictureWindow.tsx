@@ -160,7 +160,7 @@ function PictureInPictureStage({
         <video ref={videoRef} autoPlay playsInline muted className={cn("h-full w-full", source?.kind === "screen-share" ? "object-contain bg-black" : "object-cover")} />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300" style={{ backgroundImage: participantGradient }}>
-          <Avatar name={source?.title ?? "Guest"} src={source?.avatarUrl} size="xl" className="opacity-90" gradientPreference={gradientPreference} />
+          <Avatar name={source?.title ?? "Chalker"} src={source?.avatarUrl} size="xl" className="opacity-90" gradientPreference={gradientPreference} />
         </div>
       )}
     </div>
@@ -466,7 +466,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
         {phase === "joining" && (
           <div className="absolute inset-0 z-50 bg-background flex items-center justify-center">
              <LoadingScreen 
-               displayName={source?.title ?? "Guest"} 
+               displayName={source?.title ?? "Chalker"} 
                className="w-full h-full min-h-0" 
                message="Joining room..."
                supportingMessages={controls.loadingMessages}
@@ -495,8 +495,8 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                 </div>
               </div>
 
-              <h2 className="font-display text-xl font-bold tracking-tight text-white mb-2 leading-tight">{errorInfo.title}</h2>
-              <p className="mx-auto mb-5 max-w-[240px] text-xs leading-relaxed text-white/70">
+              <h2 className="font-display text-xl font-bold tracking-tight text-white mb-3 leading-snug">{errorInfo.title}</h2>
+              <p className="mx-auto mb-6 max-w-[260px] text-xs leading-normal text-white/70">
                 {errorInfo.message}
               </p>
 
