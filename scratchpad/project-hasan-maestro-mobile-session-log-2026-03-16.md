@@ -1,0 +1,4 @@
+[2026-03-16 06:52 PKT] Scope locked: Maestro-only setup for Chalk mobile `New meeting -> lobby -> Join Meeting` flow on Android emulator. No product/runtime fixes unless selector gaps block automation.
+[2026-03-16 06:54 PKT] Verified local prerequisites: `maestro --version` => `2.3.0`; emulator online at `emulator-5554`; app package `ai.q9labs.chalk.mobile` installed. Found local Maestro log-dir snag; created `~/Library/Logs/maestro` so CLI subcommands run.
+[2026-03-16 06:57 PKT] Probed live hierarchy on home screen. Existing accessibility/text surface is sufficient for this flow (`New meeting`, `Display Name`, `Join Meeting`), so skipped app code edits and kept scope in repo-local Maestro files only.
+[2026-03-16 07:00 PKT] Added `.maestro` flow scaffold plus Android permission subflow, local ignored output dirs, and changelog breadcrumb. Next: syntax check, emulator run, artifact verify, gate, scoped commit.

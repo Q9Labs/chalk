@@ -1,0 +1,35 @@
+appId: ai.q9labs.chalk.mobile
+name: Chalk mobile new meeting flow
+tags:
+  - android
+  - mobile
+  - smoke
+---
+- launchApp:
+    clearState: true
+    stopApp: true
+    permissions:
+      camera: unset
+      microphone: unset
+- assertVisible: "New meeting"
+- takeScreenshot: "01-home-opened"
+- tapOn:
+    text: "New meeting"
+- takeScreenshot: "02-after-new-meeting-tap"
+- runFlow: subflows/android-accept-media-permissions.yaml
+- takeScreenshot: "03-after-permission-handled"
+- extendedWaitUntil:
+    visible: "Display Name"
+    timeout: 20000
+- assertVisible: "Join Meeting"
+- takeScreenshot: "04-lobby-visible"
+- tapOn:
+    text: "Join Meeting"
+- takeScreenshot: "05-after-join-meeting-tap"
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(Joining .+|Already connected to a room)"
+    timeout: 20000
+- waitForAnimationToEnd:
+    timeout: 8000
+- takeScreenshot: "06-post-join-state"

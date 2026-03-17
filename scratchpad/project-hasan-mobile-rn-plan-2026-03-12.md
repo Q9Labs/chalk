@@ -1,253 +1,256 @@
-# Chalk Official RN Mobile App V1 Plan
+# Chalk Official RN Mobile App Plan
 
-## Scope Reset — 2026-03-14
+## Reality Check — 2026-03-15
 
-Mobile V1 is now meeting-only.
+Architecture has converged in the right direction:
 
-Removed from the active plan:
+- `apps/mobile` is now a thin shell
+- `packages/sdk-react-native` owns the actual RN meeting experience
+- `packages/sdk-core` remains the source of truth for room/session/runtime logic
 
-- native Google auth
+So the plan is no longer "build a mobile app from scratch."
+
+It is now:
+
+- stabilize the existing package-first RN meeting stack
+- close the remaining realtime/native gaps
+- polish the meeting UX until it feels like Chalk
+
+## Current Architecture
+
+### Thin app shell
+
+`apps/mobile` currently owns:
+
+- app boot
+- deep link intake
+- local env / API / WS resolution
+- home screen
+- route state: `home | lobby`
+- provider wiring into the RN SDK package
+
+### RN SDK surface
+
+`packages/sdk-react-native` currently owns:
+
+- `ChalkNativeProvider`
+- `NativeVideoConference`
+- `NativePreJoinLobby`
+- `NativeJoiningLoadingScreen`
+- `NativeMeetingRoom`
+- `NativeMeetingPanel`
+- `NativeMediaView`
+- RN hooks for:
+  - connection
+  - room
+  - participants
+  - media
+  - devices
+  - chat
+  - transcripts
+  - interactions
+  - panels
+  - layout
+  - recording
+  - screen share
+  - whiteboard
+
+### Shared runtime
+
+`packages/sdk-core` still owns:
+
+- `ChalkSession`
+- `ConferenceSession`
+- room lifecycle
+- join/create flow
+- RTK loader seam
+- WS hydration
+- participant/chat/transcript/reaction state
+- host actions
+
+## Grounded Status
+
+### Done
+
+- RN runtime seam exists; web/native can share `ChalkSession`
+- app boots on Android dev client
+- mobile local-dev API/WS resolution is fixed for device testing
+- home screen exists
+- create-meeting path exists
+- join-link resolution exists
+- prejoin lobby exists inside `sdk-react-native`
+- native camera preview exists in lobby
+- joining transition exists
+- room join works at least to first connected room
+- native RTC media view component exists
+- meeting room shell exists
+- participant state hooks exist
+- chat hook exists
+- transcript hook exists
+- reactions / hand raise hooks exist
+- device selection hooks exist
+- screen share hook exists
+- whiteboard state hook exists
+- host moderation plumbing exists in RN package
+
+### Partially done
+
+- room UI is real, but still in active composition/polish phase
+- chat / participants / transcripts are wired into panels, but not yet proven deeply on-device
+- screen share hook exists, but device-level proof is still needed
+- device switching UI exists, but route/speaker behavior still needs real-hardware verification
+- whiteboard state exists, but mobile whiteboard UX is not a finished product surface
+- recording hook exists, but recording is not a V1 product focus
+- end / leave lifecycle is much better, but still deserves repeat device verification
+
+### Not done
+
+- iOS device proof
+- robust end-to-end create/join test matrix
+- proof of two-way audio/video across multiple real devices
+- reconnect / network-drop validation
+- background audio validation
+- Bluetooth / earpiece / speaker validation
+- screen share originate validation on real devices
+- host moderation validation on real devices
+- meeting-quality visual polish
+- confidence that all package features are product-ready rather than exposed-only
+
+## V1 Scope
+
+Meeting-only. No dashboard drift.
+
+Ship:
+
+- create meeting
+- join existing meeting
+- prejoin lobby
+- in-room meeting experience
+- participant video/audio presence
+- participant list
+- chat
+- live transcripts
+- hand raise
+- reactions
+- leave meeting
+- host end-for-all / mute / remove
+- reconnect states
+- basic device settings
+
+Do not treat as V1 goals:
+
+- auth
 - dashboard
 - meeting history
 - transcript detail outside the room
-- public share-link viewing
-- account surfaces
+- recording library
+- account settings
+- push notifications
 
-Focus now:
+## What The Codebase Is Actually Telling Us
 
-- join an existing meeting
-- create a new meeting
-- lobby / prejoin
-- live meeting room
-- transport correctness
-- room UX around connection, participants, chat, transcripts, and moderation
+### Strong signal
 
-## Summary
+- package-first architecture is working
+- mobile is no longer a fake app or throwaway prototype
+- RN SDK has real breadth now
+- the hardest repeated infra/dev issue (`localhost` on physical Android) has a root-cause fix
 
-Build `apps/mobile` as the official React Native app on `Expo custom dev client`, while keeping Chalk's existing realtime/session model as the source of truth.
+### Weak signal
 
-Locked decisions:
+- breadth is ahead of proof
+- many hooks/components exist, but not all have been verified under real multi-device usage
+- some features may still be "plumbed" more than "finished"
 
-- `packages/sdk-core` stays the canonical join/runtime engine
-- use `Cloudflare RealtimeKit React Native Core`, not the RN UI kit
-- add `packages/sdk-react-native` as the mobile adapter/UI layer
-- meeting UI enters once `RTK` is connected; `WS` features hydrate after
-- if RTK drops, keep users in the meeting and show reconnecting/failure states in place
-- auth-less by default
-- no dashboard/auth/account work in V1
-- `chat` in V1
-- `live transcripts in-room` in V1
-- `whiteboard` deferred
-- `no push notifications` in V1
-- `no in-room recording controls` in V1
-- `screen share` can be started by any participant/host on both `iOS + Android`
-- background behavior is `audio stays alive` where platform rules allow
-- audio output gets a `simple route switcher`
-- host gets `basic moderation`
+That means the next phase should be proof + tightening, not adding more surface area.
 
-## Product Shape
+## Updated Execution Plan
 
-Primary surfaces only:
+### Phase 1 — prove meeting correctness
 
-- `Home`
-  - join link / paste destination
-  - enter room ID
-  - create new meeting
-- `Lobby`
-  - display name
-  - mic toggle
-  - camera toggle
-  - join CTA
-  - waiting / countdown states where applicable
-- `Meeting room`
-  - participant grid / active speaker
-  - participant list
-  - chat
-  - live transcript panel
-  - reactions / hand raise
-  - reconnect / degraded-state UX
-  - leave / end meeting
+- prove `create -> lobby -> room`
+- prove `join link -> lobby -> room`
+- prove two participants can hear/see each other
+- prove participant list updates live
+- prove chat events arrive live
+- prove transcript events arrive live
 
-Explicitly out of scope:
+### Phase 2 — prove mobile-native behavior
 
-- dashboard shell
-- history
-- recordings library
-- transcript summary/action-items views outside the room
-- account/settings beyond minimal local device controls
+- prove camera preview stability
+- prove mic/cam toggles work repeatedly
+- prove leave/end flows stay correct
+- prove speaker / earpiece / Bluetooth switching
+- prove background / foreground behavior
+- prove reconnect after network interruption
 
-## Runtime Architecture
+### Phase 3 — polish the room
 
-- Refactor `sdk-core` only enough to make the RTK dependency injectable behind a platform adapter seam; do not fork `ChalkSession`, `ConferenceSession`, or the join/session state machine.
-- Keep these flows canonical in shared code:
-  - `createSession`
-  - `addParticipant` / token exchange
-  - `ChalkSession.join`
-  - `ConferenceSession`
-  - RTK join retry policy
-  - WS event model
-  - reconnect-in-place behavior
-  - participant/chat/transcript/reaction state
-- Add `sdk-react-native` to own:
-  - RN provider/hooks around `ChalkSession`
-  - RTK RN Core integration
-  - native media rendering and track views
-  - device permissions
-  - audio route/interruption bridge
-  - screen-share bridge
-  - app lifecycle hooks
+- tighten lobby fidelity
+- tighten room composition
+- improve panel ergonomics
+- improve stage/grid logic
+- improve empty / loading / error states
 
-## Join and Meeting Flows
+### Phase 4 — optional deeper meeting features
 
-### Join existing meeting
+- screen share production hardening
+- host moderation refinement
+- whiteboard decision: defer or build properly
 
-1. Resolve entry:
-   - join link `/j/:joinToken`
-   - direct room `/room/:roomId`
-   - pasted destination in app
-2. Acquire room access via existing backend path.
-3. Call `addParticipant` and receive:
-   - `participantId`
-   - `role`
-   - `accessToken`
-   - `rtcToken`
-   - room info
-4. Initialize RTK with `rtcToken`.
-5. Connect WS in parallel with `accessToken`.
-6. Enter meeting UI when RTK is live.
-7. Hydrate WS-driven features progressively:
-   - chat
-   - transcripts
-   - reactions
-   - hand raise
-   - moderation events
-8. If RTK disconnects:
-   - stay in meeting UI
-   - show reconnecting state
-   - preserve visible room/chat/transcript state
-   - escalate to in-meeting failure state only after reconnect policy exhausts
+## Immediate Next Tasks
 
-### Create new meeting
+1. Real multi-device join proof
+2. Verify chat + transcripts live in-room
+3. Verify actual remote media rendering
+4. Verify host actions
+5. Verify reconnect / leave / end
+6. Only then continue room polish
 
-1. Tap `Create meeting` from home.
-2. Call shared `createSession`.
-3. Land in lobby or directly in meeting depending on current web behavior and backend contract.
-4. Host can invite others via copied room/join link.
+## Success Criteria
 
-## Meeting-Room Behavior
+Call this mobile V1 healthy when all are true:
 
-Ship in V1:
+- app boots consistently on device
+- user can create or join a room without debugging steps
+- lobby preview is stable
+- room connects reliably
+- remote participants can hear and see each other
+- chat and transcripts update live
+- leave/end behave predictably
+- core controls feel native and trustworthy
 
-- prejoin device preview
-- waiting-room countdown
-- participant grid / active speaker
-- participant list
-- chat
-- live transcription view
-- reactions
-- hand raise
-- reconnect/degraded-state UX
-- host basic moderation:
-  - mute participant
-  - remove participant
-  - end room
+## Current Strategic Advice
 
-Do not ship in V1:
+Do not expand scope.
 
-- whiteboard implementation
-- in-room recording controls
-- push/wake/call-style semantics
-- post-meeting experiences
+Do not go back to dashboard/auth/history.
 
-## Screen Share, Background, Audio
+Stay locked on:
 
-- Support screen-share viewing for all users.
-- Support mobile-originated screen share on both platforms:
-  - iOS via ReplayKit/broadcast extension
-  - Android via MediaProjection
-- If originating screen share is unavailable on a device/config, show explicit unsupported/permission state.
-- Background/lock behavior:
-  - keep meeting audio alive where allowed
-  - degrade video as required by platform/app state
-  - restore full media on foreground
-- Expose a simple output route switcher:
-  - speaker
-  - earpiece
-  - wired
-  - Bluetooth
+- meeting correctness
+- device proof
+- room polish
 
-## Public APIs / Interfaces
+That is the shortest path to an official Chalk mobile app that is actually real.
 
-- Add `packages/sdk-react-native` as a public package for RN bindings.
-- Introduce an RTK runtime adapter seam in `sdk-core` so web and RN can share `ChalkSession` without duplicating join/runtime logic.
-- Keep backend HTTP contracts unchanged for:
-  - `createSession`
-  - room join / add participant
-  - realtime WS access
-- Keep deep-link contract aligned to current meeting path semantics:
-  - `/j/:joinToken`
-  - `/room/:roomId`
-- Keep neutral terms consistent with the codebase:
-  - `participant`
-  - `host`
-  - `guest` only as fallback
-  - `meeting` / `room` / `session`
+## Release Stabilization Addendum
 
-## Runtime Spike Gate
+Current release truth:
 
-Before broader UI work, prove on real devices:
+- Android internal/alpha distribution is live and repeatable.
+- Release transport config is fixed: production builds must force Chalk prod API/WS endpoints and never honor device-local `localhost` envs.
+- The remaining active release blocker for `New Meeting` is valid prod host auth, not CORS or WebSocket routing.
 
-- open app successfully
-- join room on iOS and Android
-- create a room on iOS and Android
-- two-way audio/video works
-- RTK reconnect works in place
-- WS chat/transcript/reaction events hydrate correctly after RTK join
-- local mobile screen share works on both platforms
-- background audio survives app lock/background where expected
-- Bluetooth/speaker route switching works
+What changed in understanding:
 
-If this spike fails, keep `sdk-core` shared but narrow the RTK adapter seam further; do not fork the session model.
+- `apps/web` production is not a reliable source of truth for host-key behavior.
+- Web prod currently falls back to internal/session auth and join-token flows.
+- Mobile `host/create meeting` needs its own valid build-time host key path.
 
-## Test Plan
+Current release plan:
 
-### Automated
-
-- Unit tests for:
-  - RTK adapter injection into shared runtime
-  - join-context persistence/expiry
-  - deep-link parsing and route dispatch
-  - create-meeting flow orchestration
-  - reconnect state transitions
-  - route-switcher state handling
-- Integration tests for:
-  - join-link flow
-  - direct room flow
-  - create-meeting flow
-  - host moderation commands
-  - screen-share capability gating
-
-### Device acceptance
-
-- iOS + Android real-device checks for:
-  - prejoin permissions
-  - create meeting
-  - meeting join
-  - hear/see remote participant
-  - chat
-  - live transcripts
-  - reactions / hand raise
-  - screen-share receive and originate
-  - background audio continuity
-  - reconnect-in-place after network interruption
-  - simple route switching
-  - host moderation actions
-
-## Assumptions and Defaults
-
-- React Native stack uses `Expo custom dev client`.
-- Cloudflare RN support is present but young; runtime spike is mandatory before broader UI work.
-- Chalk owns the mobile meeting UI; Cloudflare RN UI kit is not part of the V1 architecture.
-- `RTK connected` is the threshold for entering the meeting UI; WS sync is progressive.
-- `No push`, `no whiteboard implementation`, `no dashboard`, and `no recording controls` in V1.
-- Mobile should stay product-wise close to the web meeting experience, but runtime correctness wins over parity outside the meeting surface.
+1. Build mobile release artifacts only from secret-backed prod config.
+2. Inject `EXPO_PUBLIC_CHALK_API_KEY` from GitHub secret `VITE_CHALK_API_KEY` during release builds; never depend on local `.env` host-key values for store builds.
+3. Publish fresh Android internal builds from that workflow until a tester-verified prod `New Meeting` succeeds.
+4. After host auth is green, return focus to meeting proof: multi-participant media, chat, transcripts, reconnect, and room polish.

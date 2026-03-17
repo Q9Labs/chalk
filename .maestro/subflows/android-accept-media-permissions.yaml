@@ -1,0 +1,23 @@
+appId: ai.q9labs.chalk.mobile
+---
+- runFlow:
+    when:
+      visible:
+        text: "(?i).*(while using the app|allow only while using the app|only this time|allow).*"
+    commands:
+      - tapOn:
+          text: "(?i).*(while using the app|allow only while using the app|only this time|allow).*"
+- runFlow:
+    when:
+      visible:
+        text: "(?i).*(while using the app|allow only while using the app|only this time|allow).*"
+    commands:
+      - tapOn:
+          text: "(?i).*(while using the app|allow only while using the app|only this time|allow).*"
+- runFlow:
+    when:
+      visible:
+        text: "(?i).*(while using the app|allow only while using the app|only this time|allow).*"
+    commands:
+      - tapOn:
+          text: "(?i).*(while using the app|allow only while using the app|only this time|allow).*"

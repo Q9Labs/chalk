@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "gplay-cli-usage": {
+      "source": "tamtom/gplay-cli-skills",
+      "sourceType": "github",
+      "computedHash": "f7965d712eac14537a7abf6159cf75ec4cce4f2b003aa0f10c6d6fe1ae9529db"
+    }
+  }
+}

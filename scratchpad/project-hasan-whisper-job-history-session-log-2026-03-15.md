@@ -17,3 +17,6 @@
 - root cause: checked-in migration `013_screen_annotations.sql` existed, but embedded runtime migrations skipped it
 - applied `013_screen_annotations.sql` to prod and local `chalk` DB
 - patched embedded migrations in `apps/api/internal/infrastructure/postgres/postgres.go`
+2026-03-15 07:29 UTC
+- persistent note requested: DB migrations must be applied + verified locally and prod every time schema changes land
+- AGENTS updated with migration vigilance note and recommendation to automate PlanetScale Postgres migrations in GitHub Actions / deploy path
