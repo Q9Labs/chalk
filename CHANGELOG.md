@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.0.78] - 2026-03-17
+
+### Added
+- **SDK-Core: strict Chalk webhook Express adapter** — `@q9labs/chalk-core` now ships a hardened Express webhook adapter with exact 400/401/413/415 responses, parser-error middleware, raw-hex signature normalization, and request-attached delivery/body metadata so consumers do not have to hand-roll verification plumbing.
+
+### Changed
+
+### Fixed
+- **API: webhook delivery logs now expose final payload presence** — final Chalk post-meeting webhook delivery logs now include whether the delivered payload actually contained recording, transcript, summary, action items, and errors, making tenant incident triage possible from the last delivery event alone.
+- **SDK release CI: pruned publish installs no longer crash on mobile-only postinstall work** — the RealtimeKit Android patch script now cleanly skips when `apps/mobile` or the native package is absent, so SDK release publishes can install the pruned workspace without failing before the actual package build/publish steps.
+
 ## [0.0.77] - 2026-03-17
 
 ### Added
