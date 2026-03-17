@@ -41,6 +41,8 @@ apps/web/reports
 
 # Android
 **/.idea
+/.maestro/debug/
+/.maestro/test-output/
 **/.expo
 **/.expo-shared
 **/.metro-health-check*

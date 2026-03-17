@@ -13,6 +13,13 @@ bun run generate               # Re-generate openapi.yml when suitable after mak
 cd apps/api && go run ./cmd/main.go # Run API server
 ```
 
+## Database Migration Note
+
+- Treat DB schema changes as ship blockers. If code or generated queries reference new columns/tables/indexes, apply migrations locally and in prod, then verify the exact schema exists in both places before closing.
+- Never assume checked-in SQL means prod/local already has it. Verify with direct schema queries when it matters.
+- For Chalk API specifically, keep file migrations and embedded runtime migrations in `apps/api/internal/infrastructure/postgres/postgres.go` in sync. If one side misses a migration, prod drift can survive deploys.
+- Prefer automation over memory. PlanetScale Postgres can be migrated from GitHub Actions like normal Postgres. Recommended default: automated deploy-time migration or startup migration, plus post-deploy schema verification. Manual-only is not reliable enough here.
+
 ## Testing Rules
 
 - For UX changes or any user-facing feature/behavior change, do both: add/update the appropriate automated tests and verify in a real browser flow with the Agent Browser CLI.

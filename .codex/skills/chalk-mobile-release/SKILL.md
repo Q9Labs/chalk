@@ -17,6 +17,8 @@ Primary files:
 - `apps/mobile/app.config.ts`
 - `apps/mobile/android/gradle.properties`
 - `apps/mobile/android/app/build.gradle`
+- `apps/mobile/src/lib/chalk.ts`
+- `apps/mobile/src/lib/mobile-runtime.ts`
 
 ## Defaults
 
@@ -41,6 +43,8 @@ Primary files:
      - `bun run --cwd packages/sdk-react-native test`
 3. Build signed AAB
    - `bun run --cwd apps/mobile build:android:release`
+   - if you need a direct sideload fallback too:
+     - `cd apps/mobile/android && ./gradlew assembleRelease`
 4. Preferred upload
    - `cd apps/mobile`
    - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --release-notes "..." --changes-not-sent-for-review`
@@ -51,6 +55,23 @@ Primary files:
    - `gplay tracks update`
    - `gplay edits commit`
 6. If Play API still fights, use Play Console UI in Helium
+
+### Chalk production env rule
+
+Never trust `apps/mobile/.env.local` for release.
+
+For Chalk:
+- local dev may point `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_WS_URL` at `localhost`
+- production builds must force:
+  - `https://chalk-api.q9labs.ai`
+  - `wss://chalk-ws.q9labs.ai/ws`
+
+Verify both:
+- `apps/mobile/app.config.ts`
+- `apps/mobile/src/lib/chalk.ts`
+- `apps/mobile/src/lib/mobile-runtime.ts`
+
+If a tester reports `New Meeting -> Network Error`, suspect release env leakage first.
 
 ## Helium / Play Console workflow
 
@@ -70,6 +91,7 @@ Proven flow:
 Why:
 - Play deep links often bounce to app list
 - refs go stale fast; resnapshot constantly
+- if file upload via remote browser automation is flaky/size-limited, prefer `gplay` CLI for bundle upload and use browser only for Play policy/forms/review buttons
 
 ## Proven Play troubleshooting
 
@@ -112,6 +134,25 @@ Check both:
 
 Do not assume upload == rollout.
 
+Fast recovery:
+1. create fresh edit
+2. point `internal` track directly at the already-approved `versionCode`
+3. commit the edit
+
+Pattern:
+```bash
+GPLAY_SERVICE_ACCOUNT_JSON=apps/mobile/.gplay/service-account.json \
+gplay edits create --package ai.q9labs.chalk.mobile
+
+GPLAY_SERVICE_ACCOUNT_JSON=apps/mobile/.gplay/service-account.json \
+gplay tracks update --package ai.q9labs.chalk.mobile --edit <id> --track internal --releases '[{"name":"0.0.x-internal","status":"completed","versionCodes":["<versionCode>"],"releaseNotes":[{"language":"en-US","text":"..."}]}]'
+
+GPLAY_SERVICE_ACCOUNT_JSON=apps/mobile/.gplay/service-account.json \
+gplay edits commit --package ai.q9labs.chalk.mobile --edit <id>
+```
+
+This is valid when the same artifact already passed review on another track like `alpha`.
+
 ### Network issue in installed release build
 
 For Chalk, first check:
@@ -122,13 +163,16 @@ For Chalk, first check:
 Important:
 - React Native native networking usually is not blocked by browser CORS
 - if Play/TestFlight build points at `localhost`, it means the phone itself
+- if the app on-device still fails after Play says the new build is completed, verify the installed version and consider sideloading the signed release APK for immediate proof
 
 ## Common Chalk-specific release truths
 
 - `apps/mobile/.env.local` may be safe for dev but dangerous for release if it points at `localhost`
 - local dev works because Metro host rewrite exists; release builds have no Metro `scriptURL`
+- Chalk now hard-blocks device-local API/WS URLs in production builds; keep that behavior
 - Play can accept the bundle upload but still leave internal release as draft
 - `gplay` local install may be a dev build; if behavior looks wrong, verify with `gplay version`
+- direct APK fallback used in practice: build `app-release.apk`, then upload to a temporary host only when testers are blocked by Play review/caching
 
 ## iOS lane
 
@@ -153,6 +197,8 @@ Report:
 - gate results
 - built artifact path + sha256
 - Play/TestFlight state
+- internal testing install path
+- direct APK fallback path, if created
 - exact remaining human clicks, if any
 
 Never say “released” unless:
