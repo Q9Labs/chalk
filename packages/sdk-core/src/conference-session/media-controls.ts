@@ -1,5 +1,6 @@
 import type RealtimeKitClient from "@cloudflare/realtimekit";
-import { ChalkErrorCode, type ChalkError, type Participant, type ScreenShareOptions } from "../types.ts";
+import { ChalkError, ChalkErrorCode } from "../errors/chalk-error.ts";
+import { type ChalkError as ChalkErrorShape, type Participant, type ScreenShareOptions } from "../types.ts";
 import type { VideoBackgroundEffect } from "../types/entities/media.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import { withPatchedGetDisplayMedia } from "../utils/get-display-media-fallback.ts";
@@ -8,7 +9,7 @@ import { createConferenceSessionVideoBackgroundController, isConferenceSessionVi
 interface MediaControllerDeps {
   getRtkClient: () => RealtimeKitClient | undefined;
   getLocalParticipant: () => Participant | null;
-  emitError: (error: ChalkError) => void;
+  emitError: (error: ChalkErrorShape) => void;
   emitParticipantUpdated: (participantId: string, participant: Participant) => void;
 }
 
@@ -66,6 +67,14 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
   const videoBackgroundController = createConferenceSessionVideoBackgroundController({
     getRtkClient: deps.getRtkClient,
   });
+  const getErrorConstraint = (error: unknown) => {
+    if (!error || typeof error !== "object") {
+      return undefined;
+    }
+
+    const constraint = (error as { constraint?: unknown }).constraint;
+    return typeof constraint === "string" ? constraint : undefined;
+  };
   const resetLocalScreenShareState = (participant: Participant) => {
     participant.isScreenSharing = false;
     participant.screenShareTrack = undefined;
@@ -180,16 +189,21 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
       const name = typeof err?.name === "string" ? err.name : undefined;
       const message = typeof err?.message === "string" ? err.message : "Failed to start screen sharing";
       const isCancelled = name === "AbortError" || name === "NotAllowedError";
+      const constraint = getErrorConstraint(error);
 
       resetLocalScreenShareState(localParticipant);
 
       const code = name === "OverconstrainedError" ? ChalkErrorCode.OVERCONSTRAINED : isCancelled ? ChalkErrorCode.SCREEN_SHARE_CANCELLED : ChalkErrorCode.SCREEN_SHARE_FAILED;
 
-      deps.emitError({
-        code,
-        message,
-        details: { name },
-      });
+      deps.emitError(
+        new ChalkError(code, message, {
+          cause: error instanceof Error ? error : undefined,
+          details: {
+            name,
+            ...(constraint ? { constraint } : {}),
+          },
+        }),
+      );
       return false;
     }
   };

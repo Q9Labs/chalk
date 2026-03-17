@@ -124,6 +124,9 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   private readonly stateUpdaters: SessionStateUpdaters;
   private readonly externalSubscriptions: Array<() => void> = [];
   private roomBridgeCleanup: (() => void) | null = null;
+  private connectedInputRoomId: string | null = null;
+  private inFlightJoinRoomId: string | null = null;
+  private inFlightJoinPromise: Promise<void> | null = null;
 
   constructor(config: ChalkSessionConfig) {
     super();
@@ -263,6 +266,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
 
     this.addExternalSubscription(
       this.room._emitter.on("disconnected", (data) => {
+        this.connectedInputRoomId = null;
         this.recordIncidentBreadcrumb({
           category: "room",
           message: "ConferenceSession disconnected",
@@ -346,49 +350,70 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
    * @param options - Join options including userName
    */
   async join(roomId: string, options: JoinOptions): Promise<void> {
-    try {
-      // Signal join starting via Effect service
-      await this._runtime.runPromise(
-        Effect.gen(function* () {
-          const roomSvc = yield* RoomService;
-          yield* roomSvc.requestJoin(roomId, options);
-        }),
-      );
+    if (this.connectedInputRoomId === roomId && this.room.getState().status === "connected") {
+      return;
+    }
 
-      // Actually join via ConferenceClient
-      const room = await this.client.joinSession(roomId, {
-        displayName: options.userName,
-        role: options.role,
-        audio: options.audioEnabled,
-        video: options.videoEnabled,
-        metadata: options.metadata,
-      });
+    if (this.inFlightJoinRoomId === roomId && this.inFlightJoinPromise) {
+      return this.inFlightJoinPromise;
+    }
 
-      // Attach room to all managers
-      this.attachRoomToManagers(room);
-    } catch (err) {
-      const error = ChalkError.wrap(err);
-      const roomError = new RoomError({
-        code: "ROOM_NOT_FOUND",
-        message: error.message,
-        recoverable: false,
-      });
-      await this._runtime
-        .runPromise(
+    const joinPromise = (async () => {
+      try {
+        // Signal join starting via Effect service
+        await this._runtime.runPromise(
           Effect.gen(function* () {
             const roomSvc = yield* RoomService;
-            yield* roomSvc.joinFailed(roomError);
+            yield* roomSvc.requestJoin(roomId, options);
           }),
-        )
-        .catch(() => {
-          // Ignore if join failed operation fails
+        );
+
+        // Actually join via ConferenceClient
+        const room = await this.client.joinSession(roomId, {
+          displayName: options.userName,
+          role: options.role,
+          audio: options.audioEnabled,
+          video: options.videoEnabled,
+          metadata: options.metadata,
         });
-      this.emitErrorWithIncident(error, "session", {
-        operation: "join",
-        roomId,
-      });
-      throw error;
-    }
+
+        // Attach room to all managers
+        this.attachRoomToManagers(room);
+        this.connectedInputRoomId = roomId;
+      } catch (err) {
+        const error = ChalkError.wrap(err);
+        const roomError = new RoomError({
+          code: "ROOM_NOT_FOUND",
+          message: error.message,
+          recoverable: false,
+        });
+        await this._runtime
+          .runPromise(
+            Effect.gen(function* () {
+              const roomSvc = yield* RoomService;
+              yield* roomSvc.joinFailed(roomError);
+            }),
+          )
+          .catch(() => {
+            // Ignore if join failed operation fails
+          });
+        this.emitErrorWithIncident(error, "session", {
+          operation: "join",
+          roomId,
+        });
+        throw error;
+      }
+    })();
+
+    this.inFlightJoinRoomId = roomId;
+    this.inFlightJoinPromise = joinPromise.finally(() => {
+      if (this.inFlightJoinPromise === joinPromise) {
+        this.inFlightJoinPromise = null;
+        this.inFlightJoinRoomId = null;
+      }
+    });
+
+    return this.inFlightJoinPromise;
   }
 
   /**
@@ -408,6 +433,9 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       this.roomBridgeCleanup?.();
       this.roomBridgeCleanup = null;
       this._currentRoom = null;
+      this.connectedInputRoomId = null;
+      this.inFlightJoinRoomId = null;
+      this.inFlightJoinPromise = null;
 
       // Ensure hooks see a clean slate after leaving (ConferenceSession.leave clears maps without per-participant events).
       this.resetSessionState();
@@ -667,6 +695,9 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     this.roomBridgeCleanup?.();
     this.roomBridgeCleanup = null;
     this._currentRoom = null;
+    this.connectedInputRoomId = null;
+    this.inFlightJoinRoomId = null;
+    this.inFlightJoinPromise = null;
     this.removeAllListeners();
 
     ctx.complete("success");
