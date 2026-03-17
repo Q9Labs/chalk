@@ -9,11 +9,15 @@ on:
       - "packages/**"
       - "package.json"
       - "bun.lock"
+      - "scripts/**"
+      - ".github/workflows/sdk.yml"
   pull_request:
     paths:
       - "packages/**"
       - "package.json"
       - "bun.lock"
+      - "scripts/**"
+      - ".github/workflows/sdk.yml"
   workflow_dispatch:
 
 concurrency:
@@ -53,6 +57,7 @@ jobs:
           bunx turbo prune @q9labs/chalk-core @q9labs/chalk-react @q9labs/chalk-ui @q9labs/chalk-whiteboard
           # Copy root config files needed for builds
           cp tsconfig.json turbo.json out/
+          cp -R scripts out/
           # Fix workspaces to only include pruned packages
           cd out
           node -e "
