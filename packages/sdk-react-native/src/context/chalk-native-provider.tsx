@@ -39,23 +39,7 @@ interface ChalkNativeContextValue {
 
 const ChalkNativeContext = createContext<ChalkNativeContextValue | null>(null);
 
-export function ChalkNativeProvider({
-  children,
-  apiUrl,
-  wsUrl,
-  token,
-  tokenProvider,
-  apiKey,
-  roomId,
-  userName,
-  debug,
-  demoMode,
-  incident,
-  posthog,
-  onIncident,
-  incidentReporter,
-  incidentMaxBreadcrumbs,
-}: ChalkNativeProviderProps): React.JSX.Element {
+export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvider, apiKey, roomId, userName, debug, demoMode, incident, posthog, onIncident, incidentReporter, incidentMaxBreadcrumbs }: ChalkNativeProviderProps): React.JSX.Element {
   const [isConnected, setIsConnected] = useState(false);
   const [rtkMeeting, setRtkMeeting] = useState<NativeRealtimeKitMeeting | null>(null);
   const [, forceUpdate] = useState({});
@@ -151,20 +135,11 @@ export function ChalkNativeProvider({
     await session.leave();
   }, [session]);
 
-  const createSession = useCallback(
-    async (name?: string) => session.createSession(name),
-    [session],
-  );
+  const createSession = useCallback(async (name?: string) => session.createSession(name), [session]);
 
-  const endSession = useCallback(
-    async (endRoomId: string) => session.endSession(endRoomId),
-    [session],
-  );
+  const endSession = useCallback(async (endRoomId: string) => session.endSession(endRoomId), [session]);
 
-  const removeParticipant = useCallback(
-    async (participantId: string) => session.removeParticipant(participantId),
-    [session],
-  );
+  const removeParticipant = useCallback(async (participantId: string) => session.removeParticipant(participantId), [session]);
 
   const muteParticipant = useCallback(
     (participantId: string) => {

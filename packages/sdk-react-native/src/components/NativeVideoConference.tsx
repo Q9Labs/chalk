@@ -12,7 +12,7 @@ import { NativeEndScreen, type NativeMeetingEndData } from "./NativeEndScreen";
 import { NativeJoiningLoadingScreen } from "./NativeJoiningLoadingScreen";
 import { NativeMeetingRoom, type NativeMeetingRoomFeatures } from "./NativeMeetingRoom";
 import { NativePreJoinLobby, type NativeJoinSettings } from "./NativePreJoinLobby";
-import { canStartNativeJoin } from "../utils/native-join-guard";
+import { canExecuteNativeJoin, canStartNativeJoin } from "../utils/native-join-guard";
 
 export type NativeVideoConferencePhase = "lobby" | "joining" | "meeting" | "end";
 
@@ -63,6 +63,7 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
   const didEmitJoinRef = useRef(false);
   const didEmitEndRef = useRef(false);
   const pendingJoinRequestRef = useRef(initialPhase === "joining" || autoJoin);
+  const activeJoinNonceRef = useRef<number | null>(null);
 
   const buildEndData = useCallback((): NativeMeetingEndData => {
     const joinedAt = joinedAtRef.current ?? new Date();
@@ -75,6 +76,27 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
       transcriptCount: transcripts.transcripts.length,
     };
   }, [chat.count, participants.participantCount, room.roomName, roomId, roomName, transcripts.transcripts.length]);
+
+  const promoteToMeeting = useCallback(() => {
+    if (!joinedAtRef.current) {
+      joinedAtRef.current = new Date();
+    }
+
+    pendingJoinRequestRef.current = false;
+    activeJoinNonceRef.current = null;
+    setJoinError(null);
+    setPhase("meeting");
+
+    if (!didEmitJoinRef.current) {
+      didEmitJoinRef.current = true;
+      onJoin?.({
+        roomId,
+        displayName: joinSettings.displayName,
+        role,
+        joinedAt: joinedAtRef.current,
+      });
+    }
+  }, [joinSettings.displayName, onJoin, role, roomId]);
 
   const finalizeMeeting = useCallback(() => {
     if (didEmitEndRef.current) {
@@ -97,11 +119,12 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
   }, [onError, session]);
 
   useEffect(() => {
-    if (phase !== "joining" || joinNonce === 0) {
+    if (!canExecuteNativeJoin(phase, joinNonce, connection.isJoining, connection.isConnected, pendingJoinRequestRef.current, activeJoinNonceRef.current)) {
       return;
     }
 
     let cancelled = false;
+    activeJoinNonceRef.current = joinNonce;
     setJoinError(null);
 
     void connection
@@ -116,6 +139,12 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
           return;
         }
 
+        if (session.room.getRoom()) {
+          promoteToMeeting();
+          return;
+        }
+
+        activeJoinNonceRef.current = null;
         pendingJoinRequestRef.current = false;
         setJoinError(cause instanceof Error ? cause.message : "Unable to join room");
         setPhase("lobby");
@@ -124,30 +153,15 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
     return () => {
       cancelled = true;
     };
-  }, [connection, joinNonce, joinSettings.audioEnabled, joinSettings.displayName, joinSettings.videoEnabled, phase, role, roomId]);
+  }, [connection.join, joinNonce, joinSettings.audioEnabled, joinSettings.displayName, joinSettings.videoEnabled, phase, promoteToMeeting, role, roomId, session]);
 
   useEffect(() => {
     if (phase !== "joining" || !connection.isConnected) {
       return;
     }
 
-    if (!joinedAtRef.current) {
-      joinedAtRef.current = new Date();
-    }
-
-    pendingJoinRequestRef.current = false;
-    setPhase("meeting");
-
-    if (!didEmitJoinRef.current) {
-      didEmitJoinRef.current = true;
-      onJoin?.({
-        roomId,
-        displayName: joinSettings.displayName,
-        role,
-        joinedAt: joinedAtRef.current,
-      });
-    }
-  }, [connection.isConnected, joinSettings.displayName, onJoin, phase, role, roomId]);
+    promoteToMeeting();
+  }, [connection.isConnected, phase, promoteToMeeting]);
 
   useEffect(() => {
     if (phase === "meeting" && (room.status === "disconnected" || room.status === "failed")) {
@@ -199,6 +213,7 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
 
   const handleRejoin = useCallback(() => {
     pendingJoinRequestRef.current = true;
+    activeJoinNonceRef.current = null;
     didEmitJoinRef.current = false;
     didEmitEndRef.current = false;
     joinedAtRef.current = null;

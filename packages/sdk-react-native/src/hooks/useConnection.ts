@@ -19,25 +19,13 @@ export function useConnection(): UseConnectionReturn {
 
   useEffect(() => room.subscribe(setState), [room]);
 
-  const join = useCallback(
-    async (roomId: string, options: JoinOptions) => session.join(roomId, options),
-    [session],
-  );
+  const join = useCallback(async (roomId: string, options: JoinOptions) => session.join(roomId, options), [session]);
 
-  const leave = useCallback(
-    async (options?: LeaveOptions) => session.leave(options),
-    [session],
-  );
+  const leave = useCallback(async (options?: LeaveOptions) => session.leave(options), [session]);
 
-  const createSession = useCallback(
-    async (name?: string) => session.createSession(name),
-    [session],
-  );
+  const createSession = useCallback(async (name?: string) => session.createSession(name), [session]);
 
-  const endSession = useCallback(
-    async (roomId: string) => session.endSession(roomId),
-    [session],
-  );
+  const endSession = useCallback(async (roomId: string) => session.endSession(roomId), [session]);
 
   return useMemo(
     () => ({

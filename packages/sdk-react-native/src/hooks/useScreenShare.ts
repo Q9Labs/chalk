@@ -23,14 +23,17 @@ export function useScreenShare(): UseScreenShareReturn {
 
   const start = useCallback((options?: ScreenShareOptions) => screenShare.start(options), [screenShare]);
   const stop = useCallback(() => screenShare.stop(), [screenShare]);
-  const toggle = useCallback(async (options?: ScreenShareOptions) => {
-    if (screenShare.isLocalSharing) {
-      await screenShare.stop();
-      return false;
-    }
+  const toggle = useCallback(
+    async (options?: ScreenShareOptions) => {
+      if (screenShare.isLocalSharing) {
+        await screenShare.stop();
+        return false;
+      }
 
-    return screenShare.start(options);
-  }, [screenShare]);
+      return screenShare.start(options);
+    },
+    [screenShare],
+  );
 
   return useMemo(
     () => ({

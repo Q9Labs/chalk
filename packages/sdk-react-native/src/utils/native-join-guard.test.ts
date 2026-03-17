@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { canStartNativeJoin } from "./native-join-guard";
+import { canExecuteNativeJoin, canStartNativeJoin } from "./native-join-guard";
 
 describe("canStartNativeJoin", () => {
   it("allows a fresh lobby join", () => {
@@ -11,5 +11,19 @@ describe("canStartNativeJoin", () => {
     expect(canStartNativeJoin("lobby", true, false, false)).toBe(false);
     expect(canStartNativeJoin("lobby", false, true, false)).toBe(false);
     expect(canStartNativeJoin("lobby", false, false, true)).toBe(false);
+  });
+});
+
+describe("canExecuteNativeJoin", () => {
+  it("allows the first join execution for a pending join nonce", () => {
+    expect(canExecuteNativeJoin("joining", 1, false, false, true, null)).toBe(true);
+  });
+
+  it("blocks reruns once the same join nonce is already executing or the room state advanced", () => {
+    expect(canExecuteNativeJoin("joining", 1, false, false, true, 1)).toBe(false);
+    expect(canExecuteNativeJoin("joining", 1, true, false, true, null)).toBe(false);
+    expect(canExecuteNativeJoin("joining", 1, false, true, true, null)).toBe(false);
+    expect(canExecuteNativeJoin("joining", 0, false, false, true, null)).toBe(false);
+    expect(canExecuteNativeJoin("lobby", 1, false, false, true, null)).toBe(false);
   });
 });
