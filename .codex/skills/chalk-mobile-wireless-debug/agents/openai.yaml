@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chalk Mobile Wireless Debug"
+  short_description: "Pair and drive Chalk Android over Wi-Fi"
+  default_prompt: "Use $chalk-mobile-wireless-debug to pair a Chalk Android phone over wireless adb, reconnect it, and relaunch the dev build."

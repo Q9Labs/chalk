@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Mobile tooling: wireless adb + launch shortcuts** — added a repo-local `chalk-mobile-wireless-debug` skill with reusable wireless adb reconnect/launch helpers, plus root `bun run mobile:connect`, `bun run mobile:launch`, and `bun run mobile:logs` shortcuts so real-device Chalk Android debugging can be recovered quickly without rediscovering the MIUI/Expo flow each session.
+
 ### Changed
 
 ### Fixed
@@ -16,17 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.78] - 2026-03-17
 
 ### Added
+
 - **SDK-Core: strict Chalk webhook Express adapter** — `@q9labs/chalk-core` now ships a hardened Express webhook adapter with exact 400/401/413/415 responses, parser-error middleware, raw-hex signature normalization, and request-attached delivery/body metadata so consumers do not have to hand-roll verification plumbing.
 
 ### Changed
 
 ### Fixed
+
 - **API: webhook delivery logs now expose final payload presence** — final Chalk post-meeting webhook delivery logs now include whether the delivered payload actually contained recording, transcript, summary, action items, and errors, making tenant incident triage possible from the last delivery event alone.
 - **SDK release CI: pruned publish installs no longer crash on mobile-only postinstall work** — the RealtimeKit Android patch script now cleanly skips when `apps/mobile` or the native package is absent, so SDK release publishes can install the pruned workspace without failing before the actual package build/publish steps.
 
 ## [0.0.77] - 2026-03-17
 
 ### Added
+
 - **SDK-Core: strict Chalk webhook Express adapter** — `@q9labs/chalk-core` now ships a hardened Express webhook adapter with exact 400/401/413/415 responses, parser-error middleware, raw-hex signature normalization, and request-attached delivery/body metadata so consumers do not have to hand-roll verification plumbing.
 - **Mobile/E2E: Maestro Android new-meeting flow scaffold** — added repo-local Maestro flows for `ai.q9labs.chalk.mobile` that reset camera/mic permissions, drive `New meeting -> lobby -> Join Meeting`, and capture numbered screenshots into a stable local test-output directory for emulator verification.
 - **API/Admin: durable Whisper job history + live processing visibility** — Whisper queue submissions now persist per-job metadata and terminal outcomes in Postgres (`whisper_transcription_jobs`) without storing presigned audio URLs, and admin endpoints now expose paginated history, live processing job metadata, and queue/processing counts for practical ops visibility without external analytics tooling.
@@ -36,8 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Repo skill: Chalk mobile release workflow** — added a dedicated `chalk-mobile-release` skill covering Android/iOS release flow, Play internal testing, `gplay`/Play Console workarounds, Helium browser guidance, and Chalk-specific mobile release pitfalls so future release passes reuse the same proven process.
 
 ### Changed
+
 - **Mobile/Android: internal release advanced to build 4** — bumped the Expo/app-store version metadata to `0.0.4` / Android `versionCode 4` / iOS `buildNumber 4` so a fresh internal-testing upload can carry the release URL fallback fix after Play burned version code `3` during the first successful bundle upload attempt.
+
 ### Fixed
+
 - **API: webhook delivery logs now expose final payload presence** — final Chalk post-meeting webhook delivery logs now include whether the delivered payload actually contained recording, transcript, summary, action items, and errors, making tenant incident triage possible from the last delivery event alone.
 - **SDK-Core: screen-share diagnostics now keep the real browser failure** — screen-share start errors now preserve the original DOMException as the emitted `cause`/details, and the manager no longer emits a second generic `Failed to start screen sharing` error that was masking the first useful failure in copied diagnostics.
 - **Mobile/local-dev: host auth now self-heals at join time** — when a local simulator/device build still carries a stale `EXPO_PUBLIC_CHALK_API_KEY`, the mobile host token provider now detects `invalid API key` from the local API, mints a fresh local tenant key on the fly, stores it in SecureStore, and retries so host joins stop failing in lobby with `Token exchange failed: {"error":"invalid API key"}`.
@@ -61,11 +69,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.76] - 2026-03-15
 
 ### Added
+
 - **Web: first local mutation-testing rep for avatar gradients** — `apps/web` now includes a focused Stryker + Vitest mutation-testing harness for `src/lib/avatarGradient.ts`, plus broader unit coverage around fallback initials, storage/event helpers, and exact derived/preset gradient resolution so the first mutation pass improved from `40.4%` to `85.43%` on that target.
 
 ### Changed
 
 ### Fixed
+
 - **SDK-React: tighter host-app style isolation** — Chalk roots now apply a stronger scoped reset under `[data-chalk]` / `.chalk-root` so consumer app typography, list, form-control, media, and button base rules are less likely to bleed into Chalk surfaces.
 - **SDK-Core: background images normalized before virtual-background apply** — image backgrounds now resolve through a local object-URL step before passing into the RealtimeKit transformer, reducing cross-origin/canvas-taint failures and correctly revoking temporary object URLs on clear/swap.
 - **UI: portaled Chalk surfaces keep their own theme** — settings, selects, dropdowns, dialogs, and tooltips now carry explicit Chalk scope/theme when rendered through portals so host app styles and light/dark defaults do not leak in.
@@ -76,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.75] - 2026-03-14
 
 ### Added
+
 - **Web/SDK-React: PWA install + update support** — `apps/web` now ships a real Chalk web app manifest, root service worker, install/update/offline prompt shell, and a reusable `usePwaInstall` hook in `@q9labs/chalk-react` so host apps can detect installability and standalone mode without app-specific browser wiring.
 - **Docs: canonical Chalk design system reference** — added `docs/design-system/chalk-design-system.md` as the source-of-truth doc for Chalk's current design system, including `sdk-react` core ownership, `apps/web` brand-layer ownership, current mobile drift, and the normalized token model future work should converge toward.
 - **Docs: Chalk Pencil design-system file** — added `docs/design-system/chalk-design-system.pen` as a dedicated Pencil artifact with separate Core and Brand system sections, reusable primitives, and composition shells for design-system assembly work.
