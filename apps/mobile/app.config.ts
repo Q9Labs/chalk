@@ -23,7 +23,6 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
     expo: {
       name: "Chalk",
       slug: "chalk-mobile",
-      owner: "hhushhas14",
       scheme: "chalk",
       version: "0.0.10",
       orientation: "portrait",
@@ -82,9 +81,6 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         apiUrl,
         wsUrl,
         buildProfile,
-        eas: {
-          projectId: "699bd2b8-fe9b-4740-9de4-b23741ce9d6b",
-        },
       },
     },
   };

@@ -127,14 +127,11 @@ If store listing files/screenshots exist:
 
 Current repo-backed state:
 
-- EAS project: `@hhushhas14/chalk-mobile`
-- EAS project id: `699bd2b8-fe9b-4740-9de4-b23741ce9d6b`
 - native bundle id: `ai.q9labs.chalk.mobile`
 - current V1 release contract: no mobile-originated iOS screen share
 
 What is already done:
 
-- `apps/mobile/app.config.ts` now pins the EAS owner + project id
 - `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj` now carries:
   - `DEVELOPMENT_TEAM = 4V7RXZU8P2`
   - `MARKETING_VERSION = 0.0.10`
@@ -143,23 +140,28 @@ What is already done:
 
 Current blocker:
 
-- non-interactive EAS build reaches remote iOS credentials, then stops with:
-  - `Failed to set up credentials. Credentials are not set up. Run this command again in interactive mode.`
-- local Xcode archive also gets past project config and then fails on Apple-account provisioning state
+- local Xcode archive gets past project config and then fails on Apple-account provisioning state
+- this Mac currently has only an Apple Development identity; no App Store distribution profile/cert path is configured yet
 
 Next exact steps:
 
-1. Configure iOS build credentials interactively
-   - `cd apps/mobile`
-   - `eas credentials -p ios`
-   - log into the Apple Developer account when prompted
-   - let EAS create/validate the missing distribution certificate + provisioning profile
-2. Run the production build
-   - `cd apps/mobile`
-   - `eas build --platform ios --profile production`
-3. Submit to TestFlight
-   - `cd apps/mobile`
-   - `eas submit --platform ios --profile production --latest`
+1. Open Xcode account settings
+   - `open -a Xcode`
+   - `Xcode -> Settings -> Accounts`
+   - sign into the Apple Developer account that owns team `4V7RXZU8P2`
+2. Verify signing for the app target
+   - open `apps/mobile/ios/Chalk.xcodeproj`
+   - target `Chalk` -> `Signing & Capabilities`
+   - confirm team `4V7RXZU8P2`
+   - confirm `Automatically manage signing` is enabled
+3. Archive from CLI
+   - `cd apps/mobile/ios`
+   - `xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk.xcarchive archive -allowProvisioningUpdates`
+4. Export/upload to TestFlight
+   - easiest raw path: Xcode Organizer -> `Distribute App` -> `App Store Connect` -> `Upload`
+   - CLI-capable path once App Store Connect credentials exist:
+     - `xcodebuild -exportArchive ...`
+     - upload with Apple Transporter / `xcrun altool` successor tooling
 
 Human checks before wider rollout:
 

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mobile: Android release path now reflects the actual V1 contract** — Android app links now cover both `/j/*` and `/room/*`, release docs/checklists now document clipboard-invite behavior without adding a manifest permission, and the current no-Android-screen-share V1 no longer requests media-projection release permission by default.
 - **Mobile/Android: post-upload release ops now match internal track `10`** — Android release docs now include checksum and `gplay` track/bundle verification commands, and `apps/mobile/android/app/build.gradle` fallback version metadata now stays aligned at `0.0.10` / `versionCode 10` with Expo config and checked-in Gradle properties.
 - **Mobile/iOS: V1 release contract now disables local screen-share start** — the iOS app shell no longer advertises local mobile-originated screen sharing before ReplayKit/app-group work exists, and the release checklist now treats iOS V1 as receive-only for screen-share until a dedicated native pass lands.
+- **Mobile/iOS: raw TestFlight path is now the documented release lane** — mobile release docs no longer rely on Expo/EAS ownership, and the repo now treats Xcode signing + archive + App Store Connect upload as the canonical iOS publishing path.
 
 ### Fixed
 

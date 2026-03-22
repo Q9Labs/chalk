@@ -272,6 +272,84 @@ Exact next actions from this checkpoint:
      - background audio
      - meeting join/create
 
+## 2026-03-22 18:03 PKT - raw iOS/TestFlight audit, no EAS
+
+Goal:
+- assess the raw Xcode/TestFlight path from this repo/machine only
+- no EAS assumptions
+
+Repo/tooling findings:
+- `apps/mobile/ios/Podfile` exists
+- `apps/mobile/ios` currently has no checked-in `Pods/` directory
+- no repo Fastlane/TestFlight config found:
+  - no `Fastfile`
+  - no `Appfile`
+  - no `Deliverfile`
+  - no `ExportOptions.plist`
+- machine does have Apple/Xcode upload tooling installed:
+  - `iTMSTransporter`
+  - `altool`
+  - `notarytool`
+
+Current iOS signing state:
+- checked-in Xcode project now includes:
+  - `CODE_SIGN_STYLE = Automatic`
+  - `DEVELOPMENT_TEAM = 4V7RXZU8P2`
+  - `MARKETING_VERSION = 0.0.10`
+  - `CURRENT_PROJECT_VERSION = 10`
+- effective `xcodebuild -showBuildSettings` confirms the same values
+- local macOS keychain has one valid Apple Development signing identity
+
+Archive proof:
+- raw archive without provisioning updates:
+  - failed with missing provisioning profile
+- raw archive with `-allowProvisioningUpdates`:
+  - failed with:
+    - `No Account for Team "4V7RXZU8P2"`
+    - `No profiles for 'ai.q9labs.chalk.mobile' were found`
+- interpretation:
+  - repo is now configured for team/signing
+  - this mac/Xcode does not currently have the Apple account/session needed to auto-create or download profiles for that team
+
+Version/build consistency:
+- `apps/mobile/app.config.ts`
+  - iOS version `0.0.10`
+  - buildNumber `10`
+- `apps/mobile/ios/Chalk/Info.plist`
+  - `CFBundleShortVersionString = 0.0.10`
+  - `CFBundleVersion = 10`
+- `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj`
+  - `MARKETING_VERSION = 0.0.10`
+  - `CURRENT_PROJECT_VERSION = 10`
+- interpretation:
+  - current iOS version/build values are aligned
+
+Screen share / entitlements state:
+- `apps/mobile/ios/Chalk/Chalk.entitlements` is still empty
+- no ReplayKit broadcast extension target/config present
+- if iOS V1 requires mobile-originated full screen share, native iOS work remains
+
+Policy/privacy-relevant plist state:
+- camera usage string present
+- microphone usage string present
+- background audio declared
+- `ITSAppUsesNonExemptEncryption = false`
+- photo library usage string present
+- Face ID usage string present
+- local network usage + Bonjour service keys still present in source plist, with an Expo release strip script observed during archive
+
+Exact next actions for raw Xcode/TestFlight path:
+1. Add/sign into the Apple Developer account for team `4V7RXZU8P2` in Xcode on this Mac.
+2. Run CocoaPods install from `apps/mobile/ios` before real Xcode workspace-based release work.
+3. Open the iOS project/workspace in Xcode and confirm automatic signing resolves a provisioning profile for `ai.q9labs.chalk.mobile`.
+4. Re-run archive:
+   - `cd apps/mobile/ios && xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -allowProvisioningUpdates -archivePath build/Chalk.xcarchive archive`
+5. Upload the signed archive to TestFlight using Xcode Organizer or Apple upload tooling.
+6. After TestFlight internal release, finish:
+   - real iPhone QA
+   - App Store privacy/reviewer materials
+   - screen-share scope decision
+
 [2026-03-22 19:04 PKT] Android release follow-through after successful internal upload. Verified current checked-in Android version metadata now converges on `0.0.10` / `versionCode 10`: `apps/mobile/app.config.ts` already matched, `apps/mobile/android/gradle.properties` already matched, and `apps/mobile/android/app/build.gradle` fallback version metadata was corrected from `9`/`0.0.9` to `10`/`0.0.10` so local Gradle defaults cannot drift from the shipped Play build. Confirmed local signed artifact still exists at `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab`; recorded local sha256 `9a6e34f8f7bfaba3e584cebf4e45c7dd24d31f81cf3b8762aa35e868f219b64f`. Confirmed Play internal track state via fresh `gplay` edit readback: track `internal`, release name `0.0.10`, status `completed`, `versionCodes ["10"]`. Tightened Android release docs/checklist to include artifact checksum and explicit `gplay bundles list` / `gplay tracks get` post-upload verification steps. Remaining Android-only work is operational, not code: internal tester install smoke, Play listing/privacy/data-safety completion, and final explicit acceptance that Android V1 ships without mobile-originated screen share.
 [2026-03-22 19:34 PKT] Clipboard invite suggestion iOS release/QA audit: inspected `apps/mobile/src/screens/useClipboardInviteSuggestion.ts`, `apps/mobile/src/components/ClipboardInviteSuggestion.tsx`, `apps/mobile/src/lib/inviteLink.ts`, `apps/mobile/src/screens/HomeScreen.tsx`, and `apps/mobile/src/lib/inviteLink.test.ts`. Feature is implemented via `expo-clipboard` polling/listener + AppState refresh, and invite parsing is limited to Chalk `/j/...` links only. No clipboard-specific iOS entitlement or Info.plist permission is present or needed for this path; current iOS plist only has camera, microphone, local network, and background audio keys. Expo Clipboard docs note `getStringAsync` on iOS 16+ may trigger the system paste privacy prompt and return an empty string if the user denies permission, while `ClipboardPasteButton` uses `UIPasteControl` and pastes without requesting permission. QA must explicitly cover the allow/deny prompt path, background refresh, invalid clipboard handling, and navigation after opening a valid invite.
 [2026-03-22 22:12 PKT] iOS full-device screen-share scope audit: inspected `apps/mobile/App.tsx`, `apps/mobile/app.config.ts`, `apps/mobile/ios/Chalk/Info.plist`, `apps/mobile/ios/Chalk/Chalk.entitlements`, `packages/sdk-react-native/src/hooks/useScreenShare.ts`, `packages/sdk-react-native/src/components/NativeMeetingRoom.tsx`, `packages/sdk-core/src/managers/screen-share-manager.ts`, and `packages/sdk-core/src/conference-session/media-controls.ts`. Current repo has shared SDK/UI plumbing for screen-share state and a visible iOS screen-share button, but no production-grade iOS full-device broadcast setup. `App.tsx` enables screen share on iOS (`Platform.OS !== "android"`), yet iOS native config only covers camera/mic/background-audio; `Chalk.entitlements` is empty; no ReplayKit Broadcast Upload Extension target/files exist under `apps/mobile/ios`; no App Group capability exists. Shared runtime currently calls `rtkClient.self.enableScreenShare()` behind a `getDisplayMedia`-style abstraction, which is not enough by itself for ReplayKit full-device broadcasting on iOS. Official current guidance from LiveKit/ReplayKit: full-screen/background-capable iOS sharing requires a Broadcast Upload Extension target, replacing the extension sample handler with the SDK handler, and adding both app + extension to a common App Group. Recommendation: do not include full-device iOS screen share in V1 unless it becomes a hard requirement; safer V1 is receive remote screen shares, optionally keep only in-app iOS share if proven by RTK path, and defer full-device broadcast share to a dedicated native pass with real-device QA.
@@ -285,3 +363,5 @@ Exact next actions from this checkpoint:
 [2026-03-22 22:23 PKT] Probed Apple-side local state after EAS credential failure: checking local code-sign identities, any App Store Connect API-key directories, and Xcode stored developer accounts to see whether unattended iOS/TestFlight can proceed without new human credential entry.
 
 [2026-03-22 22:23 PKT] Apple-side local credential probe results: `security find-identity -v -p codesigning` shows only one local Apple Development identity for team `4V7RXZU8P2`; no local App Store Connect API-key directories exist under `~/.appstoreconnect/private_keys` or `~/.private_keys`; `~/.fastlane` has no useful signing config. This strengthens the current blocker diagnosis: TestFlight/build completion now needs interactive Apple credential provisioning (via `eas credentials -p ios` or Xcode account setup), not more repo-side code changes.
+
+[2026-03-22 22:31 PKT] Hasan requested raw iOS publishing, not EAS. Removed Expo owner/projectId coupling from apps/mobile/app.config.ts and app.config tests, and rewrote RELEASE.md iOS lane to the raw Xcode/TestFlight path. Remote EAS project may still exist in Expo account, but repo no longer depends on it.

@@ -12,7 +12,6 @@ describe("createExpoConfig", () => {
   it("drops dev client in production builds", () => {
     const config = createExpoConfig("production");
 
-    expect(config.expo.owner).toBe("hhushhas14");
     expect(config.expo.plugins).not.toContain("expo-dev-client");
     expect(config.expo.ios.infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
     expect(config.expo.android.adaptiveIcon.backgroundColor).toBe("#0b0c14");
@@ -20,7 +19,6 @@ describe("createExpoConfig", () => {
       { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" },
       { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
     ]);
-    expect(config.expo.extra.eas.projectId).toBe("699bd2b8-fe9b-4740-9de4-b23741ce9d6b");
     expect(config.expo.extra.wsUrl).toBeDefined();
   });
 
