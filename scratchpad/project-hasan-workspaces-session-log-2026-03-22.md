@@ -66,3 +66,15 @@
 - 2026-03-22 20:35:00 PKT
   Web/mobile wiring:
   mobile release workflow already consumed `secrets.VITE_CHALK_API_KEY`; updated `.github/workflows/web.yml` so prod web builds now also require and inject that same secret during build, preventing future drift between mobile host-key releases and web host-key builds.
+
+- 2026-03-22 21:07:32 PKT
+  Join contract retired:
+  removed raw room-code entry from the Chalk web landing page, narrowed mobile join parsing to signed `/j/:token` invite links only, and dropped Android `/room/*` app-link claiming so room names/URLs stop masquerading as a safe cross-surface join contract.
+
+- 2026-03-22 21:07:32 PKT
+  Mobile new-meeting parity:
+  replaced the local `instant-meeting-*` route generator with a real `POST /api/v1/rooms` host-token create on mobile, then carried the returned canonical room UUID + friendly name into the lobby to keep share/join identity aligned with web.
+
+- 2026-03-22 21:07:32 PKT
+  Regression coverage:
+  added mobile invite-link parsing tests, mobile backend room-create tests, and updated Android intent-filter assertions so future changes cannot quietly reintroduce raw-code joins or fake local room ids.

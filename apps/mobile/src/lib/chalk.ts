@@ -3,7 +3,8 @@ import * as SecureStore from "expo-secure-store";
 import { NativeModules } from "react-native";
 import { createStorageScopeId, isConfiguredLocalApiUrl, resolveAppRuntimeUrl } from "./mobile-runtime";
 import { createHostTokenStorage } from "./host-token-storage";
-import { createNewMeetingLobbyRoute } from "./meeting-route";
+import { extractJoinTokenFromInviteLink } from "./inviteLink";
+import { createHostedMeeting } from "./newMeeting";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
 const LOCAL_DEV_HOST_API_KEY_KEY = "chalk_mobile_local_dev_host_api_key_v1";
@@ -22,7 +23,7 @@ type BaseMeetingRoute = {
   role: "host" | "participant";
   joinToken?: string;
   roomName?: string;
-  source: "new-meeting" | "join-link" | "direct-room";
+  source: "new-meeting" | "join-link";
 };
 
 export type LobbyRoute = BaseMeetingRoute & {
@@ -232,59 +233,37 @@ export async function getJoinAccessToken(apiUrl: string, joinToken: string): Pro
   return nextContext.accessToken;
 }
 
-export async function createMeetingLobbyRoute(_apiUrl: string): Promise<LobbyRoute> {
-  return createNewMeetingLobbyRoute();
+export async function createMeetingLobbyRoute(apiUrl: string): Promise<LobbyRoute> {
+  const getAccessToken = getHostTokenProvider(apiUrl);
+  if (!getAccessToken) {
+    throw new Error("Meeting creation is currently restricted.");
+  }
+
+  const createdRoom = await createHostedMeeting(apiUrl, getAccessToken);
+  return {
+    kind: "lobby",
+    roomId: createdRoom.roomId,
+    roomName: createdRoom.roomName,
+    role: "host",
+    source: "new-meeting",
+  };
 }
 
 export function parseInputDestination(input: string): LobbyRoute | null {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return null;
-  }
+  return parseUrlLike(input);
+}
 
-  const parsed = parseUrlLike(trimmed);
-  if (parsed) {
-    return parsed;
+export function parseUrlLike(url: string): LobbyRoute | null {
+  const joinToken = extractJoinTokenFromInviteLink(url);
+  if (!joinToken) {
+    return null;
   }
 
   return {
     kind: "lobby",
-    roomId: trimmed,
-    roomName: humanizeRoomName(trimmed),
+    roomId: joinToken,
     role: "participant",
-    source: "direct-room",
+    joinToken,
+    source: "join-link",
   };
-}
-
-export function parseUrlLike(url: string): LobbyRoute | null {
-  try {
-    const parsed = new URL(url);
-    const pathSegments = parsed.protocol === "chalk:" ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)] : parsed.pathname.split("/").filter(Boolean);
-    const [head, tail] = pathSegments;
-
-    if (head === "j" && tail) {
-      return {
-        kind: "lobby",
-        roomId: tail,
-        role: "participant",
-        joinToken: tail,
-        source: "join-link",
-      };
-    }
-
-    if (head === "room" && tail) {
-      const roomId = decodeURIComponent(tail);
-      return {
-        kind: "lobby",
-        roomId,
-        roomName: humanizeRoomName(roomId),
-        role: "participant",
-        source: "direct-room",
-      };
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
 }

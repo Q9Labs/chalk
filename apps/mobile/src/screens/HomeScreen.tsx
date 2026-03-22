@@ -17,29 +17,25 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
+  const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
+  const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
 
   const handleOpenInput = async () => {
-    const destination = parseInputDestination(input);
-    if (!destination) {
-      setError("Please enter a valid code or link.");
+    if (!inviteDestination?.joinToken) {
+      setError("Please paste a valid invite link.");
       return;
     }
 
     setError(null);
 
-    if (destination.joinToken) {
-      try {
-        setIsResolving(true);
-        onNavigate(await resolveJoinToken(destination.joinToken, apiUrl));
-      } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : "Invalid meeting code");
-      } finally {
-        setIsResolving(false);
-      }
-      return;
+    try {
+      setIsResolving(true);
+      onNavigate(await resolveJoinToken(inviteDestination.joinToken, apiUrl));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Invalid invite link");
+    } finally {
+      setIsResolving(false);
     }
-
-    onNavigate(destination);
   };
 
   const handleNewMeeting = async () => {
@@ -99,14 +95,14 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
                     setInput(text);
                     if (error) setError(null);
                   }}
-                  placeholder="Enter a code or link"
+                  placeholder="Paste invite link"
                   placeholderTextColor={Theme.colors.placeholder}
                   style={styles.input}
                   value={input}
                 />
                 {input.length > 0 && (
-                  <Pressable onPress={() => void handleOpenInput()} style={styles.joinAction} disabled={isResolving}>
-                    <Text style={styles.joinActionText}>{isResolving ? "..." : "Join"}</Text>
+                  <Pressable onPress={() => void handleOpenInput()} style={({ pressed }) => [styles.joinAction, pressed && !isResolving && canOpenInviteLink && styles.buttonPressed, (!canOpenInviteLink || isResolving) && styles.joinActionDisabled]} disabled={!canOpenInviteLink || isResolving}>
+                    <Text style={styles.joinActionText}>{isResolving ? "..." : "Open"}</Text>
                   </Pressable>
                 )}
               </View>
@@ -258,6 +254,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 10,
+  },
+  joinActionDisabled: {
+    opacity: 0.45,
   },
   joinActionText: {
     color: Theme.colors.primary,

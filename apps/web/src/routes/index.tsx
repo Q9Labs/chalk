@@ -1,28 +1,19 @@
 import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, Input } from "@q9labs/chalk-ui";
+import { Button } from "@q9labs/chalk-ui";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Globe, Lock, MonitorPlay, MousePointerClick } from "lucide-react";
-import { useState } from "react";
 import { useTheme } from "../context/theme";
 import { ChalkLogo } from "../components/ChalkLogo";
 
 export const Route = createFileRoute("/")({ component: App });
 
 function App() {
-  const [meetingCode, setMeetingCode] = useState("");
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleStartMeeting = () => {
     navigate({ to: "/new" });
-  };
-
-  const handleJoin = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!meetingCode.trim()) return;
-    const roomId = meetingCode.includes("/room/") ? (meetingCode.split("/room/")[1]?.split("?")[0] ?? meetingCode.trim()) : meetingCode.trim();
-    navigate({ to: `/room/${roomId}` });
   };
 
   return (
@@ -33,7 +24,7 @@ function App() {
           <div className="flex items-center gap-6">
             <ChalkLogo />
           </div>
-          
+
           <div className="flex items-center gap-4">
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
               <Link to="/documentation" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -59,23 +50,23 @@ function App() {
           <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center">
             <div className="relative w-full h-full max-w-[1400px] flex items-center justify-center overflow-hidden p-4 sm:p-0">
               {/* Dark/Nord Image - Vivid and impactful */}
-              <img 
-                src="/hero-1.png" 
-                alt="" 
+              <img
+                src="/hero-1.png"
+                alt=""
                 className="hidden dark:block w-full h-auto object-contain sm:object-cover opacity-60 scale-90 transition-all duration-500"
-                style={{ 
-                  maskImage: 'radial-gradient(circle at center, black 20%, transparent 80%)',
-                  WebkitMaskImage: 'radial-gradient(circle at center, black 20%, transparent 80%)'
+                style={{
+                  maskImage: "radial-gradient(circle at center, black 20%, transparent 80%)",
+                  WebkitMaskImage: "radial-gradient(circle at center, black 20%, transparent 80%)",
                 }}
               />
               {/* Light Mode Image - Hyper-subtle watermark, no gray haze */}
-              <img 
-                src="/hero-1.png" 
-                alt="" 
+              <img
+                src="/hero-1.png"
+                alt=""
                 className="block dark:hidden w-full h-auto object-contain sm:object-cover opacity-[0.03] scale-100 filter grayscale transition-all duration-500"
-                style={{ 
-                  maskImage: 'radial-gradient(circle at center, black 10%, transparent 70%)',
-                  WebkitMaskImage: 'radial-gradient(circle at center, black 10%, transparent 70%)'
+                style={{
+                  maskImage: "radial-gradient(circle at center, black 10%, transparent 70%)",
+                  WebkitMaskImage: "radial-gradient(circle at center, black 10%, transparent 70%)",
                 }}
               />
             </div>
@@ -84,36 +75,25 @@ function App() {
           <div className="container relative z-10 mx-auto px-4 max-w-5xl py-24 lg:py-40 flex flex-col items-center">
             <div className="space-y-10 flex flex-col items-center w-full">
               <div className="space-y-6 flex flex-col items-center w-full text-center">
-                <h1 className="text-5xl lg:text-7xl font-bold tracking-tighter text-foreground leading-[1.1] max-w-4xl balance-text">
-                  Video meetings for modern teams.
-                </h1>
-                
-                <p className="text-xl text-foreground/70 dark:text-muted-foreground leading-relaxed max-w-2xl balance-text text-center mx-auto font-medium">
-                  High-fidelity audio and video routed through the edge. Experience communication without the friction.
-                </p>
+                <h1 className="text-5xl lg:text-7xl font-bold tracking-tighter text-foreground leading-[1.1] max-w-4xl balance-text">Video meetings for modern teams.</h1>
+
+                <p className="text-xl text-foreground/70 dark:text-muted-foreground leading-relaxed max-w-2xl balance-text text-center mx-auto font-medium">High-fidelity audio and video routed through the edge. Experience communication without the friction.</p>
               </div>
-              
-              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center items-center">
+
+              <div className="flex flex-col gap-4 w-full justify-center items-center">
                 <Button size="lg" className="h-12 px-8 font-medium shadow-lg shadow-primary/20" onClick={handleStartMeeting}>
                   New Meeting
                 </Button>
-                <form onSubmit={handleJoin} className="flex gap-2 w-full sm:w-auto justify-center">
-                  <Input
-                    type="text"
-                    placeholder="Enter code or link"
-                    value={meetingCode}
-                    onChange={(e) => setMeetingCode(e.target.value)}
-                    className="h-12 w-full sm:w-64 bg-background/60 backdrop-blur-xl border-border/50"
-                  />
-                  <Button type="submit" size="lg" variant="secondary" className="h-12 px-6 shadow-sm">
-                    Join
-                  </Button>
-                </form>
+                <p className="max-w-lg text-center text-sm font-medium text-foreground/65 dark:text-muted-foreground">Joining a meeting? Open your Chalk invite link to jump straight into the right room.</p>
               </div>
-              
+
               <div className="flex items-center justify-center gap-8 text-sm font-semibold text-foreground/60 dark:text-foreground bg-background/30 backdrop-blur-xl px-6 py-2 rounded-full border border-border/40 shadow-sm">
-                <span className="flex items-center gap-2"><Lock className="h-4 w-4 text-primary" /> E2E Encrypted</span>
-                <span className="flex items-center gap-2"><Globe className="h-4 w-4 text-primary" /> No signup required</span>
+                <span className="flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-primary" /> E2E Encrypted
+                </span>
+                <span className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-primary" /> No signup required
+                </span>
               </div>
             </div>
           </div>
@@ -150,10 +130,18 @@ function App() {
             <span>© {new Date().getFullYear()} Chalk</span>
           </div>
           <nav className="flex gap-8 text-sm text-muted-foreground">
-            <Link to="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
-            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
-            <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>
-            <a href="/documentation" className="md:hidden hover:text-foreground transition-colors">Docs</a>
+            <Link to="/dashboard" className="hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+            <a href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy
+            </a>
+            <a href="/terms" className="hover:text-foreground transition-colors">
+              Terms
+            </a>
+            <a href="/documentation" className="md:hidden hover:text-foreground transition-colors">
+              Docs
+            </a>
           </nav>
         </div>
       </footer>

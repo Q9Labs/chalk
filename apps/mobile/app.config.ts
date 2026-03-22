@@ -58,10 +58,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             action: "VIEW",
             autoVerify: true,
             category: ["BROWSABLE", "DEFAULT"],
-            data: [
-              { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" },
-              { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
-            ],
+            data: [{ scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" }],
           },
         ],
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
