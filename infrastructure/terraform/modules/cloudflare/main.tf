@@ -46,7 +46,7 @@ resource "cloudflare_r2_bucket_cors" "recordings" {
   }]
 }
 
-# R2 Lifecycle - Auto-transition to InfrequentAccess after 7 days
+# R2 Lifecycle - Retention cleanup for recordings
 resource "cloudflare_r2_bucket_lifecycle" "recordings" {
   count       = var.enabled && var.enable_lifecycle_rules ? 1 : 0
   account_id  = var.cloudflare_account_id
@@ -58,20 +58,6 @@ resource "cloudflare_r2_bucket_lifecycle" "recordings" {
   }
 
   rules = [
-    {
-      id      = "archive-after-7-days"
-      enabled = true
-      conditions = {
-        prefix = ""
-      }
-      storage_class_transitions = [{
-        condition = {
-          max_age = 604800 # 7 days in seconds
-          type    = "Age"
-        }
-        storage_class = "InfrequentAccess"
-      }]
-    },
     {
       id      = "delete-after-retention"
       enabled = var.recording_retention_days > 0
