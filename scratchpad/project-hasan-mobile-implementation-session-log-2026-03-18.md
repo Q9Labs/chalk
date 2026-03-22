@@ -20,6 +20,37 @@ Re-ran mobile tests/typecheck successfully before rebuilding.
   - versionCode: `10`
 This is the first fully proven signed internal Android publish path in this repo snapshot.
 
+[2026-03-22 22:10:00] iOS discovery swarm results integrated. Key findings:
+- clipboard invite suggestion needs no new iOS entitlement or Info.plist permission
+- iOS 16+ may show Apple’s paste prompt on direct pasteboard reads; QA must cover allow/deny/cold-start/foreground flows
+- full-device iOS screen share is not V1-ready; repo lacks ReplayKit broadcast extension, app groups, extension signing, and native broadcast picker integration
+- recommendation: ship iOS V1 without mobile-originated full-device screen share; keep receiving remote screen shares only
+
+[2026-03-22 22:16:00] iOS release lane advanced to the first real blocker. Added local Apple team id `4V7RXZU8P2` plus version/build cleanup (`0.0.10` / `10`) into `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj`, then retried archive with:
+  - `xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk.xcarchive archive -allowProvisioningUpdates`
+Result:
+  - missing-team blocker is gone
+  - new blocker is operational Apple auth/provisioning on this Mac/Xcode:
+    - `No Account for Team "4V7RXZU8P2"`
+    - `No profiles for 'ai.q9labs.chalk.mobile' were found`
+Meaning: project wiring moved forward, but this machine still lacks an Apple account/session capable of creating/fetching provisioning profiles for that team.
+
+[2026-03-22 22:21:00] EAS cloud-build probe started as fallback around the local Xcode-account gap.
+- `bunx eas-cli@latest --version` worked and resolved `18.4.0`
+- but `bunx eas-cli@latest whoami` hit a Bun module-load issue for the downloaded CLI package
+- `bunx eas-cli@latest build --platform ios --profile production --non-interactive` got farther and revealed the next real EAS blocker:
+  - `EAS project not configured`
+  - requires `eas init` before non-interactive iOS build/submit can run
+This means the shortest iOS publish paths currently are:
+1. local Xcode route: add Apple account for team `4V7RXZU8P2`, regenerate provisioning, archive, then upload
+2. cloud route: initialize EAS project for `apps/mobile`, then use EAS build + submit
+
+Current iOS status after this pass:
+- project version/build alignment improved
+- screen share recommendation clarified: no full-device iOS share in V1
+- clipboard permission concern closed: no new permission, just QA
+- remaining blockers are account/config, not app business logic
+
 Current status after this pass:
 - Android:
   - tests green
@@ -242,3 +273,15 @@ Exact next actions from this checkpoint:
      - meeting join/create
 
 [2026-03-22 19:04 PKT] Android release follow-through after successful internal upload. Verified current checked-in Android version metadata now converges on `0.0.10` / `versionCode 10`: `apps/mobile/app.config.ts` already matched, `apps/mobile/android/gradle.properties` already matched, and `apps/mobile/android/app/build.gradle` fallback version metadata was corrected from `9`/`0.0.9` to `10`/`0.0.10` so local Gradle defaults cannot drift from the shipped Play build. Confirmed local signed artifact still exists at `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab`; recorded local sha256 `9a6e34f8f7bfaba3e584cebf4e45c7dd24d31f81cf3b8762aa35e868f219b64f`. Confirmed Play internal track state via fresh `gplay` edit readback: track `internal`, release name `0.0.10`, status `completed`, `versionCodes ["10"]`. Tightened Android release docs/checklist to include artifact checksum and explicit `gplay bundles list` / `gplay tracks get` post-upload verification steps. Remaining Android-only work is operational, not code: internal tester install smoke, Play listing/privacy/data-safety completion, and final explicit acceptance that Android V1 ships without mobile-originated screen share.
+[2026-03-22 19:34 PKT] Clipboard invite suggestion iOS release/QA audit: inspected `apps/mobile/src/screens/useClipboardInviteSuggestion.ts`, `apps/mobile/src/components/ClipboardInviteSuggestion.tsx`, `apps/mobile/src/lib/inviteLink.ts`, `apps/mobile/src/screens/HomeScreen.tsx`, and `apps/mobile/src/lib/inviteLink.test.ts`. Feature is implemented via `expo-clipboard` polling/listener + AppState refresh, and invite parsing is limited to Chalk `/j/...` links only. No clipboard-specific iOS entitlement or Info.plist permission is present or needed for this path; current iOS plist only has camera, microphone, local network, and background audio keys. Expo Clipboard docs note `getStringAsync` on iOS 16+ may trigger the system paste privacy prompt and return an empty string if the user denies permission, while `ClipboardPasteButton` uses `UIPasteControl` and pastes without requesting permission. QA must explicitly cover the allow/deny prompt path, background refresh, invalid clipboard handling, and navigation after opening a valid invite.
+[2026-03-22 22:12 PKT] iOS full-device screen-share scope audit: inspected `apps/mobile/App.tsx`, `apps/mobile/app.config.ts`, `apps/mobile/ios/Chalk/Info.plist`, `apps/mobile/ios/Chalk/Chalk.entitlements`, `packages/sdk-react-native/src/hooks/useScreenShare.ts`, `packages/sdk-react-native/src/components/NativeMeetingRoom.tsx`, `packages/sdk-core/src/managers/screen-share-manager.ts`, and `packages/sdk-core/src/conference-session/media-controls.ts`. Current repo has shared SDK/UI plumbing for screen-share state and a visible iOS screen-share button, but no production-grade iOS full-device broadcast setup. `App.tsx` enables screen share on iOS (`Platform.OS !== "android"`), yet iOS native config only covers camera/mic/background-audio; `Chalk.entitlements` is empty; no ReplayKit Broadcast Upload Extension target/files exist under `apps/mobile/ios`; no App Group capability exists. Shared runtime currently calls `rtkClient.self.enableScreenShare()` behind a `getDisplayMedia`-style abstraction, which is not enough by itself for ReplayKit full-device broadcasting on iOS. Official current guidance from LiveKit/ReplayKit: full-screen/background-capable iOS sharing requires a Broadcast Upload Extension target, replacing the extension sample handler with the SDK handler, and adding both app + extension to a common App Group. Recommendation: do not include full-device iOS screen share in V1 unless it becomes a hard requirement; safer V1 is receive remote screen shares, optionally keep only in-app iOS share if proven by RTK path, and defer full-device broadcast share to a dedicated native pass with real-device QA.
+
+[2026-03-22 22:19 PKT] EAS project linked. Added owner + extra.eas.projectId to apps/mobile/app.config.ts after creating @hhushhas14/chalk-mobile (projectId 699bd2b8-fe9b-4740-9de4-b23741ce9d6b). Next step: run non-interactive iOS production build to surface the real remaining blocker.
+
+[2026-03-22 22:20 PKT] EAS iOS production build reached remote credentials step, then failed non-interactively: remote iOS credentials exist in Expo scope but are not fully configured/validated for non-interactive builds. Error: "Failed to set up credentials. Credentials are not set up. Run this command again in interactive mode." This is now the primary iOS release blocker, ahead of build/archive itself.
+
+[2026-03-22 22:21 PKT] iOS V1 release contract tightened in repo: disabled local mobile-originated screen-share start in apps/mobile/App.tsx (receive-only release posture), updated RELEASE_CHECKLIST to treat iOS screen share as explicitly out of V1 unless a later ReplayKit/App Group pass lands, and updated CHANGELOG accordingly.
+
+[2026-03-22 22:23 PKT] Probed Apple-side local state after EAS credential failure: checking local code-sign identities, any App Store Connect API-key directories, and Xcode stored developer accounts to see whether unattended iOS/TestFlight can proceed without new human credential entry.
+
+[2026-03-22 22:23 PKT] Apple-side local credential probe results: `security find-identity -v -p codesigning` shows only one local Apple Development identity for team `4V7RXZU8P2`; no local App Store Connect API-key directories exist under `~/.appstoreconnect/private_keys` or `~/.private_keys`; `~/.fastlane` has no useful signing config. This strengthens the current blocker diagnosis: TestFlight/build completion now needs interactive Apple credential provisioning (via `eas credentials -p ios` or Xcode account setup), not more repo-side code changes.

@@ -1,5 +1,4 @@
 import { ChalkNativeProvider, NativeVideoConference } from "@q9labs/chalk-react-native";
-import { Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
@@ -75,7 +74,7 @@ function MeetingScreen({ route, onClose }: { route: LobbyRoute; onClose: () => v
 
   return (
     <ChalkNativeProvider apiUrl={apiUrl} debug tokenProvider={tokenProvider} wsUrl={wsUrl}>
-      <NativeVideoConference autoJoin={false} features={{ screenShare: Platform.OS !== "android" }} initialPhase="lobby" onClose={onClose} roomId={route.roomId} roomName={route.roomName} role={route.role} userName={route.role === "host" ? "Host" : "Guest"} />
+      <NativeVideoConference autoJoin={false} features={{ screenShare: false }} initialPhase="lobby" onClose={onClose} roomId={route.roomId} roomName={route.roomName} role={route.role} userName={route.role === "host" ? "Host" : "Guest"} />
     </ChalkNativeProvider>
   );
 }

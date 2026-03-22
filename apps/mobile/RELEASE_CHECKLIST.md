@@ -28,8 +28,8 @@
 - archive a release build on a real signing identity
 - verify camera + mic permission prompts copy
 - verify background audio behavior
-- decide whether V1 includes iOS screen share
-- if yes, add ReplayKit broadcast upload extension + app groups
+- verify iOS V1 is acceptable without mobile-originated screen share
+- if iOS mobile-originated screen share is needed later, add ReplayKit broadcast upload extension + app groups
 - prepare App Store screenshots, privacy policy, reviewer notes
 
 ## Product QA
