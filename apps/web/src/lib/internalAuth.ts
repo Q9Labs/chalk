@@ -155,7 +155,28 @@ export function shouldUseInternalRoomAuth(
 
 export function shouldUseRoomScopedTokenProvider(pathname: string | undefined) {
   const normalizedPath = pathname ?? "";
-  return normalizedPath.startsWith("/room/") || normalizedPath.startsWith("/j/");
+  return (
+    normalizedPath.startsWith("/room/") ||
+    normalizedPath.startsWith("/j/") ||
+    normalizedPath.startsWith("/dashboard")
+  );
+}
+
+export function getChalkSessionCacheKey(
+  pathname: string | undefined,
+  search: string | undefined,
+) {
+  const normalizedPath = pathname ?? "";
+  if (normalizedPath.startsWith("/room/")) {
+    return `room:${normalizedPath}:${JSON.stringify(search ?? "")}`;
+  }
+  if (normalizedPath.startsWith("/j/")) {
+    return `join:${normalizedPath}`;
+  }
+  if (normalizedPath.startsWith("/dashboard")) {
+    return "dashboard";
+  }
+  return "app";
 }
 
 export function shouldPrimeTokenCache(pathname: string | undefined) {

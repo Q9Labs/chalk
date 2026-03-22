@@ -3,6 +3,7 @@ import {
   clearStoredChalkTokens,
   fetchInternalAccessToken,
   fetchInternalSession,
+  getChalkSessionCacheKey,
   getJoinContext,
   getOrCreateLocalClientId,
   logoutInternalSession,
@@ -275,8 +276,25 @@ describe("shouldUseRoomScopedTokenProvider", () => {
     expect(shouldUseRoomScopedTokenProvider("/j/join-token-123")).toBe(true);
   });
 
-  it("keeps api-key auth available on non-room routes", () => {
-    expect(shouldUseRoomScopedTokenProvider("/dashboard")).toBe(false);
+  it("uses internal auth on dashboard routes", () => {
+    expect(shouldUseRoomScopedTokenProvider("/dashboard")).toBe(true);
+  });
+});
+
+describe("getChalkSessionCacheKey", () => {
+  it("isolates dashboard session state from the generic app cache", () => {
+    expect(getChalkSessionCacheKey("/dashboard", "")).toBe("dashboard");
+  });
+
+  it("keeps room session state keyed by room path and search", () => {
+    expect(
+      getChalkSessionCacheKey(
+        "/room/2f0b302b-2449-43f5-ae3b-de57decb9f09",
+        "?auth=internal",
+      ),
+    ).toBe(
+      'room:/room/2f0b302b-2449-43f5-ae3b-de57decb9f09:"?auth=internal"',
+    );
   });
 });
 

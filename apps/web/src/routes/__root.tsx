@@ -6,7 +6,7 @@ import { DebugDialog } from "../components/DebugDialog";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { createWebTokenProvider, getApiUrl, isLocalHost, shouldPrimeTokenCache, shouldUseRoomScopedTokenProvider } from "../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, getChalkSessionCacheKey, isLocalHost, shouldPrimeTokenCache, shouldUseRoomScopedTokenProvider } from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -200,15 +200,10 @@ function RootComponent() {
     });
   }, [apiKey, apiUrl]);
 
-  const sessionCacheKey = useMemo(() => {
-    if (location.pathname.startsWith("/room/")) {
-      return `room:${location.pathname}:${JSON.stringify(location.search ?? {})}`;
-    }
-    if (location.pathname.startsWith("/j/")) {
-      return `join:${location.pathname}`;
-    }
-    return "app";
-  }, [location.pathname, location.search]);
+  const sessionCacheKey = useMemo(
+    () => getChalkSessionCacheKey(location.pathname, location.search),
+    [location.pathname, location.search],
+  );
 
   const content = (
     <ThemeProvider>

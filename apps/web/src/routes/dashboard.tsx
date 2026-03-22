@@ -1,10 +1,10 @@
-import { createTokenProvider } from "@q9labs/chalk-core";
-import { ChalkProvider, useChalk } from "@q9labs/chalk-react";
+import type { RoomResource } from "@q9labs/chalk-core";
+import { useChalk } from "@q9labs/chalk-react";
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Input } from "@q9labs/chalk-ui";
 import { Archive01Icon, Calendar01Icon, CheckmarkCircle01Icon, Clock01Icon, Database01Icon, Download01Icon, File02Icon, Home01Icon, InformationCircleIcon, Logout01Icon, Moon02Icon, Search01Icon, Settings03Icon, Share01Icon, Sun01Icon, Video01Icon, AlertCircleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTheme } from "../context/theme";
 import { fetchInternalAccessToken, getApiUrl, logoutInternalSession, startGoogleOAuthSignIn } from "../lib/internalAuth";
@@ -170,20 +170,30 @@ function DashboardPage() {
 
   // Mock for classes panel integration
   const sdkClient = useChalk();
-  const [classRooms, setClassRooms] = useState([]);
+  const [classRooms, setClassRooms] = useState<RoomResource[]>([]);
   const [classesLoading, setClassesLoading] = useState(false);
-  const [classesError, setClassesError] = useState<Error | null>(null);
+  const [classesError, setClassesError] = useState<string | null>(null);
 
-  const refreshClasses = async () => {
+  const refreshClasses = useCallback(async () => {
     setClassesLoading(true);
+    setClassesError(null);
     try {
-      // Classes fetch logic would go here
+      const response = await sdkClient.listRooms({
+        status: ["scheduled", "active"],
+        limit: 50,
+      });
+      setClassRooms(response.rooms);
     } catch (e: any) {
-      setClassesError(e);
+      setClassesError(e?.message ?? "Failed to load scheduled sessions");
     } finally {
       setClassesLoading(false);
     }
-  };
+  }, [sdkClient]);
+
+  useEffect(() => {
+    if (state.kind !== "ready") return;
+    void refreshClasses();
+  }, [refreshClasses, state.kind]);
 
   if (state.kind === "loading") {
     return (

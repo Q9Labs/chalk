@@ -50,3 +50,11 @@
 - 2026-03-22 18:31:00 PKT
   Strict browser proof:
   host browser opened `/new`, auto-created room `604f2335-688b-4c11-a438-f4ba6864f5d4`, auto-joined, exposed `/j/:token`, guest browser opened that exact link, redirected to the same canonical room URL, joined, and backend verification showed one room with `cloudflare_meeting_id=bbbfeaa5-b299-4048-9466-31724a3f4e94` and `active_participant_count=2`.
+
+- 2026-03-22 18:58:00 PKT
+  Dashboard scheduled sessions fix:
+  dashboard root auth/session cache now treats `/dashboard` as internal-auth scoped instead of reusing the generic app/API-key Chalk session, and the dashboard route now actually calls `listRooms({ status: ["scheduled", "active"] })` to populate the Scheduled Sessions panel instead of feeding it an always-empty stub array.
+
+- 2026-03-22 18:58:00 PKT
+  Dashboard browser proof:
+  opened `http://localhost:3070/dashboard`, created scheduled session `Team Standup 172666`, and verified the new session card rendered in the Scheduled Sessions panel immediately without manual reload. Screenshot: `/tmp/chalk-dashboard-scheduled-session.png`.
