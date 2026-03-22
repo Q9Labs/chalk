@@ -10,6 +10,7 @@ import {
   setJoinContext,
   shouldPrimeTokenCache,
   shouldUseInternalRoomAuth,
+  shouldUseRoomScopedTokenProvider,
   signInWithGoogleCode,
 } from "./internalAuth";
 
@@ -262,6 +263,20 @@ describe("shouldPrimeTokenCache", () => {
 
   it("allows eager token warmup on room routes", () => {
     expect(shouldPrimeTokenCache("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09")).toBe(true);
+  });
+});
+
+describe("shouldUseRoomScopedTokenProvider", () => {
+  it("uses room-scoped auth on room routes", () => {
+    expect(shouldUseRoomScopedTokenProvider("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09")).toBe(true);
+  });
+
+  it("uses room-scoped auth on join-link routes", () => {
+    expect(shouldUseRoomScopedTokenProvider("/j/join-token-123")).toBe(true);
+  });
+
+  it("keeps api-key auth available on non-room routes", () => {
+    expect(shouldUseRoomScopedTokenProvider("/dashboard")).toBe(false);
   });
 });
 

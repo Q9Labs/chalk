@@ -1,12 +1,12 @@
 import { createTokenProvider } from "@q9labs/chalk-core";
 import { ChalkProvider, type ChalkPostHogClient, createHttpIncidentReporter, useWhatsNew, WhatsNewDialog, WhatsNewTrigger } from "@q9labs/chalk-react";
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { DebugDialog } from "../components/DebugDialog";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { createWebTokenProvider, getApiUrl, isLocalHost } from "../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, isLocalHost, shouldPrimeTokenCache, shouldUseRoomScopedTokenProvider } from "../lib/internalAuth";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -89,6 +89,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const location = useLocation();
   // API URL for backend - use env var or default to production
   const apiUrl = getApiUrl();
   const apiHost = useMemo(() => new URL(apiUrl).hostname, [apiUrl]);
@@ -111,7 +112,8 @@ function RootComponent() {
 
   // Token provider: handles API key → JWT exchange and auto-refresh
   const apiKey = import.meta.env.VITE_CHALK_API_KEY;
-  const tokenProvider = useMemo(
+  const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
+  const apiKeyTokenProvider = useMemo(
     () =>
       apiKey
         ? createTokenProvider({
@@ -119,15 +121,21 @@ function RootComponent() {
             apiUrl,
             storage: "sessionStorage",
           })
-        : createWebTokenProvider(apiUrl),
+        : undefined,
     [apiKey, apiUrl],
   );
+  const tokenProvider = useMemo(() => {
+    if (shouldUseRoomScopedTokenProvider(location.pathname) || !apiKeyTokenProvider) {
+      return webTokenProvider;
+    }
+    return apiKeyTokenProvider;
+  }, [apiKeyTokenProvider, location.pathname, webTokenProvider]);
 
   useEffect(() => {
-    if (isServer) return;
+    if (isServer || !shouldPrimeTokenCache(location.pathname)) return;
     // Prime token cache so first Join click avoids auth round-trip; fail-open by design.
     void tokenProvider().catch(() => {});
-  }, [tokenProvider]);
+  }, [location.pathname, tokenProvider]);
 
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [posthogClient, setPosthogClient] = useState<ChalkPostHogClient | undefined>(undefined);
@@ -192,6 +200,16 @@ function RootComponent() {
     });
   }, [apiKey, apiUrl]);
 
+  const sessionCacheKey = useMemo(() => {
+    if (location.pathname.startsWith("/room/")) {
+      return `room:${location.pathname}:${JSON.stringify(location.search ?? {})}`;
+    }
+    if (location.pathname.startsWith("/j/")) {
+      return `join:${location.pathname}`;
+    }
+    return "app";
+  }, [location.pathname, location.search]);
+
   const content = (
     <ThemeProvider>
       <ErrorProvider>
@@ -224,6 +242,7 @@ function RootComponent() {
       debug={true}
       demoMode={false}
       apiUrl={apiUrl}
+      sessionCacheKey={sessionCacheKey}
       wsUrl={wsUrl}
       tokenProvider={tokenProvider}
       posthog={posthogConfig}

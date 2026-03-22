@@ -8,7 +8,7 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react";
 import { ChalkSession, type ChalkIncident, type IncidentReporter, type ChalkSessionConfig, type JoinOptions } from "@q9labs/chalk-core";
 import type { JSX, ReactNode } from "react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 // Module-level session cache for HMR persistence
 // Key is apiUrl to allow different sessions for different endpoints
@@ -26,6 +26,8 @@ export interface ChalkProviderProps {
   children: ReactNode;
   /** Base API URL */
   apiUrl: string;
+  /** Optional cache key to isolate session state across auth/room contexts */
+  sessionCacheKey?: string;
   /** WebSocket URL (optional, derived from apiUrl if not provided) */
   wsUrl?: string;
   /** Static JWT token */
@@ -93,10 +95,12 @@ const ChalkSessionContext = createContext<ChalkSessionContextValue | null>(null)
  * </ChalkProvider>
  * ```
  */
-export function ChalkProvider({ children, apiUrl, wsUrl, token, tokenProvider, apiKey, roomId, userName, debug, demoMode, incident, posthog, onIncident, incidentReporter, incidentMaxBreadcrumbs }: ChalkProviderProps): JSX.Element {
+export function ChalkProvider({ children, apiUrl, sessionCacheKey, wsUrl, token, tokenProvider, apiKey, roomId, userName, debug, demoMode, incident, posthog, onIncident, incidentReporter, incidentMaxBreadcrumbs }: ChalkProviderProps): JSX.Element {
   const [isConnected, setIsConnected] = useState(false);
   const [rtkMeeting, setRtkMeeting] = useState<RealtimeKitClient | null>(null);
   const [, forceUpdate] = useState({});
+  const previousSessionRef = useRef<{ cacheKey: string; session: ChalkSession } | null>(null);
+  const cacheKey = useMemo(() => (sessionCacheKey ? `${apiUrl}::${sessionCacheKey}` : apiUrl), [apiUrl, sessionCacheKey]);
 
   const resolvedIncidentConfig = useMemo(
     (): ChalkSessionConfig["incident"] => ({
@@ -110,7 +114,6 @@ export function ChalkProvider({ children, apiUrl, wsUrl, token, tokenProvider, a
 
   // Use cached session for HMR persistence, or create new one
   const session = useMemo(() => {
-    const cacheKey = apiUrl;
     const cached = sessionCache.get(cacheKey);
 
     if (cached) {
@@ -130,7 +133,16 @@ export function ChalkProvider({ children, apiUrl, wsUrl, token, tokenProvider, a
     const newSession = new ChalkSession(config);
     sessionCache.set(cacheKey, newSession);
     return newSession;
-  }, [apiUrl]); // Only recreate if apiUrl changes
+  }, [apiUrl, cacheKey]);
+
+  useEffect(() => {
+    const previous = previousSessionRef.current;
+    if (previous && previous.session !== session) {
+      sessionCache.delete(previous.cacheKey);
+      previous.session.dispose();
+    }
+    previousSessionRef.current = { cacheKey, session };
+  }, [cacheKey, session]);
 
   useEffect(() => {
     session.configureIncident(resolvedIncidentConfig);
@@ -190,14 +202,14 @@ export function ChalkProvider({ children, apiUrl, wsUrl, token, tokenProvider, a
   // Cleanup on window unload only (preserve session for HMR)
   useEffect(() => {
     const handleBeforeUnload = () => {
-      sessionCache.delete(apiUrl);
+      sessionCache.delete(cacheKey);
       session.dispose();
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [session, apiUrl]);
+  }, [cacheKey, session]);
 
   const join = useCallback(
     async (joinRoomId: string, options: JoinOptions): Promise<void> => {

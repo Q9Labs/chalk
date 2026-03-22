@@ -153,6 +153,11 @@ export function shouldUseInternalRoomAuth(
   return params.get("auth") === "internal";
 }
 
+export function shouldUseRoomScopedTokenProvider(pathname: string | undefined) {
+  const normalizedPath = pathname ?? "";
+  return normalizedPath.startsWith("/room/") || normalizedPath.startsWith("/j/");
+}
+
 export function shouldPrimeTokenCache(pathname: string | undefined) {
   return (pathname ?? "").startsWith("/room/");
 }
