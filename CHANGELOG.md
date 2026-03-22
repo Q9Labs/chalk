@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CI/Web: pruned installs no longer crash on missing mobile patch script** — root `postinstall` now skips cleanly when `scripts/patch-realtimekit-react-native.ts` is absent from a pruned workspace, so web CI can install the trimmed repo without failing before build steps.
 - **Infra: R2 recordings no longer auto-transition to Infrequent Access** — removed the 7-day R2 lifecycle storage-class transition for the lean recordings bucket while keeping the 30-day delete rule, because IA operation charges outweighed the tiny storage savings at current bucket size.
 
 ## [0.0.78] - 2026-03-17

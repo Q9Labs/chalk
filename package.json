@@ -10,7 +10,7 @@
   "type": "module",
   "scripts": {
     "build": "turbo build",
-    "dev": "turbo dev",
+    "dev": "bash -lc 'trap \"kill 0\" EXIT; bun run dev:mobile & turbo dev'",
     "mobile:connect": "bash .codex/skills/chalk-mobile-wireless-debug/scripts/connect-wireless-adb.sh",
     "mobile:launch": "bash .codex/skills/chalk-mobile-wireless-debug/scripts/launch-chalk-mobile-dev.sh",
     "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL or run bun run mobile:connect.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",
@@ -18,7 +18,7 @@
     "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; bun run --cwd apps/mobile start'",
     "dev:mobile:android": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; bun run --cwd apps/mobile android'",
     "dev:mobile:ios": "bun run --cwd apps/mobile ios",
-    "postinstall": "bun run scripts/patch-realtimekit-react-native.ts",
+    "postinstall": "bash -lc 'if [ -f scripts/patch-realtimekit-react-native.ts ]; then bun run scripts/patch-realtimekit-react-native.ts; else echo \"[patch-realtimekit-react-native] skipped: script not present\"; fi'",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "dev:web:pages": "bun run --cwd apps/web dev:pages",
