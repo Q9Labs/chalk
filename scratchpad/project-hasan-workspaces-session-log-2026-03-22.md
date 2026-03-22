@@ -38,3 +38,15 @@
 - 2026-03-22 18:18:00 PKT
   New blocker found while trying exact "host browser creates room" proof:
   internal room creation can 500 with `rooms_created_by_user_id_fkey` if a local first-party token subject parses as a UUID that does not exist in `users`. Not fixed in this browser-join pass.
+
+- 2026-03-22 18:31:00 PKT
+  Follow-up fix:
+  `/new` now creates a real first-party room via `POST /api/v1/rooms` and redirects to `/room/<uuid>?auth=internal&autoJoin=true`, replacing the dead client-side `instant-meeting-*` route generation.
+
+- 2026-03-22 18:31:00 PKT
+  Backend guard:
+  room create/schedule now only set `created_by_user_id` for workspace-scoped user claims; API-key/claim tokens degrade to `NULL` instead of violating `rooms_created_by_user_id_fkey`.
+
+- 2026-03-22 18:31:00 PKT
+  Strict browser proof:
+  host browser opened `/new`, auto-created room `604f2335-688b-4c11-a438-f4ba6864f5d4`, auto-joined, exposed `/j/:token`, guest browser opened that exact link, redirected to the same canonical room URL, joined, and backend verification showed one room with `cloudflare_meeting_id=bbbfeaa5-b299-4048-9466-31724a3f4e94` and `active_participant_count=2`.

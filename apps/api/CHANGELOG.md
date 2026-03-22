@@ -25,6 +25,7 @@
 ### Fixed
 
 - **First-party room joins no longer fork Cloudflare meetings by auth context**: signed join-token exchange now preserves canonical `room_id`, first-party room joins reject room-name fallback/auto-create behavior, and authenticated users now converge on the original room/meeting instead of silently creating a second tenant-scoped room behind the same visible code.
+- **First-party room creation no longer explodes on non-user host subjects**: room create/schedule now only stamp `created_by_user_id` for workspace-scoped user claims, so host/API-key and claim-based tokens stop tripping `rooms_created_by_user_id_fkey` during room creation.
 - **Embedded DB migrations**: Runtime migrations now include `010`–`012`, preventing local/prod drift where durable chat tables were missing even though migration files existed on disk.
 - **Axiom dataset default**: Use `chalk-api-prod` when `ENV=production` so prod logs don't 404 on missing datasets.
 - **Whisper timeout false-failures under backlog**: Increased default API wait timeout to `2h` (from `30m`) and added timeout diagnostics (`job_id`, queue depth, processing queue depth) in error messages.

@@ -64,7 +64,7 @@ func (h *RoomHandler) Create(c *gin.Context) {
 	output, err := h.roomService.CreateRoom(c.Request.Context(), room.CreateRoomInput{
 		TenantID:        claims.TenantID,
 		WorkspaceID:     claims.WorkspaceID,
-		CreatedByUserID: userIDFromClaims(claims),
+		CreatedByUserID: roomCreatorUserIDFromClaims(claims),
 		Name:            req.Name,
 		Config:          configBytes,
 	})
@@ -118,7 +118,7 @@ func (h *RoomHandler) Schedule(c *gin.Context) {
 	output, err := h.roomService.ScheduleRoom(c.Request.Context(), room.ScheduleRoomInput{
 		TenantID:             claims.TenantID,
 		WorkspaceID:          claims.WorkspaceID,
-		CreatedByUserID:      userIDFromClaims(claims),
+		CreatedByUserID:      roomCreatorUserIDFromClaims(claims),
 		Name:                 req.Name,
 		Config:               configBytes,
 		ScheduledStartAt:     req.ScheduledStartAt.UTC(),

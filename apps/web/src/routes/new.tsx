@@ -1,5 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { getApiUrl } from "../lib/internalAuth";
+import { createInternalMeeting } from "../lib/newMeeting";
 
 export const Route = createFileRoute("/new")({
   component: NewRoomPage,
@@ -9,6 +11,7 @@ function NewRoomPage() {
   const navigate = useNavigate();
   const startedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const apiUrl = getApiUrl();
 
   useEffect(() => {
     if (startedRef.current) {
@@ -19,18 +22,18 @@ function NewRoomPage() {
 
     void (async () => {
       try {
-        const roomId = `instant-meeting-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const { roomId, roomName } = await createInternalMeeting(apiUrl);
         await navigate({
           to: "/room/$roomId",
           params: { roomId },
-          search: { autoJoin: true },
+          search: { autoJoin: true, auth: "internal", roomName },
           replace: true,
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create meeting");
       }
     })();
-  }, [navigate]);
+  }, [apiUrl, navigate]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">

@@ -31,6 +31,16 @@ func userIDFromClaims(claims *domainAuth.Claims) uuid.UUID {
 	return userID
 }
 
+func roomCreatorUserIDFromClaims(claims *domainAuth.Claims) uuid.UUID {
+	if claims == nil {
+		return uuid.Nil
+	}
+	if claims.WorkspaceID == uuid.Nil || claims.RoomID != uuid.Nil {
+		return uuid.Nil
+	}
+	return userIDFromClaims(claims)
+}
+
 func roomAccessibleToClaims(room *db.Room, claims *domainAuth.Claims) bool {
 	if room == nil || claims == nil || room.TenantID != claims.TenantID {
 		return false

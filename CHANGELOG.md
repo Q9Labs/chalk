@@ -1042,6 +1042,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Web join routes now force room-scoped auth instead of reusing the dashboard/demo API-key token provider, and the React SDK provider can rotate its cached session by route context so invite links no longer land on prejoin with a hidden `room not found` auth mismatch.
+- Web `New meeting` now creates a real backend room before redirecting, so first-party host flows stop generating dead `instant-meeting-*` ids and land directly on a canonical `/room/<uuid>?auth=internal` route that guests can join.
 - Mobile `New meeting` now mirrors web by generating the instant-meeting route locally and entering the lobby immediately instead of failing early on a pre-create API call from the home screen. Added regression coverage for the pure route generator.
 - Mobile local host bootstrap no longer depends on `__DEV__`; any build still pointed at a local API can now self-heal stale host keys at join time instead of bouncing the lobby with `Token exchange failed: {"error":"invalid API key"}`.
 - Mobile Hugeicons setup now installs the free icon pack and `react-native-svg`, and the Android mobile lobby/room screens stay on the stable Expo icon components to avoid the native LobbyScreen crash seen with the Hugeicons renderer path.
