@@ -25,7 +25,7 @@ export function ChalkLogoElements({ size = 64 }: ChalkLogoElementsProps) {
             duration: 2500,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
     };
 
@@ -37,7 +37,7 @@ export function ChalkLogoElements({ size = 64 }: ChalkLogoElementsProps) {
           useNativeDriver: true,
         }),
         Animated.delay(2500),
-      ])
+      ]),
     );
 
     const p1Anim = createParticleAnimation(particle1, 0);
@@ -57,7 +57,7 @@ export function ChalkLogoElements({ size = 64 }: ChalkLogoElementsProps) {
     };
   }, [particle1, particle2, particle3, arcProgress]);
 
-  const createParticleStyle = (anim: Animated.Value, xOffset: number) => ({
+  const createParticleProps = (anim: Animated.Value, xOffset: number) => ({
     opacity: anim.interpolate({
       inputRange: [0, 0.2, 0.8, 1],
       outputRange: [0, 0.5, 0.5, 0],
@@ -87,44 +87,24 @@ export function ChalkLogoElements({ size = 64 }: ChalkLogoElementsProps) {
         strokeWidth="1.5"
         strokeLinecap="round"
         fill="none"
-        style={{
-          opacity: arcProgress.interpolate({
-            inputRange: [0, 0.2, 0.7, 1],
-            outputRange: [0, 1, 1, 0],
-          }),
-          transform: [
-            {
-              translateY: arcProgress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [4, -4],
-              }),
-            },
-          ],
-        }}
+        opacity={arcProgress.interpolate({
+          inputRange: [0, 0.2, 0.7, 1],
+          outputRange: [0, 1, 1, 0],
+        })}
+        transform={[
+          {
+            translateY: arcProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [4, -4],
+            }),
+          },
+        ]}
       />
 
       {/* Animated Dust Particles */}
-      <AnimatedCircle
-        cx="16"
-        cy="12"
-        r="1.5"
-        fill="#A8D5A2"
-        style={createParticleStyle(particle1, -8)}
-      />
-      <AnimatedCircle
-        cx="28"
-        cy="8"
-        r="2"
-        fill="#F5D76E"
-        style={createParticleStyle(particle2, 4)}
-      />
-      <AnimatedCircle
-        cx="40"
-        cy="6"
-        r="1.5"
-        fill="#7EC8E3"
-        style={createParticleStyle(particle3, 8)}
-      />
+      <AnimatedCircle cx="16" cy="12" r="1.5" fill="#A8D5A2" {...createParticleProps(particle1, -8)} />
+      <AnimatedCircle cx="28" cy="8" r="2" fill="#F5D76E" {...createParticleProps(particle2, 4)} />
+      <AnimatedCircle cx="40" cy="6" r="1.5" fill="#7EC8E3" {...createParticleProps(particle3, 8)} />
 
       {/* Green chalk */}
       <G transform="rotate(-20 16 48)">

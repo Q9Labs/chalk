@@ -66,9 +66,7 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
     () => pickStageParticipant(screenShare.sharerParticipantId, participants.remoteParticipants, participants.localParticipant, participants.activeSpeaker),
     [screenShare.sharerParticipantId, participants.remoteParticipants, participants.localParticipant, participants.activeSpeaker],
   );
-  const stageTrack = screenShare.isActive
-    ? screenShare.videoTrack ?? stageParticipant?.screenShareTrack ?? stageParticipant?.videoTrack ?? null
-    : stageParticipant?.videoTrack ?? participants.localParticipant?.videoTrack ?? null;
+  const stageTrack = screenShare.isActive ? (screenShare.videoTrack ?? stageParticipant?.screenShareTrack ?? stageParticipant?.videoTrack ?? null) : (stageParticipant?.videoTrack ?? participants.localParticipant?.videoTrack ?? null);
 
   useEffect(() => {
     if (panels.activePanel === "chat") {
@@ -184,11 +182,7 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
         </View>
       </View>
 
-      <NativeReactionPicker
-        isOpen={reactionPickerOpen}
-        onClose={() => setReactionPickerOpen(false)}
-        onSelect={(emoji) => interactions.sendReaction(emoji as ReactionEmoji)}
-      />
+      <NativeReactionPicker isOpen={reactionPickerOpen} onClose={() => setReactionPickerOpen(false)} onSelect={(emoji) => interactions.sendReaction(emoji as ReactionEmoji)} />
 
       <NativeMeetingPanel
         cameras={devices.cameras}
@@ -235,12 +229,7 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
   );
 }
 
-function pickStageParticipant(
-  sharerParticipantId: string | null,
-  remoteParticipants: readonly RoomParticipant[],
-  localParticipant: RoomParticipant | null,
-  activeSpeaker: RoomParticipant | null,
-): RoomParticipant | null {
+function pickStageParticipant(sharerParticipantId: string | null, remoteParticipants: readonly RoomParticipant[], localParticipant: RoomParticipant | null, activeSpeaker: RoomParticipant | null): RoomParticipant | null {
   if (sharerParticipantId) {
     return remoteParticipants.find((participant) => participant.id === sharerParticipantId) ?? localParticipant;
   }
