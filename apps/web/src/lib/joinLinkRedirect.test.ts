@@ -23,16 +23,18 @@ describe("resolveJoinLinkRedirect", () => {
     exchangeJoinTokenMock.mockResolvedValue({
       access_token: "access-123",
       expires_in: 900,
+      room_id: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
       room_name: "math-101",
     });
 
     const { resolveJoinLinkRedirect } = await import("../routes/j/$joinToken");
 
-    await expect(resolveJoinLinkRedirect("join-token-123")).resolves.toBe("/room/math-101");
+    await expect(resolveJoinLinkRedirect("join-token-123")).resolves.toBe("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09?roomName=math-101");
     expect(getApiUrlMock).toHaveBeenCalledTimes(1);
     expect(exchangeJoinTokenMock).toHaveBeenCalledWith("https://chalk-api.q9labs.ai", "join-token-123");
     expect(setJoinContextMock).toHaveBeenCalledWith({
       joinToken: "join-token-123",
+      roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
       roomName: "math-101",
       accessToken: "access-123",
       expiresAtMs: 1_700_000_900_000,

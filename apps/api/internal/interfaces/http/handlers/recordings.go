@@ -48,7 +48,7 @@ func (h *RecordingHandler) Start(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -91,7 +91,7 @@ func (h *RecordingHandler) Stop(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -119,7 +119,7 @@ func (h *RecordingHandler) List(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "20"), 10, 32)
 	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 32)
 
-	recordings, err := h.recordingService.ListRecordingsByTenant(c.Request.Context(), claims.TenantID, int32(limit), int32(offset))
+	recordings, err := h.recordingService.ListRecordingsByTenant(c.Request.Context(), claims.TenantID, claims.WorkspaceID, int32(limit), int32(offset))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -157,7 +157,7 @@ func (h *RecordingHandler) Get(c *gin.Context) {
 
 	// Verify recording belongs to tenant via room
 	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
-	if err != nil || existingRoom.TenantID != claims.TenantID {
+	if err != nil || !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
@@ -185,7 +185,7 @@ func (h *RecordingHandler) Download(c *gin.Context) {
 		return
 	}
 	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
-	if err != nil || existingRoom.TenantID != claims.TenantID {
+	if err != nil || !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
@@ -258,7 +258,7 @@ func (h *RecordingHandler) Archive(c *gin.Context) {
 		return
 	}
 	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
-	if err != nil || existingRoom.TenantID != claims.TenantID {
+	if err != nil || !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
@@ -308,7 +308,7 @@ func (h *RecordingHandler) Delete(c *gin.Context) {
 		return
 	}
 	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
-	if err != nil || existingRoom.TenantID != claims.TenantID {
+	if err != nil || !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
@@ -350,7 +350,7 @@ func (h *RecordingHandler) Recover(c *gin.Context) {
 	}
 
 	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), rec.RoomID)
-	if err != nil || existingRoom.TenantID != claims.TenantID {
+	if err != nil || !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}
@@ -376,9 +376,9 @@ func (h *RecordingHandler) Recover(c *gin.Context) {
 
 	if cfRec.Status != cloudflare.RecordingStatusCompleted {
 		c.JSON(http.StatusOK, gin.H{
-			"message":          "recording not ready in Cloudflare yet",
+			"message":           "recording not ready in Cloudflare yet",
 			"cloudflare_status": cfRec.Status,
-			"recording_id":     id,
+			"recording_id":      id,
 		})
 		return
 	}
@@ -434,7 +434,7 @@ func (h *RecordingHandler) SyncFromCloudflare(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -450,10 +450,10 @@ func (h *RecordingHandler) SyncFromCloudflare(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":  "sync completed",
-		"synced":   len(result.Synced),
-		"existing": len(result.Existing),
-		"errors":   result.Errors,
+		"message":    "sync completed",
+		"synced":     len(result.Synced),
+		"existing":   len(result.Existing),
+		"errors":     result.Errors,
 		"recordings": result.Synced,
 	})
 }

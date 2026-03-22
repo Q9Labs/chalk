@@ -62,9 +62,11 @@ func (h *RoomHandler) Create(c *gin.Context) {
 	}
 
 	output, err := h.roomService.CreateRoom(c.Request.Context(), room.CreateRoomInput{
-		TenantID: claims.TenantID,
-		Name:     req.Name,
-		Config:   configBytes,
+		TenantID:        claims.TenantID,
+		WorkspaceID:     claims.WorkspaceID,
+		CreatedByUserID: userIDFromClaims(claims),
+		Name:            req.Name,
+		Config:          configBytes,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create room: " + err.Error()})
@@ -115,6 +117,8 @@ func (h *RoomHandler) Schedule(c *gin.Context) {
 
 	output, err := h.roomService.ScheduleRoom(c.Request.Context(), room.ScheduleRoomInput{
 		TenantID:             claims.TenantID,
+		WorkspaceID:          claims.WorkspaceID,
+		CreatedByUserID:      userIDFromClaims(claims),
 		Name:                 req.Name,
 		Config:               configBytes,
 		ScheduledStartAt:     req.ScheduledStartAt.UTC(),
@@ -164,6 +168,7 @@ func (h *RoomHandler) List(c *gin.Context) {
 	rooms, err := h.roomService.ListRoomsWithParticipantCountByStatuses(
 		c.Request.Context(),
 		claims.TenantID,
+		claims.WorkspaceID,
 		statuses,
 		int32(limit),
 		int32(offset),
@@ -173,7 +178,7 @@ func (h *RoomHandler) List(c *gin.Context) {
 		return
 	}
 
-	total, err := h.roomService.CountRoomsByTenantAndStatuses(c.Request.Context(), claims.TenantID, statuses)
+	total, err := h.roomService.CountRoomsByTenantAndStatuses(c.Request.Context(), claims.TenantID, claims.WorkspaceID, statuses)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -206,8 +211,8 @@ func (h *RoomHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// Verify tenant ownership
-	if room.TenantID != claims.TenantID {
+	existingRoom, err := h.roomService.GetRoom(c.Request.Context(), id)
+	if err != nil || !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -243,7 +248,7 @@ func (h *RoomHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -276,7 +281,7 @@ func (h *RoomHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -308,7 +313,7 @@ func (h *RoomHandler) End(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}

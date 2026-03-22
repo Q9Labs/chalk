@@ -44,7 +44,7 @@ func (h *TranscriptHandler) List(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}

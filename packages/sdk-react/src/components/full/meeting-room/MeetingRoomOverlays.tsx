@@ -17,6 +17,7 @@ interface MeetingRoomOverlaysProps {
   setShowInviteToast: (show: boolean) => void;
   isMobile: boolean;
   roomName: string;
+  meetingLink?: string;
   onCopyLink: () => void;
   allParticipants: Participant[];
   getParticipantVolume?: (participantId: string) => number;
@@ -47,13 +48,14 @@ export function MeetingRoomOverlays({
   setShowInviteToast,
   isMobile,
   roomName,
+  meetingLink,
   onCopyLink,
   allParticipants,
   getParticipantVolume,
   selectedAudioOutput,
   volume = 1,
 }: MeetingRoomOverlaysProps) {
-  const meetingLink = typeof window !== "undefined" ? getMeetingShareLink(window.location.href) : "";
+  const resolvedMeetingLink = meetingLink ?? (typeof window !== "undefined" ? getMeetingShareLink(window.location.href) : "");
 
   return (
     <>
@@ -61,9 +63,9 @@ export function MeetingRoomOverlays({
 
       {enableTour && <GuidedTour isOpen={showTour} onComplete={onTourComplete} onSkip={onTourComplete} showSkip={true} />}
 
-      <InviteModal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} meetingLink={meetingLink} meetingId={roomName} onCopyLink={onCopyLink} />
+      <InviteModal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} meetingLink={resolvedMeetingLink} meetingId={roomName} onCopyLink={onCopyLink} />
 
-      <InviteToast isVisible={showInviteToast && !showTour} onDismiss={() => setShowInviteToast(false)} meetingLink={meetingLink} className={cn(isMobile && "top-4 bottom-auto left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm")} />
+      <InviteToast isVisible={showInviteToast && !showTour} onDismiss={() => setShowInviteToast(false)} meetingLink={resolvedMeetingLink} className={cn(isMobile && "top-4 bottom-auto left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm")} />
 
       <AudioRenderer participants={allParticipants} getParticipantVolume={getParticipantVolume} audioOutputDeviceId={selectedAudioOutput} volume={volume} />
     </>

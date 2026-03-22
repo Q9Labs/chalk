@@ -4,12 +4,14 @@
 -- name: CreateRoom :one
 INSERT INTO rooms (
     tenant_id,
+    workspace_id,
+    created_by_user_id,
     cloudflare_meeting_id,
     name,
     config,
     started_at
 ) VALUES (
-    $1, $2, $3, $4, NOW()
+    $1, $2, $3, $4, $5, $6, NOW()
 )
 RETURNING *;
 
@@ -17,18 +19,22 @@ RETURNING *;
 INSERT INTO rooms (
     id,
     tenant_id,
+    workspace_id,
+    created_by_user_id,
     cloudflare_meeting_id,
     name,
     config,
     started_at
 ) VALUES (
-    $1, $2, $3, $4, $5, NOW()
+    $1, $2, $3, $4, $5, $6, $7, NOW()
 )
 RETURNING *;
 
 -- name: CreateScheduledRoom :one
 INSERT INTO rooms (
     tenant_id,
+    workspace_id,
+    created_by_user_id,
     cloudflare_meeting_id,
     name,
     config,
@@ -37,7 +43,7 @@ INSERT INTO rooms (
     scheduled_end_at,
     allow_early_join_minutes
 ) VALUES (
-    $1, $2, $3, $4, 'scheduled', $5, $6, $7
+    $1, $2, $3, $4, $5, $6, 'scheduled', $7, $8, $9
 )
 RETURNING *;
 
@@ -148,6 +154,26 @@ LIMIT sqlc.arg(limit_count) OFFSET sqlc.arg(offset_count);
 -- name: CountRoomsByTenantAndStatuses :one
 SELECT COUNT(*) FROM rooms
 WHERE tenant_id = sqlc.arg(tenant_id) AND status = ANY(sqlc.arg(statuses)::text[]);
+
+-- name: ListRoomsWithParticipantCountByWorkspaceAndStatuses :many
+SELECT
+    r.*,
+    COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
+FROM rooms r
+LEFT JOIN participants p ON p.room_id = r.id
+WHERE r.workspace_id = sqlc.arg(workspace_id)
+  AND r.status = ANY(sqlc.arg(statuses)::text[])
+GROUP BY r.id
+ORDER BY
+    CASE
+        WHEN r.status = 'scheduled' THEN COALESCE(r.scheduled_start_at, r.created_at)
+        ELSE r.created_at
+    END DESC
+LIMIT sqlc.arg(limit_count) OFFSET sqlc.arg(offset_count);
+
+-- name: CountRoomsByWorkspaceAndStatuses :one
+SELECT COUNT(*) FROM rooms
+WHERE workspace_id = sqlc.arg(workspace_id) AND status = ANY(sqlc.arg(statuses)::text[]);
 
 -- name: ListEmptyActiveRooms :many
 SELECT r.* FROM rooms r

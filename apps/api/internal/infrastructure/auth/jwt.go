@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	ErrInvalidToken     = errors.New("invalid token")
-	ErrExpiredToken     = errors.New("token has expired")
-	ErrInvalidClaim     = errors.New("invalid token claims")
-	ErrWrongTokenType   = errors.New("wrong token type: expected access token")
+	ErrInvalidToken   = errors.New("invalid token")
+	ErrExpiredToken   = errors.New("token has expired")
+	ErrInvalidClaim   = errors.New("invalid token claims")
+	ErrWrongTokenType = errors.New("wrong token type: expected access token")
 )
 
 // JWTConfig holds JWT configuration
@@ -51,6 +51,7 @@ func NewJWTService(config JWTConfig) *JWTService {
 type jwtClaims struct {
 	jwt.RegisteredClaims
 	TenantID    uuid.UUID        `json:"tenant_id"`
+	WorkspaceID uuid.UUID        `json:"workspace_id,omitempty"`
 	RoomID      uuid.UUID        `json:"room_id,omitempty"`
 	DisplayName string           `json:"display_name,omitempty"`
 	Role        string           `json:"role,omitempty"`
@@ -72,6 +73,7 @@ func (s *JWTService) GenerateAccessToken(claims auth.Claims) (string, error) {
 			ID:        generateTokenID(),
 		},
 		TenantID:    claims.TenantID,
+		WorkspaceID: claims.WorkspaceID,
 		RoomID:      claims.RoomID,
 		DisplayName: claims.DisplayName,
 		Role:        claims.Role,
@@ -157,6 +159,7 @@ func (s *JWTService) ValidateToken(tokenString string) (*auth.Claims, error) {
 		IssuedAt:    claims.IssuedAt.Time,
 		ExpiresAt:   claims.ExpiresAt.Time,
 		TenantID:    claims.TenantID,
+		WorkspaceID: claims.WorkspaceID,
 		RoomID:      claims.RoomID,
 		DisplayName: claims.DisplayName,
 		Role:        claims.Role,

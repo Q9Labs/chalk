@@ -19,9 +19,10 @@ import (
 )
 
 type internalMeetingsQueriesStub struct {
-	tenant   db.Tenant
-	meetings []db.ListMeetingsByTenantRow
-	total    int64
+	tenant            db.Tenant
+	meetings          []db.ListMeetingsByTenantRow
+	workspaceMeetings []db.ListMeetingsByWorkspaceRow
+	total             int64
 }
 
 func (q *internalMeetingsQueriesStub) GetTenant(context.Context, uuid.UUID) (db.Tenant, error) {
@@ -35,7 +36,15 @@ func (q *internalMeetingsQueriesStub) ListMeetingsByTenant(context.Context, db.L
 	return q.meetings, nil
 }
 
+func (q *internalMeetingsQueriesStub) ListMeetingsByWorkspace(context.Context, db.ListMeetingsByWorkspaceParams) ([]db.ListMeetingsByWorkspaceRow, error) {
+	return q.workspaceMeetings, nil
+}
+
 func (q *internalMeetingsQueriesStub) CountMeetingsByTenant(context.Context, uuid.UUID) (int64, error) {
+	return q.total, nil
+}
+
+func (q *internalMeetingsQueriesStub) CountMeetingsByWorkspace(context.Context, pgtype.UUID) (int64, error) {
 	return q.total, nil
 }
 
@@ -50,7 +59,7 @@ func TestInternalMeetingsList_LocalUnclaimedTenantAllowed(t *testing.T) {
 			ID:         tenantID,
 			TenantKind: "internal",
 		},
-		meetings: []db.ListMeetingsByTenantRow{{
+		workspaceMeetings: []db.ListMeetingsByWorkspaceRow{{
 			ID:        meetingID,
 			RoomID:    roomID,
 			Status:    "ready",
@@ -64,7 +73,7 @@ func TestInternalMeetingsList_LocalUnclaimedTenantAllowed(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set(middleware.ClaimsKey, &domainAuth.Claims{TenantID: tenantID, Role: "host"})
+	c.Set(middleware.ClaimsKey, &domainAuth.Claims{TenantID: tenantID, WorkspaceID: uuid.New(), Role: "host"})
 
 	handler.List(c)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -78,7 +87,7 @@ func TestInternalMeetingsList_LocalUnclaimedTenantAllowed(t *testing.T) {
 	require.Equal(t, int64(1), body.Total)
 }
 
-func TestInternalMeetingsList_ProdUnclaimedTenantRequiresLogin(t *testing.T) {
+func TestInternalMeetingsList_ProdMissingWorkspaceRequiresLogin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tenantID := uuid.New()
@@ -105,7 +114,7 @@ func TestInternalMeetingsList_ProdUnclaimedTenantRequiresLogin(t *testing.T) {
 	require.Equal(t, "login required", body["error"])
 }
 
-func TestInternalMeetingsList_ClaimedTenantWorksEverywhere(t *testing.T) {
+func TestInternalMeetingsList_WorkspaceScopedSessionWorksEverywhere(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tenantID := uuid.New()
@@ -114,10 +123,6 @@ func TestInternalMeetingsList_ClaimedTenantWorksEverywhere(t *testing.T) {
 		tenant: db.Tenant{
 			ID:         tenantID,
 			TenantKind: "internal",
-			OwnerUserID: pgtype.UUID{
-				Bytes: ownerID,
-				Valid: true,
-			},
 		},
 		total: 0,
 	})
@@ -128,7 +133,7 @@ func TestInternalMeetingsList_ClaimedTenantWorksEverywhere(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set(middleware.ClaimsKey, &domainAuth.Claims{TenantID: tenantID, Role: "host"})
+	c.Set(middleware.ClaimsKey, &domainAuth.Claims{TenantID: tenantID, WorkspaceID: ownerID, Role: "host"})
 
 	handler.List(c)
 	require.Equal(t, http.StatusOK, w.Code)

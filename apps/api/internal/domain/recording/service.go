@@ -200,7 +200,39 @@ func (s *Service) ListRecordingsByRoom(ctx context.Context, roomID uuid.UUID) ([
 	return recordings, nil
 }
 
-func (s *Service) ListRecordingsByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int32) ([]db.ListRecordingsByTenantRow, error) {
+func (s *Service) ListRecordingsByTenant(ctx context.Context, tenantID, workspaceID uuid.UUID, limit, offset int32) ([]db.ListRecordingsByTenantRow, error) {
+	if workspaceID != uuid.Nil {
+		rows, err := s.db.ListRecordingsByWorkspace(ctx, db.ListRecordingsByWorkspaceParams{
+			WorkspaceID: pgtype.UUID{Bytes: workspaceID, Valid: true},
+			Limit:       limit,
+			Offset:      offset,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list recordings: %w", err)
+		}
+		recordings := make([]db.ListRecordingsByTenantRow, 0, len(rows))
+		for _, row := range rows {
+			recordings = append(recordings, db.ListRecordingsByTenantRow{
+				ID:                    row.ID,
+				RoomID:                row.RoomID,
+				CloudflareRecordingID: row.CloudflareRecordingID,
+				StorageProvider:       row.StorageProvider,
+				StoragePath:           row.StoragePath,
+				SizeBytes:             row.SizeBytes,
+				DurationSeconds:       row.DurationSeconds,
+				Status:                row.Status,
+				StartedAt:             row.StartedAt,
+				EndedAt:               row.EndedAt,
+				ArchivedAt:            row.ArchivedAt,
+				CreatedAt:             row.CreatedAt,
+				Metadata:              row.Metadata,
+				DeletedAt:             row.DeletedAt,
+				RoomName:              row.RoomName,
+			})
+		}
+		return recordings, nil
+	}
+
 	recordings, err := s.db.ListRecordingsByTenant(ctx, db.ListRecordingsByTenantParams{
 		TenantID: tenantID,
 		Limit:    limit,

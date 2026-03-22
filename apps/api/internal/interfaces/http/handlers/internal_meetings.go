@@ -10,12 +10,15 @@ import (
 	"github.com/Q9Labs/chalk/internal/interfaces/http/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type internalMeetingsQueries interface {
 	GetTenant(ctx context.Context, id uuid.UUID) (db.Tenant, error)
 	ListMeetingsByTenant(ctx context.Context, arg db.ListMeetingsByTenantParams) ([]db.ListMeetingsByTenantRow, error)
+	ListMeetingsByWorkspace(ctx context.Context, arg db.ListMeetingsByWorkspaceParams) ([]db.ListMeetingsByWorkspaceRow, error)
 	CountMeetingsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountMeetingsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) (int64, error)
 }
 
 type InternalMeetingsHandler struct {
@@ -40,8 +43,8 @@ func (h *InternalMeetingsHandler) List(c *gin.Context) {
 		return
 	}
 
-	// Localhost dev should work without email auth; production still requires claimed ownership.
-	if !tenant.OwnerUserID.Valid && !isLocalInternalDashboardRequest(c.Request) {
+	// Localhost dev should work without email auth; first-party sessions carry workspace_id.
+	if claims.WorkspaceID == uuid.Nil && !isLocalInternalDashboardRequest(c.Request) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "login required"})
 		return
 	}
@@ -49,17 +52,34 @@ func (h *InternalMeetingsHandler) List(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 32)
 	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 32)
 
-	rows, err := h.queries.ListMeetingsByTenant(c.Request.Context(), db.ListMeetingsByTenantParams{
-		TenantID: claims.TenantID,
-		Limit:    int32(limit),
-		Offset:   int32(offset),
-	})
+	var (
+		rows  any
+		total int64
+	)
+
+	if claims.WorkspaceID != uuid.Nil {
+		rows, err = h.queries.ListMeetingsByWorkspace(c.Request.Context(), db.ListMeetingsByWorkspaceParams{
+			WorkspaceID: pgtype.UUID{Bytes: claims.WorkspaceID, Valid: true},
+			Limit:       int32(limit),
+			Offset:      int32(offset),
+		})
+		if err == nil {
+			total, _ = h.queries.CountMeetingsByWorkspace(c.Request.Context(), pgtype.UUID{Bytes: claims.WorkspaceID, Valid: true})
+		}
+	} else {
+		rows, err = h.queries.ListMeetingsByTenant(c.Request.Context(), db.ListMeetingsByTenantParams{
+			TenantID: claims.TenantID,
+			Limit:    int32(limit),
+			Offset:   int32(offset),
+		})
+		if err == nil {
+			total, _ = h.queries.CountMeetingsByTenant(c.Request.Context(), claims.TenantID)
+		}
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	total, _ := h.queries.CountMeetingsByTenant(c.Request.Context(), claims.TenantID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"meetings": rows,

@@ -124,6 +124,16 @@ WHERE r.tenant_id = $1
 ORDER BY rec.created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListRecordingsByWorkspace :many
+SELECT
+    rec.*,
+    r.name as room_name
+FROM recordings rec
+JOIN rooms r ON r.id = rec.room_id
+WHERE r.workspace_id = $1
+ORDER BY rec.created_at DESC
+LIMIT $2 OFFSET $3;
+
 -- name: GetTotalRecordingStorageByTenant :one
 SELECT COALESCE(SUM(rec.size_bytes), 0)::bigint as total_bytes
 FROM recordings rec

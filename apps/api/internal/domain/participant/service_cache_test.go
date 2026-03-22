@@ -362,12 +362,13 @@ func TestJoinRoom_ReusesExistingRoomAfterCreateRace(t *testing.T) {
 	svc := NewService(dbStub, cfStub, nil, joinTenantIssuerStub{}, nil, nil)
 
 	output, err := svc.JoinRoom(context.Background(), JoinRoomInput{
-		RoomID:      roomID,
-		RoomName:    "room-slug",
-		TenantID:    tenantID,
-		DisplayName: "A",
-		Role:        "participant",
-		Metadata:    json.RawMessage(`{}`),
+		RoomID:               roomID,
+		RoomName:             "room-slug",
+		TenantID:             tenantID,
+		DisplayName:          "A",
+		Role:                 "participant",
+		AllowCreateOnMissing: true,
+		Metadata:             json.RawMessage(`{}`),
 	})
 	require.NoError(t, err)
 	require.Equal(t, roomID, output.Room.ID)

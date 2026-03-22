@@ -15,6 +15,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -104,13 +105,15 @@ func NewService(
 }
 
 type JoinRoomInput struct {
-	RoomID         uuid.UUID
-	RoomName       string    // Room name - used for auto-creating rooms
-	TenantID       uuid.UUID // From JWT - used for auto-creating rooms
-	DisplayName    string
-	ExternalUserID string
-	Role           string
-	Metadata       json.RawMessage
+	RoomID               uuid.UUID
+	RoomName             string    // Room name - used for auto-creating rooms
+	TenantID             uuid.UUID // From JWT - used for auto-creating rooms
+	WorkspaceID          uuid.UUID
+	AllowCreateOnMissing bool
+	DisplayName          string
+	ExternalUserID       string
+	Role                 string
+	Metadata             json.RawMessage
 }
 
 // TenantConfigOutput contains tenant configuration relevant to the room
@@ -252,6 +255,9 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 			UpdatedAt:             r.UpdatedAt,
 			WhiteboardState:       r.WhiteboardState,
 			Metadata:              r.Metadata,
+			ScreenAnnotationState: r.ScreenAnnotationState,
+			WorkspaceID:           r.WorkspaceID,
+			CreatedByUserID:       r.CreatedByUserID,
 		}
 	}
 
@@ -272,6 +278,10 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 		if !errors.Is(err, pgx.ErrNoRows) {
 			failedStep = "db_get_room_with_participant_count"
 			return nil, fmt.Errorf("failed to fetch room: %w", err)
+		}
+
+		if !input.AllowCreateOnMissing {
+			return nil, ErrRoomNotFound
 		}
 
 		// Room doesn't exist - auto-create if tenant allows early join.
@@ -307,38 +317,43 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 			return nil, fmt.Errorf("failed to create room: %w", err)
 		}
 
-			createRoomStart := time.Now()
-			newRoom, err := s.db.CreateRoomWithID(ctx, db.CreateRoomWithIDParams{
-				ID:                  input.RoomID,
-				TenantID:            input.TenantID,
-				CloudflareMeetingID: cfMeeting.ID,
+		createRoomStart := time.Now()
+		newRoom, err := s.db.CreateRoomWithID(ctx, db.CreateRoomWithIDParams{
+			ID:                  input.RoomID,
+			TenantID:            input.TenantID,
+			WorkspaceID:         pgUUIDFromOptional(input.WorkspaceID),
+			CreatedByUserID:     pgtype.UUID{},
+			CloudflareMeetingID: cfMeeting.ID,
 			Name:                strPtr(roomName),
 			Config:              []byte("{}"),
-			})
-			telemetry.observeDB("db_create_room_with_id", time.Since(createRoomStart))
-			if err != nil {
-				_, _ = s.cfClient.EndMeeting(ctx, cfMeeting.ID)
-				refetchRoomStart := time.Now()
-				refetchedRoom, refetchErr := s.db.GetRoom(ctx, input.RoomID)
-				telemetry.observeDB("db_get_room_after_create_race", time.Since(refetchRoomStart))
-				if refetchErr != nil {
-					failedStep = "db_create_room_with_id"
-					return nil, fmt.Errorf("failed to create room in database: %w", err)
-				}
-				room = refetchedRoom
-				roomCreated = false
-				activeParticipantsCount = 0
-			} else {
-				room = newRoom
-				roomCreated = true
-				activeParticipantsCount = 0
+		})
+		telemetry.observeDB("db_create_room_with_id", time.Since(createRoomStart))
+		if err != nil {
+			_, _ = s.cfClient.EndMeeting(ctx, cfMeeting.ID)
+			refetchRoomStart := time.Now()
+			refetchedRoom, refetchErr := s.db.GetRoom(ctx, input.RoomID)
+			telemetry.observeDB("db_get_room_after_create_race", time.Since(refetchRoomStart))
+			if refetchErr != nil {
+				failedStep = "db_create_room_with_id"
+				return nil, fmt.Errorf("failed to create room in database: %w", err)
 			}
+			room = refetchedRoom
+			roomCreated = false
+			activeParticipantsCount = 0
 		} else {
-			room = roomFromCountRow(roomRow)
-			activeParticipantsCount = roomRow.ActiveParticipantCount
+			room = newRoom
+			roomCreated = true
+			activeParticipantsCount = 0
+		}
+	} else {
+		room = roomFromCountRow(roomRow)
+		activeParticipantsCount = roomRow.ActiveParticipantCount
 
 		// Security: if a room exists but belongs to another tenant, act like it's missing.
 		if input.TenantID != uuid.Nil && room.TenantID != input.TenantID {
+			return nil, ErrRoomNotFound
+		}
+		if input.WorkspaceID != uuid.Nil && (!room.WorkspaceID.Valid || room.WorkspaceID.Bytes != input.WorkspaceID) {
 			return nil, ErrRoomNotFound
 		}
 
@@ -996,6 +1011,13 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func pgUUIDFromOptional(id uuid.UUID) pgtype.UUID {
+	if id == uuid.Nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: id, Valid: true}
 }
 
 func normalizeMetadata(raw json.RawMessage) []byte {

@@ -42,11 +42,17 @@ type internalAuthQueries interface {
 	CreateTenantClaim(ctx context.Context, arg db.CreateTenantClaimParams) (db.TenantClaim, error)
 	CreateUser(ctx context.Context, email string) (db.User, error)
 	CreateUserSession(ctx context.Context, arg db.CreateUserSessionParams) (db.UserSession, error)
+	CreateWorkspace(ctx context.Context, arg db.CreateWorkspaceParams) (db.Workspace, error)
+	CreateWorkspaceMembership(ctx context.Context, arg db.CreateWorkspaceMembershipParams) (db.WorkspaceMembership, error)
 	GetInternalTenantByOwnerUserID(ctx context.Context, ownerUserID pgtype.UUID) (db.Tenant, error)
+	GetSharedInternalTenantByName(ctx context.Context, name string) (db.Tenant, error)
+	GetTenant(ctx context.Context, id uuid.UUID) (db.Tenant, error)
 	GetTenantClaimBySecretHash(ctx context.Context, secretHash string) (db.TenantClaim, error)
 	GetUser(ctx context.Context, id uuid.UUID) (db.User, error)
 	GetUserByEmail(ctx context.Context, lower string) (db.User, error)
 	GetUserSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (db.UserSession, error)
+	GetWorkspace(ctx context.Context, id uuid.UUID) (db.Workspace, error)
+	GetWorkspaceByTenantAndOwner(ctx context.Context, arg db.GetWorkspaceByTenantAndOwnerParams) (db.Workspace, error)
 	BindInternalTenantToOwner(ctx context.Context, arg db.BindInternalTenantToOwnerParams) (db.Tenant, error)
 	MarkTenantClaimUsed(ctx context.Context, id uuid.UUID) (db.TenantClaim, error)
 	RevokeUserSession(ctx context.Context, id uuid.UUID) error
@@ -199,6 +205,7 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var tenantID uuid.UUID
+	var workspaceID uuid.UUID
 	var subject string
 	localClientID := localClientBootstrapKey(c.Request, strings.TrimSpace(c.GetHeader(localClientIDHeader)))
 	localBootstrap, hasLocalBootstrap := h.getCachedLocalClientTenant(ctx, c.Request, localClientID)
@@ -208,12 +215,13 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 		if err == nil {
 			_ = h.queries.TouchUserSession(ctx, sess.ID)
 			subject = sess.UserID.String()
-			resolvedTenantID, resolveErr := h.resolveSessionTenantID(ctx, sess.UserID, localBootstrap, hasLocalBootstrap)
+			scope, resolveErr := h.resolveSessionScope(ctx, sess.UserID)
 			if resolveErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create tenant"})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to initialize workspace"})
 				return
 			}
-			tenantID = resolvedTenantID
+			tenantID = scope.Tenant.ID
+			workspaceID = scope.Workspace.ID
 		}
 	}
 
@@ -251,6 +259,7 @@ func (h *InternalAuthHandler) AccessToken(c *gin.Context) {
 	claims := domainAuth.Claims{
 		Subject:     subject,
 		TenantID:    tenantID,
+		WorkspaceID: workspaceID,
 		Role:        "host",
 		Permissions: domainAuth.DefaultHostPermissions(),
 	}
@@ -401,8 +410,8 @@ func (h *InternalAuthHandler) establishSession(c *gin.Context, userID uuid.UUID)
 	if claimSecret, err := c.Cookie(internalClaimCookieName); err == nil && claimSecret != "" {
 		_ = h.tryClaimTenant(ctx, claimSecret, userID)
 	}
-	tenant, err := h.ensureInternalTenantForUser(ctx, userID)
-	if err != nil || tenant == nil {
+	scope, err := h.ensureSessionScopeForUser(ctx, userID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -429,28 +438,16 @@ func (h *InternalAuthHandler) establishSession(c *gin.Context, userID uuid.UUID)
 
 	h.setCookie(c, internalSessionCookieName, refresh, time.Now().Add(sessionTTL))
 	h.clearCookie(c, internalClaimCookieName)
-	return tenant, nil
+	return &scope.Tenant, nil
 }
 
-func (h *InternalAuthHandler) resolveSessionTenantID(ctx context.Context, userID uuid.UUID, localBootstrap *localClientTenantBootstrap, hasLocalBootstrap bool) (uuid.UUID, error) {
-	if hasLocalBootstrap && localBootstrap != nil && localBootstrap.TenantID != uuid.Nil {
-		if localBootstrap.ClaimSecret != "" && h.tryClaimTenant(ctx, localBootstrap.ClaimSecret, userID) {
-			return localBootstrap.TenantID, nil
-		}
-	}
-	if cachedTenantID, ok := h.getCachedInternalTenantByOwner(ctx, userID); ok {
-		return cachedTenantID, nil
-	}
-	t, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(userID))
-	if err == nil {
-		h.setCachedInternalTenantByOwner(ctx, userID, t.ID)
-		return t.ID, nil
-	}
-	created, err := h.createInternalTenant(ctx, &userID)
-	if err != nil || created == nil {
-		return uuid.Nil, err
-	}
-	return created.ID, nil
+type resolvedSessionScope struct {
+	Tenant    db.Tenant
+	Workspace db.Workspace
+}
+
+func (h *InternalAuthHandler) resolveSessionScope(ctx context.Context, userID uuid.UUID) (*resolvedSessionScope, error) {
+	return h.ensureSessionScopeForUser(ctx, userID)
 }
 
 func (h *InternalAuthHandler) getOrCreateUser(ctx context.Context, emailAddr string) (*db.User, error) {
@@ -469,15 +466,112 @@ func (h *InternalAuthHandler) getOrCreateUser(ctx context.Context, emailAddr str
 	return &created, nil
 }
 
-func (h *InternalAuthHandler) ensureInternalTenantForUser(ctx context.Context, userID uuid.UUID) (*db.Tenant, error) {
-	tenant, err := h.queries.GetInternalTenantByOwnerUserID(ctx, pgUUID(userID))
-	if err == nil {
-		return &tenant, nil
+func (h *InternalAuthHandler) ensureSessionScopeForUser(ctx context.Context, userID uuid.UUID) (*resolvedSessionScope, error) {
+	tenant, err := h.getOrCreateSharedInternalTenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return h.createInternalTenant(ctx, &userID)
+
+	workspace, err := h.getOrCreatePersonalWorkspace(ctx, tenant.ID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resolvedSessionScope{
+		Tenant:    *tenant,
+		Workspace: *workspace,
+	}, nil
 }
 
-func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUserID *uuid.UUID) (*db.Tenant, error) {
+func (h *InternalAuthHandler) getOrCreateSharedInternalTenant(ctx context.Context) (*db.Tenant, error) {
+	if cachedTenantID, ok := h.getCachedSharedInternalTenantID(ctx); ok {
+		tenant, err := h.queries.GetTenant(ctx, cachedTenantID)
+		if err == nil && tenant.TenantKind == "internal" {
+			return &tenant, nil
+		}
+		h.clearCachedSharedInternalTenantID(ctx)
+	}
+
+	tenant, err := h.queries.GetSharedInternalTenantByName(ctx, sharedFirstPartyTenantName)
+	if err == nil {
+		h.setCachedSharedInternalTenantID(ctx, tenant.ID)
+		return &tenant, nil
+	}
+
+	created, createErr := h.createInternalTenant(ctx, nil, sharedFirstPartyTenantName)
+	if createErr == nil && created != nil {
+		h.setCachedSharedInternalTenantID(ctx, created.ID)
+		return created, nil
+	}
+
+	tenant, err = h.queries.GetSharedInternalTenantByName(ctx, sharedFirstPartyTenantName)
+	if err != nil {
+		if createErr != nil {
+			return nil, createErr
+		}
+		return nil, err
+	}
+	h.setCachedSharedInternalTenantID(ctx, tenant.ID)
+	return &tenant, nil
+}
+
+func (h *InternalAuthHandler) getOrCreatePersonalWorkspace(ctx context.Context, tenantID, userID uuid.UUID) (*db.Workspace, error) {
+	if cachedWorkspaceID, ok := h.getCachedWorkspaceByOwner(ctx, userID); ok {
+		workspace, err := h.queries.GetWorkspace(ctx, cachedWorkspaceID)
+		if err == nil && workspace.TenantID == tenantID {
+			_, _ = h.queries.CreateWorkspaceMembership(ctx, db.CreateWorkspaceMembershipParams{
+				WorkspaceID: workspace.ID,
+				UserID:      userID,
+				Role:        "owner",
+			})
+			return &workspace, nil
+		}
+		h.clearCachedWorkspaceByOwner(ctx, userID)
+	}
+
+	workspace, err := h.queries.GetWorkspaceByTenantAndOwner(ctx, db.GetWorkspaceByTenantAndOwnerParams{
+		TenantID:    tenantID,
+		OwnerUserID: pgUUID(userID),
+		Kind:        personalWorkspaceKind,
+	})
+	if err == nil {
+		h.setCachedWorkspaceByOwner(ctx, userID, workspace.ID)
+		_, _ = h.queries.CreateWorkspaceMembership(ctx, db.CreateWorkspaceMembershipParams{
+			WorkspaceID: workspace.ID,
+			UserID:      userID,
+			Role:        "owner",
+		})
+		return &workspace, nil
+	}
+
+	created, createErr := h.queries.CreateWorkspace(ctx, db.CreateWorkspaceParams{
+		TenantID:    tenantID,
+		OwnerUserID: pgUUID(userID),
+		Name:        personalWorkspaceName,
+		Kind:        personalWorkspaceKind,
+	})
+	if createErr != nil {
+		workspace, err = h.queries.GetWorkspaceByTenantAndOwner(ctx, db.GetWorkspaceByTenantAndOwnerParams{
+			TenantID:    tenantID,
+			OwnerUserID: pgUUID(userID),
+			Kind:        personalWorkspaceKind,
+		})
+		if err != nil {
+			return nil, createErr
+		}
+		created = workspace
+	}
+
+	_, _ = h.queries.CreateWorkspaceMembership(ctx, db.CreateWorkspaceMembershipParams{
+		WorkspaceID: created.ID,
+		UserID:      userID,
+		Role:        "owner",
+	})
+	h.setCachedWorkspaceByOwner(ctx, userID, created.ID)
+	return &created, nil
+}
+
+func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUserID *uuid.UUID, name string) (*db.Tenant, error) {
 	apiKey, apiKeyHash, err := h.apiKeySvc.GenerateAPIKey(false)
 	if err != nil {
 		return nil, err
@@ -492,7 +586,7 @@ func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUse
 	}
 
 	tenant, err := h.queries.CreateInternalTenant(ctx, db.CreateInternalTenantParams{
-		Name:                        "Chalk",
+		Name:                        name,
 		ApiKeyHash:                  apiKeyHash,
 		Config:                      []byte("{}"),
 		MaxConcurrentRooms:          100,
@@ -505,14 +599,11 @@ func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUse
 	if err != nil {
 		return nil, err
 	}
-	if ownerUserID != nil {
-		h.setCachedInternalTenantByOwner(ctx, *ownerUserID, tenant.ID)
-	}
 	return &tenant, nil
 }
 
 func (h *InternalAuthHandler) createInternalTenantWithClaim(ctx context.Context) (*db.Tenant, string, error) {
-	tenant, err := h.createInternalTenant(ctx, nil)
+	tenant, err := h.createInternalTenant(ctx, nil, "Chalk")
 	if err != nil {
 		return nil, "", err
 	}
@@ -543,7 +634,6 @@ func (h *InternalAuthHandler) tryClaimTenant(ctx context.Context, claimSecret st
 	if err != nil {
 		return false
 	}
-	h.setCachedInternalTenantByOwner(ctx, userID, claim.TenantID)
 	_, _ = h.queries.MarkTenantClaimUsed(ctx, claim.ID)
 	return true
 }
@@ -598,31 +688,72 @@ func (h *InternalAuthHandler) googleClientSecret() string {
 	return strings.TrimSpace(h.cfg.Auth.GoogleClientSecret)
 }
 
-func internalTenantByOwnerRedisKey(ownerUserID uuid.UUID) string {
-	return "internal_auth:tenant_by_owner:v1:" + ownerUserID.String()
+func sharedInternalTenantRedisKey() string {
+	return "internal_auth:shared_tenant:v1"
 }
 
-func (h *InternalAuthHandler) getCachedInternalTenantByOwner(ctx context.Context, ownerUserID uuid.UUID) (uuid.UUID, bool) {
+func workspaceByOwnerRedisKey(ownerUserID uuid.UUID) string {
+	return "internal_auth:workspace_by_owner:v1:" + ownerUserID.String()
+}
+
+func (h *InternalAuthHandler) getCachedSharedInternalTenantID(ctx context.Context) (uuid.UUID, bool) {
 	if h.redis == nil {
 		return uuid.Nil, false
 	}
-	value, err := h.redis.Get(ctx, internalTenantByOwnerRedisKey(ownerUserID))
+	value, err := h.redis.Get(ctx, sharedInternalTenantRedisKey())
 	if err != nil || value == "" {
 		return uuid.Nil, false
 	}
 	tenantID, parseErr := uuid.Parse(value)
 	if parseErr != nil {
-		_ = h.redis.Del(ctx, internalTenantByOwnerRedisKey(ownerUserID))
+		_ = h.redis.Del(ctx, sharedInternalTenantRedisKey())
 		return uuid.Nil, false
 	}
 	return tenantID, true
 }
 
-func (h *InternalAuthHandler) setCachedInternalTenantByOwner(ctx context.Context, ownerUserID, tenantID uuid.UUID) {
+func (h *InternalAuthHandler) setCachedSharedInternalTenantID(ctx context.Context, tenantID uuid.UUID) {
 	if h.redis == nil {
 		return
 	}
-	_ = h.redis.Set(ctx, internalTenantByOwnerRedisKey(ownerUserID), tenantID.String(), internalTenantCacheTTL)
+	_ = h.redis.Set(ctx, sharedInternalTenantRedisKey(), tenantID.String(), internalTenantCacheTTL)
+}
+
+func (h *InternalAuthHandler) clearCachedSharedInternalTenantID(ctx context.Context) {
+	if h.redis == nil {
+		return
+	}
+	_ = h.redis.Del(ctx, sharedInternalTenantRedisKey())
+}
+
+func (h *InternalAuthHandler) getCachedWorkspaceByOwner(ctx context.Context, ownerUserID uuid.UUID) (uuid.UUID, bool) {
+	if h.redis == nil {
+		return uuid.Nil, false
+	}
+	value, err := h.redis.Get(ctx, workspaceByOwnerRedisKey(ownerUserID))
+	if err != nil || value == "" {
+		return uuid.Nil, false
+	}
+	workspaceID, parseErr := uuid.Parse(value)
+	if parseErr != nil {
+		_ = h.redis.Del(ctx, workspaceByOwnerRedisKey(ownerUserID))
+		return uuid.Nil, false
+	}
+	return workspaceID, true
+}
+
+func (h *InternalAuthHandler) setCachedWorkspaceByOwner(ctx context.Context, ownerUserID, workspaceID uuid.UUID) {
+	if h.redis == nil {
+		return
+	}
+	_ = h.redis.Set(ctx, workspaceByOwnerRedisKey(ownerUserID), workspaceID.String(), internalTenantCacheTTL)
+}
+
+func (h *InternalAuthHandler) clearCachedWorkspaceByOwner(ctx context.Context, ownerUserID uuid.UUID) {
+	if h.redis == nil {
+		return
+	}
+	_ = h.redis.Del(ctx, workspaceByOwnerRedisKey(ownerUserID))
 }
 
 func localClientTenantRedisKey(clientID string) string {

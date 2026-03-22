@@ -100,6 +100,7 @@ export interface MeetingEndData {
 export interface VideoConferenceProps {
   roomId: string;
   roomName?: string;
+  meetingLink?: string;
   userName: string;
   autoJoin?: boolean;
   role?: "host" | "participant";

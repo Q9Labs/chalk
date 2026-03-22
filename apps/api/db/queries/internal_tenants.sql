@@ -28,6 +28,14 @@ WHERE tenant_kind = 'internal'
   AND owner_user_id = $1
 LIMIT 1;
 
+-- name: GetSharedInternalTenantByName :one
+SELECT * FROM tenants
+WHERE tenant_kind = 'internal'
+  AND owner_user_id IS NULL
+  AND name = $1
+ORDER BY created_at ASC
+LIMIT 1;
+
 -- name: BindInternalTenantToOwner :one
 UPDATE tenants
 SET owner_user_id = $2,
@@ -36,4 +44,3 @@ WHERE id = $1
   AND tenant_kind = 'internal'
   AND owner_user_id IS NULL
 RETURNING *;
-

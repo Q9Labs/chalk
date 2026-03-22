@@ -30,6 +30,7 @@ const DEFAULT_BACKGROUND_EFFECT = { mode: "none" } as const;
 
 function MeetingRoomBase({
   roomName,
+  meetingLink,
   localParticipant,
   participants,
   canManageParticipants = false,
@@ -208,6 +209,7 @@ function MeetingRoomBase({
   const reduceMotion = settings.appearance.reducedMotion;
   const { isDarkMode } = useMeetingRoomTheme({ theme: roomTheme });
   const { handleTourComplete, handleCopyLink } = useMeetingRoomLifecycle({
+    meetingLink,
     enableTour,
     showTourOnFirstVisit,
     defaultChatOpen,
@@ -721,6 +723,7 @@ function MeetingRoomBase({
         setShowInviteToast={ui.setShowInviteToast}
         isMobile={isMobile}
         roomName={roomName}
+        meetingLink={meetingLink}
         onCopyLink={handleCopyLink}
         allParticipants={allParticipants}
         getParticipantVolume={effectiveGetParticipantVolume}

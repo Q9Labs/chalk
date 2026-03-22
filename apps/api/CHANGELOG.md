@@ -12,6 +12,7 @@
 ### Changed
 
 - **Post-meeting webhook payloads**: Include participant metadata and external IDs in tenant webhook payloads for easier identification.
+- **First-party auth scope now resolves shared tenant + personal workspace**: internal Chalk auth now issues first-party tokens with `workspace_id`, creates/reuses a personal workspace per user inside a shared internal tenant, scopes dashboard meeting/recording queries by workspace, and writes new first-party rooms with `workspace_id`/`created_by_user_id` instead of relying on per-user internal tenants.
 - **DB join hot-path indexing**: Add composite indexes on `rooms(tenant_id, name, created_at DESC)` and `participants(room_id, external_user_id, created_at DESC)` to reduce join/read-path latency.
 - **Room snapshots with durable chat**: Direct room snapshots can now hydrate durable chat history while fanout snapshots stay lean for participant state churn.
 - **Wide event logging for recording & webhook flow**: Replaced ~60 scattered `slog.Info/Debug/Error` calls with 5 canonical wide events (`recording.webhook_received`, `recording.process`, `recording.post_meeting`, `recording.webhook_delivered`, `recording.stalled_check`). Each event is emitted once per operation via `defer`, accumulating all context (IDs, durations, outcomes, errors) into a single structured log line queryable in Axiom. Removed `[chalk]` prefix convention — event names are self-describing.
@@ -23,6 +24,7 @@
 
 ### Fixed
 
+- **First-party room joins no longer fork Cloudflare meetings by auth context**: signed join-token exchange now preserves canonical `room_id`, first-party room joins reject room-name fallback/auto-create behavior, and authenticated users now converge on the original room/meeting instead of silently creating a second tenant-scoped room behind the same visible code.
 - **Embedded DB migrations**: Runtime migrations now include `010`–`012`, preventing local/prod drift where durable chat tables were missing even though migration files existed on disk.
 - **Axiom dataset default**: Use `chalk-api-prod` when `ENV=production` so prod logs don't 404 on missing datasets.
 - **Whisper timeout false-failures under backlog**: Increased default API wait timeout to `2h` (from `30m`) and added timeout diagnostics (`job_id`, queue depth, processing queue depth) in error messages.

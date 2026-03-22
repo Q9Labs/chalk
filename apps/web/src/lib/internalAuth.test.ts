@@ -225,22 +225,25 @@ describe("getJoinContext", () => {
   });
 
   it("returns room-scoped join context on the matching room route", () => {
-    installBrowserEnv("http://localhost:3070/room/math-101");
+    installBrowserEnv("http://localhost:3070/room/2f0b302b-2449-43f5-ae3b-de57decb9f09");
     setJoinContext({
       joinToken: "join-token",
+      roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
       roomName: "math-101",
     });
 
     expect(getJoinContext()).toEqual({
       joinToken: "join-token",
+      roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
       roomName: "math-101",
     });
   });
 
   it("ignores stale join context on a different room route", () => {
-    installBrowserEnv("http://localhost:3070/room/physics-201");
+    installBrowserEnv("http://localhost:3070/room/36b56444-2449-43f5-ae3b-de57decb9f09");
     setJoinContext({
       joinToken: "join-token",
+      roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
       roomName: "math-101",
     });
 
@@ -258,7 +261,7 @@ describe("shouldPrimeTokenCache", () => {
   });
 
   it("allows eager token warmup on room routes", () => {
-    expect(shouldPrimeTokenCache("/room/math-101")).toBe(true);
+    expect(shouldPrimeTokenCache("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09")).toBe(true);
   });
 });
 

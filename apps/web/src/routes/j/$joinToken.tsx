@@ -47,9 +47,15 @@ export async function resolveJoinLinkRedirect(joinToken: string): Promise<string
   const ex = await exchangeJoinToken(apiUrl, joinToken);
   setJoinContext({
     joinToken,
+    roomId: ex.room_id,
     roomName: ex.room_name,
     accessToken: ex.access_token,
     expiresAtMs: Date.now() + ex.expires_in * 1000,
   });
-  return `/room/${encodeURIComponent(ex.room_name)}`;
+  const params = new URLSearchParams();
+  if (ex.room_name) {
+    params.set("roomName", ex.room_name);
+  }
+  const search = params.toString();
+  return `/room/${encodeURIComponent(ex.room_id)}${search ? `?${search}` : ""}`;
 }

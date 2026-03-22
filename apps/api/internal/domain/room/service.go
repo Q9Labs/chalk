@@ -56,9 +56,11 @@ func NewService(queries *db.Queries, cf CloudflareClient, roomState RoomStateMan
 }
 
 type CreateRoomInput struct {
-	TenantID uuid.UUID
-	Name     string
-	Config   []byte
+	TenantID        uuid.UUID
+	WorkspaceID     uuid.UUID
+	CreatedByUserID uuid.UUID
+	Name            string
+	Config          []byte
 }
 
 type CreateRoomOutput struct {
@@ -69,6 +71,8 @@ type CreateRoomOutput struct {
 
 type ScheduleRoomInput struct {
 	TenantID             uuid.UUID
+	WorkspaceID          uuid.UUID
+	CreatedByUserID      uuid.UUID
 	Name                 string
 	Config               []byte
 	ScheduledStartAt     time.Time
@@ -132,6 +136,8 @@ func (s *Service) CreateRoom(ctx context.Context, input CreateRoomInput) (*Creat
 
 	room, err := s.db.CreateRoom(ctx, db.CreateRoomParams{
 		TenantID:            input.TenantID,
+		WorkspaceID:         pgUUIDFromOptional(input.WorkspaceID),
+		CreatedByUserID:     pgUUIDFromOptional(input.CreatedByUserID),
 		CloudflareMeetingID: cfMeeting.ID,
 		Name:                strPtr(input.Name),
 		Config:              input.Config,
@@ -210,6 +216,8 @@ func (s *Service) ScheduleRoom(ctx context.Context, input ScheduleRoomInput) (*S
 
 	room, err := s.db.CreateScheduledRoom(ctx, db.CreateScheduledRoomParams{
 		TenantID:              input.TenantID,
+		WorkspaceID:           pgUUIDFromOptional(input.WorkspaceID),
+		CreatedByUserID:       pgUUIDFromOptional(input.CreatedByUserID),
 		CloudflareMeetingID:   cfMeeting.ID,
 		Name:                  strPtr(input.Name),
 		Config:                input.Config,
@@ -289,7 +297,44 @@ func (s *Service) ListActiveRoomsWithParticipantCount(ctx context.Context, tenan
 	return rooms, nil
 }
 
-func (s *Service) ListRoomsWithParticipantCountByStatuses(ctx context.Context, tenantID uuid.UUID, statuses []string, limit, offset int32) ([]db.ListRoomsWithParticipantCountByStatusesRow, error) {
+func (s *Service) ListRoomsWithParticipantCountByStatuses(ctx context.Context, tenantID, workspaceID uuid.UUID, statuses []string, limit, offset int32) ([]db.ListRoomsWithParticipantCountByStatusesRow, error) {
+	if workspaceID != uuid.Nil {
+		rows, err := s.db.ListRoomsWithParticipantCountByWorkspaceAndStatuses(ctx, db.ListRoomsWithParticipantCountByWorkspaceAndStatusesParams{
+			WorkspaceID: pgUUIDFromOptional(workspaceID),
+			Statuses:    statuses,
+			OffsetCount: offset,
+			LimitCount:  limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list rooms: %w", err)
+		}
+		rooms := make([]db.ListRoomsWithParticipantCountByStatusesRow, 0, len(rows))
+		for _, row := range rows {
+			rooms = append(rooms, db.ListRoomsWithParticipantCountByStatusesRow{
+				ID:                     row.ID,
+				TenantID:               row.TenantID,
+				CloudflareMeetingID:    row.CloudflareMeetingID,
+				Name:                   row.Name,
+				Config:                 row.Config,
+				Status:                 row.Status,
+				StartedAt:              row.StartedAt,
+				EndedAt:                row.EndedAt,
+				CreatedAt:              row.CreatedAt,
+				UpdatedAt:              row.UpdatedAt,
+				WhiteboardState:        row.WhiteboardState,
+				Metadata:               row.Metadata,
+				ScheduledStartAt:       row.ScheduledStartAt,
+				ScheduledEndAt:         row.ScheduledEndAt,
+				AllowEarlyJoinMinutes:  row.AllowEarlyJoinMinutes,
+				ScreenAnnotationState:  row.ScreenAnnotationState,
+				WorkspaceID:            row.WorkspaceID,
+				CreatedByUserID:        row.CreatedByUserID,
+				ActiveParticipantCount: row.ActiveParticipantCount,
+			})
+		}
+		return rooms, nil
+	}
+
 	rooms, err := s.db.ListRoomsWithParticipantCountByStatuses(ctx, db.ListRoomsWithParticipantCountByStatusesParams{
 		TenantID:    tenantID,
 		Statuses:    statuses,
@@ -310,7 +355,18 @@ func (s *Service) CountActiveRoomsByTenant(ctx context.Context, tenantID uuid.UU
 	return count, nil
 }
 
-func (s *Service) CountRoomsByTenantAndStatuses(ctx context.Context, tenantID uuid.UUID, statuses []string) (int64, error) {
+func (s *Service) CountRoomsByTenantAndStatuses(ctx context.Context, tenantID, workspaceID uuid.UUID, statuses []string) (int64, error) {
+	if workspaceID != uuid.Nil {
+		count, err := s.db.CountRoomsByWorkspaceAndStatuses(ctx, db.CountRoomsByWorkspaceAndStatusesParams{
+			WorkspaceID: pgUUIDFromOptional(workspaceID),
+			Statuses:    statuses,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("failed to count rooms: %w", err)
+		}
+		return count, nil
+	}
+
 	count, err := s.db.CountRoomsByTenantAndStatuses(ctx, db.CountRoomsByTenantAndStatusesParams{
 		TenantID: tenantID,
 		Statuses: statuses,
@@ -415,4 +471,11 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func pgUUIDFromOptional(id uuid.UUID) pgtype.UUID {
+	if id == uuid.Nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: id, Valid: true}
 }

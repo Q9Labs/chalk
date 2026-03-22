@@ -167,6 +167,7 @@ func TestParticipantHandler_Add_Perf_JoinRoomBudget(t *testing.T) {
 	// Goal: deterministic-ish regression guard for extra DB roundtrips in join.
 	// We model per-call cost with small sleeps; adding extra queries should push above budget.
 	router, claims := setupTestRouterWithClaims()
+	claims.RoomID = uuid.Nil
 
 	dbDelay := 20 * time.Millisecond
 	cfDelay := 20 * time.Millisecond

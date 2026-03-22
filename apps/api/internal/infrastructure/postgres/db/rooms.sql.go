@@ -20,7 +20,7 @@ SET
     started_at = COALESCE(started_at, NOW()),
     ended_at = NULL
 WHERE id = $1 AND status = 'scheduled'
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id
 `
 
 func (q *Queries) ActivateScheduledRoom(ctx context.Context, id uuid.UUID) (Room, error) {
@@ -43,6 +43,8 @@ func (q *Queries) ActivateScheduledRoom(ctx context.Context, id uuid.UUID) (Room
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -76,25 +78,46 @@ func (q *Queries) CountRoomsByTenantAndStatuses(ctx context.Context, arg CountRo
 	return count, err
 }
 
+const countRoomsByWorkspaceAndStatuses = `-- name: CountRoomsByWorkspaceAndStatuses :one
+SELECT COUNT(*) FROM rooms
+WHERE workspace_id = $1 AND status = ANY($2::text[])
+`
+
+type CountRoomsByWorkspaceAndStatusesParams struct {
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Statuses    []string    `db:"statuses" json:"statuses"`
+}
+
+func (q *Queries) CountRoomsByWorkspaceAndStatuses(ctx context.Context, arg CountRoomsByWorkspaceAndStatusesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRoomsByWorkspaceAndStatuses, arg.WorkspaceID, arg.Statuses)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createRoom = `-- name: CreateRoom :one
 
 INSERT INTO rooms (
     tenant_id,
+    workspace_id,
+    created_by_user_id,
     cloudflare_meeting_id,
     name,
     config,
     started_at
 ) VALUES (
-    $1, $2, $3, $4, NOW()
+    $1, $2, $3, $4, $5, $6, NOW()
 )
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id
 `
 
 type CreateRoomParams struct {
-	TenantID            uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	CloudflareMeetingID string    `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
-	Name                *string   `db:"name" json:"name"`
-	Config              []byte    `db:"config" json:"config"`
+	TenantID            uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	WorkspaceID         pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID     pgtype.UUID `db:"created_by_user_id" json:"created_by_user_id"`
+	CloudflareMeetingID string      `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
+	Name                *string     `db:"name" json:"name"`
+	Config              []byte      `db:"config" json:"config"`
 }
 
 // Room Queries
@@ -102,6 +125,8 @@ type CreateRoomParams struct {
 func (q *Queries) CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, error) {
 	row := q.db.QueryRow(ctx, createRoom,
 		arg.TenantID,
+		arg.WorkspaceID,
+		arg.CreatedByUserID,
 		arg.CloudflareMeetingID,
 		arg.Name,
 		arg.Config,
@@ -124,6 +149,8 @@ func (q *Queries) CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, e
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -132,28 +159,34 @@ const createRoomWithID = `-- name: CreateRoomWithID :one
 INSERT INTO rooms (
     id,
     tenant_id,
+    workspace_id,
+    created_by_user_id,
     cloudflare_meeting_id,
     name,
     config,
     started_at
 ) VALUES (
-    $1, $2, $3, $4, $5, NOW()
+    $1, $2, $3, $4, $5, $6, $7, NOW()
 )
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id
 `
 
 type CreateRoomWithIDParams struct {
-	ID                  uuid.UUID `db:"id" json:"id"`
-	TenantID            uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	CloudflareMeetingID string    `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
-	Name                *string   `db:"name" json:"name"`
-	Config              []byte    `db:"config" json:"config"`
+	ID                  uuid.UUID   `db:"id" json:"id"`
+	TenantID            uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	WorkspaceID         pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID     pgtype.UUID `db:"created_by_user_id" json:"created_by_user_id"`
+	CloudflareMeetingID string      `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
+	Name                *string     `db:"name" json:"name"`
+	Config              []byte      `db:"config" json:"config"`
 }
 
 func (q *Queries) CreateRoomWithID(ctx context.Context, arg CreateRoomWithIDParams) (Room, error) {
 	row := q.db.QueryRow(ctx, createRoomWithID,
 		arg.ID,
 		arg.TenantID,
+		arg.WorkspaceID,
+		arg.CreatedByUserID,
 		arg.CloudflareMeetingID,
 		arg.Name,
 		arg.Config,
@@ -176,6 +209,8 @@ func (q *Queries) CreateRoomWithID(ctx context.Context, arg CreateRoomWithIDPara
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -183,6 +218,8 @@ func (q *Queries) CreateRoomWithID(ctx context.Context, arg CreateRoomWithIDPara
 const createScheduledRoom = `-- name: CreateScheduledRoom :one
 INSERT INTO rooms (
     tenant_id,
+    workspace_id,
+    created_by_user_id,
     cloudflare_meeting_id,
     name,
     config,
@@ -191,13 +228,15 @@ INSERT INTO rooms (
     scheduled_end_at,
     allow_early_join_minutes
 ) VALUES (
-    $1, $2, $3, $4, 'scheduled', $5, $6, $7
+    $1, $2, $3, $4, $5, $6, 'scheduled', $7, $8, $9
 )
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id
 `
 
 type CreateScheduledRoomParams struct {
 	TenantID              uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	WorkspaceID           pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID       pgtype.UUID        `db:"created_by_user_id" json:"created_by_user_id"`
 	CloudflareMeetingID   string             `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
 	Name                  *string            `db:"name" json:"name"`
 	Config                []byte             `db:"config" json:"config"`
@@ -209,6 +248,8 @@ type CreateScheduledRoomParams struct {
 func (q *Queries) CreateScheduledRoom(ctx context.Context, arg CreateScheduledRoomParams) (Room, error) {
 	row := q.db.QueryRow(ctx, createScheduledRoom,
 		arg.TenantID,
+		arg.WorkspaceID,
+		arg.CreatedByUserID,
 		arg.CloudflareMeetingID,
 		arg.Name,
 		arg.Config,
@@ -234,6 +275,8 @@ func (q *Queries) CreateScheduledRoom(ctx context.Context, arg CreateScheduledRo
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -254,7 +297,7 @@ SET
     status = 'ended',
     ended_at = NOW()
 WHERE id = $1
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id
 `
 
 func (q *Queries) EndRoom(ctx context.Context, id uuid.UUID) (Room, error) {
@@ -277,12 +320,14 @@ func (q *Queries) EndRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
 const getRoom = `-- name: GetRoom :one
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id FROM rooms
 WHERE id = $1 LIMIT 1
 `
 
@@ -306,12 +351,14 @@ func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
 const getRoomByCloudflareID = `-- name: GetRoomByCloudflareID :one
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id FROM rooms
 WHERE cloudflare_meeting_id = $1 LIMIT 1
 `
 
@@ -335,12 +382,14 @@ func (q *Queries) GetRoomByCloudflareID(ctx context.Context, cloudflareMeetingID
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
 const getRoomByNameAndTenant = `-- name: GetRoomByNameAndTenant :one
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id FROM rooms
 WHERE name = $1 AND tenant_id = $2
 ORDER BY created_at DESC
 LIMIT 1
@@ -371,13 +420,15 @@ func (q *Queries) GetRoomByNameAndTenant(ctx context.Context, arg GetRoomByNameA
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
 const getRoomWithParticipantCount = `-- name: GetRoomWithParticipantCount :one
 SELECT
-    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state,
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state, r.workspace_id, r.created_by_user_id,
     COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
 FROM rooms r
 LEFT JOIN participants p ON p.room_id = r.id
@@ -402,6 +453,8 @@ type GetRoomWithParticipantCountRow struct {
 	ScheduledEndAt         pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
 	AllowEarlyJoinMinutes  int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
 	ScreenAnnotationState  []byte             `db:"screen_annotation_state" json:"screen_annotation_state"`
+	WorkspaceID            pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID        pgtype.UUID        `db:"created_by_user_id" json:"created_by_user_id"`
 	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
 }
 
@@ -425,13 +478,15 @@ func (q *Queries) GetRoomWithParticipantCount(ctx context.Context, id uuid.UUID)
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 		&i.ActiveParticipantCount,
 	)
 	return i, err
 }
 
 const listActiveRoomsByTenant = `-- name: ListActiveRoomsByTenant :many
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id FROM rooms
 WHERE tenant_id = $1 AND status = 'active'
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -469,6 +524,8 @@ func (q *Queries) ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoo
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
 			&i.ScreenAnnotationState,
+			&i.WorkspaceID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -482,7 +539,7 @@ func (q *Queries) ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoo
 
 const listActiveRoomsWithParticipantCount = `-- name: ListActiveRoomsWithParticipantCount :many
 SELECT
-    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state,
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state, r.workspace_id, r.created_by_user_id,
     COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
 FROM rooms r
 LEFT JOIN participants p ON p.room_id = r.id
@@ -515,6 +572,8 @@ type ListActiveRoomsWithParticipantCountRow struct {
 	ScheduledEndAt         pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
 	AllowEarlyJoinMinutes  int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
 	ScreenAnnotationState  []byte             `db:"screen_annotation_state" json:"screen_annotation_state"`
+	WorkspaceID            pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID        pgtype.UUID        `db:"created_by_user_id" json:"created_by_user_id"`
 	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
 }
 
@@ -544,6 +603,8 @@ func (q *Queries) ListActiveRoomsWithParticipantCount(ctx context.Context, arg L
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
 			&i.ScreenAnnotationState,
+			&i.WorkspaceID,
+			&i.CreatedByUserID,
 			&i.ActiveParticipantCount,
 		); err != nil {
 			return nil, err
@@ -557,7 +618,7 @@ func (q *Queries) ListActiveRoomsWithParticipantCount(ctx context.Context, arg L
 }
 
 const listEmptyActiveRooms = `-- name: ListEmptyActiveRooms :many
-SELECT r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state FROM rooms r
+SELECT r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state, r.workspace_id, r.created_by_user_id FROM rooms r
 LEFT JOIN participants p ON p.room_id = r.id AND p.left_at IS NULL
 WHERE r.status = 'active'
   AND r.created_at < NOW() - INTERVAL '1 minute' * $1
@@ -591,6 +652,8 @@ func (q *Queries) ListEmptyActiveRooms(ctx context.Context, dollar_1 interface{}
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
 			&i.ScreenAnnotationState,
+			&i.WorkspaceID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -603,7 +666,7 @@ func (q *Queries) ListEmptyActiveRooms(ctx context.Context, dollar_1 interface{}
 }
 
 const listRooms = `-- name: ListRooms :many
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id FROM rooms
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -639,6 +702,8 @@ func (q *Queries) ListRooms(ctx context.Context, arg ListRoomsParams) ([]Room, e
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
 			&i.ScreenAnnotationState,
+			&i.WorkspaceID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -651,7 +716,7 @@ func (q *Queries) ListRooms(ctx context.Context, arg ListRoomsParams) ([]Room, e
 }
 
 const listRoomsByTenant = `-- name: ListRoomsByTenant :many
-SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state FROM rooms
+SELECT id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id FROM rooms
 WHERE tenant_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -689,6 +754,8 @@ func (q *Queries) ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantPa
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
 			&i.ScreenAnnotationState,
+			&i.WorkspaceID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -702,7 +769,7 @@ func (q *Queries) ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantPa
 
 const listRoomsWithParticipantCountByStatuses = `-- name: ListRoomsWithParticipantCountByStatuses :many
 SELECT
-    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state,
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state, r.workspace_id, r.created_by_user_id,
     COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
 FROM rooms r
 LEFT JOIN participants p ON p.room_id = r.id
@@ -741,6 +808,8 @@ type ListRoomsWithParticipantCountByStatusesRow struct {
 	ScheduledEndAt         pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
 	AllowEarlyJoinMinutes  int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
 	ScreenAnnotationState  []byte             `db:"screen_annotation_state" json:"screen_annotation_state"`
+	WorkspaceID            pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID        pgtype.UUID        `db:"created_by_user_id" json:"created_by_user_id"`
 	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
 }
 
@@ -775,6 +844,99 @@ func (q *Queries) ListRoomsWithParticipantCountByStatuses(ctx context.Context, a
 			&i.ScheduledEndAt,
 			&i.AllowEarlyJoinMinutes,
 			&i.ScreenAnnotationState,
+			&i.WorkspaceID,
+			&i.CreatedByUserID,
+			&i.ActiveParticipantCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoomsWithParticipantCountByWorkspaceAndStatuses = `-- name: ListRoomsWithParticipantCountByWorkspaceAndStatuses :many
+SELECT
+    r.id, r.tenant_id, r.cloudflare_meeting_id, r.name, r.config, r.status, r.started_at, r.ended_at, r.created_at, r.updated_at, r.whiteboard_state, r.metadata, r.scheduled_start_at, r.scheduled_end_at, r.allow_early_join_minutes, r.screen_annotation_state, r.workspace_id, r.created_by_user_id,
+    COUNT(p.id) FILTER (WHERE p.left_at IS NULL) as active_participant_count
+FROM rooms r
+LEFT JOIN participants p ON p.room_id = r.id
+WHERE r.workspace_id = $1
+  AND r.status = ANY($2::text[])
+GROUP BY r.id
+ORDER BY
+    CASE
+        WHEN r.status = 'scheduled' THEN COALESCE(r.scheduled_start_at, r.created_at)
+        ELSE r.created_at
+    END DESC
+LIMIT $4 OFFSET $3
+`
+
+type ListRoomsWithParticipantCountByWorkspaceAndStatusesParams struct {
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Statuses    []string    `db:"statuses" json:"statuses"`
+	OffsetCount int32       `db:"offset_count" json:"offset_count"`
+	LimitCount  int32       `db:"limit_count" json:"limit_count"`
+}
+
+type ListRoomsWithParticipantCountByWorkspaceAndStatusesRow struct {
+	ID                     uuid.UUID          `db:"id" json:"id"`
+	TenantID               uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	CloudflareMeetingID    string             `db:"cloudflare_meeting_id" json:"cloudflare_meeting_id"`
+	Name                   *string            `db:"name" json:"name"`
+	Config                 []byte             `db:"config" json:"config"`
+	Status                 string             `db:"status" json:"status"`
+	StartedAt              pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt                pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	CreatedAt              time.Time          `db:"created_at" json:"created_at"`
+	UpdatedAt              time.Time          `db:"updated_at" json:"updated_at"`
+	WhiteboardState        []byte             `db:"whiteboard_state" json:"whiteboard_state"`
+	Metadata               []byte             `db:"metadata" json:"metadata"`
+	ScheduledStartAt       pgtype.Timestamptz `db:"scheduled_start_at" json:"scheduled_start_at"`
+	ScheduledEndAt         pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
+	AllowEarlyJoinMinutes  int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
+	ScreenAnnotationState  []byte             `db:"screen_annotation_state" json:"screen_annotation_state"`
+	WorkspaceID            pgtype.UUID        `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID        pgtype.UUID        `db:"created_by_user_id" json:"created_by_user_id"`
+	ActiveParticipantCount int64              `db:"active_participant_count" json:"active_participant_count"`
+}
+
+func (q *Queries) ListRoomsWithParticipantCountByWorkspaceAndStatuses(ctx context.Context, arg ListRoomsWithParticipantCountByWorkspaceAndStatusesParams) ([]ListRoomsWithParticipantCountByWorkspaceAndStatusesRow, error) {
+	rows, err := q.db.Query(ctx, listRoomsWithParticipantCountByWorkspaceAndStatuses,
+		arg.WorkspaceID,
+		arg.Statuses,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRoomsWithParticipantCountByWorkspaceAndStatusesRow{}
+	for rows.Next() {
+		var i ListRoomsWithParticipantCountByWorkspaceAndStatusesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CloudflareMeetingID,
+			&i.Name,
+			&i.Config,
+			&i.Status,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.WhiteboardState,
+			&i.Metadata,
+			&i.ScheduledStartAt,
+			&i.ScheduledEndAt,
+			&i.AllowEarlyJoinMinutes,
+			&i.ScreenAnnotationState,
+			&i.WorkspaceID,
+			&i.CreatedByUserID,
 			&i.ActiveParticipantCount,
 		); err != nil {
 			return nil, err
@@ -795,7 +957,7 @@ SET
     started_at = NOW(),
     ended_at = NULL
 WHERE id = $1
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id
 `
 
 type ReactivateRoomParams struct {
@@ -823,6 +985,8 @@ func (q *Queries) ReactivateRoom(ctx context.Context, arg ReactivateRoomParams) 
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -833,7 +997,7 @@ SET
     name = COALESCE($2, name),
     config = COALESCE($3, config)
 WHERE id = $1
-RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state
+RETURNING id, tenant_id, cloudflare_meeting_id, name, config, status, started_at, ended_at, created_at, updated_at, whiteboard_state, metadata, scheduled_start_at, scheduled_end_at, allow_early_join_minutes, screen_annotation_state, workspace_id, created_by_user_id
 `
 
 type UpdateRoomParams struct {
@@ -862,6 +1026,8 @@ func (q *Queries) UpdateRoom(ctx context.Context, arg UpdateRoomParams) (Room, e
 		&i.ScheduledEndAt,
 		&i.AllowEarlyJoinMinutes,
 		&i.ScreenAnnotationState,
+		&i.WorkspaceID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }

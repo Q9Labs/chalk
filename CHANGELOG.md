@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **First-party meeting identity now resolves by workspace + room UUID** — Chalk web/internal auth now provisions personal workspaces inside a shared first-party tenant instead of creating per-user internal tenants, dashboard joins preserve canonical `room_id` through signed join-link exchange, and in-room invite UI now surfaces the real guest `/j/:token` link rather than reusing the host page URL.
+
 ### Fixed
 
 - **CI/Web: pruned installs no longer crash on missing mobile patch script** — root `postinstall` now skips cleanly when `scripts/patch-realtimekit-react-native.ts` is absent from a pruned workspace, so web CI can install the trimmed repo without failing before build steps.

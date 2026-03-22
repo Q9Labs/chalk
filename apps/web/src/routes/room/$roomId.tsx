@@ -17,7 +17,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
-import { createWebTokenProvider, fetchInternalAccessToken, getApiUrl, getJoinContext } from "../../lib/internalAuth";
+import { createRoomJoinLink, createWebTokenProvider, fetchInternalAccessToken, getApiUrl, getJoinContext } from "../../lib/internalAuth";
 import { ChalkLogo } from "../../components/ChalkLogo";
 import { cn } from "../../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -66,12 +66,19 @@ function RoomPage() {
   const navigate = useNavigate();
   const apiUrl = useMemo(() => getApiUrl(), []);
   const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
+  const joinCtx = typeof window === "undefined" ? null : getJoinContext();
 
   const [storedUserName, setStoredUserName] = useState<string>(() => getStoredUserName());
   const [roomData, setRoomData] = useState<any>(null);
   const [isCheckingRoom, setIsCheckingRoom] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [defaults, setDefaults] = useState(() => getStoredJoinDefaults());
+  const [meetingLink, setMeetingLink] = useState<string>(() => {
+    if (!joinCtx) {
+      return "";
+    }
+    return `${window.location.origin}/j/${joinCtx.joinToken}`;
+  });
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -130,8 +137,38 @@ function RoomPage() {
     setDefaults(getStoredJoinDefaults());
   }, []);
 
-  const joinCtx = typeof window === "undefined" ? null : getJoinContext();
   const role = joinCtx ? "participant" : "host";
+
+  useEffect(() => {
+    if (joinCtx?.joinToken) {
+      setMeetingLink(`${window.location.origin}/j/${joinCtx.joinToken}`);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await fetchInternalAccessToken(apiUrl);
+        const nextMeetingLink = await createRoomJoinLink(
+          apiUrl,
+          roomId,
+          token,
+          window.location.origin,
+        );
+        if (!cancelled) {
+          setMeetingLink(nextMeetingLink);
+        }
+      } catch {
+        if (!cancelled) {
+          setMeetingLink("");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, joinCtx?.joinToken, roomId]);
 
   if (isCheckingRoom) {
     return (
@@ -233,6 +270,7 @@ function RoomPage() {
       <VideoConference
         roomId={roomId}
         roomName={roomName || "Meeting On Chalk"}
+        meetingLink={meetingLink || undefined}
         userName={storedUserName || "Chalker"}
         autoJoin={autoJoin}
         onJoin={(data) => {

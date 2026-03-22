@@ -43,7 +43,9 @@ type Querier interface {
 	CountAuditLogsByAction(ctx context.Context, action string) (int64, error)
 	CountAuditLogsByTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountMeetingsByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountMeetingsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) (int64, error)
 	CountRoomsByTenantAndStatuses(ctx context.Context, arg CountRoomsByTenantAndStatusesParams) (int64, error)
+	CountRoomsByWorkspaceAndStatuses(ctx context.Context, arg CountRoomsByWorkspaceAndStatusesParams) (int64, error)
 	CountTenants(ctx context.Context) (int64, error)
 	CountTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) (int64, error)
 	// Audit Log Queries
@@ -86,6 +88,10 @@ type Querier interface {
 	CreateWebhookDelivery(ctx context.Context, arg CreateWebhookDeliveryParams) (WebhookDelivery, error)
 	// Whisper transcription job history
 	CreateWhisperTranscriptionJob(ctx context.Context, arg CreateWhisperTranscriptionJobParams) (WhisperTranscriptionJob, error)
+	// Workspace Queries
+	// First-party ownership + collaboration scope under a shared tenant
+	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
+	CreateWorkspaceMembership(ctx context.Context, arg CreateWorkspaceMembershipParams) (WorkspaceMembership, error)
 	DeactivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	DeleteOldAuditLogs(ctx context.Context, createdAt time.Time) error
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
@@ -117,6 +123,7 @@ type Querier interface {
 	GetRoomByNameAndTenant(ctx context.Context, arg GetRoomByNameAndTenantParams) (Room, error)
 	GetRoomHost(ctx context.Context, roomID uuid.UUID) (Participant, error)
 	GetRoomWithParticipantCount(ctx context.Context, id uuid.UUID) (GetRoomWithParticipantCountRow, error)
+	GetSharedInternalTenantByName(ctx context.Context, name string) (Tenant, error)
 	GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetTenantByAPIKeyHash(ctx context.Context, apiKeyHash string) (Tenant, error)
 	GetTenantByRoomID(ctx context.Context, id uuid.UUID) (Tenant, error)
@@ -130,6 +137,8 @@ type Querier interface {
 	GetWebhookDeliveriesByRoom(ctx context.Context, roomID uuid.UUID) ([]WebhookDelivery, error)
 	GetWebhookDeliveriesByTenant(ctx context.Context, arg GetWebhookDeliveriesByTenantParams) ([]WebhookDelivery, error)
 	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
+	GetWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error)
+	GetWorkspaceByTenantAndOwner(ctx context.Context, arg GetWorkspaceByTenantAndOwnerParams) (Workspace, error)
 	ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoomsByTenantParams) ([]Room, error)
 	ListActiveRoomsWithParticipantCount(ctx context.Context, arg ListActiveRoomsWithParticipantCountParams) ([]ListActiveRoomsWithParticipantCountRow, error)
@@ -152,6 +161,7 @@ type Querier interface {
 	// Internal Meetings Queries
 	// Dashboard rows (room + recording + transcript summary)
 	ListMeetingsByTenant(ctx context.Context, arg ListMeetingsByTenantParams) ([]ListMeetingsByTenantRow, error)
+	ListMeetingsByWorkspace(ctx context.Context, arg ListMeetingsByWorkspaceParams) ([]ListMeetingsByWorkspaceRow, error)
 	ListParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListParticipantsWithRoomInfo(ctx context.Context, arg ListParticipantsWithRoomInfoParams) ([]ListParticipantsWithRoomInfoRow, error)
 	ListPostMeetingTranscriptsByRoom(ctx context.Context, roomID uuid.UUID) ([]PostMeetingTranscript, error)
@@ -159,10 +169,12 @@ type Querier interface {
 	ListRecordingsByRoom(ctx context.Context, roomID uuid.UUID) ([]Recording, error)
 	ListRecordingsByStatus(ctx context.Context, arg ListRecordingsByStatusParams) ([]Recording, error)
 	ListRecordingsByTenant(ctx context.Context, arg ListRecordingsByTenantParams) ([]ListRecordingsByTenantRow, error)
+	ListRecordingsByWorkspace(ctx context.Context, arg ListRecordingsByWorkspaceParams) ([]ListRecordingsByWorkspaceRow, error)
 	ListRecordingsReadyForArchive(ctx context.Context, limit int32) ([]Recording, error)
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]Room, error)
 	ListRoomsByTenant(ctx context.Context, arg ListRoomsByTenantParams) ([]Room, error)
 	ListRoomsWithParticipantCountByStatuses(ctx context.Context, arg ListRoomsWithParticipantCountByStatusesParams) ([]ListRoomsWithParticipantCountByStatusesRow, error)
+	ListRoomsWithParticipantCountByWorkspaceAndStatuses(ctx context.Context, arg ListRoomsWithParticipantCountByWorkspaceAndStatusesParams) ([]ListRoomsWithParticipantCountByWorkspaceAndStatusesRow, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
 	ListTranscriptsByRoom(ctx context.Context, arg ListTranscriptsByRoomParams) ([]Transcript, error)
 	MarkPostMeetingTranscriptFailed(ctx context.Context, arg MarkPostMeetingTranscriptFailedParams) error

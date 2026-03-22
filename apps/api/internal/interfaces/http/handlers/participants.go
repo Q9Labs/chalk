@@ -87,8 +87,13 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 	roomIDParam := c.Param("id")
 	roomID, err := uuid.Parse(roomIDParam)
 	roomNameLookup := err != nil
+	allowCreateOnMissing := roomNameLookup && claims.WorkspaceID == uuid.Nil && claims.RoomID == uuid.Nil
 
 	if roomNameLookup {
+		if !allowCreateOnMissing {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
 		if cachedRoomID, ok := h.getCachedRoomID(ctx, claims.TenantID, roomIDParam); ok {
 			roomID = cachedRoomID
 		} else {
@@ -103,6 +108,9 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 				h.setCachedRoomID(ctx, claims.TenantID, roomIDParam, roomID)
 			}
 		}
+	} else if claims.RoomID != uuid.Nil && roomID != claims.RoomID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		return
 	}
 
 	var req AddParticipantRequest
@@ -115,13 +123,15 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 
 	joinStartedAt := time.Now()
 	output, err := h.participantService.JoinRoom(ctx, participant.JoinRoomInput{
-		RoomID:         roomID,
-		RoomName:       roomIDParam, // Use original param as room name for auto-creation
-		TenantID:       claims.TenantID,
-		DisplayName:    req.DisplayName,
-		ExternalUserID: req.ExternalUserID,
-		Role:           req.Role,
-		Metadata:       req.Metadata,
+		RoomID:               roomID,
+		RoomName:             roomIDParam, // Use original param as room name for legacy auto-creation
+		TenantID:             claims.TenantID,
+		WorkspaceID:          claims.WorkspaceID,
+		AllowCreateOnMissing: allowCreateOnMissing,
+		DisplayName:          req.DisplayName,
+		ExternalUserID:       req.ExternalUserID,
+		Role:                 req.Role,
+		Metadata:             req.Metadata,
 	})
 	joinElapsedMs := time.Since(joinStartedAt).Milliseconds()
 	if err != nil {
@@ -179,7 +189,7 @@ func (h *ParticipantHandler) Add(c *gin.Context) {
 		return
 	}
 
-	if roomNameLookup {
+	if roomNameLookup && allowCreateOnMissing {
 		h.setCachedRoomID(ctx, claims.TenantID, roomIDParam, output.Room.ID)
 	}
 
@@ -291,7 +301,7 @@ func (h *ParticipantHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -359,7 +369,7 @@ func (h *ParticipantHandler) List(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -402,7 +412,7 @@ func (h *ParticipantHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -450,7 +460,7 @@ func (h *ParticipantHandler) RefreshToken(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
-	if existingRoom.TenantID != claims.TenantID {
+	if !roomAccessibleToClaims(existingRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -501,6 +511,10 @@ func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
 	roomID, err := uuid.Parse(roomIDParam)
 
 	if err != nil {
+		if claims.WorkspaceID != uuid.Nil || claims.RoomID != uuid.Nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
 		// Not a UUID - look up by room name
 		existingRoom, lookupErr := h.roomService.GetRoomByName(c.Request.Context(), roomIDParam, claims.TenantID)
 		if lookupErr != nil {
@@ -516,7 +530,7 @@ func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 			return
 		}
-		if existingRoom.TenantID != claims.TenantID {
+		if !roomAccessibleToClaims(existingRoom, claims) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 			return
 		}
@@ -536,12 +550,14 @@ func (h *ParticipantHandler) BulkAdd(c *gin.Context) {
 	results := make([]gin.H, 0, len(req.Participants))
 	for _, p := range req.Participants {
 		output, err := h.participantService.JoinRoom(c.Request.Context(), participant.JoinRoomInput{
-			RoomID:         roomID,
-			TenantID:       claims.TenantID,
-			DisplayName:    p.DisplayName,
-			ExternalUserID: p.ExternalUserID,
-			Role:           p.Role,
-			Metadata:       p.Metadata,
+			RoomID:               roomID,
+			TenantID:             claims.TenantID,
+			WorkspaceID:          claims.WorkspaceID,
+			AllowCreateOnMissing: false,
+			DisplayName:          p.DisplayName,
+			ExternalUserID:       p.ExternalUserID,
+			Role:                 p.Role,
+			Metadata:             p.Metadata,
 		})
 		if err != nil {
 			results = append(results, gin.H{

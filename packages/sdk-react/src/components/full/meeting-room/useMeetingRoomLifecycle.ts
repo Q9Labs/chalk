@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 interface UseMeetingRoomLifecycleOptions {
+  meetingLink?: string;
   enableTour: boolean;
   showTourOnFirstVisit: boolean;
   defaultChatOpen: boolean;
@@ -13,7 +14,7 @@ interface UseMeetingRoomLifecycleOptions {
 
 const LEAVE_ANIMATION_MS = 600;
 
-export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defaultChatOpen, onChatOpen, onLeave, onTourComplete, setShowTour, setIsExiting }: UseMeetingRoomLifecycleOptions) {
+export function useMeetingRoomLifecycle({ meetingLink, enableTour, showTourOnFirstVisit, defaultChatOpen, onChatOpen, onLeave, onTourComplete, setShowTour, setIsExiting }: UseMeetingRoomLifecycleOptions) {
   const leaveTimeoutRef = useRef<number | null>(null);
   const hasMarkedDefaultChatReadRef = useRef(false);
 
@@ -41,9 +42,8 @@ export function useMeetingRoomLifecycle({ enableTour, showTourOnFirstVisit, defa
   }, [onTourComplete, setShowTour]);
 
   const handleCopyLink = useCallback(() => {
-    const meetingLink = window.location.href;
-    navigator.clipboard.writeText(meetingLink);
-  }, []);
+    navigator.clipboard.writeText(meetingLink ?? window.location.href);
+  }, [meetingLink]);
 
   useEffect(() => {
     if (!enableTour || !showTourOnFirstVisit) {

@@ -123,7 +123,9 @@ type Room struct {
 	ScheduledEndAt        pgtype.Timestamptz `db:"scheduled_end_at" json:"scheduled_end_at"`
 	AllowEarlyJoinMinutes int32              `db:"allow_early_join_minutes" json:"allow_early_join_minutes"`
 	// Screen annotation state JSON (share session, items, access mode)
-	ScreenAnnotationState []byte `db:"screen_annotation_state" json:"screen_annotation_state"`
+	ScreenAnnotationState []byte      `db:"screen_annotation_state" json:"screen_annotation_state"`
+	WorkspaceID           pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	CreatedByUserID       pgtype.UUID `db:"created_by_user_id" json:"created_by_user_id"`
 }
 
 type Tenant struct {
@@ -242,4 +244,21 @@ type WhiteboardPermission struct {
 	GrantedBy     pgtype.UUID `db:"granted_by" json:"granted_by"`
 	CreatedAt     time.Time   `db:"created_at" json:"created_at"`
 	UpdatedAt     time.Time   `db:"updated_at" json:"updated_at"`
+}
+
+type Workspace struct {
+	ID          uuid.UUID   `db:"id" json:"id"`
+	TenantID    uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	OwnerUserID pgtype.UUID `db:"owner_user_id" json:"owner_user_id"`
+	Name        string      `db:"name" json:"name"`
+	Kind        string      `db:"kind" json:"kind"`
+	CreatedAt   time.Time   `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time   `db:"updated_at" json:"updated_at"`
+}
+
+type WorkspaceMembership struct {
+	WorkspaceID uuid.UUID `db:"workspace_id" json:"workspace_id"`
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	Role        string    `db:"role" json:"role"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 }

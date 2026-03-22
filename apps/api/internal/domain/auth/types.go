@@ -15,6 +15,7 @@ type Claims struct {
 
 	// Chalk-specific claims
 	TenantID    uuid.UUID   `json:"tenant_id"`
+	WorkspaceID uuid.UUID   `json:"workspace_id,omitempty"`
 	RoomID      uuid.UUID   `json:"room_id,omitempty"`
 	DisplayName string      `json:"display_name,omitempty"`
 	Role        string      `json:"role,omitempty"` // host, participant

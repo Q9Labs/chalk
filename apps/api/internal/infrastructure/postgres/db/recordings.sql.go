@@ -538,6 +538,77 @@ func (q *Queries) ListRecordingsByTenant(ctx context.Context, arg ListRecordings
 	return items, nil
 }
 
+const listRecordingsByWorkspace = `-- name: ListRecordingsByWorkspace :many
+SELECT
+    rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at,
+    r.name as room_name
+FROM recordings rec
+JOIN rooms r ON r.id = rec.room_id
+WHERE r.workspace_id = $1
+ORDER BY rec.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListRecordingsByWorkspaceParams struct {
+	WorkspaceID pgtype.UUID `db:"workspace_id" json:"workspace_id"`
+	Limit       int32       `db:"limit" json:"limit"`
+	Offset      int32       `db:"offset" json:"offset"`
+}
+
+type ListRecordingsByWorkspaceRow struct {
+	ID                    uuid.UUID          `db:"id" json:"id"`
+	RoomID                uuid.UUID          `db:"room_id" json:"room_id"`
+	CloudflareRecordingID *string            `db:"cloudflare_recording_id" json:"cloudflare_recording_id"`
+	StorageProvider       *string            `db:"storage_provider" json:"storage_provider"`
+	StoragePath           *string            `db:"storage_path" json:"storage_path"`
+	SizeBytes             *int64             `db:"size_bytes" json:"size_bytes"`
+	DurationSeconds       *int32             `db:"duration_seconds" json:"duration_seconds"`
+	Status                string             `db:"status" json:"status"`
+	StartedAt             pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt               pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	ArchivedAt            pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
+	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
+	Metadata              []byte             `db:"metadata" json:"metadata"`
+	DeletedAt             pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
+	RoomName              *string            `db:"room_name" json:"room_name"`
+}
+
+func (q *Queries) ListRecordingsByWorkspace(ctx context.Context, arg ListRecordingsByWorkspaceParams) ([]ListRecordingsByWorkspaceRow, error) {
+	rows, err := q.db.Query(ctx, listRecordingsByWorkspace, arg.WorkspaceID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecordingsByWorkspaceRow{}
+	for rows.Next() {
+		var i ListRecordingsByWorkspaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RoomID,
+			&i.CloudflareRecordingID,
+			&i.StorageProvider,
+			&i.StoragePath,
+			&i.SizeBytes,
+			&i.DurationSeconds,
+			&i.Status,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+			&i.Metadata,
+			&i.DeletedAt,
+			&i.RoomName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecordingsReadyForArchive = `-- name: ListRecordingsReadyForArchive :many
 SELECT rec.id, rec.room_id, rec.cloudflare_recording_id, rec.storage_provider, rec.storage_path, rec.size_bytes, rec.duration_seconds, rec.status, rec.started_at, rec.ended_at, rec.archived_at, rec.created_at, rec.metadata, rec.deleted_at FROM recordings rec
 JOIN rooms r ON r.id = rec.room_id

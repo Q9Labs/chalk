@@ -62,7 +62,7 @@ func (h *InternalLinksHandler) CreateJoinToken(c *gin.Context) {
 	}
 
 	resolvedRoom, roomTarget, err := h.resolveJoinRoom(c.Request.Context(), claims.TenantID, roomIdentifier)
-	if err != nil || resolvedRoom == nil {
+	if err != nil || resolvedRoom == nil || !roomAccessibleToClaims(resolvedRoom, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -107,6 +107,7 @@ func (h *InternalLinksHandler) ExchangeJoinToken(c *gin.Context) {
 	tokenPair, err := h.jwtService.GenerateTokenPair(domainAuth.Claims{
 		Subject:     "join",
 		TenantID:    payload.TenantID,
+		RoomID:      resolvedRoom.ID,
 		Role:        "participant",
 		Permissions: domainAuth.DefaultParticipantPermissions(),
 	})
@@ -144,7 +145,7 @@ func (h *InternalLinksHandler) CreateShareToken(c *gin.Context) {
 	}
 
 	r, err := h.roomSvc.GetRoom(c.Request.Context(), rec.RoomID)
-	if err != nil || r.TenantID != claims.TenantID {
+	if err != nil || !roomAccessibleToClaims(r, claims) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "recording not found"})
 		return
 	}

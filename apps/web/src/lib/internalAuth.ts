@@ -2,6 +2,7 @@ import { APIClient } from "@q9labs/chalk-core";
 
 type JoinContextV1 = {
   joinToken: string;
+  roomId?: string;
   roomName?: string;
   accessToken?: string;
   expiresAtMs?: number;
@@ -126,12 +127,12 @@ function readJoinContext(): JoinContextV1 | null {
 
 function isJoinContextActiveForCurrentRoom(ctx: JoinContextV1) {
   if (typeof window === "undefined") return true;
-  if (!ctx.roomName) return false;
+  if (!ctx.roomId) return false;
   if (!window.location.pathname.startsWith("/room/")) return false;
-  const currentRoomName = decodeURIComponent(
+  const currentRoomID = decodeURIComponent(
     window.location.pathname.slice("/room/".length),
   );
-  return currentRoomName === ctx.roomName;
+  return currentRoomID === ctx.roomId;
 }
 
 export function getJoinContext(): JoinContextV1 | null {
@@ -341,8 +342,40 @@ export async function exchangeJoinToken(apiUrl: string, joinToken: string) {
   return {
     access_token: response.data.accessToken,
     expires_in: response.data.expiresIn,
+    room_id: response.data.roomId,
     room_name: response.data.roomName,
   };
+}
+
+export async function createRoomJoinLink(
+  apiUrl: string,
+  roomId: string,
+  accessToken: string,
+  origin?: string,
+) {
+  const res = await fetch(`${apiUrl}/api/v1/rooms/${roomId}/join-token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`join link failed (${res.status})`);
+  }
+
+  const data = (await res.json()) as { join_token?: string };
+  if (!data.join_token) {
+    throw new Error("missing join token");
+  }
+
+  const baseOrigin =
+    origin ??
+    (typeof window === "undefined" ? undefined : window.location.origin);
+  if (!baseOrigin) {
+    throw new Error("missing origin");
+  }
+
+  return new URL(`/j/${data.join_token}`, baseOrigin).toString();
 }
 
 export function createWebTokenProvider(apiUrl: string) {
@@ -361,6 +394,7 @@ export function createWebTokenProvider(apiUrl: string) {
       const expiresAtMs = Date.now() + ex.expires_in * 1000;
       setJoinContext({
         joinToken: jc.joinToken,
+        roomId: ex.room_id,
         roomName: ex.room_name,
         accessToken: ex.access_token,
         expiresAtMs,

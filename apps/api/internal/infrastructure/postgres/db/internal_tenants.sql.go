@@ -152,3 +152,36 @@ func (q *Queries) GetInternalTenantByOwnerUserID(ctx context.Context, ownerUserI
 	)
 	return i, err
 }
+
+const getSharedInternalTenantByName = `-- name: GetSharedInternalTenantByName :one
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
+WHERE tenant_kind = 'internal'
+  AND owner_user_id IS NULL
+  AND name = $1
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+func (q *Queries) GetSharedInternalTenantByName(ctx context.Context, name string) (Tenant, error) {
+	row := q.db.QueryRow(ctx, getSharedInternalTenantByName, name)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ApiKeyHash,
+		&i.Config,
+		&i.MaxConcurrentRooms,
+		&i.MaxParticipantsPerRoom,
+		&i.MaxRecordingDurationMinutes,
+		&i.MaxTotalMinutesOfMeetings,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.WhiteboardConfig,
+		&i.TenantConfig,
+		&i.TenantKind,
+		&i.OwnerUserID,
+		&i.ClaimedAt,
+	)
+	return i, err
+}

@@ -5,6 +5,7 @@ import type { ConferenceFeatureFlags } from "./useConferenceFeatureFlags";
 
 export interface UseMeetingRoomPropsParams {
   roomName: MeetingRoomProps["roomName"];
+  meetingLink?: MeetingRoomProps["meetingLink"];
   localParticipant: MeetingRoomProps["localParticipant"];
   participants: MeetingRoomProps["participants"];
   canManageParticipants: MeetingRoomProps["canManageParticipants"];
@@ -70,6 +71,7 @@ export interface UseMeetingRoomPropsParams {
 
 export function useMeetingRoomProps({
   roomName,
+  meetingLink,
   localParticipant,
   participants,
   canManageParticipants,
@@ -137,6 +139,7 @@ export function useMeetingRoomProps({
   return useMemo(
     () => ({
       roomName,
+      meetingLink,
       localParticipant,
       participants,
       canManageParticipants,
@@ -209,6 +212,7 @@ export function useMeetingRoomProps({
     }),
     [
       roomName,
+      meetingLink,
       localParticipant,
       participants,
       canManageParticipants,

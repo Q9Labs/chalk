@@ -57,19 +57,22 @@ type internalAuthQueriesStub struct {
 	userByID         db.User
 	userByEmail      db.User
 
-	tenantByOwner       db.Tenant
-	getInternalCalls    int
-	touchUserSessionCnt int
-	createTenantCalls   int
-	createClaimCalls    int
-	createUserCalls     int
-	createSessionCalls  int
-	revokeSessionCalls  int
-	createdTenant       db.Tenant
-	createdClaim        db.TenantClaim
-	claimBySecret       db.TenantClaim
-	bindTenantCalls     int
-	bindTenantErr       error
+	tenantByOwner        db.Tenant
+	sharedTenant         db.Tenant
+	workspaceByOwner     db.Workspace
+	getInternalCalls     int
+	touchUserSessionCnt  int
+	createTenantCalls    int
+	createClaimCalls     int
+	createUserCalls      int
+	createSessionCalls   int
+	createWorkspaceCalls int
+	revokeSessionCalls   int
+	createdTenant        db.Tenant
+	createdClaim         db.TenantClaim
+	claimBySecret        db.TenantClaim
+	bindTenantCalls      int
+	bindTenantErr        error
 }
 
 func (q *internalAuthQueriesStub) CreateInternalTenant(context.Context, db.CreateInternalTenantParams) (db.Tenant, error) {
@@ -102,12 +105,47 @@ func (q *internalAuthQueriesStub) CreateUserSession(context.Context, db.CreateUs
 	return db.UserSession{ID: uuid.New()}, nil
 }
 
+func (q *internalAuthQueriesStub) CreateWorkspace(_ context.Context, arg db.CreateWorkspaceParams) (db.Workspace, error) {
+	q.createWorkspaceCalls++
+	if q.workspaceByOwner.ID == uuid.Nil {
+		q.workspaceByOwner = db.Workspace{
+			ID:          uuid.New(),
+			TenantID:    arg.TenantID,
+			OwnerUserID: arg.OwnerUserID,
+			Name:        arg.Name,
+			Kind:        arg.Kind,
+		}
+	}
+	return q.workspaceByOwner, nil
+}
+
+func (q *internalAuthQueriesStub) CreateWorkspaceMembership(context.Context, db.CreateWorkspaceMembershipParams) (db.WorkspaceMembership, error) {
+	return db.WorkspaceMembership{}, nil
+}
+
 func (q *internalAuthQueriesStub) GetInternalTenantByOwnerUserID(_ context.Context, _ pgtype.UUID) (db.Tenant, error) {
 	q.getInternalCalls++
 	if q.tenantByOwner.ID == uuid.Nil {
 		return db.Tenant{}, errors.New("tenant not found")
 	}
 	return q.tenantByOwner, nil
+}
+
+func (q *internalAuthQueriesStub) GetSharedInternalTenantByName(_ context.Context, _ string) (db.Tenant, error) {
+	if q.sharedTenant.ID == uuid.Nil {
+		return db.Tenant{}, errors.New("tenant not found")
+	}
+	return q.sharedTenant, nil
+}
+
+func (q *internalAuthQueriesStub) GetTenant(_ context.Context, id uuid.UUID) (db.Tenant, error) {
+	if q.sharedTenant.ID == id {
+		return q.sharedTenant, nil
+	}
+	if q.createdTenant.ID == id {
+		return q.createdTenant, nil
+	}
+	return db.Tenant{}, errors.New("tenant not found")
 }
 
 func (q *internalAuthQueriesStub) GetTenantClaimBySecretHash(context.Context, string) (db.TenantClaim, error) {
@@ -141,6 +179,26 @@ func (q *internalAuthQueriesStub) GetUserSessionByRefreshTokenHash(_ context.Con
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(time.Hour),
 	}, nil
+}
+
+func (q *internalAuthQueriesStub) GetWorkspace(_ context.Context, id uuid.UUID) (db.Workspace, error) {
+	if q.workspaceByOwner.ID == id {
+		return q.workspaceByOwner, nil
+	}
+	return db.Workspace{}, errors.New("workspace not found")
+}
+
+func (q *internalAuthQueriesStub) GetWorkspaceByTenantAndOwner(_ context.Context, arg db.GetWorkspaceByTenantAndOwnerParams) (db.Workspace, error) {
+	if q.workspaceByOwner.ID == uuid.Nil {
+		return db.Workspace{}, errors.New("workspace not found")
+	}
+	if q.workspaceByOwner.TenantID != arg.TenantID {
+		return db.Workspace{}, errors.New("workspace not found")
+	}
+	if !q.workspaceByOwner.OwnerUserID.Valid || q.workspaceByOwner.OwnerUserID.Bytes != arg.OwnerUserID.Bytes {
+		return db.Workspace{}, errors.New("workspace not found")
+	}
+	return q.workspaceByOwner, nil
 }
 
 func (q *internalAuthQueriesStub) BindInternalTenantToOwner(_ context.Context, arg db.BindInternalTenantToOwnerParams) (db.Tenant, error) {
@@ -195,6 +253,7 @@ func TestInternalAuthGoogle_ExchangesOAuthCodeAndEstablishesSession(t *testing.T
 	require.Equal(t, 1, queryStub.createUserCalls)
 	require.Equal(t, 1, queryStub.createSessionCalls)
 	require.Equal(t, 1, queryStub.createTenantCalls)
+	require.Equal(t, 1, queryStub.createWorkspaceCalls)
 	require.Contains(t, w.Header().Get("Set-Cookie"), internalSessionCookieName+"=")
 
 	var bodyJSON map[string]any
@@ -290,23 +349,31 @@ func TestInternalAuthLogout_RevokesSessionAndClearsCookies(t *testing.T) {
 	require.Equal(t, "", cookies[0].Value)
 }
 
-func TestInternalAuthAccessToken_UsesOwnerTenantCache(t *testing.T) {
+func TestInternalAuthAccessToken_UsesSharedTenantAndWorkspaceCache(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	sessionToken := "session-token"
 	userID := uuid.New()
 	tenantID := uuid.New()
+	workspaceID := uuid.New()
 
 	queryStub := &internalAuthQueriesStub{
 		sessionTokenHash: sha256Hex(sessionToken),
 		sessionUserID:    userID,
 		sessionID:        uuid.New(),
-		tenantByOwner: db.Tenant{
-			ID: tenantID,
+		sharedTenant: db.Tenant{
+			ID:         tenantID,
+			TenantKind: "internal",
+		},
+		workspaceByOwner: db.Workspace{
+			ID:          workspaceID,
+			TenantID:    tenantID,
+			OwnerUserID: pgtype.UUID{Bytes: userID, Valid: true},
 		},
 	}
 	cacheStub := &internalAuthCacheStub{
 		values: map[string]string{
-			internalTenantByOwnerRedisKey(userID): tenantID.String(),
+			sharedInternalTenantRedisKey():   tenantID.String(),
+			workspaceByOwnerRedisKey(userID): workspaceID.String(),
 		},
 	}
 
@@ -334,23 +401,31 @@ func TestInternalAuthAccessToken_UsesOwnerTenantCache(t *testing.T) {
 	require.NotEmpty(t, body["access_token"])
 }
 
-func TestInternalAuthAccessToken_InvalidOwnerTenantCacheFallsBackToDB(t *testing.T) {
+func TestInternalAuthAccessToken_InvalidWorkspaceCacheFallsBackToDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	sessionToken := "session-token"
 	userID := uuid.New()
 	tenantID := uuid.New()
+	workspaceID := uuid.New()
 
 	queryStub := &internalAuthQueriesStub{
 		sessionTokenHash: sha256Hex(sessionToken),
 		sessionUserID:    userID,
 		sessionID:        uuid.New(),
-		tenantByOwner: db.Tenant{
-			ID: tenantID,
+		sharedTenant: db.Tenant{
+			ID:         tenantID,
+			TenantKind: "internal",
+		},
+		workspaceByOwner: db.Workspace{
+			ID:          workspaceID,
+			TenantID:    tenantID,
+			OwnerUserID: pgtype.UUID{Bytes: userID, Valid: true},
 		},
 	}
 	cacheStub := &internalAuthCacheStub{
 		values: map[string]string{
-			internalTenantByOwnerRedisKey(userID): "not-a-uuid",
+			sharedInternalTenantRedisKey():   tenantID.String(),
+			workspaceByOwnerRedisKey(userID): "not-a-uuid",
 		},
 	}
 
@@ -370,6 +445,5 @@ func TestInternalAuthAccessToken_InvalidOwnerTenantCacheFallsBackToDB(t *testing
 
 	handler.AccessToken(c)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 1, queryStub.getInternalCalls)
-	require.Equal(t, tenantID.String(), cacheStub.values[internalTenantByOwnerRedisKey(userID)])
+	require.Equal(t, workspaceID.String(), cacheStub.values[workspaceByOwnerRedisKey(userID)])
 }

@@ -63,6 +63,7 @@ export interface ActiveReaction {
 
 export interface MeetingRoomProps {
   roomName: string;
+  meetingLink?: string;
   localParticipant: Participant;
   participants: Participant[];
   canManageParticipants?: boolean;
