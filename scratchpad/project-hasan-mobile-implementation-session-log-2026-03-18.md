@@ -51,6 +51,24 @@ Current iOS status after this pass:
 - clipboard permission concern closed: no new permission, just QA
 - remaining blockers are account/config, not app business logic
 
+[2026-03-22 23:47 PKT] Mobile privacy/reviewer helper pass completed. Grounded the store-review draft from repo reality and live site checks:
+- privacy URLs that actually serve now:
+  - `https://chalk.q9labs.ai/privacy/`
+  - `https://chalk.q9labs.ai/privacy-policy/`
+- direct bare slugs are not safe for stores yet:
+  - `https://chalk.q9labs.ai/privacy` -> 404
+  - `https://chalk.q9labs.ai/privacy-policy` -> 404
+  - `https://chalk.q9labs.ai/terms` -> 404
+- mobile feature facts confirmed from code:
+  - camera + microphone usage present
+  - network access required
+  - clipboard invite suggestion only reads clipboard to detect a Chalk invite link
+  - no mobile analytics SDK wiring found
+  - no separate consumer sign-in flow in `apps/mobile`
+  - host token / join context are stored locally in `expo-secure-store`
+- drafted store helper at `apps/mobile/STORE_REVIEW_HELPER.md`
+- added static terms page at `apps/web/public/terms/index.html` so a real `https://chalk.q9labs.ai/terms/` URL can be deployed next if desired
+
 Current status after this pass:
 - Android:
   - tests green
@@ -365,3 +383,9 @@ Exact next actions for raw Xcode/TestFlight path:
 [2026-03-22 22:23 PKT] Apple-side local credential probe results: `security find-identity -v -p codesigning` shows only one local Apple Development identity for team `4V7RXZU8P2`; no local App Store Connect API-key directories exist under `~/.appstoreconnect/private_keys` or `~/.private_keys`; `~/.fastlane` has no useful signing config. This strengthens the current blocker diagnosis: TestFlight/build completion now needs interactive Apple credential provisioning (via `eas credentials -p ios` or Xcode account setup), not more repo-side code changes.
 
 [2026-03-22 22:31 PKT] Hasan requested raw iOS publishing, not EAS. Removed Expo owner/projectId coupling from apps/mobile/app.config.ts and app.config tests, and rewrote RELEASE.md iOS lane to the raw Xcode/TestFlight path. Remote EAS project may still exist in Expo account, but repo no longer depends on it.
+
+[2026-03-22 23:45 PKT] Hasan confirmed Apple account/team step done in Xcode and added the Xcode MCP server. Next critical-path action: use Xcode tooling to archive Chalk and push toward TestFlight while Android store-blocker agents work in parallel.
+
+[2026-03-22 23:45 PKT] Xcode build hit native workspace drift, not signing: "The sandbox is not in sync with the Podfile.lock." Running `pod install` in apps/mobile/ios before retrying build/archive.
+
+[2026-03-22 23:47 PKT] Ran `pod install` in apps/mobile/ios successfully. Important follow-up from CocoaPods: close old Xcode project sessions and use `apps/mobile/ios/Chalk.xcworkspace` from now on for build/archive.
