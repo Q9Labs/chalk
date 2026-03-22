@@ -9,6 +9,9 @@
 - add real `keystore.properties` locally
 - or provide `ANDROID_UPLOAD_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PROPERTIES` in GitHub Secrets for CI builds
 - confirm `bundleRelease` succeeds
+- record the shipped AAB sha256 from `android/app/build/outputs/bundle/release/app-release.aab`
+- verify Play bundle library contains the uploaded versionCode
+- verify the `internal` track points at the intended versionCode after upload
 - confirm release build host key comes from `VITE_CHALK_API_KEY` secret, not local `.env.local`
 - verify `SYSTEM_ALERT_WINDOW` is not required before release
 - verify Android V1 release is acceptable without mobile-originated screen share

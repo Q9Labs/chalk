@@ -17,6 +17,8 @@ Optional native refresh only when intentionally regenerating Android files:
 Bundle output:
 
 - `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab`
+- checksum:
+  - `cd apps/mobile/android/app/build/outputs/bundle/release && shasum -a 256 app-release.aab`
 
 ## Secret-backed Android CI build
 
@@ -77,6 +79,19 @@ From `apps/mobile`:
    - `bun run build:android:release`
 2. Upload to internal track
    - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --release-notes "Initial Android internal test build"`
+
+## Post-upload verification
+
+1. Confirm the built artifact hash
+   - `cd apps/mobile/android/app/build/outputs/bundle/release && shasum -a 256 app-release.aab`
+2. Confirm the uploaded bundle exists in Play
+   - `edit=$(GPLAY_SERVICE_ACCOUNT_JSON=.gplay/service-account.json gplay edits create --package ai.q9labs.chalk.mobile | jq -r '.id')`
+   - `GPLAY_SERVICE_ACCOUNT_JSON=.gplay/service-account.json gplay bundles list --package ai.q9labs.chalk.mobile --edit "$edit"`
+3. Confirm the internal track points at the expected versionCode
+   - `GPLAY_SERVICE_ACCOUNT_JSON=.gplay/service-account.json gplay tracks get --package ai.q9labs.chalk.mobile --edit "$edit" --track internal`
+4. Expected good state:
+   - target release `status: completed`
+   - target `versionCodes` contains the newly uploaded version
 
 Current known behavior:
 

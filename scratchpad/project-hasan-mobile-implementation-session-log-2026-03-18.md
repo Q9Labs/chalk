@@ -163,3 +163,82 @@ Important alignment note:
   - then Android internal release
   - then iOS
   - not the other way around
+
+## 2026-03-22 17:44 PKT - iOS internal-release assessment
+
+Goal for this pass:
+- assess the real iOS internal-release lane
+- verify current signing/team state
+- push to the first concrete archive blocker
+
+Files inspected:
+- `apps/mobile/RELEASE.md`
+- `apps/mobile/RELEASE_CHECKLIST.md`
+- `apps/mobile/app.config.ts`
+- `apps/mobile/package.json`
+- `apps/mobile/ios/Chalk/Info.plist`
+- `apps/mobile/ios/Chalk/Chalk.entitlements`
+- `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj`
+
+Commands run:
+- `xcodebuild -version`
+- `security find-identity -p codesigning -v`
+- `cd apps/mobile/ios && xcodebuild -list -json`
+- `cd apps/mobile/ios && xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -showBuildSettings | rg "DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|MARKETING_VERSION|CURRENT_PROJECT_VERSION|CODE_SIGN|PROVISIONING_PROFILE|CODE_SIGN_STYLE|CODE_SIGN_IDENTITY"`
+- `cd apps/mobile/ios && xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk.xcarchive archive`
+
+Grounded findings:
+- Xcode is installed locally:
+  - `Xcode 26.3`
+  - `Build version 17C529`
+- local macOS keychain has at least one valid Apple code-signing identity:
+  - Apple Development identity present
+- checked-in Xcode project does **not** have `DEVELOPMENT_TEAM` configured
+- first real archive attempt failed on signing, not on React Native/native compile issues
+
+Exact archive blocker:
+- `Signing for "Chalk" requires a development team. Select a development team in the Signing & Capabilities editor.`
+
+Version/build consistency status:
+- `apps/mobile/app.config.ts`
+  - iOS version: `0.0.10`
+  - iOS buildNumber: `10`
+- `apps/mobile/ios/Chalk/Info.plist`
+  - `CFBundleShortVersionString = 0.0.10`
+  - `CFBundleVersion = 10`
+- `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj`
+  - `MARKETING_VERSION = 1.0`
+  - `CURRENT_PROJECT_VERSION = 1`
+- interpretation:
+  - Expo config + Info.plist are aligned
+  - Xcode project build settings are stale and should be aligned before TestFlight/archive
+
+Other iOS blockers observed:
+- `apps/mobile/ios/Chalk/Chalk.entitlements` is empty
+- no ReplayKit broadcast extension target is present in the checked-in iOS project
+- no app groups configured
+- iOS screen share therefore is not release-ready if V1 requires full mobile-originated screen share
+
+Important nuance:
+- `apps/mobile/ios/Pods` is currently absent on disk in this checkout
+- archive still reached the signing step first, so missing pods were not the current top blocker in this pass
+
+Exact next actions from this checkpoint:
+1. Set `DEVELOPMENT_TEAM` for target/project `Chalk` in Xcode Signing & Capabilities.
+2. Align iOS version/build values in `project.pbxproj` with:
+   - `0.0.10`
+   - `10`
+3. Re-run release archive:
+   - `cd apps/mobile/ios && xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk.xcarchive archive`
+4. If screen share stays in iOS V1:
+   - add ReplayKit broadcast upload extension
+   - add app groups entitlements/config
+5. After signed archive succeeds:
+   - export/upload to TestFlight
+   - run real iPhone QA for:
+     - camera/mic prompts
+     - clipboard prompt UX
+     - background audio
+     - meeting join/create
+
+[2026-03-22 19:04 PKT] Android release follow-through after successful internal upload. Verified current checked-in Android version metadata now converges on `0.0.10` / `versionCode 10`: `apps/mobile/app.config.ts` already matched, `apps/mobile/android/gradle.properties` already matched, and `apps/mobile/android/app/build.gradle` fallback version metadata was corrected from `9`/`0.0.9` to `10`/`0.0.10` so local Gradle defaults cannot drift from the shipped Play build. Confirmed local signed artifact still exists at `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab`; recorded local sha256 `9a6e34f8f7bfaba3e584cebf4e45c7dd24d31f81cf3b8762aa35e868f219b64f`. Confirmed Play internal track state via fresh `gplay` edit readback: track `internal`, release name `0.0.10`, status `completed`, `versionCodes ["10"]`. Tightened Android release docs/checklist to include artifact checksum and explicit `gplay bundles list` / `gplay tracks get` post-upload verification steps. Remaining Android-only work is operational, not code: internal tester install smoke, Play listing/privacy/data-safety completion, and final explicit acceptance that Android V1 ships without mobile-originated screen share.

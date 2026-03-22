@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **First-party meeting identity now resolves by workspace + room UUID** — Chalk web/internal auth now provisions personal workspaces inside a shared first-party tenant instead of creating per-user internal tenants, dashboard joins preserve canonical `room_id` through signed join-link exchange, and in-room invite UI now surfaces the real guest `/j/:token` link rather than reusing the host page URL.
 - **Meeting entry is now invite-link-first across Chalk surfaces** — web landing no longer accepts raw room codes, mobile join input now only accepts signed invite links, and Android app links only claim `/j/*` so arbitrary `/room/*` or typed codes stop acting like a product contract.
 - **Mobile: Android release path now reflects the actual V1 contract** — Android app links now cover both `/j/*` and `/room/*`, release docs/checklists now document clipboard-invite behavior without adding a manifest permission, and the current no-Android-screen-share V1 no longer requests media-projection release permission by default.
+- **Mobile/Android: post-upload release ops now match internal track `10`** — Android release docs now include checksum and `gplay` track/bundle verification commands, and `apps/mobile/android/app/build.gradle` fallback version metadata now stays aligned at `0.0.10` / `versionCode 10` with Expo config and checked-in Gradle properties.
 
 ### Fixed
 
