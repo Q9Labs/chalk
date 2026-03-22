@@ -78,3 +78,11 @@
 - 2026-03-22 21:07:32 PKT
   Regression coverage:
   added mobile invite-link parsing tests, mobile backend room-create tests, and updated Android intent-filter assertions so future changes cannot quietly reintroduce raw-code joins or fake local room ids.
+
+- 2026-03-22 21:42:55 PKT
+  Clipboard suggestion:
+  added `expo-clipboard@55.0.9` to mobile, read clipboard text on home-screen load/app foreground/clipboard changes, and surface a one-tap “Join copied invite” card whenever the clipboard already contains a valid Chalk invite link that is not already in the input.
+
+- 2026-03-22 21:42:55 PKT
+  Safety + coverage:
+  clipboard suggestion stays a suggestion instead of auto-joining, uses `hasStringAsync()` before reading clipboard, and gained regression coverage for clipboard suggestion filtering in `inviteLink.test.ts`.

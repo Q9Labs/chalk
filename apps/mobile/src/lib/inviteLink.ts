@@ -24,3 +24,16 @@ export function extractJoinTokenFromInviteLink(input: string): string | null {
     return null;
   }
 }
+
+export function getClipboardInviteSuggestion(clipboardText: string | null | undefined, currentInput = ""): string | null {
+  const normalizedClipboardText = clipboardText?.trim();
+  if (!normalizedClipboardText) {
+    return null;
+  }
+
+  if (normalizedClipboardText === currentInput.trim()) {
+    return null;
+  }
+
+  return extractJoinTokenFromInviteLink(normalizedClipboardText) ? normalizedClipboardText : null;
+}

@@ -5,6 +5,8 @@ import { Settings01Icon, KeyboardIcon, Add01Icon } from "@hugeicons/core-free-ic
 import { canCreateMeeting, createMeetingLobbyRoute, getApiUrl, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
 import { Theme } from "../lib/theme";
 import { ChalkLogoElements } from "../components/ChalkLogoElements";
+import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
+import { useClipboardInviteSuggestion } from "./useClipboardInviteSuggestion";
 
 export interface HomeScreenProps {
   onNavigate: (route: LobbyRoute) => void;
@@ -19,9 +21,12 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
   const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
+  const clipboardInviteLink = useClipboardInviteSuggestion(input);
 
-  const handleOpenInput = async () => {
-    if (!inviteDestination?.joinToken) {
+  const openInviteLink = async (inviteLink: string) => {
+    const destination = parseInputDestination(inviteLink);
+    const joinToken = destination?.joinToken;
+    if (!joinToken) {
       setError("Please paste a valid invite link.");
       return;
     }
@@ -30,12 +35,25 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
 
     try {
       setIsResolving(true);
-      onNavigate(await resolveJoinToken(inviteDestination.joinToken, apiUrl));
+      onNavigate(await resolveJoinToken(joinToken, apiUrl));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Invalid invite link");
     } finally {
       setIsResolving(false);
     }
+  };
+
+  const handleOpenInput = async () => {
+    await openInviteLink(input);
+  };
+
+  const handleClipboardSuggestion = async () => {
+    if (!clipboardInviteLink) {
+      return;
+    }
+
+    setInput(clipboardInviteLink);
+    await openInviteLink(clipboardInviteLink);
   };
 
   const handleNewMeeting = async () => {
@@ -84,6 +102,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
               <HugeiconsIcon icon={Add01Icon} size={20} color="white" />
               <Text style={styles.primaryButtonText}>{isCreatingMeeting ? "Starting..." : "New meeting"}</Text>
             </Pressable>
+
+            {clipboardInviteLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
 
             <View style={styles.inputWrapper}>
               <View style={styles.inputContainer}>
