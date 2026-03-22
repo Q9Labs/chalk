@@ -2,6 +2,7 @@
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
   <uses-permission android:name="android.permission.BLUETOOTH"/>
   <uses-permission android:name="android.permission.CAMERA"/>
+  <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT" tools:node="remove"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" tools:node="remove"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" tools:node="remove"/>
@@ -9,7 +10,6 @@
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.MICROPHONE"/>
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
-  <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT" tools:node="remove"/>
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
   <uses-permission android:name="android.permission.RECORD_AUDIO"/>
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove"/>
@@ -43,6 +43,7 @@
       <intent-filter android:autoVerify="true" data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
         <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPrefix="/j/"/>
+        <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPrefix="/room/"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>

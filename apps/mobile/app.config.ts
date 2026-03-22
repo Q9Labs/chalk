@@ -24,7 +24,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       name: "Chalk",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "0.0.9",
+      version: "0.0.10",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
@@ -38,7 +38,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       ios: {
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "9",
+        buildNumber: "10",
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you during meetings.",
@@ -48,7 +48,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       },
       android: {
         package: "ai.q9labs.chalk.mobile",
-        versionCode: 9,
+        versionCode: 10,
         adaptiveIcon: {
           foregroundImage: "./assets/icon.png",
           backgroundColor: "#0b0c14",
@@ -58,7 +58,10 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             action: "VIEW",
             autoVerify: true,
             category: ["BROWSABLE", "DEFAULT"],
-            data: [{ scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" }],
+            data: [
+              { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" },
+              { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
+            ],
           },
         ],
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
@@ -67,7 +70,6 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
           "android.permission.BLUETOOTH",
           "android.permission.CAMERA",
           "android.permission.FOREGROUND_SERVICE",
-          "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
           "android.permission.INTERNET",
           "android.permission.MODIFY_AUDIO_SETTINGS",
           "android.permission.RECORD_AUDIO",

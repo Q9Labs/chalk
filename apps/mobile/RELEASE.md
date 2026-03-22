@@ -76,7 +76,12 @@ From `apps/mobile`:
 1. Create signed bundle
    - `bun run build:android:release`
 2. Upload to internal track
-   - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --release-notes "Initial Android internal test build" --changes-not-sent-for-review`
+   - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --release-notes "Initial Android internal test build"`
+
+Current known behavior:
+
+- for this Play app, internal-track changes are sent for review automatically
+- do **not** pass `--changes-not-sent-for-review`; Play rejects the commit with `400`
 
 ## Optional metadata
 
@@ -90,6 +95,9 @@ If store listing files/screenshots exist:
 - privacy policy URL
 - data safety
 - app content declarations
+- clipboard invite suggestion:
+  - Android: no new manifest permission required
+  - iOS: direct pasteboard reads can trigger the system paste prompt; verify the join suggestion feels acceptable
 - real device QA:
   - create meeting
   - join meeting
@@ -98,4 +106,4 @@ If store listing files/screenshots exist:
   - transcripts
   - reconnect
   - speaker routing
-  - screen share
+  - confirm Android V1 behavior without mobile-originated screen share

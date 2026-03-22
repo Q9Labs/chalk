@@ -11,8 +11,11 @@
 - confirm `bundleRelease` succeeds
 - confirm release build host key comes from `VITE_CHALK_API_KEY` secret, not local `.env.local`
 - verify `SYSTEM_ALERT_WINDOW` is not required before release
-- verify screen share still works with current foreground-service permissions
+- verify Android V1 release is acceptable without mobile-originated screen share
 - confirm production build has no cleartext HTTP dependency
+- verify clipboard invite suggestion feels correct
+  - Android: no new manifest permission required
+  - iOS: direct pasteboard reads may show the Apple paste prompt
 - update Play listing assets, privacy policy, data safety, reviewer notes
 
 ## iOS
