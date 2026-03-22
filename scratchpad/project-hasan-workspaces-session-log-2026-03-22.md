@@ -58,3 +58,11 @@
 - 2026-03-22 18:58:00 PKT
   Dashboard browser proof:
   opened `http://localhost:3070/dashboard`, created scheduled session `Team Standup 172666`, and verified the new session card rendered in the Scheduled Sessions panel immediately without manual reload. Screenshot: `/tmp/chalk-dashboard-scheduled-session.png`.
+
+- 2026-03-22 20:35:00 PKT
+  Prod host-key tenant rotation:
+  confirmed prod web currently ships without bundled `VITE_CHALK_API_KEY`, proved prod can still operate via internal claim tenants, then created a fresh prod external tenant `f5b46d23-39ee-0169-9598-539cc4a83332` (`Chalk Official App`) through `POST /api/v1/tenants`, patched its tenant config to match the active first-party Chalk shape (`force_recording=true`, `allow_early_join=true`, `transcription_enabled=true`, `recording_retention_days=7`), and rotated repo secret `VITE_CHALK_API_KEY` to the new returned API key.
+
+- 2026-03-22 20:35:00 PKT
+  Web/mobile wiring:
+  mobile release workflow already consumed `secrets.VITE_CHALK_API_KEY`; updated `.github/workflows/web.yml` so prod web builds now also require and inject that same secret during build, preventing future drift between mobile host-key releases and web host-key builds.

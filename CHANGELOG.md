@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Prod app auth: web now receives the same host API key secret as mobile** — created a fresh prod external tenant cloned from the active first-party Chalk limits/config shape, rotated repo secret `VITE_CHALK_API_KEY` to that tenant, and updated web CI to inject the same secret mobile release already uses so host-key-backed app routes share one explicit prod tenant instead of drifting between internal claim tenants and stale release secrets.
 - **Web/dashboard: scheduled sessions now load and render from the real rooms API** — the dashboard now uses internal auth for its Chalk SDK session, isolates that auth state from the generic app cache, and actually fetches scheduled/active rooms for the Scheduled Sessions panel so `POST /api/v1/rooms/schedule` results appear in the UI immediately instead of disappearing behind an empty stub list.
 - **CI/Web: pruned installs no longer crash on missing mobile patch script** — root `postinstall` now skips cleanly when `scripts/patch-realtimekit-react-native.ts` is absent from a pruned workspace, so web CI can install the trimmed repo without failing before build steps.
 - **Infra: R2 recordings no longer auto-transition to Infrequent Access** — removed the 7-day R2 lifecycle storage-class transition for the lean recordings bucket while keeping the 30-day delete rule, because IA operation charges outweighed the tiny storage savings at current bucket size.
