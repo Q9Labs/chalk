@@ -10,6 +10,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const mobileDir = dirname(scriptDir);
 const localEnvPath = join(mobileDir, ".env.local");
 const backupEnvPath = join(mobileDir, ".env.local.release-backup");
+const verifyScriptPath = join(scriptDir, "verify-production-mobile-host-key.ts");
 
 const command = process.argv.slice(2);
 
@@ -30,12 +31,7 @@ try {
     renameSync(localEnvPath, backupEnvPath);
   }
 
-  const [cmd, ...args] = command;
-  if (!cmd) {
-    throw new Error("Missing command for production mobile build wrapper");
-  }
-
-  const result = spawnSync(cmd, args, {
+  const verifyResult = spawnSync("bun", [verifyScriptPath], {
     cwd: mobileDir,
     stdio: "inherit",
     env: {
@@ -47,11 +43,36 @@ try {
     },
   });
 
-  if (result.error) {
-    throw result.error;
+  if (verifyResult.error) {
+    throw verifyResult.error;
   }
 
-  exitCode = result.status ?? 1;
+  if ((verifyResult.status ?? 1) !== 0) {
+    exitCode = verifyResult.status ?? 1;
+  } else {
+    const [cmd, ...args] = command;
+    if (!cmd) {
+      throw new Error("Missing command for production mobile build wrapper");
+    }
+
+    const result = spawnSync(cmd, args, {
+      cwd: mobileDir,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        EXPO_PUBLIC_API_URL: PROD_API_URL,
+        EXPO_PUBLIC_WS_URL: PROD_WS_URL,
+        CHALK_APP_VARIANT: "production",
+        NODE_ENV: "production",
+      },
+    });
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    exitCode = result.status ?? 1;
+  }
 } finally {
   if (hadLocalEnv && existsSync(backupEnvPath)) {
     renameSync(backupEnvPath, localEnvPath);

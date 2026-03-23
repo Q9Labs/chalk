@@ -14,6 +14,7 @@
 - verify Play bundle library contains the uploaded versionCode
 - verify the `internal` track points at the intended versionCode after upload
 - confirm release build host key comes from `VITE_CHALK_API_KEY` secret, not local `.env.local`
+- confirm `bun run --cwd apps/mobile verify:production-host-key` passes before any uploadable build
 - verify `SYSTEM_ALERT_WINDOW` is not required before release
 - verify Android V1 release is acceptable without mobile-originated screen share
 - confirm production build has no cleartext HTTP dependency

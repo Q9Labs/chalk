@@ -4,6 +4,13 @@
 
 Use the guarded prod-env wrapper for all local release builds. It temporarily removes `apps/mobile/.env.local`, forces prod API/WS URLs, and refuses to run without `EXPO_PUBLIC_CHALK_API_KEY`.
 
+Important:
+
+- local Android release bundles are for dry-runs only
+- Play/TestFlight releases must use a centrally sourced host key
+- Android closed/prod releases should come from `.github/workflows/mobile-android-release.yml`
+- wrapper now verifies the supplied prod host key against `POST /api/v1/auth/token` before bundling
+
 1. Generate or refresh the upload keystore
    - local file: `apps/mobile/android/app/chalk-upload-key.jks`
    - local config: `apps/mobile/android/app/keystore.properties`
@@ -36,6 +43,7 @@ Preferred when the prod host key must come from GitHub, not local env:
    - `ANDROID_UPLOAD_KEYSTORE_BASE64`
    - `ANDROID_KEYSTORE_PROPERTIES`
 4. Download the produced signed AAB artifact, then upload/promote with `gplay` if the workflow itself is not publishing yet
+5. Treat the CI artifact as the only uploadable Android artifact
 
 ## Google Play service account
 
@@ -140,9 +148,9 @@ What is already done:
 
 - `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj` now carries:
   - `DEVELOPMENT_TEAM = 5K9635LZ6F`
-  - `MARKETING_VERSION = 0.0.14`
-  - `CURRENT_PROJECT_VERSION = 14`
-- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.14 (14)`
+  - `MARKETING_VERSION = 0.0.15`
+  - `CURRENT_PROJECT_VERSION = 15`
+- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.15 (15)`
 
 Current blocker:
 
@@ -163,10 +171,10 @@ Next exact steps:
    - confirm `Automatically manage signing` is enabled
 3. Archive from CLI
    - `cd apps/mobile`
-   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -workspace ios/Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath ios/build/Chalk-0.0.14.xcarchive archive -allowProvisioningUpdates`
+   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -workspace ios/Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath ios/build/Chalk-0.0.15.xcarchive archive -allowProvisioningUpdates`
 4. Export/upload to TestFlight
    - `cd apps/mobile`
-   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -exportArchive -archivePath ios/build/Chalk-0.0.14.xcarchive -exportPath /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/fresh-0.0.14 -exportOptionsPlist /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/ExportOptions.plist -allowProvisioningUpdates`
+   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -exportArchive -archivePath ios/build/Chalk-0.0.15.xcarchive -exportPath /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/fresh-0.0.15 -exportOptionsPlist /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/ExportOptions.plist -allowProvisioningUpdates`
 
 Human checks before wider rollout:
 

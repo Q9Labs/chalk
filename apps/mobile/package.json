@@ -14,6 +14,7 @@
     "build:android:release": "cd android && ./gradlew bundleRelease",
     "build:android:release:production": "bun run ./scripts/run-with-production-mobile-env.ts -- bun run build:android:release",
     "with:production-release-env": "bun run ./scripts/run-with-production-mobile-env.ts --",
+    "verify:production-host-key": "bun run ./scripts/verify-production-mobile-host-key.ts",
     "check-types": "tsc --noEmit",
     "lint": "bunx oxfmt --check . && tsc --noEmit",
     "test": "bun test"

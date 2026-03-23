@@ -64,8 +64,11 @@ jobs:
         run: |
           bun run --cwd apps/mobile test
 
+      - name: Verify production mobile host key
+        run: bun run --cwd apps/mobile verify:production-host-key
+
       - name: Build signed Android bundle
-        run: bun run --cwd apps/mobile build:android:release
+        run: bun run --cwd apps/mobile with:production-release-env -- bun run build:android:release
 
       - name: Generate checksums
         run: |
