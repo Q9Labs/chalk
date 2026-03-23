@@ -43,6 +43,10 @@ export function isConfiguredLocalApiUrl(configuredUrl?: string | null): boolean 
   return !!candidate && isDeviceLocalUrl(candidate);
 }
 
+export function canUseLocalHostBootstrap(apiUrl: string, allowDeviceLocal: boolean): boolean {
+  return allowDeviceLocal && isDeviceLocalUrl(apiUrl);
+}
+
 export function resolveDeviceLocalUrl(url: string, scriptUrl?: string | null, fallbackUrl?: string): string {
   try {
     const parsed = new URL(url);

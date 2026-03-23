@@ -2,12 +2,14 @@
 
 ## Local release build
 
+Use the guarded prod-env wrapper for all local release builds. It temporarily removes `apps/mobile/.env.local`, forces prod API/WS URLs, and refuses to run without `EXPO_PUBLIC_CHALK_API_KEY`.
+
 1. Generate or refresh the upload keystore
    - local file: `apps/mobile/android/app/chalk-upload-key.jks`
    - local config: `apps/mobile/android/app/keystore.properties`
    - template: `apps/mobile/android/app/keystore.properties.example`
 2. Build signed bundle
-   - `bun run --cwd apps/mobile build:android:release`
+   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run --cwd apps/mobile build:android:release:production`
 
 Optional native refresh only when intentionally regenerating Android files:
 
@@ -138,9 +140,9 @@ What is already done:
 
 - `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj` now carries:
   - `DEVELOPMENT_TEAM = 5K9635LZ6F`
-  - `MARKETING_VERSION = 0.0.12`
-  - `CURRENT_PROJECT_VERSION = 12`
-- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.12 (12)`
+  - `MARKETING_VERSION = 0.0.14`
+  - `CURRENT_PROJECT_VERSION = 14`
+- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.14 (14)`
 
 Current blocker:
 
@@ -160,11 +162,11 @@ Next exact steps:
    - confirm team `5K9635LZ6F`
    - confirm `Automatically manage signing` is enabled
 3. Archive from CLI
-   - `cd apps/mobile/ios`
-   - `xcodebuild -workspace Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk-0.0.12.xcarchive archive -allowProvisioningUpdates`
+   - `cd apps/mobile`
+   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -workspace ios/Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath ios/build/Chalk-0.0.14.xcarchive archive -allowProvisioningUpdates`
 4. Export/upload to TestFlight
-   - raw path: Xcode Organizer -> `Distribute App` -> `App Store Connect` -> `Upload`
-   - select the existing App Store Connect app record; do not let Xcode create a new one with plain `Chalk`
+   - `cd apps/mobile`
+   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -exportArchive -archivePath ios/build/Chalk-0.0.14.xcarchive -exportPath /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/fresh-0.0.14 -exportOptionsPlist /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/ExportOptions.plist -allowProvisioningUpdates`
 
 Human checks before wider rollout:
 

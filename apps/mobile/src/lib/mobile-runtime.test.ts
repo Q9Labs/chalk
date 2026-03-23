@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createStorageScopeId, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl } from "./mobile-runtime";
+import { canUseLocalHostBootstrap, createStorageScopeId, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl } from "./mobile-runtime";
 
 describe("mobile runtime helpers", () => {
   it("derives a stable scoped token namespace", () => {
@@ -56,5 +56,11 @@ describe("mobile runtime helpers", () => {
     expect(isConfiguredLocalApiUrl(" ws://127.0.0.1:8080/ws ")).toBe(true);
     expect(isConfiguredLocalApiUrl("https://chalk-api.q9labs.ai")).toBe(false);
     expect(isConfiguredLocalApiUrl(undefined)).toBe(false);
+  });
+
+  it("only allows host bootstrap for resolved local runtime urls", () => {
+    expect(canUseLocalHostBootstrap("http://localhost:8080", true)).toBe(true);
+    expect(canUseLocalHostBootstrap("https://chalk-api.q9labs.ai", true)).toBe(false);
+    expect(canUseLocalHostBootstrap("http://localhost:8080", false)).toBe(false);
   });
 });

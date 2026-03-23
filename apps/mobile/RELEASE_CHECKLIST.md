@@ -8,6 +8,7 @@
 - create upload keystore from `android/app/keystore.properties.example`
 - add real `keystore.properties` locally
 - or provide `ANDROID_UPLOAD_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PROPERTIES` in GitHub Secrets for CI builds
+- run local prod builds only through `scripts/run-with-production-mobile-env.ts`
 - confirm `bundleRelease` succeeds
 - record the shipped AAB sha256 from `android/app/build/outputs/bundle/release/app-release.aab`
 - verify Play bundle library contains the uploaded versionCode
@@ -25,6 +26,7 @@
 
 - open `ios/Chalk.xcworkspace` in Xcode
 - set Apple team + signing for `ai.q9labs.chalk.mobile`
+- run local archive/upload only through `scripts/run-with-production-mobile-env.ts`
 - archive a release build on a real signing identity
 - verify camera + mic permission prompts copy
 - verify background audio behavior

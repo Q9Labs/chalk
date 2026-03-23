@@ -1,7 +1,7 @@
 import { APIClient, createTokenProvider } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
 import { NativeModules } from "react-native";
-import { createStorageScopeId, isConfiguredLocalApiUrl, resolveAppRuntimeUrl } from "./mobile-runtime";
+import { canUseLocalHostBootstrap, createStorageScopeId, resolveAppRuntimeUrl } from "./mobile-runtime";
 import { createHostTokenStorage } from "./host-token-storage";
 import { extractJoinTokenFromInviteLink } from "./inviteLink";
 import { getCanonicalJoinRoomId, getJoinRoomName } from "./join-exchange";
@@ -76,12 +76,12 @@ export function getHostApiKey(): string | null {
   return configured || null;
 }
 
-export function canCreateMeeting(): boolean {
-  return getHostApiKey() !== null || canBootstrapLocalHostKey();
+export function canBootstrapLocalHostKey(apiUrl: string, allowDeviceLocal = __DEV__): boolean {
+  return canUseLocalHostBootstrap(apiUrl, allowDeviceLocal);
 }
 
-export function canBootstrapLocalHostKey(configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim()): boolean {
-  return isConfiguredLocalApiUrl(configuredApiUrl);
+export function canCreateMeeting(apiUrl = getApiUrl()): boolean {
+  return getHostApiKey() !== null || canBootstrapLocalHostKey(apiUrl);
 }
 
 function getTokenProviderForKey(apiUrl: string, apiKey: string): () => Promise<string> {
@@ -114,6 +114,10 @@ async function setLocalDevHostApiKey(apiKey: string): Promise<void> {
 }
 
 async function createLocalDevHostApiKey(apiUrl: string): Promise<string> {
+  if (!canBootstrapLocalHostKey(apiUrl)) {
+    throw new Error("Local host bootstrap is disabled for non-local API URLs");
+  }
+
   const response = await fetch(`${apiUrl}/api/v1/tenants`, {
     method: "POST",
     headers: {
@@ -139,14 +143,19 @@ async function createLocalDevHostApiKey(apiUrl: string): Promise<string> {
 
 export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | null {
   const configuredApiKey = getHostApiKey();
-  if (!configuredApiKey && !canBootstrapLocalHostKey()) {
+  const allowLocalBootstrap = canBootstrapLocalHostKey(apiUrl);
+
+  if (!configuredApiKey && !allowLocalBootstrap) {
     return null;
   }
 
   return async () => {
-    let apiKey = configuredApiKey ?? (canBootstrapLocalHostKey() ? await getLocalDevHostApiKey() : null);
+    let apiKey = configuredApiKey ?? (allowLocalBootstrap ? await getLocalDevHostApiKey() : null);
 
     if (!apiKey) {
+      if (!allowLocalBootstrap) {
+        throw new Error("Production mobile host API key is missing.");
+      }
       apiKey = await createLocalDevHostApiKey(apiUrl);
     }
 
@@ -154,7 +163,16 @@ export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | 
       return await getTokenProviderForKey(apiUrl, apiKey)();
     } catch (error) {
       const message = error instanceof Error ? error.message.toLowerCase() : "";
-      if (!canBootstrapLocalHostKey() || !message.includes("invalid api key")) {
+      const invalidHostKey = message.includes("token exchange failed") || message.includes("invalid api key");
+
+      if (!allowLocalBootstrap) {
+        if (invalidHostKey) {
+          throw new Error("Production mobile host API key is invalid. Ship a fresh build with the current key.");
+        }
+        throw error;
+      }
+
+      if (!invalidHostKey) {
         throw error;
       }
 

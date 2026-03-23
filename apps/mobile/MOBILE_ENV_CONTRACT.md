@@ -11,6 +11,7 @@ Required release env:
 Rules:
 
 - treat `apps/mobile/.env.local` as dev-only
+- local prod builds must run through `apps/mobile/scripts/run-with-production-mobile-env.ts`
 - if local mobile host auth drifts, run `bun run mobile:sync-local-env`
 - never trust a local host key for Play/TestFlight builds
 - Android signing material stays in GitHub Secrets, recreated only on the runner
@@ -23,4 +24,4 @@ Current Android release workflow:
 Current Android publish target:
 
 - package `ai.q9labs.chalk.mobile`
-- track `internal`
+- track `Gamma` for closed testing

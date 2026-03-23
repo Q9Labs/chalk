@@ -9,8 +9,8 @@ def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def keystorePropertiesFile = rootProject.file("app/keystore.properties")
 def keystoreProperties = new Properties()
 def isReleaseTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
-def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '13').toString())
-def appVersionName = (findProperty('chalk.versionName') ?: '0.0.13').toString()
+def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '14').toString())
+def appVersionName = (findProperty('chalk.versionName') ?: '0.0.14').toString()
 
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
