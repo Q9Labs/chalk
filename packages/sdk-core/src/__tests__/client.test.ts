@@ -647,8 +647,8 @@ describe("ConferenceClient", () => {
         globalThis.setTimeout = originalSetTimeout;
       }
 
-      expect(timeoutSamples).toEqual([30000, 30000, 30000, 30000, 30000]);
-      expect(scheduledDelays).toEqual([500, 1000, 2000, 4000]);
+      expect(timeoutSamples).toEqual([30000]);
+      expect(scheduledDelays).toEqual([]);
     });
 
     it("uses degraded-network RTK join policy for constrained browser cohort", async () => {
@@ -678,8 +678,8 @@ describe("ConferenceClient", () => {
         globalThis.setTimeout = originalSetTimeout;
       }
 
-      expect(timeoutSamples).toEqual([45000, 45000, 45000, 45000, 45000]);
-      expect(scheduledDelays).toEqual([1000, 2000, 4000, 8000]);
+      expect(timeoutSamples).toEqual([45000]);
+      expect(scheduledDelays).toEqual([]);
     });
 
     it("emits RTK join cohort/policy in room.join wide-event data", async () => {
@@ -757,7 +757,13 @@ describe("ConferenceClient", () => {
       const join = mock(async () => {});
       const joinEffect = mock(() => {
         if (joinEffect.mock.calls.length < 3) {
-          return Effect.fail(new Error("join attempt failed"));
+          return Effect.fail(
+            new TimeoutError({
+              message: "ConferenceSession join timed out after 30000ms",
+              operation: "joinRTKRoom",
+              timeoutMs: 30000,
+            }),
+          );
         }
         return Effect.succeed(undefined);
       });
@@ -777,7 +783,7 @@ describe("ConferenceClient", () => {
       expect(joinEffect).toHaveBeenCalledTimes(3);
     });
 
-    it("emits per-attempt RTK join telemetry with timeout/error classification", async () => {
+    it("emits per-attempt RTK join telemetry across timeout retries", async () => {
       const wideEventsReceived: Array<{
         eventType: string;
         outcome: string;
@@ -809,11 +815,8 @@ describe("ConferenceClient", () => {
       let attemptCount = 0;
       (client as any)._joinRealtimeKitEffect = mock(() => {
         attemptCount += 1;
-        if (attemptCount === 1) {
+        if (attemptCount < 3) {
           return Effect.fail(timeoutError);
-        }
-        if (attemptCount === 2) {
-          return Effect.fail(new Error("socket closed"));
         }
         return Effect.succeed(undefined);
       });
@@ -839,10 +842,10 @@ describe("ConferenceClient", () => {
 
       const attemptEvents = wideEventsReceived.filter((event) => event.eventType === "room.join.rtk.attempt");
       expect(attemptEvents).toHaveLength(3);
-      expect(attemptEvents.map((event) => event.outcome)).toEqual(["timeout", "error", "success"]);
+      expect(attemptEvents.map((event) => event.outcome)).toEqual(["timeout", "timeout", "success"]);
       expect(attemptEvents.map((event) => event.data?.attempt)).toEqual([1, 2, 3]);
       expect(attemptEvents.map((event) => event.data?.delayMs)).toEqual([10, 20, 0]);
-      expect(attemptEvents.map((event) => event.data?.timeoutVsError)).toEqual(["timeout", "error", "none"]);
+      expect(attemptEvents.map((event) => event.data?.timeoutVsError)).toEqual(["timeout", "timeout", "none"]);
       expect(attemptEvents.every((event) => typeof event.data?.attemptDurationMs === "number" && (event.data?.attemptDurationMs as number) >= 0 && event.durationMs >= 0)).toBe(true);
     });
 
@@ -852,7 +855,16 @@ describe("ConferenceClient", () => {
         token: "chalk_access_token",
       });
       const join = mock(async () => {});
-      const joinEffect = mock(() => Effect.fail(new Error("socket closed")));
+      const joinEffect = mock(
+        () =>
+          Effect.fail(
+            new TimeoutError({
+              message: "ConferenceSession join timed out after 30000ms",
+              operation: "joinRTKRoom",
+              timeoutMs: 30000,
+            }),
+          ),
+      );
       (client as any)._joinRealtimeKitEffect = joinEffect;
       const originalSetTimeout = globalThis.setTimeout;
       globalThis.setTimeout = ((handler: TimerHandler) => {
@@ -861,7 +873,9 @@ describe("ConferenceClient", () => {
       }) as any;
 
       try {
-        await expect((client as any)._joinRealtimeKitWithRetry({ join } as any)).rejects.toThrow("Failed to join room after 5 attempts: socket closed");
+        await expect((client as any)._joinRealtimeKitWithRetry({ join } as any)).rejects.toThrow(
+          "Failed to join room after 5 attempts: ConferenceSession join timed out after 30000ms",
+        );
       } finally {
         globalThis.setTimeout = originalSetTimeout;
       }
@@ -899,7 +913,7 @@ describe("ConferenceClient", () => {
         globalThis.setTimeout = originalSetTimeout;
       }
 
-      expect(join).toHaveBeenCalledTimes(1);
+      expect(join).toHaveBeenCalledTimes(5);
     });
   });
 

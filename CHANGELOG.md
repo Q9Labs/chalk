@@ -9,8 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.0.79] - 2026-03-23
+
+### Added
+
 - **Mobile tooling: wireless adb + launch shortcuts** — added a repo-local `chalk-mobile-wireless-debug` skill with reusable wireless adb reconnect/launch helpers, plus root `bun run mobile:connect`, `bun run mobile:launch`, and `bun run mobile:logs` shortcuts so real-device Chalk Android debugging can be recovered quickly without rediscovering the MIUI/Expo flow each session.
 - **Mobile home can suggest copied invite links** — added Expo clipboard support plus a one-tap “Join copied invite” suggestion on the mobile home screen whenever the clipboard already contains a valid Chalk `/j/:token` link.
+- **SDK invite-link joins now have first-class APIs** — added `joinWithJoinToken`, `joinWithInviteLink`, and cached join-token token providers in Chalk core/React so consumers can join canonical rooms without smuggling friendly codes through `roomId`.
 
 ### Changed
 

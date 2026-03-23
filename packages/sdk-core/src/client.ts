@@ -31,6 +31,7 @@ import { ChalkPostHogSessionReplay, type ChalkPostHogConfig } from "./posthog.ts
 import { importWebRealtimeKit, type RealtimeKitStatic } from "./realtimekit/runtime.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "./rtk-join-policy.ts";
 import { ConferenceSession } from "./room.ts";
+import { extractJoinTokenFromInviteLink } from "./utils/invite-link.ts";
 import type { ChalkError, ConferenceClientConfig, CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, JoinSessionConfig, RoomResource, ScheduleRoomOptions, SessionConnectionState } from "./types.ts";
 import { WSClient } from "./ws-client.ts";
 
@@ -232,6 +233,21 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
         throw error;
       }
     });
+  }
+
+  async joinWithJoinToken(joinToken: string, config: JoinSessionConfig): Promise<ConferenceSession> {
+    const exchange = await this.exchangeJoinToken(joinToken);
+    this.apiClient.setToken(exchange.accessToken);
+    return this.joinSession(exchange.roomId, config);
+  }
+
+  async joinWithInviteLink(inviteLink: string, config: JoinSessionConfig): Promise<ConferenceSession> {
+    const joinToken = extractJoinTokenFromInviteLink(inviteLink);
+    if (!joinToken) {
+      throw new Error("Invalid Chalk invite link. Expected a /j/:token link.");
+    }
+
+    return this.joinWithJoinToken(joinToken, config);
   }
 
   async createSession(name?: string, config?: Record<string, unknown>): Promise<string> {

@@ -98,7 +98,9 @@ export interface MeetingEndData {
 }
 
 export interface VideoConferenceProps {
-  roomId: string;
+  roomId?: string;
+  joinToken?: string;
+  inviteLink?: string;
   roomName?: string;
   meetingLink?: string;
   userName: string;

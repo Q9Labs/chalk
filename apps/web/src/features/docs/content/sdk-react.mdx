@@ -63,7 +63,27 @@ Drop-in components for the fastest implementation. Zero configuration required.
 import { VideoConference } from "@q9labs/chalk-react";
 
 function Room() {
-  return <VideoConference roomId="my-room" userName="John Doe" authToken={token} />;
+  return (
+    <VideoConference
+      roomId="5cf88a28-a9a2-4937-b9ea-46caa2515948"
+      userName="John Doe"
+    />
+  );
+}
+```
+
+Guest invite flow:
+
+```tsx
+import { VideoConference } from "@q9labs/chalk-react";
+
+function InviteRoom() {
+  return (
+    <VideoConference
+      inviteLink="https://chalk.q9labs.ai/j/join-token-123"
+      userName="John Doe"
+    />
+  );
 }
 ```
 

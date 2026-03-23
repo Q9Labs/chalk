@@ -13,10 +13,14 @@ import { useRealtimeKitPreload } from "./useRealtimeKitPreload";
 const JOIN_RETRY_DELAYS_MS = [500, 1200];
 
 export interface UseJoinFlowParams {
-  roomId: string;
+  roomId?: string;
+  joinToken?: string;
+  inviteLink?: string;
   role?: "host" | "participant";
   metadata?: Record<string, unknown>;
   join: (roomId: string, options: JoinOptions) => Promise<void>;
+  joinWithJoinToken: (joinToken: string, options: JoinOptions) => Promise<void>;
+  joinWithInviteLink: (inviteLink: string, options: JoinOptions) => Promise<void>;
   isJoining: boolean;
   isConnected: boolean;
   localParticipant: Participant | null;
@@ -42,9 +46,13 @@ export interface UseJoinFlowReturn {
 
 export function useJoinFlow({
   roomId,
+  joinToken,
+  inviteLink,
   role,
   metadata,
   join,
+  joinWithJoinToken,
+  joinWithInviteLink,
   isJoining,
   isConnected,
   localParticipant,
@@ -65,14 +73,15 @@ export function useJoinFlow({
   const { session } = useChalkSession();
   const lastJoinSettingsRef = useRef<JoinSettings | null>(null);
   const joinInFlightRef = useRef(false);
+  const joinTargetLabel = roomId ?? inviteLink ?? joinToken ?? "meeting";
   useRealtimeKitPreload({
-    roomId,
+    roomId: joinTargetLabel,
     session,
     pushIncidentBreadcrumb,
   });
 
   const { emitJoinClickTelemetry, emitJoinPhaseTransitionTelemetry, selectMediaDevicePostJoin } = useJoinFlowTelemetry({
-    roomId,
+    roomId: joinTargetLabel,
     phaseRef,
     pushIncidentBreadcrumb,
   });
@@ -113,16 +122,26 @@ export function useJoinFlow({
           pushIncidentBreadcrumb("join", "Join attempt started", {
             attempt: attempt + 1,
             maxAttempts,
-            roomId,
+            roomId: joinTargetLabel,
           });
           try {
-            await join(roomId, {
+            const joinOptions = {
               userName: settings.displayName,
               role,
               videoEnabled: settings.videoEnabled,
               audioEnabled: settings.audioEnabled,
               metadata,
-            });
+            };
+
+            if (inviteLink) {
+              await joinWithInviteLink(inviteLink, joinOptions);
+            } else if (joinToken) {
+              await joinWithJoinToken(joinToken, joinOptions);
+            } else if (roomId) {
+              await join(roomId, joinOptions);
+            } else {
+              throw new Error("Missing room join target. Provide roomId, joinToken, or inviteLink.");
+            }
 
             const deviceSelectionTasks = buildPostJoinDeviceSelectionTasks({
               settings,
@@ -144,11 +163,11 @@ export function useJoinFlow({
             pushIncidentBreadcrumb("join", "Join attempt succeeded", {
               attempt: attempt + 1,
               maxAttempts,
-              roomId,
+              roomId: session.room.getState().roomId ?? roomId ?? joinTargetLabel,
             });
             play("join");
             onJoin?.({
-              roomId,
+              roomId: session.room.getState().roomId ?? roomId ?? joinTargetLabel,
               participantId: localParticipant?.id ?? "",
               role: localParticipant?.role ?? role ?? "participant",
               displayName: settings.displayName,
@@ -171,7 +190,7 @@ export function useJoinFlow({
               pushIncidentBreadcrumb("join", "Join request deduped (already joining)", {
                 attempt: attempt + 1,
                 maxAttempts,
-                roomId,
+                roomId: joinTargetLabel,
               });
               return;
             }
@@ -192,7 +211,7 @@ export function useJoinFlow({
             pushIncidentBreadcrumb("join", "Join attempt failed", {
               attempt: attempt + 1,
               maxAttempts,
-              roomId,
+              roomId: joinTargetLabel,
               stage: joinStage,
               retryable,
               code: enrichedError.code,
@@ -242,7 +261,12 @@ export function useJoinFlow({
       setError,
       setSupportCode,
       roomId,
+      joinTargetLabel,
       join,
+      joinWithJoinToken,
+      joinWithInviteLink,
+      joinToken,
+      inviteLink,
       role,
       metadata,
       selectMediaDevicePostJoin,
@@ -254,6 +278,7 @@ export function useJoinFlow({
       localParticipant,
       isRecording,
       emitError,
+      session,
     ],
   );
 

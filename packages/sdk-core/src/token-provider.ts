@@ -23,6 +23,13 @@ export interface CreateTokenProviderConfig {
   storage?: "sessionStorage" | "localStorage" | TokenStorage;
 }
 
+export interface CreateJoinTokenProviderConfig {
+  apiUrl: string;
+  joinToken: string;
+  /** Refresh this many milliseconds before expiry. */
+  skewMs?: number;
+}
+
 interface TokenResponse {
   access_token: string;
   refresh_token: string;
@@ -192,5 +199,54 @@ export function createTokenProvider(config: CreateTokenProviderConfig): () => Pr
     })();
 
     return refreshPromise;
+  };
+}
+
+export function createJoinTokenProvider(config: CreateJoinTokenProviderConfig): () => Promise<string> {
+  const { apiUrl, joinToken, skewMs = 5_000 } = config;
+
+  let cachedToken: { accessToken: string; expiresAtMs: number } | null = null;
+  let exchangePromise: Promise<string> | null = null;
+
+  async function exchangeJoinToken(): Promise<{ access_token: string; expires_in: number }> {
+    const response = await fetch(`${apiUrl}/api/v1/public/join-token/exchange`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ join_token: joinToken }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text().catch(() => "Unknown error");
+      throw new Error(`Join token exchange failed: ${err}`);
+    }
+
+    return response.json();
+  }
+
+  return async (): Promise<string> => {
+    if (cachedToken && Date.now() < cachedToken.expiresAtMs - skewMs) {
+      return cachedToken.accessToken;
+    }
+
+    if (exchangePromise) {
+      return exchangePromise;
+    }
+
+    exchangePromise = (async () => {
+      try {
+        const tokens = await exchangeJoinToken();
+        cachedToken = {
+          accessToken: tokens.access_token,
+          expiresAtMs: Date.now() + tokens.expires_in * 1000,
+        };
+        return cachedToken.accessToken;
+      } finally {
+        exchangePromise = null;
+      }
+    })();
+
+    return exchangePromise;
   };
 }

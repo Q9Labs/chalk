@@ -36,7 +36,7 @@ const DISCONNECT_GRACE_MS = 8000;
 const EMPTY_FEATURES: Features = {};
 const EMPTY_DEFAULTS: NonNullable<VideoConferenceProps["defaults"]> = {};
 
-export function useVideoConferenceController({ roomId, roomName, meetingLink, userName, autoJoin = false, role, metadata, features, defaults, sounds = true, onJoin, onLeave, onEnd, onError, onAddPeople, whiteboard: whiteboardOptions, className }: VideoConferenceProps): VideoConferenceControllerState {
+export function useVideoConferenceController({ roomId, joinToken, inviteLink, roomName, meetingLink, userName, autoJoin = false, role, metadata, features, defaults, sounds = true, onJoin, onLeave, onEnd, onError, onAddPeople, whiteboard: whiteboardOptions, className }: VideoConferenceProps): VideoConferenceControllerState {
   const resolvedFeatures = features ?? EMPTY_FEATURES;
   const resolvedDefaults = defaults ?? EMPTY_DEFAULTS;
 
@@ -46,9 +46,9 @@ export function useVideoConferenceController({ roomId, roomName, meetingLink, us
   const [isExiting, setIsExiting] = useState(false);
   const autoJoinStartedRef = useRef(false);
 
-  const effectiveRoomName = roomName ?? roomId;
+  const effectiveRoomName = roomName ?? roomId ?? "Meeting";
 
-  const { join, leave, isJoining } = useConnection();
+  const { join, joinWithJoinToken, joinWithInviteLink, leave, isJoining } = useConnection();
   const { isConnected, status } = useRoom();
   const { participants, localParticipant, participantCount, updateDisplayName } = useParticipants();
   const { activeSpeaker } = useActiveSpeaker();
@@ -66,7 +66,7 @@ export function useVideoConferenceController({ roomId, roomName, meetingLink, us
   const { lastWsToastAtRef, roomIdRef, phaseRef, localParticipantIdRef, disconnectGraceTimeoutRef, isDisconnectGraceActive, setIsDisconnectGraceActive, clearDisconnectGraceTimeout } = useConferenceLifecycleState({
     phase,
     status,
-    roomId,
+    roomId: roomId ?? inviteLink ?? joinToken ?? "meeting",
     localParticipantId: localParticipant?.id,
   });
 
@@ -115,7 +115,7 @@ export function useVideoConferenceController({ roomId, roomName, meetingLink, us
 
   const { meetingDuration, incrementHandRaiseCount, buildEndData, resetForRejoin } = useMeetingStats({
     phase,
-    roomId,
+    roomId: roomId ?? inviteLink ?? joinToken ?? "meeting",
     participants,
     participantCount,
     messagesLength: messages.length,
@@ -146,9 +146,13 @@ export function useVideoConferenceController({ roomId, roomName, meetingLink, us
 
   const { handleJoin, handleRetryConnection } = useJoinFlow({
     roomId,
+    joinToken,
+    inviteLink,
     role,
     metadata,
     join,
+    joinWithJoinToken,
+    joinWithInviteLink,
     isJoining,
     isConnected,
     localParticipant,

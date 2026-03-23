@@ -15,6 +15,10 @@ export interface UseConnectionReturn {
   isJoining: boolean;
   /** Join a room */
   join: (roomId: string, options: JoinOptions) => Promise<void>;
+  /** Join by opaque join token */
+  joinWithJoinToken: (joinToken: string, options: JoinOptions) => Promise<void>;
+  /** Join by full Chalk invite link */
+  joinWithInviteLink: (inviteLink: string, options: JoinOptions) => Promise<void>;
   /** Leave the current room */
   leave: (options?: LeaveOptions) => Promise<void>;
   /** Create a new room */
@@ -62,6 +66,20 @@ export function useConnection(): UseConnectionReturn {
     [session],
   );
 
+  const joinWithJoinToken = useCallback(
+    async (joinToken: string, options: JoinOptions): Promise<void> => {
+      await session.joinWithJoinToken(joinToken, options);
+    },
+    [session],
+  );
+
+  const joinWithInviteLink = useCallback(
+    async (inviteLink: string, options: JoinOptions): Promise<void> => {
+      await session.joinWithInviteLink(inviteLink, options);
+    },
+    [session],
+  );
+
   const leave = useCallback(
     async (options?: LeaveOptions): Promise<void> => {
       await session.leave(options);
@@ -89,10 +107,12 @@ export function useConnection(): UseConnectionReturn {
       isConnected: state.status === "connected",
       isJoining: state.isJoining,
       join,
+      joinWithJoinToken,
+      joinWithInviteLink,
       leave,
       createSession,
       endSession,
     }),
-    [state.status, state.isJoining, join, leave, createSession, endSession],
+    [state.status, state.isJoining, join, joinWithJoinToken, joinWithInviteLink, leave, createSession, endSession],
   );
 }

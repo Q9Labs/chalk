@@ -416,6 +416,92 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     return this.inFlightJoinPromise;
   }
 
+  async joinWithJoinToken(joinToken: string, options: JoinOptions): Promise<void> {
+    try {
+      await this._runtime.runPromise(
+        Effect.gen(function* () {
+          const roomSvc = yield* RoomService;
+          yield* roomSvc.requestJoin(joinToken, options);
+        }),
+      );
+
+      const room = await this.client.joinWithJoinToken(joinToken, {
+        displayName: options.userName,
+        role: options.role,
+        audio: options.audioEnabled,
+        video: options.videoEnabled,
+        metadata: options.metadata,
+      });
+
+      this.attachRoomToManagers(room);
+      this.connectedInputRoomId = room.id;
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      const roomError = new RoomError({
+        code: "ROOM_NOT_FOUND",
+        message: error.message,
+        recoverable: false,
+      });
+      await this._runtime
+        .runPromise(
+          Effect.gen(function* () {
+            const roomSvc = yield* RoomService;
+            yield* roomSvc.joinFailed(roomError);
+          }),
+        )
+        .catch(() => {
+          // Ignore if join failed operation fails
+        });
+      this.emitErrorWithIncident(error, "session", {
+        operation: "join_with_join_token",
+      });
+      throw error;
+    }
+  }
+
+  async joinWithInviteLink(inviteLink: string, options: JoinOptions): Promise<void> {
+    try {
+      await this._runtime.runPromise(
+        Effect.gen(function* () {
+          const roomSvc = yield* RoomService;
+          yield* roomSvc.requestJoin(inviteLink, options);
+        }),
+      );
+
+      const room = await this.client.joinWithInviteLink(inviteLink, {
+        displayName: options.userName,
+        role: options.role,
+        audio: options.audioEnabled,
+        video: options.videoEnabled,
+        metadata: options.metadata,
+      });
+
+      this.attachRoomToManagers(room);
+      this.connectedInputRoomId = room.id;
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      const roomError = new RoomError({
+        code: "ROOM_NOT_FOUND",
+        message: error.message,
+        recoverable: false,
+      });
+      await this._runtime
+        .runPromise(
+          Effect.gen(function* () {
+            const roomSvc = yield* RoomService;
+            yield* roomSvc.joinFailed(roomError);
+          }),
+        )
+        .catch(() => {
+          // Ignore if join failed operation fails
+        });
+      this.emitErrorWithIncident(error, "session", {
+        operation: "join_with_invite_link",
+      });
+      throw error;
+    }
+  }
+
   /**
    * Leave the current room
    *

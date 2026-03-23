@@ -65,6 +65,10 @@ interface ChalkSessionContextValue {
   session: ChalkSession;
   /** Join a room */
   join: (roomId: string, options: JoinOptions) => Promise<void>;
+  /** Join by opaque join token */
+  joinWithJoinToken: (joinToken: string, options: JoinOptions) => Promise<void>;
+  /** Join by full Chalk invite link */
+  joinWithInviteLink: (inviteLink: string, options: JoinOptions) => Promise<void>;
   /** Leave current room */
   leave: () => Promise<void>;
   /** Create a new room */
@@ -218,6 +222,20 @@ export function ChalkProvider({ children, apiUrl, sessionCacheKey, wsUrl, token,
     [session],
   );
 
+  const joinWithJoinToken = useCallback(
+    async (joinToken: string, options: JoinOptions): Promise<void> => {
+      await session.joinWithJoinToken(joinToken, options);
+    },
+    [session],
+  );
+
+  const joinWithInviteLink = useCallback(
+    async (inviteLink: string, options: JoinOptions): Promise<void> => {
+      await session.joinWithInviteLink(inviteLink, options);
+    },
+    [session],
+  );
+
   const leave = useCallback(async (): Promise<void> => {
     await session.leave();
   }, [session]);
@@ -261,6 +279,8 @@ export function ChalkProvider({ children, apiUrl, sessionCacheKey, wsUrl, token,
     (): ChalkSessionContextValue => ({
       session,
       join,
+      joinWithJoinToken,
+      joinWithInviteLink,
       leave,
       createSession,
       endSession,
@@ -270,7 +290,7 @@ export function ChalkProvider({ children, apiUrl, sessionCacheKey, wsUrl, token,
       isConnected,
       rtkMeeting,
     }),
-    [session, join, leave, createSession, endSession, removeParticipant, muteParticipant, unmuteParticipant, isConnected, rtkMeeting],
+    [session, join, joinWithJoinToken, joinWithInviteLink, leave, createSession, endSession, removeParticipant, muteParticipant, unmuteParticipant, isConnected, rtkMeeting],
   );
 
   const content = <ChalkSessionContext.Provider value={value}>{children}</ChalkSessionContext.Provider>;

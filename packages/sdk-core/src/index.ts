@@ -218,7 +218,9 @@ export { ChalkErrorCode, err, ok } from "./types.ts";
 // ============================================================================
 
 export type { CreateTokenProviderConfig, TokenStorage } from "./token-provider.ts";
-export { createTokenProvider } from "./token-provider.ts";
+export type { CreateJoinTokenProviderConfig } from "./token-provider.ts";
+export { createJoinTokenProvider, createTokenProvider } from "./token-provider.ts";
+export { extractJoinTokenFromInviteLink, isCanonicalRoomId } from "./utils/invite-link.ts";
 
 // ============================================================================
 // Webhooks

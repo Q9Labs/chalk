@@ -85,16 +85,18 @@ cp -r node_modules/@excalidraw/excalidraw/dist/prod/fonts public/vendor/fonts
 ## Usage
 
 ```tsx
-import { useRoom, useMedia, useParticipants, MeetingRoom } from "@q9labs/chalk-react";
+import { useConnection, useMedia, useParticipants, VideoConference } from "@q9labs/chalk-react";
 
 function VideoCall() {
-  const { join, leave, status } = useRoom();
+  const { joinWithInviteLink, leave, status } = useConnection();
   const { toggleAudio, toggleVideo, isAudioEnabled, isVideoEnabled } = useMedia();
   const { participants } = useParticipants();
 
   return (
     <div>
-      <button onClick={() => join({ roomId: "my-room" })}>Join</button>
+      <button onClick={() => joinWithInviteLink("https://chalk.q9labs.ai/j/join-token-123", { userName: "John Doe" })}>
+        Join invite
+      </button>
       <button onClick={toggleAudio}>{isAudioEnabled ? "Mute" : "Unmute"}</button>
       <button onClick={toggleVideo}>{isVideoEnabled ? "Hide" : "Show"}</button>
       <button onClick={leave}>Leave</button>
@@ -104,6 +106,6 @@ function VideoCall() {
 
 // Or use the turnkey MeetingRoom component
 function App() {
-  return <MeetingRoom roomId="my-room" />;
+  return <VideoConference roomId="5cf88a28-a9a2-4937-b9ea-46caa2515948" userName="John Doe" />;
 }
 ```

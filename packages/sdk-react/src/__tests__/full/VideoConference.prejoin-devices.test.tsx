@@ -46,10 +46,14 @@ const capturedWideEvents: Array<{
 
 vi.mock("../../hooks/room/useConnection", () => {
   const join = vi.fn(async () => {});
+  const joinWithJoinToken = vi.fn(async () => {});
+  const joinWithInviteLink = vi.fn(async () => {});
   const leave = vi.fn(async () => {});
   (globalThis as any).__vcJoinMock = join;
+  (globalThis as any).__vcJoinWithJoinTokenMock = joinWithJoinToken;
+  (globalThis as any).__vcJoinWithInviteLinkMock = joinWithInviteLink;
   return {
-    useConnection: () => ({ join, leave, isJoining: false }),
+    useConnection: () => ({ join, joinWithJoinToken, joinWithInviteLink, leave, isJoining: false }),
   };
 });
 
@@ -210,6 +214,8 @@ describe("VideoConference pre-join devices", () => {
     mockRoomState.isConnected = false;
     mockRoomState.status = "disconnected";
     (globalThis as any).__vcJoinMock?.mockClear?.();
+    (globalThis as any).__vcJoinWithJoinTokenMock?.mockClear?.();
+    (globalThis as any).__vcJoinWithInviteLinkMock?.mockClear?.();
     (globalThis as any).__vcSelectCameraMock?.mockClear?.();
     (globalThis as any).__vcSelectMicrophoneMock?.mockClear?.();
     (globalThis as any).__vcSelectSpeakerMock?.mockClear?.();
@@ -243,6 +249,30 @@ describe("VideoConference pre-join devices", () => {
     });
     expect(joinMock).toHaveBeenCalledWith(
       "room-123",
+      expect.objectContaining({
+        userName: "Hasan",
+        audioEnabled: false,
+        videoEnabled: false,
+      }),
+    );
+  });
+
+  it("auto-join uses invite links when provided", async () => {
+    const joinWithInviteLinkMock = (globalThis as any).__vcJoinWithInviteLinkMock;
+
+    render(
+      <VideoConference
+        inviteLink="https://chalk.q9labs.ai/j/join-token-123"
+        userName="Hasan"
+        autoJoin
+      />,
+    );
+
+    await waitFor(() => {
+      expect(joinWithInviteLinkMock).toHaveBeenCalledTimes(1);
+    });
+    expect(joinWithInviteLinkMock).toHaveBeenCalledWith(
+      "https://chalk.q9labs.ai/j/join-token-123",
       expect.objectContaining({
         userName: "Hasan",
         audioEnabled: false,

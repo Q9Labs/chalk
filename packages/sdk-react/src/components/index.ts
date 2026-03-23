@@ -7,7 +7,7 @@
  * - turnkey (alias: full): Complete experiences (VideoConference, MeetingRoom, etc.)
  *
  * Consumer usage levels:
- * - Level 0 (Turnkey): <VideoConference roomId="abc" userName="John" />
+ * - Level 0 (Turnkey): <VideoConference roomId="5cf88a28-a9a2-4937-b9ea-46caa2515948" userName="John" />
  * - Level 1 (Composable): <composable.VideoGrid />, <composable.ControlBar />
  * - Level 2 (Atomic): <atomic.VideoTile participant={p} />, <atomic.Avatar name="John" />
  */
