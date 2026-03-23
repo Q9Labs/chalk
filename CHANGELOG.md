@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Mobile/Android: closed test `Gamma` now carries the room-join fix build** — bumped native/release metadata to `0.0.13 / versionCode 13`, rebuilt the signed AAB, and rolled the closed testing track forward so testers get the canonical-room join fix instead of the broken `12` build.
 - **Mobile/SDK-Core: faster native join failures + canonical invite rooms** — mobile join-token exchange now requires the server-provided canonical `room_id` instead of falling back to room names, React Native RTK join retries now create a fresh native join per attempt with a tighter native timeout budget, and the raw iOS lane successfully uploaded `0.0.12 (12)` to TestFlight processing while preserving the current dSYM warning breadcrumbs.
 - **Mobile host meetings now create real backend rooms before lobby join** — mobile `New meeting` now mirrors web by creating a backend room first and carrying the returned canonical UUID into the lobby, replacing the old client-only `instant-meeting-*` ids that could never be shared safely across app boundaries.
 - **Mobile/Release: first signed internal Android upload proven** — repaired a mangled `build.gradle` version fallback that blocked `bundleRelease`, bumped the native build to `0.0.10` / `versionCode 10`, built the signed AAB locally, and successfully committed it to the Play internal track after dropping the unsupported `--changes-not-sent-for-review` flag for this app’s review mode.
