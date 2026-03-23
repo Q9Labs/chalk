@@ -276,6 +276,20 @@ Exact next actions from this checkpoint:
 1. Set `DEVELOPMENT_TEAM` for target/project `Chalk` in Xcode Signing & Capabilities.
 2. Align iOS version/build values in `project.pbxproj` with:
    - `0.0.10`
+[2026-03-22 23:48:49 PKT] Android Play-blocker audit pass. Confirmed live policy endpoints from outside the repo:
+  - `https://chalk.q9labs.ai/privacy` -> `200`
+  - `https://chalk.q9labs.ai/privacy-policy/` -> `200`
+  - `https://chalk.q9labs.ai/terms` -> `404` (not used for Play blocker clearing in this pass)
+Repo-side release prep completed:
+  - added an in-app privacy-policy link on the mobile home footer in `apps/mobile/src/screens/HomeScreen.tsx`
+  - expanded both public privacy policy surfaces (`apps/web/src/routes/privacy.tsx`, `apps/web/public/privacy/index.html`) so they now name Chalk/Q9 Labs and explicitly cover data types, use, sharing, security, retention/deletion, and contact
+  - created `apps/mobile/PLAY_STORE_DRAFTS.md` with exact Play listing copy drafts, screenshot/graphic checklist, repo-derived data-safety draft answers, app-content draft answers, reviewer notes, and the remaining human/store inputs
+  - recorded that the current tracked icon candidate exists at `apps/mobile/assets/icon.png`, is `512x512`, and appears structurally suitable for Play app-icon use; the stricter no-alpha rule applies to screenshots/feature graphics, not the app icon itself
+Interpretation after this pass:
+  - privacy policy URL blocker: cleared in repo and already live
+  - in-app privacy link blocker: cleared in repo
+  - Play screenshots/feature graphic: still human/asset work
+  - Data safety/App content/reviewer notes: drafted in repo, but final submission remains human/store-side
    - `10`
 3. Re-run release archive:
    - `cd apps/mobile/ios && xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk.xcarchive archive`
@@ -390,3 +404,17 @@ Exact next actions for raw Xcode/TestFlight path:
 
 [2026-03-22 23:47 PKT] Ran `pod install` in apps/mobile/ios successfully. Important follow-up from CocoaPods: close old Xcode project sessions and use `apps/mobile/ios/Chalk.xcworkspace` from now on for build/archive.
 [2026-03-22 23:48 PKT] Added a repo-grounded Android store-listing checklist at `docs/mobile-play-store-checklist.md`. It records what the tree already proves for Google Play rollout: icon source exists at `apps/mobile/assets/icon.png` (512x512 PNG), privacy policy exists at `https://chalk.q9labs.ai/privacy/` with backup `https://chalk.q9labs.ai/privacy-policy/`, and the repo still lacks a dedicated feature graphic, screenshot pack, short description, full description, and final Play contact email selection.
+
+[2026-03-22 23:52 PKT] Raw iOS archive succeeded from the workspace-based path: `cd apps/mobile/ios && xcodebuild -workspace Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk.xcarchive archive -allowProvisioningUpdates`. Archive product now exists at `apps/mobile/ios/build/Chalk.xcarchive`. Next step: upload this archive to TestFlight via Xcode Organizer / App Store Connect.
+[2026-03-23 00:04 PKT] App Store Connect upload did not fail on signing or binary validation. Organizer hit an App Record Creation error: the App Store Connect app name entered for the new record is already in use. This is a store-record naming collision, not a code or bundle-id failure. Fastest unblock path: create the iOS app record manually in App Store Connect with the existing bundle identifier and a unique App Store name, then retry the same archive upload.
+
+[2026-03-23 00:06 PKT] Android store-blocker delegation delivered real repo artifacts. Added/updated `apps/mobile/PLAY_STORE_DRAFTS.md`, `apps/mobile/RELEASE.md`, stronger privacy-policy content in `apps/web/src/routes/privacy.tsx` and `apps/web/public/privacy/index.html`, plus an in-app privacy-policy link in `apps/mobile/src/screens/HomeScreen.tsx`. Result: listing copy, privacy policy path, reviewer notes, and draft data-safety/app-content answers now exist in repo, but Play screenshots/feature graphic and final console declarations still need owner-side completion.
+[2026-03-23 00:18 PKT] Hasan completed the App Store Connect app-record creation step after the initial name collision. Exported upload logs were saved under `scratchpad/upload-logs/`. Durable notes for the next iOS publishing pass: the archive/export itself was healthy and fully App Store-signed for team `5K9635LZ6F` (`CollabEZ FZE LLC`) using a cloud-managed distribution cert and store provisioning profile for `ai.q9labs.chalk.mobile`; the hard blocker was only the ASC app-record name collision on plain `Chalk`. `DistributionSummary.plist` confirms version `0.0.10` build `10`, arm64-only IPA, and correct beta entitlements.
+
+[2026-03-23 00:19 PKT] iOS upload/export warnings to remember next time: `Packaging.log` shows repeated `Upload Symbols Failed` lines during the export pipeline even though the archive/export continued and symbol-bearing frameworks were included in the summary. Treat this as a follow-up warning to re-check after the next upload, not the primary blocker from this pass. The store-side fatal issue in this run was still the ASC app-record naming collision, not symbols/signing/provisioning.
+[2026-03-23 01:07 PKT] Generated a Play-ready feature graphic locally at `scratchpad/chalk-play-feature-graphic-1024x500.png` after Hasan resolved the tablet-screenshot concern and had three phone screenshots available. Final asset is `1024x500`, marketing-clean, dark Chalk branding, safe for immediate Play Console upload.
+[2026-03-23 01:27 PKT] Google Play rejected a fresh Android upload because `versionCode 10` was already used on the app. Bumped mobile release metadata to `0.0.11 / 11` across Expo config, Android Gradle properties/fallbacks, and iOS version alignment files, then rebuilt the signed Android bundle successfully. New upload artifact: `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab` (sha256 `d8f891134d306ee74008ef4c4bdb41c67642919c82ab32f1e943f7f3e56cb49a`).
+[2026-03-23 01:45 PKT] Hasan requested another Android bundle bump. Advanced release metadata again to `0.0.12 / 12` across Expo config, Android Gradle properties/fallbacks, and iOS version alignment files, then rebuilt the signed Android bundle successfully. Current upload artifact: `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab` (sha256 `51b4a6eac2e6c8b36dd4757029b30e8e215b958a560f790b18650fc4a722395f`).
+[2026-03-23 15:42:00 PKT] Android v12 closed test live; installed build hit slow join then room not found. Likely seam: mobile join-token exchange fallback to roomName despite canonical room_id server contract; tightening helper + test. Also correcting stale iOS raw-release docs to team 5K9635LZ6F and 0.0.12/12. Starting fresh raw iOS archive: xcodebuild -workspace Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk-0.0.12.xcarchive archive -allowProvisioningUpdates.
+[2026-03-23 15:43:47 PKT] Fresh iOS archive succeeded at apps/mobile/ios/build/Chalk-0.0.12.xcarchive. Running export/upload pass with scratchpad/upload-logs/ExportOptions.plist to verify App Store/TestFlight signing path and catch any ASC/export warnings.
+[2026-03-23 15:45:32 PKT] Fresh iOS TestFlight upload succeeded from apps/mobile/ios/build/Chalk-0.0.12.xcarchive via xcodebuild -exportArchive. App Store Connect status: uploaded package is processing. Warnings preserved: Upload Symbols Failed for React.framework, ReactNativeDependencies.framework, hermesvm.framework missing dSYMs.

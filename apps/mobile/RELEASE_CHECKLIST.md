@@ -23,7 +23,7 @@
 
 ## iOS
 
-- open `ios/Chalk.xcodeproj` in Xcode
+- open `ios/Chalk.xcworkspace` in Xcode
 - set Apple team + signing for `ai.q9labs.chalk.mobile`
 - archive a release build on a real signing identity
 - verify camera + mic permission prompts copy

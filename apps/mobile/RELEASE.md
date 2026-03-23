@@ -104,6 +104,10 @@ If store listing files/screenshots exist:
 
 - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --listings-dir .gplay/listings --screenshots-dir .gplay/screenshots`
 
+Tracked store-copy draft:
+
+- `apps/mobile/PLAY_STORE_DRAFTS.md`
+
 ## Required human checks before wider rollout
 
 - Play listing assets
@@ -128,40 +132,39 @@ If store listing files/screenshots exist:
 Current repo-backed state:
 
 - native bundle id: `ai.q9labs.chalk.mobile`
-- current V1 release contract: no mobile-originated iOS screen share
+- current V1 release contract: no mobile-originated screen share on either platform
 
 What is already done:
 
 - `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj` now carries:
-  - `DEVELOPMENT_TEAM = 4V7RXZU8P2`
-  - `MARKETING_VERSION = 0.0.10`
-  - `CURRENT_PROJECT_VERSION = 10`
-- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.10 (10)`
+  - `DEVELOPMENT_TEAM = 5K9635LZ6F`
+  - `MARKETING_VERSION = 0.0.12`
+  - `CURRENT_PROJECT_VERSION = 12`
+- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.12 (12)`
 
 Current blocker:
 
-- local Xcode archive gets past project config and then fails on Apple-account provisioning state
-- this Mac currently has only an Apple Development identity; no App Store distribution profile/cert path is configured yet
+- the remaining blocker is App Store Connect upload completion against the existing app record
+- previous hard failure was the auto-created app-record name collision on plain `Chalk`
+- exported warning worth re-checking on next upload: `Upload Symbols Failed`
 
 Next exact steps:
 
 1. Open Xcode account settings
    - `open -a Xcode`
    - `Xcode -> Settings -> Accounts`
-   - sign into the Apple Developer account that owns team `4V7RXZU8P2`
+   - sign into the Apple Developer account that owns team `5K9635LZ6F`
 2. Verify signing for the app target
-   - open `apps/mobile/ios/Chalk.xcodeproj`
+   - open `apps/mobile/ios/Chalk.xcworkspace`
    - target `Chalk` -> `Signing & Capabilities`
-   - confirm team `4V7RXZU8P2`
+   - confirm team `5K9635LZ6F`
    - confirm `Automatically manage signing` is enabled
 3. Archive from CLI
    - `cd apps/mobile/ios`
-   - `xcodebuild -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk.xcarchive archive -allowProvisioningUpdates`
+   - `xcodebuild -workspace Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath build/Chalk-0.0.12.xcarchive archive -allowProvisioningUpdates`
 4. Export/upload to TestFlight
-   - easiest raw path: Xcode Organizer -> `Distribute App` -> `App Store Connect` -> `Upload`
-   - CLI-capable path once App Store Connect credentials exist:
-     - `xcodebuild -exportArchive ...`
-     - upload with Apple Transporter / `xcrun altool` successor tooling
+   - raw path: Xcode Organizer -> `Distribute App` -> `App Store Connect` -> `Upload`
+   - select the existing App Store Connect app record; do not let Xcode create a new one with plain `Chalk`
 
 Human checks before wider rollout:
 

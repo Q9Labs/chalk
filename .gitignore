@@ -95,3 +95,7 @@ apps/api/server
 
 # Worktrees
 .worktrees/
+
+.codex-tmp/
+.collaborator
+.claude/

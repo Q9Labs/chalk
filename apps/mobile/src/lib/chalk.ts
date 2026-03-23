@@ -1,9 +1,10 @@
-import { APIClient, createTokenProvider, humanizeRoomName } from "@q9labs/chalk-core";
+import { APIClient, createTokenProvider } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
 import { NativeModules } from "react-native";
 import { createStorageScopeId, isConfiguredLocalApiUrl, resolveAppRuntimeUrl } from "./mobile-runtime";
 import { createHostTokenStorage } from "./host-token-storage";
 import { extractJoinTokenFromInviteLink } from "./inviteLink";
+import { getCanonicalJoinRoomId, getJoinRoomName } from "./join-exchange";
 import { createHostedMeeting } from "./newMeeting";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
@@ -197,8 +198,8 @@ export async function resolveJoinToken(joinToken: string, apiUrl: string): Promi
     throw new Error(response.error?.message ?? "Invalid join link");
   }
 
-  const roomId = response.data.roomId || response.data.roomName;
-  const roomName = humanizeRoomName(response.data.roomName || roomId);
+  const roomId = getCanonicalJoinRoomId(response.data);
+  const roomName = getJoinRoomName(response.data);
 
   const context: JoinContext = {
     joinToken,

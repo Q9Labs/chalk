@@ -6,6 +6,12 @@ const RTK_JOIN_DEFAULT_POLICY = {
   retryDelaysMs: [500, 1000, 2000, 4000],
 } as const;
 
+const RTK_JOIN_REACT_NATIVE_POLICY = {
+  name: "react-native-default",
+  timeoutMs: 12000,
+  retryDelaysMs: [1000, 2000],
+} as const;
+
 const RTK_JOIN_DEGRADED_NETWORK_POLICY = {
   name: "degraded-network",
   timeoutMs: 45000,
@@ -40,7 +46,7 @@ export function getRtkJoinPolicyForCurrentCohort() {
   const saveData = network?.saveData === true;
   const isDegradedNetwork = platform === "browser" && (saveData || (effectiveType ? DEGRADED_EFFECTIVE_TYPES.has(effectiveType) : false));
 
-  const policy = isDegradedNetwork ? RTK_JOIN_DEGRADED_NETWORK_POLICY : RTK_JOIN_DEFAULT_POLICY;
+  const policy = platform === "react-native" ? RTK_JOIN_REACT_NATIVE_POLICY : isDegradedNetwork ? RTK_JOIN_DEGRADED_NETWORK_POLICY : RTK_JOIN_DEFAULT_POLICY;
 
   const cohort = platform === "browser" ? `browser-${effectiveType ?? "unknown"}${saveData ? "-save-data" : ""}` : `${platform}-default`;
 

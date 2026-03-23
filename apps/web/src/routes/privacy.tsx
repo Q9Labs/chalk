@@ -23,47 +23,58 @@ function PrivacyPolicy() {
       <main className="max-w-3xl mx-auto px-6 py-12 md:py-20 space-y-8">
         <div>
           <h1 className="text-4xl font-black tracking-tight mb-2">Privacy Policy</h1>
-          <p className="text-muted-foreground">Last updated: {new Date().toLocaleDateString()}</p>
+          <p className="text-muted-foreground">Last updated: March 22, 2026</p>
         </div>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none space-y-6">
           <p>
-            Welcome to Chalk ("we," "our," or "us"). We are committed to protecting your personal information and your right to privacy.
-            This Privacy Policy explains how we collect, use, and share your information when you use our video conferencing application.
+            Chalk is operated by Q9 Labs. This Privacy Policy explains how Chalk accesses, collects, uses, retains, and shares data when you create or join meetings, use chat and whiteboards, or interact with related collaboration features on our web and mobile apps.
           </p>
 
           <h2 className="text-2xl font-bold mt-8 mb-4">1. Information We Collect</h2>
-          <p>
-            We collect personal information that you voluntarily provide to us when you register on the application, express an interest in obtaining information about us or our products, or when you participate in activities on the application.
-          </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li><strong>Personal Information:</strong> such as your name, email address, and profile picture, primarily provided through Google OAuth.</li>
-            <li><strong>Meeting Data:</strong> video, audio, chat transcripts, and whiteboard data generated during your sessions.</li>
-            <li><strong>Usage Data:</strong> diagnostic information, device information, and interaction logs.</li>
+            <li><strong>Account and contact information:</strong> information you choose to provide, such as a display name, email address, or support request details.</li>
+            <li><strong>Meeting content:</strong> live audio and video, chat messages, transcripts, whiteboard content, meeting identifiers, and related participant metadata generated while using Chalk.</li>
+            <li><strong>Technical and diagnostic information:</strong> device, network, and service events needed to deliver calls, troubleshoot issues, prevent abuse, and improve reliability.</li>
+            <li><strong>Invite and session data stored on device:</strong> the mobile app may store limited local session data such as secure join context or locally pasted Chalk invite links to help you continue a meeting flow.</li>
           </ul>
 
           <h2 className="text-2xl font-bold mt-8 mb-4">2. How We Use Your Information</h2>
-          <p>We use the information we collect or receive to:</p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>Facilitate account creation and logon process.</li>
-            <li>Provide and manage the video conferencing service, including generating intelligent summaries and action items.</li>
-            <li>Respond to user inquiries and offer support to users.</li>
-            <li>Protect our application and ensure platform security.</li>
+            <li>Provide Chalk meetings, chat, transcripts, whiteboards, recordings, and other collaboration features.</li>
+            <li>Route media, establish sessions, maintain quality, reconnect users, and secure the platform.</li>
+            <li>Respond to support requests, investigate incidents, and enforce our terms and abuse-prevention rules.</li>
+            <li>Generate meeting outputs such as transcripts, summaries, and action items when those features are enabled.</li>
           </ul>
 
-          <h2 className="text-2xl font-bold mt-8 mb-4">3. Sharing of Information</h2>
+          <h2 className="text-2xl font-bold mt-8 mb-4">3. Permissions and Sensitive Access</h2>
           <p>
-            We only share information with your consent, to comply with laws, to provide you with services, to protect your rights, or to fulfill business obligations. We do not sell your personal information to third parties.
+            Chalk requests camera and microphone access so meeting participants can send audio and video. On mobile, Chalk may also inspect the clipboard to suggest a Chalk invite link that is already on your device. If Chalk introduces any collection or sharing that is outside a user&apos;s reasonable expectation, we will add the required in-app disclosure and consent flow.
           </p>
 
-          <h2 className="text-2xl font-bold mt-8 mb-4">4. Google API Services Usage</h2>
+          <h2 className="text-2xl font-bold mt-8 mb-4">4. Sharing of Information</h2>
+          <p>
+            We do not sell personal information. We may share data with service providers and infrastructure partners that process data on our behalf to run Chalk, with participants in the same meeting as needed to provide the service, when you direct us to share it, or when required by law or needed to protect users, Chalk, or our rights.
+          </p>
+
+          <h2 className="text-2xl font-bold mt-8 mb-4">5. Security</h2>
+          <p>
+            We use administrative, technical, and organizational safeguards designed to protect personal and sensitive data in transit and at rest. No method of transmission or storage is perfectly secure, but we work to reduce risk and respond quickly to issues.
+          </p>
+
+          <h2 className="text-2xl font-bold mt-8 mb-4">6. Retention and Deletion</h2>
+          <p>
+            We keep data for as long as needed to provide Chalk, comply with legal obligations, resolve disputes, enforce agreements, and maintain security and operational records. Local session data stored on your device can be cleared by uninstalling the app or clearing app storage. For deletion or privacy requests, contact us using the details below so we can review the request in context.
+          </p>
+
+          <h2 className="text-2xl font-bold mt-8 mb-4">7. Google API Services Usage</h2>
           <p>
             Chalk's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-primary hover:underline">Google API Services User Data Policy</a>, including the Limited Use requirements.
           </p>
 
-          <h2 className="text-2xl font-bold mt-8 mb-4">5. Contact Us</h2>
+          <h2 className="text-2xl font-bold mt-8 mb-4">8. Contact Us</h2>
           <p>
-            If you have questions or comments about this policy, you may email us at privacy@chalk.com.
+            Questions, requests, or concerns about this policy may be sent to <a href="mailto:privacy@chalk.com" className="text-primary hover:underline">privacy@chalk.com</a>.
           </p>
         </div>
       </main>

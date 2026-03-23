@@ -77,6 +77,10 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
     void Linking.openURL("https://chalk.q9labs.ai");
   };
 
+  const handleOpenPrivacyPolicy = () => {
+    void Linking.openURL("https://chalk.q9labs.ai/privacy");
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
@@ -136,11 +140,18 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
           </View>
         </ScrollView>
 
-        <Pressable onPress={handleOpenWebsite} style={styles.footer}>
-          <Text style={styles.footerText}>
-            Learn more at <Text style={styles.footerLink}>chalk.q9labs.ai</Text>
-          </Text>
-        </Pressable>
+        <View style={styles.footer}>
+          <Pressable onPress={handleOpenWebsite}>
+            <Text style={styles.footerText}>
+              Learn more at <Text style={styles.footerLink}>chalk.q9labs.ai</Text>
+            </Text>
+          </Pressable>
+          <Pressable onPress={handleOpenPrivacyPolicy}>
+            <Text style={styles.footerText}>
+              <Text style={styles.footerLink}>Privacy Policy</Text>
+            </Text>
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -295,6 +306,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingVertical: 24,
     alignItems: "center",
+    gap: 8,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.03)",
   },

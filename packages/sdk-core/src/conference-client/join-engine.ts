@@ -93,7 +93,6 @@ const defaultSleep = (delayMs: number) =>
 
 export const joinRealtimeKitWithRetry = async (rtkClient: { join: () => Promise<void> }, joinPolicySelection: RtkJoinPolicySelection, deps: JoinRealtimeKitWithRetryDeps): Promise<void> => {
   let lastError: Error | null = null;
-  let joinPromise: Promise<void> | null = null;
   const retryDelays = joinPolicySelection.policy.retryDelaysMs;
   const timeoutMs = joinPolicySelection.policy.timeoutMs;
   const totalAttempts = 1 + retryDelays.length;
@@ -102,10 +101,7 @@ export const joinRealtimeKitWithRetry = async (rtkClient: { join: () => Promise<
   for (let attempt = 0; attempt < totalAttempts; attempt++) {
     const attemptNumber = attempt + 1;
     const attemptStart = performance.now();
-
-    if (!joinPromise) {
-      joinPromise = rtkClient.join();
-    }
+    const joinPromise = rtkClient.join();
 
     try {
       await deps.waitForJoin(joinPromise, timeoutMs);
@@ -139,7 +135,7 @@ export const joinRealtimeKitWithRetry = async (rtkClient: { join: () => Promise<
       });
 
       if (!isTimeout) {
-        joinPromise = null;
+        break;
       }
 
       if (attempt < retryDelays.length) {
