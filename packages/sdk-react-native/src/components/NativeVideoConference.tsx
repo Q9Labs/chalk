@@ -12,7 +12,7 @@ import { NativeEndScreen, type NativeMeetingEndData } from "./NativeEndScreen";
 import { NativeJoiningLoadingScreen } from "./NativeJoiningLoadingScreen";
 import { NativeMeetingRoom, type NativeMeetingRoomFeatures } from "./NativeMeetingRoom";
 import { NativePreJoinLobby, type NativeJoinSettings } from "./NativePreJoinLobby";
-import { canExecuteNativeJoin, canStartNativeJoin } from "../utils/native-join-guard";
+import { canExecuteNativeJoin, canStartNativeJoin, shouldPromoteAfterJoinError } from "../utils/native-join-guard";
 
 export type NativeVideoConferencePhase = "lobby" | "joining" | "meeting" | "end";
 
@@ -139,7 +139,17 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
           return;
         }
 
-        if (session.room.getRoom()) {
+        const roomState = session.room.getState();
+        if (
+          session.room.getRoom() ||
+          shouldPromoteAfterJoinError({
+            error: cause,
+            expectedRoomId: roomId,
+            activeRoomId: session.room.getRoom()?.id ?? null,
+            roomStateRoomId: roomState.roomId,
+            roomStatus: roomState.status,
+          })
+        ) {
           promoteToMeeting();
           return;
         }

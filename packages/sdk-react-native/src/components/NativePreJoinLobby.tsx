@@ -1,7 +1,7 @@
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RTCView } from "@cloudflare/react-native-webrtc";
 import { Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon, ArrowLeft01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { usePreJoinPreview } from "../hooks/usePreJoinPreview";
 import { Theme } from "../ui/theme";
@@ -31,20 +31,23 @@ export function NativePreJoinLobby({ roomName, role = "participant", userName = 
   const [audioEnabled, setAudioEnabled] = useState(initialAudioEnabled);
   const [videoEnabled, setVideoEnabled] = useState(initialVideoEnabled);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLatchRef = useRef(false);
 
   const { previewError, previewStream } = usePreJoinPreview(videoEnabled);
 
   useEffect(() => {
     if (!joinDisabled) {
+      submitLatchRef.current = false;
       setIsSubmitting(false);
     }
   }, [joinDisabled]);
 
   const handleJoin = () => {
-    if (joinDisabled || isSubmitting) {
+    if (joinDisabled || isSubmitting || submitLatchRef.current) {
       return;
     }
 
+    submitLatchRef.current = true;
     setIsSubmitting(true);
     onJoin({
       displayName,

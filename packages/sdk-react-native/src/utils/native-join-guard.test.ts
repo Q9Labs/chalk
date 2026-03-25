@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { canExecuteNativeJoin, canStartNativeJoin } from "./native-join-guard";
+import { canExecuteNativeJoin, canStartNativeJoin, shouldPromoteAfterJoinError } from "./native-join-guard";
 
 describe("canStartNativeJoin", () => {
   it("allows a fresh lobby join", () => {
@@ -25,5 +25,49 @@ describe("canExecuteNativeJoin", () => {
     expect(canExecuteNativeJoin("joining", 1, false, true, true, null)).toBe(false);
     expect(canExecuteNativeJoin("joining", 0, false, false, true, null)).toBe(false);
     expect(canExecuteNativeJoin("lobby", 1, false, false, true, null)).toBe(false);
+  });
+});
+
+describe("shouldPromoteAfterJoinError", () => {
+  it("treats duplicate same-room joins as success once the room is already connected", () => {
+    expect(
+      shouldPromoteAfterJoinError({
+        error: new Error("Already connected to a room"),
+        expectedRoomId: "room_123",
+        activeRoomId: "room_123",
+        roomStateRoomId: "room_123",
+        roomStatus: "connected",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not hide actual failures or mismatched-room state", () => {
+    expect(
+      shouldPromoteAfterJoinError({
+        error: new Error("Already connected to a room"),
+        expectedRoomId: "room_123",
+        activeRoomId: "room_456",
+        roomStateRoomId: "room_456",
+        roomStatus: "connected",
+      }),
+    ).toBe(false);
+    expect(
+      shouldPromoteAfterJoinError({
+        error: new Error("Unable to join room"),
+        expectedRoomId: "room_123",
+        activeRoomId: "room_123",
+        roomStateRoomId: "room_123",
+        roomStatus: "connected",
+      }),
+    ).toBe(false);
+    expect(
+      shouldPromoteAfterJoinError({
+        error: new Error("Already connected to a room"),
+        expectedRoomId: "room_123",
+        activeRoomId: "room_123",
+        roomStateRoomId: "room_123",
+        roomStatus: "connecting",
+      }),
+    ).toBe(false);
   });
 });
