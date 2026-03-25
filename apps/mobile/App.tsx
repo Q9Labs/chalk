@@ -16,6 +16,7 @@ export default function App(): React.JSX.Element {
   const [route, setRoute] = useState<MobileRoute>({ kind: "home" });
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [isRefreshingDiagnosticsAuth, setIsRefreshingDiagnosticsAuth] = useState(false);
+  const diagnosticsWideEvents = useMemo(() => (diagnosticsEnabled ? { enabled: true, includeDebugInfo: true, handler: recordWideEvent } : undefined), [diagnosticsEnabled]);
 
   const tokenProvider = useMemo(() => {
     if (route.kind !== "lobby") {
@@ -45,7 +46,7 @@ export default function App(): React.JSX.Element {
       }
       return token;
     };
-  }, [apiUrl, diagnosticsEnabled, route]);
+  }, [apiUrl, diagnosticsEnabled, route.kind, route.kind === "lobby" ? route.joinToken : null]);
 
   useEffect(() => {
     const openUrl = async (url: string | null) => {
@@ -109,14 +110,14 @@ export default function App(): React.JSX.Element {
     void getMobileDebugContext(apiUrl).then(setDevDiagnosticsStaticAuth);
   }, [apiUrl, buildProfile, diagnosticsEnabled, route, wsUrl]);
 
-  const goHome = async () => {
+  const goHome = useCallback(async () => {
     await clearJoinContext();
     setRoute({ kind: "home" });
-  };
+  }, []);
 
-  const openLobby = (nextRoute: LobbyRoute) => {
+  const openLobby = useCallback((nextRoute: LobbyRoute) => {
     setRoute(nextRoute);
-  };
+  }, []);
 
   const refreshDiagnosticsAuth = useCallback(async () => {
     if (!diagnosticsEnabled || route.kind !== "lobby" || !tokenProvider) {
@@ -144,7 +145,7 @@ export default function App(): React.JSX.Element {
     <View style={styles.appShell}>
       <StatusBar style="light" />
       {route.kind === "home" ? <HomeScreen onNavigate={openLobby} /> : null}
-      {route.kind === "lobby" ? <MeetingScreen apiUrl={apiUrl} onClose={() => void goHome()} route={route} tokenProvider={tokenProvider} wsUrl={wsUrl} diagnosticsEnabled={diagnosticsEnabled} /> : null}
+      {route.kind === "lobby" ? <MeetingScreen apiUrl={apiUrl} diagnosticsEnabled={diagnosticsEnabled} onClose={goHome} route={route} tokenProvider={tokenProvider} wideEvents={diagnosticsWideEvents} wsUrl={wsUrl} /> : null}
       {diagnosticsEnabled ? (
         <>
           <Pressable onPress={() => setDiagnosticsOpen(true)} style={styles.devPill}>
@@ -157,9 +158,25 @@ export default function App(): React.JSX.Element {
   );
 }
 
-function MeetingScreen({ route, onClose, apiUrl, wsUrl, tokenProvider, diagnosticsEnabled }: { route: LobbyRoute; onClose: () => void; apiUrl: string; wsUrl?: string; tokenProvider?: () => Promise<string>; diagnosticsEnabled: boolean }): React.JSX.Element {
+function MeetingScreen({
+  route,
+  onClose,
+  apiUrl,
+  wsUrl,
+  tokenProvider,
+  diagnosticsEnabled,
+  wideEvents,
+}: {
+  route: LobbyRoute;
+  onClose: () => Promise<void>;
+  apiUrl: string;
+  wsUrl?: string;
+  tokenProvider?: () => Promise<string>;
+  diagnosticsEnabled: boolean;
+  wideEvents?: { enabled?: boolean; includeDebugInfo?: boolean; handler?: typeof recordWideEvent };
+}): React.JSX.Element {
   return (
-    <ChalkNativeProvider apiUrl={apiUrl} debug={diagnosticsEnabled} tokenProvider={tokenProvider} wideEvents={diagnosticsEnabled ? { enabled: true, includeDebugInfo: true, handler: recordWideEvent } : undefined} wsUrl={wsUrl}>
+    <ChalkNativeProvider apiUrl={apiUrl} debug={diagnosticsEnabled} tokenProvider={tokenProvider} wideEvents={wideEvents} wsUrl={wsUrl}>
       <NativeVideoConference autoJoin={false} features={{ screenShare: false }} initialPhase="lobby" onClose={onClose} roomId={route.roomId} roomName={route.roomName} role={route.role} userName={route.role === "host" ? "Host" : "Guest"} />
     </ChalkNativeProvider>
   );

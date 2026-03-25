@@ -3,6 +3,7 @@ import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-reac
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { importReactNativeRealtimeKit } from "../runtime/realtimekit-loader";
+import { getWideEventsMemoDependencies } from "../utils/wide-events-config";
 
 type NativeRealtimeKitMeeting = ComponentProps<typeof RTKProvider>["value"];
 
@@ -44,6 +45,7 @@ export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvi
   const [isConnected, setIsConnected] = useState(false);
   const [rtkMeeting, setRtkMeeting] = useState<NativeRealtimeKitMeeting | null>(null);
   const [, forceUpdate] = useState({});
+  const [wideEventsEnabled, wideEventsIncludeDebugInfo, wideEventsHandler] = getWideEventsMemoDependencies(wideEvents);
 
   const resolvedIncidentConfig = useMemo(
     (): Parameters<ChalkSession["configureIncident"]>[0] => ({
@@ -55,6 +57,18 @@ export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvi
     [incident, onIncident, incidentReporter, incidentMaxBreadcrumbs],
   );
 
+  const resolvedWideEvents = useMemo(() => {
+    if (!wideEvents) {
+      return undefined;
+    }
+
+    return {
+      enabled: wideEventsEnabled,
+      includeDebugInfo: wideEventsIncludeDebugInfo,
+      handler: wideEventsHandler ?? undefined,
+    } satisfies ConferenceClientConfig["wideEvents"];
+  }, [wideEvents, wideEventsEnabled, wideEventsIncludeDebugInfo, wideEventsHandler]);
+
   const session = useMemo(() => {
     return new ChalkSession({
       apiUrl,
@@ -64,11 +78,11 @@ export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvi
       apiKey,
       debug,
       demoMode,
-      wideEvents,
+      wideEvents: resolvedWideEvents,
       posthog,
       realtimeKitLoader: importReactNativeRealtimeKit,
     } as any);
-  }, [apiUrl, wsUrl, token, tokenProvider, apiKey, debug, demoMode, wideEvents, posthog]);
+  }, [apiUrl, wsUrl, token, tokenProvider, apiKey, debug, demoMode, resolvedWideEvents, posthog]);
 
   useEffect(
     () => () => {
