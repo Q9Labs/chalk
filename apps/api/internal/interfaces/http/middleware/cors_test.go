@@ -141,6 +141,7 @@ func TestCORS_AllowedHeaders(t *testing.T) {
 	assert.Contains(t, allowHeaders, "X-API-Key")
 	assert.Contains(t, allowHeaders, "X-CSRF-Token")
 	assert.Contains(t, allowHeaders, "X-Chalk-Local-Client-ID")
+	assert.Contains(t, allowHeaders, "x-chalk-source")
 }
 
 func TestCORS_AllowedMethods(t *testing.T) {
