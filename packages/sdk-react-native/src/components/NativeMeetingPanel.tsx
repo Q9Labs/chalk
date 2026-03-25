@@ -1,7 +1,7 @@
 import type { ChatMessage, LayoutMode, MediaDevice, ParticipantState, Transcript } from "@q9labs/chalk-core";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Modal, TouchableWithoutFeedback, Platform } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Cancel01Icon, Settings01Icon, Chat01Icon, UserGroupIcon, TextFontIcon, Presentation01Icon, CheckmarkCircle01Icon, Refresh01Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Settings01Icon, Chat01Icon, UserGroupIcon, TextFontIcon, Presentation01Icon, CheckmarkCircle01Icon, Refresh01Icon, WavingHand01Icon } from "@hugeicons/core-free-icons";
 import { Theme } from "../ui/theme";
 
 export type NativeMeetingPanelName = "chat" | "participants" | "settings" | "transcripts" | "whiteboard";
@@ -140,6 +140,12 @@ export function NativeMeetingPanel({
                               </Text>
                             </View>
                           </View>
+                          {participant.handRaised ? (
+                            <View style={styles.handBadge}>
+                              <HugeiconsIcon color="#ffffff" icon={WavingHand01Icon} size={12} />
+                              <Text style={styles.handBadgeText}>Hand raised</Text>
+                            </View>
+                          ) : null}
                           {isHost && !isLocal ? (
                             <View style={styles.actionButtons}>
                               <Pressable onPress={() => (participant.audioEnabled ? onMuteParticipant(participant.id) : onUnmuteParticipant(participant.id))} style={styles.iconActionButton}>
@@ -265,7 +271,7 @@ function panelTitle(panel: NativeMeetingPanelName | null): string {
     case "participants":
       return "Participants";
     case "settings":
-      return "Meeting Settings";
+      return "Device Settings";
     case "transcripts":
       return "Transcripts";
     case "whiteboard":
@@ -482,11 +488,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
   },
   participantInfo: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    flex: 1,
   },
   avatarCircle: {
     width: 40,
@@ -501,6 +509,7 @@ const styles = StyleSheet.create({
   },
   participantMeta: {
     gap: 2,
+    flexShrink: 1,
   },
   participantName: {
     fontSize: 15,
@@ -514,6 +523,20 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: "row",
     gap: 8,
+  },
+  handBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(139, 92, 246, 0.18)",
+  },
+  handBadgeText: {
+    color: "#ede9fe",
+    fontSize: 12,
+    fontWeight: "700",
   },
   iconActionButton: {
     paddingHorizontal: 12,

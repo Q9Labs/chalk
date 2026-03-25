@@ -10,17 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Mobile/dev: in-app diagnostics sheet for API/auth/request triage** — development builds now expose a copyable debug sheet that shows the active API/WS target, host/join token previews, server-auth claims (`tenantId`, `roomId`, role, scopes), and recent request telemetry with request/trace IDs so local-vs-prod drift and join issues can be debugged quickly without attaching a logger.
+- **Mobile/meeting room: shareable Chalk invite links now have a native helper** — React Native meeting surfaces can now mint a host join token and turn it into the canonical `https://chalkmeet.com/j/:token` invite link through a small tested helper instead of hand-building links in component code.
 
 ### Changed
 
 - **Web/domain: `chalkmeet.com` is now the canonical Chalk app URL** — web-generated invite/share/privacy links now default to `https://chalkmeet.com`, Cloudflare Pages/web config now exposes the new canonical public origin, and mobile/store/docs surfaces now present `chalkmeet.com` while keeping `chalk.q9labs.ai` valid.
 - **Mobile/dev: diagnostics launcher now uses an icon-only affordance** — the development-only diagnostics entry point stays top-right but now uses a compact bug/debug icon button instead of a `DEV` text pill, reducing visual noise while keeping the same quick access.
+- **Mobile/meeting room: the old debug-ish bottom sheet is now a real actions sheet** — the room now opens a dedicated dark action grid with icon tiles for mute/video/share/invite/chat/people/hand/reactions/whiteboard/record/transcript/settings plus a prominent leave button, while deep device/chat/transcript panels stay behind it.
 
 ### Fixed
 
 - **Web/API: internal `/new` joins now stay on one first-party auth scope** — the web app now carries the just-minted internal access token from room creation into the immediate room load/join flow, and hosted first-party auth requests reuse a stable client bootstrap so `chalkmeet.com` no longer falls back into fresh claim tenants and trip false `room not found` joins.
 - **Mobile release: host-key verification now blocks bad bundles before ship** — release tooling now proves the supplied prod mobile host key can exchange against `POST /api/v1/auth/token` before any uploadable bundle/archive is produced, Android closed/prod builds are explicitly treated as CI-artifact-only, and the next hotfix lane advances to `0.0.15 / 15`.
 - **API/auth: hosted Chalk origins now allow both primary and legacy domains** — internal Google auth origin validation, HTTP CORS, WebSocket origin checks, and static CORS sync allowlists now accept both `https://chalkmeet.com` and `https://chalk.q9labs.ai` so the domain cutover does not break dashboard, invite, or realtime flows.
+- **Mobile/meeting room: reactions, raised hands, chat access, invite share, and screenshare affordances now surface truthfully** — active reactions now render in-room, raised hands show both on-stage and in the participants list, chat is reachable from the room actions sheet, invite participants is wired via host join-token sharing, and the mobile app no longer hard-disables screen share from the room shell.
 
 ## [0.0.79] - 2026-03-23
 

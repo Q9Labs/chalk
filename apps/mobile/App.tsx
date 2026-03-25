@@ -179,7 +179,7 @@ function MeetingScreen({
 }): React.JSX.Element {
   return (
     <ChalkNativeProvider apiUrl={apiUrl} debug={diagnosticsEnabled} tokenProvider={tokenProvider} wideEvents={wideEvents} wsUrl={wsUrl}>
-      <NativeVideoConference autoJoin={false} features={{ screenShare: false }} initialPhase="lobby" onClose={onClose} roomId={route.roomId} roomName={route.roomName} role={route.role} userName={route.role === "host" ? "Host" : "Guest"} />
+      <NativeVideoConference autoJoin={false} initialPhase="lobby" onClose={onClose} roomId={route.roomId} roomName={route.roomName} role={route.role} userName={route.role === "host" ? "Host" : "Guest"} />
     </ChalkNativeProvider>
   );
 }
