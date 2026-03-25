@@ -1,5 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { WSClient } from "../ws-client.ts";
+import { wideEvents, type WideEvent } from "../wide-events/index.ts";
 import { serializeOutgoingMessage } from "../ws-client/outbound.ts";
 
 class MockWebSocket {
@@ -68,6 +69,29 @@ const makeFakeTimers = () => {
 };
 
 describe("WSClient", () => {
+  let capturedWideEvents: WideEvent[] = [];
+
+  beforeEach(() => {
+    capturedWideEvents = [];
+    wideEvents.reset();
+    wideEvents.configure({
+      enabled: true,
+      includeDebugInfo: true,
+      handler: (event) => {
+        capturedWideEvents.push(event);
+      },
+    });
+  });
+
+  afterEach(() => {
+    wideEvents.reset();
+    wideEvents.configure({
+      enabled: false,
+      includeDebugInfo: false,
+      handler: undefined,
+    });
+  });
+
   it("decodes participant.joined (nested) + emits Participant", () => {
     let ws: MockWebSocket | null = null;
 
@@ -220,6 +244,7 @@ describe("WSClient", () => {
 
     expect(got).toBeDefined();
     expect(got.code).toBe("WS_PARSE_ERROR");
+    expect(capturedWideEvents.some((event) => event.eventType === "websocket.error" && event.error?.code === "WS_PARSE_ERROR")).toBe(true);
   });
 
   it("serializes transcript with camelCase payload keys", () => {
@@ -301,5 +326,52 @@ describe("WSClient", () => {
 
     expect(client.connectionState).toBe("reconnecting");
     expect(attempt).toBe(1);
+  });
+
+  it("emits websocket close and reconnect diagnostics for unexpected closes", () => {
+    let ws: MockWebSocket | null = null;
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    ws?.close(1013, "Try again later");
+
+    const disconnectEvent = capturedWideEvents.find((event) => event.eventType === "websocket.disconnect" && event.data.reason === "socket_closed");
+    const reconnectEvent = capturedWideEvents.find((event) => event.eventType === "websocket.reconnect" && event.data.trigger === "socket_closed");
+
+    expect(disconnectEvent).toBeDefined();
+    expect(disconnectEvent?.error?.code).toBe("WS_CLOSED");
+    expect(disconnectEvent?.data.closeCode).toBe(1013);
+    expect(disconnectEvent?.data.closeReason).toBe("Try again later");
+    expect(reconnectEvent).toBeDefined();
+    expect(reconnectEvent?.data.attempt).toBe(1);
+    expect(reconnectEvent?.data.delayMs).toBe(1000);
+  });
+
+  it("emits websocket error diagnostics for socket runtime errors", () => {
+    let ws: MockWebSocket | null = null;
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    ws?.onerror?.({
+      type: "error",
+      message: "socket blew up",
+    });
+
+    const errorEvent = capturedWideEvents.find((event) => event.eventType === "websocket.error" && event.data.stage === "socket");
+    expect(errorEvent).toBeDefined();
+    expect(errorEvent?.error?.code).toBe("WS_ERROR");
+    expect(errorEvent?.error?.message).toContain("socket blew up");
   });
 });

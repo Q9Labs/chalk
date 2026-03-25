@@ -63,6 +63,23 @@ export class WSClientBase extends EventEmitter<WSEvents> {
     return this.lastCloseEvent;
   }
 
+  private emitWsWideEvent(eventType: "websocket.disconnect" | "websocket.reconnect" | "websocket.error", outcome: "success" | "error", details: Record<string, unknown>, error?: { code: string; message: string }): void {
+    const ctx = wideEvents.start(eventType);
+    ctx.merge({
+      roomId: this.roomId,
+      wsUrl: this.wsUrl,
+      reconnectAttempt: this.reconnectAttempt,
+      lastClose: this.lastCloseEvent,
+      ...details,
+    });
+    if (outcome === "success") {
+      ctx.complete("success");
+      return;
+    }
+
+    ctx.complete("error", error ?? { code: "WS_ERROR", message: "WebSocket event failed" });
+  }
+
   connect(token: string, roomId: string): void {
     if (!canConnect(this.state)) {
       return;
@@ -96,7 +113,21 @@ export class WSClientBase extends EventEmitter<WSEvents> {
         errorMessage,
       });
       this.connectContext = null;
-      this.handleConnectionFailure();
+      this.emitWsWideEvent(
+        "websocket.error",
+        "error",
+        {
+          stage: "connect",
+          errorMessage,
+        },
+        {
+          code: "WS_CONNECTION_ERROR",
+          message: errorMessage,
+        },
+      );
+      this.handleConnectionFailure("connect_exception", {
+        errorMessage,
+      });
     }
   }
 
@@ -137,11 +168,43 @@ export class WSClientBase extends EventEmitter<WSEvents> {
         return;
       }
 
-      this.handleConnectionFailure();
+      this.emitWsWideEvent(
+        "websocket.disconnect",
+        "error",
+        {
+          reason: "socket_closed",
+          closeCode: event.code,
+          closeReason: event.reason || codeDescription,
+          wasClean: event.wasClean,
+          stateAtClose: this.state,
+        },
+        {
+          code: "WS_CLOSED",
+          message: `WebSocket closed: ${event.reason || codeDescription}`,
+        },
+      );
+      this.handleConnectionFailure("socket_closed", {
+        closeCode: event.code,
+        closeReason: event.reason || codeDescription,
+        wasClean: event.wasClean,
+      });
     };
 
     this.ws.onerror = (event) => {
-      this.emit("error", toWsError(event, this.ws));
+      const wsError = toWsError(event, this.ws);
+      this.emitWsWideEvent(
+        "websocket.error",
+        "error",
+        {
+          stage: "socket",
+          ...(typeof wsError.details === "object" && wsError.details ? wsError.details : {}),
+        },
+        {
+          code: wsError.code,
+          message: wsError.message,
+        },
+      );
+      this.emit("error", wsError);
     };
 
     this.ws.onmessage = (event) => {
@@ -153,6 +216,18 @@ export class WSClientBase extends EventEmitter<WSEvents> {
   private handleIncoming(raw: string): void {
     const decoded = decodeIncomingMessage(raw);
     if (!decoded.ok) {
+      this.emitWsWideEvent(
+        "websocket.error",
+        "error",
+        {
+          stage: "decode",
+          details: decoded.error,
+        },
+        {
+          code: "WS_PARSE_ERROR",
+          message: "Failed to parse WebSocket message",
+        },
+      );
       this.emit("error", {
         code: "WS_PARSE_ERROR",
         message: "Failed to parse WebSocket message",
@@ -168,7 +243,8 @@ export class WSClientBase extends EventEmitter<WSEvents> {
     handler?.(decoded.message.payload as never);
   }
 
-  private handleConnectionFailure(): void {
+  private handleConnectionFailure(trigger: string = "unknown", triggerDetails: Record<string, unknown> = {}): void {
+    const previousState = this.state;
     this.stopHeartbeat();
 
     // Ensure we don't keep a half-dead socket around (e.g. heartbeat timeout).
@@ -204,8 +280,13 @@ export class WSClientBase extends EventEmitter<WSEvents> {
       }
 
       const ctx = wideEvents.start("websocket.disconnect");
-      ctx.set("roomId", this.roomId);
-      ctx.set("reason", "max_reconnect_attempts");
+      ctx.merge({
+        roomId: this.roomId,
+        reason: "max_reconnect_attempts",
+        trigger,
+        ...triggerDetails,
+        lastClose: this.lastCloseEvent,
+      });
       ctx.complete("error", {
         errorCode: "MAX_RECONNECT_ATTEMPTS",
         errorMessage: "Failed to reconnect after multiple attempts",
@@ -225,6 +306,14 @@ export class WSClientBase extends EventEmitter<WSEvents> {
       return;
     }
 
+    this.emitWsWideEvent("websocket.reconnect", "success", {
+      attempt: this.reconnectAttempt,
+      delayMs: decision.delayMs,
+      trigger,
+      previousState,
+      ...triggerDetails,
+      lastPongAgeMs: Math.max(0, this.now() - this.lastPongTime),
+    });
     this.emit("reconnecting", { attempt: this.reconnectAttempt });
 
     this.stopReconnectTimer();
@@ -247,9 +336,22 @@ export class WSClientBase extends EventEmitter<WSEvents> {
       try {
         this.token = await this.tokenProvider();
       } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to refresh token for WebSocket reconnection";
+        this.emitWsWideEvent(
+          "websocket.reconnect",
+          "error",
+          {
+            attempt: this.reconnectAttempt,
+            trigger: "token_refresh",
+          },
+          {
+            code: "TOKEN_EXPIRED",
+            message,
+          },
+        );
         this.emit("token.expired", {
           code: "TOKEN_EXPIRED",
-          message: err instanceof Error ? err.message : "Failed to refresh token for WebSocket reconnection",
+          message,
         });
         this.state = "failed";
         return;
@@ -287,9 +389,22 @@ export class WSClientBase extends EventEmitter<WSEvents> {
     try {
       this.ws.send(serializeOutgoingMessage(message));
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to send WS message";
+      this.emitWsWideEvent(
+        "websocket.error",
+        "error",
+        {
+          stage: "send",
+          messageType: message.type,
+        },
+        {
+          code: "WS_SEND_ERROR",
+          message: errorMessage,
+        },
+      );
       this.emit("error", {
         code: "WS_SEND_ERROR",
-        message: err instanceof Error ? err.message : "Failed to send WS message",
+        message: errorMessage,
       });
     }
   }

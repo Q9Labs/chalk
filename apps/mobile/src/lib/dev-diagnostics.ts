@@ -72,7 +72,8 @@ export interface DevDiagnosticsTimelineEntry {
   eventType: string;
   outcome: WideEventOutcome;
   durationMs?: number;
-  summary: string;
+  title: string;
+  detail?: string;
   errorMessage?: string;
 }
 
@@ -225,22 +226,29 @@ const parseBase64UrlJson = (raw: string): Record<string, unknown> | null => {
   }
 };
 
-const formatTimelineSummary = (eventType: string, data: Record<string, unknown>, request?: { method?: string; path?: string }, response?: { statusCode?: number | null }): string => {
+const formatTimelineTitle = (eventType: string, outcome: WideEventOutcome): string => {
+  const label = eventType.replace(/\./g, " ").toUpperCase();
+  return `${label} ${outcome.toUpperCase()}`;
+};
+
+const formatTimelineDetail = (eventType: string, data: Record<string, unknown>, request?: { method?: string; path?: string }, response?: { statusCode?: number | null }): string => {
   switch (eventType) {
     case "api.request":
       return [request?.method, request?.path, response?.statusCode ? `status ${response.statusCode}` : null].filter(Boolean).join(" ");
     case "room.join.rtk.attempt":
-      return `attempt ${String(data.attempt ?? "?")}/${String(data.totalAttempts ?? "?")} ${String(data.outcome ?? "")} timeout ${String(data.timeoutMs ?? "?")}ms`;
+      return `attempt ${String(data.attempt ?? "?")}/${String(data.totalAttempts ?? "?")} timeout ${String(data.timeoutMs ?? "?")}ms`;
     case "websocket.connect":
-      return `connect ${String(data.roomId ?? "")} attempt ${String(data.attempt ?? 1)}`.trim();
+      return [`room ${String(data.roomId ?? "")}`.trim(), `attempt ${String(data.attempt ?? 1)}`.trim()].filter(Boolean).join(" ");
     case "websocket.disconnect":
-      return `disconnect ${String(data.reason ?? "unknown")}`.trim();
+      return [`reason ${String(data.reason ?? "unknown")}`.trim(), data.closeCode ? `code ${String(data.closeCode)}` : null, data.closeReason ? `close ${String(data.closeReason)}` : null, typeof data.wasClean === "boolean" ? `clean ${String(data.wasClean)}` : null].filter(Boolean).join(" ");
     case "websocket.reconnect":
-      return `reconnect attempt ${String(data.attempt ?? "?")}`.trim();
+      return [`attempt ${String(data.attempt ?? "?")}`.trim(), data.delayMs ? `delay ${String(data.delayMs)}ms` : null, data.trigger ? `trigger ${String(data.trigger)}` : null].filter(Boolean).join(" ");
+    case "websocket.error":
+      return [data.stage ? `stage ${String(data.stage)}` : null, data.messageType ? `message ${String(data.messageType)}` : null, data.readyStateDesc ? `state ${String(data.readyStateDesc)}` : null].filter(Boolean).join(" ");
     case "room.join":
-      return `join ${String(data.roomId ?? "")}`.trim();
+      return `room ${String(data.roomId ?? "")}`.trim();
     case "room.leave":
-      return `leave ${String(data.roomId ?? "")}`.trim();
+      return `room ${String(data.roomId ?? "")}`.trim();
     default:
       return JSON.stringify(normalizeJsonPreview(data));
   }
@@ -413,10 +421,25 @@ export const recordDiagnosticsFailure = (source: string, message: string) => {
         source: "manual",
         eventType: "diagnostics.failure",
         outcome: "error",
-        summary: `${source}: ${message}`,
+        title: "DIAGNOSTICS FAILURE",
+        detail: `${source}: ${message}`,
         errorMessage: message,
       },
     ),
+  );
+};
+
+export const recordDevDiagnosticsLifecycleEvent = (eventType: string, title: string, detail?: string) => {
+  updateState((current) =>
+    appendTimeline(current, {
+      id: createId("lifecycle"),
+      timestamp: new Date().toISOString(),
+      source: "manual",
+      eventType,
+      outcome: "success",
+      title,
+      detail,
+    }),
   );
 };
 
@@ -448,7 +471,8 @@ export const recordManualRequest = (entry: Omit<DevDiagnosticsRequestLog, "id" |
         eventType: entry.eventType,
         outcome: entry.outcome,
         durationMs: entry.durationMs,
-        summary: [entry.method, entry.path ?? entry.url, entry.statusCode ? `status ${entry.statusCode}` : null].filter(Boolean).join(" "),
+        title: formatTimelineTitle(entry.eventType, entry.outcome),
+        detail: [entry.method, entry.path ?? entry.url, entry.statusCode ? `status ${entry.statusCode}` : null].filter(Boolean).join(" "),
         errorMessage: entry.errorMessage,
       },
     );
@@ -467,7 +491,8 @@ export const recordWideEvent = (event: WideEvent) => {
       eventType: event.eventType,
       outcome: event.outcome,
       durationMs: event.durationMs,
-      summary: formatTimelineSummary(event.eventType, event.data, request, response),
+      title: formatTimelineTitle(event.eventType, event.outcome),
+      detail: formatTimelineDetail(event.eventType, event.data, request, response),
       errorMessage: event.error?.message,
     });
 

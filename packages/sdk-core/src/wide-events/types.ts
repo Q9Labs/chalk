@@ -101,6 +101,7 @@ export type WideEventType =
   | "websocket.connect"
   | "websocket.disconnect"
   | "websocket.reconnect"
+  | "websocket.error"
   | "participant.join"
   | "participant.leave"
   | "chat.send"

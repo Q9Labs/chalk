@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Mobile/dev: local-only diagnostics sheet now captures full join/debug state** — local development builds now expose a copyable debug sheet with the resolved API/WS target, host/join/latest token previews plus decoded JWT claims, native device/runtime info, server-auth claims (`tenantId`, `roomId`, role, scopes), session/join lifecycle state, WebSocket + RTK timeline events, one-tap cleanup actions, and failure-triggered auto-open so local-vs-prod drift and “already connected” join issues can be debugged quickly without attaching a logger.
+- **Mobile/dev: local-only diagnostics sheet now captures full join/debug state** — local development builds now expose a copyable debug sheet with the resolved API/WS target, host/join/latest token previews plus decoded JWT claims, native device/runtime info, server-auth claims (`tenantId`, `roomId`, role, scopes), session/join lifecycle state, WebSocket close/error/reconnect + RTK timeline events, one-tap cleanup actions, and failure-triggered auto-open so local-vs-prod drift and “already connected” join issues can be debugged quickly without attaching a logger.
 - **Mobile/meeting room: shareable Chalk invite links now have a native helper** — React Native meeting surfaces can now mint a host join token and turn it into the canonical `https://chalkmeet.com/j/:token` invite link through a small tested helper instead of hand-building links in component code.
 
 ### Changed
