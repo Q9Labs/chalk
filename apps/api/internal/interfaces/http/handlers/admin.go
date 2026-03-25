@@ -234,6 +234,7 @@ func (h *AdminHandler) CreateTenant(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate API key"})
 		return
 	}
+	apiKeyLookupHash := h.apiKeyService.LookupHash(apiKey)
 
 	maxRooms := int32(100)
 	maxParticipants := int32(10)
@@ -251,6 +252,7 @@ func (h *AdminHandler) CreateTenant(c *gin.Context) {
 	tenant, err := h.queries.CreateTenant(c.Request.Context(), db.CreateTenantParams{
 		Name:                        req.Name,
 		ApiKeyHash:                  apiKeyHash,
+		ApiKeyLookupHash:            &apiKeyLookupHash,
 		Config:                      []byte("{}"),
 		MaxConcurrentRooms:          maxRooms,
 		MaxParticipantsPerRoom:      maxParticipants,
@@ -363,10 +365,12 @@ func (h *AdminHandler) RotateKey(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate API key"})
 		return
 	}
+	apiKeyLookupHash := h.apiKeyService.LookupHash(apiKey)
 
 	_, err = h.queries.RotateTenantAPIKey(c.Request.Context(), db.RotateTenantAPIKeyParams{
-		ID:         id,
-		ApiKeyHash: apiKeyHash,
+		ID:               id,
+		ApiKeyHash:       apiKeyHash,
+		ApiKeyLookupHash: &apiKeyLookupHash,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

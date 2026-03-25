@@ -5,12 +5,13 @@
 INSERT INTO tenants (
     name,
     api_key_hash,
+    api_key_lookup_hash,
     config,
     max_concurrent_rooms,
     max_participants_per_room,
     max_recording_duration_minutes
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7
 )
 RETURNING *;
 
@@ -21,6 +22,11 @@ WHERE id = $1 LIMIT 1;
 -- name: GetTenantByAPIKeyHash :one
 SELECT * FROM tenants
 WHERE api_key_hash = $1 AND is_active = true
+LIMIT 1;
+
+-- name: GetTenantByAPIKeyLookupHash :one
+SELECT * FROM tenants
+WHERE api_key_lookup_hash = $1 AND is_active = true
 LIMIT 1;
 
 -- name: ListTenants :many
@@ -35,10 +41,11 @@ ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
 -- name: ListActiveTenantAPIKeys :many
--- Minimal rowset for API key verification; avoid pulling large JSON configs for every tenant.
+-- Minimal rowset for API key verification; only legacy keys without lookup hashes need scanning.
 SELECT id, api_key_hash
 FROM tenants
 WHERE is_active = true
+  AND api_key_lookup_hash IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
@@ -79,8 +86,16 @@ WHERE is_active = true;
 -- name: RotateTenantAPIKey :one
 UPDATE tenants
 SET api_key_hash = $2
+  , api_key_lookup_hash = $3
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateTenantAPIKeyLookupHash :exec
+UPDATE tenants
+SET api_key_lookup_hash = $2
+WHERE id = $1
+  AND api_key_lookup_hash IS NULL
+  AND api_key_hash = $3;
 
 -- name: UpdateTenantConfig :one
 UPDATE tenants

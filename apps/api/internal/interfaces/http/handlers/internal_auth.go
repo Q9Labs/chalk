@@ -619,7 +619,7 @@ func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUse
 	if err != nil {
 		return nil, err
 	}
-	_ = apiKey
+	apiKeyLookupHash := h.apiKeySvc.LookupHash(apiKey)
 
 	tenantCfg := []byte(`{"force_recording":true,"recording_retention_days":7,"allow_early_join":true,"transcription_enabled":true}`)
 	var claimedAt *time.Time
@@ -631,6 +631,7 @@ func (h *InternalAuthHandler) createInternalTenant(ctx context.Context, ownerUse
 	tenant, err := h.queries.CreateInternalTenant(ctx, db.CreateInternalTenantParams{
 		Name:                        name,
 		ApiKeyHash:                  apiKeyHash,
+		ApiKeyLookupHash:            &apiKeyLookupHash,
 		Config:                      []byte("{}"),
 		MaxConcurrentRooms:          100,
 		MaxParticipantsPerRoom:      10,

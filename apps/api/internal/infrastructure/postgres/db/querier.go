@@ -126,6 +126,7 @@ type Querier interface {
 	GetSharedInternalTenantByName(ctx context.Context, name string) (Tenant, error)
 	GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetTenantByAPIKeyHash(ctx context.Context, apiKeyHash string) (Tenant, error)
+	GetTenantByAPIKeyLookupHash(ctx context.Context, apiKeyLookupHash *string) (Tenant, error)
 	GetTenantByRoomID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetTenantClaimBySecretHash(ctx context.Context, secretHash string) (TenantClaim, error)
 	GetTotalRecordingStorageByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
@@ -142,7 +143,7 @@ type Querier interface {
 	ListActiveParticipantsByRoom(ctx context.Context, roomID uuid.UUID) ([]Participant, error)
 	ListActiveRoomsByTenant(ctx context.Context, arg ListActiveRoomsByTenantParams) ([]Room, error)
 	ListActiveRoomsWithParticipantCount(ctx context.Context, arg ListActiveRoomsWithParticipantCountParams) ([]ListActiveRoomsWithParticipantCountRow, error)
-	// Minimal rowset for API key verification; avoid pulling large JSON configs for every tenant.
+	// Minimal rowset for API key verification; only legacy keys without lookup hashes need scanning.
 	ListActiveTenantAPIKeys(ctx context.Context, arg ListActiveTenantAPIKeysParams) ([]ListActiveTenantAPIKeysRow, error)
 	ListActiveTenants(ctx context.Context, arg ListActiveTenantsParams) ([]Tenant, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
@@ -200,6 +201,7 @@ type Querier interface {
 	UpdatePostMeetingTranscriptStatus(ctx context.Context, arg UpdatePostMeetingTranscriptStatusParams) error
 	UpdateRoom(ctx context.Context, arg UpdateRoomParams) (Room, error)
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
+	UpdateTenantAPIKeyLookupHash(ctx context.Context, arg UpdateTenantAPIKeyLookupHashParams) error
 	UpdateTenantConfig(ctx context.Context, arg UpdateTenantConfigParams) (Tenant, error)
 	UpdateWebhookDeliveryAttempt(ctx context.Context, arg UpdateWebhookDeliveryAttemptParams) error
 }

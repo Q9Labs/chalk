@@ -10,6 +10,7 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,8 +20,10 @@ type fakeTenantQuerier struct {
 	candidates []db.ListActiveTenantAPIKeysRow
 	tenants    map[uuid.UUID]db.Tenant
 
-	listCalls int
-	getCalls  int
+	listCalls        int
+	getCalls         int
+	getByLookupCalls int
+	updateCalls      int
 }
 
 func (q *fakeTenantQuerier) ListActiveTenantAPIKeys(_ context.Context, arg db.ListActiveTenantAPIKeysParams) ([]db.ListActiveTenantAPIKeysRow, error) {
@@ -52,10 +55,44 @@ func (q *fakeTenantQuerier) GetTenant(_ context.Context, id uuid.UUID) (db.Tenan
 	return t, nil
 }
 
-func (q *fakeTenantQuerier) counts() (listCalls, getCalls int) {
+func (q *fakeTenantQuerier) GetTenantByAPIKeyLookupHash(_ context.Context, apiKeyLookupHash *string) (db.Tenant, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return q.listCalls, q.getCalls
+	q.getByLookupCalls++
+	if apiKeyLookupHash == nil {
+		return db.Tenant{}, pgx.ErrNoRows
+	}
+	for _, tenant := range q.tenants {
+		if tenant.ApiKeyLookupHash != nil && *tenant.ApiKeyLookupHash == *apiKeyLookupHash {
+			return tenant, nil
+		}
+	}
+	return db.Tenant{}, pgx.ErrNoRows
+}
+
+func (q *fakeTenantQuerier) UpdateTenantAPIKeyLookupHash(_ context.Context, arg db.UpdateTenantAPIKeyLookupHashParams) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.updateCalls++
+	tenant, ok := q.tenants[arg.ID]
+	if !ok {
+		return errors.New("tenant not found")
+	}
+	if tenant.ApiKeyLookupHash != nil {
+		return nil
+	}
+	if tenant.ApiKeyHash != arg.ApiKeyHash {
+		return nil
+	}
+	tenant.ApiKeyLookupHash = arg.ApiKeyLookupHash
+	q.tenants[arg.ID] = tenant
+	return nil
+}
+
+func (q *fakeTenantQuerier) counts() (listCalls, getCalls, getByLookupCalls, updateCalls int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.listCalls, q.getCalls, q.getByLookupCalls, q.updateCalls
 }
 
 type fakeVerifier struct {
@@ -71,6 +108,8 @@ type fakeVerifier struct {
 }
 
 func (v *fakeVerifier) ValidateAPIKeyFormat(_ string) error { return v.validateErr }
+
+func (v *fakeVerifier) LookupHash(apiKey string) string { return "lookup:" + apiKey }
 
 func (v *fakeVerifier) VerifyAPIKey(apiKey, hash string) bool {
 	cur := v.inFlight.Add(1)
@@ -93,10 +132,50 @@ func (v *fakeVerifier) VerifyAPIKey(apiKey, hash string) bool {
 func TestTenantLookup_ResolvesAndCaches(t *testing.T) {
 	apiKey := "ck_live_testkey"
 	tenantID := uuid.New()
+	lookupHash := "lookup:" + apiKey
+
+	q := &fakeTenantQuerier{
+		tenants: map[uuid.UUID]db.Tenant{
+			tenantID: {ID: tenantID, ApiKeyHash: "hash:" + apiKey, IsActive: true, ApiKeyLookupHash: &lookupHash},
+		},
+	}
+
+	v := &fakeVerifier{
+		match: func(apiKey, hash string) bool { return hash == "hash:"+apiKey },
+	}
+
+	lookup := NewTenantLookup(q, v, WithTenantLookupVerifyWorkers(4), WithTenantLookupPageSize(100))
+
+	tenant, err := lookup.ResolveActiveTenant(context.Background(), apiKey)
+	require.NoError(t, err)
+	require.NotNil(t, tenant)
+	require.Equal(t, tenantID, tenant.ID)
+
+	list1, get1, getByLookup1, update1 := q.counts()
+	require.Equal(t, 0, list1)
+	require.Equal(t, 0, get1)
+	require.GreaterOrEqual(t, getByLookup1, 1)
+	require.Equal(t, 0, update1)
+
+	// Second resolve should be a cache hit: no list call, no additional lookup query.
+	tenant2, err := lookup.ResolveActiveTenant(context.Background(), apiKey)
+	require.NoError(t, err)
+	require.NotNil(t, tenant2)
+	require.Equal(t, tenantID, tenant2.ID)
+
+	list2, get2, getByLookup2, update2 := q.counts()
+	require.Equal(t, list1, list2)
+	require.Greater(t, get2, get1)
+	require.Equal(t, getByLookup1, getByLookup2)
+	require.Equal(t, update1, update2)
+}
+
+func TestTenantLookup_PromotesLegacyMatchToLookupHash(t *testing.T) {
+	apiKey := "ck_live_legacykey"
+	tenantID := uuid.New()
 
 	q := &fakeTenantQuerier{
 		candidates: []db.ListActiveTenantAPIKeysRow{
-			{ID: uuid.New(), ApiKeyHash: "hash:nope"},
 			{ID: tenantID, ApiKeyHash: "hash:" + apiKey},
 		},
 		tenants: map[uuid.UUID]db.Tenant{
@@ -115,19 +194,67 @@ func TestTenantLookup_ResolvesAndCaches(t *testing.T) {
 	require.NotNil(t, tenant)
 	require.Equal(t, tenantID, tenant.ID)
 
-	list1, get1 := q.counts()
+	list1, get1, getByLookup1, update1 := q.counts()
 	require.GreaterOrEqual(t, list1, 1)
 	require.GreaterOrEqual(t, get1, 1)
+	require.GreaterOrEqual(t, getByLookup1, 1)
+	require.Equal(t, 1, update1)
+	require.NotNil(t, q.tenants[tenantID].ApiKeyLookupHash)
 
-	// Second resolve should be a cache hit: no list call, only GetTenant.
-	tenant2, err := lookup.ResolveActiveTenant(context.Background(), apiKey)
+	lookup2 := NewTenantLookup(q, v, WithTenantLookupVerifyWorkers(4), WithTenantLookupPageSize(100))
+	tenant2, err := lookup2.ResolveActiveTenant(context.Background(), apiKey)
 	require.NoError(t, err)
 	require.NotNil(t, tenant2)
 	require.Equal(t, tenantID, tenant2.ID)
 
-	list2, get2 := q.counts()
+	list2, _, getByLookup2, update2 := q.counts()
 	require.Equal(t, list1, list2)
-	require.Greater(t, get2, get1)
+	require.GreaterOrEqual(t, getByLookup2, 1)
+	require.Equal(t, update1, update2)
+}
+
+func TestTenantLookup_RejectsStaleLegacyMatchAfterConcurrentRotation(t *testing.T) {
+	apiKey := "ck_live_legacykey"
+	rotatedAPIKey := "ck_live_rotatedkey"
+	tenantID := uuid.New()
+	rotatedLookupHash := "lookup:" + rotatedAPIKey
+
+	q := &fakeTenantQuerier{
+		candidates: []db.ListActiveTenantAPIKeysRow{
+			{ID: tenantID, ApiKeyHash: "hash:" + apiKey},
+		},
+		tenants: map[uuid.UUID]db.Tenant{
+			tenantID: {
+				ID:               tenantID,
+				ApiKeyHash:       "hash:" + apiKey,
+				IsActive:         true,
+				ApiKeyLookupHash: nil,
+			},
+		},
+	}
+
+	v := &fakeVerifier{
+		match: func(apiKey, hash string) bool { return hash == "hash:"+apiKey },
+	}
+
+	lookup := NewTenantLookup(q, v, WithTenantLookupVerifyWorkers(4), WithTenantLookupPageSize(100))
+
+	q.mu.Lock()
+	rotatedTenant := q.tenants[tenantID]
+	rotatedTenant.ApiKeyHash = "hash:" + rotatedAPIKey
+	rotatedTenant.ApiKeyLookupHash = &rotatedLookupHash
+	q.tenants[tenantID] = rotatedTenant
+	q.mu.Unlock()
+
+	tenant, err := lookup.ResolveActiveTenant(context.Background(), apiKey)
+	require.NoError(t, err)
+	require.Nil(t, tenant)
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	require.Equal(t, "hash:"+rotatedAPIKey, q.tenants[tenantID].ApiKeyHash)
+	require.NotNil(t, q.tenants[tenantID].ApiKeyLookupHash)
+	require.Equal(t, rotatedLookupHash, *q.tenants[tenantID].ApiKeyLookupHash)
 }
 
 func TestTenantLookup_UsesConcurrency(t *testing.T) {

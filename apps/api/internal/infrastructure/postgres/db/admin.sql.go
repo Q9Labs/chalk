@@ -469,7 +469,7 @@ func (q *Queries) AdminListRooms(ctx context.Context, arg AdminListRoomsParams) 
 
 const adminListTenants = `-- name: AdminListTenants :many
 SELECT
-    t.id, t.name, t.api_key_hash, t.config, t.max_concurrent_rooms, t.max_participants_per_room, t.max_recording_duration_minutes, t.max_total_minutes_of_meetings, t.is_active, t.created_at, t.updated_at, t.whiteboard_config, t.tenant_config, t.tenant_kind, t.owner_user_id, t.claimed_at,
+    t.id, t.name, t.api_key_hash, t.config, t.max_concurrent_rooms, t.max_participants_per_room, t.max_recording_duration_minutes, t.max_total_minutes_of_meetings, t.is_active, t.created_at, t.updated_at, t.whiteboard_config, t.tenant_config, t.tenant_kind, t.owner_user_id, t.claimed_at, t.api_key_lookup_hash,
     (SELECT COUNT(*) FROM rooms r WHERE r.tenant_id = t.id AND r.status = 'active') AS active_rooms,
     (SELECT COUNT(*) FROM rooms r WHERE r.tenant_id = t.id) AS total_rooms,
     (SELECT COUNT(*) FROM recordings rec JOIN rooms r ON r.id = rec.room_id WHERE r.tenant_id = t.id) AS total_recordings,
@@ -502,6 +502,7 @@ type AdminListTenantsRow struct {
 	TenantKind                  string             `db:"tenant_kind" json:"tenant_kind"`
 	OwnerUserID                 pgtype.UUID        `db:"owner_user_id" json:"owner_user_id"`
 	ClaimedAt                   pgtype.Timestamptz `db:"claimed_at" json:"claimed_at"`
+	ApiKeyLookupHash            *string            `db:"api_key_lookup_hash" json:"api_key_lookup_hash"`
 	ActiveRooms                 int64              `db:"active_rooms" json:"active_rooms"`
 	TotalRooms                  int64              `db:"total_rooms" json:"total_rooms"`
 	TotalRecordings             int64              `db:"total_recordings" json:"total_recordings"`
@@ -535,6 +536,7 @@ func (q *Queries) AdminListTenants(ctx context.Context, arg AdminListTenantsPara
 			&i.TenantKind,
 			&i.OwnerUserID,
 			&i.ClaimedAt,
+			&i.ApiKeyLookupHash,
 			&i.ActiveRooms,
 			&i.TotalRooms,
 			&i.TotalRecordings,
@@ -709,7 +711,7 @@ const adminUpdateWhiteboardConfig = `-- name: AdminUpdateWhiteboardConfig :one
 UPDATE tenants
 SET whiteboard_config = $2
 WHERE id = $1
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 type AdminUpdateWhiteboardConfigParams struct {
@@ -737,6 +739,7 @@ func (q *Queries) AdminUpdateWhiteboardConfig(ctx context.Context, arg AdminUpda
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }

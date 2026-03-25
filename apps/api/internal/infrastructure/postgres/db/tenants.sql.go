@@ -15,7 +15,7 @@ const activateTenant = `-- name: ActivateTenant :one
 UPDATE tenants
 SET is_active = true
 WHERE id = $1
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 func (q *Queries) ActivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -38,6 +38,7 @@ func (q *Queries) ActivateTenant(ctx context.Context, id uuid.UUID) (Tenant, err
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
@@ -70,23 +71,25 @@ const createTenant = `-- name: CreateTenant :one
 INSERT INTO tenants (
     name,
     api_key_hash,
+    api_key_lookup_hash,
     config,
     max_concurrent_rooms,
     max_participants_per_room,
     max_recording_duration_minutes
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7
 )
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 type CreateTenantParams struct {
-	Name                        string `db:"name" json:"name"`
-	ApiKeyHash                  string `db:"api_key_hash" json:"api_key_hash"`
-	Config                      []byte `db:"config" json:"config"`
-	MaxConcurrentRooms          int32  `db:"max_concurrent_rooms" json:"max_concurrent_rooms"`
-	MaxParticipantsPerRoom      int32  `db:"max_participants_per_room" json:"max_participants_per_room"`
-	MaxRecordingDurationMinutes int32  `db:"max_recording_duration_minutes" json:"max_recording_duration_minutes"`
+	Name                        string  `db:"name" json:"name"`
+	ApiKeyHash                  string  `db:"api_key_hash" json:"api_key_hash"`
+	ApiKeyLookupHash            *string `db:"api_key_lookup_hash" json:"api_key_lookup_hash"`
+	Config                      []byte  `db:"config" json:"config"`
+	MaxConcurrentRooms          int32   `db:"max_concurrent_rooms" json:"max_concurrent_rooms"`
+	MaxParticipantsPerRoom      int32   `db:"max_participants_per_room" json:"max_participants_per_room"`
+	MaxRecordingDurationMinutes int32   `db:"max_recording_duration_minutes" json:"max_recording_duration_minutes"`
 }
 
 // Tenant Queries
@@ -95,6 +98,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 	row := q.db.QueryRow(ctx, createTenant,
 		arg.Name,
 		arg.ApiKeyHash,
+		arg.ApiKeyLookupHash,
 		arg.Config,
 		arg.MaxConcurrentRooms,
 		arg.MaxParticipantsPerRoom,
@@ -118,6 +122,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
@@ -126,7 +131,7 @@ const deactivateTenant = `-- name: DeactivateTenant :one
 UPDATE tenants
 SET is_active = false
 WHERE id = $1
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 func (q *Queries) DeactivateTenant(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -149,6 +154,7 @@ func (q *Queries) DeactivateTenant(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
@@ -193,7 +199,7 @@ func (q *Queries) GetAllTenantAllowedOrigins(ctx context.Context) ([]string, err
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash FROM tenants
 WHERE id = $1 LIMIT 1
 `
 
@@ -217,12 +223,13 @@ func (q *Queries) GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error) {
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
 
 const getTenantByAPIKeyHash = `-- name: GetTenantByAPIKeyHash :one
-SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash FROM tenants
 WHERE api_key_hash = $1 AND is_active = true
 LIMIT 1
 `
@@ -247,12 +254,44 @@ func (q *Queries) GetTenantByAPIKeyHash(ctx context.Context, apiKeyHash string) 
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
+	)
+	return i, err
+}
+
+const getTenantByAPIKeyLookupHash = `-- name: GetTenantByAPIKeyLookupHash :one
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash FROM tenants
+WHERE api_key_lookup_hash = $1 AND is_active = true
+LIMIT 1
+`
+
+func (q *Queries) GetTenantByAPIKeyLookupHash(ctx context.Context, apiKeyLookupHash *string) (Tenant, error) {
+	row := q.db.QueryRow(ctx, getTenantByAPIKeyLookupHash, apiKeyLookupHash)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ApiKeyHash,
+		&i.Config,
+		&i.MaxConcurrentRooms,
+		&i.MaxParticipantsPerRoom,
+		&i.MaxRecordingDurationMinutes,
+		&i.MaxTotalMinutesOfMeetings,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.WhiteboardConfig,
+		&i.TenantConfig,
+		&i.TenantKind,
+		&i.OwnerUserID,
+		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
 
 const getTenantByRoomID = `-- name: GetTenantByRoomID :one
-SELECT t.id, t.name, t.api_key_hash, t.config, t.max_concurrent_rooms, t.max_participants_per_room, t.max_recording_duration_minutes, t.max_total_minutes_of_meetings, t.is_active, t.created_at, t.updated_at, t.whiteboard_config, t.tenant_config, t.tenant_kind, t.owner_user_id, t.claimed_at FROM tenants t
+SELECT t.id, t.name, t.api_key_hash, t.config, t.max_concurrent_rooms, t.max_participants_per_room, t.max_recording_duration_minutes, t.max_total_minutes_of_meetings, t.is_active, t.created_at, t.updated_at, t.whiteboard_config, t.tenant_config, t.tenant_kind, t.owner_user_id, t.claimed_at, t.api_key_lookup_hash FROM tenants t
 JOIN rooms r ON r.tenant_id = t.id
 WHERE r.id = $1
 LIMIT 1
@@ -278,6 +317,7 @@ func (q *Queries) GetTenantByRoomID(ctx context.Context, id uuid.UUID) (Tenant, 
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
@@ -286,6 +326,7 @@ const listActiveTenantAPIKeys = `-- name: ListActiveTenantAPIKeys :many
 SELECT id, api_key_hash
 FROM tenants
 WHERE is_active = true
+  AND api_key_lookup_hash IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -300,7 +341,7 @@ type ListActiveTenantAPIKeysRow struct {
 	ApiKeyHash string    `db:"api_key_hash" json:"api_key_hash"`
 }
 
-// Minimal rowset for API key verification; avoid pulling large JSON configs for every tenant.
+// Minimal rowset for API key verification; only legacy keys without lookup hashes need scanning.
 func (q *Queries) ListActiveTenantAPIKeys(ctx context.Context, arg ListActiveTenantAPIKeysParams) ([]ListActiveTenantAPIKeysRow, error) {
 	rows, err := q.db.Query(ctx, listActiveTenantAPIKeys, arg.Limit, arg.Offset)
 	if err != nil {
@@ -322,7 +363,7 @@ func (q *Queries) ListActiveTenantAPIKeys(ctx context.Context, arg ListActiveTen
 }
 
 const listActiveTenants = `-- name: ListActiveTenants :many
-SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash FROM tenants
 WHERE is_active = true
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -359,6 +400,7 @@ func (q *Queries) ListActiveTenants(ctx context.Context, arg ListActiveTenantsPa
 			&i.TenantKind,
 			&i.OwnerUserID,
 			&i.ClaimedAt,
+			&i.ApiKeyLookupHash,
 		); err != nil {
 			return nil, err
 		}
@@ -371,7 +413,7 @@ func (q *Queries) ListActiveTenants(ctx context.Context, arg ListActiveTenantsPa
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash FROM tenants
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -407,6 +449,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Ten
 			&i.TenantKind,
 			&i.OwnerUserID,
 			&i.ClaimedAt,
+			&i.ApiKeyLookupHash,
 		); err != nil {
 			return nil, err
 		}
@@ -421,17 +464,19 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Ten
 const rotateTenantAPIKey = `-- name: RotateTenantAPIKey :one
 UPDATE tenants
 SET api_key_hash = $2
+  , api_key_lookup_hash = $3
 WHERE id = $1
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 type RotateTenantAPIKeyParams struct {
-	ID         uuid.UUID `db:"id" json:"id"`
-	ApiKeyHash string    `db:"api_key_hash" json:"api_key_hash"`
+	ID               uuid.UUID `db:"id" json:"id"`
+	ApiKeyHash       string    `db:"api_key_hash" json:"api_key_hash"`
+	ApiKeyLookupHash *string   `db:"api_key_lookup_hash" json:"api_key_lookup_hash"`
 }
 
 func (q *Queries) RotateTenantAPIKey(ctx context.Context, arg RotateTenantAPIKeyParams) (Tenant, error) {
-	row := q.db.QueryRow(ctx, rotateTenantAPIKey, arg.ID, arg.ApiKeyHash)
+	row := q.db.QueryRow(ctx, rotateTenantAPIKey, arg.ID, arg.ApiKeyHash, arg.ApiKeyLookupHash)
 	var i Tenant
 	err := row.Scan(
 		&i.ID,
@@ -450,6 +495,7 @@ func (q *Queries) RotateTenantAPIKey(ctx context.Context, arg RotateTenantAPIKey
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
@@ -463,7 +509,7 @@ SET
     max_participants_per_room = COALESCE($5, max_participants_per_room),
     max_recording_duration_minutes = COALESCE($6, max_recording_duration_minutes)
 WHERE id = $1
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 type UpdateTenantParams struct {
@@ -502,15 +548,35 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Ten
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
+}
+
+const updateTenantAPIKeyLookupHash = `-- name: UpdateTenantAPIKeyLookupHash :exec
+UPDATE tenants
+SET api_key_lookup_hash = $2
+WHERE id = $1
+  AND api_key_lookup_hash IS NULL
+  AND api_key_hash = $3
+`
+
+type UpdateTenantAPIKeyLookupHashParams struct {
+	ID               uuid.UUID `db:"id" json:"id"`
+	ApiKeyLookupHash *string   `db:"api_key_lookup_hash" json:"api_key_lookup_hash"`
+	ApiKeyHash       string    `db:"api_key_hash" json:"api_key_hash"`
+}
+
+func (q *Queries) UpdateTenantAPIKeyLookupHash(ctx context.Context, arg UpdateTenantAPIKeyLookupHashParams) error {
+	_, err := q.db.Exec(ctx, updateTenantAPIKeyLookupHash, arg.ID, arg.ApiKeyLookupHash, arg.ApiKeyHash)
+	return err
 }
 
 const updateTenantConfig = `-- name: UpdateTenantConfig :one
 UPDATE tenants
 SET tenant_config = $2
 WHERE id = $1
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 type UpdateTenantConfigParams struct {
@@ -538,6 +604,7 @@ func (q *Queries) UpdateTenantConfig(ctx context.Context, arg UpdateTenantConfig
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }

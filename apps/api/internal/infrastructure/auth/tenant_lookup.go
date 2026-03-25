@@ -2,8 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"runtime"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 var (
@@ -22,11 +21,14 @@ var (
 type apiKeyVerifier interface {
 	ValidateAPIKeyFormat(apiKey string) error
 	VerifyAPIKey(apiKey, hash string) bool
+	LookupHash(apiKey string) string
 }
 
 type tenantQuerier interface {
+	GetTenantByAPIKeyLookupHash(ctx context.Context, apiKeyLookupHash *string) (db.Tenant, error)
 	ListActiveTenantAPIKeys(ctx context.Context, arg db.ListActiveTenantAPIKeysParams) ([]db.ListActiveTenantAPIKeysRow, error)
 	GetTenant(ctx context.Context, id uuid.UUID) (db.Tenant, error)
+	UpdateTenantAPIKeyLookupHash(ctx context.Context, arg db.UpdateTenantAPIKeyLookupHashParams) error
 }
 
 type TenantLookup struct {
@@ -108,13 +110,26 @@ func (l *TenantLookup) ResolveActiveTenant(ctx context.Context, apiKey string) (
 	}
 
 	start := time.Now()
-	cacheKey := apiKeyCacheKey(apiKey)
+	lookupHash := l.verifier.LookupHash(apiKey)
+	cacheKey := lookupHash
 	if tenantID, ok := l.cache.Get(cacheKey); ok {
 		tenant, err := l.q.GetTenant(ctx, tenantID)
-		if err == nil && tenant.IsActive && l.verifier.VerifyAPIKey(apiKey, tenant.ApiKeyHash) {
-			return &tenant, nil
+		if err == nil && tenant.IsActive {
+			if tenant.ApiKeyLookupHash != nil && *tenant.ApiKeyLookupHash == lookupHash {
+				return &tenant, nil
+			}
+			if (tenant.ApiKeyLookupHash == nil || *tenant.ApiKeyLookupHash == "") && l.verifier.VerifyAPIKey(apiKey, tenant.ApiKeyHash) {
+				return &tenant, nil
+			}
 		}
 		l.cache.Delete(cacheKey)
+	}
+
+	if tenant, err := l.resolveByLookupHash(ctx, apiKey, lookupHash); err != nil {
+		return nil, err
+	} else if tenant != nil {
+		l.cache.Set(cacheKey, tenant.ID)
+		return tenant, nil
 	}
 
 	// Guardrail: callers behind API Gateway have a 30s cap; if a deadline exists, respect it.
@@ -150,6 +165,16 @@ func (l *TenantLookup) ResolveActiveTenant(ctx context.Context, apiKey string) (
 			if err != nil {
 				return nil, err
 			}
+			if !l.verifier.VerifyAPIKey(apiKey, tenant.ApiKeyHash) {
+				l.log.Warn("api key legacy lookup stale after reload", "tenant_id", tenant.ID)
+				offset += l.pageSize
+				continue
+			}
+			if err := l.promoteLegacyLookupHash(ctx, tenant.ID, tenant.ApiKeyHash, lookupHash); err != nil {
+				l.log.Warn("api key lookup promotion failed", "tenant_id", tenant.ID, "error", err)
+			} else {
+				tenant.ApiKeyLookupHash = &lookupHash
+			}
 			l.cache.Set(cacheKey, tenant.ID)
 			if d := time.Since(start); d >= slowLogThreshold {
 				l.log.Warn("api key lookup slow (match found)",
@@ -174,6 +199,32 @@ func (l *TenantLookup) ResolveActiveTenant(ctx context.Context, apiKey string) (
 		)
 	}
 	return nil, nil
+}
+
+func (l *TenantLookup) resolveByLookupHash(ctx context.Context, apiKey, lookupHash string) (*db.Tenant, error) {
+	tenant, err := l.q.GetTenantByAPIKeyLookupHash(ctx, &lookupHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !tenant.IsActive {
+		return nil, nil
+	}
+	if !l.verifier.VerifyAPIKey(apiKey, tenant.ApiKeyHash) {
+		l.log.Warn("api key lookup hash mismatch", "tenant_id", tenant.ID)
+		return nil, nil
+	}
+	return &tenant, nil
+}
+
+func (l *TenantLookup) promoteLegacyLookupHash(ctx context.Context, tenantID uuid.UUID, apiKeyHash, lookupHash string) error {
+	return l.q.UpdateTenantAPIKeyLookupHash(ctx, db.UpdateTenantAPIKeyLookupHashParams{
+		ID:               tenantID,
+		ApiKeyLookupHash: &lookupHash,
+		ApiKeyHash:       apiKeyHash,
+	})
 }
 
 func (l *TenantLookup) findMatchInRows(ctx context.Context, apiKey string, rows []db.ListActiveTenantAPIKeysRow) (uuid.UUID, int, bool) {
@@ -233,11 +284,6 @@ sendLoop:
 	default:
 		return uuid.Nil, int(checked.Load()), false
 	}
-}
-
-func apiKeyCacheKey(apiKey string) string {
-	sum := sha256.Sum256([]byte(apiKey))
-	return hex.EncodeToString(sum[:])
 }
 
 type tenantLookupCacheConfig struct {

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Mobile/dev: in-app diagnostics sheet for API/auth/request triage** — development builds now expose a copyable debug sheet that shows the active API/WS target, host/join token previews, server-auth claims (`tenantId`, `roomId`, role, scopes), and recent request telemetry with request/trace IDs so local-vs-prod drift and join issues can be debugged quickly without attaching a logger.
+- **Mobile/dev: local-only diagnostics sheet now captures full join/debug state** — local development builds now expose a copyable debug sheet with the resolved API/WS target, host/join/latest token previews plus decoded JWT claims, native device/runtime info, server-auth claims (`tenantId`, `roomId`, role, scopes), session/join lifecycle state, WebSocket + RTK timeline events, one-tap cleanup actions, and failure-triggered auto-open so local-vs-prod drift and “already connected” join issues can be debugged quickly without attaching a logger.
 - **Mobile/meeting room: shareable Chalk invite links now have a native helper** — React Native meeting surfaces can now mint a host join token and turn it into the canonical `https://chalkmeet.com/j/:token` invite link through a small tested helper instead of hand-building links in component code.
 
 ### Changed
@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **API/auth: tenant API-key lookup no longer linearly scans active tenants** — the API now stores an indexed deterministic lookup hash for tenant keys, resolves auth-token and `X-API-Key` requests through a single-row lookup plus one bcrypt verification, and backfills legacy keys on first successful use so `/api/v1/auth/token` stops drifting toward multi-second timeouts as tenant count grows.
 - **Web/API: internal `/new` joins now stay on one first-party auth scope** — the web app now carries the just-minted internal access token from room creation into the immediate room load/join flow, and hosted first-party auth requests reuse a stable client bootstrap so `chalkmeet.com` no longer falls back into fresh claim tenants and trip false `room not found` joins.
 - **Mobile release: host-key verification now blocks bad bundles before ship** — release tooling now proves the supplied prod mobile host key can exchange against `POST /api/v1/auth/token` before any uploadable bundle/archive is produced, Android closed/prod builds are explicitly treated as CI-artifact-only, and the next hotfix lane advances to `0.0.15 / 15`.
 - **API/auth: hosted Chalk origins now allow both primary and legacy domains** — internal Google auth origin validation, HTTP CORS, WebSocket origin checks, and static CORS sync allowlists now accept both `https://chalkmeet.com` and `https://chalk.q9labs.ai` so the domain cutover does not break dashboard, invite, or realtime flows.

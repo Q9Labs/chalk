@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,9 +46,35 @@ func (q *perfTenantQuerier) GetTenant(_ context.Context, id uuid.UUID) (db.Tenan
 	defer q.mu.Unlock()
 	t, ok := q.tenants[id]
 	if !ok {
-		return db.Tenant{}, errors.New("tenant not found")
+		return db.Tenant{}, pgx.ErrNoRows
 	}
 	return t, nil
+}
+
+func (q *perfTenantQuerier) GetTenantByAPIKeyLookupHash(_ context.Context, apiKeyLookupHash *string) (db.Tenant, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if apiKeyLookupHash == nil {
+		return db.Tenant{}, pgx.ErrNoRows
+	}
+	for _, tenant := range q.tenants {
+		if tenant.ApiKeyLookupHash != nil && *tenant.ApiKeyLookupHash == *apiKeyLookupHash {
+			return tenant, nil
+		}
+	}
+	return db.Tenant{}, pgx.ErrNoRows
+}
+
+func (q *perfTenantQuerier) UpdateTenantAPIKeyLookupHash(_ context.Context, arg db.UpdateTenantAPIKeyLookupHashParams) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	tenant, ok := q.tenants[arg.ID]
+	if !ok {
+		return pgx.ErrNoRows
+	}
+	tenant.ApiKeyLookupHash = arg.ApiKeyLookupHash
+	q.tenants[arg.ID] = tenant
+	return nil
 }
 
 type perfVerifier struct {
@@ -61,6 +87,8 @@ type perfVerifier struct {
 }
 
 func (v *perfVerifier) ValidateAPIKeyFormat(_ string) error { return nil }
+
+func (v *perfVerifier) LookupHash(apiKey string) string { return "lookup:" + apiKey }
 
 func (v *perfVerifier) VerifyAPIKey(apiKey, hash string) bool {
 	cur := v.inFlight.Add(1)
@@ -150,4 +178,56 @@ func TestAuthHandler_Token_ResponseTime(t *testing.T) {
 	if d > 250*time.Millisecond {
 		t.Logf("/api/v1/auth/token duration=%s (max_in_flight=%d)", d, v.maxInFlight.Load())
 	}
+}
+
+func TestAuthHandler_Token_ResponseTime_FastLookupHash(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	apiKey := "ck_live_" + strings.Repeat("b", 32)
+	lookupHash := "lookup:" + apiKey
+	matchID := uuid.New()
+
+	tenants := map[uuid.UUID]db.Tenant{
+		matchID: {
+			ID:               matchID,
+			ApiKeyHash:       "hash:" + apiKey,
+			ApiKeyLookupHash: &lookupHash,
+			IsActive:         true,
+		},
+	}
+
+	q := &perfTenantQuerier{tenants: tenants}
+	v := &perfVerifier{
+		sleepPerVerify: 5 * time.Millisecond,
+		match: func(apiKey, hash string) bool {
+			return hash == "hash:"+apiKey
+		},
+	}
+
+	lookup := infraAuth.NewTenantLookup(q, v, infraAuth.WithTenantLookupVerifyWorkers(12), infraAuth.WithTenantLookupPageSize(1000))
+	jwtSvc := infraAuth.NewJWTService(infraAuth.DefaultJWTConfig())
+	apiKeySvc := infraAuth.NewAPIKeyService()
+
+	h := &AuthHandler{
+		jwtService:    jwtSvc,
+		apiKeyService: apiKeySvc,
+		tenantLookup:  lookup,
+	}
+
+	router := gin.New()
+	router.POST("/api/v1/auth/token", h.Token)
+
+	payload, err := json.Marshal(map[string]string{"api_key": apiKey})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/v1/auth/token", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	start := time.Now()
+	router.ServeHTTP(w, req)
+	d := time.Since(start)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Less(t, d, 100*time.Millisecond, "lookup-hash auth/token should stay fast")
 }

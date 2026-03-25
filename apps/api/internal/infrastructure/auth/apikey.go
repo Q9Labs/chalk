@@ -2,7 +2,9 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -71,6 +73,12 @@ func (s *APIKeyService) HashAPIKey(apiKey string) (string, error) {
 func (s *APIKeyService) VerifyAPIKey(apiKey, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(apiKey))
 	return err == nil
+}
+
+// LookupHash creates a deterministic lookup hash for API key indexing.
+func (s *APIKeyService) LookupHash(apiKey string) string {
+	sum := sha256.Sum256([]byte(apiKey))
+	return hex.EncodeToString(sum[:])
 }
 
 // ValidateAPIKeyFormat checks if an API key has the correct format

@@ -19,7 +19,7 @@ SET owner_user_id = $2,
 WHERE id = $1
   AND tenant_kind = 'internal'
   AND owner_user_id IS NULL
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 type BindInternalTenantToOwnerParams struct {
@@ -47,6 +47,7 @@ func (q *Queries) BindInternalTenantToOwner(ctx context.Context, arg BindInterna
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
@@ -56,6 +57,7 @@ const createInternalTenant = `-- name: CreateInternalTenant :one
 INSERT INTO tenants (
     name,
     api_key_hash,
+    api_key_lookup_hash,
     config,
     max_concurrent_rooms,
     max_participants_per_room,
@@ -65,18 +67,19 @@ INSERT INTO tenants (
     claimed_at,
     tenant_config
 ) VALUES (
-    $1, $2, $3, $4, $5, $6,
+    $1, $2, $3, $4, $5, $6, $7,
     'internal',
-    $7,
     $8,
-    $9
+    $9,
+    $10
 )
-RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at
+RETURNING id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash
 `
 
 type CreateInternalTenantParams struct {
 	Name                        string             `db:"name" json:"name"`
 	ApiKeyHash                  string             `db:"api_key_hash" json:"api_key_hash"`
+	ApiKeyLookupHash            *string            `db:"api_key_lookup_hash" json:"api_key_lookup_hash"`
 	Config                      []byte             `db:"config" json:"config"`
 	MaxConcurrentRooms          int32              `db:"max_concurrent_rooms" json:"max_concurrent_rooms"`
 	MaxParticipantsPerRoom      int32              `db:"max_participants_per_room" json:"max_participants_per_room"`
@@ -92,6 +95,7 @@ func (q *Queries) CreateInternalTenant(ctx context.Context, arg CreateInternalTe
 	row := q.db.QueryRow(ctx, createInternalTenant,
 		arg.Name,
 		arg.ApiKeyHash,
+		arg.ApiKeyLookupHash,
 		arg.Config,
 		arg.MaxConcurrentRooms,
 		arg.MaxParticipantsPerRoom,
@@ -118,12 +122,13 @@ func (q *Queries) CreateInternalTenant(ctx context.Context, arg CreateInternalTe
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
 
 const getInternalTenantByOwnerUserID = `-- name: GetInternalTenantByOwnerUserID :one
-SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash FROM tenants
 WHERE tenant_kind = 'internal'
   AND owner_user_id = $1
 LIMIT 1
@@ -149,12 +154,13 @@ func (q *Queries) GetInternalTenantByOwnerUserID(ctx context.Context, ownerUserI
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }
 
 const getSharedInternalTenantByName = `-- name: GetSharedInternalTenantByName :one
-SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at FROM tenants
+SELECT id, name, api_key_hash, config, max_concurrent_rooms, max_participants_per_room, max_recording_duration_minutes, max_total_minutes_of_meetings, is_active, created_at, updated_at, whiteboard_config, tenant_config, tenant_kind, owner_user_id, claimed_at, api_key_lookup_hash FROM tenants
 WHERE tenant_kind = 'internal'
   AND owner_user_id IS NULL
   AND name = $1
@@ -182,6 +188,7 @@ func (q *Queries) GetSharedInternalTenantByName(ctx context.Context, name string
 		&i.TenantKind,
 		&i.OwnerUserID,
 		&i.ClaimedAt,
+		&i.ApiKeyLookupHash,
 	)
 	return i, err
 }

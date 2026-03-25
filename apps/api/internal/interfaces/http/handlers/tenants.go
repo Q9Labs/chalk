@@ -56,6 +56,7 @@ func (h *TenantHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate API key"})
 		return
 	}
+	apiKeyLookupHash := h.apiKeyService.LookupHash(apiKey)
 
 	// Set defaults
 	maxRooms := int32(100)
@@ -75,6 +76,7 @@ func (h *TenantHandler) Create(c *gin.Context) {
 	tenant, err := h.queries.CreateTenant(c.Request.Context(), db.CreateTenantParams{
 		Name:                        req.Name,
 		ApiKeyHash:                  apiKeyHash,
+		ApiKeyLookupHash:            &apiKeyLookupHash,
 		Config:                      []byte("{}"),
 		MaxConcurrentRooms:          maxRooms,
 		MaxParticipantsPerRoom:      maxParticipants,
@@ -205,11 +207,13 @@ func (h *TenantHandler) RotateAPIKey(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate API key"})
 		return
 	}
+	apiKeyLookupHash := h.apiKeyService.LookupHash(apiKey)
 
 	// Update tenant with new hash
 	_, err = h.queries.RotateTenantAPIKey(c.Request.Context(), db.RotateTenantAPIKeyParams{
-		ID:         id,
-		ApiKeyHash: apiKeyHash,
+		ID:               id,
+		ApiKeyHash:       apiKeyHash,
+		ApiKeyLookupHash: &apiKeyLookupHash,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -385,9 +389,9 @@ func (h *TenantHandler) UpdateConfig(c *gin.Context) {
 
 	// Parse existing config with defaults
 	config := TenantConfig{
-		AllowEarlyJoin:             true,    // default
-		EmptyRoomTimeoutMinutes:    30,      // default
-		RecordingRetentionDays:     30,      // default
+		AllowEarlyJoin:             true, // default
+		EmptyRoomTimeoutMinutes:    30,   // default
+		RecordingRetentionDays:     30,   // default
 		DuplicateParticipantPolicy: "reject",
 		TranscriptionEnabled:       true,    // default ON
 		TranscriptionLanguage:      "en-US", // default

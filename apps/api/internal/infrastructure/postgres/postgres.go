@@ -144,6 +144,10 @@ CREATE TABLE IF NOT EXISTS tenants (
 );
 
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_total_minutes_of_meetings INT NOT NULL DEFAULT 1000;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS api_key_lookup_hash VARCHAR(64);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_api_key_lookup_hash
+    ON tenants(api_key_lookup_hash)
+    WHERE api_key_lookup_hash IS NOT NULL;
 
 DROP TRIGGER IF EXISTS update_tenants_updated_at ON tenants;
 CREATE TRIGGER update_tenants_updated_at

@@ -146,6 +146,7 @@ type Tenant struct {
 	TenantKind       string             `db:"tenant_kind" json:"tenant_kind"`
 	OwnerUserID      pgtype.UUID        `db:"owner_user_id" json:"owner_user_id"`
 	ClaimedAt        pgtype.Timestamptz `db:"claimed_at" json:"claimed_at"`
+	ApiKeyLookupHash *string            `db:"api_key_lookup_hash" json:"api_key_lookup_hash"`
 }
 
 type TenantClaim struct {

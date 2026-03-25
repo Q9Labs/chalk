@@ -5,6 +5,7 @@
 INSERT INTO tenants (
     name,
     api_key_hash,
+    api_key_lookup_hash,
     config,
     max_concurrent_rooms,
     max_participants_per_room,
@@ -14,11 +15,11 @@ INSERT INTO tenants (
     claimed_at,
     tenant_config
 ) VALUES (
-    $1, $2, $3, $4, $5, $6,
+    $1, $2, $3, $4, $5, $6, $7,
     'internal',
-    $7,
     $8,
-    $9
+    $9,
+    $10
 )
 RETURNING *;
 
