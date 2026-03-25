@@ -1,6 +1,7 @@
 import { APIClient, createTokenProvider } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
 import { NativeModules } from "react-native";
+import { maskSecret, recordManualRequest } from "./dev-diagnostics";
 import { canUseLocalHostBootstrap, createStorageScopeId, resolveAppRuntimeUrl } from "./mobile-runtime";
 import { createHostTokenStorage } from "./host-token-storage";
 import { extractJoinTokenFromInviteLink } from "./inviteLink";
@@ -18,6 +19,14 @@ export type JoinContext = {
   accessToken?: string;
   expiresAtMs?: number;
 };
+
+export interface MobileDebugContext {
+  hostMode: "configured-api-key" | "local-bootstrap" | "none";
+  configuredHostApiKeyPreview: string | null;
+  localDevHostApiKeyPreview: string | null;
+  joinTokenPreview: string | null;
+  joinAccessTokenPreview: string | null;
+}
 
 type BaseMeetingRoute = {
   roomId: string;
@@ -130,13 +139,42 @@ async function createLocalDevHostApiKey(apiUrl: string): Promise<string> {
       max_recording_duration_minutes: 120,
     }),
   });
+  const responseMeta = {
+    statusCode: response.status,
+    requestId: response.headers?.get?.("x-request-id") ?? null,
+    traceId: response.headers?.get?.("x-chalk-trace-id") ?? null,
+    cfRay: response.headers?.get?.("cf-ray") ?? null,
+  };
 
   const data = (await response.json().catch(() => null)) as { api_key?: string; error?: string } | null;
 
   if (!response.ok || !data?.api_key) {
+    recordManualRequest({
+      eventType: "api.request",
+      method: "POST",
+      path: "/api/v1/tenants",
+      url: `${apiUrl}/api/v1/tenants`,
+      outcome: "error",
+      statusCode: responseMeta.statusCode,
+      requestId: responseMeta.requestId,
+      traceId: responseMeta.traceId,
+      cfRay: responseMeta.cfRay,
+      errorMessage: data?.error ?? "Local host bootstrap failed",
+    });
     throw new Error(data?.error ?? "Local host bootstrap failed");
   }
 
+  recordManualRequest({
+    eventType: "api.request",
+    method: "POST",
+    path: "/api/v1/tenants",
+    url: `${apiUrl}/api/v1/tenants`,
+    outcome: "success",
+    statusCode: responseMeta.statusCode,
+    requestId: responseMeta.requestId,
+    traceId: responseMeta.traceId,
+    cfRay: responseMeta.cfRay,
+  });
   await setLocalDevHostApiKey(data.api_key);
   return data.api_key;
 }
@@ -207,6 +245,20 @@ export async function setJoinContext(context: JoinContext): Promise<void> {
 
 export async function clearJoinContext(): Promise<void> {
   await SecureStore.deleteItemAsync(JOIN_CONTEXT_KEY);
+}
+
+export async function getMobileDebugContext(apiUrl: string): Promise<MobileDebugContext> {
+  const configuredHostApiKey = getHostApiKey();
+  const localDevHostApiKey = canBootstrapLocalHostKey(apiUrl) ? await getLocalDevHostApiKey() : null;
+  const joinContext = await getJoinContext();
+
+  return {
+    hostMode: configuredHostApiKey ? "configured-api-key" : localDevHostApiKey ? "local-bootstrap" : "none",
+    configuredHostApiKeyPreview: maskSecret(configuredHostApiKey),
+    localDevHostApiKeyPreview: maskSecret(localDevHostApiKey),
+    joinTokenPreview: maskSecret(joinContext?.joinToken ?? null),
+    joinAccessTokenPreview: maskSecret(joinContext?.accessToken ?? null),
+  };
 }
 
 export async function resolveJoinToken(joinToken: string, apiUrl: string): Promise<LobbyRoute> {

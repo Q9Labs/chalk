@@ -25,7 +25,7 @@ import { TypedEventEmitter } from "../utils/typed-emitter";
 import { wideEvents } from "../wide-events/index";
 import type { ChalkIncident, ChalkIncidentBreadcrumb, ChalkIncidentConfig, ChalkIncidentInput, ChalkIncidentSource } from "../incident.ts";
 import type { ChalkPostHogConfig } from "../posthog.ts";
-import type { CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, RealtimeKitLoader, RoomResource, ScheduleRoomOptions } from "../types.ts";
+import type { ConferenceClientConfig, CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, RealtimeKitLoader, RoomResource, ScheduleRoomOptions } from "../types.ts";
 import { createDefaultMediaState, createDefaultParticipantState, createDefaultRoomState, createSessionStateApis, type MediaSessionApi, type ParticipantSessionApi, type RoomSessionApi, type SessionStateUpdaters } from "./chalk-session-state";
 import { ChalkSessionIncidentPipeline } from "./chalk-session-incidents";
 import { attachRoomToManagersAndBridgeState } from "./chalk-session-bridges";
@@ -55,6 +55,8 @@ export interface ChalkSessionConfig {
   incident?: ChalkIncidentConfig;
   /** Optional PostHog session replay integration. */
   posthog?: ChalkPostHogConfig;
+  /** Optional wide events configuration passthrough. */
+  wideEvents?: ConferenceClientConfig["wideEvents"];
 }
 
 /** ChalkSession events */
@@ -143,6 +145,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
       debug,
       demoMode: config.demoMode,
       posthog: config.posthog,
+      wideEvents: config.wideEvents,
     });
 
     // Create managed runtime for Effect services

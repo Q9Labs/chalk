@@ -5,6 +5,8 @@
  * Supports browser (sessionStorage/localStorage) and custom storage (React Native).
  */
 
+import { wideEvents } from "./wide-events/index.ts";
+
 const STORAGE_KEY_ACCESS = "chalk_access_token";
 const STORAGE_KEY_REFRESH = "chalk_refresh_token";
 const STORAGE_KEY_EXPIRES = "chalk_token_expires";
@@ -35,6 +37,50 @@ interface TokenResponse {
   refresh_token: string;
   expires_in: number;
 }
+
+const createRequestMeta = (response: Response) => ({
+  statusCode: response.status,
+  requestId: response.headers?.get?.("x-request-id") ?? null,
+  traceId: response.headers?.get?.("x-chalk-trace-id") ?? null,
+  cfRay: response.headers?.get?.("cf-ray") ?? null,
+});
+
+const performTokenRequest = async <T>(method: string, apiUrl: string, path: string, body: unknown, errorPrefix: string): Promise<T> => {
+  const ctx = wideEvents.start("api.request");
+  ctx.set("request", { method, path, hasBody: body !== undefined });
+
+  try {
+    const response = await fetch(`${apiUrl}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const responseMeta = createRequestMeta(response);
+
+    if (!response.ok) {
+      const err = await response.text().catch(() => "Unknown error");
+      ctx.set("response", responseMeta);
+      ctx.complete("error", {
+        code: `HTTP_${response.status}`,
+        message: `${errorPrefix}: ${err}`,
+      });
+      throw new Error(`${errorPrefix}: ${err}`);
+    }
+
+    ctx.set("response", responseMeta);
+    ctx.complete("success");
+    return response.json() as Promise<T>;
+  } catch (error) {
+    if (error instanceof Error) {
+      ctx.complete("error", error);
+      throw error;
+    }
+
+    const normalized = new Error(String(error));
+    ctx.complete("error", normalized);
+    throw normalized;
+  }
+};
 
 /**
  * Normalizes storage to async interface
@@ -118,34 +164,17 @@ export function createTokenProvider(config: CreateTokenProviderConfig): () => Pr
   let refreshPromise: Promise<string> | null = null;
 
   async function fetchInitialToken(): Promise<TokenResponse> {
-    const response = await fetch(`${apiUrl}/api/v1/auth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: apiKey }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text().catch(() => "Unknown error");
-      throw new Error(`Token exchange failed: ${err}`);
-    }
-
-    return response.json();
+    return performTokenRequest<TokenResponse>("POST", apiUrl, "/api/v1/auth/token", { api_key: apiKey }, "Token exchange failed");
   }
 
   async function refreshToken(refreshTok: string): Promise<TokenResponse> {
-    const response = await fetch(`${apiUrl}/api/v1/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshTok }),
-    });
-
-    if (!response.ok) {
+    try {
+      return await performTokenRequest<TokenResponse>("POST", apiUrl, "/api/v1/auth/refresh", { refresh_token: refreshTok }, "Token refresh failed");
+    } catch (error) {
       // Clear tokens on refresh failure
       await Promise.all([storage.remove(STORAGE_KEY_ACCESS), storage.remove(STORAGE_KEY_REFRESH), storage.remove(STORAGE_KEY_EXPIRES)]);
-      throw new Error("Token refresh failed");
+      throw error;
     }
-
-    return response.json();
   }
 
   async function storeTokens(tokens: TokenResponse): Promise<void> {
@@ -209,20 +238,7 @@ export function createJoinTokenProvider(config: CreateJoinTokenProviderConfig): 
   let exchangePromise: Promise<string> | null = null;
 
   async function exchangeJoinToken(): Promise<{ access_token: string; expires_in: number }> {
-    const response = await fetch(`${apiUrl}/api/v1/public/join-token/exchange`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ join_token: joinToken }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text().catch(() => "Unknown error");
-      throw new Error(`Join token exchange failed: ${err}`);
-    }
-
-    return response.json();
+    return performTokenRequest<{ access_token: string; expires_in: number }>("POST", apiUrl, "/api/v1/public/join-token/exchange", { join_token: joinToken }, "Join token exchange failed");
   }
 
   return async (): Promise<string> => {

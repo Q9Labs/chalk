@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Mobile/dev: in-app diagnostics sheet for API/auth/request triage** — development builds now expose a copyable debug sheet that shows the active API/WS target, host/join token previews, server-auth claims (`tenantId`, `roomId`, role, scopes), and recent request telemetry with request/trace IDs so local-vs-prod drift and join issues can be debugged quickly without attaching a logger.
+
 ### Changed
 
 - **Web/domain: `chalkmeet.com` is now the canonical Chalk app URL** — web-generated invite/share/privacy links now default to `https://chalkmeet.com`, Cloudflare Pages/web config now exposes the new canonical public origin, and mobile/store/docs surfaces now present `chalkmeet.com` while keeping `chalk.q9labs.ai` valid.
