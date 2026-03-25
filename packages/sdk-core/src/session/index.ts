@@ -6,4 +6,4 @@
  */
 
 export { ChalkSession } from "./chalk-session";
-export type { ChalkSessionConfig, ChalkSessionEvents } from "./chalk-session";
+export type { ChalkSessionConfig, ChalkSessionDiagnosticsSnapshot, ChalkSessionEvents } from "./chalk-session";

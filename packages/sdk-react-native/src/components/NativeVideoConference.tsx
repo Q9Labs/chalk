@@ -1,4 +1,4 @@
-import type { ChalkError } from "@q9labs/chalk-core";
+import { ChalkErrorClass, type ChalkError, type ChalkSessionDiagnosticsSnapshot } from "@q9labs/chalk-core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useConnection } from "../hooks/useConnection";
@@ -37,9 +37,24 @@ export interface NativeVideoConferenceProps {
   onEnd?: (data: NativeMeetingEndData) => void;
   onClose?: () => void;
   onError?: (error: ChalkError) => void;
+  onDiagnosticsChange?: (snapshot: NativeVideoConferenceDiagnosticsSnapshot) => void;
 }
 
-export function NativeVideoConference({ roomId, roomName, userName, role = "participant", autoJoin = false, initialPhase, initialJoinSettings, features, onJoin, onLeave, onEnd, onClose, onError }: NativeVideoConferenceProps): React.JSX.Element {
+export interface NativeVideoConferenceDiagnosticsSnapshot {
+  phase: NativeVideoConferencePhase;
+  roomId: string;
+  roomName: string;
+  joinNonce: number;
+  pendingJoinRequest: boolean;
+  activeJoinNonce: number | null;
+  lastJoinError: string | null;
+  connectionStatus: string;
+  isConnected: boolean;
+  isJoining: boolean;
+  session: ChalkSessionDiagnosticsSnapshot;
+}
+
+export function NativeVideoConference({ roomId, roomName, userName, role = "participant", autoJoin = false, initialPhase, initialJoinSettings, features, onJoin, onLeave, onEnd, onClose, onError, onDiagnosticsChange }: NativeVideoConferenceProps): React.JSX.Element {
   const session = useSession();
   const connection = useConnection();
   const room = useRoom();
@@ -119,6 +134,22 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
   }, [onError, session]);
 
   useEffect(() => {
+    onDiagnosticsChange?.({
+      phase,
+      roomId,
+      roomName: roomName || room.roomName || roomId,
+      joinNonce,
+      pendingJoinRequest: pendingJoinRequestRef.current,
+      activeJoinNonce: activeJoinNonceRef.current,
+      lastJoinError: joinError,
+      connectionStatus: connection.status,
+      isConnected: connection.isConnected,
+      isJoining: connection.isJoining,
+      session: session.getDiagnosticsSnapshot(),
+    });
+  }, [connection.isConnected, connection.isJoining, connection.status, joinError, joinNonce, onDiagnosticsChange, phase, room.roomName, roomId, roomName, session]);
+
+  useEffect(() => {
     if (!canExecuteNativeJoin(phase, joinNonce, connection.isJoining, connection.isConnected, pendingJoinRequestRef.current, activeJoinNonceRef.current)) {
       return;
     }
@@ -156,7 +187,8 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
 
         activeJoinNonceRef.current = null;
         pendingJoinRequestRef.current = false;
-        setJoinError(cause instanceof Error ? cause.message : "Unable to join room");
+        const wrappedError = ChalkErrorClass.wrap(cause);
+        setJoinError(wrappedError.message);
         setPhase("lobby");
       });
 

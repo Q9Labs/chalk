@@ -73,6 +73,25 @@ export interface ChalkSessionEvents {
   "token.expired": void;
 }
 
+export interface ChalkSessionDiagnosticsSnapshot {
+  isDisposed: boolean;
+  roomStateRoomId: string | null;
+  roomStateRoomName: string | null;
+  roomStateStatus: string;
+  roomStateIsJoining: boolean;
+  hasActiveRoom: boolean;
+  activeRoomId: string | null;
+  activeRoomStatus: string | null;
+  activeRoomHasRtkMeeting: boolean;
+  connectedInputRoomId: string | null;
+  inFlightJoinRoomId: string | null;
+  hasInFlightJoinPromise: boolean;
+  clientConnectionState: string;
+  websocketConnectionState: string;
+  localParticipantId: string | null;
+  websocketLastClose: { code: number; reason: string; wasClean: boolean } | null;
+}
+
 /**
  * ChalkSession orchestrates all managers and provides
  * a unified interface for video conferencing.
@@ -129,6 +148,7 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
   private connectedInputRoomId: string | null = null;
   private inFlightJoinRoomId: string | null = null;
   private inFlightJoinPromise: Promise<void> | null = null;
+  private disposed = false;
 
   constructor(config: ChalkSessionConfig) {
     super();
@@ -784,10 +804,36 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     return this.client;
   }
 
+  getDiagnosticsSnapshot(): ChalkSessionDiagnosticsSnapshot {
+    const roomState = this.room.getState();
+    const activeRoom = this.room.getRoom();
+    const clientDiagnostics = this.client.getDiagnosticsSnapshot();
+
+    return {
+      isDisposed: this.disposed,
+      roomStateRoomId: roomState.roomId,
+      roomStateRoomName: roomState.roomName,
+      roomStateStatus: roomState.status,
+      roomStateIsJoining: roomState.isJoining,
+      hasActiveRoom: activeRoom !== null,
+      activeRoomId: activeRoom?.id ?? null,
+      activeRoomStatus: activeRoom?.connectionState ?? null,
+      activeRoomHasRtkMeeting: Boolean(activeRoom?.rtkMeeting),
+      connectedInputRoomId: this.connectedInputRoomId,
+      inFlightJoinRoomId: this.inFlightJoinRoomId,
+      hasInFlightJoinPromise: this.inFlightJoinPromise !== null,
+      clientConnectionState: clientDiagnostics.connectionState,
+      websocketConnectionState: clientDiagnostics.websocketConnectionState,
+      localParticipantId: clientDiagnostics.localParticipantId,
+      websocketLastClose: clientDiagnostics.websocketLastClose,
+    };
+  }
+
   /**
    * Cleanup all resources
    */
   dispose(): void {
+    this.disposed = true;
     const ctx = wideEvents.start("session.dispose");
 
     // Dispose Effect services runtime

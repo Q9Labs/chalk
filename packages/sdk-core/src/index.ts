@@ -30,16 +30,7 @@ export { EventEmitter } from "./events.ts";
 // ConferenceSession
 export { ConferenceSession, type ConferenceSessionEvents, type Transcript } from "./room.ts";
 export { camelToSnake, camelToSnakeString, snakeToCamel, snakeToCamelString } from "./transforms.ts";
-export {
-  getParticipantAvatarGradient,
-  getParticipantAvatarRecipe,
-  getParticipantBorder,
-  getParticipantColor,
-  getParticipantGradient,
-  getParticipantInitial,
-  getParticipantThemeVariables,
-  PARTICIPANT_GRADIENT_PRESETS,
-} from "./utils/participant-colors.ts";
+export { getParticipantAvatarGradient, getParticipantAvatarRecipe, getParticipantBorder, getParticipantColor, getParticipantGradient, getParticipantInitial, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "./utils/participant-colors.ts";
 export type { ParticipantGradientPreference } from "./utils/participant-colors.ts";
 // WebSocket client (for advanced/React Native integrations)
 export { WSClient } from "./ws-client.ts";
@@ -144,18 +135,12 @@ export type {
 export * as managers from "./managers/index.ts";
 // Individual managers (non-Effect)
 export { ChatManager, InteractionManager, RecordingManager, ScreenShareManager, UIManager, WhiteboardManager } from "./managers/index.ts";
-export type { ChalkSessionConfig, ChalkSessionEvents } from "./session/chalk-session.ts";
+export type { ChalkSessionConfig, ChalkSessionDiagnosticsSnapshot, ChalkSessionEvents } from "./session/chalk-session.ts";
 // ChalkSession - main orchestrator
 export { ChalkSession } from "./session/chalk-session.ts";
 export * as session from "./session/index.ts";
 export * as state from "./state/index.ts";
-export {
-  createFriendlyRoomIdentity,
-  createFriendlyRoomName,
-  humanizeRoomName,
-  type FriendlyRoomIdentity,
-  type FriendlyRoomName,
-} from "./utils/friendly-room-name.ts";
+export { createFriendlyRoomIdentity, createFriendlyRoomName, humanizeRoomName, type FriendlyRoomIdentity, type FriendlyRoomName } from "./utils/friendly-room-name.ts";
 // State container base class
 export { StateContainer } from "./state/state-container.ts";
 // Whiteboard types
@@ -226,14 +211,5 @@ export { extractJoinTokenFromInviteLink, isCanonicalRoomId } from "./utils/invit
 // Webhooks
 // ============================================================================
 
-export {
-  chalkWebhookMiddleware,
-  chalkWebhookParserErrorMiddleware,
-  createWebhookHandler,
-  normalizeChalkSignatureHeader,
-  type ChalkWebhookExpressOptions,
-  type ChalkWebhookParserErrorOptions,
-  type WebhookEvent,
-  type WebhookHandlerOptions,
-} from "./webhooks/index.ts";
+export { chalkWebhookMiddleware, chalkWebhookParserErrorMiddleware, createWebhookHandler, normalizeChalkSignatureHeader, type ChalkWebhookExpressOptions, type ChalkWebhookParserErrorOptions, type WebhookEvent, type WebhookHandlerOptions } from "./webhooks/index.ts";
 export { WebhookError, WebhookMeeting, WebhookPayload, WebhookRecording, WebhookTranscript } from "./webhooks/schemas.ts";

@@ -161,4 +161,20 @@ describe("ChalkSession lifecycle listener graph", () => {
 
     session.dispose();
   });
+
+  it("surfaces a diagnostics snapshot before and after dispose", () => {
+    const session = createSession();
+
+    const initialSnapshot = session.getDiagnosticsSnapshot();
+    expect(initialSnapshot.isDisposed).toBe(false);
+    expect(initialSnapshot.roomStateStatus).toBe("disconnected");
+    expect(initialSnapshot.hasActiveRoom).toBe(false);
+    expect(initialSnapshot.websocketConnectionState).toBe("disconnected");
+
+    session.dispose();
+
+    const disposedSnapshot = session.getDiagnosticsSnapshot();
+    expect(disposedSnapshot.isDisposed).toBe(true);
+    expect(disposedSnapshot.hasActiveRoom).toBe(false);
+  });
 });

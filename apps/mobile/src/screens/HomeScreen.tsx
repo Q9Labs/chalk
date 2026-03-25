@@ -13,9 +13,10 @@ const PUBLIC_PRIVACY_URL = "https://chalkmeet.com/privacy";
 
 export interface HomeScreenProps {
   onNavigate: (route: LobbyRoute) => void;
+  onDiagnosticsFailure?: (source: "resolve-join-link" | "create-meeting", message: string) => void;
 }
 
-export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
+export function HomeScreen({ onNavigate, onDiagnosticsFailure }: HomeScreenProps): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
   const createEnabled = useMemo(() => canCreateMeeting(), []);
   const [input, setInput] = useState("");
@@ -40,7 +41,9 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
       setIsResolving(true);
       onNavigate(await resolveJoinToken(joinToken, apiUrl));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Invalid invite link");
+      const message = nextError instanceof Error ? nextError.message : "Invalid invite link";
+      setError(message);
+      onDiagnosticsFailure?.("resolve-join-link", message);
     } finally {
       setIsResolving(false);
     }
@@ -70,7 +73,9 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
       setIsCreatingMeeting(true);
       onNavigate(await createMeetingLobbyRoute(apiUrl));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to create meeting");
+      const message = nextError instanceof Error ? nextError.message : "Unable to create meeting";
+      setError(message);
+      onDiagnosticsFailure?.("create-meeting", message);
     } finally {
       setIsCreatingMeeting(false);
     }

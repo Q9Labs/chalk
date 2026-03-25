@@ -8,6 +8,10 @@ interface DevDiagnosticsSheetProps {
   visible: boolean;
   onClose: () => void;
   onRefreshAuth: () => Promise<void>;
+  onForceDisconnect: () => Promise<void>;
+  onClearJoinContext: () => Promise<void>;
+  onClearHostAuth: () => Promise<void>;
+  onResetDiagnostics: () => Promise<void> | void;
   isRefreshingAuth?: boolean;
 }
 
@@ -17,9 +21,11 @@ const codeFont = Platform.select({
   default: "monospace",
 });
 
-const renderValue = (value: string | number | null | undefined) => (value === null || value === undefined || value === "" ? "—" : String(value));
+const renderValue = (value: string | number | boolean | null | undefined) => (value === null || value === undefined || value === "" ? "—" : String(value));
 
-export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefreshingAuth = false }: DevDiagnosticsSheetProps): React.JSX.Element {
+const renderJson = (value: unknown): string => (value === null || value === undefined ? "—" : JSON.stringify(value, null, 2));
+
+export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, onForceDisconnect, onClearJoinContext, onClearHostAuth, onResetDiagnostics, isRefreshingAuth = false }: DevDiagnosticsSheetProps): React.JSX.Element {
   const diagnostics = useSyncExternalStore(subscribeDevDiagnostics, getDevDiagnosticsState);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
 
@@ -29,7 +35,8 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefresh
     }
   }, [visible]);
 
-  const requestItems = useMemo(() => diagnostics.requests.slice(0, 40), [diagnostics.requests]);
+  const requestItems = useMemo(() => diagnostics.requests.slice(0, 30), [diagnostics.requests]);
+  const timelineItems = useMemo(() => diagnostics.timeline.slice(0, 40), [diagnostics.timeline]);
 
   const handleCopy = async () => {
     await Clipboard.setStringAsync(buildDevDiagnosticsCopyText());
@@ -41,7 +48,7 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefresh
       <SafeAreaView style={styles.screen}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.eyebrow}>DEV DIAGNOSTICS</Text>
+            <Text style={styles.eyebrow}>LOCAL DEV DIAGNOSTICS</Text>
             <Text style={styles.title}>Mobile debug snapshot</Text>
           </View>
           <Pressable onPress={onClose} style={styles.closeButton}>
@@ -50,18 +57,24 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefresh
         </View>
 
         <View style={styles.actionRow}>
-          <Pressable onPress={handleCopy} style={styles.primaryAction}>
-            <Text style={styles.primaryActionText}>{copyState === "copied" ? "Copied" : "Copy all"}</Text>
-          </Pressable>
-          <Pressable disabled={isRefreshingAuth} onPress={() => void onRefreshAuth()} style={[styles.secondaryAction, isRefreshingAuth && styles.actionDisabled]}>
-            <Text style={styles.secondaryActionText}>{isRefreshingAuth ? "Refreshing..." : "Refresh auth"}</Text>
-          </Pressable>
-          <Pressable onPress={clearDevDiagnosticsLogs} style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Clear logs</Text>
-          </Pressable>
+          <ActionButton label={copyState === "copied" ? "Copied" : "Copy all"} onPress={handleCopy} primary={true} />
+          <ActionButton disabled={isRefreshingAuth} label={isRefreshingAuth ? "Refreshing..." : "Refresh auth"} onPress={() => void onRefreshAuth()} />
+          <ActionButton label="Force disconnect" onPress={() => void onForceDisconnect()} />
+          <ActionButton label="Clear join context" onPress={() => void onClearJoinContext()} />
+          <ActionButton label="Clear host auth" onPress={() => void onClearHostAuth()} />
+          <ActionButton label="Clear logs" onPress={clearDevDiagnosticsLogs} />
+          <ActionButton label="Reset sheet" onPress={() => void onResetDiagnostics()} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
+          {diagnostics.lastFailure ? (
+            <Section title="Last Failure">
+              <Row label="Source" value={diagnostics.lastFailure.source} />
+              <Row label="At" value={diagnostics.lastFailure.occurredAt} />
+              <Block label="Message" value={diagnostics.lastFailure.message} />
+            </Section>
+          ) : null}
+
           <Section title="Target">
             <Row label="Target" value={diagnostics.env.target} />
             <Row label="Build" value={diagnostics.env.buildProfile} />
@@ -70,6 +83,20 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefresh
             <Row label="Source" value={diagnostics.env.routeSource} />
             <Block label="API URL" value={diagnostics.env.apiUrl} />
             <Block label="WS URL" value={diagnostics.env.wsUrl} />
+          </Section>
+
+          <Section title="Device">
+            <Row label="App version" value={diagnostics.device?.appVersion} />
+            <Row label="Platform" value={diagnostics.device?.platform} />
+            <Row label="OS version" value={diagnostics.device?.osVersion} />
+            <Row label="RN" value={diagnostics.device?.reactNativeVersion} />
+            <Row label="Model" value={diagnostics.device?.model} />
+            <Row label="Brand" value={diagnostics.device?.brand} />
+            <Row label="Maker" value={diagnostics.device?.manufacturer} />
+            <Row label="System" value={diagnostics.device?.systemName} />
+            <Row label="Idiom" value={diagnostics.device?.interfaceIdiom} />
+            <Row label="Hermes" value={diagnostics.device?.hermesEnabled} />
+            <Block label="Script URL" value={diagnostics.device?.scriptUrl} />
           </Section>
 
           <Section title="Auth">
@@ -82,6 +109,36 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefresh
             <Row label="Token source" value={diagnostics.auth.latestAccessTokenSource} />
           </Section>
 
+          <Section title="Token Claims">
+            <JsonBlock label="Join token claims" value={diagnostics.auth.joinTokenClaims} />
+            <JsonBlock label="Join access claims" value={diagnostics.auth.joinAccessTokenClaims} />
+            <JsonBlock label="Latest access claims" value={diagnostics.auth.latestAccessTokenClaims} />
+          </Section>
+
+          <Section title="Session Lifecycle">
+            <Row label="Phase" value={diagnostics.session?.phase} />
+            <Row label="Join nonce" value={diagnostics.session?.joinNonce} />
+            <Row label="Pending join" value={diagnostics.session?.pendingJoinRequest} />
+            <Row label="Active nonce" value={diagnostics.session?.activeJoinNonce} />
+            <Row label="Conn status" value={diagnostics.session?.connectionStatus} />
+            <Row label="Connected" value={diagnostics.session?.isConnected} />
+            <Row label="Joining" value={diagnostics.session?.isJoining} />
+            <Row label="Room state" value={diagnostics.session?.session.roomStateStatus} />
+            <Row label="Room state room" value={diagnostics.session?.session.roomStateRoomId} />
+            <Row label="Active room" value={diagnostics.session?.session.activeRoomId} />
+            <Row label="Active status" value={diagnostics.session?.session.activeRoomStatus} />
+            <Row label="Has active room" value={diagnostics.session?.session.hasActiveRoom} />
+            <Row label="Has RTK" value={diagnostics.session?.session.activeRoomHasRtkMeeting} />
+            <Row label="Client status" value={diagnostics.session?.session.clientConnectionState} />
+            <Row label="WS status" value={diagnostics.session?.session.websocketConnectionState} />
+            <Row label="Input room" value={diagnostics.session?.session.connectedInputRoomId} />
+            <Row label="In-flight room" value={diagnostics.session?.session.inFlightJoinRoomId} />
+            <Row label="In-flight join" value={diagnostics.session?.session.hasInFlightJoinPromise} />
+            <Row label="Disposed" value={diagnostics.session?.session.isDisposed} />
+            <Block label="Last join error" value={diagnostics.session?.lastJoinError} />
+            <JsonBlock label="WS last close" value={diagnostics.session?.session.websocketLastClose} />
+          </Section>
+
           <Section title="Server Auth Debug">
             <Row label="User" value={diagnostics.auth.authInfo?.userId} />
             <Row label="Tenant" value={diagnostics.auth.authInfo?.tenantId} />
@@ -92,7 +149,7 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefresh
             <Row label="Request ID" value={diagnostics.auth.authInfo?.requestId} />
             <Row label="Trace ID" value={diagnostics.auth.authInfo?.traceId} />
             <Block label="Scopes" value={diagnostics.auth.authInfo?.scopes.join(", ")} />
-            <Block label="Permissions" value={diagnostics.auth.authInfo ? JSON.stringify(diagnostics.auth.authInfo.permissions) : null} />
+            <JsonBlock label="Permissions" value={diagnostics.auth.authInfo?.permissions} />
             <Block label="API build" value={diagnostics.auth.authInfo ? `${diagnostics.auth.authInfo.apiVersion} @ ${diagnostics.auth.authInfo.apiCommitSha}` : null} />
           </Section>
 
@@ -117,9 +174,39 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, isRefresh
               </View>
             ))}
           </Section>
+
+          <Section title={`Timeline (${diagnostics.timeline.length})`}>
+            {timelineItems.length === 0 ? <Text style={styles.emptyText}>No events captured yet.</Text> : null}
+            {timelineItems.map((entry) => (
+              <View key={entry.id} style={styles.logCard}>
+                <Text selectable={true} style={styles.logLine}>
+                  [{entry.timestamp}] {entry.eventType}
+                </Text>
+                <Text selectable={true} style={styles.logMeta}>
+                  {entry.outcome.toUpperCase()} · {renderValue(entry.durationMs)} ms
+                </Text>
+                <Text selectable={true} style={styles.logMeta}>
+                  {entry.summary}
+                </Text>
+                {entry.errorMessage ? (
+                  <Text selectable={true} style={styles.logError}>
+                    {entry.errorMessage}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </Section>
         </ScrollView>
       </SafeAreaView>
     </Modal>
+  );
+}
+
+function ActionButton({ label, onPress, disabled = false, primary = false }: { label: string; onPress: () => void; disabled?: boolean; primary?: boolean }): React.JSX.Element {
+  return (
+    <Pressable disabled={disabled} onPress={onPress} style={[primary ? styles.primaryAction : styles.secondaryAction, disabled && styles.actionDisabled]}>
+      <Text style={primary ? styles.primaryActionText : styles.secondaryActionText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -132,7 +219,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value }: { label: string; value: string | number | null | undefined }): React.JSX.Element {
+function Row({ label, value }: { label: string; value: string | number | boolean | null | undefined }): React.JSX.Element {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -143,12 +230,23 @@ function Row({ label, value }: { label: string; value: string | number | null | 
   );
 }
 
-function Block({ label, value }: { label: string | null | undefined; value: string | null | undefined }): React.JSX.Element {
+function Block({ label, value }: { label: string; value: string | null | undefined }): React.JSX.Element {
   return (
     <View style={styles.block}>
-      <Text style={styles.rowLabel}>{renderValue(label)}</Text>
+      <Text style={styles.rowLabel}>{label}</Text>
       <Text selectable={true} style={styles.blockValue}>
         {renderValue(value)}
+      </Text>
+    </View>
+  );
+}
+
+function JsonBlock({ label, value }: { label: string; value: unknown }): React.JSX.Element {
+  return (
+    <View style={styles.block}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text selectable={true} style={styles.blockValue}>
+        {renderJson(value)}
       </Text>
     </View>
   );

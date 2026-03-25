@@ -10,7 +10,7 @@ export type { NativeMeetingRoomFeatures, NativeMeetingRoomProps } from "./compon
 export { NativePreJoinLobby } from "./components/NativePreJoinLobby";
 export type { NativeJoinSettings, NativePreJoinLobbyProps } from "./components/NativePreJoinLobby";
 export { NativeVideoConference } from "./components/NativeVideoConference";
-export type { NativeMeetingJoinedData, NativeVideoConferencePhase, NativeVideoConferenceProps } from "./components/NativeVideoConference";
+export type { NativeMeetingJoinedData, NativeVideoConferenceDiagnosticsSnapshot, NativeVideoConferencePhase, NativeVideoConferenceProps } from "./components/NativeVideoConference";
 export { useChat } from "./hooks/useChat";
 export type { UseChatReturn } from "./hooks/useChat";
 export { useConnection } from "./hooks/useConnection";

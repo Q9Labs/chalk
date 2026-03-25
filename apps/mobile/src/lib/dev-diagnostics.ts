@@ -1,6 +1,33 @@
-import type { WideEvent } from "@q9labs/chalk-core";
+import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
+import type { WideEvent, WideEventOutcome } from "@q9labs/chalk-core";
 
 const isDevelopmentRuntime = typeof __DEV__ !== "undefined" ? __DEV__ : process.env.NODE_ENV !== "production";
+const MAX_REQUEST_LOGS = 80;
+const MAX_TIMELINE_ITEMS = 120;
+
+export interface DevDiagnosticsTokenClaims {
+  [key: string]: unknown;
+}
+
+export interface DevDiagnosticsTokenClaimsPreview {
+  header: Record<string, unknown> | null;
+  payload: DevDiagnosticsTokenClaims | null;
+  error: string | null;
+}
+
+export interface DevDiagnosticsDeviceInfo {
+  appVersion: string | null;
+  platform: string | null;
+  osVersion: string | null;
+  reactNativeVersion: string | null;
+  brand: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  systemName: string | null;
+  interfaceIdiom: string | null;
+  hermesEnabled: boolean;
+  scriptUrl: string | null;
+}
 
 export interface DevDiagnosticsAuthInfo {
   userId: string;
@@ -29,7 +56,7 @@ export interface DevDiagnosticsRequestLog {
   method?: string;
   path?: string;
   url?: string;
-  outcome: "success" | "error" | "timeout";
+  outcome: WideEventOutcome;
   statusCode?: number;
   durationMs?: number;
   requestId?: string | null;
@@ -38,7 +65,24 @@ export interface DevDiagnosticsRequestLog {
   errorMessage?: string;
 }
 
-interface DevDiagnosticsState {
+export interface DevDiagnosticsTimelineEntry {
+  id: string;
+  timestamp: string;
+  source: "wide-event" | "manual";
+  eventType: string;
+  outcome: WideEventOutcome;
+  durationMs?: number;
+  summary: string;
+  errorMessage?: string;
+}
+
+export interface DevDiagnosticsFailure {
+  source: string;
+  message: string;
+  occurredAt: string;
+}
+
+export interface DevDiagnosticsState {
   enabled: boolean;
   env: {
     buildProfile: string | null;
@@ -57,12 +101,17 @@ interface DevDiagnosticsState {
     joinAccessTokenPreview: string | null;
     latestAccessTokenPreview: string | null;
     latestAccessTokenSource: string | null;
+    joinTokenClaims: DevDiagnosticsTokenClaimsPreview | null;
+    joinAccessTokenClaims: DevDiagnosticsTokenClaimsPreview | null;
+    latestAccessTokenClaims: DevDiagnosticsTokenClaimsPreview | null;
     authInfo: DevDiagnosticsAuthInfo | null;
   };
+  device: DevDiagnosticsDeviceInfo | null;
+  session: NativeVideoConferenceDiagnosticsSnapshot | null;
+  lastFailure: DevDiagnosticsFailure | null;
   requests: DevDiagnosticsRequestLog[];
+  timeline: DevDiagnosticsTimelineEntry[];
 }
-
-const MAX_REQUEST_LOGS = 80;
 
 const initialState = (): DevDiagnosticsState => ({
   enabled: isDevelopmentRuntime,
@@ -83,9 +132,16 @@ const initialState = (): DevDiagnosticsState => ({
     joinAccessTokenPreview: null,
     latestAccessTokenPreview: null,
     latestAccessTokenSource: null,
+    joinTokenClaims: null,
+    joinAccessTokenClaims: null,
+    latestAccessTokenClaims: null,
     authInfo: null,
   },
+  device: null,
+  session: null,
+  lastFailure: null,
   requests: [],
+  timeline: [],
 });
 
 let state = initialState();
@@ -106,7 +162,7 @@ const updateState = (updater: (current: DevDiagnosticsState) => DevDiagnosticsSt
   emitChange();
 };
 
-const trimLogs = (logs: DevDiagnosticsRequestLog[]): DevDiagnosticsRequestLog[] => logs.slice(0, MAX_REQUEST_LOGS);
+const trimLogs = <T>(logs: T[], limit: number): T[] => logs.slice(0, limit);
 
 const normalizeHost = (value: string | null | undefined): string | null => {
   if (!value) {
@@ -130,6 +186,71 @@ const isPrivate172Host = (host: string): boolean => {
   return secondOctet >= 16 && secondOctet <= 31;
 };
 
+const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const normalizeJsonPreview = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map(normalizeJsonPreview);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .slice(0, 40)
+        .map(([key, entryValue]) => [key, normalizeJsonPreview(entryValue)]),
+    );
+  }
+
+  if (typeof value === "string" && value.length > 300) {
+    return `${value.slice(0, 297)}...`;
+  }
+
+  return value;
+};
+
+const parseBase64UrlJson = (raw: string): Record<string, unknown> | null => {
+  try {
+    const normalized = raw
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(raw.length / 4) * 4, "=");
+    const decoded = typeof globalThis.atob === "function" ? globalThis.atob(normalized) : typeof Buffer !== "undefined" ? Buffer.from(normalized, "base64").toString("utf-8") : null;
+    if (!decoded) {
+      return null;
+    }
+
+    return normalizeJsonPreview(JSON.parse(decoded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const formatTimelineSummary = (eventType: string, data: Record<string, unknown>, request?: { method?: string; path?: string }, response?: { statusCode?: number | null }): string => {
+  switch (eventType) {
+    case "api.request":
+      return [request?.method, request?.path, response?.statusCode ? `status ${response.statusCode}` : null].filter(Boolean).join(" ");
+    case "room.join.rtk.attempt":
+      return `attempt ${String(data.attempt ?? "?")}/${String(data.totalAttempts ?? "?")} ${String(data.outcome ?? "")} timeout ${String(data.timeoutMs ?? "?")}ms`;
+    case "websocket.connect":
+      return `connect ${String(data.roomId ?? "")} attempt ${String(data.attempt ?? 1)}`.trim();
+    case "websocket.disconnect":
+      return `disconnect ${String(data.reason ?? "unknown")}`.trim();
+    case "websocket.reconnect":
+      return `reconnect attempt ${String(data.attempt ?? "?")}`.trim();
+    case "room.join":
+      return `join ${String(data.roomId ?? "")}`.trim();
+    case "room.leave":
+      return `leave ${String(data.roomId ?? "")}`.trim();
+    default:
+      return JSON.stringify(normalizeJsonPreview(data));
+  }
+};
+
+const appendTimeline = (current: DevDiagnosticsState, entry: DevDiagnosticsTimelineEntry): DevDiagnosticsState => ({
+  ...current,
+  timeline: trimLogs([entry, ...current.timeline.filter((item) => item.id !== entry.id)], MAX_TIMELINE_ITEMS),
+});
+
 export const maskSecret = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
@@ -140,6 +261,33 @@ export const maskSecret = (value: string | null | undefined): string | null => {
   }
 
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
+};
+
+export const decodeTokenClaimsPreview = (token: string | null | undefined): DevDiagnosticsTokenClaimsPreview | null => {
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 3 || !parts[0] || !parts[1]) {
+    return null;
+  }
+
+  const header = parseBase64UrlJson(parts[0]);
+  const payload = parseBase64UrlJson(parts[1]);
+  if (!header || !payload) {
+    return {
+      header: null,
+      payload: null,
+      error: "Unable to decode JWT payload",
+    };
+  }
+
+  return {
+    header,
+    payload,
+    error: null,
+  };
 };
 
 export const classifyTarget = (apiUrl: string | null | undefined): DevDiagnosticsState["env"]["target"] => {
@@ -183,12 +331,21 @@ export const setDevDiagnosticsEnvironment = (next: Partial<DevDiagnosticsState["
   });
 };
 
-export const setDevDiagnosticsStaticAuth = (next: Partial<Omit<DevDiagnosticsState["auth"], "latestAccessTokenPreview" | "latestAccessTokenSource" | "authInfo">>) => {
+export const setDevDiagnosticsStaticAuth = (
+  next: Partial<Pick<DevDiagnosticsState["auth"], "hostMode" | "configuredHostApiKeyPreview" | "localDevHostApiKeyPreview" | "joinTokenPreview" | "joinAccessTokenPreview" | "joinTokenClaims" | "joinAccessTokenClaims">> & { device?: DevDiagnosticsDeviceInfo | null },
+) => {
   updateState((current) => ({
     ...current,
+    device: next.device ?? current.device,
     auth: {
       ...current.auth,
-      ...next,
+      hostMode: next.hostMode ?? current.auth.hostMode,
+      configuredHostApiKeyPreview: next.configuredHostApiKeyPreview ?? current.auth.configuredHostApiKeyPreview,
+      localDevHostApiKeyPreview: next.localDevHostApiKeyPreview ?? current.auth.localDevHostApiKeyPreview,
+      joinTokenPreview: next.joinTokenPreview ?? current.auth.joinTokenPreview,
+      joinAccessTokenPreview: next.joinAccessTokenPreview ?? current.auth.joinAccessTokenPreview,
+      joinTokenClaims: next.joinTokenClaims ?? current.auth.joinTokenClaims,
+      joinAccessTokenClaims: next.joinAccessTokenClaims ?? current.auth.joinAccessTokenClaims,
     },
   }));
 };
@@ -200,6 +357,7 @@ export const setDevDiagnosticsToken = (token: string, source: string) => {
       ...current.auth,
       latestAccessTokenPreview: maskSecret(token),
       latestAccessTokenSource: source,
+      latestAccessTokenClaims: decodeTokenClaimsPreview(token),
     },
   }));
 };
@@ -214,53 +372,134 @@ export const setDevDiagnosticsAuthInfo = (authInfo: DevDiagnosticsAuthInfo | nul
   }));
 };
 
+export const setDevDiagnosticsSession = (snapshot: NativeVideoConferenceDiagnosticsSnapshot | null) => {
+  updateState((current) => ({
+    ...current,
+    session: snapshot,
+  }));
+};
+
 export const clearDevDiagnosticsLogs = () => {
   updateState((current) => ({
     ...current,
     requests: [],
+    timeline: [],
   }));
 };
 
-export const recordManualRequest = (entry: Omit<DevDiagnosticsRequestLog, "id" | "timestamp" | "source">) => {
+export const resetDevDiagnosticsState = () => {
   updateState((current) => ({
-    ...current,
-    requests: trimLogs([
+    ...initialState(),
+    enabled: current.enabled,
+    env: current.env,
+    device: current.device,
+  }));
+};
+
+export const recordDiagnosticsFailure = (source: string, message: string) => {
+  updateState((current) =>
+    appendTimeline(
       {
-        id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ...current,
+        lastFailure: {
+          source,
+          message,
+          occurredAt: new Date().toISOString(),
+        },
+      },
+      {
+        id: createId("failure"),
         timestamp: new Date().toISOString(),
         source: "manual",
-        ...entry,
+        eventType: "diagnostics.failure",
+        outcome: "error",
+        summary: `${source}: ${message}`,
+        errorMessage: message,
       },
-      ...current.requests,
-    ]),
-  }));
+    ),
+  );
+};
+
+export const recordManualRequest = (entry: Omit<DevDiagnosticsRequestLog, "id" | "timestamp" | "source">) => {
+  updateState((current) => {
+    const timestamp = new Date().toISOString();
+    const id = createId("manual");
+
+    return appendTimeline(
+      {
+        ...current,
+        requests: trimLogs(
+          [
+            {
+              id,
+              timestamp,
+              source: "manual",
+              ...entry,
+            },
+            ...current.requests,
+          ],
+          MAX_REQUEST_LOGS,
+        ),
+      },
+      {
+        id,
+        timestamp,
+        source: "manual",
+        eventType: entry.eventType,
+        outcome: entry.outcome,
+        durationMs: entry.durationMs,
+        summary: [entry.method, entry.path ?? entry.url, entry.statusCode ? `status ${entry.statusCode}` : null].filter(Boolean).join(" "),
+        errorMessage: entry.errorMessage,
+      },
+    );
+  });
 };
 
 export const recordWideEvent = (event: WideEvent) => {
   const request = (event.data.request ?? {}) as { method?: string; path?: string };
-  const response = (event.data.response ?? {}) as { statusCode?: number; requestId?: string | null; traceId?: string | null; cfRay?: string | null };
+  const response = (event.data.response ?? {}) as { statusCode?: number | null; requestId?: string | null; traceId?: string | null; cfRay?: string | null };
 
-  updateState((current) => ({
-    ...current,
-    requests: trimLogs([
-      {
-        id: event.eventId,
-        timestamp: event.timestamp,
-        source: "wide-event",
-        eventType: event.eventType,
-        method: request.method,
-        path: request.path,
-        outcome: event.outcome,
-        statusCode: response.statusCode,
-        durationMs: event.durationMs,
-        requestId: response.requestId,
-        traceId: response.traceId,
-        cfRay: response.cfRay,
-        errorMessage: event.error?.message,
-      },
-      ...current.requests.filter((item) => item.id !== event.eventId),
-    ]),
-  }));
+  updateState((current) => {
+    const nextState = appendTimeline(current, {
+      id: event.eventId,
+      timestamp: event.timestamp,
+      source: "wide-event",
+      eventType: event.eventType,
+      outcome: event.outcome,
+      durationMs: event.durationMs,
+      summary: formatTimelineSummary(event.eventType, event.data, request, response),
+      errorMessage: event.error?.message,
+    });
+
+    if (event.eventType !== "api.request") {
+      return nextState;
+    }
+
+    return {
+      ...nextState,
+      requests: trimLogs(
+        [
+          {
+            id: event.eventId,
+            timestamp: event.timestamp,
+            source: "wide-event",
+            eventType: event.eventType,
+            method: request.method,
+            path: request.path,
+            outcome: event.outcome,
+            statusCode: response.statusCode ?? undefined,
+            durationMs: event.durationMs,
+            requestId: response.requestId,
+            traceId: response.traceId,
+            cfRay: response.cfRay,
+            errorMessage: event.error?.message,
+          },
+          ...nextState.requests.filter((item) => item.id !== event.eventId),
+        ],
+        MAX_REQUEST_LOGS,
+      ),
+    };
+  });
 };
 
 export const fetchDevDiagnosticsAuth = async (apiUrl: string, accessToken: string): Promise<DevDiagnosticsAuthInfo> => {

@@ -41,6 +41,16 @@ interface ConferenceClientEvents {
 
 type JoinLock = ReturnType<typeof createJoinLock>;
 
+export interface ConferenceClientDiagnosticsSnapshot {
+  connectionState: SessionConnectionState;
+  websocketConnectionState: SessionConnectionState;
+  hasCurrentSession: boolean;
+  hasCurrentWsClient: boolean;
+  activeRoomId: string | null;
+  localParticipantId: string | null;
+  websocketLastClose: { code: number; reason: string; wasClean: boolean } | null;
+}
+
 export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
   private readonly apiClient: APIClient;
   private readonly wsUrl: string;
@@ -352,6 +362,18 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
 
   get localParticipantId(): string | null {
     return this.currentSession?.localParticipant?.id ?? null;
+  }
+
+  getDiagnosticsSnapshot(): ConferenceClientDiagnosticsSnapshot {
+    return {
+      connectionState: this.connectionState,
+      websocketConnectionState: this.websocketConnectionState,
+      hasCurrentSession: this.currentSession !== null,
+      hasCurrentWsClient: this.currentWsClient !== null,
+      activeRoomId: this.currentSession?.id ?? null,
+      localParticipantId: this.localParticipantId,
+      websocketLastClose: this.currentWsClient?.lastClose ?? null,
+    };
   }
 
   async removeParticipant(apiParticipantId: string): Promise<void> {
