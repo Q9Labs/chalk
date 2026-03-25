@@ -40,7 +40,7 @@
     "oxfmt": "^0.36.0",
     "turbo": "^2.7.2",
     "typescript": "^5.7.2",
-    "wrangler": "^4.54.0",
+    "wrangler": "^4.77.0",
     "yaml": "^2.8.2"
   },
   "engines": {
