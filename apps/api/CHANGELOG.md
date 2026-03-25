@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- **Hosted first-party auth bootstrap + client incident CORS**: hosted Chalk web clients now reuse a stable bootstrap identity even when cross-site cookies drop between requests, and the debug incident endpoint now explicitly allows `x-chalk-source` so browser incident reports from `chalkmeet.com` do not fail preflight.
 - **First-party room joins no longer fork Cloudflare meetings by auth context**: signed join-token exchange now preserves canonical `room_id`, first-party room joins reject room-name fallback/auto-create behavior, and authenticated users now converge on the original room/meeting instead of silently creating a second tenant-scoped room behind the same visible code.
 - **First-party room creation no longer explodes on non-user host subjects**: room create/schedule now only stamp `created_by_user_id` for workspace-scoped user claims, so host/API-key and claim-based tokens stop tripping `rooms_created_by_user_id_fkey` during room creation.
 - **Embedded DB migrations**: Runtime migrations now include `010`–`012`, preventing local/prod drift where durable chat tables were missing even though migration files existed on disk.

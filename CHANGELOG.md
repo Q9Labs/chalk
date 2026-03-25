@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Web/API: internal `/new` joins now stay on one first-party auth scope** — the web app now carries the just-minted internal access token from room creation into the immediate room load/join flow, and hosted first-party auth requests reuse a stable client bootstrap so `chalkmeet.com` no longer falls back into fresh claim tenants and trip false `room not found` joins.
 - **Mobile release: host-key verification now blocks bad bundles before ship** — release tooling now proves the supplied prod mobile host key can exchange against `POST /api/v1/auth/token` before any uploadable bundle/archive is produced, Android closed/prod builds are explicitly treated as CI-artifact-only, and the next hotfix lane advances to `0.0.15 / 15`.
 - **API/auth: hosted Chalk origins now allow both primary and legacy domains** — internal Google auth origin validation, HTTP CORS, WebSocket origin checks, and static CORS sync allowlists now accept both `https://chalkmeet.com` and `https://chalk.q9labs.ai` so the domain cutover does not break dashboard, invite, or realtime flows.
 

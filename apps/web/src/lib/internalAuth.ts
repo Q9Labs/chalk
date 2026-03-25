@@ -41,7 +41,7 @@ declare global {
 }
 
 const JOIN_CONTEXT_KEY = "chalk_join_context_v1";
-const LOCAL_CLIENT_ID_KEY = "chalk_local_client_id_v1";
+const INTERNAL_CLIENT_ID_KEY = "chalk_internal_client_id_v1";
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 const LOCAL_API_URL = "http://localhost:8080";
 const GOOGLE_IDENTITY_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
@@ -94,12 +94,12 @@ export function getApiUrl() {
 }
 
 export function getOrCreateLocalClientId() {
-  if (typeof window === "undefined" || !isLocalHost(window.location.hostname)) {
+  if (typeof window === "undefined") {
     return null;
   }
 
   try {
-    const existing = localStorage.getItem(LOCAL_CLIENT_ID_KEY);
+    const existing = localStorage.getItem(INTERNAL_CLIENT_ID_KEY);
     if (existing) {
       return existing;
     }
@@ -108,7 +108,7 @@ export function getOrCreateLocalClientId() {
       typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : `chalk-local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(LOCAL_CLIENT_ID_KEY, next);
+    localStorage.setItem(INTERNAL_CLIENT_ID_KEY, next);
     return next;
   } catch {
     return null;
@@ -203,6 +203,31 @@ export function clearStoredChalkTokens() {
     } catch {
       // ignore storage failures; logout still proceeds
     }
+  }
+}
+
+export function getAccessTokenExpiryMs(accessToken: string) {
+  const jwtParts = accessToken.split(".");
+  if (jwtParts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payload = jwtParts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(jwtParts[1].length / 4) * 4, "=");
+    const decoded =
+      typeof atob === "function"
+        ? atob(payload)
+        : Buffer.from(payload, "base64").toString("utf8");
+    const parsed = JSON.parse(decoded) as { exp?: number };
+    if (typeof parsed.exp !== "number") {
+      return null;
+    }
+    return parsed.exp * 1000;
+  } catch {
+    return null;
   }
 }
 
@@ -403,15 +428,15 @@ export async function createRoomJoinLink(
 export function createWebTokenProvider(apiUrl: string) {
   return async () => {
     const jc = getJoinContext();
-    if (jc?.joinToken) {
-      if (
-        jc.accessToken &&
-        jc.expiresAtMs &&
-        Date.now() < jc.expiresAtMs - 5_000
-      ) {
-        return jc.accessToken;
-      }
+    if (
+      jc?.accessToken &&
+      jc.expiresAtMs &&
+      Date.now() < jc.expiresAtMs - 5_000
+    ) {
+      return jc.accessToken;
+    }
 
+    if (jc?.joinToken) {
       const ex = await exchangeJoinToken(apiUrl, jc.joinToken);
       const expiresAtMs = Date.now() + ex.expires_in * 1000;
       setJoinContext({

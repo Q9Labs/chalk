@@ -27,6 +27,8 @@ describe("createInternalMeeting", () => {
     await expect(createInternalMeeting("https://chalk-api.q9labs.ai")).resolves.toEqual({
       roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
       roomName: "New meeting",
+      accessToken: "access-123",
+      expiresAtMs: null,
     });
 
     expect(fetchInternalAccessTokenMock).toHaveBeenCalledWith("https://chalk-api.q9labs.ai");

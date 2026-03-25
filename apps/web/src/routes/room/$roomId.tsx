@@ -75,7 +75,7 @@ function RoomPage() {
   const [now, setNow] = useState(Date.now());
   const [defaults, setDefaults] = useState(() => getStoredJoinDefaults());
   const [meetingLink, setMeetingLink] = useState<string>(() => {
-    if (!joinCtx) {
+    if (!joinCtx?.joinToken) {
       return "";
     }
     return `${getPublicAppOrigin()}/j/${joinCtx.joinToken}`;
@@ -98,8 +98,8 @@ function RoomPage() {
     (async () => {
       try {
         const joinContext = getJoinContext();
-        const usingInternalAuth = !joinContext;
-        const token = joinContext ? await webTokenProvider() : await fetchInternalAccessToken(apiUrl);
+        const usingInternalAuth = auth === "internal" || !joinContext?.joinToken;
+        const token = await webTokenProvider();
         const res = await fetch(`${apiUrl}/api/v1/rooms/${roomId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -138,7 +138,7 @@ function RoomPage() {
     setDefaults(getStoredJoinDefaults());
   }, []);
 
-  const role = joinCtx ? "participant" : "host";
+  const role = joinCtx?.joinToken ? "participant" : "host";
 
   useEffect(() => {
     if (joinCtx?.joinToken) {
@@ -149,7 +149,7 @@ function RoomPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const token = await fetchInternalAccessToken(apiUrl);
+        const token = await webTokenProvider();
         const nextMeetingLink = await createRoomJoinLink(
           apiUrl,
           roomId,
@@ -168,7 +168,7 @@ function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [apiUrl, joinCtx?.joinToken, roomId]);
+  }, [joinCtx?.joinToken, roomId, webTokenProvider]);
 
   if (isCheckingRoom) {
     return (

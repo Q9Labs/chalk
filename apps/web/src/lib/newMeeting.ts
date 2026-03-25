@@ -1,4 +1,4 @@
-import { fetchInternalAccessToken } from "./internalAuth";
+import { fetchInternalAccessToken, getAccessTokenExpiryMs } from "./internalAuth";
 
 type CreateRoomResponse = {
   id?: string;
@@ -31,5 +31,7 @@ export async function createInternalMeeting(apiUrl: string, roomName = "New meet
   return {
     roomId: data.id,
     roomName: data.name || roomName,
+    accessToken,
+    expiresAtMs: getAccessTokenExpiryMs(accessToken),
   };
 }

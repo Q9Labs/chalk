@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { getApiUrl } from "../lib/internalAuth";
+import { getApiUrl, setJoinContext } from "../lib/internalAuth";
 import { createInternalMeeting } from "../lib/newMeeting";
 
 export const Route = createFileRoute("/new")({
@@ -22,7 +22,14 @@ function NewRoomPage() {
 
     void (async () => {
       try {
-        const { roomId, roomName } = await createInternalMeeting(apiUrl);
+        const { roomId, roomName, accessToken, expiresAtMs } =
+          await createInternalMeeting(apiUrl);
+        setJoinContext({
+          roomId,
+          roomName,
+          accessToken,
+          expiresAtMs: expiresAtMs ?? undefined,
+        });
         await navigate({
           to: "/room/$roomId",
           params: { roomId },

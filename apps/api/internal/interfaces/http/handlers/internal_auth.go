@@ -811,9 +811,11 @@ func localClientBootstrapKey(r *http.Request, clientID string) string {
 }
 
 func (h *InternalAuthHandler) getCachedLocalClientTenant(ctx context.Context, r *http.Request, clientID string) (*localClientTenantBootstrap, bool) {
-	if h.redis == nil || clientID == "" || !isLocalRequest(r) {
+	if h.redis == nil || clientID == "" {
 		return nil, false
 	}
+	// Hosted first-party apps like chalkmeet.com hit the API cross-site, so
+	// third-party cookie blocking can hide the claim cookie between requests.
 	payload, err := h.redis.Get(ctx, localClientTenantRedisKey(clientID))
 	if err != nil || payload == "" {
 		return nil, false
@@ -831,7 +833,7 @@ func (h *InternalAuthHandler) getCachedLocalClientTenant(ctx context.Context, r 
 }
 
 func (h *InternalAuthHandler) setCachedLocalClientTenant(ctx context.Context, r *http.Request, clientID string, tenantID uuid.UUID, claimSecret string) {
-	if h.redis == nil || clientID == "" || claimSecret == "" || !isLocalRequest(r) {
+	if h.redis == nil || clientID == "" || claimSecret == "" {
 		return
 	}
 	payload, err := json.Marshal(localClientTenantBootstrap{TenantID: tenantID, ClaimSecret: claimSecret})

@@ -486,3 +486,39 @@ func TestInternalAuthAccessToken_InvalidWorkspaceCacheFallsBackToDB(t *testing.T
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, workspaceID.String(), cacheStub.values[workspaceByOwnerRedisKey(userID)])
 }
+
+func TestInternalAuthAccessToken_ReusesHostedClientBootstrapWithoutCookies(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	queryStub := &internalAuthQueriesStub{}
+	cacheStub := &internalAuthCacheStub{values: map[string]string{}}
+	handler := NewInternalAuthHandler(
+		nil,
+		queryStub,
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		cacheStub,
+	)
+
+	makeRequest := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/access-token", nil)
+		req.Host = "chalk-api.q9labs.ai"
+		req.Header.Set(localClientIDHeader, "hosted-client-123")
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = req
+		handler.AccessToken(c)
+		return w
+	}
+
+	first := makeRequest()
+	require.Equal(t, http.StatusOK, first.Code)
+	require.Equal(t, 1, queryStub.createTenantCalls)
+	require.Equal(t, 1, queryStub.createClaimCalls)
+	require.NotEmpty(t, cacheStub.values[localClientTenantRedisKey("hosted-client-123")])
+
+	second := makeRequest()
+	require.Equal(t, http.StatusOK, second.Code)
+	require.Equal(t, 1, queryStub.createTenantCalls)
+	require.Equal(t, 1, queryStub.createClaimCalls)
+}

@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearStoredChalkTokens,
+  createWebTokenProvider,
   createRoomJoinLink,
   fetchInternalAccessToken,
   fetchInternalSession,
+  getAccessTokenExpiryMs,
   getChalkSessionCacheKey,
   getJoinContext,
   getOrCreateLocalClientId,
@@ -123,7 +125,7 @@ describe("fetchInternalAccessToken", () => {
     restoreBrowserEnv();
   });
 
-  it("sends a stable localhost bootstrap header", async () => {
+  it("sends a stable bootstrap header on localhost", async () => {
     installBrowserEnv("http://localhost:3070/dashboard");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -148,7 +150,7 @@ describe("fetchInternalAccessToken", () => {
     expect(fetchMock.mock.calls[0]?.[1]).toEqual(fetchMock.mock.calls[1]?.[1]);
   });
 
-  it("does not send localhost bootstrap header on hosted origins", async () => {
+  it("sends a stable bootstrap header on hosted origins too", async () => {
     installBrowserEnv("https://chalkmeet.com/dashboard");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -156,14 +158,36 @@ describe("fetchInternalAccessToken", () => {
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
 
-    await fetchInternalAccessToken("https://chalk-api.q9labs.ai");
+    const first = await fetchInternalAccessToken("https://chalk-api.q9labs.ai");
+    const second = await fetchInternalAccessToken("https://chalk-api.q9labs.ai");
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(first).toBe("token-123");
+    expect(second).toBe("token-123");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
       "https://chalk-api.q9labs.ai/api/v1/internal/auth/access-token",
       expect.objectContaining({
-        headers: undefined,
+        headers: {
+          "X-Chalk-Local-Client-ID": expect.any(String),
+        },
       }),
     );
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(fetchMock.mock.calls[1]?.[1]);
+  });
+});
+
+describe("getAccessTokenExpiryMs", () => {
+  it("reads exp from a jwt payload", () => {
+    const payload = Buffer.from(JSON.stringify({ exp: 1_700_000_000 })).toString(
+      "base64url",
+    );
+    expect(getAccessTokenExpiryMs(`header.${payload}.sig`)).toBe(
+      1_700_000_000_000,
+    );
+  });
+
+  it("returns null for malformed tokens", () => {
+    expect(getAccessTokenExpiryMs("not-a-jwt")).toBeNull();
   });
 });
 
@@ -245,6 +269,23 @@ describe("createRoomJoinLink", () => {
 describe("getJoinContext", () => {
   afterEach(() => {
     restoreBrowserEnv();
+  });
+
+  it("returns internal room auth context on the matching room route", () => {
+    installBrowserEnv("http://localhost:3070/room/2f0b302b-2449-43f5-ae3b-de57decb9f09");
+    setJoinContext({
+      roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
+      roomName: "math-101",
+      accessToken: "access-123",
+      expiresAtMs: 1_700_000_900_000,
+    });
+
+    expect(getJoinContext()).toEqual({
+      roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
+      roomName: "math-101",
+      accessToken: "access-123",
+      expiresAtMs: 1_700_000_900_000,
+    });
   });
 
   it("returns room-scoped join context on the matching room route", () => {
@@ -358,6 +399,27 @@ describe("clearStoredChalkTokens", () => {
   });
 });
 
+describe("createWebTokenProvider", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    restoreBrowserEnv();
+  });
+
+  it("reuses a fresh internal room token for the current room", async () => {
+    installBrowserEnv("https://chalkmeet.com/room/2f0b302b-2449-43f5-ae3b-de57decb9f09?auth=internal");
+    setJoinContext({
+      roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
+      accessToken: "access-123",
+      expiresAtMs: Date.now() + 60_000,
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const tokenProvider = createWebTokenProvider("https://chalk-api.q9labs.ai");
+
+    await expect(tokenProvider()).resolves.toBe("access-123");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("getOrCreateLocalClientId", () => {
   afterEach(() => {
     restoreBrowserEnv();
@@ -373,8 +435,11 @@ describe("getOrCreateLocalClientId", () => {
     expect(first).toBe(second);
   });
 
-  it("returns null on hosted origins", () => {
+  it("keeps a stable client id on hosted origins", () => {
     installBrowserEnv("https://chalkmeet.com/dashboard");
-    expect(getOrCreateLocalClientId()).toBeNull();
+    const first = getOrCreateLocalClientId();
+    const second = getOrCreateLocalClientId();
+    expect(first).toBeTruthy();
+    expect(first).toBe(second);
   });
 });
