@@ -102,6 +102,9 @@ describe("ChalkSession lifecycle listener graph", () => {
     };
 
     (session as any).attachRoomToManagers = () => {
+      (session as any)._currentRoom = {
+        id: "connected-room-id",
+      };
       session.room._state = {
         ...session.room._state,
         status: "connected",
@@ -112,6 +115,48 @@ describe("ChalkSession lifecycle listener graph", () => {
     await session.join("room-alias", { userName: "Hasan" });
     await session.join("room-alias", { userName: "Hasan" });
 
+    expect(joinCalls).toBe(1);
+
+    session.dispose();
+  });
+
+  it("recovers stale connected state without an active room before joining again", async () => {
+    const session = createSession();
+    let joinCalls = 0;
+
+    session.room._state = {
+      status: "connected",
+      roomId: "ghost-room",
+      roomName: "Ghost room",
+      isJoining: false,
+      hostId: null,
+    };
+
+    (session as any)._runtime = {
+      runPromise: async () => undefined,
+      dispose: () => undefined,
+    };
+
+    (session as any).client = {
+      joinSession: async () => {
+        joinCalls += 1;
+        return {
+          id: "fresh-room-id",
+        };
+      },
+      disconnect: () => undefined,
+      on: () => () => undefined,
+    };
+
+    (session as any).attachRoomToManagers = () => {
+      session.room._state = {
+        ...session.room._state,
+        status: "connected",
+        roomId: "fresh-room-id",
+      };
+    };
+
+    await expect(session.join("fresh-room", { userName: "Hasan" })).resolves.toBeUndefined();
     expect(joinCalls).toBe(1);
 
     session.dispose();

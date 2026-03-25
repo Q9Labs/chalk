@@ -343,6 +343,26 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
     });
   }
 
+  private recoverStaleConnectedRoomState(): void {
+    const roomState = this.room.getState();
+    if (roomState.status !== "connected" || this.room.getRoom()) {
+      return;
+    }
+
+    this.recordIncidentBreadcrumb({
+      category: "room",
+      message: "Recovering stale connected room state before join",
+      data: {
+        roomId: roomState.roomId,
+      },
+    });
+
+    this.connectedInputRoomId = null;
+    this.inFlightJoinRoomId = null;
+    this.inFlightJoinPromise = null;
+    this.resetSessionState();
+  }
+
   /**
    * Join a room
    *
@@ -350,6 +370,8 @@ export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
    * @param options - Join options including userName
    */
   async join(roomId: string, options: JoinOptions): Promise<void> {
+    this.recoverStaleConnectedRoomState();
+
     if (this.connectedInputRoomId === roomId && this.room.getState().status === "connected") {
       return;
     }

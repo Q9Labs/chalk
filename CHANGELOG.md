@@ -1074,7 +1074,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Join-token exchange now returns both the canonical room UUID and the friendly room name, so mobile can display intelligible titles without treating the room label as the room identifier.
 - Tenant access-token minting now stamps `role=host` as well as host permissions, so mobile `New meeting` can create rooms again after the room pre-create flow started using the host-only `/rooms` endpoint. Mobile host token cache key bumped to evict stale no-role tokens on device.
 - Mobile host meeting creation now self-heals one stale `host role required` failure by clearing the cached host JWT set and retrying room creation once, so already-stored pre-fix tokens stop blocking `New meeting`.
-- Mobile pre-join now latches duplicate submit attempts and treats same-room `Already connected to a room` races as a successful join, so host create-and-join no longer bounces back with a misleading error before entering the meeting room.
+- Mobile/native join now latches duplicate submit attempts, treats same-room `Already connected to a room` races as a successful join, and clears stale connected room state before retrying, so host create-and-join no longer bounces back with a misleading prejoin error before entering the meeting room.
 
 ### Changed
 
