@@ -6,8 +6,16 @@ describe("extractJoinTokenFromInviteLink", () => {
     expect(extractJoinTokenFromInviteLink("https://chalk.q9labs.ai/j/join-token-123")).toBe("join-token-123");
   });
 
+  it("accepts the new Chalk meet host", () => {
+    expect(extractJoinTokenFromInviteLink("https://chalkmeet.com/j/join-token-123")).toBe("join-token-123");
+  });
+
   it("accepts bare Chalk invite hostnames", () => {
     expect(extractJoinTokenFromInviteLink("chalk.q9labs.ai/j/join-token-123")).toBe("join-token-123");
+  });
+
+  it("accepts bare Chalk meet hostnames", () => {
+    expect(extractJoinTokenFromInviteLink("chalkmeet.com/j/join-token-123")).toBe("join-token-123");
   });
 
   it("accepts native Chalk deep links", () => {
@@ -22,11 +30,11 @@ describe("extractJoinTokenFromInviteLink", () => {
 
 describe("getClipboardInviteSuggestion", () => {
   it("returns a copied Chalk invite link when it differs from the current input", () => {
-    expect(getClipboardInviteSuggestion("https://chalk.q9labs.ai/j/join-token-123", "")).toBe("https://chalk.q9labs.ai/j/join-token-123");
+    expect(getClipboardInviteSuggestion("https://chalkmeet.com/j/join-token-123", "")).toBe("https://chalkmeet.com/j/join-token-123");
   });
 
   it("hides the suggestion when the input already matches the clipboard", () => {
-    expect(getClipboardInviteSuggestion("https://chalk.q9labs.ai/j/join-token-123", "https://chalk.q9labs.ai/j/join-token-123")).toBeNull();
+    expect(getClipboardInviteSuggestion("https://chalkmeet.com/j/join-token-123", "https://chalkmeet.com/j/join-token-123")).toBeNull();
   });
 
   it("ignores non-invite clipboard values", () => {

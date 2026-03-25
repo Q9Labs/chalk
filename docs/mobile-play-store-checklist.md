@@ -10,9 +10,9 @@ This is repo-grounded only. Anything not found in the tree is marked missing.
 - Android package: `ai.q9labs.chalk.mobile`
 - Current version in app config: `0.0.10`
 - Current Android versionCode: `10`
-- Public app site: `https://chalk.q9labs.ai`
-- Privacy policy route: `https://chalk.q9labs.ai/privacy/`
-- Privacy policy backup route: `https://chalk.q9labs.ai/privacy-policy/`
+- Public app site: `https://chalkmeet.com`
+- Privacy policy route: `https://chalkmeet.com/privacy/`
+- Privacy policy backup route: `https://chalkmeet.com/privacy-policy/`
 
 ## Required Play listing pieces
 
@@ -66,8 +66,8 @@ This is repo-grounded only. Anything not found in the tree is marked missing.
 ### Privacy policy
 
 - Status: present
-- Primary URL from repo helper: `https://chalk.q9labs.ai/privacy/`
-- Backup URL from repo helper: `https://chalk.q9labs.ai/privacy-policy/`
+- Primary URL from repo helper: `https://chalkmeet.com/privacy/`
+- Backup URL from repo helper: `https://chalkmeet.com/privacy-policy/`
 - Static backup file: `apps/web/public/privacy-policy/index.html`
 - Policy content route: `apps/web/src/routes/privacy.tsx`
 

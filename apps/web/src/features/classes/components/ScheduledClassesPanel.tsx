@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { RefreshCcw } from "lucide-react";
 import { GmailIcon } from "../../../components/GmailIcon";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@q9labs/chalk-ui";
+import { getPublicAppOrigin } from "../../../lib/publicUrl";
 
 type ScheduledClassesPanelProps = {
   client: ConferenceClient;
@@ -106,7 +107,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
   async function copyInvite(room: RoomResource) {
     try {
       const response = await client.createJoinToken(room.id);
-      const inviteUrl = `${window.location.origin}/j/${response.joinToken}`;
+      const inviteUrl = `${getPublicAppOrigin()}/j/${response.joinToken}`;
 
       const timeStr = room.scheduledStartAt ? ` at ${new Date(room.scheduledStartAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "";
 
@@ -122,7 +123,7 @@ export function ScheduledClassesPanel({ client, rooms, isLoading, error, onRefre
   async function sendGmailInvite(room: RoomResource) {
     try {
       const response = await client.createJoinToken(room.id);
-      const inviteUrl = `${window.location.origin}/j/${response.joinToken}`;
+      const inviteUrl = `${getPublicAppOrigin()}/j/${response.joinToken}`;
 
       const timeStr = room.scheduledStartAt ? new Date(room.scheduledStartAt).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" }) : "now";
 

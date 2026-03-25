@@ -1,4 +1,5 @@
 import { APIClient } from "@q9labs/chalk-core";
+import { getPublicAppOrigin } from "./publicUrl";
 
 type JoinContextV1 = {
   joinToken: string;
@@ -395,12 +396,7 @@ export async function createRoomJoinLink(
   }
 
   const baseOrigin =
-    origin ??
-    (typeof window === "undefined" ? undefined : window.location.origin);
-  if (!baseOrigin) {
-    throw new Error("missing origin");
-  }
-
+    origin ?? getPublicAppOrigin();
   return new URL(`/j/${data.join_token}`, baseOrigin).toString();
 }
 

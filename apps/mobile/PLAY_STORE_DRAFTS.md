@@ -7,7 +7,7 @@ Last updated: 2026-03-22
 - Package: `ai.q9labs.chalk.mobile`
 - Current Android version: `0.0.12 (12)`
 - Internal testing track: latest upload target should use `versionCode 12`
-- Public privacy policy URL: `https://chalk.q9labs.ai/privacy`
+- Public privacy policy URL: `https://chalkmeet.com/privacy`
 - In-app privacy-policy link: mobile home footer
 - Current tracked icon candidate: `apps/mobile/assets/icon.png`
   - size: `512x512`
@@ -137,7 +137,7 @@ This section is a repo-derived draft, not a legal sign-off. It should be reviewe
 
 ## Reviewer notes draft
 
-`Chalk is a low-latency video meeting app. No login or reviewer account is required for the reviewed Android build. Launch the app to reach the home screen, then either tap "New meeting" or paste/open a Chalk invite link. The current Android v1 build focuses on core meetings: join/create, audio, video, chat, transcripts, and whiteboards. Mobile-originated Android screen sharing is intentionally disabled in this version. Camera and microphone permissions are only used for live meeting participation. Privacy policy: https://chalk.q9labs.ai/privacy`
+`Chalk is a low-latency video meeting app. No login or reviewer account is required for the reviewed Android build. Launch the app to reach the home screen, then either tap "New meeting" or paste/open a Chalk invite link. The current Android v1 build focuses on core meetings: join/create, audio, video, chat, transcripts, and whiteboards. Mobile-originated Android screen sharing is intentionally disabled in this version. Camera and microphone permissions are only used for live meeting participation. Privacy policy: https://chalkmeet.com/privacy`
 
 ## Remaining human/store inputs
 

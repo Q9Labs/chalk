@@ -76,6 +76,7 @@ jobs:
           cd out && bun run build --filter=web 2>&1 | tee build.log
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
+          VITE_PUBLIC_APP_URL: https://chalkmeet.com
           VITE_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
           VITE_GOOGLE_CLIENT_ID: 520998158013-9imcfo2tk5lpis830euphcm07q8p9nr8.apps.googleusercontent.com
           NODE_OPTIONS: --max-old-space-size=4096
@@ -132,7 +133,7 @@ jobs:
       deployments: write
     environment:
       name: production
-      url: https://chalk.q9labs.ai
+      url: https://chalkmeet.com
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4

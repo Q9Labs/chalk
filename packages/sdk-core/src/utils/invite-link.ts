@@ -1,4 +1,4 @@
-const CHALK_INVITE_HOST = "chalk.q9labs.ai";
+const CHALK_INVITE_HOSTS = ["chalkmeet.com", "chalk.q9labs.ai"] as const;
 
 export function extractJoinTokenFromInviteLink(input: string): string | null {
   const trimmed = input.trim();
@@ -8,7 +8,7 @@ export function extractJoinTokenFromInviteLink(input: string): string | null {
 
   const normalized = trimmed.includes("://")
     ? trimmed
-    : trimmed.startsWith(`${CHALK_INVITE_HOST}/`)
+    : CHALK_INVITE_HOSTS.some((host) => trimmed.startsWith(`${host}/`))
       ? `https://${trimmed}`
       : null;
 

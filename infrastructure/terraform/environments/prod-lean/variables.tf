@@ -172,7 +172,7 @@ variable "resend_from_email" {
 variable "internal_app_url" {
   description = "Internal app URL for magic links"
   type        = string
-  default     = "https://chalk.q9labs.ai"
+  default     = "https://chalkmeet.com"
 }
 
 variable "internal_app_urls" {

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearStoredChalkTokens,
+  createRoomJoinLink,
   fetchInternalAccessToken,
   fetchInternalSession,
   getChalkSessionCacheKey,
@@ -111,7 +112,7 @@ describe("resolveApiUrl", () => {
 
   it("keeps prod api on hosted origins", () => {
     expect(
-      resolveApiUrl("https://chalk-api.q9labs.ai", "chalk.q9labs.ai"),
+      resolveApiUrl("https://chalk-api.q9labs.ai", "chalkmeet.com"),
     ).toBe("https://chalk-api.q9labs.ai");
   });
 });
@@ -148,7 +149,7 @@ describe("fetchInternalAccessToken", () => {
   });
 
   it("does not send localhost bootstrap header on hosted origins", async () => {
-    installBrowserEnv("https://chalk.q9labs.ai/dashboard");
+    installBrowserEnv("https://chalkmeet.com/dashboard");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ access_token: "token-123" }),
@@ -218,6 +219,26 @@ describe("internal session helpers", () => {
         method: "POST",
       }),
     );
+  });
+});
+
+describe("createRoomJoinLink", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    restoreBrowserEnv();
+  });
+
+  it("defaults hosted share links to the canonical chalkmeet origin", async () => {
+    installBrowserEnv("https://chalk.q9labs.ai/dashboard");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ join_token: "join-token-123" }),
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
+
+    await expect(
+      createRoomJoinLink("https://chalk-api.q9labs.ai", "room-123", "access-123"),
+    ).resolves.toBe("https://chalkmeet.com/j/join-token-123");
   });
 });
 
@@ -324,7 +345,7 @@ describe("clearStoredChalkTokens", () => {
   });
 
   it("removes sdk tokens from both browser stores", () => {
-    const env = installBrowserEnv("https://chalk.q9labs.ai/dashboard");
+    const env = installBrowserEnv("https://chalkmeet.com/dashboard");
     env.localStorage.setItem("chalk_access_token", "abc");
     env.sessionStorage.setItem("chalk_refresh_token", "xyz");
     env.localStorage.setItem("chalk_token_expires", "123");
@@ -353,7 +374,7 @@ describe("getOrCreateLocalClientId", () => {
   });
 
   it("returns null on hosted origins", () => {
-    installBrowserEnv("https://chalk.q9labs.ai/dashboard");
+    installBrowserEnv("https://chalkmeet.com/dashboard");
     expect(getOrCreateLocalClientId()).toBeNull();
   });
 });

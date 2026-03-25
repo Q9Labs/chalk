@@ -1,4 +1,5 @@
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+const PUBLIC_WEB_HOSTS = ["chalkmeet.com", "chalk.q9labs.ai"] as const;
 
 function isLocalUrl(url: string | undefined): boolean {
   if (!url) {
@@ -59,8 +60,10 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             autoVerify: true,
             category: ["BROWSABLE", "DEFAULT"],
             data: [
-              { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" },
-              { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
+              ...PUBLIC_WEB_HOSTS.flatMap((host) => [
+                { scheme: "https", host, pathPrefix: "/j/" },
+                { scheme: "https", host, pathPrefix: "/room/" },
+              ]),
             ],
           },
         ],

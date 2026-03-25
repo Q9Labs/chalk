@@ -7,6 +7,7 @@ import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { createWebTokenProvider, getApiUrl, getChalkSessionCacheKey, isLocalHost, shouldPrimeTokenCache, shouldUseRoomScopedTokenProvider } from "../lib/internalAuth";
+import { getPublicAppUrl } from "../lib/publicUrl";
 
 // SSR check - ChalkProvider requires browser APIs
 const isServer = typeof window === "undefined";
@@ -19,35 +20,46 @@ installChunkLoadAutoReload();
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "Chalk",
-      },
-    ],
-    links: [
-      {
-        rel: "icon",
-        type: "image/svg+xml",
-        href: "/chalk-icon.svg",
-      },
-      {
-        rel: "apple-touch-icon",
-        href: "/apple-touch-icon.png",
-      },
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
+  head: () => {
+    const canonicalPath =
+      typeof window === "undefined"
+        ? "/"
+        : `${window.location.pathname}${window.location.search}`;
+
+    return {
+      meta: [
+        {
+          charSet: "utf-8",
+        },
+        {
+          name: "viewport",
+          content: "width=device-width, initial-scale=1",
+        },
+        {
+          title: "Chalk",
+        },
+      ],
+      links: [
+        {
+          rel: "canonical",
+          href: getPublicAppUrl(canonicalPath),
+        },
+        {
+          rel: "icon",
+          type: "image/svg+xml",
+          href: "/chalk-icon.svg",
+        },
+        {
+          rel: "apple-touch-icon",
+          href: "/apple-touch-icon.png",
+        },
+        {
+          rel: "stylesheet",
+          href: appCss,
+        },
+      ],
+    };
+  },
 
   shellComponent: RootDocument,
   component: RootComponent,

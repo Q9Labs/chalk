@@ -4,8 +4,8 @@ Last updated: 2026-03-22
 
 ## Privacy policy URL options
 
-- Primary: `https://chalk.q9labs.ai/privacy/`
-- Backup: `https://chalk.q9labs.ai/privacy-policy/`
+- Primary: `https://chalkmeet.com/privacy/`
+- Backup: `https://chalkmeet.com/privacy-policy/`
 - If a store field rejects the trailing slash, use the same path after the web deploy is confirmed to preserve the 200 response.
 
 ## App Store reviewer notes

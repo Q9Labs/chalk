@@ -11,9 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Web/domain: `chalkmeet.com` is now the canonical Chalk app URL** — web-generated invite/share/privacy links now default to `https://chalkmeet.com`, Cloudflare Pages/web config now exposes the new canonical public origin, and mobile/store/docs surfaces now present `chalkmeet.com` while keeping `chalk.q9labs.ai` valid.
+
 ### Fixed
 
 - **Mobile release: host-key verification now blocks bad bundles before ship** — release tooling now proves the supplied prod mobile host key can exchange against `POST /api/v1/auth/token` before any uploadable bundle/archive is produced, Android closed/prod builds are explicitly treated as CI-artifact-only, and the next hotfix lane advances to `0.0.15 / 15`.
+- **API/auth: hosted Chalk origins now allow both primary and legacy domains** — internal Google auth origin validation, HTTP CORS, WebSocket origin checks, and static CORS sync allowlists now accept both `https://chalkmeet.com` and `https://chalk.q9labs.ai` so the domain cutover does not break dashboard, invite, or realtime flows.
 
 ## [0.0.79] - 2026-03-23
 

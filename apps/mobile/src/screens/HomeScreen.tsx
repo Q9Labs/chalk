@@ -8,6 +8,9 @@ import { ChalkLogoElements } from "../components/ChalkLogoElements";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
 import { useClipboardInviteSuggestion } from "./useClipboardInviteSuggestion";
 
+const PUBLIC_SITE_URL = "https://chalkmeet.com";
+const PUBLIC_PRIVACY_URL = "https://chalkmeet.com/privacy";
+
 export interface HomeScreenProps {
   onNavigate: (route: LobbyRoute) => void;
 }
@@ -74,11 +77,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
   };
 
   const handleOpenWebsite = () => {
-    void Linking.openURL("https://chalk.q9labs.ai");
+    void Linking.openURL(PUBLIC_SITE_URL);
   };
 
   const handleOpenPrivacyPolicy = () => {
-    void Linking.openURL("https://chalk.q9labs.ai/privacy");
+    void Linking.openURL(PUBLIC_PRIVACY_URL);
   };
 
   return (
@@ -143,7 +146,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps): React.JSX.Element {
         <View style={styles.footer}>
           <Pressable onPress={handleOpenWebsite}>
             <Text style={styles.footerText}>
-              Learn more at <Text style={styles.footerLink}>chalk.q9labs.ai</Text>
+              Learn more at <Text style={styles.footerLink}>chalkmeet.com</Text>
             </Text>
           </Pressable>
           <Pressable onPress={handleOpenPrivacyPolicy}>

@@ -16,6 +16,8 @@ describe("createExpoConfig", () => {
     expect(config.expo.ios.infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
     expect(config.expo.android.adaptiveIcon.backgroundColor).toBe("#0b0c14");
     expect(config.expo.android.intentFilters?.[0]?.data).toEqual([
+      { scheme: "https", host: "chalkmeet.com", pathPrefix: "/j/" },
+      { scheme: "https", host: "chalkmeet.com", pathPrefix: "/room/" },
       { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" },
       { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
     ]);

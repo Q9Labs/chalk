@@ -22,6 +22,7 @@ import { ChalkLogo } from "../../components/ChalkLogo";
 import { cn } from "../../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Calendar01Icon, Clock01Icon } from "@hugeicons/core-free-icons";
+import { getPublicAppOrigin } from "../../lib/publicUrl";
 
 function getStoredUserName() {
   if (typeof window === "undefined") {
@@ -77,7 +78,7 @@ function RoomPage() {
     if (!joinCtx) {
       return "";
     }
-    return `${window.location.origin}/j/${joinCtx.joinToken}`;
+    return `${getPublicAppOrigin()}/j/${joinCtx.joinToken}`;
   });
 
   useEffect(() => {
@@ -141,7 +142,7 @@ function RoomPage() {
 
   useEffect(() => {
     if (joinCtx?.joinToken) {
-      setMeetingLink(`${window.location.origin}/j/${joinCtx.joinToken}`);
+      setMeetingLink(`${getPublicAppOrigin()}/j/${joinCtx.joinToken}`);
       return;
     }
 
@@ -153,7 +154,6 @@ function RoomPage() {
           apiUrl,
           roomId,
           token,
-          window.location.origin,
         );
         if (!cancelled) {
           setMeetingLink(nextMeetingLink);

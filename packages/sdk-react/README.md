@@ -94,7 +94,7 @@ function VideoCall() {
 
   return (
     <div>
-      <button onClick={() => joinWithInviteLink("https://chalk.q9labs.ai/j/join-token-123", { userName: "John Doe" })}>
+      <button onClick={() => joinWithInviteLink("https://chalkmeet.com/j/join-token-123", { userName: "John Doe" })}>
         Join invite
       </button>
       <button onClick={toggleAudio}>{isAudioEnabled ? "Mute" : "Unmute"}</button>

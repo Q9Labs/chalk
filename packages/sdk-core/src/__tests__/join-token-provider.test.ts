@@ -7,6 +7,10 @@ describe("extractJoinTokenFromInviteLink", () => {
     expect(extractJoinTokenFromInviteLink("https://chalk.q9labs.ai/j/join-token-123")).toBe("join-token-123");
   });
 
+  it("accepts the new Chalk meet hostname", () => {
+    expect(extractJoinTokenFromInviteLink("https://chalkmeet.com/j/join-token-123")).toBe("join-token-123");
+  });
+
   it("accepts native Chalk deep links", () => {
     expect(extractJoinTokenFromInviteLink("chalk://j/join-token-123")).toBe("join-token-123");
   });
@@ -83,6 +87,23 @@ describe("ConferenceClient join token helpers", () => {
     (client as unknown as { joinWithJoinToken: typeof joinWithJoinToken }).joinWithJoinToken = joinWithJoinToken;
 
     await client.joinWithInviteLink("https://chalk.q9labs.ai/j/join-token-123", {
+      displayName: "Hasan",
+    });
+
+    expect(joinWithJoinToken).toHaveBeenCalledWith("join-token-123", {
+      displayName: "Hasan",
+    });
+  });
+
+  it("extracts the join token from chalkmeet invite links before joining", async () => {
+    const client = new ConferenceClient({
+      apiUrl: "https://chalk-api.q9labs.ai",
+      token: "seed-token",
+    });
+    const joinWithJoinToken = mock(async () => ({ id: "room-1" }));
+    (client as unknown as { joinWithJoinToken: typeof joinWithJoinToken }).joinWithJoinToken = joinWithJoinToken;
+
+    await client.joinWithInviteLink("https://chalkmeet.com/j/join-token-123", {
       displayName: "Hasan",
     });
 

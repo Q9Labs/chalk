@@ -7,4 +7,5 @@ pages_build_output_dir = "dist/client"
 
 [vars]
 VITE_API_URL = "https://chalk-api.q9labs.ai"
+VITE_PUBLIC_APP_URL = "https://chalkmeet.com"
 VITE_POSTHOG_HOST = "https://us.i.posthog.com"

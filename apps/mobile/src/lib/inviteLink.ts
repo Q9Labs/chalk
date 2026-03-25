@@ -1,29 +1,6 @@
-export function extractJoinTokenFromInviteLink(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return null;
-  }
+import { extractJoinTokenFromInviteLink as extractJoinTokenFromInviteLinkCore } from "@q9labs/chalk-core";
 
-  const normalized = trimmed.includes("://") ? trimmed : trimmed.startsWith("chalk.q9labs.ai/") ? `https://${trimmed}` : null;
-
-  if (!normalized) {
-    return null;
-  }
-
-  try {
-    const parsed = new URL(normalized);
-    const pathSegments = parsed.protocol === "chalk:" ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)] : parsed.pathname.split("/").filter(Boolean);
-    const [head, tail] = pathSegments;
-
-    if (head !== "j" || !tail) {
-      return null;
-    }
-
-    return tail;
-  } catch {
-    return null;
-  }
-}
+export const extractJoinTokenFromInviteLink = extractJoinTokenFromInviteLinkCore;
 
 export function getClipboardInviteSuggestion(clipboardText: string | null | undefined, currentInput = ""): string | null {
   const normalizedClipboardText = clipboardText?.trim();
