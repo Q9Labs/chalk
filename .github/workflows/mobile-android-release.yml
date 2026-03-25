@@ -8,6 +8,15 @@ on:
         required: false
         default: Internal testing build with production mobile release env.
         type: string
+      artifact_format:
+        description: Which Android artifact(s) to build
+        required: false
+        default: both
+        type: choice
+        options:
+          - both
+          - aab
+          - apk
 
 concurrency:
   group: mobile-android-release
@@ -68,18 +77,41 @@ jobs:
         run: bun run --cwd apps/mobile verify:production-host-key
 
       - name: Build signed Android bundle
+        if: inputs.artifact_format == 'both' || inputs.artifact_format == 'aab'
         run: bun run --cwd apps/mobile with:production-release-env -- bun run build:android:release
 
-      - name: Generate checksums
+      - name: Build signed Android APK
+        if: inputs.artifact_format == 'both' || inputs.artifact_format == 'apk'
+        run: bun run --cwd apps/mobile with:production-release-env -- bun run build:android:apk:release
+
+      - name: Generate AAB checksum
+        if: inputs.artifact_format == 'both' || inputs.artifact_format == 'aab'
         run: |
           cd apps/mobile/android/app/build/outputs/bundle/release
           sha256sum app-release.aab > app-release.aab.sha256
 
-      - name: Upload Android release artifact
+      - name: Generate APK checksum
+        if: inputs.artifact_format == 'both' || inputs.artifact_format == 'apk'
+        run: |
+          cd apps/mobile/android/app/build/outputs/apk/release
+          sha256sum app-release.apk > app-release.apk.sha256
+
+      - name: Upload Android release bundle artifact
+        if: inputs.artifact_format == 'both' || inputs.artifact_format == 'aab'
         uses: actions/upload-artifact@v4
         with:
           name: mobile-android-release-aab
           path: |
             apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
             apps/mobile/android/app/build/outputs/bundle/release/app-release.aab.sha256
+          retention-days: 7
+
+      - name: Upload Android release APK artifact
+        if: inputs.artifact_format == 'both' || inputs.artifact_format == 'apk'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-release-apk
+          path: |
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk.sha256
           retention-days: 7

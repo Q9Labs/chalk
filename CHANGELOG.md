@@ -1090,6 +1090,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Mobile native room action accents now use the Chalk theme primary green instead of hard-coded purple values, keeping the meeting sheet and hand/share states on-brand.
+- Android mobile release workflow can now emit a signed sideload APK artifact from the same secret-backed verified production build path as the Play bundle.
 - Removed the legacy Terraform dev environment and unused non-lean modules, keeping only `bootstrap`, `prod-lean`, and the modules they depend on.
 - Trimmed root and Terraform README files down to stable orientation notes so active behavior stays defined by source files instead of drifting docs.
 - mobile(android): bump release metadata to 0.0.7 / versionCode 7 while stripping Android foreground-service declarations from the alpha build to clear Play review blockers without policy video uploads

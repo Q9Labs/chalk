@@ -11,6 +11,8 @@
     "prebuild:ios": "expo prebuild --platform ios --no-install",
     "prebuild:ios:production": "CHALK_APP_VARIANT=production expo prebuild --platform ios --clean --no-install",
     "build": "expo export --platform ios --output-dir dist/ios && expo export --platform android --output-dir dist/android",
+    "build:android:apk:release": "cd android && ./gradlew assembleRelease",
+    "build:android:apk:release:production": "bun run ./scripts/run-with-production-mobile-env.ts -- bun run build:android:apk:release",
     "build:android:release": "cd android && ./gradlew bundleRelease",
     "build:android:release:production": "bun run ./scripts/run-with-production-mobile-env.ts -- bun run build:android:release",
     "with:production-release-env": "bun run ./scripts/run-with-production-mobile-env.ts --",

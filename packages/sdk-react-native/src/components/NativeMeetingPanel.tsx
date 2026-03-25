@@ -531,10 +531,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(139, 92, 246, 0.18)",
+    backgroundColor: "rgba(27, 182, 166, 0.18)",
   },
   handBadgeText: {
-    color: "#ede9fe",
+    color: "#c8fff8",
     fontSize: 12,
     fontWeight: "700",
   },

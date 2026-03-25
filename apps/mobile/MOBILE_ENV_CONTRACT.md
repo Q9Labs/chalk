@@ -16,12 +16,16 @@ Rules:
 - if local mobile host auth drifts, run `bun run mobile:sync-local-env`
 - never trust a local host key for Play/TestFlight builds
 - Android closed/prod releases: CI artifact only
+- sideloadable production Android APKs: CI artifact only
 - Android signing material stays in GitHub Secrets, recreated only on the runner
 - Play upload credentials stay in GitHub Secrets or local ignored files, never git
 
 Current Android release workflow:
 
 - `.github/workflows/mobile-android-release.yml`
+- supported outputs:
+  - `mobile-android-release-aab`
+  - `mobile-android-release-apk`
 
 Current Android publish target:
 

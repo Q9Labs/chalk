@@ -10,11 +10,14 @@
 - or provide `ANDROID_UPLOAD_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PROPERTIES` in GitHub Secrets for CI builds
 - run local prod builds only through `scripts/run-with-production-mobile-env.ts`
 - confirm `bundleRelease` succeeds
+- confirm `assembleRelease` succeeds when a sideload APK is needed
 - record the shipped AAB sha256 from `android/app/build/outputs/bundle/release/app-release.aab`
+- record the sideload APK sha256 from `android/app/build/outputs/apk/release/app-release.apk` when generated
 - verify Play bundle library contains the uploaded versionCode
 - verify the `internal` track points at the intended versionCode after upload
 - confirm release build host key comes from `VITE_CHALK_API_KEY` secret, not local `.env.local`
 - confirm `bun run --cwd apps/mobile verify:production-host-key` passes before any uploadable build
+- prefer workflow `.github/workflows/mobile-android-release.yml` with `artifact_format=apk|both` for device-installable prod builds
 - verify `SYSTEM_ALERT_WINDOW` is not required before release
 - verify Android V1 release is acceptable without mobile-originated screen share
 - confirm production build has no cleartext HTTP dependency

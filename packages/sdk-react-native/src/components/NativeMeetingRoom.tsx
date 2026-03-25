@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(91,33,182,0.88)",
+    backgroundColor: "rgba(27, 182, 166, 0.9)",
   },
   shareChipText: {
     color: "#ffffff",
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#8b5cf6",
+    backgroundColor: Theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   controlButtonActive: {
-    backgroundColor: "#8b5cf6",
+    backgroundColor: Theme.colors.primary,
   },
   controlButtonDanger: {
     backgroundColor: "#ef4444",
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#8b5cf6",
+    backgroundColor: Theme.colors.primary,
   },
   controlBadgeText: {
     color: "#ffffff",
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#8b5cf6",
+    backgroundColor: Theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },

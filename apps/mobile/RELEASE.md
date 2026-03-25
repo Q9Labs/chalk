@@ -35,6 +35,10 @@ Preferred when the prod host key must come from GitHub, not local env:
 
 1. Trigger workflow:
    - `.github/workflows/mobile-android-release.yml`
+   - choose `artifact_format`:
+     - `aab` for Play
+     - `apk` for direct sideload
+     - `both` for both artifacts from the same verified secret-backed build
 2. Workflow injects:
    - `EXPO_PUBLIC_API_URL=https://chalk-api.q9labs.ai`
    - `EXPO_PUBLIC_WS_URL=wss://chalk-ws.q9labs.ai/ws`
@@ -42,8 +46,12 @@ Preferred when the prod host key must come from GitHub, not local env:
 3. Workflow rebuilds signing files from GitHub Secrets:
    - `ANDROID_UPLOAD_KEYSTORE_BASE64`
    - `ANDROID_KEYSTORE_PROPERTIES`
-4. Download the produced signed AAB artifact, then upload/promote with `gplay` if the workflow itself is not publishing yet
-5. Treat the CI artifact as the only uploadable Android artifact
+4. Workflow can emit:
+   - `mobile-android-release-aab`
+   - `mobile-android-release-apk`
+5. Download the produced signed AAB artifact, then upload/promote with `gplay` if the workflow itself is not publishing yet
+6. Use the signed APK artifact for direct device installs when Play/TestFlight review or device-side caching blocks fast validation
+7. Treat CI artifacts as the only uploadable Android artifacts
 
 ## Google Play service account
 
@@ -107,6 +115,7 @@ Current known behavior:
 
 - for this Play app, internal-track changes are sent for review automatically
 - do **not** pass `--changes-not-sent-for-review`; Play rejects the commit with `400`
+- fastest sideload lane is now workflow `artifact_format=apk` and downloading `mobile-android-release-apk`
 
 ## Optional metadata
 
@@ -148,9 +157,9 @@ What is already done:
 
 - `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj` now carries:
   - `DEVELOPMENT_TEAM = 5K9635LZ6F`
-  - `MARKETING_VERSION = 0.0.15`
-  - `CURRENT_PROJECT_VERSION = 15`
-- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.15 (15)`
+  - `MARKETING_VERSION = 0.0.16`
+  - `CURRENT_PROJECT_VERSION = 16`
+- `apps/mobile/ios/Chalk/Info.plist` is aligned to `0.0.16 (16)`
 
 Current blocker:
 
@@ -171,10 +180,10 @@ Next exact steps:
    - confirm `Automatically manage signing` is enabled
 3. Archive from CLI
    - `cd apps/mobile`
-   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -workspace ios/Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath ios/build/Chalk-0.0.15.xcarchive archive -allowProvisioningUpdates`
+   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -workspace ios/Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -archivePath ios/build/Chalk-0.0.16.xcarchive archive -allowProvisioningUpdates`
 4. Export/upload to TestFlight
    - `cd apps/mobile`
-   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -exportArchive -archivePath ios/build/Chalk-0.0.15.xcarchive -exportPath /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/fresh-0.0.15 -exportOptionsPlist /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/ExportOptions.plist -allowProvisioningUpdates`
+   - `EXPO_PUBLIC_CHALK_API_KEY=<current-prod-key> bun run ./scripts/run-with-production-mobile-env.ts -- xcodebuild -exportArchive -archivePath ios/build/Chalk-0.0.16.xcarchive -exportPath /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/fresh-0.0.16 -exportOptionsPlist /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/ExportOptions.plist -allowProvisioningUpdates`
 
 Human checks before wider rollout:
 

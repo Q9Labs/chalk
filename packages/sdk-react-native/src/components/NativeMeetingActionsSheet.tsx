@@ -2,6 +2,7 @@ import { CallEnd01Icon, Chat01Icon, ComputerScreenShareIcon, Link01Icon, Mic01Ic
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { memo } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
+import { Theme } from "../ui/theme";
 
 interface NativeMeetingActionsSheetProps {
   visible: boolean;
@@ -36,7 +37,7 @@ interface NativeMeetingActionsSheetProps {
   onLeaveMeeting: () => void;
 }
 
-const accent = "#8b5cf6";
+const accent = Theme.colors.primary;
 const tileBackground = "#11192a";
 
 function NativeMeetingActionsSheetBase({
