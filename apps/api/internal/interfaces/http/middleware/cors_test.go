@@ -21,6 +21,7 @@ func TestCORS_AllowedOrigins(t *testing.T) {
 		"http://127.0.0.1:8080", // Any 127.0.0.1 port allowed
 		"http://127.0.0.1",      // 127.0.0.1 without port
 		"https://chalk.q9labs.ai",
+		"https://chalkmeet.com",
 		"https://chalk-5bc.pages.dev",
 		"https://dev.dwd4jsk5p7j52.amplifyapp.com",
 		"https://portal.tuitionhighway.com",
@@ -261,6 +262,7 @@ func TestIsOriginAllowedForTenant_PlatformOrigins(t *testing.T) {
 	// Platform origins should always be allowed
 	platformOrigins := []string{
 		"https://chalk.q9labs.ai",
+		"https://chalkmeet.com",
 		"https://chalk-5bc.pages.dev",
 		"https://collabdash-dev.vercel.app",
 		"https://app.collabdash.io",

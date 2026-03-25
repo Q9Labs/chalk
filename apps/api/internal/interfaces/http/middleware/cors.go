@@ -14,6 +14,7 @@ var localhostPattern = regexp.MustCompile(`^http://(localhost|127\.0\.0\.1)(:\d+
 // PlatformOrigins are the static origins always allowed by the platform
 var PlatformOrigins = map[string]bool{
 	"https://chalk.q9labs.ai":                   true,
+	"https://chalkmeet.com":                     true,
 	"https://chalk-5bc.pages.dev":               true,
 	"https://collabdash-dev.vercel.app":         true,
 	"https://app.collabdash.io":                 true,

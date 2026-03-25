@@ -114,6 +114,7 @@ locals {
     POST_MEETING_WHISPER_REDIS_QUEUE = "transcription:jobs"
     RESEND_FROM_EMAIL                = var.resend_from_email
     INTERNAL_APP_URL                 = var.internal_app_url
+    INTERNAL_APP_URLS                = var.internal_app_urls
     AUTH_COOKIE_DOMAIN               = var.auth_cookie_domain
     API_PUBLIC_URL                   = "https://${local.api_domain}"
     ADMIN_ENABLED                    = "true"

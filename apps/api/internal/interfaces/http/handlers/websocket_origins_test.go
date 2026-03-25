@@ -18,6 +18,8 @@ func TestBuildAllowedWSOrigins_IncludesEmanTimeOrigins(t *testing.T) {
 	assert.Contains(t, origins, "dev-app.emantime.com")
 	assert.Contains(t, origins, "https://portal.emantime.com")
 	assert.Contains(t, origins, "portal.emantime.com")
+	assert.Contains(t, origins, "https://chalkmeet.com")
+	assert.Contains(t, origins, "chalkmeet.com")
 }
 
 func TestBuildAllowedWSOrigins_IncludesEnvConfiguredOrigins(t *testing.T) {

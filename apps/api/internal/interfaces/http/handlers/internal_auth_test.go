@@ -261,6 +261,45 @@ func TestInternalAuthGoogle_ExchangesOAuthCodeAndEstablishesSession(t *testing.T
 	require.Equal(t, "hasan@q9labs.ai", bodyJSON["user"].(map[string]any)["email"])
 }
 
+func TestInternalAuthGoogle_AcceptsMultipleHostedOrigins(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	queryStub := &internalAuthQueriesStub{}
+	handler := NewInternalAuthHandler(
+		&config.Config{Auth: config.AuthConfig{
+			GoogleClientID:     "google-client-id",
+			GoogleClientSecret: "google-client-secret",
+			InternalAppURL:     "https://chalk.q9labs.ai",
+			InternalAppURLs:    "https://chalkmeet.com, https://chalk.q9labs.ai",
+		}},
+		queryStub,
+		infraAuth.NewJWTService(infraAuth.DefaultJWTConfig()),
+		infraAuth.NewAPIKeyService(),
+		nil,
+	)
+	handler.googleCodeExchanger = func(_ context.Context, code, redirectURI string) (*googleIdentity, error) {
+		require.Equal(t, "oauth-code", code)
+		require.Equal(t, "https://chalkmeet.com", redirectURI)
+		return &googleIdentity{Email: "hasan@q9labs.ai", EmailVerified: true}, nil
+	}
+
+	body := bytes.NewBufferString(`{"code":"oauth-code"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/internal/auth/google", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://chalkmeet.com")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.Google(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, queryStub.createUserCalls)
+	require.Equal(t, 1, queryStub.createSessionCalls)
+	require.Equal(t, 1, queryStub.createTenantCalls)
+	require.Equal(t, 1, queryStub.createWorkspaceCalls)
+	require.Contains(t, w.Header().Get("Set-Cookie"), internalSessionCookieName+"=")
+}
+
 func TestInternalAuthGoogle_RejectsInvalidOrigin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler := NewInternalAuthHandler(

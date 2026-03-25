@@ -32,6 +32,8 @@ func buildAllowedWSOrigins() []string {
 	origins = append(origins,
 		"https://chalk.q9labs.ai",
 		"chalk.q9labs.ai", // Some requests may not include scheme
+		"https://chalkmeet.com",
+		"chalkmeet.com",
 		"https://collabdash-dev.vercel.app",
 		"collabdash-dev.vercel.app",
 		"https://app.collabdash.io",

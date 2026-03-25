@@ -71,6 +71,7 @@ type AuthConfig struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	InternalAppURL     string
+	InternalAppURLs    string
 
 	// Cookie settings (cross-subdomain in prod).
 	CookieDomain string
@@ -206,6 +207,7 @@ func Load() (*Config, error) {
 			GoogleClientID:     getEnv("AUTH_GOOGLE_CLIENT_ID", ""),
 			GoogleClientSecret: getEnv("AUTH_GOOGLE_CLIENT_SECRET", ""),
 			InternalAppURL:     getEnv("INTERNAL_APP_URL", "http://localhost:3070"),
+			InternalAppURLs:    getEnv("INTERNAL_APP_URLS", ""),
 			CookieDomain:       getEnv("AUTH_COOKIE_DOMAIN", ""),
 			LinkSigningKey:     getEnv("AUTH_LINK_SIGNING_KEY", getEnv("JWT_SIGNING_KEY", "development-secret-key")),
 			SessionTTLDays:     getEnvInt("AUTH_SESSION_TTL_DAYS", 30),

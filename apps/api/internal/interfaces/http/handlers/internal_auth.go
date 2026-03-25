@@ -348,9 +348,10 @@ func (h *InternalAuthHandler) resolveGoogleRedirectURI(r *http.Request) string {
 
 func (h *InternalAuthHandler) isAllowedGoogleOrigin(origin string) bool {
 	if h.cfg != nil {
-		configuredOrigin, ok := normalizedOrigin(h.cfg.Auth.InternalAppURL)
-		if ok && strings.EqualFold(origin, configuredOrigin) {
-			return true
+		for _, configuredOrigin := range h.allowedGoogleOrigins() {
+			if strings.EqualFold(origin, configuredOrigin) {
+				return true
+			}
 		}
 	}
 
@@ -378,6 +379,48 @@ func normalizedOrigin(rawURL string) (string, bool) {
 		return "", false
 	}
 	return parsed.Scheme + "://" + parsed.Host, true
+}
+
+func (h *InternalAuthHandler) allowedGoogleOrigins() []string {
+	if h.cfg == nil {
+		return nil
+	}
+
+	rawOrigins := parseConfiguredOrigins(h.cfg.Auth.InternalAppURLs)
+	if len(rawOrigins) == 0 {
+		rawOrigins = []string{h.cfg.Auth.InternalAppURL}
+	}
+
+	origins := make([]string, 0, len(rawOrigins))
+	seen := make(map[string]struct{}, len(rawOrigins))
+	for _, raw := range rawOrigins {
+		origin, ok := normalizedOrigin(raw)
+		if !ok {
+			continue
+		}
+		if _, exists := seen[origin]; exists {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+
+	return origins
+}
+
+func parseConfiguredOrigins(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	return origins
 }
 
 func (h *InternalAuthHandler) currentUser(ctx context.Context, c *gin.Context) (*db.User, int, string) {

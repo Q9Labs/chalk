@@ -3,8 +3,8 @@ package s3
 import "testing"
 
 func TestMergeAndSortOrigins_DedupAndSorted(t *testing.T) {
-	static := []string{"https://a.example", "https://b.example", "https://a.example"}
-	tenant := []string{"https://c.example", "https://b.example"}
+	static := []string{"https://a.example", "https://b.example", "https://chalkmeet.com", "https://a.example"}
+	tenant := []string{"https://c.example", "https://b.example", "https://chalk.q9labs.ai"}
 
 	got := mergeAndSortOrigins(static, tenant)
 
@@ -12,6 +12,8 @@ func TestMergeAndSortOrigins_DedupAndSorted(t *testing.T) {
 		"https://a.example",
 		"https://b.example",
 		"https://c.example",
+		"https://chalk.q9labs.ai",
+		"https://chalkmeet.com",
 	}
 
 	if len(got) != len(want) {
@@ -23,4 +25,3 @@ func TestMergeAndSortOrigins_DedupAndSorted(t *testing.T) {
 		}
 	}
 }
-

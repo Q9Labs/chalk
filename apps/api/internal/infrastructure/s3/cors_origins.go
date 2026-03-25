@@ -113,6 +113,7 @@ func NewCORSOriginsService(cfg CORSOriginsConfig, queries *db.Queries, logger *s
 		githubToken: cfg.GitHubToken,
 		staticOrigins: []string{
 			"https://chalk.q9labs.ai",
+			"https://chalkmeet.com",
 			"https://chalk-5bc.pages.dev",
 			"https://collabdash-dev.vercel.app",
 			"https://app.collabdash.io",

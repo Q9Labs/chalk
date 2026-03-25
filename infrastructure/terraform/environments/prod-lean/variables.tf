@@ -175,6 +175,12 @@ variable "internal_app_url" {
   default     = "https://chalk.q9labs.ai"
 }
 
+variable "internal_app_urls" {
+  description = "Comma-separated internal app URLs for magic links"
+  type        = string
+  default     = "https://chalkmeet.com,https://chalk.q9labs.ai"
+}
+
 variable "auth_cookie_domain" {
   description = "Auth cookie domain"
   type        = string
