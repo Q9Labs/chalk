@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Web/domain: `chalkmeet.com` is now the canonical Chalk app URL** — web-generated invite/share/privacy links now default to `https://chalkmeet.com`, Cloudflare Pages/web config now exposes the new canonical public origin, and mobile/store/docs surfaces now present `chalkmeet.com` while keeping `chalk.q9labs.ai` valid.
+- **Mobile/dev: diagnostics launcher now uses an icon-only affordance** — the development-only diagnostics entry point stays top-right but now uses a compact bug/debug icon button instead of a `DEV` text pill, reducing visual noise while keeping the same quick access.
 
 ### Fixed
 

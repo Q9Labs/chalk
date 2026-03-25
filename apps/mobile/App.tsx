@@ -1,8 +1,10 @@
 import { wideEvents } from "@q9labs/chalk-core";
 import { ChalkNativeProvider, NativeVideoConference } from "@q9labs/chalk-react-native";
+import { Bug02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
 import { fetchDevDiagnosticsAuth, recordWideEvent, setDevDiagnosticsAuthInfo, setDevDiagnosticsEnvironment, setDevDiagnosticsStaticAuth, setDevDiagnosticsToken } from "./src/lib/dev-diagnostics";
 import { clearJoinContext, getApiUrl, getHostTokenProvider, getJoinAccessToken, getMobileDebugContext, getWsUrl, type LobbyRoute, type MobileRoute, parseUrlLike, resolveJoinToken } from "./src/lib/chalk";
@@ -148,8 +150,8 @@ export default function App(): React.JSX.Element {
       {route.kind === "lobby" ? <MeetingScreen apiUrl={apiUrl} diagnosticsEnabled={diagnosticsEnabled} onClose={goHome} route={route} tokenProvider={tokenProvider} wideEvents={diagnosticsWideEvents} wsUrl={wsUrl} /> : null}
       {diagnosticsEnabled ? (
         <>
-          <Pressable onPress={() => setDiagnosticsOpen(true)} style={styles.devPill}>
-            <Text style={styles.devPillText}>DEV</Text>
+          <Pressable hitSlop={8} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
+            <HugeiconsIcon color="#11c2b4" icon={Bug02Icon} size={18} />
           </Pressable>
           <DevDiagnosticsSheet isRefreshingAuth={isRefreshingDiagnosticsAuth} onClose={() => setDiagnosticsOpen(false)} onRefreshAuth={refreshDiagnosticsAuth} visible={diagnosticsOpen} />
         </>
@@ -186,24 +188,22 @@ const styles = StyleSheet.create({
   appShell: {
     flex: 1,
   },
-  devPill: {
+  devButton: {
     position: "absolute",
     top: 58,
     right: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#11c2b4",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(11, 18, 21, 0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(17, 194, 180, 0.28)",
     shadowColor: "#11c2b4",
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
-  },
-  devPillText: {
-    color: "#041110",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
   },
 });
