@@ -164,11 +164,12 @@ export function NativeMeetingPanel({
 
                 {panel === "settings" && (
                   <View style={styles.settingsContainer}>
-                    <Text style={styles.sectionLabel}>Layout</Text>
+                    <Text style={styles.sectionLabel}>Participant Layout</Text>
+                    <Text style={styles.sectionCopy}>These controls tune participant arrangement and strip placement. Shared content still takes over the stage automatically.</Text>
                     <View style={styles.rowWrap}>
                       {(["auto", "grid", "spotlight", "speaker"] as const).map((option) => (
                         <Pressable key={option} onPress={() => onSetLayout(option)} style={[styles.chip, layout === option && styles.chipActive]}>
-                          <Text style={[styles.chipText, layout === option && styles.chipTextActive]}>{option.charAt(0).toUpperCase() + option.slice(1)}</Text>
+                          <Text style={[styles.chipText, layout === option && styles.chipTextActive]}>{layoutOptionLabel(option)}</Text>
                         </Pressable>
                       ))}
                     </View>
@@ -298,6 +299,21 @@ function panelIcon(panel: NativeMeetingPanelName | null): any {
   }
 }
 
+function layoutOptionLabel(layout: LayoutMode): string {
+  switch (layout) {
+    case "auto":
+      return "Auto";
+    case "grid":
+      return "Grid";
+    case "spotlight":
+      return "Focus";
+    case "speaker":
+      return "Speaker Rail";
+    default:
+      return layout;
+  }
+}
+
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -363,6 +379,13 @@ const styles = StyleSheet.create({
     color: Theme.colors.mutedForeground,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  sectionCopy: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: -8,
+    marginBottom: 4,
   },
   rowWrap: {
     flexDirection: "row",

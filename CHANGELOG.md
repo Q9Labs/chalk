@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Web/domain: `chalkmeet.com` is now the canonical Chalk app URL** — web-generated invite/share/privacy links now default to `https://chalkmeet.com`, Cloudflare Pages/web config now exposes the new canonical public origin, and mobile/store/docs surfaces now present `chalkmeet.com` while keeping `chalk.q9labs.ai` valid.
 - **Mobile/dev: diagnostics launcher now uses an icon-only affordance** — the development-only diagnostics entry point stays top-right but now uses a compact bug/debug icon button instead of a `DEV` text pill, reducing visual noise while keeping the same quick access.
 - **Mobile/meeting room: the old debug-ish bottom sheet is now a real actions sheet** — the room now opens a dedicated dark action grid with icon tiles for mute/video/share/invite/chat/people/hand/reactions/whiteboard/record/transcript/settings plus a prominent leave button, while deep device/chat/transcript panels stay behind it.
+- **Mobile/meeting room: stage logic is now content-first with high-volume grid handling** — native meeting rooms now derive stage content from live screen share and whiteboard state instead of treating non-grid layouts as implicit single-speaker spotlight, compact rooms page participants in quads, wider rooms virtualize participant rows, local screen-share previews are suppressed, and wide whiteboard-plus-share sessions can split the stage.
 
 ### Fixed
 

@@ -1,8 +1,7 @@
 import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
-import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
-import { CallEnd01Icon, ComputerScreenShareIcon, Mic01Icon, MicOff01Icon, MoreHorizontalIcon, Video01Icon, VideoOffIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
+import { CallEnd01Icon, ComputerScreenShareIcon, Mic01Icon, MicOff01Icon, MoreHorizontalIcon, Video01Icon, VideoOffIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import { useChalkSession, useSession } from "../context/chalk-native-provider";
 import { useChat } from "../hooks/useChat";
@@ -19,12 +18,12 @@ import { useTranscripts } from "../hooks/useTranscripts";
 import { useWhiteboard } from "../hooks/useWhiteboard";
 import { Theme } from "../ui/theme";
 import { buildChalkInviteLink } from "../utils/build-chalk-invite-link";
-import { NativeFaceAvatar } from "./NativeFaceAvatar";
-import { NativeGradientSurface } from "./NativeGradientSurface";
-import { NativeMediaView } from "./NativeMediaView";
 import { NativeMeetingActionsSheet } from "./NativeMeetingActionsSheet";
 import { NativeMeetingPanel, type NativeMeetingPanelName } from "./NativeMeetingPanel";
 import { NativeReactionPicker } from "./NativeReactionPicker";
+import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid";
+import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage";
+import { useNativeMeetingRoomDerived } from "./native-meeting-room/useNativeMeetingRoomDerived";
 
 type RoomParticipant = ParticipantState["participants"][number];
 
@@ -62,6 +61,12 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
   const layout = useLayout();
   const panels = usePanels();
   const whiteboard = useWhiteboard();
+  const derived = useNativeMeetingRoomDerived({
+    participants: participants.participants as readonly RoomParticipant[],
+    localParticipant: participants.localParticipant as RoomParticipant | null,
+    screenShare,
+    isWhiteboardOpen: whiteboard.isOpen,
+  });
 
   const [actionsOpen, setActionsOpen] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
@@ -70,11 +75,21 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
 
   const isHost = (participants.localParticipant?.role ?? "participant") === "host";
   const panel = localPanel ?? (panels.activePanel as NativeMeetingPanelName | null);
-  const stageParticipant = useMemo(
-    () => pickStageParticipant(screenShare.sharerParticipantId, participants.remoteParticipants, participants.localParticipant, participants.activeSpeaker),
-    [screenShare.sharerParticipantId, participants.remoteParticipants, participants.localParticipant, participants.activeSpeaker],
-  );
-  const stageTrack = screenShare.isActive ? (screenShare.videoTrack ?? stageParticipant?.screenShareTrack ?? stageParticipant?.videoTrack ?? null) : (stageParticipant?.videoTrack ?? participants.localParticipant?.videoTrack ?? null);
+  const selfName = participants.localParticipant?.displayName || "Guest";
+  const isMuted = !media.isAudioEnabled;
+  const isCameraOff = !media.isVideoEnabled;
+  const handRaised = interactions.isHandRaised;
+  const raisedHandCount = interactions.raisedHandCount;
+  const activeReactions = interactions.activeReactions.slice(-3);
+  const canChat = features?.chat !== false;
+  const canParticipants = features?.participants !== false;
+  const canTranscripts = features?.transcripts !== false;
+  const canSettings = features?.settings !== false;
+  const canScreenShare = features?.screenShare !== false;
+  const canRecording = features?.recording !== false;
+  const canReactions = features?.reactions !== false;
+  const canHandRaise = features?.handRaise !== false;
+  const canWhiteboard = features?.whiteboard !== false;
 
   useEffect(() => {
     if (panel === "chat") {
@@ -126,104 +141,33 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
     });
   }, [room.roomId, room.roomName, runAsync, session]);
 
-  const stageName = stageParticipant?.displayName || "Participant";
-  const selfName = participants.localParticipant?.displayName || "Guest";
-  const isMuted = !media.isAudioEnabled;
-  const isCameraOff = !media.isVideoEnabled;
-  const handRaised = interactions.isHandRaised;
-  const raisedHandCount = interactions.raisedHandCount;
-  const activeReactions = interactions.activeReactions.slice(-3);
-  const selfAvatarRecipe = useMemo(() => getParticipantAvatarRecipe(selfName), [selfName]);
-  const canChat = features?.chat !== false;
-  const canParticipants = features?.participants !== false;
-  const canTranscripts = features?.transcripts !== false;
-  const canSettings = features?.settings !== false;
-  const canScreenShare = features?.screenShare !== false;
-  const canRecording = features?.recording !== false;
-  const canReactions = features?.reactions !== false;
-  const canHandRaise = features?.handRaise !== false;
-  const canWhiteboard = features?.whiteboard !== false;
-
   return (
     <View style={styles.roomScreen}>
       <View style={styles.stageFrame}>
-        {layout.layout === "grid" ? (
-          <View style={styles.grid}>
-            {participants.participants.map((participant) => (
-              <View key={participant.id} style={styles.gridTile}>
-                <NativeMediaView label={participant.displayName} participant={participant as RoomParticipant} track={participant.videoTrack ?? participant.screenShareTrack} />
-                {participant.handRaised ? (
-                  <View style={styles.gridHandBadge}>
-                    <HugeiconsIcon color="#ffffff" icon={WavingHand01Icon} size={14} />
-                  </View>
-                ) : null}
-              </View>
-            ))}
-          </View>
+        {derived.isStageMode ? (
+          <NativeMeetingStage
+            activeReactions={activeReactions}
+            handRaised={handRaised}
+            isCompactViewport={derived.isCompactViewport}
+            isHost={isHost}
+            isMuted={isMuted}
+            isRecording={recording.isRecording}
+            layoutMode={layout.layout}
+            primaryContent={derived.primaryContent}
+            raisedHandCount={raisedHandCount}
+            screenShareTrack={derived.screenShareTrack}
+            screenSharer={derived.screenSharer}
+            selfName={selfName}
+            stripParticipants={derived.allParticipants}
+            whiteboard={{
+              isOpen: whiteboard.isOpen,
+              canDraw: whiteboard.canDraw,
+              elementCount: whiteboard.elements.length,
+              participantCount: whiteboard.openParticipants.length,
+            }}
+          />
         ) : (
-          <View style={styles.stageSurface}>
-            <NativeGradientSurface borderRadius={36} participantId={stageName} />
-            {stageTrack ? (
-              <View style={styles.stageVideoContainer}>
-                <NativeMediaView participant={stageParticipant as RoomParticipant} track={stageTrack} zOrder={0} />
-              </View>
-            ) : (
-              <View style={styles.stageCenter}>
-                <NativeFaceAvatar name={stageName} size={160} />
-              </View>
-            )}
-
-            {raisedHandCount > 0 ? (
-              <View style={styles.stageChip}>
-                <HugeiconsIcon color="#ffffff" icon={WavingHand01Icon} size={14} />
-                <Text style={styles.stageChipText}>{raisedHandCount === 1 ? "1 hand raised" : `${raisedHandCount} hands raised`}</Text>
-              </View>
-            ) : null}
-
-            {recording.isRecording ? (
-              <View style={styles.recordingChip}>
-                <View style={styles.recordingDot} />
-                <Text style={styles.recordingChipText}>REC</Text>
-              </View>
-            ) : null}
-
-            {screenShare.isLocalSharing ? (
-              <View style={styles.shareChip}>
-                <HugeiconsIcon color="#ffffff" icon={ComputerScreenShareIcon} size={14} />
-                <Text style={styles.shareChipText}>Sharing</Text>
-              </View>
-            ) : null}
-
-            {activeReactions.length > 0 ? (
-              <View style={styles.reactionRail}>
-                {activeReactions.map((reaction) => (
-                  <View key={reaction.id} style={styles.reactionBubble}>
-                    <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
-                    <Text numberOfLines={1} style={styles.reactionName}>
-                      {reaction.participantName}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-
-            <View style={styles.selfPill}>
-              <View style={[styles.selfAvatar, { backgroundColor: selfAvatarRecipe.colors.primary }]}>
-                <Text style={styles.selfAvatarText}>{selfAvatarRecipe.initials}</Text>
-              </View>
-              <Text style={styles.selfPillName}>{isHost ? "Host" : selfName}</Text>
-              {handRaised ? (
-                <View style={styles.handRaisedIndicator}>
-                  <HugeiconsIcon color="#ffffff" icon={WavingHand01Icon} size={10} />
-                </View>
-              ) : null}
-              {isMuted ? (
-                <View style={styles.micOffIndicator}>
-                  <HugeiconsIcon color="#ffffff" icon={MicOff01Icon} size={10} />
-                </View>
-              ) : null}
-            </View>
-          </View>
+          <NativeMeetingGrid gridPages={derived.gridPages} isCompactViewport={derived.isCompactViewport} layoutMode={layout.layout} participants={derived.allParticipants} />
         )}
       </View>
 
@@ -355,14 +299,6 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
   );
 }
 
-function pickStageParticipant(sharerParticipantId: string | null, remoteParticipants: readonly RoomParticipant[], localParticipant: RoomParticipant | null, activeSpeaker: RoomParticipant | null): RoomParticipant | null {
-  if (sharerParticipantId) {
-    return remoteParticipants.find((participant) => participant.id === sharerParticipantId) ?? localParticipant;
-  }
-
-  return activeSpeaker ?? remoteParticipants.find((participant) => participant.videoTrack) ?? remoteParticipants[0] ?? localParticipant;
-}
-
 const styles = StyleSheet.create({
   roomScreen: {
     flex: 1,
@@ -375,171 +311,26 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 36,
     overflow: "hidden",
-    backgroundColor: "#101314",
-  },
-  stageSurface: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-  },
-  stageVideoContainer: {
-    flex: 1,
-    borderRadius: 36,
-    overflow: "hidden",
-  },
-  stageCenter: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stageChip: {
-    position: "absolute",
-    top: 16,
-    left: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(17,25,40,0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  stageChipText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  recordingChip: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(127,29,29,0.88)",
-  },
-  recordingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#ff7b7b",
-  },
-  recordingChipText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  shareChip: {
-    position: "absolute",
-    top: 60,
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(27, 182, 166, 0.9)",
-  },
-  shareChipText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  reactionRail: {
-    position: "absolute",
-    top: 18,
-    alignSelf: "center",
-    gap: 8,
-  },
-  reactionBubble: {
-    minWidth: 88,
-    maxWidth: 160,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(9,15,24,0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  reactionEmoji: {
-    fontSize: 18,
-  },
-  reactionName: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-    maxWidth: 92,
-  },
-  selfPill: {
-    position: "absolute",
-    left: 16,
-    bottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingLeft: 4,
-    paddingRight: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  selfAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  selfAvatarText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  selfPillName: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  handRaisedIndicator: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  micOffIndicator: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#ef4444",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: Theme.colors.stageBackground,
   },
   bottomDock: {
-    flexDirection: "row",
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: Platform.OS === "ios" ? 22 : 10,
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-    width: "100%",
+    pointerEvents: "box-none",
   },
   controlPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#111111",
-    borderRadius: 32,
-    padding: 4,
-    gap: 2,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: Theme.colors.controlsBackground,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   controlButton: {
     width: 48,
@@ -547,57 +338,32 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
-  },
-  controlButtonActive: {
-    backgroundColor: Theme.colors.primary,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   controlButtonDanger: {
-    backgroundColor: "#ef4444",
+    backgroundColor: "rgba(239,68,68,0.24)",
+  },
+  controlButtonActive: {
+    backgroundColor: "rgba(27,182,166,0.24)",
   },
   controlButtonEndCall: {
-    width: 56,
-    backgroundColor: "#ef4444",
+    backgroundColor: "rgba(239,68,68,0.92)",
   },
   controlBadge: {
     position: "absolute",
     top: 6,
-    right: 6,
+    right: 4,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    paddingHorizontal: 4,
+    backgroundColor: Theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.colors.primary,
+    paddingHorizontal: 4,
   },
   controlBadgeText: {
     color: "#ffffff",
     fontSize: 10,
-    fontWeight: "700",
-  },
-  grid: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Theme.spacing.md,
-    padding: 16,
-  },
-  gridTile: {
-    width: "48.5%",
-    aspectRatio: 0.78,
-    borderRadius: 24,
-    overflow: "hidden",
-  },
-  gridHandBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
+    fontWeight: "800",
   },
 });
