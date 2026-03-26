@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { buildDevDiagnosticsCopyText, classifyTarget, decodeTokenClaimsPreview, getDevDiagnosticsState, maskSecret, recordDevDiagnosticsLifecycleEvent, recordManualRequest, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsEnvironment } from "./dev-diagnostics";
+import {
+  buildDevDiagnosticsCopyText,
+  classifyTarget,
+  decodeTokenClaimsPreview,
+  getDevDiagnosticsState,
+  maskSecret,
+  recordDevDiagnosticsLifecycleEvent,
+  recordManualRequest,
+  resetDevDiagnosticsState,
+  resolveDevDiagnosticsMode,
+  setDevDiagnosticsEnvironment,
+  setDevDiagnosticsSession,
+} from "./dev-diagnostics";
 
 describe("dev diagnostics helpers", () => {
   afterEach(() => {
@@ -72,5 +84,80 @@ describe("dev diagnostics helpers", () => {
     expect(copied.requests.some((entry) => entry.path === "/api/v1/rooms" && entry.requestId === "req-123")).toBe(true);
     expect(copied.timeline.some((entry) => entry.eventType === "debug.lifecycle")).toBe(true);
     expect(copied.timeline.some((entry) => entry.eventType === "api.request")).toBe(true);
+  });
+
+  it("does not append duplicate screen-share diagnostics for the same session snapshot", () => {
+    const snapshot = {
+      phase: "meeting",
+      roomId: "room-1",
+      roomName: "Room 1",
+      joinNonce: 1,
+      pendingJoinRequest: false,
+      activeJoinNonce: null,
+      lastJoinError: null,
+      connectionStatus: "connected",
+      isConnected: true,
+      isJoining: false,
+      session: {
+        activeRoomStatus: "connected",
+        websocketConnectionState: "connected",
+        activeRoomHasRtkMeeting: true,
+        hasInFlightJoinPromise: false,
+        isDisposed: false,
+        activeRoomId: "room-1",
+        roomStateRoomId: "room-1",
+      },
+      meetingRoom: {
+        isHost: true,
+        participantCount: 2,
+        raisedHandCount: 0,
+        unreadChatCount: 0,
+        featureFlags: {
+          chat: true,
+          participants: true,
+          transcripts: true,
+          settings: true,
+          screenShare: false,
+          recording: true,
+          reactions: true,
+          handRaise: true,
+          whiteboard: true,
+        },
+        actionAvailability: {
+          screenShare: {
+            enabled: false,
+            reason: "feature-disabled",
+            detail: "features.screenShare=false in meeting room props",
+            isActive: false,
+            isLocalSharing: false,
+            sharerParticipantId: null,
+            visibleInBottomDock: false,
+            enabledInActionsSheet: false,
+          },
+          reactions: { enabled: true, reason: null, detail: null },
+          handRaise: { enabled: true, reason: null, detail: null },
+          chat: { enabled: true, reason: null, detail: null },
+          participants: { enabled: true, reason: null, detail: null },
+          transcripts: { enabled: true, reason: null, detail: null },
+          recording: { enabled: true, reason: null, detail: null },
+          settings: { enabled: true, reason: null, detail: null },
+          whiteboard: { enabled: true, reason: null, detail: null },
+          moderation: {
+            enabled: true,
+            reason: null,
+            detail: "local participant role=host",
+            canMuteOthers: true,
+            canUnmuteOthers: true,
+          },
+        },
+      },
+    } as const;
+
+    setDevDiagnosticsSession(snapshot as any);
+    const firstTimelineLength = getDevDiagnosticsState().timeline.length;
+
+    setDevDiagnosticsSession(snapshot as any);
+
+    expect(getDevDiagnosticsState().timeline.length).toBe(firstTimelineLength);
   });
 });

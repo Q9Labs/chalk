@@ -1,7 +1,7 @@
 import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
 import { CallEnd01Icon, ComputerScreenShareIcon, Mic01Icon, MicOff01Icon, MoreHorizontalIcon, Video01Icon, VideoOffIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import { useChalkSession, useSession } from "../context/chalk-native-provider";
 import { useChat } from "../hooks/useChat";
@@ -118,6 +118,7 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
       }),
     [canChat, canHandRaise, canParticipants, canRecording, canReactions, canScreenShare, canSettings, canTranscripts, canWhiteboard, chat.unreadCount, isHost, participants.participantCount, raisedHandCount, screenShare.isActive, screenShare.isLocalSharing, screenShare.sharerParticipantId],
   );
+  const lastDiagnosticsSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (panel === "chat") {
@@ -126,7 +127,17 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
   }, [panel, chat]);
 
   useEffect(() => {
-    onDiagnosticsChange?.(roomDiagnostics);
+    if (!onDiagnosticsChange) {
+      return;
+    }
+
+    const nextSignature = JSON.stringify(roomDiagnostics);
+    if (lastDiagnosticsSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    lastDiagnosticsSignatureRef.current = nextSignature;
+    onDiagnosticsChange(roomDiagnostics);
   }, [onDiagnosticsChange, roomDiagnostics]);
 
   const runAsync = useCallback(async (action: () => Promise<unknown>) => {

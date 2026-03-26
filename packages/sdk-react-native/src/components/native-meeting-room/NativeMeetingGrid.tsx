@@ -80,8 +80,8 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
     if (participants.length === 2) {
       return (
         <View style={styles.compactTwoUp}>
-          {participants.map((participant) => (
-            <View key={participant.id} style={styles.compactTwoUpTile}>
+          {participants.map((participant, index) => (
+            <View key={`${participant.id}-${index}`} style={styles.compactTwoUpTile}>
               <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
             </View>
           ))}
@@ -92,8 +92,8 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
     if (participants.length <= 4) {
       return (
         <View style={styles.compactQuad}>
-          {participants.map((participant) => (
-            <View key={participant.id} style={styles.compactQuadTile}>
+          {participants.map((participant, index) => (
+            <View key={`${participant.id}-${index}`} style={styles.compactQuadTile}>
               <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
             </View>
           ))}
@@ -119,8 +119,8 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
           renderItem={({ item: page }) => (
             <View style={[styles.page, { width: pageWidth }]}>
               <View style={styles.compactQuad}>
-                {page.map((participant) => (
-                  <View key={participant.id} style={styles.compactQuadTile}>
+                {page.map((participant, index) => (
+                  <View key={`${participant.id}-${index}`} style={styles.compactQuadTile}>
                     <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
                   </View>
                 ))}
@@ -153,7 +153,7 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
             const participant = row[columnIndex] ?? null;
 
             return (
-              <View key={participant?.id ?? `empty-${columnIndex + 1}`} style={styles.wideGridTile}>
+              <View key={`${participant?.id ?? "empty"}-${columnIndex + 1}`} style={styles.wideGridTile}>
                 {participant ? (
                   <View style={styles.wideGridTileInner}>
                     <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />

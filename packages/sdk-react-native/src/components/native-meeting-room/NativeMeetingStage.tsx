@@ -91,7 +91,7 @@ function NativeParticipantStrip({ participants, vertical }: { participants: read
       data={participants}
       horizontal={!vertical}
       initialNumToRender={vertical ? 4 : 5}
-      keyExtractor={(participant) => participant.id}
+      keyExtractor={(participant, index) => `${participant.id}-${index}`}
       maxToRenderPerBatch={vertical ? 5 : 6}
       removeClippedSubviews
       renderItem={({ item: participant }) => (
@@ -146,8 +146,8 @@ export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryConte
 
         {activeReactions.length > 0 ? (
           <View style={styles.reactionRail}>
-            {activeReactions.map((reaction) => (
-              <View key={reaction.id} style={styles.reactionBubble}>
+            {activeReactions.map((reaction, index) => (
+              <View key={`${reaction.id}-${index}`} style={styles.reactionBubble}>
                 <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
                 <Text numberOfLines={1} style={styles.reactionName}>
                   {reaction.participantName}

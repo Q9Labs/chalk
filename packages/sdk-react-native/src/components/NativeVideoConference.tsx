@@ -81,6 +81,7 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
   const pendingJoinRequestRef = useRef(initialPhase === "joining" || autoJoin);
   const activeJoinNonceRef = useRef<number | null>(null);
   const [meetingRoomDiagnostics, setMeetingRoomDiagnostics] = useState<NativeMeetingRoomDiagnosticsSnapshot | null>(null);
+  const lastDiagnosticsSignatureRef = useRef<string | null>(null);
 
   const buildEndData = useCallback((): NativeMeetingEndData => {
     const joinedAt = joinedAtRef.current ?? new Date();
@@ -135,8 +136,8 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
     return unsubscribe;
   }, [onError, session]);
 
-  useEffect(() => {
-    onDiagnosticsChange?.({
+  const diagnosticsSnapshot = useMemo<NativeVideoConferenceDiagnosticsSnapshot>(
+    () => ({
       phase,
       roomId,
       roomName: roomName || room.roomName || roomId,
@@ -149,8 +150,23 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
       isJoining: connection.isJoining,
       session: session.getDiagnosticsSnapshot(),
       meetingRoom: meetingRoomDiagnostics,
-    });
-  }, [connection.isConnected, connection.isJoining, connection.status, joinError, joinNonce, meetingRoomDiagnostics, onDiagnosticsChange, phase, room.roomName, roomId, roomName, session]);
+    }),
+    [connection.isConnected, connection.isJoining, connection.status, joinError, joinNonce, meetingRoomDiagnostics, phase, room.roomName, roomId, roomName, session],
+  );
+
+  useEffect(() => {
+    if (!onDiagnosticsChange) {
+      return;
+    }
+
+    const nextSignature = JSON.stringify(diagnosticsSnapshot);
+    if (lastDiagnosticsSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    lastDiagnosticsSignatureRef.current = nextSignature;
+    onDiagnosticsChange(diagnosticsSnapshot);
+  }, [diagnosticsSnapshot, onDiagnosticsChange]);
 
   useEffect(() => {
     if (!canExecuteNativeJoin(phase, joinNonce, connection.isJoining, connection.isConnected, pendingJoinRequestRef.current, activeJoinNonceRef.current)) {

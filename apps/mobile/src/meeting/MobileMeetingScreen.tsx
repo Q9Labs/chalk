@@ -1,6 +1,6 @@
 import { type ChalkSession } from "@q9labs/chalk-core";
 import { ChalkNativeProvider, NativeVideoConference, useSession, type NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { LobbyRoute } from "../lib/chalk";
 import { recordWideEvent } from "../lib/dev-diagnostics";
 
@@ -18,12 +18,14 @@ export interface MeetingScreenProps {
 }
 
 export function MobileMeetingScreen({ route, onClose, apiUrl, wsUrl, tokenProvider, diagnosticsEnabled, wideEvents, onDiagnosticsChange, onDiagnosticsError, onSessionChange }: MeetingScreenProps): React.JSX.Element {
+  const meetingFeatures = useMemo(() => ({ screenShare: true }), []);
+
   return (
     <ChalkNativeProvider apiUrl={apiUrl} debug={diagnosticsEnabled} tokenProvider={tokenProvider} wideEvents={wideEvents} wsUrl={wsUrl}>
       <MeetingDiagnosticsBridge onSessionChange={onSessionChange} />
       <NativeVideoConference
         autoJoin={false}
-        features={{ screenShare: true }}
+        features={meetingFeatures}
         initialPhase="lobby"
         onClose={onClose}
         onDiagnosticsChange={onDiagnosticsChange}

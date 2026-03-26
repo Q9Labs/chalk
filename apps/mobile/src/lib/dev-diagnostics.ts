@@ -173,6 +173,7 @@ const updateState = (updater: (current: DevDiagnosticsState) => DevDiagnosticsSt
 };
 
 const trimLogs = <T>(logs: T[], limit: number): T[] => logs.slice(0, limit);
+const stableJson = (value: unknown): string => JSON.stringify(value) ?? "null";
 
 const normalizeHost = (value: string | null | undefined): string | null => {
   if (!value) {
@@ -412,14 +413,20 @@ export const getDevDiagnosticsState = (): DevDiagnosticsState => state;
 export const setDevDiagnosticsEnvironment = (next: Partial<DevDiagnosticsState["env"]>) => {
   updateState((current) => {
     const apiUrl = next.apiUrl ?? current.env.apiUrl;
+    const env = {
+      ...current.env,
+      ...next,
+      apiUrl,
+      target: classifyTarget(apiUrl),
+    };
+
+    if (stableJson(env) === stableJson(current.env)) {
+      return current;
+    }
+
     return {
       ...current,
-      env: {
-        ...current.env,
-        ...next,
-        apiUrl,
-        target: classifyTarget(apiUrl),
-      },
+      env,
     };
   });
 };
@@ -467,6 +474,10 @@ export const setDevDiagnosticsAuthInfo = (authInfo: DevDiagnosticsAuthInfo | nul
 
 export const setDevDiagnosticsSession = (snapshot: NativeVideoConferenceDiagnosticsSnapshot | null) => {
   updateState((current) => {
+    if (stableJson(current.session) === stableJson(snapshot)) {
+      return current;
+    }
+
     const previousReason = current.session?.meetingRoom?.actionAvailability.screenShare.reason ?? null;
     const nextReason = snapshot?.meetingRoom?.actionAvailability.screenShare.reason ?? null;
     const nextDetail = snapshot?.meetingRoom?.actionAvailability.screenShare.detail ?? null;

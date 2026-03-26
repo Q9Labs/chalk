@@ -310,6 +310,10 @@ export default function App(): React.JSX.Element {
     await syncStaticDiagnostics();
   }, [apiUrl, syncStaticDiagnostics]);
 
+  const handleSessionChange = useCallback((session: ChalkSession | null) => {
+    diagnosticsSessionRef.current = session;
+  }, []);
+
   const handleResetDiagnostics = useCallback(async () => {
     resetDevDiagnosticsState();
     setDevDiagnosticsEnvironment({
@@ -338,9 +342,7 @@ export default function App(): React.JSX.Element {
           onClose: goHome,
           onDiagnosticsFailure: openDiagnosticsForFailure,
           onNavigate: openLobby,
-          onSessionChange: (session) => {
-            diagnosticsSessionRef.current = session;
-          },
+          onSessionChange: handleSessionChange,
           route,
           tokenProvider,
           wideEvents: diagnosticsWideEvents,

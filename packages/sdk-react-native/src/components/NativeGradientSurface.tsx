@@ -28,8 +28,8 @@ function NativeGradientSurfaceBase({ participantId, gradientPreference, borderRa
     <Svg height="100%" pointerEvents="none" style={[StyleSheet.absoluteFillObject, { opacity }]} width="100%">
       <Defs>
         <LinearGradient id={gradientId} x1="0%" x2={angle === "diagonal" ? "100%" : "0%"} y1="0%" y2="100%">
-          {stops.map((stop) => (
-            <Stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
+          {stops.map((stop, index) => (
+            <Stop key={`${stop.offset}-${stop.color}-${index}`} offset={stop.offset} stopColor={stop.color} />
           ))}
         </LinearGradient>
       </Defs>
