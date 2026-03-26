@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { cn } from "@q9labs/chalk-ui";
 import { AlertCircleIcon, CopyIcon, CheckIcon, XIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
-import { buildChalkWebDebugReport, downloadDebugReport, toDebugClipboardText } from "../lib/debugReport";
+import { buildChalkWebDebugReport, copyDebugReportToClipboard, downloadDebugReport } from "../lib/debugReport";
 
 export interface ErrorDialogProps {
   /** Whether the dialog is open */
@@ -42,18 +42,18 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
   }, [isOpen, onClose]);
 
   const handleCopyFullDebug = async () => {
-    const report = await buildChalkWebDebugReport({ message, traceId });
-    const text = toDebugClipboardText(report);
+    const reportPromise = buildChalkWebDebugReport({ message, traceId });
+    const result = await copyDebugReportToClipboard(reportPromise);
 
-    try {
-      await navigator.clipboard.writeText(text);
+    if (result.copied) {
       setCopiedDebug(true);
       window.setTimeout(() => setCopiedDebug(false), 2500);
-    } catch {
-      downloadDebugReport(report);
-      setDownloadingDebug(true);
-      window.setTimeout(() => setDownloadingDebug(false), 2500);
+      return;
     }
+
+    downloadDebugReport(result.report);
+    setDownloadingDebug(true);
+    window.setTimeout(() => setDownloadingDebug(false), 2500);
   };
 
   const handleDownloadDebug = async () => {

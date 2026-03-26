@@ -3,7 +3,7 @@
 import { chalkDebugCollector } from "@q9labs/chalk-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildChalkWebDebugReport, toDebugClipboardText } from "./debugReport";
+import { buildChalkWebDebugReport, copyDebugReportToClipboard, toDebugClipboardText } from "./debugReport";
 
 describe("debugReport", () => {
   afterEach(() => {
@@ -78,5 +78,28 @@ describe("debugReport", () => {
     expect(text).toContain('"counter": "42n"');
     expect(text).toContain('"__type": "Set"');
     expect(text).toContain('"self": "[Circular]"');
+  });
+
+  it("uses ClipboardItem write during the click-safe copy flow when available", async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    const originalClipboardItem = globalThis.ClipboardItem;
+    const clipboardItemSpy = vi.fn((items: Record<string, Promise<Blob>>) => items);
+
+    Object.assign(navigator, {
+      clipboard: {
+        ...navigator.clipboard,
+        write,
+      },
+    });
+    // @ts-expect-error test shim
+    globalThis.ClipboardItem = clipboardItemSpy;
+
+    const result = await copyDebugReportToClipboard(Promise.resolve({ hello: "world" }));
+
+    expect(result.copied).toBe(true);
+    expect(clipboardItemSpy).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    globalThis.ClipboardItem = originalClipboardItem;
   });
 });

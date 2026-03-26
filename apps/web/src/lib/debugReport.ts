@@ -179,6 +179,73 @@ const safeJsonStringify = (value: unknown) => {
   );
 };
 
+async function copyTextToClipboard(text: string) {
+  try {
+    await navigator.clipboard?.writeText?.(text);
+    return true;
+  } catch {
+    // Fall through to legacy/browser-specific strategies.
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "true");
+    textarea.setAttribute("aria-hidden", "true");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "-9999px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+
+    try {
+      if (document.execCommand("copy")) {
+        return true;
+      }
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  } catch {
+    // Fall through.
+  }
+
+  return false;
+}
+
+export async function copyDebugReportToClipboard(reportPromise: Promise<unknown>) {
+  if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+    let resolvedReport: unknown;
+
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": reportPromise.then((report) => {
+            resolvedReport = report;
+            return new Blob([toDebugClipboardText(report)], { type: "text/plain" });
+          }),
+        }),
+      ]);
+
+      return {
+        copied: true,
+        report: resolvedReport ?? (await reportPromise),
+      };
+    } catch {
+      // Fall through to post-build strategies.
+    }
+  }
+
+  const report = await reportPromise;
+  if (await copyTextToClipboard(toDebugClipboardText(report))) {
+    return { copied: true, report };
+  }
+
+  return { copied: false, report };
+}
+
 export async function buildChalkWebDebugReport(errorContext: { message: string; traceId?: string }) {
   const permissions = await getPermissionsSnapshot();
   const devices = await getDevicesSnapshot();

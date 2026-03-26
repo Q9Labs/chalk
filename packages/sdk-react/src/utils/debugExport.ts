@@ -200,6 +200,32 @@ const copyTextToClipboard = async (text: string) => {
   return false;
 };
 
+const copyReportWithClipboardItem = async (reportPromise: Promise<unknown>) => {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    return null;
+  }
+
+  let resolvedReport: unknown;
+
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/plain": reportPromise.then((report) => {
+          resolvedReport = report;
+          return new Blob([toClipboardText(report)], { type: "text/plain" });
+        }),
+      }),
+    ]);
+
+    return {
+      copied: true,
+      report: resolvedReport ?? (await reportPromise),
+    };
+  } catch {
+    return null;
+  }
+};
+
 const downloadDebugReport = (report: unknown, filename = `chalk-debug-${Date.now()}.json`) => {
   const blob = new Blob([safeJsonStringify(report)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -233,7 +259,7 @@ async function getDevicesSnapshot() {
 }
 
 export async function exportFullDebugReport(context: Record<string, unknown>) {
-  const report = {
+  const reportPromise = (async () => ({
     report: {
       generatedAt: new Date().toISOString(),
       app: "chalk-sdk-react",
@@ -267,8 +293,14 @@ export async function exportFullDebugReport(context: Record<string, unknown>) {
     },
     context,
     logs: chalkDebugCollector.getSnapshot(),
-  };
+  }))();
 
+  const clipboardItemResult = await copyReportWithClipboardItem(reportPromise);
+  if (clipboardItemResult) {
+    return { outcome: "copied" as const, report: clipboardItemResult.report };
+  }
+
+  const report = await reportPromise;
   const text = toClipboardText(report);
 
   if (await copyTextToClipboard(text)) {
