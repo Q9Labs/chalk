@@ -2,11 +2,13 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import type { APIClient } from "../api-client.ts";
 import { ConferenceSession } from "../room.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "../rtk-join-policy.ts";
+import { createSessionTokenProvider } from "../token-provider.ts";
 import type { ChalkError, JoinSessionConfig, Participant, TokenProvider } from "../types.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import { WSClient } from "../ws-client.ts";
 
 interface JoinConferenceSessionDeps {
+  apiUrl: string;
   apiClient: APIClient;
   demoMode: boolean;
   wsUrl: string;
@@ -58,6 +60,16 @@ export const joinConferenceSession = async (sessionId: string, config: JoinSessi
     }
 
     deps.apiClient.setToken(tokens.accessToken);
+    const sessionTokenProvider = createSessionTokenProvider({
+      apiUrl: deps.apiUrl,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt,
+    });
+    const mutableApiClient = deps.apiClient as APIClient & {
+      setTokenProvider?: (tokenProvider?: TokenProvider) => void;
+    };
+    mutableApiClient.setTokenProvider?.(sessionTokenProvider);
 
     const localParticipant: Participant = {
       id: participantId,
@@ -78,7 +90,7 @@ export const joinConferenceSession = async (sessionId: string, config: JoinSessi
     if (deps.wsUrl) {
       wsClient = new WSClient(deps.wsUrl, {
         debug: deps.debug,
-        tokenProvider: deps.tokenProvider,
+        tokenProvider: sessionTokenProvider,
       });
       wsClient.on("token.expired", (error) => {
         deps.emitTokenExpired(error);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { WSClient } from "../ws-client.ts";
 import { wideEvents, type WideEvent } from "../wide-events/index.ts";
 import { serializeOutgoingMessage } from "../ws-client/outbound.ts";
@@ -351,6 +351,35 @@ describe("WSClient", () => {
     expect(reconnectEvent).toBeDefined();
     expect(reconnectEvent?.data.attempt).toBe(1);
     expect(reconnectEvent?.data.delayMs).toBe(1000);
+  });
+
+  it("uses the updated token provider for reconnects after join", async () => {
+    const { timers, timeouts } = makeFakeTimers();
+    const sockets: MockWebSocket[] = [];
+    const rootTokenProvider = mock(async () => "root_token");
+    const sessionTokenProvider = mock(async () => "session_refreshed");
+
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        const ws = new MockWebSocket(url, protocols);
+        sockets.push(ws);
+        return ws as unknown as WebSocket;
+      },
+      timers: timers as any,
+      tokenProvider: rootTokenProvider,
+    });
+
+    client.connect("joined_token", "room_1");
+    sockets[0]?.open();
+    client.setTokenProvider(sessionTokenProvider);
+
+    sockets[0]?.close(1011, "server error");
+    const reconnect = Array.from(timeouts.values())[0];
+    await reconnect?.();
+
+    expect(rootTokenProvider).not.toHaveBeenCalled();
+    expect(sessionTokenProvider).toHaveBeenCalledTimes(1);
+    expect(sockets[1]?.protocols[1]).toBe("token.session_refreshed");
   });
 
   it("emits websocket error diagnostics for socket runtime errors", () => {

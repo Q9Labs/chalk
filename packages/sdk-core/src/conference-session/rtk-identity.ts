@@ -35,6 +35,17 @@ export const mapRtkParticipant = (peerIdMap: Map<string, string>, rtkParticipant
   const { stableId, userId } = getRtkIds(peerIdMap, rtkParticipant);
   const screenShareVideoTrack = (participant.screenShareTracks as { video?: MediaStreamTrack } | undefined)?.video ?? (participant.screenShareVideoTrack as MediaStreamTrack | undefined) ?? undefined;
   const screenShareAudioTrack = (participant.screenShareTracks as { audio?: MediaStreamTrack } | undefined)?.audio ?? (participant.screenShareAudioTrack as MediaStreamTrack | undefined) ?? undefined;
+  const hasScreenShareTracks = !!screenShareVideoTrack || !!screenShareAudioTrack;
+  const hasScreenShareProducer =
+    Array.isArray(participant.producers) &&
+    participant.producers.some((producer) => {
+      if (!producer || typeof producer !== "object") {
+        return false;
+      }
+
+      const appData = (producer as { appData?: Record<string, unknown> }).appData;
+      return !!appData?.screenShare;
+    });
 
   return {
     id: stableId,
@@ -49,7 +60,7 @@ export const mapRtkParticipant = (peerIdMap: Map<string, string>, rtkParticipant
     screenShareTrack: screenShareVideoTrack,
     screenShareAudioTrack,
     isSpeaking: false,
-    isScreenSharing: (participant.screenShareEnabled as boolean) ?? false,
+    isScreenSharing: ((participant.screenShareEnabled as boolean) ?? false) || hasScreenShareTracks || hasScreenShareProducer,
     handRaised: false,
     connectionQuality: 100,
   };

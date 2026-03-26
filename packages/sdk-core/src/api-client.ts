@@ -31,7 +31,7 @@ interface APIClientEvents {
 export class APIClient extends EventEmitter<APIClientEvents> {
   private readonly apiUrl: string;
   private readonly apiKey?: string;
-  private readonly tokenProvider?: TokenProvider;
+  private tokenProvider?: TokenProvider;
   private token?: string;
   private isRefreshingToken = false;
   // SDKCORE-MED-02: Queue for serializing concurrent refresh requests
@@ -50,6 +50,14 @@ export class APIClient extends EventEmitter<APIClientEvents> {
 
   setToken(token: string): void {
     this.token = token;
+  }
+
+  setTokenProvider(tokenProvider?: TokenProvider): void {
+    this.tokenProvider = tokenProvider;
+  }
+
+  getApiUrl(): string {
+    return this.apiUrl;
   }
 
   async getToken(): Promise<string | undefined> {

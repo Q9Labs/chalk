@@ -414,6 +414,32 @@ describe("ConferenceSession (RTK identity mapping)", () => {
     expect(room.participants.get("uuid_z")?.screenShareTrack).toBeTruthy();
   });
 
+  it("treats remote screen share tracks as active even when the RTK flag is stale", () => {
+    rtk.participants.joined.emit("participantJoined", {
+      id: "peer_s2",
+      userId: "uuid_s2",
+      name: "Sharer",
+      screenShareEnabled: false,
+    });
+
+    rtk.participants.joined.setSnapshot([
+      {
+        id: "peer_s2",
+        userId: "uuid_s2",
+        name: "Sharer",
+        screenShareEnabled: false,
+        screenShareTracks: {
+          video: { id: "track_screen_1", readyState: "live", enabled: true } as any,
+        },
+      },
+    ]);
+
+    rtk.participants.emit("participantsUpdate");
+
+    expect(room.participants.get("uuid_s2")?.isScreenSharing).toBe(true);
+    expect(room.participants.get("uuid_s2")?.screenShareTrack).toBeTruthy();
+  });
+
   it("applies host mute/unmute commands to local audio when addressed to local participant", async () => {
     const ws = createMockWsClient();
     room.attachWsClient(ws as any);

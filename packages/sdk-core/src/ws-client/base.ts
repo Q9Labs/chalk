@@ -17,7 +17,7 @@ import { toWsError } from "./ws-error.ts";
 export class WSClientBase extends EventEmitter<WSEvents> {
   private ws: WebSocket | null = null;
   private readonly wsUrl: string;
-  private readonly tokenProvider?: TokenProvider;
+  private tokenProvider?: TokenProvider;
   private token: string | null = null;
   private roomId: string | null = null;
   private state: ConnectionState = "disconnected";
@@ -61,6 +61,10 @@ export class WSClientBase extends EventEmitter<WSEvents> {
 
   get lastClose(): { code: number; reason: string; wasClean: boolean } | null {
     return this.lastCloseEvent;
+  }
+
+  setTokenProvider(tokenProvider?: TokenProvider): void {
+    this.tokenProvider = tokenProvider;
   }
 
   private emitWsWideEvent(eventType: "websocket.disconnect" | "websocket.reconnect" | "websocket.error", outcome: "success" | "error", details: Record<string, unknown>, error?: { code: string; message: string }): void {

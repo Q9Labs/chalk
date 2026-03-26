@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { ConferenceClient } from "../client.ts";
-import { createJoinTokenProvider, extractJoinTokenFromInviteLink } from "../index.ts";
+import { createJoinTokenProvider, createSessionTokenProvider, extractJoinTokenFromInviteLink } from "../index.ts";
 
 describe("extractJoinTokenFromInviteLink", () => {
   it("accepts Chalk https invite links", () => {
@@ -43,6 +43,54 @@ describe("createJoinTokenProvider", () => {
     await expect(tokenProvider()).resolves.toBe("jwt_123");
     await expect(tokenProvider()).resolves.toBe("jwt_123");
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createSessionTokenProvider", () => {
+  beforeEach(() => {
+    globalThis.fetch = mock(async () => {
+      return {
+        ok: true,
+        headers: {
+          get: () => null,
+        },
+        json: async () => ({
+          access_token: "jwt_refreshed",
+          refresh_token: "refresh_next",
+          expires_in: 900,
+        }),
+      };
+    }) as typeof fetch;
+  });
+
+  it("reuses the joined access token until expiry", async () => {
+    const tokenProvider = createSessionTokenProvider({
+      apiUrl: "https://chalk-api.q9labs.ai",
+      accessToken: "jwt_joined",
+      refreshToken: "refresh_123",
+      expiresAt: Date.now() + 60_000,
+    });
+
+    await expect(tokenProvider()).resolves.toBe("jwt_joined");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the joined access token after expiry", async () => {
+    const tokenProvider = createSessionTokenProvider({
+      apiUrl: "https://chalk-api.q9labs.ai",
+      accessToken: "jwt_joined",
+      refreshToken: "refresh_123",
+      expiresAt: Date.now() - 1,
+    });
+
+    await expect(tokenProvider()).resolves.toBe("jwt_refreshed");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://chalk-api.q9labs.ai/api/v1/auth/refresh",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
   });
 });
 

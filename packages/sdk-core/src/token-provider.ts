@@ -32,6 +32,15 @@ export interface CreateJoinTokenProviderConfig {
   skewMs?: number;
 }
 
+export interface CreateSessionTokenProviderConfig {
+  apiUrl: string;
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  /** Refresh this many milliseconds before expiry. */
+  skewMs?: number;
+}
+
 interface TokenResponse {
   access_token: string;
   refresh_token: string;
@@ -264,5 +273,47 @@ export function createJoinTokenProvider(config: CreateJoinTokenProviderConfig): 
     })();
 
     return exchangePromise;
+  };
+}
+
+export function createSessionTokenProvider(config: CreateSessionTokenProviderConfig): () => Promise<string> {
+  const { apiUrl, skewMs = 30_000 } = config;
+  let accessToken = config.accessToken;
+  let refreshToken = config.refreshToken;
+  let expiresAt = config.expiresAt;
+  let refreshPromise: Promise<string> | null = null;
+
+  const isExpired = () => typeof expiresAt === "number" && Date.now() >= expiresAt - skewMs;
+
+  async function refreshSessionToken(currentRefreshToken: string): Promise<TokenResponse> {
+    return performTokenRequest<TokenResponse>("POST", apiUrl, "/api/v1/auth/refresh", { refresh_token: currentRefreshToken }, "Session token refresh failed");
+  }
+
+  return async (): Promise<string> => {
+    if (accessToken && !isExpired()) {
+      return accessToken;
+    }
+
+    if (refreshPromise) {
+      return refreshPromise;
+    }
+
+    if (!refreshToken) {
+      throw new Error("Session access token expired and no refresh token is available");
+    }
+
+    refreshPromise = (async () => {
+      try {
+        const refreshed = await refreshSessionToken(refreshToken!);
+        accessToken = refreshed.access_token;
+        refreshToken = refreshed.refresh_token || refreshToken;
+        expiresAt = Date.now() + refreshed.expires_in * 1000;
+        return accessToken;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+
+    return refreshPromise;
   };
 }

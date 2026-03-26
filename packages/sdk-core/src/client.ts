@@ -53,6 +53,7 @@ export interface ConferenceClientDiagnosticsSnapshot {
 
 export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
   private readonly apiClient: APIClient;
+  private readonly apiUrl: string;
   private readonly wsUrl: string;
   private readonly tokenProvider?: ConferenceClientConfig["tokenProvider"];
   private readonly debug: boolean;
@@ -68,6 +69,7 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     super();
 
     const apiUrl = config.apiUrl ?? DEFAULT_API_URL;
+    this.apiUrl = apiUrl;
     this.debug = config.debug ?? false;
     this.demoMode = config.demoMode ?? false;
     this.wsUrl = config.wsUrl ?? deriveWsUrl(apiUrl);
@@ -204,6 +206,7 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
 
       try {
         const joined = await joinConferenceSession(sessionId, config, {
+          apiUrl: this.apiUrl,
           apiClient: this.apiClient,
           demoMode: this.demoMode,
           wsUrl: this.wsUrl,
