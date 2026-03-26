@@ -34,11 +34,10 @@ Bundle output:
 Preferred when the prod host key must come from GitHub, not local env:
 
 1. Trigger workflow:
-   - `.github/workflows/mobile-android-release.yml`
-   - choose `artifact_format`:
-     - `aab` for Play
-     - `apk` for direct sideload
-     - `both` for both artifacts from the same verified secret-backed build
+   - APK fast lane:
+     - `.github/workflows/mobile-android-release.yml`
+   - AAB on-demand lane:
+     - `.github/workflows/mobile-android-bundle.yml`
 2. Workflow injects:
    - `EXPO_PUBLIC_API_URL=https://chalk-api.q9labs.ai`
    - `EXPO_PUBLIC_WS_URL=wss://chalk-ws.q9labs.ai/ws`
@@ -46,11 +45,13 @@ Preferred when the prod host key must come from GitHub, not local env:
 3. Workflow rebuilds signing files from GitHub Secrets:
    - `ANDROID_UPLOAD_KEYSTORE_BASE64`
    - `ANDROID_KEYSTORE_PROPERTIES`
-4. Workflow can emit:
-   - `mobile-android-release-aab`
-   - `mobile-android-release-apk`
-5. Download the produced signed AAB artifact, then upload/promote with `gplay` if the workflow itself is not publishing yet
-6. Use the signed APK artifact for direct device installs when Play/TestFlight review or device-side caching blocks fast validation
+4. Workflow outputs:
+   - APK lane:
+     - `mobile-android-release-apk`
+   - AAB lane:
+     - `mobile-android-release-aab`
+5. Use the signed APK artifact for direct device installs when Play/TestFlight review or device-side caching blocks fast validation
+6. Download the produced signed AAB artifact, then upload/promote with `gplay` if the workflow itself is not publishing yet
 7. Treat CI artifacts as the only uploadable Android artifacts
 
 ## Google Play service account
@@ -115,7 +116,8 @@ Current known behavior:
 
 - for this Play app, internal-track changes are sent for review automatically
 - do **not** pass `--changes-not-sent-for-review`; Play rejects the commit with `400`
-- fastest sideload lane is now workflow `artifact_format=apk` and downloading `mobile-android-release-apk`
+- fastest sideload lane is now `.github/workflows/mobile-android-release.yml` and downloading `mobile-android-release-apk`
+- AAB/Play lane is `.github/workflows/mobile-android-bundle.yml` only when you actually need the bundle
 
 ## Optional metadata
 

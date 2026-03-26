@@ -1,21 +1,21 @@
-name: Mobile Android APK
+name: Mobile Android AAB
 
 on:
   workflow_dispatch:
     inputs:
       release_notes:
-        description: Release notes for the sideload APK build
+        description: Release notes for Play/internal testing
         required: false
-        default: Sideload APK built with production mobile release env.
+        default: Play bundle built with production mobile release env.
         type: string
 
 concurrency:
-  group: mobile-android-apk
+  group: mobile-android-aab
   cancel-in-progress: false
 
 jobs:
-  build-android-release:
-    name: Build Android Release APK
+  build-android-bundle:
+    name: Build Android Release AAB
     runs-on: ubuntu-latest
     env:
       EXPO_PUBLIC_API_URL: https://chalk-api.q9labs.ai
@@ -67,19 +67,19 @@ jobs:
       - name: Verify production mobile host key
         run: bun run --cwd apps/mobile verify:production-host-key
 
-      - name: Build signed Android APK
-        run: bun run --cwd apps/mobile with:production-release-env -- bun run build:android:apk:release
+      - name: Build signed Android bundle
+        run: bun run --cwd apps/mobile with:production-release-env -- bun run build:android:release
 
-      - name: Generate APK checksum
+      - name: Generate AAB checksum
         run: |
-          cd apps/mobile/android/app/build/outputs/apk/release
-          sha256sum app-release.apk > app-release.apk.sha256
+          cd apps/mobile/android/app/build/outputs/bundle/release
+          sha256sum app-release.aab > app-release.aab.sha256
 
-      - name: Upload Android release APK artifact
+      - name: Upload Android release bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-android-release-apk
+          name: mobile-android-release-aab
           path: |
-            apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            apps/mobile/android/app/build/outputs/apk/release/app-release.apk.sha256
+            apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+            apps/mobile/android/app/build/outputs/bundle/release/app-release.aab.sha256
           retention-days: 7

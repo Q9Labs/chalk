@@ -23,9 +23,14 @@ Rules:
 Current Android release workflow:
 
 - `.github/workflows/mobile-android-release.yml`
-- supported outputs:
-  - `mobile-android-release-aab`
+- output:
   - `mobile-android-release-apk`
+
+Current Android bundle workflow:
+
+- `.github/workflows/mobile-android-bundle.yml`
+- output:
+  - `mobile-android-release-aab`
 
 Current Android publish target:
 
