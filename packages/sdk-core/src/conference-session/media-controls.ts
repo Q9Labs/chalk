@@ -93,6 +93,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     const ctx = wideEvents.start("media.toggle");
     ctx.set("mediaType", "video");
     ctx.set("before", localParticipant.videoEnabled);
+    ctx.set("participantId", localParticipant.id);
 
     try {
       if (rtkClient.self.videoEnabled) {
@@ -131,6 +132,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     const ctx = wideEvents.start("media.toggle");
     ctx.set("mediaType", "audio");
     ctx.set("before", localParticipant.audioEnabled);
+    ctx.set("participantId", localParticipant.id);
 
     try {
       if (rtkClient.self.audioEnabled) {
@@ -169,6 +171,8 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     }
 
     const ctx = wideEvents.start("screenshare.start");
+    ctx.set("participantId", localParticipant.id);
+    ctx.set("withAudio", options?.withAudio ?? false);
 
     try {
       await withPatchedGetDisplayMedia(
@@ -221,6 +225,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     }
 
     const ctx = wideEvents.start("screenshare.stop");
+    ctx.set("participantId", localParticipant.id);
 
     try {
       await rtkClient.self.disableScreenShare();

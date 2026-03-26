@@ -374,4 +374,58 @@ describe("WSClient", () => {
     expect(errorEvent?.error?.code).toBe("WS_ERROR");
     expect(errorEvent?.error?.message).toContain("socket blew up");
   });
+
+  it("emits outbound interaction diagnostics for reaction and moderation actions", () => {
+    let ws: MockWebSocket | null = null;
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    client.sendReaction("🔥");
+    client.muteParticipant("p2");
+    client.unmuteParticipant("p2");
+
+    expect(capturedWideEvents.some((event) => event.eventType === "reaction.send" && event.data.emoji === "🔥")).toBe(true);
+    expect(capturedWideEvents.some((event) => event.eventType === "participant.mute.request" && event.data.participantId === "p2")).toBe(true);
+    expect(capturedWideEvents.some((event) => event.eventType === "participant.unmute.request" && event.data.participantId === "p2")).toBe(true);
+  });
+
+  it("emits inbound interaction diagnostics for reaction, hand raise, and moderation events", () => {
+    let ws: MockWebSocket | null = null;
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    ws?.receive({
+      type: "reaction",
+      payload: {
+        participant_id: "p1",
+        display_name: "Alice",
+        emoji: "👏",
+        timestamp: "2026-02-05T00:00:00.000Z",
+      },
+    });
+    ws?.receive({
+      type: "hand.raised",
+      payload: { participant_id: "p1" },
+    });
+    ws?.receive({
+      type: "participant.mute",
+      payload: { participant_id: "p2" },
+    });
+
+    expect(capturedWideEvents.some((event) => event.eventType === "reaction.receive" && event.data.emoji === "👏")).toBe(true);
+    expect(capturedWideEvents.some((event) => event.eventType === "hand.raise" && event.data.direction === "receive" && event.data.participantId === "p1")).toBe(true);
+    expect(capturedWideEvents.some((event) => event.eventType === "participant.mute.receive" && event.data.participantId === "p2")).toBe(true);
+  });
 });

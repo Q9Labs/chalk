@@ -1,7 +1,7 @@
 import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
 import { CallEnd01Icon, ComputerScreenShareIcon, Mic01Icon, MicOff01Icon, MoreHorizontalIcon, Video01Icon, VideoOffIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import { useChalkSession, useSession } from "../context/chalk-native-provider";
 import { useChat } from "../hooks/useChat";
@@ -23,6 +23,7 @@ import { NativeMeetingPanel, type NativeMeetingPanelName } from "./NativeMeeting
 import { NativeReactionPicker } from "./NativeReactionPicker";
 import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid";
 import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage";
+import { buildNativeMeetingRoomDiagnosticsSnapshot, type NativeMeetingRoomDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
 import { useNativeMeetingRoomDerived } from "./native-meeting-room/useNativeMeetingRoomDerived";
 
 type RoomParticipant = ParticipantState["participants"][number];
@@ -44,9 +45,12 @@ export interface NativeMeetingRoomProps {
   features?: NativeMeetingRoomFeatures;
   onLeave: () => void | Promise<void>;
   onEndForAll?: () => void | Promise<void>;
+  onDiagnosticsChange?: (snapshot: NativeMeetingRoomDiagnosticsSnapshot) => void;
 }
 
-export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps): React.JSX.Element {
+export type { NativeMeetingRoomDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
+
+export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: NativeMeetingRoomProps): React.JSX.Element {
   const session = useSession();
   const { removeParticipant, muteParticipant, unmuteParticipant } = useChalkSession();
   const media = useMedia();
@@ -90,12 +94,40 @@ export function NativeMeetingRoom({ features, onLeave }: NativeMeetingRoomProps)
   const canReactions = features?.reactions !== false;
   const canHandRaise = features?.handRaise !== false;
   const canWhiteboard = features?.whiteboard !== false;
+  const roomDiagnostics = useMemo(
+    () =>
+      buildNativeMeetingRoomDiagnosticsSnapshot({
+        featureFlags: {
+          chat: canChat,
+          participants: canParticipants,
+          transcripts: canTranscripts,
+          settings: canSettings,
+          screenShare: canScreenShare,
+          recording: canRecording,
+          reactions: canReactions,
+          handRaise: canHandRaise,
+          whiteboard: canWhiteboard,
+        },
+        isHost,
+        participantCount: participants.participantCount,
+        raisedHandCount,
+        unreadChatCount: chat.unreadCount,
+        isScreenShareActive: screenShare.isActive,
+        isLocalScreenSharing: screenShare.isLocalSharing,
+        screenShareSharerParticipantId: screenShare.sharerParticipantId,
+      }),
+    [canChat, canHandRaise, canParticipants, canRecording, canReactions, canScreenShare, canSettings, canTranscripts, canWhiteboard, chat.unreadCount, isHost, participants.participantCount, raisedHandCount, screenShare.isActive, screenShare.isLocalSharing, screenShare.sharerParticipantId],
+  );
 
   useEffect(() => {
     if (panel === "chat") {
       chat.markAsRead();
     }
   }, [panel, chat]);
+
+  useEffect(() => {
+    onDiagnosticsChange?.(roomDiagnostics);
+  }, [onDiagnosticsChange, roomDiagnostics]);
 
   const runAsync = useCallback(async (action: () => Promise<unknown>) => {
     try {

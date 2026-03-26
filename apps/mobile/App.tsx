@@ -312,7 +312,7 @@ function MeetingScreen({
       <MeetingDiagnosticsBridge onSessionChange={onSessionChange} />
       <NativeVideoConference
         autoJoin={false}
-        features={{ screenShare: false }}
+        features={{ screenShare: true }}
         initialPhase="lobby"
         onClose={onClose}
         onDiagnosticsChange={onDiagnosticsChange}

@@ -6,7 +6,7 @@ export { NativeJoiningLoadingScreen } from "./components/NativeJoiningLoadingScr
 export type { NativeJoiningLoadingScreenProps } from "./components/NativeJoiningLoadingScreen";
 export { NativeMediaView } from "./components/NativeMediaView";
 export { NativeMeetingRoom } from "./components/NativeMeetingRoom";
-export type { NativeMeetingRoomFeatures, NativeMeetingRoomProps } from "./components/NativeMeetingRoom";
+export type { NativeMeetingRoomDiagnosticsSnapshot, NativeMeetingRoomFeatures, NativeMeetingRoomProps } from "./components/NativeMeetingRoom";
 export { NativePreJoinLobby } from "./components/NativePreJoinLobby";
 export type { NativeJoinSettings, NativePreJoinLobbyProps } from "./components/NativePreJoinLobby";
 export { NativeVideoConference } from "./components/NativeVideoConference";

@@ -10,7 +10,7 @@ import { useTranscripts } from "../hooks/useTranscripts";
 import { Theme } from "../ui/theme";
 import { NativeEndScreen, type NativeMeetingEndData } from "./NativeEndScreen";
 import { NativeJoiningLoadingScreen } from "./NativeJoiningLoadingScreen";
-import { NativeMeetingRoom, type NativeMeetingRoomFeatures } from "./NativeMeetingRoom";
+import { NativeMeetingRoom, type NativeMeetingRoomDiagnosticsSnapshot, type NativeMeetingRoomFeatures } from "./NativeMeetingRoom";
 import { NativePreJoinLobby, type NativeJoinSettings } from "./NativePreJoinLobby";
 import { canExecuteNativeJoin, canStartNativeJoin, shouldPromoteAfterJoinError } from "../utils/native-join-guard";
 
@@ -52,6 +52,7 @@ export interface NativeVideoConferenceDiagnosticsSnapshot {
   isConnected: boolean;
   isJoining: boolean;
   session: ChalkSessionDiagnosticsSnapshot;
+  meetingRoom: NativeMeetingRoomDiagnosticsSnapshot | null;
 }
 
 export function NativeVideoConference({ roomId, roomName, userName, role = "participant", autoJoin = false, initialPhase, initialJoinSettings, features, onJoin, onLeave, onEnd, onClose, onError, onDiagnosticsChange }: NativeVideoConferenceProps): React.JSX.Element {
@@ -79,6 +80,7 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
   const didEmitEndRef = useRef(false);
   const pendingJoinRequestRef = useRef(initialPhase === "joining" || autoJoin);
   const activeJoinNonceRef = useRef<number | null>(null);
+  const [meetingRoomDiagnostics, setMeetingRoomDiagnostics] = useState<NativeMeetingRoomDiagnosticsSnapshot | null>(null);
 
   const buildEndData = useCallback((): NativeMeetingEndData => {
     const joinedAt = joinedAtRef.current ?? new Date();
@@ -146,8 +148,9 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
       isConnected: connection.isConnected,
       isJoining: connection.isJoining,
       session: session.getDiagnosticsSnapshot(),
+      meetingRoom: meetingRoomDiagnostics,
     });
-  }, [connection.isConnected, connection.isJoining, connection.status, joinError, joinNonce, onDiagnosticsChange, phase, room.roomName, roomId, roomName, session]);
+  }, [connection.isConnected, connection.isJoining, connection.status, joinError, joinNonce, meetingRoomDiagnostics, onDiagnosticsChange, phase, room.roomName, roomId, roomName, session]);
 
   useEffect(() => {
     if (!canExecuteNativeJoin(phase, joinNonce, connection.isJoining, connection.isConnected, pendingJoinRequestRef.current, activeJoinNonceRef.current)) {
@@ -306,7 +309,7 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
     return <NativeEndScreen data={endData} onGoHome={() => onClose?.()} onRejoin={handleRejoin} />;
   }
 
-  return <NativeMeetingRoom features={features} onEndForAll={role === "host" ? handleEndForAll : undefined} onLeave={handleLeave} roomName={roomName || room.roomName || roomId} />;
+  return <NativeMeetingRoom features={features} onDiagnosticsChange={setMeetingRoomDiagnostics} onEndForAll={role === "host" ? handleEndForAll : undefined} onLeave={handleLeave} roomName={roomName || room.roomName || roomId} />;
 }
 
 const styles = StyleSheet.create({

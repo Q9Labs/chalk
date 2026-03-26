@@ -1,18 +1,7 @@
+import { wideEvents } from "../wide-events/index.ts";
 import type { WSEvents } from "./emitted-events.ts";
 import type { WSInboundPayloadMap, WSInboundType, WSOutboundMessage } from "./messages.ts";
-import {
-  toChatMessage,
-  toParticipant,
-  toPermissionChanged,
-  toReaction,
-  toSnapshot,
-  toWhiteboardClosed,
-  toWhiteboardCursor,
-  toWhiteboardData,
-  toWhiteboardOpened,
-  toWhiteboardSnapshot,
-  unwrapParticipantJoined,
-} from "./transforms.ts";
+import { toChatMessage, toParticipant, toPermissionChanged, toReaction, toSnapshot, toWhiteboardClosed, toWhiteboardCursor, toWhiteboardData, toWhiteboardOpened, toWhiteboardSnapshot, unwrapParticipantJoined } from "./transforms.ts";
 
 type Emit = <K extends keyof WSEvents>(event: K, data: WSEvents[K]) => void;
 
@@ -31,9 +20,15 @@ export const createInboundHandlers = (deps: { emit: Emit; send: (message: WSOutb
       });
     },
     "participant.mute": (payload) => {
+      const ctx = wideEvents.start("participant.mute.receive");
+      ctx.merge({ participantId: payload.participantId });
+      ctx.complete("success");
       deps.emit("participant.mute", payload);
     },
     "participant.unmute": (payload) => {
+      const ctx = wideEvents.start("participant.unmute.receive");
+      ctx.merge({ participantId: payload.participantId });
+      ctx.complete("success");
       deps.emit("participant.unmute", payload);
     },
     "chat.message": (payload) => {
@@ -48,12 +43,32 @@ export const createInboundHandlers = (deps: { emit: Emit; send: (message: WSOutb
       });
     },
     reaction: (payload) => {
-      deps.emit("reaction", toReaction(payload));
+      const reaction = toReaction(payload);
+      const ctx = wideEvents.start("reaction.receive");
+      ctx.merge({
+        participantId: reaction.participantId,
+        participantName: reaction.participantName,
+        emoji: reaction.emoji,
+      });
+      ctx.complete("success");
+      deps.emit("reaction", reaction);
     },
     "hand.raised": (payload) => {
+      const ctx = wideEvents.start("hand.raise");
+      ctx.merge({
+        direction: "receive",
+        participantId: payload.participantId,
+      });
+      ctx.complete("success");
       deps.emit("hand.raised", { participantId: payload.participantId });
     },
     "hand.lowered": (payload) => {
+      const ctx = wideEvents.start("hand.lower");
+      ctx.merge({
+        direction: "receive",
+        participantId: payload.participantId,
+      });
+      ctx.complete("success");
       deps.emit("hand.lowered", { participantId: payload.participantId });
     },
     "recording.started": (payload) => {

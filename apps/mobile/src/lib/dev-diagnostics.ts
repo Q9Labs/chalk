@@ -237,6 +237,26 @@ const formatTimelineDetail = (eventType: string, data: Record<string, unknown>, 
       return [request?.method, request?.path, response?.statusCode ? `status ${response.statusCode}` : null].filter(Boolean).join(" ");
     case "room.join.rtk.attempt":
       return `attempt ${String(data.attempt ?? "?")}/${String(data.totalAttempts ?? "?")} timeout ${String(data.timeoutMs ?? "?")}ms`;
+    case "media.toggle":
+      return `${String(data.mediaType ?? "media")} ${String(data.before ?? "?")} -> ${String(data.enabled ?? "?")}`;
+    case "screenshare.start":
+      return `withAudio ${String(data.withAudio ?? false)} participant ${String(data.participantId ?? "")}`.trim();
+    case "screenshare.stop":
+      return `participant ${String(data.participantId ?? "")}`.trim();
+    case "reaction.send":
+      return `emoji ${String(data.emoji ?? "")}`.trim();
+    case "reaction.receive":
+      return `${String(data.emoji ?? "")} from ${String(data.participantName ?? data.participantId ?? "unknown")}`.trim();
+    case "hand.raise":
+    case "hand.lower":
+      return [data.direction ? `direction ${String(data.direction)}` : null, data.participantId ? `participant ${String(data.participantId)}` : null].filter(Boolean).join(" ");
+    case "participant.mute.request":
+    case "participant.unmute.request":
+    case "participant.mute.receive":
+    case "participant.unmute.receive":
+      return `participant ${String(data.participantId ?? "")}`.trim();
+    case "participant.moderation.audio":
+      return `${String(data.action ?? "audio")} enabled ${String(data.enabled ?? "?")}`;
     case "websocket.connect":
       return [`room ${String(data.roomId ?? "")}`.trim(), `attempt ${String(data.attempt ?? 1)}`.trim()].filter(Boolean).join(" ");
     case "websocket.disconnect":
@@ -381,10 +401,29 @@ export const setDevDiagnosticsAuthInfo = (authInfo: DevDiagnosticsAuthInfo | nul
 };
 
 export const setDevDiagnosticsSession = (snapshot: NativeVideoConferenceDiagnosticsSnapshot | null) => {
-  updateState((current) => ({
-    ...current,
-    session: snapshot,
-  }));
+  updateState((current) => {
+    const previousReason = current.session?.meetingRoom?.actionAvailability.screenShare.reason ?? null;
+    const nextReason = snapshot?.meetingRoom?.actionAvailability.screenShare.reason ?? null;
+    const nextDetail = snapshot?.meetingRoom?.actionAvailability.screenShare.detail ?? null;
+    const nextState = {
+      ...current,
+      session: snapshot,
+    };
+
+    if (previousReason === nextReason && current.session?.meetingRoom?.actionAvailability.screenShare.detail === nextDetail) {
+      return nextState;
+    }
+
+    return appendTimeline(nextState, {
+      id: createId("screenshare-availability"),
+      timestamp: new Date().toISOString(),
+      source: "manual",
+      eventType: "meeting_room.screenshare_availability",
+      outcome: nextReason ? "error" : "success",
+      title: "SCREEN SHARE AVAILABILITY",
+      detail: nextReason ? `${nextReason}${nextDetail ? ` · ${nextDetail}` : ""}` : "screen share available",
+    });
+  });
 };
 
 export const clearDevDiagnosticsLogs = () => {
