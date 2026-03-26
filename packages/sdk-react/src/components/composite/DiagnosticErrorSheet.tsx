@@ -14,6 +14,7 @@ export interface DiagnosticErrorSheetProps {
 export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ error, supportCode, onRetry, onBack, className }) => {
   const [showDetails, setShowDetails] = useState(true);
   const [debugExportState, setDebugExportState] = useState<"idle" | "copied" | "downloaded">("idle");
+  const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
 
   // Analyze error to determine the best human-readable message and actions
   const errorInfo = useMemo(() => {
@@ -54,6 +55,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
       supportCode: supportCode ?? null,
     });
     setDebugExportState(result.outcome);
+    setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
@@ -183,6 +185,14 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
                     <pre className="text-[11px] font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap max-h-32 scrollbar-thin">{error}</pre>
                   </div>
                 </div>
+                {debugExportLog && (
+                  <div className="mt-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground/60 mb-1.5 px-1">Debug Export Log</p>
+                    <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
+                      <pre className="text-[11px] font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap max-h-40 scrollbar-thin">{debugExportLog}</pre>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -315,6 +315,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [debugExportState, setDebugExportState] = useState<"idle" | "copied" | "downloaded">("idle");
+  const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
   const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
 
   const errorInfo = useMemo(() => {
@@ -435,6 +436,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
       roomName: source?.title ?? null,
     });
     setDebugExportState(result.outcome);
+    setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
@@ -575,6 +577,12 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                       <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40 mb-1.5">Error Log</p>
                       <pre className="text-[10px] leading-4 font-mono text-white/88 overflow-x-auto whitespace-pre-wrap max-h-24 scrollbar-thin">{controls.errorMessage}</pre>
                     </div>
+                    {debugExportLog && (
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40 mb-1.5">Debug Export Log</p>
+                        <pre className="text-[10px] leading-4 font-mono text-white/88 overflow-x-auto whitespace-pre-wrap max-h-28 scrollbar-thin">{debugExportLog}</pre>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
