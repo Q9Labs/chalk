@@ -80,26 +80,20 @@ describe("debugReport", () => {
     expect(text).toContain('"self": "[Circular]"');
   });
 
-  it("uses ClipboardItem write during the click-safe copy flow when available", async () => {
-    const write = vi.fn().mockResolvedValue(undefined);
-    const originalClipboardItem = globalThis.ClipboardItem;
-    const clipboardItemSpy = vi.fn((items: Record<string, Promise<Blob>>) => items);
+  it("uses writeText first for plain-text debug copy", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
 
     Object.assign(navigator, {
       clipboard: {
         ...navigator.clipboard,
-        write,
+        writeText,
       },
     });
-    // @ts-expect-error test shim
-    globalThis.ClipboardItem = clipboardItemSpy;
 
     const result = await copyDebugReportToClipboard(Promise.resolve({ hello: "world" }));
 
     expect(result.copied).toBe(true);
-    expect(clipboardItemSpy).toHaveBeenCalledTimes(1);
-    expect(write).toHaveBeenCalledTimes(1);
-
-    globalThis.ClipboardItem = originalClipboardItem;
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(String(writeText.mock.calls[0]?.[0])).toContain('"hello": "world"');
   });
 });

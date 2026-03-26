@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, ArrowDown01Icon, ArrowUp01Icon, RefreshIcon, ArrowLeft01Icon, InformationCircleIcon, WifiOffIcon, Shield01Icon, Copy01Icon, Download01Icon, CheckmarkCircle02Icon } from "../../utils/icons";
-import { exportFullDebugReport } from "../../utils/debugExport";
+import { copyPreparedDebugExport, downloadDebugReport, prepareFullDebugExport, type PreparedDebugExport } from "../../utils/debugExport";
 
 export interface DiagnosticErrorSheetProps {
   error: string;
@@ -13,8 +13,9 @@ export interface DiagnosticErrorSheetProps {
 
 export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ error, supportCode, onRetry, onBack, className }) => {
   const [showDetails, setShowDetails] = useState(true);
-  const [debugExportState, setDebugExportState] = useState<"idle" | "copied" | "downloaded">("idle");
+  const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "copied" | "failed" | "downloaded">("idle");
   const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
+  const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
 
   // Analyze error to determine the best human-readable message and actions
   const errorInfo = useMemo(() => {
@@ -48,14 +49,56 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
 
   const { Icon } = errorInfo;
 
-  const handleDebugExport = async () => {
-    const result = await exportFullDebugReport({
+  useEffect(() => {
+    let cancelled = false;
+    setDebugExportState("preparing");
+    setPreparedDebugExport(null);
+    setDebugExportLog(null);
+
+    void prepareFullDebugExport({
       source: "diagnostic-error-sheet",
       error,
       supportCode: supportCode ?? null,
-    });
+    })
+      .then((prepared) => {
+        if (cancelled) return;
+        setPreparedDebugExport(prepared);
+        setDebugExportState("idle");
+      })
+      .catch((preparationError) => {
+        if (cancelled) return;
+        setDebugExportLog(JSON.stringify({ preparationError: preparationError instanceof Error ? preparationError.message : String(preparationError) }, null, 2));
+        setDebugExportState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [error, supportCode]);
+
+  const handleDebugExport = async () => {
+    if (!preparedDebugExport) {
+      setDebugExportState("preparing");
+      setDebugExportLog(JSON.stringify({ error: "Debug report still preparing. Click again in a second." }, null, 2));
+      return;
+    }
+
+    const result = await copyPreparedDebugExport(preparedDebugExport);
     setDebugExportState(result.outcome);
     setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
+    window.setTimeout(() => setDebugExportState("idle"), 2500);
+  };
+
+  const handleDebugDownload = async () => {
+    const prepared = preparedDebugExport ?? (await prepareFullDebugExport({
+      source: "diagnostic-error-sheet",
+      error,
+      supportCode: supportCode ?? null,
+    }));
+    setPreparedDebugExport(prepared);
+    downloadDebugReport(prepared.report);
+    setDebugExportState("downloaded");
+    setDebugExportLog(JSON.stringify(prepared.diagnostics, null, 2));
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
@@ -137,7 +180,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
             </button>
           </div>
 
-          <div className="mb-6 flex w-full justify-center">
+          <div className="mb-6 flex w-full flex-wrap justify-center gap-3">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -150,6 +193,16 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
                   <CheckmarkCircle02Icon size={18} />
                   Copied Full Debug
                 </>
+              ) : debugExportState === "preparing" ? (
+                <>
+                  <Download01Icon size={18} />
+                  Preparing Debug...
+                </>
+              ) : debugExportState === "failed" ? (
+                <>
+                  <Copy01Icon size={18} />
+                  Copy Failed
+                </>
               ) : debugExportState === "downloaded" ? (
                 <>
                   <Download01Icon size={18} />
@@ -161,6 +214,16 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
                   Copy Full Debug
                 </>
               )}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleDebugDownload();
+              }}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-muted/40 px-4 text-[14px] font-semibold text-foreground transition-all hover:bg-muted/60 active:scale-[0.98]"
+            >
+              <Download01Icon size={18} />
+              Download Debug JSON
             </button>
           </div>
 

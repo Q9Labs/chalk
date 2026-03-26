@@ -15,6 +15,18 @@ type DebugExportDiagnostics = {
   attempts: DebugExportAttempt[];
 };
 
+export type PreparedDebugExport = {
+  report: Record<string, unknown>;
+  text: string;
+  diagnostics: DebugExportDiagnostics;
+};
+
+export type DebugCopyResult = {
+  outcome: "copied" | "failed";
+  report: Record<string, unknown>;
+  diagnostics: DebugExportDiagnostics;
+};
+
 const toErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`;
@@ -192,9 +204,30 @@ const copyTextWithExecCommand = (text: string) => {
 
 const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnostics) => {
   try {
-    await navigator.clipboard?.writeText?.(text);
-    diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true });
-    return true;
+    const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+    if (!writeText) {
+      diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: "Clipboard API unavailable" });
+    } else {
+      await writeText(text);
+      const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
+      if (readText) {
+        try {
+          const copiedText = await readText();
+          if (copiedText !== text) {
+            diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: "Clipboard verification mismatch after writeText" });
+          } else {
+            diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true });
+            return true;
+          }
+        } catch (verificationError) {
+          diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true, error: `Verification skipped: ${toErrorMessage(verificationError)}` });
+          return true;
+        }
+      } else {
+        diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true });
+        return true;
+      }
+    }
   } catch (error) {
     diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: toErrorMessage(error) });
   }
@@ -210,8 +243,11 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
   }
 
   try {
-    if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
-      await navigator.clipboard.write([
+    const write = navigator.clipboard?.write?.bind(navigator.clipboard);
+    if (!write || typeof ClipboardItem === "undefined") {
+      diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: false, error: "ClipboardItem API unavailable" });
+    } else {
+      await write([
         new ClipboardItem({
           "text/plain": new Blob([text], { type: "text/plain" }),
         }),
@@ -226,37 +262,7 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
   return false;
 };
 
-const copyReportWithClipboardItem = async (reportPromise: Promise<unknown>, diagnostics: DebugExportDiagnostics) => {
-  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-    return null;
-  }
-
-  let resolvedReport: unknown;
-
-  try {
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        "text/plain": reportPromise.then((report) => {
-          resolvedReport = report;
-          const text = toClipboardText(report);
-          diagnostics.textBytes = new TextEncoder().encode(text).length;
-          return new Blob([text], { type: "text/plain" });
-        }),
-      }),
-    ]);
-    diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem-promise)", ok: true });
-
-    return {
-      copied: true,
-      report: resolvedReport ?? (await reportPromise),
-    };
-  } catch (error) {
-    diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem-promise)", ok: false, error: toErrorMessage(error) });
-    return null;
-  }
-};
-
-const downloadDebugReport = (report: unknown, filename = `chalk-debug-${Date.now()}.json`) => {
+export const downloadDebugReport = (report: unknown, filename = `chalk-debug-${Date.now()}.json`) => {
   const blob = new Blob([safeJsonStringify(report)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -288,7 +294,7 @@ async function getDevicesSnapshot() {
   }
 }
 
-export async function exportFullDebugReport(context: Record<string, unknown>) {
+export async function prepareFullDebugExport(context: Record<string, unknown>): Promise<PreparedDebugExport> {
   const diagnostics: DebugExportDiagnostics = {
     clipboardAvailable: Boolean(navigator.clipboard),
     clipboardWriteTextAvailable: Boolean(navigator.clipboard?.writeText),
@@ -297,7 +303,7 @@ export async function exportFullDebugReport(context: Record<string, unknown>) {
     attempts: [],
   };
 
-  const reportPromise = (async () => ({
+  const report = await (async () => ({
     report: {
       generatedAt: new Date().toISOString(),
       app: "chalk-sdk-react",
@@ -332,27 +338,32 @@ export async function exportFullDebugReport(context: Record<string, unknown>) {
     context,
     logs: chalkDebugCollector.getSnapshot(),
   }))();
-
-  const clipboardItemResult = await copyReportWithClipboardItem(reportPromise, diagnostics);
-  if (clipboardItemResult) {
-    if (diagnostics.attempts.some((attempt) => !attempt.ok)) {
-      console.warn("[chalk][debug-export] copied after fallback", diagnostics);
-    }
-    return { outcome: "copied" as const, report: clipboardItemResult.report, diagnostics };
-  }
-
-  const report = await reportPromise;
   const text = toClipboardText(report);
-  diagnostics.textBytes ??= new TextEncoder().encode(text).length;
+  diagnostics.textBytes = new TextEncoder().encode(text).length;
 
-  if (await copyTextToClipboard(text, diagnostics)) {
-    if (diagnostics.attempts.some((attempt) => !attempt.ok)) {
-      console.warn("[chalk][debug-export] copied after fallback", diagnostics);
+  return { report, text, diagnostics };
+}
+
+export async function copyPreparedDebugExport(prepared: PreparedDebugExport): Promise<DebugCopyResult> {
+  if (await copyTextToClipboard(prepared.text, prepared.diagnostics)) {
+    if (prepared.diagnostics.attempts.some((attempt) => !attempt.ok)) {
+      console.warn("[chalk][debug-export] copied after fallback", prepared.diagnostics);
     }
-    return { outcome: "copied" as const, report, diagnostics };
+    return { outcome: "copied", report: prepared.report, diagnostics: prepared.diagnostics };
   }
 
-  console.error("[chalk][debug-export] all copy strategies failed", diagnostics);
-  downloadDebugReport(report);
-  return { outcome: "downloaded" as const, report, diagnostics };
+  console.error("[chalk][debug-export] all copy strategies failed", prepared.diagnostics);
+  return { outcome: "failed", report: prepared.report, diagnostics: prepared.diagnostics };
+}
+
+export async function exportFullDebugReport(context: Record<string, unknown>) {
+  const prepared = await prepareFullDebugExport(context);
+
+  const result = await copyPreparedDebugExport(prepared);
+  if (result.outcome === "copied") {
+    return result;
+  }
+
+  downloadDebugReport(prepared.report);
+  return { outcome: "downloaded" as const, report: prepared.report, diagnostics: prepared.diagnostics };
 }

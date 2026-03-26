@@ -181,8 +181,20 @@ const safeJsonStringify = (value: unknown) => {
 
 async function copyTextToClipboard(text: string) {
   try {
-    await navigator.clipboard?.writeText?.(text);
-    return true;
+    const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+    if (writeText) {
+      await writeText(text);
+      const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
+      if (!readText) {
+        return true;
+      }
+
+      try {
+        return (await readText()) === text;
+      } catch {
+        return true;
+      }
+    }
   } catch {
     // Fall through to legacy/browser-specific strategies.
   }
@@ -215,31 +227,13 @@ async function copyTextToClipboard(text: string) {
   return false;
 }
 
+export async function copyDebugTextToClipboard(text: string) {
+  return copyTextToClipboard(text);
+}
+
 export async function copyDebugReportToClipboard(reportPromise: Promise<unknown>) {
-  if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
-    let resolvedReport: unknown;
-
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          "text/plain": reportPromise.then((report) => {
-            resolvedReport = report;
-            return new Blob([toDebugClipboardText(report)], { type: "text/plain" });
-          }),
-        }),
-      ]);
-
-      return {
-        copied: true,
-        report: resolvedReport ?? (await reportPromise),
-      };
-    } catch {
-      // Fall through to post-build strategies.
-    }
-  }
-
   const report = await reportPromise;
-  if (await copyTextToClipboard(toDebugClipboardText(report))) {
+  if (await copyDebugTextToClipboard(toDebugClipboardText(report))) {
     return { copied: true, report };
   }
 

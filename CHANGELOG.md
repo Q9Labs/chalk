@@ -1082,6 +1082,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Chalk full-debug copy now prebuilds the payload before the click, uses plain-text clipboard write first, verifies the write when the browser allows clipboard reads, and exposes a dedicated download fallback in the shared SDK error sheets instead of silently reporting fake clipboard success.
 - Mobile dev diagnostics now stay visible in debug builds even when the app is pointed at production/custom APIs, so local debug APKs stop hiding the diagnostics sheet just because the target is not classified as `local`.
 - Web join routes now force room-scoped auth instead of reusing the dashboard/demo API-key token provider, and the React SDK provider can rotate its cached session by route context so invite links no longer land on prejoin with a hidden `room not found` auth mismatch.
 - Web `New meeting` now creates a real backend room before redirecting, so first-party host flows stop generating dead `instant-meeting-*` ids and land directly on a canonical `/room/<uuid>?auth=internal` route that guests can join.

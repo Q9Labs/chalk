@@ -9,7 +9,7 @@ import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
 import { useMeetingRoomTheme } from "../meeting-room/useMeetingRoomTheme";
 import { LoadingScreen } from "../LoadingScreen";
 import type { PictureInPictureControls, PictureInPictureMeetingLayout, PictureInPicturePhase, PictureInPictureSource } from "./types";
-import { exportFullDebugReport } from "../../../utils/debugExport";
+import { copyPreparedDebugExport, downloadDebugReport, prepareFullDebugExport, type PreparedDebugExport } from "../../../utils/debugExport";
 
 interface PictureInPictureWindowProps {
   phase: PictureInPicturePhase;
@@ -314,8 +314,9 @@ function MeetingPictureInPictureLayout({
 export function PictureInPictureWindow({ phase, source, previewSource, participantSources, meetingLayout = "single", controls, onReturnToTab }: PictureInPictureWindowProps) {
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const [debugExportState, setDebugExportState] = useState<"idle" | "copied" | "downloaded">("idle");
+  const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "copied" | "failed" | "downloaded">("idle");
   const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
+  const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
   const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
 
   const errorInfo = useMemo(() => {
@@ -427,16 +428,64 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
   const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
   const reduceMotion = settings.appearance.reducedMotion;
 
-  const handleDebugExport = async () => {
-    const result = await exportFullDebugReport({
+  useEffect(() => {
+    if (!showErrorOverlay) {
+      setPreparedDebugExport(null);
+      setDebugExportLog(null);
+      setDebugExportState("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setDebugExportState("preparing");
+    void prepareFullDebugExport({
       source: "pip-error-overlay",
       phase,
       error: controls.errorMessage ?? null,
       supportCode: controls.supportCode ?? null,
       roomName: source?.title ?? null,
-    });
+    })
+      .then((prepared) => {
+        if (cancelled) return;
+        setPreparedDebugExport(prepared);
+        setDebugExportState("idle");
+      })
+      .catch((preparationError) => {
+        if (cancelled) return;
+        setDebugExportLog(JSON.stringify({ preparationError: preparationError instanceof Error ? preparationError.message : String(preparationError) }, null, 2));
+        setDebugExportState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [controls.errorMessage, controls.supportCode, phase, showErrorOverlay, source?.title]);
+
+  const handleDebugExport = async () => {
+    if (!preparedDebugExport) {
+      setDebugExportState("preparing");
+      setDebugExportLog(JSON.stringify({ error: "Debug report still preparing. Click again in a second." }, null, 2));
+      return;
+    }
+
+    const result = await copyPreparedDebugExport(preparedDebugExport);
     setDebugExportState(result.outcome);
     setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
+    window.setTimeout(() => setDebugExportState("idle"), 2500);
+  };
+
+  const handleDebugDownload = async () => {
+    const prepared = preparedDebugExport ?? (await prepareFullDebugExport({
+      source: "pip-error-overlay",
+      phase,
+      error: controls.errorMessage ?? null,
+      supportCode: controls.supportCode ?? null,
+      roomName: source?.title ?? null,
+    }));
+    setPreparedDebugExport(prepared);
+    downloadDebugReport(prepared.report);
+    setDebugExportState("downloaded");
+    setDebugExportLog(JSON.stringify(prepared.diagnostics, null, 2));
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
@@ -535,7 +584,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                 </button>
               </div>
 
-              <div className="mb-5 flex w-full justify-center">
+              <div className="mb-5 flex w-full flex-wrap justify-center gap-2">
                 <button
                   onClick={() => void handleDebugExport()}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95"
@@ -544,6 +593,16 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                     <>
                       <CheckmarkCircle02Icon size={16} />
                       Copied Full Debug
+                    </>
+                  ) : debugExportState === "preparing" ? (
+                    <>
+                      <Download01Icon size={16} />
+                      Preparing Debug...
+                    </>
+                  ) : debugExportState === "failed" ? (
+                    <>
+                      <Copy01Icon size={16} />
+                      Copy Failed
                     </>
                   ) : debugExportState === "downloaded" ? (
                     <>
@@ -556,6 +615,13 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                       Copy Full Debug
                     </>
                   )}
+                </button>
+                <button
+                  onClick={() => void handleDebugDownload()}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95"
+                >
+                  <Download01Icon size={16} />
+                  Download JSON
                 </button>
               </div>
 

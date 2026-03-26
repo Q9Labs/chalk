@@ -4,24 +4,26 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { DiagnosticErrorSheet } from "../../components/composite/DiagnosticErrorSheet";
 
 describe("DiagnosticErrorSheet", () => {
-  it("uses ClipboardItem write during the click flow when available", async () => {
-    const write = vi.fn().mockResolvedValue(undefined);
-    const originalClipboardItem = globalThis.ClipboardItem;
-    const clipboardItemSpy = vi.fn((items: Record<string, Promise<Blob>>) => items);
-
-    navigator.clipboard.write = write;
-    // @ts-expect-error test shim
-    globalThis.ClipboardItem = clipboardItemSpy;
+  it("copies the prebuilt debug text with writeText first", async () => {
+    let clipboardText = "";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const readText = vi.fn().mockImplementation(async () => clipboardText);
+    navigator.clipboard.writeText = vi.fn(async (text: string) => {
+      clipboardText = text;
+      return writeText(text);
+    });
+    navigator.clipboard.readText = readText;
 
     const { getByText, findByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-789" />);
 
+    await findByText("Copy Full Debug");
     fireEvent.click(getByText("Copy Full Debug"));
 
     await findByText("Copied Full Debug");
-    expect(clipboardItemSpy).toHaveBeenCalledTimes(1);
-    expect(write).toHaveBeenCalledTimes(1);
-
-    globalThis.ClipboardItem = originalClipboardItem;
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(String(writeText.mock.calls[0]?.[0])).toContain("Failed to join room");
+    expect(String(writeText.mock.calls[0]?.[0])).toContain("CHK-789");
   });
 
   it("falls back to legacy copy when async clipboard write fails", async () => {
@@ -38,6 +40,7 @@ describe("DiagnosticErrorSheet", () => {
 
     const { getByText, findByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-456" />);
 
+    await findByText("Copy Full Debug");
     fireEvent.click(getByText("Copy Full Debug"));
 
     await findByText("Copied Full Debug");
@@ -51,8 +54,9 @@ describe("DiagnosticErrorSheet", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     navigator.clipboard.writeText = writeText;
 
-    const { getByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-123" />);
+    const { getByText, findByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-123" />);
 
+    await findByText("Copy Full Debug");
     fireEvent.click(getByText("Copy Full Debug"));
 
     await waitFor(() => {
@@ -60,5 +64,18 @@ describe("DiagnosticErrorSheet", () => {
     });
     expect(String(writeText.mock.calls[0]?.[0])).toContain("Failed to join room");
     expect(String(writeText.mock.calls[0]?.[0])).toContain("CHK-123");
+  });
+
+  it("does not silently report copied while the debug payload is still preparing", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    navigator.clipboard.writeText = writeText;
+
+    const { getByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-321" />);
+
+    fireEvent.click(getByText("Preparing Debug..."));
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(getByText("Preparing Debug...")).toBeTruthy();
+    expect(getByText(/Debug report still preparing/i)).toBeTruthy();
   });
 });

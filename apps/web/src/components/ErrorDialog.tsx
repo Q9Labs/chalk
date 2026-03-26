@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { cn } from "@q9labs/chalk-ui";
 import { AlertCircleIcon, CopyIcon, CheckIcon, XIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
-import { buildChalkWebDebugReport, copyDebugReportToClipboard, downloadDebugReport } from "../lib/debugReport";
+import { buildChalkWebDebugReport, copyDebugTextToClipboard, downloadDebugReport, toDebugClipboardText } from "../lib/debugReport";
 
 export interface ErrorDialogProps {
   /** Whether the dialog is open */
@@ -21,8 +21,9 @@ export interface ErrorDialogProps {
  */
 export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, message, traceId, className }) => {
   const [copied, setCopied] = useState(false);
-  const [copiedDebug, setCopiedDebug] = useState(false);
+  const [copiedDebug, setCopiedDebug] = useState<"idle" | "preparing" | "copied" | "failed">("idle");
   const [downloadingDebug, setDownloadingDebug] = useState(false);
+  const [preparedDebugReport, setPreparedDebugReport] = useState<{ report: unknown; text: string } | null>(null);
 
   const handleCopyTrace = () => {
     if (!traceId) return;
@@ -41,23 +42,50 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  const handleCopyFullDebug = async () => {
-    const reportPromise = buildChalkWebDebugReport({ message, traceId });
-    const result = await copyDebugReportToClipboard(reportPromise);
-
-    if (result.copied) {
-      setCopiedDebug(true);
-      window.setTimeout(() => setCopiedDebug(false), 2500);
+  useEffect(() => {
+    if (!isOpen) {
+      setPreparedDebugReport(null);
+      setCopiedDebug("idle");
       return;
     }
 
-    downloadDebugReport(result.report);
-    setDownloadingDebug(true);
-    window.setTimeout(() => setDownloadingDebug(false), 2500);
+    let cancelled = false;
+    setCopiedDebug("preparing");
+
+    void buildChalkWebDebugReport({ message, traceId })
+      .then((report) => {
+        if (cancelled) return;
+        setPreparedDebugReport({ report, text: toDebugClipboardText(report) });
+        setCopiedDebug("idle");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPreparedDebugReport(null);
+        setCopiedDebug("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, message, traceId]);
+
+  const handleCopyFullDebug = async () => {
+    if (!preparedDebugReport) {
+      setCopiedDebug("preparing");
+      return;
+    }
+
+    if (await copyDebugTextToClipboard(preparedDebugReport.text)) {
+      setCopiedDebug("copied");
+      window.setTimeout(() => setCopiedDebug("idle"), 2500);
+      return;
+    }
+
+    setCopiedDebug("failed");
   };
 
   const handleDownloadDebug = async () => {
-    const report = await buildChalkWebDebugReport({ message, traceId });
+    const report = preparedDebugReport?.report ?? (await buildChalkWebDebugReport({ message, traceId }));
     downloadDebugReport(report);
     setDownloadingDebug(true);
     window.setTimeout(() => setDownloadingDebug(false), 2500);
@@ -89,10 +117,18 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
 
           <div className="mt-6 space-y-3 rounded-lg bg-muted/50 border border-border p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => void handleCopyFullDebug()} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors", copiedDebug ? "bg-green-500/15 text-green-600" : "bg-primary/10 text-primary hover:bg-primary/15")}>
-                {copiedDebug ? (
+              <button onClick={() => void handleCopyFullDebug()} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors", copiedDebug === "copied" ? "bg-green-500/15 text-green-600" : copiedDebug === "failed" ? "bg-red-500/15 text-red-600" : "bg-primary/10 text-primary hover:bg-primary/15")}>
+                {copiedDebug === "copied" ? (
                   <>
                     <CheckIcon size={12} /> Copied Full Debug
+                  </>
+                ) : copiedDebug === "preparing" ? (
+                  <>
+                    <DownloadIcon size={12} /> Preparing Debug
+                  </>
+                ) : copiedDebug === "failed" ? (
+                  <>
+                    <CopyIcon size={12} /> Copy Failed
                   </>
                 ) : (
                   <>
