@@ -1,4 +1,5 @@
 import { ChalkErrorCode, type ChalkError, type Participant } from "../types.ts";
+import { wideEvents } from "../wide-events/index.ts";
 import { getRtkIds, mapRtkParticipant } from "./rtk-identity.ts";
 import { collectJoinedParticipants, getParticipantEmitters, onParticipantsEvent, toRtkParticipantsApi, type RtkParticipantsApi, type ParticipantEventEmitter } from "./rtk-participant-adapter.ts";
 import { applyAudioUpdatePatch, applyScreenShareUpdatePatch, applyVideoUpdatePatch, hasMediaStateChanged, mergeParticipantMediaState } from "./participant-sync-reducer.ts";
@@ -88,6 +89,24 @@ const reconcileJoinedParticipants = (deps: RtkSignalingDeps, participantsApi: Rt
 const emitTrackError = (deps: RtkSignalingDeps, error: ChalkError): void => {
   deps.emit("error", error);
 };
+
+const getTrackDiagnostics = (track: MediaStreamTrack | undefined | null) => ({
+  hasTrack: !!track,
+  trackReadyState: track?.readyState ?? null,
+  trackEnabled: track?.enabled ?? null,
+  trackMuted: track?.muted ?? null,
+});
+
+const getScreenShareDiagnostics = (participant: Participant) => ({
+  hasVideoTrack: !!participant.screenShareTrack,
+  videoTrackReadyState: participant.screenShareTrack?.readyState ?? null,
+  videoTrackEnabled: participant.screenShareTrack?.enabled ?? null,
+  videoTrackMuted: participant.screenShareTrack?.muted ?? null,
+  hasAudioTrack: !!participant.screenShareAudioTrack,
+  audioTrackReadyState: participant.screenShareAudioTrack?.readyState ?? null,
+  audioTrackEnabled: participant.screenShareAudioTrack?.enabled ?? null,
+  audioTrackMuted: participant.screenShareAudioTrack?.muted ?? null,
+});
 
 const RTK_RECONNECT_DELAYS_MS = [0, 1000, 2000, 4000, 8000] as const;
 
@@ -243,6 +262,14 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       }
     }
 
+    const ctx = wideEvents.start("media.video.update");
+    ctx.merge({
+      scope: "local",
+      participantId: localParticipant.id,
+      enabled: data.videoEnabled,
+      ...getTrackDiagnostics(data.videoTrack),
+    });
+    ctx.complete("success");
     emitParticipantUpdated(deps, localParticipant.id, localParticipant);
   });
 
@@ -266,6 +293,14 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       }
     }
 
+    const ctx = wideEvents.start("media.audio.update");
+    ctx.merge({
+      scope: "local",
+      participantId: localParticipant.id,
+      enabled: data.audioEnabled,
+      ...getTrackDiagnostics(data.audioTrack),
+    });
+    ctx.complete("success");
     emitParticipantUpdated(deps, localParticipant.id, localParticipant);
   });
 
@@ -287,6 +322,14 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       localParticipant.screenShareTrack = data.screenShareTracks?.video ?? undefined;
       localParticipant.screenShareAudioTrack = data.screenShareTracks?.audio ?? undefined;
 
+      const ctx = wideEvents.start("screenshare.update");
+      ctx.merge({
+        scope: "local",
+        participantId: localParticipant.id,
+        enabled: data.screenShareEnabled,
+        ...getScreenShareDiagnostics(localParticipant),
+      });
+      ctx.complete("success");
       emitParticipantUpdated(deps, localParticipant.id, localParticipant);
     },
   );
@@ -329,6 +372,15 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       deps.validateTrack(participant.videoTrack, "REMOTE_VIDEO", participant.id);
     }
 
+    const ctx = wideEvents.start("media.video.update");
+    ctx.merge({
+      scope: "remote",
+      participantId: updated.id,
+      participantName: updated.displayName,
+      enabled: updated.videoEnabled,
+      ...getTrackDiagnostics(updated.videoTrack),
+    });
+    ctx.complete("success");
     emitParticipantUpdated(deps, participant.id, updated);
   });
 
@@ -351,6 +403,15 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       deps.validateTrack(participant.audioTrack, "REMOTE_AUDIO", participant.id);
     }
 
+    const ctx = wideEvents.start("media.audio.update");
+    ctx.merge({
+      scope: "remote",
+      participantId: updated.id,
+      participantName: updated.displayName,
+      enabled: updated.audioEnabled,
+      ...getTrackDiagnostics(updated.audioTrack),
+    });
+    ctx.complete("success");
     emitParticipantUpdated(deps, participant.id, updated);
   });
 
@@ -380,6 +441,15 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       }
     }
 
+    const ctx = wideEvents.start("screenshare.update");
+    ctx.merge({
+      scope: "remote",
+      participantId: updated.id,
+      participantName: updated.displayName,
+      enabled: updated.isScreenSharing,
+      ...getScreenShareDiagnostics(updated),
+    });
+    ctx.complete("success");
     emitParticipantUpdated(deps, participant.id, updated);
   });
 

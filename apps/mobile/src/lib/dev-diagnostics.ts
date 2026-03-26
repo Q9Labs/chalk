@@ -237,12 +237,62 @@ const formatTimelineDetail = (eventType: string, data: Record<string, unknown>, 
       return [request?.method, request?.path, response?.statusCode ? `status ${response.statusCode}` : null].filter(Boolean).join(" ");
     case "room.join.rtk.attempt":
       return `attempt ${String(data.attempt ?? "?")}/${String(data.totalAttempts ?? "?")} timeout ${String(data.timeoutMs ?? "?")}ms`;
+    case "chat.send":
+      return [data.transport ? `transport ${String(data.transport)}` : null, `chars ${String(data.contentLength ?? 0)}`, `attachments ${String(data.attachmentCount ?? 0)}`, data.wsConnectionState ? `ws ${String(data.wsConnectionState)}` : null, data.localOnly ? "local only" : null]
+        .filter(Boolean)
+        .join(" ");
+    case "chat.message.receive":
+      return [`from ${String(data.participantName ?? data.participantId ?? "unknown")}`, `chars ${String(data.contentLength ?? 0)}`, `attachments ${String(data.attachmentCount ?? 0)}`].filter(Boolean).join(" ");
+    case "chat.read.receive":
+      return [`participant ${String(data.participantId ?? "")}`.trim(), `messages ${String(data.messageCount ?? 0)}`].filter(Boolean).join(" ");
     case "media.toggle":
-      return `${String(data.mediaType ?? "media")} ${String(data.before ?? "?")} -> ${String(data.enabled ?? "?")}`;
+      return [
+        `${String(data.mediaType ?? "media")} ${String(data.before ?? "?")} -> ${String(data.enabled ?? "?")}`,
+        `track ${String(data.hasTrack ?? false)}`,
+        data.trackReadyState ? `ready ${String(data.trackReadyState)}` : null,
+        typeof data.trackMuted === "boolean" ? `muted ${String(data.trackMuted)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
+    case "media.video.update":
+    case "media.audio.update":
+      return [
+        data.scope ? `scope ${String(data.scope)}` : null,
+        data.participantName ? `name ${String(data.participantName)}` : null,
+        data.participantId ? `participant ${String(data.participantId)}` : null,
+        `enabled ${String(data.enabled ?? "?")}`,
+        `track ${String(data.hasTrack ?? false)}`,
+        data.trackReadyState ? `ready ${String(data.trackReadyState)}` : null,
+        typeof data.trackMuted === "boolean" ? `muted ${String(data.trackMuted)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "screenshare.start":
-      return `withAudio ${String(data.withAudio ?? false)} participant ${String(data.participantId ?? "")}`.trim();
+      return [
+        `withAudio ${String(data.withAudio ?? false)}`,
+        `participant ${String(data.participantId ?? "")}`.trim(),
+        `videoTrack ${String(data.hasVideoTrack ?? false)}`,
+        `audioTrack ${String(data.hasAudioTrack ?? false)}`,
+        data.videoTrackReadyState ? `videoReady ${String(data.videoTrackReadyState)}` : null,
+        data.audioTrackReadyState ? `audioReady ${String(data.audioTrackReadyState)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "screenshare.stop":
-      return `participant ${String(data.participantId ?? "")}`.trim();
+      return [`participant ${String(data.participantId ?? "")}`.trim(), `videoTrack ${String(data.hasVideoTrack ?? false)}`, `audioTrack ${String(data.hasAudioTrack ?? false)}`].filter(Boolean).join(" ");
+    case "screenshare.update":
+      return [
+        data.scope ? `scope ${String(data.scope)}` : null,
+        data.participantName ? `name ${String(data.participantName)}` : null,
+        data.participantId ? `participant ${String(data.participantId)}` : null,
+        `enabled ${String(data.enabled ?? "?")}`,
+        `videoTrack ${String(data.hasVideoTrack ?? false)}`,
+        `audioTrack ${String(data.hasAudioTrack ?? false)}`,
+        data.videoTrackReadyState ? `videoReady ${String(data.videoTrackReadyState)}` : null,
+        data.audioTrackReadyState ? `audioReady ${String(data.audioTrackReadyState)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "reaction.send":
       return `emoji ${String(data.emoji ?? "")}`.trim();
     case "reaction.receive":

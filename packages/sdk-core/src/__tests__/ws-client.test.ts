@@ -395,6 +395,22 @@ describe("WSClient", () => {
     expect(capturedWideEvents.some((event) => event.eventType === "participant.unmute.request" && event.data.participantId === "p2")).toBe(true);
   });
 
+  it("emits outbound chat diagnostics with transport details", () => {
+    let ws: MockWebSocket | null = null;
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    client.sendChatMessage("hello world", ["a1", "a2"]);
+
+    expect(capturedWideEvents.some((event) => event.eventType === "chat.send" && event.data.transport === "ws" && event.data.contentLength === 11 && event.data.attachmentCount === 2)).toBe(true);
+  });
+
   it("emits inbound interaction diagnostics for reaction, hand raise, and moderation events", () => {
     let ws: MockWebSocket | null = null;
     const client = new WSClient("wss://example/ws", {
@@ -427,5 +443,49 @@ describe("WSClient", () => {
     expect(capturedWideEvents.some((event) => event.eventType === "reaction.receive" && event.data.emoji === "👏")).toBe(true);
     expect(capturedWideEvents.some((event) => event.eventType === "hand.raise" && event.data.direction === "receive" && event.data.participantId === "p1")).toBe(true);
     expect(capturedWideEvents.some((event) => event.eventType === "participant.mute.receive" && event.data.participantId === "p2")).toBe(true);
+  });
+
+  it("emits inbound chat diagnostics for messages and read receipts", () => {
+    let ws: MockWebSocket | null = null;
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    ws?.receive({
+      type: "chat.message",
+      payload: {
+        id: "m1",
+        participant_id: "p1",
+        display_name: "Alice",
+        content: "hello",
+        timestamp: "2026-02-05T00:00:00.000Z",
+        attachments: [
+          {
+            id: "att-1",
+            file_name: "hello.png",
+            mime_type: "image/png",
+            size_bytes: 123,
+            kind: "image",
+          },
+        ],
+      },
+    });
+    ws?.receive({
+      type: "chat.read",
+      payload: {
+        message_ids: ["m1", "m2"],
+        participant_id: "p2",
+        display_name: "Bob",
+        read_at: "2026-02-05T00:00:01.000Z",
+      },
+    });
+
+    expect(capturedWideEvents.some((event) => event.eventType === "chat.message.receive" && event.data.participantId === "p1" && event.data.contentLength === 5)).toBe(true);
+    expect(capturedWideEvents.some((event) => event.eventType === "chat.read.receive" && event.data.participantId === "p2" && event.data.messageCount === 2)).toBe(true);
   });
 });

@@ -4,7 +4,7 @@ import { WSClientBase } from "./base.ts";
 export { type WSClientOptions } from "./deps.ts";
 
 export class WSClient extends WSClientBase {
-  private emitActionWideEvent(eventType: "reaction.send" | "hand.raise" | "hand.lower" | "participant.mute.request" | "participant.unmute.request", details: Record<string, unknown>): boolean {
+  private emitActionWideEvent(eventType: "chat.send" | "reaction.send" | "hand.raise" | "hand.lower" | "participant.mute.request" | "participant.unmute.request", details: Record<string, unknown>): boolean {
     const ctx = wideEvents.start(eventType);
     ctx.merge(details);
 
@@ -26,6 +26,16 @@ export class WSClient extends WSClientBase {
   }
 
   sendChatMessage(content: string, attachmentIds?: string[]): void {
+    if (
+      !this.emitActionWideEvent("chat.send", {
+        transport: "ws",
+        contentLength: content.length,
+        attachmentCount: attachmentIds?.length ?? 0,
+      })
+    ) {
+      return;
+    }
+
     this.send({
       type: "chat.send",
       payload: attachmentIds && attachmentIds.length > 0 ? { content, attachmentIds } : { content },

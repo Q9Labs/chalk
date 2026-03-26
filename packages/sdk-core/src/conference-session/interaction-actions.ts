@@ -1,5 +1,6 @@
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import type { ChatMessage, Participant, ReactionEmoji } from "../types.ts";
+import { wideEvents } from "../wide-events/index.ts";
 import type { WSClient } from "../ws-client.ts";
 
 interface InteractionActionsDeps {
@@ -55,6 +56,12 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
     }
 
     pendingHandRaised = isRaised;
+    const ctx = wideEvents.start(isRaised ? "hand.raise" : "hand.lower");
+    ctx.merge({
+      direction: "queued",
+      wsConnectionState: wsClient.connectionState,
+    });
+    ctx.complete("success");
     if (!pendingHandSyncCleanup) {
       pendingHandSyncCleanup = wsClient.on("connected", () => {
         flushPendingHandSync();
@@ -78,28 +85,51 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
 
     const wsClient = deps.getWsClient();
     const rtkClient = deps.getRtkClient();
+    const wsConnectionState = wsClient?.connectionState ?? "missing";
 
-    if (wsClient) {
+    if (wsClient?.connectionState === "connected") {
       wsClient.sendChatMessage(trimmed, normalizedAttachmentIds);
-    } else if (rtkClient) {
+      return;
+    }
+
+    const ctx = wideEvents.start("chat.send");
+    ctx.merge({
+      contentLength: trimmed.length,
+      attachmentCount: normalizedAttachmentIds.length,
+      wsConnectionState,
+    });
+
+    if (rtkClient) {
+      ctx.set("transport", wsClient ? "rtk-fallback" : "rtk");
       try {
         rtkClient.chat?.sendTextMessage(trimmed);
+        ctx.complete("success");
       } catch {
+        ctx.complete("error", {
+          code: "RTK_CHAT_SEND_FAILED",
+          message: "Failed to send chat message through RealtimeKit fallback",
+        });
         // best effort
       }
-    } else {
-      const localParticipant = deps.getLocalParticipant();
-      const localMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        senderId: localParticipant?.id ?? "local",
-        senderName: localParticipant?.displayName ?? "You",
-        content: trimmed,
-        timestamp: new Date(),
-        attachments: [],
-        readBy: [],
-      };
-      deps.emitChatMessage(localMessage);
+      return;
     }
+
+    ctx.set("transport", "local-echo");
+    const localParticipant = deps.getLocalParticipant();
+    const localMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      senderId: localParticipant?.id ?? "local",
+      senderName: localParticipant?.displayName ?? "You",
+      content: trimmed,
+      timestamp: new Date(),
+      attachments: [],
+      readBy: [],
+    };
+    deps.emitChatMessage(localMessage);
+    ctx.complete("error", {
+      code: "CHAT_LOCAL_ONLY",
+      message: "No realtime transport available; message echoed locally only",
+    });
   };
 
   const markChatRead = (readThroughMessageId: string): void => {

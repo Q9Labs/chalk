@@ -1,7 +1,11 @@
-import { describe, expect, it } from "bun:test";
-import { classifyTarget, decodeTokenClaimsPreview, maskSecret, resolveDevDiagnosticsMode } from "./dev-diagnostics";
+import { afterEach, describe, expect, it } from "bun:test";
+import { buildDevDiagnosticsCopyText, classifyTarget, decodeTokenClaimsPreview, getDevDiagnosticsState, maskSecret, recordDevDiagnosticsLifecycleEvent, recordManualRequest, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsEnvironment } from "./dev-diagnostics";
 
 describe("dev diagnostics helpers", () => {
+  afterEach(() => {
+    resetDevDiagnosticsState();
+  });
+
   it("classifies local, production, and custom targets", () => {
     expect(classifyTarget("http://localhost:8080")).toBe("local");
     expect(classifyTarget("http://192.168.1.5:8080")).toBe("local");
@@ -39,5 +43,34 @@ describe("dev diagnostics helpers", () => {
 
   it("returns null for opaque non-jwt tokens", () => {
     expect(decodeTokenClaimsPreview("join_token_opaque")).toBeNull();
+  });
+
+  it("copy all includes env, requests, and timeline state", () => {
+    setDevDiagnosticsEnvironment({
+      apiUrl: "http://localhost:8080",
+      wsUrl: "ws://localhost:8080/ws",
+      routeKind: "join",
+      routeRoomId: "room-local",
+    });
+    recordDevDiagnosticsLifecycleEvent("debug.lifecycle", "DEBUG LIFECYCLE", "entered room");
+    recordManualRequest({
+      eventType: "api.request",
+      method: "POST",
+      path: "/api/v1/rooms",
+      url: "http://localhost:8080/api/v1/rooms",
+      outcome: "success",
+      statusCode: 201,
+      requestId: "req-123",
+      traceId: "trace-123",
+    });
+
+    const copied = JSON.parse(buildDevDiagnosticsCopyText()) as ReturnType<typeof getDevDiagnosticsState> & { generatedAt: string };
+
+    expect(typeof copied.generatedAt).toBe("string");
+    expect(copied.env.apiUrl).toBe("http://localhost:8080");
+    expect(copied.env.target).toBe("local");
+    expect(copied.requests.some((entry) => entry.path === "/api/v1/rooms" && entry.requestId === "req-123")).toBe(true);
+    expect(copied.timeline.some((entry) => entry.eventType === "debug.lifecycle")).toBe(true);
+    expect(copied.timeline.some((entry) => entry.eventType === "api.request")).toBe(true);
   });
 });

@@ -32,9 +32,26 @@ export const createInboundHandlers = (deps: { emit: Emit; send: (message: WSOutb
       deps.emit("participant.unmute", payload);
     },
     "chat.message": (payload) => {
-      deps.emit("chat.message", toChatMessage(payload));
+      const chatMessage = toChatMessage(payload);
+      const ctx = wideEvents.start("chat.message.receive");
+      ctx.merge({
+        participantId: chatMessage.senderId,
+        participantName: chatMessage.senderName,
+        contentLength: chatMessage.content.length,
+        attachmentCount: chatMessage.attachments?.length ?? 0,
+        messageId: chatMessage.id,
+      });
+      ctx.complete("success");
+      deps.emit("chat.message", chatMessage);
     },
     "chat.read": (payload) => {
+      const ctx = wideEvents.start("chat.read.receive");
+      ctx.merge({
+        participantId: payload.participantId,
+        participantName: payload.displayName,
+        messageCount: payload.messageIds.length,
+      });
+      ctx.complete("success");
       deps.emit("chat.read", {
         messageIds: payload.messageIds as string[],
         participantId: payload.participantId,

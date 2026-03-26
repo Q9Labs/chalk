@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../types.ts";
+import { wideEvents } from "../wide-events/index.ts";
 import type { RtkSignalingDeps } from "./rtk-signaling-deps.ts";
 
 const extractChatMessage = (payload: unknown): ChatMessage | null => {
@@ -49,6 +50,16 @@ export const setupRtkChatListener = (deps: RtkSignalingDeps): void => {
     }
 
     deps.getMessages().push(chatMessage);
+    const ctx = wideEvents.start("chat.message.receive");
+    ctx.merge({
+      transport: "rtk",
+      participantId: chatMessage.senderId,
+      participantName: chatMessage.senderName,
+      contentLength: chatMessage.content.length,
+      attachmentCount: chatMessage.attachments?.length ?? 0,
+      messageId: chatMessage.id,
+    });
+    ctx.complete("success");
     deps.emit("chat.message", chatMessage);
   };
 

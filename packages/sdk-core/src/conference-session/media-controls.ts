@@ -24,6 +24,24 @@ const validateTrack = (track: MediaStreamTrack | undefined | null): boolean => {
   return isLive && isEnabled;
 };
 
+const getTrackDiagnostics = (track: MediaStreamTrack | undefined | null) => ({
+  hasTrack: !!track,
+  trackReadyState: track?.readyState ?? null,
+  trackEnabled: track?.enabled ?? null,
+  trackMuted: "muted" in (track ?? {}) ? (track as MediaStreamTrack).muted : null,
+});
+
+const getScreenShareTrackDiagnostics = (videoTrack: MediaStreamTrack | undefined | null, audioTrack: MediaStreamTrack | undefined | null) => ({
+  hasVideoTrack: !!videoTrack,
+  videoTrackReadyState: videoTrack?.readyState ?? null,
+  videoTrackEnabled: videoTrack?.enabled ?? null,
+  videoTrackMuted: "muted" in (videoTrack ?? {}) ? (videoTrack as MediaStreamTrack).muted : null,
+  hasAudioTrack: !!audioTrack,
+  audioTrackReadyState: audioTrack?.readyState ?? null,
+  audioTrackEnabled: audioTrack?.enabled ?? null,
+  audioTrackMuted: "muted" in (audioTrack ?? {}) ? (audioTrack as MediaStreamTrack).muted : null,
+});
+
 const boostVideoBitrate = async (rtkClient: RealtimeKitClient): Promise<void> => {
   try {
     const client = rtkClient as unknown as {
@@ -109,7 +127,10 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
       }
 
       deps.emitParticipantUpdated(localParticipant.id, localParticipant);
-      ctx.complete("success", { enabled: localParticipant.videoEnabled });
+      ctx.complete("success", {
+        enabled: localParticipant.videoEnabled,
+        ...getTrackDiagnostics(localParticipant.videoTrack),
+      });
       return localParticipant.videoEnabled;
     } catch (error) {
       ctx.complete("error", error);
@@ -146,7 +167,10 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
       }
 
       deps.emitParticipantUpdated(localParticipant.id, localParticipant);
-      ctx.complete("success", { enabled: localParticipant.audioEnabled });
+      ctx.complete("success", {
+        enabled: localParticipant.audioEnabled,
+        ...getTrackDiagnostics(localParticipant.audioTrack),
+      });
       return localParticipant.audioEnabled;
     } catch (error) {
       ctx.complete("error", error);
@@ -184,8 +208,12 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
       );
 
       localParticipant.isScreenSharing = true;
+      localParticipant.screenShareTrack = rtkClient.self.screenShareTracks?.video ?? localParticipant.screenShareTrack;
+      localParticipant.screenShareAudioTrack = rtkClient.self.screenShareTracks?.audio ?? localParticipant.screenShareAudioTrack;
       deps.emitParticipantUpdated(localParticipant.id, localParticipant);
-      ctx.complete("success");
+      ctx.complete("success", {
+        ...getScreenShareTrackDiagnostics(localParticipant.screenShareTrack, localParticipant.screenShareAudioTrack),
+      });
       return true;
     } catch (error) {
       ctx.complete("error", error);
@@ -226,6 +254,10 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
 
     const ctx = wideEvents.start("screenshare.stop");
     ctx.set("participantId", localParticipant.id);
+    const previousTracks = {
+      video: localParticipant.screenShareTrack,
+      audio: localParticipant.screenShareAudioTrack,
+    };
 
     try {
       await rtkClient.self.disableScreenShare();
@@ -233,7 +265,9 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
       localParticipant.screenShareTrack = undefined;
       localParticipant.screenShareAudioTrack = undefined;
       deps.emitParticipantUpdated(localParticipant.id, localParticipant);
-      ctx.complete("success");
+      ctx.complete("success", {
+        ...getScreenShareTrackDiagnostics(previousTracks.video, previousTracks.audio),
+      });
     } catch (error) {
       ctx.complete("error", error);
     }
