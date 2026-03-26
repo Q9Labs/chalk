@@ -4,11 +4,12 @@ import { cn } from "../../../utils/cn";
 import { getParticipantColor, getParticipantGradient, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { Avatar, ControlButton } from "../../atomic";
 import { DeviceControlButton, ReactionPicker } from "../../composite";
-import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, RefreshIcon, ArrowLeft01Icon, Shield01Icon, WifiOffIcon, InformationCircleIcon, ArrowDown01Icon, ArrowUp01Icon } from "../../../utils/icons";
+import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, RefreshIcon, ArrowLeft01Icon, Shield01Icon, WifiOffIcon, InformationCircleIcon, ArrowDown01Icon, ArrowUp01Icon, Copy01Icon, Download01Icon, CheckmarkCircle02Icon } from "../../../utils/icons";
 import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
 import { useMeetingRoomTheme } from "../meeting-room/useMeetingRoomTheme";
 import { LoadingScreen } from "../LoadingScreen";
 import type { PictureInPictureControls, PictureInPictureMeetingLayout, PictureInPicturePhase, PictureInPictureSource } from "./types";
+import { exportFullDebugReport } from "../../../utils/debugExport";
 
 interface PictureInPictureWindowProps {
   phase: PictureInPicturePhase;
@@ -313,6 +314,7 @@ function MeetingPictureInPictureLayout({
 export function PictureInPictureWindow({ phase, source, previewSource, participantSources, meetingLayout = "single", controls, onReturnToTab }: PictureInPictureWindowProps) {
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [debugExportState, setDebugExportState] = useState<"idle" | "copied" | "downloaded">("idle");
   const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
 
   const errorInfo = useMemo(() => {
@@ -424,6 +426,18 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
   const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
   const reduceMotion = settings.appearance.reducedMotion;
 
+  const handleDebugExport = async () => {
+    const result = await exportFullDebugReport({
+      source: "pip-error-overlay",
+      phase,
+      error: controls.errorMessage ?? null,
+      supportCode: controls.supportCode ?? null,
+      roomName: source?.title ?? null,
+    });
+    setDebugExportState(result.outcome);
+    window.setTimeout(() => setDebugExportState("idle"), 2500);
+  };
+
   return (
     <div className="flex h-screen w-full flex-col bg-background text-foreground chalk-theme-transition relative overflow-hidden" style={participantThemeVariables as React.CSSProperties}>
       {phase !== "joining" && (
@@ -516,6 +530,30 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                 >
                   <ArrowLeft01Icon size={16} />
                   Go Back
+                </button>
+              </div>
+
+              <div className="mb-5 flex w-full justify-center">
+                <button
+                  onClick={() => void handleDebugExport()}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95"
+                >
+                  {debugExportState === "copied" ? (
+                    <>
+                      <CheckmarkCircle02Icon size={16} />
+                      Copied Full Debug
+                    </>
+                  ) : debugExportState === "downloaded" ? (
+                    <>
+                      <Download01Icon size={16} />
+                      Downloaded Debug JSON
+                    </>
+                  ) : (
+                    <>
+                      <Copy01Icon size={16} />
+                      Copy Full Debug
+                    </>
+                  )}
                 </button>
               </div>
 

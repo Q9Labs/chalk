@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, ArrowDown01Icon, ArrowUp01Icon, RefreshIcon, ArrowLeft01Icon, InformationCircleIcon, WifiOffIcon, Shield01Icon } from "../../utils/icons";
+import { Cancel01Icon, ArrowDown01Icon, ArrowUp01Icon, RefreshIcon, ArrowLeft01Icon, InformationCircleIcon, WifiOffIcon, Shield01Icon, Copy01Icon, Download01Icon, CheckmarkCircle02Icon } from "../../utils/icons";
+import { exportFullDebugReport } from "../../utils/debugExport";
 
 export interface DiagnosticErrorSheetProps {
   error: string;
@@ -12,6 +13,7 @@ export interface DiagnosticErrorSheetProps {
 
 export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ error, supportCode, onRetry, onBack, className }) => {
   const [showDetails, setShowDetails] = useState(true);
+  const [debugExportState, setDebugExportState] = useState<"idle" | "copied" | "downloaded">("idle");
 
   // Analyze error to determine the best human-readable message and actions
   const errorInfo = useMemo(() => {
@@ -44,6 +46,16 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
   }, [error]);
 
   const { Icon } = errorInfo;
+
+  const handleDebugExport = async () => {
+    const result = await exportFullDebugReport({
+      source: "diagnostic-error-sheet",
+      error,
+      supportCode: supportCode ?? null,
+    });
+    setDebugExportState(result.outcome);
+    window.setTimeout(() => setDebugExportState("idle"), 2500);
+  };
 
   return (
     <div className={cn("fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-background/60 backdrop-blur-md animate-in fade-in duration-500 font-app", className)}>
@@ -120,6 +132,33 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
             >
               <ArrowLeft01Icon size={18} />
               Go Back
+            </button>
+          </div>
+
+          <div className="mb-6 flex w-full justify-center">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleDebugExport();
+              }}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-muted/40 px-4 text-[14px] font-semibold text-foreground transition-all hover:bg-muted/60 active:scale-[0.98]"
+            >
+              {debugExportState === "copied" ? (
+                <>
+                  <CheckmarkCircle02Icon size={18} />
+                  Copied Full Debug
+                </>
+              ) : debugExportState === "downloaded" ? (
+                <>
+                  <Download01Icon size={18} />
+                  Downloaded Debug JSON
+                </>
+              ) : (
+                <>
+                  <Copy01Icon size={18} />
+                  Copy Full Debug
+                </>
+              )}
             </button>
           </div>
 
