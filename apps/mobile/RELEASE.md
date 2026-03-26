@@ -37,15 +37,22 @@ Fastest daily iteration path. No prod secret dependency.
    - `bun run mobile:connect`
    - or direct:
      - `bun run mobile:install:local -- --connect 192.168.18.140:43299`
-2. Build + install debug APK
+2. Build + push debug APK to Downloads
    - `bun run mobile:install:local`
+   - default behavior is now push-to-Downloads for manual tap-install
+   - pushed filename includes timestamp + random suffix to avoid stale-file confusion
 3. Optional pair + connect in one shot
    - `bun run mobile:install:local -- --pair 192.168.18.140:32965 --code 665929 --connect 192.168.18.140:43299`
+4. If you explicitly want direct adb install first
+   - `bun run mobile:install:local -- --install --connect 192.168.18.140:43299`
 
 Notes:
 
 - defaults to `assembleDebug`
-- installs via `adb install -r -t -g`
+- defaults to push-to-Downloads/manual install
+- pushed APK name looks like `chalk-mobile-debug-20260326-113000-ab12cd34.apk`
+- `--install` uses `adb install -r -t -g`
+- on `INSTALL_FAILED_USER_RESTRICTED`, install mode still falls back to push-to-Downloads automatically
 - auto-launches `ai.q9labs.chalk.mobile`
 - use CI APK workflow for prod-like multi-device builds
 
