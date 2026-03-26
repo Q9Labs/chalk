@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { ErrorDialog } from "../components/ErrorDialog";
+import { installChalkWebDebugRuntime } from "../lib/debugRuntime";
 
 interface ErrorState {
   isOpen: boolean;
@@ -19,6 +20,10 @@ export function ErrorProvider({ children }: { children: React.ReactNode }) {
     isOpen: false,
     message: "",
   });
+
+  useEffect(() => {
+    installChalkWebDebugRuntime();
+  }, []);
 
   const showError = useCallback((message: string, traceId?: string) => {
     setState({ isOpen: true, message, traceId });

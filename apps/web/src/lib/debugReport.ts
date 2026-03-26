@@ -4,15 +4,27 @@ type PermissionNameLike = "camera" | "microphone" | "notifications";
 
 const storageToObject = (storage: Storage | undefined) => {
   if (!storage) return {};
-  return Object.fromEntries(Array.from({ length: storage.length }, (_, index) => {
-    const key = storage.key(index) ?? `${index}`;
-    return [key, storage.getItem(key)];
-  }));
+  try {
+    return Object.fromEntries(Array.from({ length: storage.length }, (_, index) => {
+      const key = storage.key(index) ?? `${index}`;
+      return [key, storage.getItem(key)];
+    }));
+  } catch (error) {
+    return {
+      __error: error instanceof Error ? error.message : String(error),
+    };
+  }
 };
 
 const headersSummary = () => ({
   referrer: document.referrer || null,
-  cookie: document.cookie || null,
+  cookie: (() => {
+    try {
+      return document.cookie || null;
+    } catch (error) {
+      return error instanceof Error ? `[cookie read failed] ${error.message}` : "[cookie read failed]";
+    }
+  })(),
 });
 
 const getViewport = () => ({
@@ -103,6 +115,10 @@ const safeJsonStringify = (value: unknown) => {
     (_key, currentValue) => {
       if (typeof currentValue === "bigint") {
         return `${currentValue.toString()}n`;
+      }
+
+      if (typeof currentValue === "function") {
+        return `[Function ${currentValue.name || "anonymous"}]`;
       }
 
       if (currentValue instanceof Error) {
