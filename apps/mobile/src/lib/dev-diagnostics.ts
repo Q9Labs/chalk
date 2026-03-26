@@ -147,11 +147,20 @@ const initialState = (): DevDiagnosticsState => ({
 
 let state = initialState();
 const listeners = new Set<() => void>();
+let emitQueued = false;
 
 const emitChange = () => {
-  for (const listener of listeners) {
-    listener();
+  if (emitQueued) {
+    return;
   }
+
+  emitQueued = true;
+  queueMicrotask(() => {
+    emitQueued = false;
+    for (const listener of listeners) {
+      listener();
+    }
+  });
 };
 
 const updateState = (updater: (current: DevDiagnosticsState) => DevDiagnosticsState) => {

@@ -1,6 +1,7 @@
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import type { ChatMessage, Participant, ReactionEmoji } from "../types.ts";
 import { wideEvents } from "../wide-events/index.ts";
+import { createRandomId } from "../utils/random-id.ts";
 import type { WSClient } from "../ws-client.ts";
 
 interface InteractionActionsDeps {
@@ -117,7 +118,7 @@ export const createConferenceSessionInteractionActions = (deps: InteractionActio
     ctx.set("transport", "local-echo");
     const localParticipant = deps.getLocalParticipant();
     const localMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: createRandomId(),
       senderId: localParticipant?.id ?? "local",
       senderName: localParticipant?.displayName ?? "You",
       content: trimmed,

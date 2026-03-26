@@ -1,5 +1,6 @@
 import type { Transcript } from "./types.ts";
 import type { RtkSignalingDeps } from "./rtk-signaling-deps.ts";
+import { createRandomId } from "../utils/random-id.ts";
 
 const mapRtkTranscript = (data: unknown): Transcript | null => {
   if (!data || typeof data !== "object") {
@@ -21,7 +22,7 @@ const mapRtkTranscript = (data: unknown): Transcript | null => {
   const isInterim = raw.isPartialTranscript === true;
 
   return {
-    id: (raw.id as string) ?? crypto.randomUUID(),
+    id: (raw.id as string) ?? createRandomId(),
     participantId,
     speakerName,
     text,

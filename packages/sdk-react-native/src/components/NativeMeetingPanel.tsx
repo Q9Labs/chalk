@@ -105,8 +105,8 @@ export function NativeMeetingPanel({
                         <Text style={styles.emptyText}>No messages yet.</Text>
                       </View>
                     ) : null}
-                    {messages.map((message) => (
-                      <View key={message.id} style={styles.messageCard}>
+                    {messages.map((message, index) => (
+                      <View key={`${message.id ?? "message"}-${index}`} style={styles.messageCard}>
                         <Text style={styles.messageAuthor}>{message.senderName}</Text>
                         <Text style={styles.messageBody}>{message.content}</Text>
                       </View>
@@ -122,10 +122,10 @@ export function NativeMeetingPanel({
 
                 {panel === "participants" && (
                   <View style={styles.listContainer}>
-                    {participants.map((participant) => {
+                    {participants.map((participant, index) => {
                       const isLocal = participant.id === localParticipantId;
                       return (
-                        <View key={participant.id} style={styles.participantRow}>
+                        <View key={`${participant.id}-${index}`} style={styles.participantRow}>
                           <View style={styles.participantInfo}>
                             <View style={[styles.avatarCircle, { backgroundColor: Theme.colors.secondary }]}>
                               <Text style={styles.avatarText}>{(participant.displayName?.charAt(0) || "P").toUpperCase()}</Text>
@@ -198,10 +198,10 @@ export function NativeMeetingPanel({
                         <Text style={styles.emptyText}>No transcript lines yet.</Text>
                       </View>
                     ) : null}
-                    {transcripts.map((t) => (
-                      <View key={t.id} style={styles.messageCard}>
-                        <Text style={styles.messageAuthor}>{t.speakerName}</Text>
-                        <Text style={styles.messageBody}>{t.text}</Text>
+                    {transcripts.map((transcript, index) => (
+                      <View key={`${transcript.id ?? "transcript"}-${index}`} style={styles.messageCard}>
+                        <Text style={styles.messageAuthor}>{transcript.speakerName}</Text>
+                        <Text style={styles.messageBody}>{transcript.text}</Text>
                       </View>
                     ))}
                   </View>
@@ -250,10 +250,10 @@ function DeviceList({ devices, selectedId, onSelect }: { devices: readonly Media
 
   return (
     <View style={styles.deviceList}>
-      {devices.map((device) => {
+      {devices.map((device, index) => {
         const isSelected = selectedId === device.deviceId;
         return (
-          <Pressable key={device.deviceId} onPress={() => onSelect(device.deviceId)} style={[styles.deviceItem, isSelected && styles.deviceItemSelected]}>
+          <Pressable key={`${device.deviceId || "device"}-${device.label || "unknown"}-${index}`} onPress={() => onSelect(device.deviceId)} style={[styles.deviceItem, isSelected && styles.deviceItemSelected]}>
             <Text style={[styles.deviceItemText, isSelected && styles.deviceItemTextSelected]} numberOfLines={1}>
               {device.label || "Default Device"}
             </Text>

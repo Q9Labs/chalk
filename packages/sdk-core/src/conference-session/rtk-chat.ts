@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../types.ts";
+import { createRandomId } from "../utils/random-id.ts";
 import { wideEvents } from "../wide-events/index.ts";
 import type { RtkSignalingDeps } from "./rtk-signaling-deps.ts";
 
@@ -12,7 +13,7 @@ const extractChatMessage = (payload: unknown): ChatMessage | null => {
   const messageData = (rawData.message as Record<string, unknown>) ?? rawData;
 
   const chatMessage: ChatMessage = {
-    id: (messageData.id as string) ?? crypto.randomUUID(),
+    id: (messageData.id as string) ?? createRandomId(),
     senderId: (messageData.userId as string) ?? "unknown",
     senderName: (messageData.displayName as string) ?? "Unknown",
     content: (messageData.message as string) ?? (messageData.text as string) ?? (messageData.content as string) ?? "",

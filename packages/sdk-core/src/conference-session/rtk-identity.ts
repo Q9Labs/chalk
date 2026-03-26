@@ -1,4 +1,5 @@
 import type { Participant } from "../types.ts";
+import { createRandomId } from "../utils/random-id.ts";
 
 export interface RtkResolvedIds {
   stableId: string;
@@ -9,7 +10,7 @@ export interface RtkResolvedIds {
 export const getRtkIds = (peerIdMap: Map<string, string>, rtkParticipant: unknown): RtkResolvedIds => {
   const participant = rtkParticipant as Record<string, unknown>;
 
-  const peerId = typeof participant.id === "string" && participant.id.length > 0 ? participant.id : crypto.randomUUID();
+  const peerId = typeof participant.id === "string" && participant.id.length > 0 ? participant.id : createRandomId();
 
   const directUserId =
     (typeof participant.userId === "string" && participant.userId.length > 0 ? participant.userId : undefined) ??

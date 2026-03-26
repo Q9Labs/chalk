@@ -227,3 +227,13 @@
   - `bun run --cwd apps/web build`
   - `bun run --cwd apps/mobile lint`
   - `bun run --cwd apps/mobile build`
+
+## 2026-03-26 23:24 PKT
+
+- fixed follow-up mobile warnings after the startup pass
+- deferred dev diagnostics store notifications to a microtask so diagnostics subscribers do not update during `ChalkNativeProvider` render/setup
+- hardened `NativeMeetingPanel` list keys for messages, participants, transcripts, and device rows
+- replaced direct `crypto.randomUUID()` usage in sdk-core with a guarded helper so RN debugger paths fall back cleanly when secure crypto APIs are missing
+- verify:
+  - `bun run --cwd apps/mobile lint`
+  - `bun run --cwd apps/mobile build`
