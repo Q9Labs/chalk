@@ -29,6 +29,26 @@ Bundle output:
 - checksum:
   - `cd apps/mobile/android/app/build/outputs/bundle/release && shasum -a 256 app-release.aab`
 
+## Local debug APK -> phone
+
+Fastest daily iteration path. No prod secret dependency.
+
+1. Connect wireless adb if needed
+   - `bun run mobile:connect`
+   - or direct:
+     - `bun run mobile:install:local -- --connect 192.168.18.140:43299`
+2. Build + install debug APK
+   - `bun run mobile:install:local`
+3. Optional pair + connect in one shot
+   - `bun run mobile:install:local -- --pair 192.168.18.140:32965 --code 665929 --connect 192.168.18.140:43299`
+
+Notes:
+
+- defaults to `assembleDebug`
+- installs via `adb install -r -t -g`
+- auto-launches `ai.q9labs.chalk.mobile`
+- use CI APK workflow for prod-like multi-device builds
+
 ## Secret-backed Android CI build
 
 Preferred when the prod host key must come from GitHub, not local env:

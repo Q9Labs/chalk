@@ -13,6 +13,7 @@
     "dev": "bash -lc 'trap \"kill 0\" EXIT; bun run dev:mobile & turbo dev'",
     "mobile:connect": "bash .codex/skills/chalk-mobile-wireless-debug/scripts/connect-wireless-adb.sh",
     "mobile:launch": "bash .codex/skills/chalk-mobile-wireless-debug/scripts/launch-chalk-mobile-dev.sh",
+    "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
     "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL or run bun run mobile:connect.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",
     "mobile:sync-local-env": "bun run scripts/sync-local-mobile-env.ts",
     "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; bun run --cwd apps/mobile start'",
