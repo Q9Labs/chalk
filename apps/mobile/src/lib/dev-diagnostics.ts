@@ -173,7 +173,54 @@ const updateState = (updater: (current: DevDiagnosticsState) => DevDiagnosticsSt
 };
 
 const trimLogs = <T>(logs: T[], limit: number): T[] => logs.slice(0, limit);
-const stableJson = (value: unknown): string => JSON.stringify(value) ?? "null";
+
+const sanitizeForJson = (value: unknown, seen = new WeakSet<object>()): unknown => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  if (typeof value === "function" || typeof value === "symbol") {
+    return undefined;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeForJson(entry, seen));
+  }
+
+  if (typeof value === "object") {
+    if (seen.has(value)) {
+      return "[Circular]";
+    }
+
+    seen.add(value);
+
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, entryValue]) => [key, sanitizeForJson(entryValue, seen)] as const)
+      .filter(([, entryValue]) => entryValue !== undefined);
+
+    return Object.fromEntries(entries);
+  }
+
+  return value;
+};
+
+const stableJson = (value: unknown): string => JSON.stringify(sanitizeForJson(value)) ?? "null";
 
 const normalizeHost = (value: string | null | undefined): string | null => {
   if (!value) {
@@ -726,10 +773,10 @@ export const fetchDevDiagnosticsAuth = async (apiUrl: string, accessToken: strin
 
 export const buildDevDiagnosticsCopyText = (): string =>
   JSON.stringify(
-    {
+    sanitizeForJson({
       generatedAt: new Date().toISOString(),
       ...state,
-    },
+    }),
     null,
     2,
-  );
+  ) ?? "null";

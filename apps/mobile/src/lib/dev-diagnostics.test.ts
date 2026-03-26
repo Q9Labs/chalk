@@ -160,4 +160,84 @@ describe("dev diagnostics helpers", () => {
 
     expect(getDevDiagnosticsState().timeline.length).toBe(firstTimelineLength);
   });
+
+  it("copy all tolerates circular debug payloads", () => {
+    const circular: Record<string, unknown> = {
+      enabled: true,
+      reason: "circular-test",
+    };
+    circular.self = circular;
+
+    setDevDiagnosticsSession({
+      phase: "meeting",
+      roomId: "room-circular",
+      roomName: "Room Circular",
+      joinNonce: 2,
+      pendingJoinRequest: false,
+      activeJoinNonce: null,
+      lastJoinError: null,
+      connectionStatus: "connected",
+      isConnected: true,
+      isJoining: false,
+      session: {
+        activeRoomStatus: "connected",
+        websocketConnectionState: "connected",
+        activeRoomHasRtkMeeting: true,
+        hasInFlightJoinPromise: false,
+        isDisposed: false,
+        activeRoomId: "room-circular",
+        roomStateRoomId: "room-circular",
+      } as any,
+      meetingRoom: {
+        isHost: false,
+        participantCount: 1,
+        raisedHandCount: 0,
+        unreadChatCount: 0,
+        featureFlags: {
+          chat: true,
+          participants: true,
+          transcripts: true,
+          settings: true,
+          screenShare: true,
+          recording: true,
+          reactions: true,
+          handRaise: true,
+          whiteboard: true,
+        },
+        actionAvailability: {
+          screenShare: {
+            enabled: true,
+            reason: null,
+            detail: null,
+            isActive: false,
+            isLocalSharing: false,
+            sharerParticipantId: null,
+            visibleInBottomDock: true,
+            enabledInActionsSheet: true,
+            debug: circular,
+          },
+          reactions: { enabled: true, reason: null, detail: null },
+          handRaise: { enabled: true, reason: null, detail: null },
+          chat: { enabled: true, reason: null, detail: null },
+          participants: { enabled: true, reason: null, detail: null },
+          transcripts: { enabled: true, reason: null, detail: null },
+          recording: { enabled: true, reason: null, detail: null },
+          settings: { enabled: true, reason: null, detail: null },
+          whiteboard: { enabled: true, reason: null, detail: null },
+          moderation: {
+            enabled: false,
+            reason: "not-host",
+            detail: "local participant role is not host",
+            canMuteOthers: false,
+            canUnmuteOthers: false,
+          },
+        },
+      } as any,
+    } as any);
+
+    const copied = buildDevDiagnosticsCopyText();
+
+    expect(copied).toContain('"generatedAt"');
+    expect(copied).toContain('"[Circular]"');
+  });
 });

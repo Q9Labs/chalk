@@ -1,7 +1,10 @@
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
-import { buildDevDiagnosticsCopyText, clearDevDiagnosticsLogs, getDevDiagnosticsState, subscribeDevDiagnostics } from "../lib/dev-diagnostics";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { AlertCircleIcon, Database01Icon, Navigation03Icon, SmartPhone01Icon, Clock01Icon, Key01Icon, ActivityIcon, Settings01Icon } from "@hugeicons/core-free-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { buildDevDiagnosticsCopyText, clearDevDiagnosticsLogs, getDevDiagnosticsState, recordDiagnosticsFailure, subscribeDevDiagnostics } from "../lib/dev-diagnostics";
 import { Theme } from "../lib/theme";
 
 interface DevDiagnosticsSheetProps {
@@ -23,11 +26,19 @@ const codeFont = Platform.select({
 
 const renderValue = (value: string | number | boolean | null | undefined) => (value === null || value === undefined || value === "" ? "—" : String(value));
 
-const renderJson = (value: unknown): string => (value === null || value === undefined ? "—" : JSON.stringify(value, null, 2));
+const formatTime = (isoString: string | null | undefined) => {
+  if (!isoString) return "—";
+  try {
+    const d = new Date(isoString);
+    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}.${d.getMilliseconds().toString().padStart(3, "0")}`;
+  } catch {
+    return "—";
+  }
+};
 
 export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, onForceDisconnect, onClearJoinContext, onClearHostAuth, onResetDiagnostics, isRefreshingAuth = false }: DevDiagnosticsSheetProps): React.JSX.Element {
   const diagnostics = useSyncExternalStore(subscribeDevDiagnostics, getDevDiagnosticsState);
-  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   useEffect(() => {
     if (!visible) {
@@ -36,11 +47,28 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, onForceDi
   }, [visible]);
 
   const requestItems = useMemo(() => diagnostics.requests.slice(0, 30), [diagnostics.requests]);
-  const timelineItems = useMemo(() => diagnostics.timeline.slice(0, 40), [diagnostics.timeline]);
+  const timelineItems = useMemo(() => diagnostics.timeline.slice(0, 50), [diagnostics.timeline]);
 
   const handleCopy = async () => {
-    await Clipboard.setStringAsync(buildDevDiagnosticsCopyText());
-    setCopyState("copied");
+    try {
+      const copyText = buildDevDiagnosticsCopyText();
+      const clipboardModule = Clipboard as typeof Clipboard & {
+        setString?: (value: string) => void;
+      };
+
+      clipboardModule.setString?.(copyText);
+      await Clipboard.setStringAsync(copyText);
+
+      const copiedText = await Clipboard.getStringAsync();
+      if (copiedText !== copyText) {
+        throw new Error("Clipboard verification failed");
+      }
+
+      setCopyState("copied");
+    } catch (error) {
+      setCopyState("failed");
+      recordDiagnosticsFailure("copy-debug", error instanceof Error ? error.message : "Copy full debug failed");
+    }
   };
 
   return (
@@ -57,25 +85,58 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, onForceDi
         </View>
 
         <View style={styles.actionRow}>
-          <ActionButton label={copyState === "copied" ? "Copied" : "Copy all"} onPress={handleCopy} primary={true} />
+          <ActionButton label={copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy Full Debug"} onPress={handleCopy} primary={true} />
           <ActionButton disabled={isRefreshingAuth} label={isRefreshingAuth ? "Refreshing..." : "Refresh auth"} onPress={() => void onRefreshAuth()} />
           <ActionButton label="Force disconnect" onPress={() => void onForceDisconnect()} />
-          <ActionButton label="Clear join context" onPress={() => void onClearJoinContext()} />
-          <ActionButton label="Clear host auth" onPress={() => void onClearHostAuth()} />
+          <ActionButton label="Clear join" onPress={() => void onClearJoinContext()} />
+          <ActionButton label="Clear host" onPress={() => void onClearHostAuth()} />
           <ActionButton label="Clear logs" onPress={clearDevDiagnosticsLogs} />
-          <ActionButton label="Reset sheet" onPress={() => void onResetDiagnostics()} />
+          <ActionButton label="Reset" onPress={() => void onResetDiagnostics()} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
           {diagnostics.lastFailure ? (
-            <Section title="Last Failure">
-              <Row label="Source" value={diagnostics.lastFailure.source} />
-              <Row label="At" value={diagnostics.lastFailure.occurredAt} />
-              <Block label="Message" value={diagnostics.lastFailure.message} />
+            <Section icon={AlertCircleIcon} title="Last Failure" color={Theme.colors.error}>
+              <Row label="Reason" value={diagnostics.lastFailure.message} />
+              <Row label="At" value={formatTime(diagnostics.lastFailure.occurredAt)} />
+              <Block label="Source" value={diagnostics.lastFailure.source} />
             </Section>
           ) : null}
 
-          <Section title="Target">
+          <Section icon={SmartPhone01Icon} title="Native Device Info">
+            <CompactGrid>
+              <GridItem label="Platform" value={diagnostics.device?.platform} />
+              <GridItem label="OS" value={diagnostics.device?.osVersion} />
+              <GridItem label="RN" value={diagnostics.device?.reactNativeVersion} />
+              <GridItem label="Model" value={diagnostics.device?.model} />
+              <GridItem label="Brand" value={diagnostics.device?.brand} />
+              <GridItem label="Maker" value={diagnostics.device?.manufacturer} />
+              <GridItem label="Idiom" value={diagnostics.device?.interfaceIdiom} />
+              <GridItem label="Hermes" value={diagnostics.device?.hermesEnabled} highlight={diagnostics.device?.hermesEnabled} />
+            </CompactGrid>
+            <Block label="Script URL" value={diagnostics.device?.scriptUrl} />
+          </Section>
+
+          <Section icon={ActivityIcon} title="Session Lifecycle Summary">
+            <CompactGrid>
+              <GridItem label="Phase" value={diagnostics.session?.phase} highlight={!!diagnostics.session?.phase} />
+              <GridItem label="Room Status" value={diagnostics.session?.session.activeRoomStatus} />
+              <GridItem label="WS Status" value={diagnostics.session?.session.websocketConnectionState} />
+              <GridItem label="Connected" value={diagnostics.session?.isConnected} highlight={diagnostics.session?.isConnected} />
+              <GridItem label="Joining" value={diagnostics.session?.isJoining} highlight={diagnostics.session?.isJoining} />
+              <GridItem label="Has RTK" value={diagnostics.session?.session.activeRoomHasRtkMeeting} />
+              <GridItem label="In-flight" value={diagnostics.session?.session.hasInFlightJoinPromise} />
+              <GridItem label="Pending" value={diagnostics.session?.pendingJoinRequest !== null} />
+              <GridItem label="Disposed" value={diagnostics.session?.session.isDisposed} />
+            </CompactGrid>
+            <View style={styles.gridFooter}>
+              <Row label="Active Room" value={diagnostics.session?.session.activeRoomId} />
+              <Row label="Room State ID" value={diagnostics.session?.session.roomStateRoomId} />
+              <Row label="Last Join Error" value={diagnostics.session?.lastJoinError} />
+            </View>
+          </Section>
+
+          <Section icon={Navigation03Icon} title="Target">
             <Row label="Target" value={diagnostics.env.target} />
             <Row label="Build" value={diagnostics.env.buildProfile} />
             <Row label="Route" value={diagnostics.env.routeKind} />
@@ -85,89 +146,59 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, onForceDi
             <Block label="WS URL" value={diagnostics.env.wsUrl} />
           </Section>
 
-          <Section title="Device">
-            <Row label="App version" value={diagnostics.device?.appVersion} />
-            <Row label="Platform" value={diagnostics.device?.platform} />
-            <Row label="OS version" value={diagnostics.device?.osVersion} />
-            <Row label="RN" value={diagnostics.device?.reactNativeVersion} />
-            <Row label="Model" value={diagnostics.device?.model} />
-            <Row label="Brand" value={diagnostics.device?.brand} />
-            <Row label="Maker" value={diagnostics.device?.manufacturer} />
-            <Row label="System" value={diagnostics.device?.systemName} />
-            <Row label="Idiom" value={diagnostics.device?.interfaceIdiom} />
-            <Row label="Hermes" value={diagnostics.device?.hermesEnabled} />
-            <Block label="Script URL" value={diagnostics.device?.scriptUrl} />
-          </Section>
-
-          <Section title="Auth">
+          <Section icon={Key01Icon} title="Auth">
             <Row label="Host mode" value={diagnostics.auth.hostMode} />
-            <Row label="Configured key" value={diagnostics.auth.configuredHostApiKeyPreview} />
-            <Row label="Local key" value={diagnostics.auth.localDevHostApiKeyPreview} />
             <Row label="Join token" value={diagnostics.auth.joinTokenPreview} />
             <Row label="Join access" value={diagnostics.auth.joinAccessTokenPreview} />
             <Row label="Latest token" value={diagnostics.auth.latestAccessTokenPreview} />
-            <Row label="Token source" value={diagnostics.auth.latestAccessTokenSource} />
+            <Row label="Source" value={diagnostics.auth.latestAccessTokenSource} />
           </Section>
 
-          <Section title="Token Claims">
-            <JsonBlock label="Join token claims" value={diagnostics.auth.joinTokenClaims} />
-            <JsonBlock label="Join access claims" value={diagnostics.auth.joinAccessTokenClaims} />
-            <JsonBlock label="Latest access claims" value={diagnostics.auth.latestAccessTokenClaims} />
+          <Section icon={Clock01Icon} title={`Timeline (${diagnostics.timeline.length})`}>
+            {timelineItems.length === 0 ? <Text style={styles.emptyText}>No events captured yet.</Text> : null}
+            <View style={styles.timelineContainer}>
+              {timelineItems.map((entry, i) => (
+                <View key={entry.id} style={[styles.timelineItem, i === timelineItems.length - 1 && styles.timelineItemLast]}>
+                  <View style={styles.timelineIndicator}>
+                    <View style={[styles.timelineDot, entry.outcome === "error" && styles.timelineDotError, entry.outcome === "success" && styles.timelineDotSuccess]} />
+                    {i !== timelineItems.length - 1 && <View style={styles.timelineLine} />}
+                  </View>
+                  <View style={styles.timelineContent}>
+                    <View style={styles.timelineHeader}>
+                      <Text style={styles.timelineTitle}>{entry.title}</Text>
+                      <Text style={styles.timelineTimestamp}>{formatTime(entry.timestamp)}</Text>
+                    </View>
+                    {entry.detail ? (
+                      <Text selectable={true} style={styles.timelineDetail}>
+                        {entry.detail}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
+            </View>
           </Section>
 
-          <Section title="Session Lifecycle">
-            <Row label="Phase" value={diagnostics.session?.phase} />
-            <Row label="Join nonce" value={diagnostics.session?.joinNonce} />
-            <Row label="Pending join" value={diagnostics.session?.pendingJoinRequest} />
-            <Row label="Active nonce" value={diagnostics.session?.activeJoinNonce} />
-            <Row label="Conn status" value={diagnostics.session?.connectionStatus} />
-            <Row label="Connected" value={diagnostics.session?.isConnected} />
-            <Row label="Joining" value={diagnostics.session?.isJoining} />
-            <Row label="Room state" value={diagnostics.session?.session.roomStateStatus} />
-            <Row label="Room state room" value={diagnostics.session?.session.roomStateRoomId} />
-            <Row label="Active room" value={diagnostics.session?.session.activeRoomId} />
-            <Row label="Active status" value={diagnostics.session?.session.activeRoomStatus} />
-            <Row label="Has active room" value={diagnostics.session?.session.hasActiveRoom} />
-            <Row label="Has RTK" value={diagnostics.session?.session.activeRoomHasRtkMeeting} />
-            <Row label="Client status" value={diagnostics.session?.session.clientConnectionState} />
-            <Row label="WS status" value={diagnostics.session?.session.websocketConnectionState} />
-            <Row label="Input room" value={diagnostics.session?.session.connectedInputRoomId} />
-            <Row label="In-flight room" value={diagnostics.session?.session.inFlightJoinRoomId} />
-            <Row label="In-flight join" value={diagnostics.session?.session.hasInFlightJoinPromise} />
-            <Row label="Disposed" value={diagnostics.session?.session.isDisposed} />
-            <Block label="Last join error" value={diagnostics.session?.lastJoinError} />
-            <JsonBlock label="WS last close" value={diagnostics.session?.session.websocketLastClose} />
-          </Section>
-
-          <Section title="Server Auth Debug">
-            <Row label="User" value={diagnostics.auth.authInfo?.userId} />
-            <Row label="Tenant" value={diagnostics.auth.authInfo?.tenantId} />
-            <Row label="Room" value={diagnostics.auth.authInfo?.roomId} />
-            <Row label="Display" value={diagnostics.auth.authInfo?.displayName} />
-            <Row label="Role" value={diagnostics.auth.authInfo?.role} />
-            <Row label="Expires in" value={diagnostics.auth.authInfo?.tokenExpiresInSeconds} />
-            <Row label="Request ID" value={diagnostics.auth.authInfo?.requestId} />
-            <Row label="Trace ID" value={diagnostics.auth.authInfo?.traceId} />
-            <Block label="Scopes" value={diagnostics.auth.authInfo?.scopes.join(", ")} />
-            <JsonBlock label="Permissions" value={diagnostics.auth.authInfo?.permissions} />
-            <Block label="API build" value={diagnostics.auth.authInfo ? `${diagnostics.auth.authInfo.apiVersion} @ ${diagnostics.auth.authInfo.apiCommitSha}` : null} />
-          </Section>
-
-          <Section title={`Requests (${diagnostics.requests.length})`}>
+          <Section icon={Settings01Icon} title={`Requests (${diagnostics.requests.length})`}>
             {requestItems.length === 0 ? <Text style={styles.emptyText}>No requests captured yet.</Text> : null}
             {requestItems.map((request) => (
               <View key={request.id} style={styles.logCard}>
-                <Text selectable={true} style={styles.logLine}>
-                  [{request.timestamp}] {request.method || request.eventType} {request.path || request.url || ""}
+                <View style={styles.logHeader}>
+                  <Text style={styles.logMethod}>{request.method || "EVENT"}</Text>
+                  <Text style={styles.logStatus}>{renderValue(request.statusCode)}</Text>
+                  <Text style={styles.logTimestamp}>{formatTime(request.timestamp)}</Text>
+                </View>
+                <Text selectable={true} style={styles.logPath}>
+                  {request.path || request.url || request.eventType}
                 </Text>
-                <Text selectable={true} style={styles.logMeta}>
-                  {request.outcome.toUpperCase()} · status {renderValue(request.statusCode)} · {renderValue(request.durationMs)} ms
-                </Text>
-                <Text selectable={true} style={styles.logMeta}>
-                  req {renderValue(request.requestId)} · trace {renderValue(request.traceId)} · cf {renderValue(request.cfRay)}
-                </Text>
+                <View style={styles.logFooter}>
+                  <Text style={[styles.logOutcome, request.outcome === "error" && styles.logError]}>{request.outcome.toUpperCase()}</Text>
+                  <Text style={styles.logMeta}>
+                    {renderValue(request.durationMs)} ms · {renderValue(request.cfRay)}
+                  </Text>
+                </View>
                 {request.errorMessage ? (
-                  <Text selectable={true} style={styles.logError}>
+                  <Text selectable={true} style={styles.logErrorText}>
                     {request.errorMessage}
                   </Text>
                 ) : null}
@@ -175,30 +206,33 @@ export function DevDiagnosticsSheet({ visible, onClose, onRefreshAuth, onForceDi
             ))}
           </Section>
 
-          <Section title={`Timeline (${diagnostics.timeline.length})`}>
-            {timelineItems.length === 0 ? <Text style={styles.emptyText}>No events captured yet.</Text> : null}
-            {timelineItems.map((entry) => (
-              <View key={entry.id} style={styles.logCard}>
-                <Text selectable={true} style={styles.logLine}>
-                  [{entry.timestamp}] {entry.eventType}
-                </Text>
-                <Text selectable={true} style={styles.logMeta}>
-                  {entry.outcome.toUpperCase()} · {renderValue(entry.durationMs)} ms
-                </Text>
-                <Text selectable={true} style={styles.logMeta}>
-                  {entry.summary}
-                </Text>
-                {entry.errorMessage ? (
-                  <Text selectable={true} style={styles.logError}>
-                    {entry.errorMessage}
-                  </Text>
-                ) : null}
-              </View>
-            ))}
+          <Section icon={Database01Icon} title="Server Auth Debug">
+            <Row label="User" value={diagnostics.auth.authInfo?.userId} />
+            <Row label="Tenant" value={diagnostics.auth.authInfo?.tenantId} />
+            <Row label="Room" value={diagnostics.auth.authInfo?.roomId} />
+            <Row label="Role" value={diagnostics.auth.authInfo?.role} />
+            <Row label="Expires" value={formatTime(diagnostics.auth.authInfo?.tokenExpiresAt)} />
+            <Row label="Trace" value={diagnostics.auth.authInfo?.traceId} />
+            <Block label="API" value={diagnostics.auth.authInfo ? `${diagnostics.auth.authInfo.apiVersion} @ ${diagnostics.auth.authInfo.apiCommitSha}` : null} />
           </Section>
         </ScrollView>
       </SafeAreaView>
     </Modal>
+  );
+}
+
+function CompactGrid({ children }: { children: React.ReactNode }) {
+  return <View style={styles.compactGrid}>{children}</View>;
+}
+
+function GridItem({ label, value, highlight = false }: { label: string; value: string | number | boolean | null | undefined; highlight?: boolean }) {
+  return (
+    <View style={styles.gridItem}>
+      <Text style={styles.gridLabel}>{label}</Text>
+      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.gridValue, highlight && styles.gridValueHighlight]}>
+        {renderValue(value)}
+      </Text>
+    </View>
   );
 }
 
@@ -210,10 +244,13 @@ function ActionButton({ label, onPress, disabled = false, primary = false }: { l
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
+function Section({ title, icon, children, color }: { title: string; icon: any; children: React.ReactNode; color?: string }): React.JSX.Element {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionHeader}>
+        <HugeiconsIcon icon={icon} size={16} color={color || Theme.colors.primary} />
+        <Text style={[styles.sectionTitle, color ? { color } : null]}>{title}</Text>
+      </View>
       {children}
     </View>
   );
@@ -236,17 +273,6 @@ function Block({ label, value }: { label: string; value: string | null | undefin
       <Text style={styles.rowLabel}>{label}</Text>
       <Text selectable={true} style={styles.blockValue}>
         {renderValue(value)}
-      </Text>
-    </View>
-  );
-}
-
-function JsonBlock({ label, value }: { label: string; value: unknown }): React.JSX.Element {
-  return (
-    <View style={styles.block}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text selectable={true} style={styles.blockValue}>
-        {renderJson(value)}
       </Text>
     </View>
   );
@@ -290,30 +316,32 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     paddingHorizontal: 20,
     paddingTop: 14,
     flexWrap: "wrap",
   },
   primaryAction: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     backgroundColor: Theme.colors.primary,
   },
   primaryActionText: {
     color: "#041110",
     fontWeight: "800",
+    fontSize: 13,
   },
   secondaryAction: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.08)",
   },
   secondaryActionText: {
     color: Theme.colors.foreground,
     fontWeight: "700",
+    fontSize: 13,
   },
   actionDisabled: {
     opacity: 0.6,
@@ -326,12 +354,56 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     backgroundColor: "rgba(255,255,255,0.04)",
-    gap: 10,
+    gap: 12,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
   },
   sectionTitle: {
     color: Theme.colors.foreground,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  compactGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  gridItem: {
+    width: "31.5%",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 8,
+    borderRadius: 10,
+    gap: 2,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.03)",
+  },
+  gridLabel: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 9,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  gridValue: {
+    color: Theme.colors.foreground,
+    fontFamily: codeFont,
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  gridValueHighlight: {
+    color: Theme.colors.primary,
+  },
+  gridFooter: {
+    gap: 6,
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.05)",
   },
   row: {
     flexDirection: "row",
@@ -340,7 +412,7 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     color: Theme.colors.mutedForeground,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -350,38 +422,139 @@ const styles = StyleSheet.create({
     color: Theme.colors.foreground,
     textAlign: "right",
     fontFamily: codeFont,
-    fontSize: 12,
+    fontSize: 11,
   },
   block: {
-    gap: 6,
+    gap: 4,
   },
   blockValue: {
     color: Theme.colors.foreground,
     fontFamily: codeFont,
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 16,
   },
   emptyText: {
     color: Theme.colors.mutedForeground,
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  timelineContainer: {
+    paddingLeft: 4,
+  },
+  timelineItem: {
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 40,
+  },
+  timelineItemLast: {
+    minHeight: 0,
+  },
+  timelineIndicator: {
+    alignItems: "center",
+    width: 8,
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.colors.mutedForeground,
+    marginTop: 4,
+  },
+  timelineDotError: {
+    backgroundColor: Theme.colors.error,
+  },
+  timelineDotSuccess: {
+    backgroundColor: Theme.colors.success,
+  },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  timelineContent: {
+    flex: 1,
+    paddingBottom: 12,
+  },
+  timelineHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  timelineTitle: {
+    color: Theme.colors.foreground,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  timelineTimestamp: {
+    color: Theme.colors.mutedForeground,
+    fontFamily: codeFont,
+    fontSize: 9,
+  },
+  timelineDetail: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 11,
+    marginTop: 2,
   },
   logCard: {
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 12,
+    padding: 10,
     backgroundColor: "#0f1014",
     gap: 4,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.03)",
   },
-  logLine: {
+  logHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  logMethod: {
+    color: Theme.colors.primary,
+    fontFamily: codeFont,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  logStatus: {
+    color: Theme.colors.foreground,
+    fontFamily: codeFont,
+    fontSize: 10,
+  },
+  logTimestamp: {
+    flex: 1,
+    textAlign: "right",
+    color: Theme.colors.mutedForeground,
+    fontFamily: codeFont,
+    fontSize: 9,
+  },
+  logPath: {
     color: Theme.colors.foreground,
     fontFamily: codeFont,
     fontSize: 11,
   },
-  logMeta: {
-    color: Theme.colors.mutedForeground,
-    fontFamily: codeFont,
-    fontSize: 11,
+  logFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  logOutcome: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.colors.success,
   },
   logError: {
     color: Theme.colors.error,
+  },
+  logMeta: {
+    color: Theme.colors.mutedForeground,
     fontFamily: codeFont,
-    fontSize: 11,
+    fontSize: 9,
+  },
+  logErrorText: {
+    color: Theme.colors.error,
+    fontFamily: codeFont,
+    fontSize: 10,
+    marginTop: 2,
   },
 });
