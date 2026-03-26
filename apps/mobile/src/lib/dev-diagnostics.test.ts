@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { classifyTarget, decodeTokenClaimsPreview, maskSecret } from "./dev-diagnostics";
+import { classifyTarget, decodeTokenClaimsPreview, maskSecret, resolveDevDiagnosticsMode } from "./dev-diagnostics";
 
 describe("dev diagnostics helpers", () => {
   it("classifies local, production, and custom targets", () => {
@@ -8,6 +8,14 @@ describe("dev diagnostics helpers", () => {
     expect(classifyTarget("https://chalk-api.q9labs.ai")).toBe("production");
     expect(classifyTarget("https://staging.chalk.q9labs.ai")).toBe("custom");
     expect(classifyTarget("not-a-url")).toBe("unknown");
+  });
+
+  it("keeps diagnostics enabled for debug builds even when targeting production", () => {
+    expect(resolveDevDiagnosticsMode({ isDevRuntime: true, apiUrl: "https://chalk-api.q9labs.ai" })).toEqual({
+      enabled: true,
+      buildProfile: "development",
+      target: "production",
+    });
   });
 
   it("masks long and short secrets without exposing the full value", () => {

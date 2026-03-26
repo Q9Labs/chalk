@@ -7,15 +7,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
 import { clearJoinContext, clearStoredHostAuth, getApiUrl, getHostTokenProvider, getJoinAccessToken, getMobileDebugContext, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
-import { classifyTarget, fetchDevDiagnosticsAuth, recordDiagnosticsFailure, recordWideEvent, resetDevDiagnosticsState, setDevDiagnosticsAuthInfo, setDevDiagnosticsEnvironment, setDevDiagnosticsSession, setDevDiagnosticsStaticAuth, setDevDiagnosticsToken } from "./src/lib/dev-diagnostics";
+import {
+  fetchDevDiagnosticsAuth,
+  recordDevDiagnosticsLifecycleEvent,
+  recordDiagnosticsFailure,
+  recordWideEvent,
+  resetDevDiagnosticsState,
+  resolveDevDiagnosticsMode,
+  setDevDiagnosticsAuthInfo,
+  setDevDiagnosticsEnvironment,
+  setDevDiagnosticsSession,
+  setDevDiagnosticsStaticAuth,
+  setDevDiagnosticsToken,
+} from "./src/lib/dev-diagnostics";
 import { Theme } from "./src/lib/theme";
 import { HomeScreen } from "./src/screens/HomeScreen";
 
 export default function App(): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
   const wsUrl = useMemo(() => getWsUrl(apiUrl), [apiUrl]);
-  const diagnosticsEnabled = __DEV__ && classifyTarget(apiUrl) === "local";
-  const buildProfile = diagnosticsEnabled ? "development" : "production";
+  const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, apiUrl }), [apiUrl]);
+  const diagnosticsEnabled = diagnosticsMode.enabled;
+  const buildProfile = diagnosticsMode.buildProfile;
   const [route, setRoute] = useState<MobileRoute>({ kind: "home" });
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [isRefreshingDiagnosticsAuth, setIsRefreshingDiagnosticsAuth] = useState(false);

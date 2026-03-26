@@ -335,6 +335,12 @@ export const classifyTarget = (apiUrl: string | null | undefined): DevDiagnostic
   return "custom";
 };
 
+export const resolveDevDiagnosticsMode = ({ isDevRuntime, apiUrl }: { isDevRuntime: boolean; apiUrl: string | null | undefined }) => ({
+  enabled: isDevRuntime,
+  buildProfile: isDevRuntime ? "development" : "production",
+  target: classifyTarget(apiUrl),
+});
+
 export const subscribeDevDiagnostics = (listener: () => void): (() => void) => {
   listeners.add(listener);
   return () => {
