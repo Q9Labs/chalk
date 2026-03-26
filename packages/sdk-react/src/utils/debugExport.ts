@@ -147,6 +147,59 @@ const toClipboardText = (report: unknown) =>
     safeJsonStringify(report),
   ].join("\n");
 
+const copyTextWithExecCommand = (text: string) => {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "-9999px";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+
+  try {
+    return document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+};
+
+const copyTextToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard?.writeText?.(text);
+    return true;
+  } catch {
+    // Fall through to legacy/browser-specific strategies.
+  }
+
+  try {
+    if (copyTextWithExecCommand(text)) {
+      return true;
+    }
+  } catch {
+    // Fall through.
+  }
+
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    }
+  } catch {
+    // Final fallback handled by caller.
+  }
+
+  return false;
+};
+
 const downloadDebugReport = (report: unknown, filename = `chalk-debug-${Date.now()}.json`) => {
   const blob = new Blob([safeJsonStringify(report)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -218,11 +271,10 @@ export async function exportFullDebugReport(context: Record<string, unknown>) {
 
   const text = toClipboardText(report);
 
-  try {
-    await navigator.clipboard.writeText(text);
+  if (await copyTextToClipboard(text)) {
     return { outcome: "copied" as const, report };
-  } catch {
-    downloadDebugReport(report);
-    return { outcome: "downloaded" as const, report };
   }
+
+  downloadDebugReport(report);
+  return { outcome: "downloaded" as const, report };
 }
