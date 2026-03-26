@@ -1,10 +1,12 @@
 import { wideEvents, type ChalkSession } from "@q9labs/chalk-core";
-import { ChalkNativeProvider, NativeVideoConference, useSession, type NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
+import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
 import { Bug02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentType, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
 import { clearJoinContext, clearStoredHostAuth, getApiUrl, getHostTokenProvider, getJoinAccessToken, getMobileDebugContext, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
 import {
@@ -21,7 +23,10 @@ import {
   setDevDiagnosticsToken,
 } from "./src/lib/dev-diagnostics";
 import { Theme } from "./src/lib/theme";
+import type { MeetingScreenProps } from "./src/meeting/MobileMeetingScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
+
+type LazyMeetingScreenComponent = ComponentType<MeetingScreenProps>;
 
 export default function App(): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
@@ -30,8 +35,10 @@ export default function App(): React.JSX.Element {
   const diagnosticsEnabled = diagnosticsMode.enabled;
   const buildProfile = diagnosticsMode.buildProfile;
   const [route, setRoute] = useState<MobileRoute>({ kind: "home" });
+  const [isBooting, setIsBooting] = useState(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [isRefreshingDiagnosticsAuth, setIsRefreshingDiagnosticsAuth] = useState(false);
+  const [MeetingScreen, setMeetingScreen] = useState<LazyMeetingScreenComponent | null>(null);
   const diagnosticsSessionRef = useRef<ChalkSession | null>(null);
   const lastJoinErrorRef = useRef<string | null>(null);
 
@@ -45,9 +52,13 @@ export default function App(): React.JSX.Element {
     if (route.joinToken) {
       const joinToken = route.joinToken;
       return async () => {
+        if (diagnosticsEnabled) {
+          recordDevDiagnosticsLifecycleEvent("auth", "Requesting join access token", joinToken);
+        }
         const token = await getJoinAccessToken(apiUrl, joinToken);
         if (diagnosticsEnabled) {
           setDevDiagnosticsToken(token, "join-token");
+          recordDevDiagnosticsLifecycleEvent("auth", "Join access token received");
         }
         return token;
       };
@@ -59,9 +70,13 @@ export default function App(): React.JSX.Element {
     }
 
     return async () => {
+      if (diagnosticsEnabled) {
+        recordDevDiagnosticsLifecycleEvent("auth", "Requesting host token");
+      }
       const token = await hostTokenProvider();
       if (diagnosticsEnabled) {
         setDevDiagnosticsToken(token, "host");
+        recordDevDiagnosticsLifecycleEvent("auth", "Host token received");
       }
       return token;
     };
@@ -88,9 +103,20 @@ export default function App(): React.JSX.Element {
   );
 
   useEffect(() => {
+    if (!diagnosticsEnabled) return;
+    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "lobby" ? `Room: ${route.roomId}` : undefined);
+  }, [route, diagnosticsEnabled]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     const openUrl = async (url: string | null) => {
       if (!url) {
         return;
+      }
+
+      if (diagnosticsEnabled) {
+        recordDevDiagnosticsLifecycleEvent("navigation", "Deep link received", url);
       }
 
       const nextRoute = parseUrlLike(url);
@@ -100,26 +126,68 @@ export default function App(): React.JSX.Element {
 
       if (nextRoute.joinToken) {
         try {
-          setRoute(await resolveJoinToken(nextRoute.joinToken, apiUrl));
+          if (diagnosticsEnabled) {
+            recordDevDiagnosticsLifecycleEvent("navigation", "Resolving join token", nextRoute.joinToken);
+          }
+          const resolvedRoute = await resolveJoinToken(nextRoute.joinToken, apiUrl);
+          if (!isMounted) {
+            return;
+          }
+          setRoute(resolvedRoute);
         } catch (error) {
+          if (!isMounted) {
+            return;
+          }
           openDiagnosticsForFailure("initial-link-resolve", error instanceof Error ? error.message : "Failed to resolve initial join link");
           setRoute({ kind: "home" });
         }
         return;
       }
 
-      setRoute(nextRoute);
+      if (isMounted) {
+        setRoute(nextRoute);
+      }
     };
 
-    void Linking.getInitialURL().then(openUrl);
+    const initialize = async () => {
+      try {
+        await openUrl(await Linking.getInitialURL());
+      } finally {
+        if (isMounted) {
+          setIsBooting(false);
+        }
+      }
+    };
+
+    void initialize();
     const subscription = Linking.addEventListener("url", ({ url }) => {
       void openUrl(url);
     });
 
     return () => {
+      isMounted = false;
       subscription.remove();
     };
   }, [apiUrl, openDiagnosticsForFailure]);
+
+  useEffect(() => {
+    if (route.kind !== "lobby" || MeetingScreen) {
+      return;
+    }
+
+    let isMounted = true;
+
+    void import("./src/meeting/MobileMeetingScreen").then((module) => {
+      if (!isMounted) {
+        return;
+      }
+      setMeetingScreen(() => module.MobileMeetingScreen);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [MeetingScreen, route.kind]);
 
   useEffect(() => {
     if (!diagnosticsEnabled) {
@@ -257,104 +325,112 @@ export default function App(): React.JSX.Element {
   }, [apiUrl, buildProfile, route, syncStaticDiagnostics, wsUrl]);
 
   return (
-    <View style={styles.appShell}>
-      <StatusBar style="light" />
-      {route.kind === "home" ? <HomeScreen onDiagnosticsFailure={openDiagnosticsForFailure} onNavigate={openLobby} /> : null}
-      {route.kind === "lobby" ? (
-        <MeetingScreen
-          apiUrl={apiUrl}
-          diagnosticsEnabled={diagnosticsEnabled}
-          onClose={goHome}
-          onDiagnosticsChange={handleConferenceDiagnostics}
-          onDiagnosticsError={handleConferenceError}
-          onSessionChange={(session) => {
+    <SafeAreaProvider>
+      <View style={styles.appShell}>
+        <StatusBar style="light" />
+        {renderContent({
+          MeetingScreen,
+          apiUrl,
+          diagnosticsEnabled,
+          handleConferenceDiagnostics,
+          handleConferenceError,
+          isBooting,
+          onClose: goHome,
+          onDiagnosticsFailure: openDiagnosticsForFailure,
+          onNavigate: openLobby,
+          onSessionChange: (session) => {
             diagnosticsSessionRef.current = session;
-          }}
-          route={route}
-          tokenProvider={tokenProvider}
-          wideEvents={diagnosticsWideEvents}
-          wsUrl={wsUrl}
-        />
-      ) : null}
-      {diagnosticsEnabled ? (
-        <>
-          <Pressable hitSlop={16} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
-            <HugeiconsIcon color={Theme.colors.primary} icon={Bug02Icon} size={18} />
-          </Pressable>
-          <DevDiagnosticsSheet
-            isRefreshingAuth={isRefreshingDiagnosticsAuth}
-            onClearHostAuth={handleClearHostAuth}
-            onClearJoinContext={handleClearJoinContext}
-            onClose={() => setDiagnosticsOpen(false)}
-            onForceDisconnect={handleForceDisconnect}
-            onRefreshAuth={refreshDiagnosticsAuth}
-            onResetDiagnostics={handleResetDiagnostics}
-            visible={diagnosticsOpen}
-          />
-        </>
-      ) : null}
-    </View>
+          },
+          route,
+          tokenProvider,
+          wideEvents: diagnosticsWideEvents,
+          wsUrl,
+        })}
+        {diagnosticsEnabled ? (
+          <>
+            <Pressable hitSlop={16} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
+              <HugeiconsIcon color={Theme.colors.primary} icon={Bug02Icon} size={18} />
+            </Pressable>
+            <DevDiagnosticsSheet
+              isRefreshingAuth={isRefreshingDiagnosticsAuth}
+              onClearHostAuth={handleClearHostAuth}
+              onClearJoinContext={handleClearJoinContext}
+              onClose={() => setDiagnosticsOpen(false)}
+              onForceDisconnect={handleForceDisconnect}
+              onRefreshAuth={refreshDiagnosticsAuth}
+              onResetDiagnostics={handleResetDiagnostics}
+              visible={diagnosticsOpen}
+            />
+          </>
+        ) : null}
+      </View>
+    </SafeAreaProvider>
   );
 }
 
-function MeetingScreen({
-  route,
-  onClose,
+function renderContent({
+  MeetingScreen,
   apiUrl,
-  wsUrl,
-  tokenProvider,
   diagnosticsEnabled,
-  wideEvents,
-  onDiagnosticsChange,
-  onDiagnosticsError,
+  handleConferenceDiagnostics,
+  handleConferenceError,
+  isBooting,
+  onClose,
+  onDiagnosticsFailure,
+  onNavigate,
   onSessionChange,
+  route,
+  tokenProvider,
+  wideEvents,
+  wsUrl,
 }: {
-  route: LobbyRoute;
-  onClose: () => Promise<void>;
+  MeetingScreen: LazyMeetingScreenComponent | null;
   apiUrl: string;
-  wsUrl?: string;
-  tokenProvider?: () => Promise<string>;
   diagnosticsEnabled: boolean;
+  handleConferenceDiagnostics: (snapshot: NativeVideoConferenceDiagnosticsSnapshot) => void;
+  handleConferenceError: (error: { message: string }) => void;
+  isBooting: boolean;
+  onClose: () => Promise<void>;
+  onDiagnosticsFailure: (source: string, message: string) => void;
+  onNavigate: (route: LobbyRoute) => void;
+  onSessionChange: (session: ChalkSession | null) => void;
+  route: MobileRoute;
+  tokenProvider?: () => Promise<string>;
   wideEvents?: { enabled?: boolean; includeDebugInfo?: boolean; handler?: typeof recordWideEvent };
-  onDiagnosticsChange?: (snapshot: NativeVideoConferenceDiagnosticsSnapshot) => void;
-  onDiagnosticsError?: (error: { message: string }) => void;
-  onSessionChange?: (session: ChalkSession | null) => void;
-}): React.JSX.Element {
+  wsUrl?: string;
+}): ReactElement {
+  if (isBooting) {
+    return <AppBootstrapScreen label="Starting Chalk..." />;
+  }
+
+  if (route.kind === "home") {
+    return <HomeScreen onDiagnosticsFailure={onDiagnosticsFailure} onNavigate={onNavigate} />;
+  }
+
+  if (!MeetingScreen) {
+    return <AppBootstrapScreen label="Preparing meeting..." />;
+  }
+
   return (
-    <ChalkNativeProvider apiUrl={apiUrl} debug={diagnosticsEnabled} tokenProvider={tokenProvider} wideEvents={wideEvents} wsUrl={wsUrl}>
-      <MeetingDiagnosticsBridge onSessionChange={onSessionChange} />
-      <NativeVideoConference
-        autoJoin={false}
-        features={{ screenShare: true }}
-        initialPhase="lobby"
-        onClose={onClose}
-        onDiagnosticsChange={onDiagnosticsChange}
-        onError={onDiagnosticsError}
-        roomId={route.roomId}
-        roomName={route.roomName}
-        role={route.role}
-        userName={route.role === "host" ? "Host" : "Guest"}
-      />
-    </ChalkNativeProvider>
+    <MeetingScreen
+      apiUrl={apiUrl}
+      diagnosticsEnabled={diagnosticsEnabled}
+      onClose={onClose}
+      onDiagnosticsChange={handleConferenceDiagnostics}
+      onDiagnosticsError={handleConferenceError}
+      onSessionChange={onSessionChange}
+      route={route}
+      tokenProvider={tokenProvider}
+      wideEvents={wideEvents}
+      wsUrl={wsUrl}
+    />
   );
-}
-
-function MeetingDiagnosticsBridge({ onSessionChange }: { onSessionChange?: (session: ChalkSession | null) => void }): null {
-  const session = useSession();
-
-  useEffect(() => {
-    onSessionChange?.(session);
-    return () => {
-      onSessionChange?.(null);
-    };
-  }, [onSessionChange, session]);
-
-  return null;
 }
 
 const styles = StyleSheet.create({
   appShell: {
     flex: 1,
+    backgroundColor: Theme.colors.background,
   },
   devButton: {
     position: "absolute",
