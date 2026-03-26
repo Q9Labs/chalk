@@ -6,6 +6,7 @@
  */
 
 import type { WideEvent, WideEventConfig } from "./types";
+import { chalkDebugCollector } from "../debug/collector.ts";
 
 /**
  * Emit a wide event to console (JSON format)
@@ -28,6 +29,8 @@ export function emitToConsole(event: WideEvent): void {
  */
 export function createEmitter(config: WideEventConfig): (event: WideEvent) => void {
   return (event: WideEvent) => {
+    chalkDebugCollector.recordWideEvent(event);
+
     // Always call custom handler if provided
     if (config.handler) {
       try {

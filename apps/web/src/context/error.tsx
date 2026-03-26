@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { ErrorDialog } from "../components/ErrorDialog";
 
 interface ErrorState {
@@ -27,6 +27,23 @@ export function ErrorProvider({ children }: { children: React.ReactNode }) {
   const hideError = useCallback(() => {
     setState((prev) => ({ ...prev, isOpen: false }));
   }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === "undefined") return;
+
+    const debugWindow = window as Window & {
+      __chalkShowError?: (message: string, traceId?: string) => void;
+      __chalkHideError?: () => void;
+    };
+
+    debugWindow.__chalkShowError = showError;
+    debugWindow.__chalkHideError = hideError;
+
+    return () => {
+      delete debugWindow.__chalkShowError;
+      delete debugWindow.__chalkHideError;
+    };
+  }, [hideError, showError]);
 
   return (
     <ErrorContext.Provider value={{ showError, hideError }}>

@@ -1,6 +1,7 @@
 import { ChalkError } from "../errors/chalk-error";
 import { createBrowserIncidentContext, createSupportCode, type ChalkIncident, type ChalkIncidentBreadcrumb, type ChalkIncidentConfig, type ChalkIncidentInput, type ChalkIncidentSource } from "../incident.ts";
 import { wideEvents } from "../wide-events/index";
+import { chalkDebugCollector } from "../debug/collector.ts";
 
 interface ChalkSessionIncidentSnapshot {
   roomId: string | null;
@@ -46,6 +47,7 @@ export class ChalkSessionIncidentPipeline {
     if (this.breadcrumbs.length > maxBreadcrumbs) {
       this.breadcrumbs = this.breadcrumbs.slice(-maxBreadcrumbs);
     }
+    chalkDebugCollector.recordBreadcrumb(next);
   }
 
   emitErrorWithIncident(error: ChalkError, source: ChalkIncidentSource, details?: Record<string, unknown>): void {
@@ -94,6 +96,7 @@ export class ChalkSessionIncidentPipeline {
         ...(incidentInput.context ?? {}),
       },
     };
+    chalkDebugCollector.recordIncident(incident);
 
     const onIncident = this.config?.onIncident;
     if (onIncident) {

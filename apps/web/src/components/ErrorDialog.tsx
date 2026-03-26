@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { cn } from "@q9labs/chalk-ui";
-import { AlertCircleIcon, CopyIcon, CheckIcon, XIcon, ChevronRightIcon } from "lucide-react";
+import { AlertCircleIcon, CopyIcon, CheckIcon, XIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
+import { buildChalkWebDebugReport, downloadDebugReport, toDebugClipboardText } from "../lib/debugReport";
 
 export interface ErrorDialogProps {
   /** Whether the dialog is open */
@@ -20,6 +21,8 @@ export interface ErrorDialogProps {
  */
 export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, message, traceId, className }) => {
   const [copied, setCopied] = useState(false);
+  const [copiedDebug, setCopiedDebug] = useState(false);
+  const [downloadingDebug, setDownloadingDebug] = useState(false);
 
   const handleCopyTrace = () => {
     if (!traceId) return;
@@ -37,6 +40,28 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
+
+  const handleCopyFullDebug = async () => {
+    const report = await buildChalkWebDebugReport({ message, traceId });
+    const text = toDebugClipboardText(report);
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedDebug(true);
+      window.setTimeout(() => setCopiedDebug(false), 2500);
+    } catch {
+      downloadDebugReport(report);
+      setDownloadingDebug(true);
+      window.setTimeout(() => setDownloadingDebug(false), 2500);
+    }
+  };
+
+  const handleDownloadDebug = async () => {
+    const report = await buildChalkWebDebugReport({ message, traceId });
+    downloadDebugReport(report);
+    setDownloadingDebug(true);
+    window.setTimeout(() => setDownloadingDebug(false), 2500);
+  };
 
   if (!isOpen) return null;
 
@@ -62,8 +87,34 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
             {message}
           </p>
 
-          {traceId && (
-            <div className="mt-6 p-3 rounded-lg bg-muted/50 border border-border">
+          <div className="mt-6 space-y-3 rounded-lg bg-muted/50 border border-border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => void handleCopyFullDebug()} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors", copiedDebug ? "bg-green-500/15 text-green-600" : "bg-primary/10 text-primary hover:bg-primary/15")}>
+                {copiedDebug ? (
+                  <>
+                    <CheckIcon size={12} /> Copied Full Debug
+                  </>
+                ) : (
+                  <>
+                    <CopyIcon size={12} /> Copy Full Debug
+                  </>
+                )}
+              </button>
+              <button onClick={() => void handleDownloadDebug()} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors", downloadingDebug ? "bg-green-500/15 text-green-600" : "bg-secondary text-secondary-foreground hover:opacity-90")}>
+                {downloadingDebug ? (
+                  <>
+                    <CheckIcon size={12} /> Downloaded JSON
+                  </>
+                ) : (
+                  <>
+                    <DownloadIcon size={12} /> Download JSON
+                  </>
+                )}
+              </button>
+            </div>
+
+            {traceId && (
+              <>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Trace ID</span>
                 <button onClick={handleCopyTrace} className={cn("text-[10px] font-medium flex items-center gap-1 transition-colors", copied ? "text-green-500" : "text-primary hover:underline")}>
@@ -79,8 +130,10 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
                 </button>
               </div>
               <code className="text-[11px] font-mono text-muted-foreground break-all select-all">{traceId}</code>
-            </div>
-          )}
+              </>
+            )}
+            <p className="text-[10px] leading-relaxed text-muted-foreground">Full debug includes requests, responses, websocket traffic, console logs, runtime errors, browser/device info, cookies, storage, and active Chalk session state captured in this tab.</p>
+          </div>
         </div>
 
         {/* Footer */}

@@ -1,11 +1,16 @@
 import { createTokenProvider } from "@q9labs/chalk-core";
-import { ChalkProvider, type ChalkPostHogClient, createHttpIncidentReporter, useWhatsNew, WhatsNewDialog, WhatsNewTrigger } from "@q9labs/chalk-react";
+import { ChalkProvider, type ChalkPostHogClient, createHttpIncidentReporter, useSession, useWhatsNew, WhatsNewDialog, WhatsNewTrigger } from "@q9labs/chalk-react";
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { DebugDialog } from "../components/DebugDialog";
+import { registerDebugSection, installChalkWebDebugRuntime } from "../lib/debugRuntime";
 import { createWebTokenProvider, getApiUrl, getChalkSessionCacheKey, isLocalHost, shouldUseRoomScopedTokenProvider } from "../lib/internalAuth";
 
 const isServer = typeof window === "undefined";
+
+if (!isServer) {
+  installChalkWebDebugRuntime();
+}
 
 type WebChalkRuntimeRenderProps = {
   openDebug: () => void;
@@ -148,6 +153,7 @@ export function WebChalkRuntime({ children, fallback = null }: WebChalkRuntimePr
       }}
     >
       {renderedChildren}
+      <ChalkDebugBridge />
       <WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
 
       <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
@@ -159,6 +165,43 @@ export function WebChalkRuntime({ children, fallback = null }: WebChalkRuntimePr
       <DebugDialog isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} />
     </ChalkProvider>
   );
+}
+
+function ChalkDebugBridge() {
+  const session = useSession();
+
+  useEffect(
+    () =>
+      registerDebugSection("chalkSession", () => {
+        const activeRoom = session.room.getRoom();
+
+        return {
+          diagnostics: session.getDiagnosticsSnapshot(),
+          roomState: session.room.getState(),
+          participantState: session.participants.getState(),
+          mediaState: session.media.getState(),
+          chatState: session.chat.getState(),
+          interactionState: session.interactions.getState(),
+          recordingState: session.recording.getState(),
+          whiteboardState: session.whiteboard.getState(),
+          uiState: session.ui.getState(),
+          screenShareState: session.screenShare.getState(),
+          activeRoom: activeRoom
+            ? {
+                id: activeRoom.id,
+                status: activeRoom.status,
+                connectionState: activeRoom.connectionState,
+                info: activeRoom.info,
+                localParticipant: activeRoom.localParticipant,
+                participantCount: activeRoom.participants.size,
+              }
+            : null,
+        };
+      }),
+    [session],
+  );
+
+  return null;
 }
 
 function WhatsNew({ apiBaseUrl }: { apiBaseUrl: string }) {

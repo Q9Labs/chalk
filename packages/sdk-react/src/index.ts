@@ -62,6 +62,7 @@ export { ChalkErrorCode } from "@q9labs/chalk-core";
 
 // Re-export wide events (replaces old logging utilities)
 export { wideEvents, configureWideEvents, createBrowserIncidentContext, createHttpIncidentReporter, createSupportCode, type WideEvent, type WideEventConfig } from "@q9labs/chalk-core";
+export { chalkDebugCollector, type ChalkDebugConsoleRecord, type ChalkDebugFetchRecord, type ChalkDebugRuntimeErrorRecord, type ChalkDebugSnapshot, type ChalkDebugWebSocketRecord } from "@q9labs/chalk-core";
 
 // ============================================================================
 // Provider and Context
