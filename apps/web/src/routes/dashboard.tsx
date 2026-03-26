@@ -16,6 +16,7 @@ import { ChalkLoader } from "../components/ChalkLoader";
 import { ChalkLogo } from "../components/ChalkLogo";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { Loader2 } from "lucide-react";
+import { WebChalkRuntime } from "../components/WebChalkRuntime";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
@@ -77,6 +78,14 @@ async function downloadRecording(meetingId: string, token: string) {
 }
 
 function DashboardPage() {
+  return (
+    <WebChalkRuntime fallback={<div className="min-h-screen bg-[#0A0A0B]" />}>
+      {() => <DashboardPageContent />}
+    </WebChalkRuntime>
+  );
+}
+
+function DashboardPageContent() {
   const apiUrl = getApiUrl();
   const [state, setState] = useState<{ kind: "loading" } | { kind: "login" } | { kind: "ready"; data: MeetingsResponse; token: string } | { kind: "error"; message: string }>({ kind: "loading" });
   const [isSigningIn, setIsSigningIn] = useState(false);

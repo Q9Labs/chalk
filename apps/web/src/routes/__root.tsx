@@ -1,12 +1,9 @@
-import { createTokenProvider } from "@q9labs/chalk-core";
-import { ChalkProvider, type ChalkPostHogClient, createHttpIncidentReporter, useWhatsNew, WhatsNewDialog, WhatsNewTrigger } from "@q9labs/chalk-react";
 import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { DebugDialog } from "../components/DebugDialog";
+import { useEffect } from "react";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { createWebTokenProvider, getApiUrl, getChalkSessionCacheKey, isLocalHost, shouldPrimeTokenCache, shouldUseRoomScopedTokenProvider } from "../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, shouldPrimeTokenCache } from "../lib/internalAuth";
 import { getPublicAppUrl } from "../lib/publicUrl";
 
 // SSR check - ChalkProvider requires browser APIs
@@ -102,120 +99,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const location = useLocation();
-  // API URL for backend - use env var or default to production
-  const apiUrl = getApiUrl();
-  const apiHost = useMemo(() => new URL(apiUrl).hostname, [apiUrl]);
-  const isLocalApi = useMemo(() => isLocalHost(apiHost), [apiHost]);
-  // WebSocket URL for real-time features (chat, reactions, whiteboard, etc.)
-  const configuredWsUrl = import.meta.env.VITE_WS_URL;
-  const wsUrl =
-    (!isLocalApi && configuredWsUrl) ||
-    (apiUrl
-      ? (() => {
-          const api = new URL(apiUrl);
-          if (api.host === "chalk-api.q9labs.ai") {
-            return "wss://chalk-ws.q9labs.ai/ws";
-          }
-          // Local/other: derive from API URL
-          const wsProtocol = api.protocol === "https:" ? "wss:" : "ws:";
-          return `${wsProtocol}//${api.host}/ws`;
-        })()
-      : undefined);
-
-  // Token provider: handles API key → JWT exchange and auto-refresh
-  const apiKey = import.meta.env.VITE_CHALK_API_KEY;
-  const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
-  const apiKeyTokenProvider = useMemo(
-    () =>
-      apiKey
-        ? createTokenProvider({
-            apiKey,
-            apiUrl,
-            storage: "sessionStorage",
-          })
-        : undefined,
-    [apiKey, apiUrl],
-  );
-  const tokenProvider = useMemo(() => {
-    if (shouldUseRoomScopedTokenProvider(location.pathname) || !apiKeyTokenProvider) {
-      return webTokenProvider;
-    }
-    return apiKeyTokenProvider;
-  }, [apiKeyTokenProvider, location.pathname, webTokenProvider]);
-
   useEffect(() => {
     if (isServer || !shouldPrimeTokenCache(location.pathname)) return;
+    const apiUrl = getApiUrl();
+    const tokenProvider = createWebTokenProvider(apiUrl);
     // Prime token cache so first Join click avoids auth round-trip; fail-open by design.
     void tokenProvider().catch(() => {});
-  }, [location.pathname, tokenProvider]);
-
-  const [isDebugOpen, setIsDebugOpen] = useState(false);
-  const [posthogClient, setPosthogClient] = useState<ChalkPostHogClient | undefined>(undefined);
-
-  const posthogKey = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
-  const posthogHost = (import.meta.env.VITE_POSTHOG_HOST as string | undefined) || "https://us.i.posthog.com";
-
-  useEffect(() => {
-    if (isServer || !posthogKey) return;
-    const normalizedKey = posthogKey.trim();
-    // PostHog JS requires the project API key (typically `phc_...`), not personal keys (`phx_...`).
-    if (normalizedKey.startsWith("phx_")) {
-      console.warn("[chalk:web] PostHog disabled: VITE_POSTHOG_KEY is a personal API key (phx_*). Use the project API key (phc_*).");
-      return;
-    }
-
-    let active = true;
-    void import("posthog-js")
-      .then(({ default: posthog }) => {
-        posthog.init(normalizedKey, {
-          api_host: posthogHost,
-          disable_session_recording: true,
-        });
-        if (active) setPosthogClient(posthog);
-      })
-      .catch(() => {
-        // PostHog is optional for local/dev environments.
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [posthogHost, posthogKey]);
-
-  const posthogConfig = useMemo(
-    () =>
-      posthogClient
-        ? {
-            client: posthogClient,
-            properties: {
-              app: "web",
-            },
-          }
-        : undefined,
-    [posthogClient],
-  );
-
-  const incidentReporter = useMemo(() => {
-    if (isServer) return undefined;
-    const trimmedApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
-    if (!trimmedApiKey) return undefined;
-    return createHttpIncidentReporter({
-      endpoint: `${apiUrl}/api/v1/debug/client-incident`,
-      headers: {
-        "x-api-key": trimmedApiKey,
-        "x-chalk-source": "chalk-web",
-      },
-      retries: 1,
-      retryDelayMs: 200,
-      timeoutMs: 3000,
-      useBeacon: true,
-    });
-  }, [apiKey, apiUrl]);
-
-  const sessionCacheKey = useMemo(
-    () => getChalkSessionCacheKey(location.pathname, location.search),
-    [location.pathname, location.search],
-  );
+  }, [location.pathname]);
 
   const content = (
     <ThemeProvider>
@@ -224,64 +114,10 @@ function RootComponent() {
           <div className="chalk-wipe-container chalk-wipe-active min-h-screen">
             <Outlet />
           </div>
-          <WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
-
-          {/* Version Trigger - Bottom Right */}
-          <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
-            <button onClick={() => setIsDebugOpen(true)} className="text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer select-none" title="System Information">
-              sdk v{__SDK_REACT_VERSION__} · web v{__WEB_APP_VERSION__}
-            </button>
-          </div>
-
-          {!isServer && <DebugDialog isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} />}
         </div>
       </ErrorProvider>
     </ThemeProvider>
   );
 
-  // ChalkProvider requires browser APIs - skip during SSR/prerender
-  if (isServer) {
-    return content;
-  }
-
-  return (
-    <ChalkProvider
-      debug={true}
-      demoMode={false}
-      apiUrl={apiUrl}
-      sessionCacheKey={sessionCacheKey}
-      wsUrl={wsUrl}
-      tokenProvider={tokenProvider}
-      posthog={posthogConfig}
-      incident={{
-        reporter: incidentReporter,
-        maxBreadcrumbs: 80,
-      }}
-    >
-      {content}
-    </ChalkProvider>
-  );
-}
-
-function WhatsNew({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { isOpen, open, close, releases, currentIndex, next, prev, markAllAsSeen, later, hasSeen, shouldAutoOpen } = useWhatsNew({ apiBaseUrl });
-
-  // Auto-open for returning users with unseen updates
-  useEffect(() => {
-    if (shouldAutoOpen) open();
-  }, [shouldAutoOpen, open]);
-
-  return (
-    <>
-      {/* Floating trigger button - only show when there are unseen releases */}
-      {releases.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-40">
-          <WhatsNewTrigger hasUnseen={!hasSeen} onClick={open} />
-        </div>
-      )}
-
-      {/* Dialog */}
-      {isOpen && releases.length > 0 && <WhatsNewDialog isOpen={isOpen} onClose={close} releases={releases} currentIndex={currentIndex} onNext={next} onPrev={prev} onSkipAll={markAllAsSeen} onLater={later} />}
-    </>
-  );
+  return content;
 }

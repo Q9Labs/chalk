@@ -210,3 +210,20 @@
 - kept lightweight room token priming in root to preserve first-join auth warmup
 - verified `bun run --cwd apps/web build` passes
 - note: client main bundle size still essentially unchanged; next win is route/code splitting + SDK lazy fixes
+
+## 2026-03-26 23:03 PKT
+
+- integrated all three P0 startup cuts into the same tree
+- web:
+  - `/j/$joinToken` and `/demo` now navigate through TanStack Router instead of full document reloads
+  - root no longer boots Chalk runtime globally
+  - root token warmup now stays on the room-scoped web token provider
+- mobile:
+  - app shell stays light on cold boot
+  - meeting runtime loads on demand from `src/meeting/MobileMeetingScreen.tsx`
+  - branded bootstrap screen covers initial deep-link resolution and meeting handoff
+  - enabled Metro `inlineRequires` to defer more module evaluation on startup
+- verify:
+  - `bun run --cwd apps/web build`
+  - `bun run --cwd apps/mobile lint`
+  - `bun run --cwd apps/mobile build`

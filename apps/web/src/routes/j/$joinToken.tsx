@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import z from "zod";
 import { exchangeJoinToken, getApiUrl, setJoinContext } from "../../lib/internalAuth";
@@ -12,6 +12,7 @@ export const Route = createFileRoute("/j/$joinToken")({
 
 function JoinLinkPage() {
   const { joinToken } = Route.useParams();
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,7 +21,7 @@ function JoinLinkPage() {
       try {
         const redirectPath = await resolveJoinLinkRedirect(joinToken);
         if (cancelled) return;
-        window.location.replace(redirectPath);
+        await navigate({ href: redirectPath, replace: true });
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -29,7 +30,7 @@ function JoinLinkPage() {
     return () => {
       cancelled = true;
     };
-  }, [joinToken]);
+  }, [joinToken, navigate]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">

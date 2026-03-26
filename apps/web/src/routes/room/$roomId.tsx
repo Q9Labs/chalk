@@ -19,6 +19,7 @@ import z from "zod";
 import { ReactionBubbles } from "@/features/room/components";
 import { createRoomJoinLink, createWebTokenProvider, fetchInternalAccessToken, getApiUrl, getJoinContext } from "../../lib/internalAuth";
 import { ChalkLogo } from "../../components/ChalkLogo";
+import { WebChalkRuntime } from "../../components/WebChalkRuntime";
 import { cn } from "../../lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Calendar01Icon, Clock01Icon } from "@hugeicons/core-free-icons";
@@ -59,7 +60,6 @@ export const Route = createFileRoute("/room/$roomId")({
 });
 
 function RoomPage() {
-  const { setIsDebugOpen } = Route.useRouteContext() as { setIsDebugOpen: (open: boolean) => void };
   const { roomId } = Route.useParams() as {
     roomId: string;
   };
@@ -265,47 +265,50 @@ function RoomPage() {
   }
 
   return (
-    <div className="h-screen w-screen relative bg-background">
-      {/*@ts-ignore*/}
-      <VideoConference
-        roomId={roomId}
-        roomName={roomName || "Meeting On Chalk"}
-        meetingLink={meetingLink || undefined}
-        userName={storedUserName || "Chalker"}
-        autoJoin={autoJoin}
-        onJoin={(data) => {
-          console.log("Joined: ", data);
-        }}
-        onEnd={(data) => {
-          localStorage.setItem("data", JSON.stringify(data));
-          navigate({ to: "/room/end", search: { roomId } });
-        }}
-        sounds={true}
-        debug={true}
-        role={role as "host" | "participant"}
-        features={{
-          chat: true,
-          recording: role === "host",
-          screenShare: true,
-          whiteboard: true,
-          reactions: true,
-          handRaise: true,
-          backgroundEffects: true,
-          tour: false,
-        }}
-        defaults={{
-          videoEnabled: defaults.videoEnabled,
-          layout: "grid",
-          audioEnabled: defaults.audioEnabled,
-        }}
-        onOpenDebug={() => setIsDebugOpen(true)}
-        className="h-full w-full"
-      />
+    <WebChalkRuntime fallback={<div className="h-screen w-screen bg-background" />}>
+      {({ openDebug }) => (
+        <div className="h-screen w-screen relative bg-background">
+          {/*@ts-ignore*/}
+          <VideoConference
+            roomId={roomId}
+            roomName={roomName || "Meeting On Chalk"}
+            meetingLink={meetingLink || undefined}
+            userName={storedUserName || "Chalker"}
+            autoJoin={autoJoin}
+            onJoin={(data) => {
+              console.log("Joined: ", data);
+            }}
+            onEnd={(data) => {
+              localStorage.setItem("data", JSON.stringify(data));
+              navigate({ to: "/room/end", search: { roomId } });
+            }}
+            sounds={true}
+            debug={true}
+            role={role as "host" | "participant"}
+            features={{
+              chat: true,
+              recording: role === "host",
+              screenShare: true,
+              whiteboard: true,
+              reactions: true,
+              handRaise: true,
+              backgroundEffects: true,
+              tour: false,
+            }}
+            defaults={{
+              videoEnabled: defaults.videoEnabled,
+              layout: "grid",
+              audioEnabled: defaults.audioEnabled,
+            }}
+            onOpenDebug={openDebug}
+            className="h-full w-full"
+          />
 
-      {/* App-specific overlays */}
-      <WhiteboardKeyboardShortcut />
-      <ReactionBubblesOverlay />
-    </div>
+          <WhiteboardKeyboardShortcut />
+          <ReactionBubblesOverlay />
+        </div>
+      )}
+    </WebChalkRuntime>
   );
 }
 

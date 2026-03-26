@@ -21,5 +21,14 @@ config.resolver.blockList = [
   new RegExp(`^${escapePathForRegex(path.join(sdkNodeModules, "@hugeicons"))}\\/.*$`),
   new RegExp(`^${escapePathForRegex(bunStoreNodeModules)}\\/@hugeicons\\+react-native@[^/]+\\/node_modules\\/react-native-svg\\/.*$`),
 ];
+config.transformer = {
+  ...config.transformer,
+  getTransformOptions: async () => ({
+    transform: {
+      experimentalImportSupport: false,
+      inlineRequires: true,
+    },
+  }),
+};
 
 module.exports = config;
