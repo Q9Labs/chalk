@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, ArrowDown01Icon, ArrowUp01Icon, RefreshIcon, ArrowLeft01Icon, InformationCircleIcon, WifiOffIcon, Shield01Icon, Copy01Icon, Download01Icon, CheckmarkCircle02Icon } from "../../utils/icons";
 import { copyPreparedDebugExport, downloadDebugReport, prepareFullDebugExport, type PreparedDebugExport } from "../../utils/debugExport";
@@ -16,6 +16,8 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
   const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "copied" | "failed" | "downloaded">("idle");
   const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
   const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
+  const [manualCopyText, setManualCopyText] = useState<string | null>(null);
+  const manualCopyRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Analyze error to determine the best human-readable message and actions
   const errorInfo = useMemo(() => {
@@ -54,6 +56,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     setDebugExportState("preparing");
     setPreparedDebugExport(null);
     setDebugExportLog(null);
+    setManualCopyText(null);
 
     void prepareFullDebugExport({
       source: "diagnostic-error-sheet",
@@ -76,6 +79,16 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     };
   }, [error, supportCode]);
 
+  useEffect(() => {
+    if (!manualCopyText || !manualCopyRef.current) {
+      return;
+    }
+
+    manualCopyRef.current.focus();
+    manualCopyRef.current.select();
+    manualCopyRef.current.setSelectionRange(0, manualCopyText.length);
+  }, [manualCopyText]);
+
   const handleDebugExport = async () => {
     if (!preparedDebugExport) {
       setDebugExportState("preparing");
@@ -86,6 +99,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     const result = await copyPreparedDebugExport(preparedDebugExport);
     setDebugExportState(result.outcome);
     setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
+    setManualCopyText(result.outcome === "failed" ? preparedDebugExport.text : null);
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
@@ -226,6 +240,19 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
               Download Debug JSON
             </button>
           </div>
+
+          {manualCopyText && (
+            <div className="mb-6 w-full rounded-2xl border border-border bg-muted/30 p-3 text-left">
+              <p className="mb-2 text-[12px] font-semibold text-foreground">Manual copy fallback</p>
+              <p className="mb-2 text-[12px] text-muted-foreground">Clipboard write could not be verified. Press Cmd/Ctrl+C on the selected text below.</p>
+              <textarea
+                ref={manualCopyRef}
+                readOnly
+                value={manualCopyText}
+                className="h-28 w-full resize-none rounded-xl border border-border/60 bg-background/80 p-2 text-[11px] font-mono text-foreground"
+              />
+            </div>
+          )}
 
           {/* Technical Details Accordion */}
           <div className="w-full">

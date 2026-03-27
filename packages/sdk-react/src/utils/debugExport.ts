@@ -181,7 +181,54 @@ const toClipboardText = (report: unknown) =>
     safeJsonStringify(report),
   ].join("\n");
 
+const verifyClipboardText = async (text: string) => {
+  const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
+  if (!readText) {
+    return {
+      verified: false,
+      reason: "Clipboard read API unavailable for verification",
+    } as const;
+  }
+
+  try {
+    const copiedText = await readText();
+    return copiedText === text
+      ? ({ verified: true } as const)
+      : ({
+          verified: false,
+          reason: "Clipboard verification mismatch",
+        } as const);
+  } catch (error) {
+    return {
+      verified: false,
+      reason: `Clipboard verification failed: ${toErrorMessage(error)}`,
+    } as const;
+  }
+};
+
 const copyTextWithExecCommand = (text: string) => {
+  let eventCopyWorked = false;
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const handleCopy = (event: ClipboardEvent) => {
+    if (!event.clipboardData) {
+      return;
+    }
+
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", text);
+    eventCopyWorked = true;
+  };
+
+  document.addEventListener("copy", handleCopy);
+  try {
+    if (document.execCommand("copy") && eventCopyWorked) {
+      return true;
+    }
+  } finally {
+    document.removeEventListener("copy", handleCopy);
+    activeElement?.focus();
+  }
+
   const textarea = document.createElement("textarea");
   textarea.value = text;
   textarea.setAttribute("readonly", "true");
@@ -194,11 +241,14 @@ const copyTextWithExecCommand = (text: string) => {
   textarea.focus();
   textarea.select();
   textarea.setSelectionRange(0, text.length);
+  let selectionCopyWorked = false;
 
   try {
-    return document.execCommand("copy");
+    selectionCopyWorked = document.execCommand("copy");
+    return selectionCopyWorked;
   } finally {
     document.body.removeChild(textarea);
+    activeElement?.focus();
   }
 };
 
@@ -209,37 +259,19 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
       diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: "Clipboard API unavailable" });
     } else {
       await writeText(text);
-      const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
-      if (readText) {
-        try {
-          const copiedText = await readText();
-          if (copiedText !== text) {
-            diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: "Clipboard verification mismatch after writeText" });
-          } else {
-            diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true });
-            return true;
-          }
-        } catch (verificationError) {
-          diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true, error: `Verification skipped: ${toErrorMessage(verificationError)}` });
-          return true;
-        }
-      } else {
+      const verification = await verifyClipboardText(text);
+      if (verification.verified) {
         diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true });
         return true;
       }
+      if (verification.reason !== "Clipboard verification mismatch") {
+        diagnostics.attempts.push({ strategy: "clipboard.writeText (unverified)", ok: true, error: verification.reason });
+        return true;
+      }
+      diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: verification.reason });
     }
   } catch (error) {
     diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: toErrorMessage(error) });
-  }
-
-  try {
-    if (copyTextWithExecCommand(text)) {
-      diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: true });
-      return true;
-    }
-    diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: "Command returned false" });
-  } catch (error) {
-    diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: toErrorMessage(error) });
   }
 
   try {
@@ -252,16 +284,38 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
           "text/plain": new Blob([text], { type: "text/plain" }),
         }),
       ]);
-      diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: true });
-      return true;
+      const verification = await verifyClipboardText(text);
+      if (verification.verified) {
+        diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: true });
+        return true;
+      }
+      if (verification.reason !== "Clipboard verification mismatch") {
+        diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem) (unverified)", ok: true, error: verification.reason });
+        return true;
+      }
+      diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: false, error: verification.reason });
     }
   } catch (error) {
     diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: false, error: toErrorMessage(error) });
   }
 
+  try {
+    if (!copyTextWithExecCommand(text)) {
+      diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: "Command returned false" });
+    } else {
+      const verification = await verifyClipboardText(text);
+      if (verification.verified) {
+        diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: true });
+        return true;
+      }
+      diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: verification.reason });
+    }
+  } catch (error) {
+    diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: toErrorMessage(error) });
+  }
+
   return false;
 };
-
 export const downloadDebugReport = (report: unknown, filename = `chalk-debug-${Date.now()}.json`) => {
   const blob = new Blob([safeJsonStringify(report)], { type: "application/json" });
   const url = URL.createObjectURL(blob);

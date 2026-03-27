@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@q9labs/chalk-ui";
 import { AlertCircleIcon, CopyIcon, CheckIcon, XIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
 import { buildChalkWebDebugReport, copyDebugTextToClipboard, downloadDebugReport, toDebugClipboardText } from "../lib/debugReport";
@@ -24,6 +24,8 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
   const [copiedDebug, setCopiedDebug] = useState<"idle" | "preparing" | "copied" | "failed">("idle");
   const [downloadingDebug, setDownloadingDebug] = useState(false);
   const [preparedDebugReport, setPreparedDebugReport] = useState<{ report: unknown; text: string } | null>(null);
+  const [manualCopyText, setManualCopyText] = useState<string | null>(null);
+  const manualCopyRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleCopyTrace = () => {
     if (!traceId) return;
@@ -46,6 +48,7 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
     if (!isOpen) {
       setPreparedDebugReport(null);
       setCopiedDebug("idle");
+      setManualCopyText(null);
       return;
     }
 
@@ -69,6 +72,16 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
     };
   }, [isOpen, message, traceId]);
 
+  useEffect(() => {
+    if (!manualCopyText || !manualCopyRef.current) {
+      return;
+    }
+
+    manualCopyRef.current.focus();
+    manualCopyRef.current.select();
+    manualCopyRef.current.setSelectionRange(0, manualCopyText.length);
+  }, [manualCopyText]);
+
   const handleCopyFullDebug = async () => {
     if (!preparedDebugReport) {
       setCopiedDebug("preparing");
@@ -77,11 +90,13 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
 
     if (await copyDebugTextToClipboard(preparedDebugReport.text)) {
       setCopiedDebug("copied");
+      setManualCopyText(null);
       window.setTimeout(() => setCopiedDebug("idle"), 2500);
       return;
     }
 
     setCopiedDebug("failed");
+    setManualCopyText(preparedDebugReport.text);
   };
 
   const handleDownloadDebug = async () => {
@@ -148,6 +163,14 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
                 )}
               </button>
             </div>
+
+            {manualCopyText && (
+              <div className="space-y-2 rounded-md border border-border bg-background/80 p-2">
+                <p className="text-[11px] font-semibold text-card-foreground">Manual copy fallback</p>
+                <p className="text-[11px] text-muted-foreground">Clipboard write could not be verified. Press Cmd/Ctrl+C on the selected text below.</p>
+                <textarea ref={manualCopyRef} readOnly value={manualCopyText} className="h-28 w-full resize-none rounded-md border border-border bg-background p-2 text-[10px] font-mono text-card-foreground" />
+              </div>
+            )}
 
             {traceId && (
               <>

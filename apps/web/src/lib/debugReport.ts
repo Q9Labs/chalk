@@ -180,18 +180,53 @@ const safeJsonStringify = (value: unknown) => {
 };
 
 async function copyTextToClipboard(text: string) {
+  const verifyClipboardText = async () => {
+    const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
+    if (!readText) {
+      return {
+        verified: false,
+        reason: "Clipboard read API unavailable for verification",
+      } as const;
+    }
+
+    try {
+      return (await readText()) === text
+        ? ({ verified: true } as const)
+        : ({
+            verified: false,
+            reason: "Clipboard verification mismatch",
+          } as const);
+    } catch (error) {
+      return {
+        verified: false,
+        reason: error instanceof Error ? error.message : String(error),
+      } as const;
+    }
+  };
+
   try {
     const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard);
     if (writeText) {
       await writeText(text);
-      const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
-      if (!readText) {
+      const verification = await verifyClipboardText();
+      if (verification.verified || verification.reason !== "Clipboard verification mismatch") {
         return true;
       }
+    }
+  } catch {
+    // Fall through to next strategies.
+  }
 
-      try {
-        return (await readText()) === text;
-      } catch {
+  try {
+    const write = navigator.clipboard?.write?.bind(navigator.clipboard);
+    if (write && typeof ClipboardItem !== "undefined") {
+      await write([
+        new ClipboardItem({
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      const verification = await verifyClipboardText();
+      if (verification.verified || verification.reason !== "Clipboard verification mismatch") {
         return true;
       }
     }
@@ -200,6 +235,28 @@ async function copyTextToClipboard(text: string) {
   }
 
   try {
+    let eventCopyWorked = false;
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const handleCopy = (event: ClipboardEvent) => {
+      if (!event.clipboardData) {
+        return;
+      }
+
+      event.preventDefault();
+      event.clipboardData.setData("text/plain", text);
+      eventCopyWorked = true;
+    };
+
+    document.addEventListener("copy", handleCopy);
+    try {
+      if (document.execCommand("copy") && eventCopyWorked) {
+        return (await verifyClipboardText()).verified;
+      }
+    } finally {
+      document.removeEventListener("copy", handleCopy);
+      activeElement?.focus();
+    }
+
     const textarea = document.createElement("textarea");
     textarea.value = text;
     textarea.setAttribute("readonly", "true");
@@ -215,13 +272,14 @@ async function copyTextToClipboard(text: string) {
 
     try {
       if (document.execCommand("copy")) {
-        return true;
+        return (await verifyClipboardText()).verified;
       }
     } finally {
       document.body.removeChild(textarea);
+      activeElement?.focus();
     }
   } catch {
-    // Fall through.
+    // Fall through to failure.
   }
 
   return false;

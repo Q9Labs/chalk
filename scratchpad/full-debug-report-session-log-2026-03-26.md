@@ -25,3 +25,21 @@
   - `bun run test -- src/lib/debugReport.test.ts` passed in `apps/web`
   - `bun run check-types` passed
   - agent-browser headless click on shared helper now reports honest clipboard permission denial instead of fake success; useful as negative-path proof
+## 2026-03-27 12:49 PKT
+
+- user repro: `Copy Full Debug` still says copied; clipboard unchanged
+- user log: only `document.execCommand(copy)` attempt, `ok: true`
+- root cause: helper trusted `execCommand` success without proving clipboard changed
+- fix:
+  - reorder copy strategies to prefer `navigator.clipboard.writeText()` first
+  - keep `ClipboardItem` next
+  - run `execCommand(copy)` last
+  - only trust `execCommand(copy)` when clipboard read-back matches
+  - keep manual copy textarea fallback when all programmatic strategies fail
+- tests added:
+  - async clipboard wins before exec fallback
+  - `execCommand(copy)` false-positive with stale clipboard now fails
+- browser verify:
+  - forced real web error dialog via `window.__chalkShowError(...)`
+  - confirmed real UI path renders `Copy Full Debug`
+  - agent-browser clipboard read/write permissions blocked, so system clipboard read-back could not be proven there

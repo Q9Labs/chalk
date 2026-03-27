@@ -81,12 +81,18 @@ describe("debugReport", () => {
   });
 
   it("uses writeText first for plain-text debug copy", async () => {
+    let clipboardText = "";
     const writeText = vi.fn().mockResolvedValue(undefined);
+    const readText = vi.fn().mockImplementation(async () => clipboardText);
 
     Object.assign(navigator, {
       clipboard: {
         ...navigator.clipboard,
-        writeText,
+        writeText: vi.fn(async (text: string) => {
+          clipboardText = text;
+          return writeText(text);
+        }),
+        readText,
       },
     });
 
@@ -94,6 +100,26 @@ describe("debugReport", () => {
 
     expect(result.copied).toBe(true);
     expect(writeText).toHaveBeenCalledTimes(1);
+    expect(readText).toHaveBeenCalledTimes(1);
     expect(String(writeText.mock.calls[0]?.[0])).toContain('"hello": "world"');
+  });
+
+  it("does not trust execCommand success when clipboard read-back mismatches", async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        ...navigator.clipboard,
+        writeText: vi.fn().mockRejectedValue(new Error("clipboard denied")),
+        readText: vi.fn().mockResolvedValue("stale clipboard value"),
+        write: undefined,
+      },
+    });
+    Object.defineProperty(document, "execCommand", {
+      value: vi.fn(() => true),
+      configurable: true,
+    });
+
+    const result = await copyDebugReportToClipboard(Promise.resolve({ hello: "world" }));
+
+    expect(result.copied).toBe(false);
   });
 });

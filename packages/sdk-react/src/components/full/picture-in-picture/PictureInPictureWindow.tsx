@@ -317,6 +317,8 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
   const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "copied" | "failed" | "downloaded">("idle");
   const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
   const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
+  const [manualCopyText, setManualCopyText] = useState<string | null>(null);
+  const manualCopyRef = useRef<HTMLTextAreaElement | null>(null);
   const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
 
   const errorInfo = useMemo(() => {
@@ -433,6 +435,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
       setPreparedDebugExport(null);
       setDebugExportLog(null);
       setDebugExportState("idle");
+      setManualCopyText(null);
       return;
     }
 
@@ -461,6 +464,16 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
     };
   }, [controls.errorMessage, controls.supportCode, phase, showErrorOverlay, source?.title]);
 
+  useEffect(() => {
+    if (!manualCopyText || !manualCopyRef.current) {
+      return;
+    }
+
+    manualCopyRef.current.focus();
+    manualCopyRef.current.select();
+    manualCopyRef.current.setSelectionRange(0, manualCopyText.length);
+  }, [manualCopyText]);
+
   const handleDebugExport = async () => {
     if (!preparedDebugExport) {
       setDebugExportState("preparing");
@@ -471,6 +484,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
     const result = await copyPreparedDebugExport(preparedDebugExport);
     setDebugExportState(result.outcome);
     setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
+    setManualCopyText(result.outcome === "failed" ? preparedDebugExport.text : null);
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
@@ -624,6 +638,19 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                   Download JSON
                 </button>
               </div>
+
+              {manualCopyText && (
+                <div className="mb-5 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5 text-left">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Manual copy fallback</p>
+                  <p className="mb-2 text-[10px] leading-4 text-white/70">Clipboard write could not be verified. Press Cmd/Ctrl+C on the selected text below.</p>
+                  <textarea
+                    ref={manualCopyRef}
+                    readOnly
+                    value={manualCopyText}
+                    className="h-24 w-full resize-none rounded-xl border border-white/10 bg-slate-950/70 p-2 text-[10px] font-mono leading-4 text-white/88"
+                  />
+                </div>
+              )}
 
               <div className="w-full text-left">
                 <button onClick={() => setShowDetails(!showDetails)} className="flex items-center justify-center gap-1.5 mx-auto text-[11px] font-medium text-white/50 hover:text-white transition-all duration-200 group">
