@@ -44,7 +44,6 @@ const ChalkNativeContext = createContext<ChalkNativeContextValue | null>(null);
 export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvider, apiKey, roomId, userName, debug, demoMode, wideEvents, incident, posthog, onIncident, incidentReporter, incidentMaxBreadcrumbs }: ChalkNativeProviderProps): React.JSX.Element {
   const [isConnected, setIsConnected] = useState(false);
   const [rtkMeeting, setRtkMeeting] = useState<NativeRealtimeKitMeeting | null>(null);
-  const [, forceUpdate] = useState({});
   const [wideEventsEnabled, wideEventsIncludeDebugInfo, wideEventsHandler] = getWideEventsMemoDependencies(wideEvents);
 
   const resolvedIncidentConfig = useMemo(
@@ -111,14 +110,9 @@ export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvi
       setRtkMeeting(null);
     });
 
-    const unsubStatus = session.on("status:changed", () => {
-      forceUpdate({});
-    });
-
     return () => {
       unsubConnected();
       unsubDisconnected();
-      unsubStatus();
     };
   }, [session]);
 
