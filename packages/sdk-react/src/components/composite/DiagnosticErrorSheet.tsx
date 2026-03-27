@@ -173,6 +173,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
           {/* Actions */}
           <div className="flex flex-col w-full gap-3 mb-6">
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onRetry?.();
@@ -183,6 +184,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
               Try Again
             </button>
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onBack?.();
@@ -196,6 +198,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
 
           <div className="mb-6 flex w-full flex-wrap justify-center gap-3">
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 void handleDebugExport();
@@ -230,6 +233,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
               )}
             </button>
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 void handleDebugDownload();
@@ -256,7 +260,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
 
           {/* Technical Details Accordion */}
           <div className="w-full">
-            <button onClick={() => setShowDetails(!showDetails)} className="flex items-center justify-center gap-1.5 mx-auto text-[13px] font-medium text-muted-foreground/70 hover:text-foreground transition-all duration-200 group">
+            <button type="button" onClick={() => setShowDetails(!showDetails)} className="flex items-center justify-center gap-1.5 mx-auto text-[13px] font-medium text-muted-foreground/70 hover:text-foreground transition-all duration-200 group">
               {showDetails ? <ArrowUp01Icon size={14} /> : <ArrowDown01Icon size={14} />}
               <span>Technical details</span>
             </button>

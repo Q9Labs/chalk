@@ -264,11 +264,8 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
         diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true });
         return true;
       }
-      if (verification.reason !== "Clipboard verification mismatch") {
-        diagnostics.attempts.push({ strategy: "clipboard.writeText (unverified)", ok: true, error: verification.reason });
-        return true;
-      }
-      diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: verification.reason });
+      diagnostics.attempts.push({ strategy: "clipboard.writeText (unverified)", ok: true, error: verification.reason });
+      return true;
     }
   } catch (error) {
     diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: toErrorMessage(error) });
@@ -289,11 +286,8 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
         diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: true });
         return true;
       }
-      if (verification.reason !== "Clipboard verification mismatch") {
-        diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem) (unverified)", ok: true, error: verification.reason });
-        return true;
-      }
-      diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: false, error: verification.reason });
+      diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem) (unverified)", ok: true, error: verification.reason });
+      return true;
     }
   } catch (error) {
     diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: false, error: toErrorMessage(error) });

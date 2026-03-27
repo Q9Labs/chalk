@@ -112,6 +112,26 @@ describe("DiagnosticErrorSheet", () => {
     expect(getByText(/Press Cmd\/Ctrl\+C/i)).toBeTruthy();
   });
 
+  it("trusts async clipboard writes even when read-back verification mismatches", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    navigator.clipboard.writeText = writeText;
+    navigator.clipboard.readText = vi.fn(async () => "stale clipboard value");
+    navigator.clipboard.write = undefined as never;
+    Object.defineProperty(document, "execCommand", {
+      value: undefined,
+      configurable: true,
+    });
+
+    const { getByText, findByText, queryByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-741" />);
+
+    await findByText("Copy Full Debug");
+    fireEvent.click(getByText("Copy Full Debug"));
+
+    await findByText("Copied Full Debug");
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(queryByText("Manual copy fallback")).toBeNull();
+  });
+
   it("does not trust execCommand success when clipboard read-back mismatches", async () => {
     const execCommand = vi.fn(() => true);
     navigator.clipboard.writeText = vi.fn().mockRejectedValue(new Error("clipboard denied"));
