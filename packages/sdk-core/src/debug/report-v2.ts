@@ -248,7 +248,9 @@ export const buildStructuredDebugReport = ({
   const roomIdLooksMutated = typeof routeTarget.rawTarget === "string" && routeTarget.rawTarget.includes("roomName=");
   const roomIdFormatValid = routeTarget.targetType !== "roomId" ? null : UUID_RE.test(routeTarget.rawTarget ?? "");
   const backendRoomLookupFailedBeforeJoin = firstRoomLookup?.status === 404;
-  const joinAttemptReachedRtc = logs.wideEvents.some((event) => event.eventType.startsWith("room.join.rtk.") && event.outcome === "success");
+  const rtkPreloadReached = logs.wideEvents.some((event) => event.eventType === "room.join.rtk.preload" && event.outcome === "success");
+  const rtcJoinStarted = logs.wideEvents.some((event) => event.eventType === "room.join.rtk.attempt");
+  const rtcJoinSucceeded = logs.wideEvents.some((event) => event.eventType === "room.join.rtk.attempt" && event.outcome === "success");
   const joinAttemptReachedWebsocket = logs.websocket.some((record) => record.event === "open");
   const tokenTenantMismatchSuspected =
     Boolean(activeToken?.tenantId) &&
@@ -299,7 +301,9 @@ export const buildStructuredDebugReport = ({
         roomIdFormatValid,
         roomIdLooksMutated,
         backendRoomLookupFailedBeforeJoin,
-        joinAttemptReachedRtc,
+        rtkPreloadReached,
+        rtcJoinStarted,
+        rtcJoinSucceeded,
         joinAttemptReachedWebsocket,
         tokenTenantMismatchSuspected,
         wrongEnvironmentSuspected: false,

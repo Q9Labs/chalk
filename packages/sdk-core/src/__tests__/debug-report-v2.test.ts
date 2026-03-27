@@ -73,7 +73,40 @@ describe("buildStructuredDebugReport", () => {
         websocket: [],
         console: [],
         runtimeErrors: [],
-        wideEvents: [],
+        wideEvents: [
+          {
+            eventId: "evt-1",
+            eventType: "room.join.rtk.preload",
+            timestamp: "2026-03-27T09:53:12.100Z",
+            sdk: {
+              version: "0.0.79",
+              platform: "browser",
+              userAgent: "test-agent",
+            },
+            sessionId: "sess-1",
+            durationMs: 1,
+            outcome: "success",
+            data: {},
+          },
+          {
+            eventId: "evt-2",
+            eventType: "room.join.rtk.attempt",
+            timestamp: "2026-03-27T09:53:12.110Z",
+            sdk: {
+              version: "0.0.79",
+              platform: "browser",
+              userAgent: "test-agent",
+            },
+            sessionId: "sess-1",
+            durationMs: 10,
+            outcome: "error",
+            error: {
+              code: "RTK_JOIN_ERROR",
+              message: "join failed",
+            },
+            data: {},
+          },
+        ],
         incidents: [],
         breadcrumbs: [],
         sections: {
@@ -89,6 +122,9 @@ describe("buildStructuredDebugReport", () => {
     expect(report.meta.schemaVersion).toBe("chalk-debug-report/v2");
     expect(report.summary.failureClass).toBe("room_join");
     expect(report.summary.derived.roomIdFormatValid).toBe(true);
+    expect(report.summary.derived.rtkPreloadReached).toBe(true);
+    expect(report.summary.derived.rtcJoinStarted).toBe(true);
+    expect(report.summary.derived.rtcJoinSucceeded).toBe(false);
     expect(report.authContext.activeToken?.tenantId).toBe("tenant-1");
     expect(report.browser.document.cookie).toBe("[REDACTED]");
     expect(report.browser.document.cookieNames).toEqual(["session", "other"]);
