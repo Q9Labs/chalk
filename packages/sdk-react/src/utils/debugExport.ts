@@ -253,6 +253,24 @@ const copyTextWithExecCommand = (text: string) => {
 };
 
 const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnostics) => {
+  let copied = false;
+
+  try {
+    if (!copyTextWithExecCommand(text)) {
+      diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: "Command returned false" });
+    } else {
+      const verification = await verifyClipboardText(text);
+      if (verification.verified) {
+        diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: true });
+      } else {
+        diagnostics.attempts.push({ strategy: "document.execCommand(copy) (unverified)", ok: true, error: verification.reason });
+      }
+      copied = true;
+    }
+  } catch (error) {
+    diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: toErrorMessage(error) });
+  }
+
   try {
     const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard);
     if (!writeText) {
@@ -262,10 +280,10 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
       const verification = await verifyClipboardText(text);
       if (verification.verified) {
         diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: true });
-        return true;
+      } else {
+        diagnostics.attempts.push({ strategy: "clipboard.writeText (unverified)", ok: true, error: verification.reason });
       }
-      diagnostics.attempts.push({ strategy: "clipboard.writeText (unverified)", ok: true, error: verification.reason });
-      return true;
+      copied = true;
     }
   } catch (error) {
     diagnostics.attempts.push({ strategy: "clipboard.writeText", ok: false, error: toErrorMessage(error) });
@@ -284,34 +302,29 @@ const copyTextToClipboard = async (text: string, diagnostics: DebugExportDiagnos
       const verification = await verifyClipboardText(text);
       if (verification.verified) {
         diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: true });
-        return true;
+      } else {
+        diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem) (unverified)", ok: true, error: verification.reason });
       }
-      diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem) (unverified)", ok: true, error: verification.reason });
-      return true;
+      copied = true;
     }
   } catch (error) {
     diagnostics.attempts.push({ strategy: "clipboard.write(ClipboardItem)", ok: false, error: toErrorMessage(error) });
   }
 
-  try {
-    if (!copyTextWithExecCommand(text)) {
-      diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: "Command returned false" });
-    } else {
-      const verification = await verifyClipboardText(text);
-      if (verification.verified) {
-        diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: true });
-        return true;
-      }
-      diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: verification.reason });
-    }
-  } catch (error) {
-    diagnostics.attempts.push({ strategy: "document.execCommand(copy)", ok: false, error: toErrorMessage(error) });
-  }
-
-  return false;
+  return copied;
 };
 export const downloadDebugReport = (report: unknown, filename = `chalk-debug-${Date.now()}.json`) => {
   const blob = new Blob([safeJsonStringify(report)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
+export const downloadDebugText = (text: string, filename = `chalk-debug-${Date.now()}.txt`) => {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

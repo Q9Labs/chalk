@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Web/react diagnostics: diagnostic sheet now downloads plain-text debug exports** — the error sheet no longer offers unreliable clipboard copy for full debug payloads and now downloads the shareable formatted debug report as `.txt` instead of `.json`, so users can forward the file without JSON-specific tooling.
 - **Web/react diagnostics: full debug now always opens as selected text after copy attempts** — the diagnostic sheet still tries browser clipboard APIs, but it now always reveals the full selected debug textarea afterward so support/debug copy remains usable on mobile Safari and other browsers that falsely report clipboard success.
 - **Web/react diagnostics: copy-debug clicks now log prep and clipboard attempt state to console** — the diagnostic error sheet now emits `[chalk][diagnostic-error-sheet]` console groups for prepare start/ready/failure plus copy click/result state so clipboard failures can be pasted back with the exact runtime context.
 - **Web/react diagnostics: full debug copy now trusts successful async clipboard writes** — the diagnostic sheet copy action now treats resolved `navigator.clipboard.writeText` / `clipboard.write` calls as success even when immediate read-back verification is stale or blocked by the browser, and its buttons now use `type="button"` so parent forms cannot swallow the click.

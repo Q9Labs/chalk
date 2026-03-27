@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, ArrowDown01Icon, ArrowUp01Icon, RefreshIcon, ArrowLeft01Icon, InformationCircleIcon, WifiOffIcon, Shield01Icon, Copy01Icon, Download01Icon, CheckmarkCircle02Icon } from "../../utils/icons";
-import { copyPreparedDebugExport, downloadDebugReport, prepareFullDebugExport, type PreparedDebugExport } from "../../utils/debugExport";
+import { Cancel01Icon, ArrowDown01Icon, ArrowUp01Icon, RefreshIcon, ArrowLeft01Icon, InformationCircleIcon, WifiOffIcon, Shield01Icon, Download01Icon } from "../../utils/icons";
+import { downloadDebugText, prepareFullDebugExport, type PreparedDebugExport } from "../../utils/debugExport";
 
 export interface DiagnosticErrorSheetProps {
   error: string;
@@ -13,15 +13,10 @@ export interface DiagnosticErrorSheetProps {
 
 export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ error, supportCode, onRetry, onBack, className }) => {
   const [showDetails, setShowDetails] = useState(true);
-  const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "copied" | "failed" | "downloaded">("idle");
+  const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "failed" | "downloaded">("idle");
   const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
   const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
-  const [manualCopyText, setManualCopyText] = useState<string | null>(null);
-  const manualCopyRef = useRef<HTMLTextAreaElement | null>(null);
-  const prefersTouchCopyInstructions = useMemo(
-    () => navigator.maxTouchPoints > 0 || window.matchMedia?.("(pointer: coarse)").matches === true,
-    [],
-  );
+  const downloadLinkRef = useRef<HTMLButtonElement | null>(null);
 
   const logCopyDebug = (label: string, details: Record<string, unknown>) => {
     console.groupCollapsed(`[chalk][diagnostic-error-sheet] ${label}`);
@@ -68,7 +63,6 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     setDebugExportState("preparing");
     setPreparedDebugExport(null);
     setDebugExportLog(null);
-    setManualCopyText(null);
     logCopyDebug("prepare:start", {
       error,
       supportCode: supportCode ?? null,
@@ -108,58 +102,28 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     };
   }, [error, supportCode]);
 
-  useEffect(() => {
-    if (!manualCopyText || !manualCopyRef.current) {
-      return;
-    }
-
-    manualCopyRef.current.focus();
-    manualCopyRef.current.select();
-    manualCopyRef.current.setSelectionRange(0, manualCopyText.length);
-  }, [manualCopyText]);
-
-  const handleDebugExport = async () => {
-    logCopyDebug("copy:click", {
+  const handleDebugDownload = async () => {
+    logCopyDebug("download:click", {
       debugExportState,
       hasPreparedDebugExport: Boolean(preparedDebugExport),
-      manualCopyVisible: Boolean(manualCopyText),
       supportCode: supportCode ?? null,
       error,
     });
 
-    if (!preparedDebugExport) {
-      setDebugExportState("preparing");
-      setDebugExportLog(JSON.stringify({ error: "Debug report still preparing. Click again in a second." }, null, 2));
-      logCopyDebug("copy:blocked-preparing", {
-        debugExportState,
-        supportCode: supportCode ?? null,
-      });
-      return;
-    }
-
-    const result = await copyPreparedDebugExport(preparedDebugExport);
-    setDebugExportState(result.outcome);
-    setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
-    setManualCopyText(preparedDebugExport.text);
-    logCopyDebug("copy:result", {
-      outcome: result.outcome,
-      diagnostics: result.diagnostics,
-      attempts: result.diagnostics.attempts,
-      manualCopyShown: true,
-    });
-    window.setTimeout(() => setDebugExportState("idle"), 2500);
-  };
-
-  const handleDebugDownload = async () => {
     const prepared = preparedDebugExport ?? (await prepareFullDebugExport({
       source: "diagnostic-error-sheet",
       error,
       supportCode: supportCode ?? null,
     }));
     setPreparedDebugExport(prepared);
-    downloadDebugReport(prepared.report);
+    downloadDebugText(prepared.text);
     setDebugExportState("downloaded");
     setDebugExportLog(JSON.stringify(prepared.diagnostics, null, 2));
+    logCopyDebug("download:result", {
+      outcome: "downloaded",
+      diagnostics: prepared.diagnostics,
+      textBytes: prepared.diagnostics.textBytes ?? null,
+    });
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
@@ -245,41 +209,7 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
 
           <div className="mb-6 flex w-full flex-wrap justify-center gap-3">
             <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                void handleDebugExport();
-              }}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-muted/40 px-4 text-[14px] font-semibold text-foreground transition-all hover:bg-muted/60 active:scale-[0.98]"
-            >
-              {debugExportState === "copied" ? (
-                <>
-                  <CheckmarkCircle02Icon size={18} />
-                  Copied Full Debug
-                </>
-              ) : debugExportState === "preparing" ? (
-                <>
-                  <Download01Icon size={18} />
-                  Preparing Debug...
-                </>
-              ) : debugExportState === "failed" ? (
-                <>
-                  <Copy01Icon size={18} />
-                  Copy Failed
-                </>
-              ) : debugExportState === "downloaded" ? (
-                <>
-                  <Download01Icon size={18} />
-                  Downloaded Debug JSON
-                </>
-              ) : (
-                <>
-                  <Copy01Icon size={18} />
-                  Copy Full Debug
-                </>
-              )}
-            </button>
-            <button
+              ref={downloadLinkRef}
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
@@ -288,26 +218,13 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
               className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-muted/40 px-4 text-[14px] font-semibold text-foreground transition-all hover:bg-muted/60 active:scale-[0.98]"
             >
               <Download01Icon size={18} />
-              Download Debug JSON
+              {debugExportState === "preparing"
+                ? "Preparing Debug..."
+                : debugExportState === "downloaded"
+                  ? "Downloaded Debug TXT"
+                  : "Download Debug TXT"}
             </button>
           </div>
-
-          {manualCopyText && (
-            <div className="mb-6 w-full rounded-2xl border border-border bg-muted/30 p-3 text-left">
-              <p className="mb-2 text-[12px] font-semibold text-foreground">Full debug text ready</p>
-              <p className="mb-2 text-[12px] text-muted-foreground">
-                {prefersTouchCopyInstructions
-                  ? "The full debug text is selected below. If your clipboard stayed empty, long-press the selected text and tap Copy."
-                  : "The full debug text is selected below. If your clipboard stayed empty, press Cmd/Ctrl+C on the selected text."}
-              </p>
-              <textarea
-                ref={manualCopyRef}
-                readOnly
-                value={manualCopyText}
-                className="h-28 w-full resize-none rounded-xl border border-border/60 bg-background/80 p-2 text-[11px] font-mono text-foreground"
-              />
-            </div>
-          )}
 
           {/* Technical Details Accordion */}
           <div className="w-full">
