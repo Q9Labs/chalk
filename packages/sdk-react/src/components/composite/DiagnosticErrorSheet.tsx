@@ -19,6 +19,14 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
   const [manualCopyText, setManualCopyText] = useState<string | null>(null);
   const manualCopyRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const logCopyDebug = (label: string, details: Record<string, unknown>) => {
+    console.groupCollapsed(`[chalk][diagnostic-error-sheet] ${label}`);
+    for (const [key, value] of Object.entries(details)) {
+      console.log(key, value);
+    }
+    console.groupEnd();
+  };
+
   // Analyze error to determine the best human-readable message and actions
   const errorInfo = useMemo(() => {
     const lowerError = error.toLowerCase();
@@ -57,6 +65,11 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     setPreparedDebugExport(null);
     setDebugExportLog(null);
     setManualCopyText(null);
+    logCopyDebug("prepare:start", {
+      error,
+      supportCode: supportCode ?? null,
+      previousState: debugExportState,
+    });
 
     void prepareFullDebugExport({
       source: "diagnostic-error-sheet",
@@ -67,11 +80,23 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
         if (cancelled) return;
         setPreparedDebugExport(prepared);
         setDebugExportState("idle");
+        logCopyDebug("prepare:ready", {
+          textBytes: prepared.diagnostics.textBytes ?? null,
+          clipboardAvailable: prepared.diagnostics.clipboardAvailable,
+          clipboardWriteTextAvailable: prepared.diagnostics.clipboardWriteTextAvailable,
+          clipboardWriteAvailable: prepared.diagnostics.clipboardWriteAvailable,
+          clipboardItemAvailable: prepared.diagnostics.clipboardItemAvailable,
+        });
       })
       .catch((preparationError) => {
         if (cancelled) return;
         setDebugExportLog(JSON.stringify({ preparationError: preparationError instanceof Error ? preparationError.message : String(preparationError) }, null, 2));
         setDebugExportState("failed");
+        logCopyDebug("prepare:failed", {
+          error,
+          supportCode: supportCode ?? null,
+          preparationError,
+        });
       });
 
     return () => {
@@ -90,9 +115,21 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
   }, [manualCopyText]);
 
   const handleDebugExport = async () => {
+    logCopyDebug("copy:click", {
+      debugExportState,
+      hasPreparedDebugExport: Boolean(preparedDebugExport),
+      manualCopyVisible: Boolean(manualCopyText),
+      supportCode: supportCode ?? null,
+      error,
+    });
+
     if (!preparedDebugExport) {
       setDebugExportState("preparing");
       setDebugExportLog(JSON.stringify({ error: "Debug report still preparing. Click again in a second." }, null, 2));
+      logCopyDebug("copy:blocked-preparing", {
+        debugExportState,
+        supportCode: supportCode ?? null,
+      });
       return;
     }
 
@@ -100,6 +137,12 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     setDebugExportState(result.outcome);
     setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
     setManualCopyText(result.outcome === "failed" ? preparedDebugExport.text : null);
+    logCopyDebug("copy:result", {
+      outcome: result.outcome,
+      diagnostics: result.diagnostics,
+      attempts: result.diagnostics.attempts,
+      manualCopyShown: result.outcome === "failed",
+    });
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
 
