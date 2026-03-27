@@ -42,6 +42,7 @@ describe("DiagnosticErrorSheet", () => {
     const { findByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-123" />);
 
     expect(await findByText("Download Debug TXT")).toBeTruthy();
+    expect(await findByText(/share it with your support admin/i)).toBeTruthy();
   });
 
   it("does not silently report downloaded while the debug payload is still preparing", async () => {

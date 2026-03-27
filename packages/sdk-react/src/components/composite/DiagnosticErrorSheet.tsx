@@ -14,7 +14,6 @@ export interface DiagnosticErrorSheetProps {
 export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ error, supportCode, onRetry, onBack, className }) => {
   const [showDetails, setShowDetails] = useState(true);
   const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "failed" | "downloaded">("idle");
-  const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
   const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
   const downloadLinkRef = useRef<HTMLButtonElement | null>(null);
 
@@ -62,7 +61,6 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     let cancelled = false;
     setDebugExportState("preparing");
     setPreparedDebugExport(null);
-    setDebugExportLog(null);
     logCopyDebug("prepare:start", {
       error,
       supportCode: supportCode ?? null,
@@ -88,7 +86,6 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
       })
       .catch((preparationError) => {
         if (cancelled) return;
-        setDebugExportLog(JSON.stringify({ preparationError: preparationError instanceof Error ? preparationError.message : String(preparationError) }, null, 2));
         setDebugExportState("failed");
         logCopyDebug("prepare:failed", {
           error,
@@ -118,7 +115,6 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     setPreparedDebugExport(prepared);
     downloadDebugText(prepared.text);
     setDebugExportState("downloaded");
-    setDebugExportLog(JSON.stringify(prepared.diagnostics, null, 2));
     logCopyDebug("download:result", {
       outcome: "downloaded",
       diagnostics: prepared.diagnostics,
@@ -226,6 +222,10 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
             </button>
           </div>
 
+          <p className="mb-6 max-w-[320px] text-[12px] leading-normal text-muted-foreground">
+            Download the debug file and share it with your support admin so they can help investigate the issue.
+          </p>
+
           {/* Technical Details Accordion */}
           <div className="w-full">
             <button type="button" onClick={() => setShowDetails(!showDetails)} className="flex items-center justify-center gap-1.5 mx-auto text-[13px] font-medium text-muted-foreground/70 hover:text-foreground transition-all duration-200 group">
@@ -247,14 +247,6 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
                     <pre className="text-[11px] font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap max-h-32 scrollbar-thin">{error}</pre>
                   </div>
                 </div>
-                {debugExportLog && (
-                  <div className="mt-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground/60 mb-1.5 px-1">Debug Export Log</p>
-                    <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                      <pre className="text-[11px] font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap max-h-40 scrollbar-thin">{debugExportLog}</pre>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
