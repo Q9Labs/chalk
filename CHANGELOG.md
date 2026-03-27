@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Web/react diagnostics: full debug now always opens as selected text after copy attempts** — the diagnostic sheet still tries browser clipboard APIs, but it now always reveals the full selected debug textarea afterward so support/debug copy remains usable on mobile Safari and other browsers that falsely report clipboard success.
 - **Web/react diagnostics: copy-debug clicks now log prep and clipboard attempt state to console** — the diagnostic error sheet now emits `[chalk][diagnostic-error-sheet]` console groups for prepare start/ready/failure plus copy click/result state so clipboard failures can be pasted back with the exact runtime context.
 - **Web/react diagnostics: full debug copy now trusts successful async clipboard writes** — the diagnostic sheet copy action now treats resolved `navigator.clipboard.writeText` / `clipboard.write` calls as success even when immediate read-back verification is stale or blocked by the browser, and its buttons now use `type="button"` so parent forms cannot swallow the click.
 - **Web/react error sheets: full debug copy no longer trusts `execCommand` false positives** — full debug export now prefers the async clipboard APIs first, treats legacy `document.execCommand("copy")` as last-resort only, rejects the old “command returned true but clipboard stayed stale” case when read-back mismatches, and exposes the selected manual-copy textarea only when every programmatic path really fails.

@@ -18,6 +18,10 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
   const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
   const [manualCopyText, setManualCopyText] = useState<string | null>(null);
   const manualCopyRef = useRef<HTMLTextAreaElement | null>(null);
+  const prefersTouchCopyInstructions = useMemo(
+    () => navigator.maxTouchPoints > 0 || window.matchMedia?.("(pointer: coarse)").matches === true,
+    [],
+  );
 
   const logCopyDebug = (label: string, details: Record<string, unknown>) => {
     console.groupCollapsed(`[chalk][diagnostic-error-sheet] ${label}`);
@@ -136,12 +140,12 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
     const result = await copyPreparedDebugExport(preparedDebugExport);
     setDebugExportState(result.outcome);
     setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
-    setManualCopyText(result.outcome === "failed" ? preparedDebugExport.text : null);
+    setManualCopyText(preparedDebugExport.text);
     logCopyDebug("copy:result", {
       outcome: result.outcome,
       diagnostics: result.diagnostics,
       attempts: result.diagnostics.attempts,
-      manualCopyShown: result.outcome === "failed",
+      manualCopyShown: true,
     });
     window.setTimeout(() => setDebugExportState("idle"), 2500);
   };
@@ -290,8 +294,12 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
 
           {manualCopyText && (
             <div className="mb-6 w-full rounded-2xl border border-border bg-muted/30 p-3 text-left">
-              <p className="mb-2 text-[12px] font-semibold text-foreground">Manual copy fallback</p>
-              <p className="mb-2 text-[12px] text-muted-foreground">Clipboard write could not be verified. Press Cmd/Ctrl+C on the selected text below.</p>
+              <p className="mb-2 text-[12px] font-semibold text-foreground">Full debug text ready</p>
+              <p className="mb-2 text-[12px] text-muted-foreground">
+                {prefersTouchCopyInstructions
+                  ? "The full debug text is selected below. If your clipboard stayed empty, long-press the selected text and tap Copy."
+                  : "The full debug text is selected below. If your clipboard stayed empty, press Cmd/Ctrl+C on the selected text."}
+              </p>
               <textarea
                 ref={manualCopyRef}
                 readOnly

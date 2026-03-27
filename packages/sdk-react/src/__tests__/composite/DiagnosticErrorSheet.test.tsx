@@ -24,9 +24,10 @@ describe("DiagnosticErrorSheet", () => {
     expect(readText).toHaveBeenCalledTimes(1);
     expect(String(writeText.mock.calls[0]?.[0])).toContain("Failed to join room");
     expect(String(writeText.mock.calls[0]?.[0])).toContain("CHK-789");
+    expect(getByText("Full debug text ready")).toBeTruthy();
   });
 
-  it("tries async clipboard writes before execCommand fallbacks", async () => {
+  it("tries same-gesture execCommand before async clipboard writes", async () => {
     let clipboardText = "";
     const writeText = vi.fn().mockResolvedValue(undefined);
     navigator.clipboard.writeText = vi.fn(async (text: string) => {
@@ -50,7 +51,7 @@ describe("DiagnosticErrorSheet", () => {
 
     await findByText("Copied Full Debug");
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(execCommand).not.toHaveBeenCalled();
+    expect(execCommand).toHaveBeenCalledWith("copy");
 
     globalThis.ClipboardItem = originalClipboardItem;
   });
@@ -93,7 +94,7 @@ describe("DiagnosticErrorSheet", () => {
     expect(getByText(/Debug report still preparing/i)).toBeTruthy();
   });
 
-  it("shows manual copy fallback when clipboard writes cannot be verified", async () => {
+  it("shows the selected full debug text when clipboard writes fail", async () => {
     const writeText = vi.fn().mockRejectedValue(new Error("clipboard denied"));
     navigator.clipboard.writeText = writeText;
     navigator.clipboard.write = undefined as never;
@@ -108,11 +109,11 @@ describe("DiagnosticErrorSheet", () => {
     await findByText("Copy Full Debug");
     fireEvent.click(getByText("Copy Full Debug"));
 
-    await findByText("Manual copy fallback");
-    expect(getByText(/Press Cmd\/Ctrl\+C/i)).toBeTruthy();
+    await findByText("Full debug text ready");
+    expect(getByText(/clipboard stayed empty|long-press the selected text|press Cmd\/Ctrl\+C/i)).toBeTruthy();
   });
 
-  it("trusts async clipboard writes even when read-back verification mismatches", async () => {
+  it("still surfaces the selected full debug text when async clipboard verification mismatches", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     navigator.clipboard.writeText = writeText;
     navigator.clipboard.readText = vi.fn(async () => "stale clipboard value");
@@ -122,17 +123,17 @@ describe("DiagnosticErrorSheet", () => {
       configurable: true,
     });
 
-    const { getByText, findByText, queryByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-741" />);
+    const { getByText, findByText } = render(<DiagnosticErrorSheet error="Failed to join room" supportCode="CHK-741" />);
 
     await findByText("Copy Full Debug");
     fireEvent.click(getByText("Copy Full Debug"));
 
     await findByText("Copied Full Debug");
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(queryByText("Manual copy fallback")).toBeNull();
+    expect(getByText("Full debug text ready")).toBeTruthy();
   });
 
-  it("does not trust execCommand success when clipboard read-back mismatches", async () => {
+  it("shows the selected full debug text even when execCommand becomes the effective fallback", async () => {
     const execCommand = vi.fn(() => true);
     navigator.clipboard.writeText = vi.fn().mockRejectedValue(new Error("clipboard denied"));
     navigator.clipboard.write = undefined as never;
@@ -147,8 +148,8 @@ describe("DiagnosticErrorSheet", () => {
     await findByText("Copy Full Debug");
     fireEvent.click(getByText("Copy Full Debug"));
 
-    await findByText("Manual copy fallback");
+    await findByText("Copied Full Debug");
     expect(execCommand).toHaveBeenCalledWith("copy");
-    expect(getByText(/Press Cmd\/Ctrl\+C/i)).toBeTruthy();
+    expect(getByText("Full debug text ready")).toBeTruthy();
   });
 });
