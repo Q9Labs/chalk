@@ -85,6 +85,7 @@ export { configureWideEvents, WideEventCollector, WideEventContext, wideEvents, 
 export { createAxiomWideEventsHandler, type AxiomWideEventsConfig, type AxiomWideEventsHandler } from "./wide-events/axiom.ts";
 export type { ChalkDebugConsoleRecord, ChalkDebugFetchRecord, ChalkDebugRuntimeErrorRecord, ChalkDebugSnapshot, ChalkDebugWebSocketRecord } from "./debug/types.ts";
 export { chalkDebugCollector, ChalkDebugCollector } from "./debug/collector.ts";
+export { buildStructuredDebugReport, type BuildStructuredDebugReportInput } from "./debug/report-v2.ts";
 export {
   createBrowserIncidentContext,
   createHttpIncidentReporter,

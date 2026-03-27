@@ -1,4 +1,4 @@
-import { chalkDebugCollector } from "@q9labs/chalk-core";
+import { buildStructuredDebugReport, chalkDebugCollector } from "@q9labs/chalk-core";
 
 type DebugExportAttempt = {
   strategy: string;
@@ -364,10 +364,14 @@ export async function prepareFullDebugExport(context: Record<string, unknown>): 
     attempts: [],
   };
 
-  const report = await (async () => ({
-    report: {
-      generatedAt: new Date().toISOString(),
-      app: "chalk-sdk-react",
+  const generatedAt = new Date().toISOString();
+  const report = buildStructuredDebugReport({
+    generatedAt,
+    reportType: "sdk-react-full",
+    app: {
+      name: "chalk-sdk-react",
+    },
+    location: {
       url: window.location.href,
       origin: window.location.origin,
       host: window.location.host,
@@ -376,6 +380,8 @@ export async function prepareFullDebugExport(context: Record<string, unknown>): 
       hash: window.location.hash,
       title: document.title,
       referrer: document.referrer || null,
+      historyLength: safeValue(() => window.history.length, null),
+      visibilityState: document.visibilityState,
     },
     browser: {
       navigator: getNavigatorSnapshot(),
@@ -398,7 +404,7 @@ export async function prepareFullDebugExport(context: Record<string, unknown>): 
     },
     context,
     logs: chalkDebugCollector.getSnapshot(),
-  }))();
+  });
   const text = toClipboardText(report);
   diagnostics.textBytes = new TextEncoder().encode(text).length;
 

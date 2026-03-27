@@ -44,17 +44,22 @@ describe("debugReport", () => {
       traceId: "trace-123",
     });
 
-    expect(report.error).toMatchObject({
+    expect(report.meta.schemaVersion).toBe("chalk-debug-report/v2");
+    expect(report.summary.primaryError).toMatchObject({
       message: "Boom",
+    });
+    expect(report.raw.context).toMatchObject({
+      error: "Boom",
       traceId: "trace-123",
     });
-    expect(report.logs.fetch).toHaveLength(1);
-    expect(report.logs.sections.chalkSession).toEqual({
+    expect(report.logs.snapshot.fetch).toHaveLength(1);
+    expect(report.logs.snapshot.sections.chalkSession).toEqual({
       diagnostics: { roomId: "room_123" },
     });
     expect(report.browser.devices).toEqual([
       { deviceId: "cam-1", groupId: "group-1", kind: "videoinput", label: "Camera 1" },
     ]);
+    expect(report.logs.snapshot.fetch[0]?.requestHeaders?.authorization).toBe("[REDACTED]");
 
     unregister();
   });

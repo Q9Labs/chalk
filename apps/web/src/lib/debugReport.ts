@@ -1,4 +1,4 @@
-import { chalkDebugCollector } from "@q9labs/chalk-react";
+import { buildStructuredDebugReport, chalkDebugCollector } from "@q9labs/chalk-core";
 
 type PermissionNameLike = "camera" | "microphone" | "notifications";
 
@@ -303,30 +303,28 @@ export async function buildChalkWebDebugReport(errorContext: { message: string; 
   const devices = await getDevicesSnapshot();
   const snapshot = chalkDebugCollector.getSnapshot();
 
-  return {
-    report: {
-      generatedAt: snapshot.generatedAt,
-      app: "chalk-web",
+  return buildStructuredDebugReport({
+    generatedAt: snapshot.generatedAt,
+    reportType: "web-full",
+    app: {
+      name: "chalk-web",
+      sdkReactVersion: __SDK_REACT_VERSION__,
+      consumerAppName: "chalk-web",
+      consumerAppVersion: __WEB_APP_VERSION__,
+      commitHash: __COMMIT_HASH__,
+      buildTime: __BUILD_TIME__,
+    },
+    location: {
       url: window.location.href,
       origin: window.location.origin,
       host: window.location.host,
       pathname: window.location.pathname,
       search: window.location.search,
       hash: window.location.hash,
-      historyLength: window.history.length,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      visibilityState: document.visibilityState,
       title: document.title,
       referrer: document.referrer || null,
-      sdkReactVersion: __SDK_REACT_VERSION__,
-      webAppVersion: __WEB_APP_VERSION__,
-      commitHash: __COMMIT_HASH__,
-      buildTime: __BUILD_TIME__,
-      env: { ...import.meta.env },
-    },
-    error: {
-      message: errorContext.message,
-      traceId: errorContext.traceId ?? null,
+      historyLength: window.history.length,
+      visibilityState: document.visibilityState,
     },
     browser: {
       navigator: getNavigatorSnapshot(),
@@ -338,8 +336,16 @@ export async function buildChalkWebDebugReport(errorContext: { message: string; 
       },
       document: headersSummary(),
     },
+    context: {
+      error: errorContext.message,
+      traceId: errorContext.traceId ?? null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    environment: {
+      env: { ...import.meta.env },
+    },
     logs: snapshot,
-  };
+  });
 }
 
 export function toDebugClipboardText(report: unknown): string {
