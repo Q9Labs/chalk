@@ -35,9 +35,6 @@ export function useClipboardInviteSuggestion(currentInput: string) {
     };
 
     void refreshClipboardText();
-    const clipboardSubscription = Clipboard.addClipboardListener(() => {
-      void refreshClipboardText();
-    });
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {
         void refreshClipboardText();
@@ -46,7 +43,6 @@ export function useClipboardInviteSuggestion(currentInput: string) {
 
     return () => {
       isMounted = false;
-      clipboardSubscription.remove();
       appStateSubscription.remove();
     };
   }, []);
