@@ -121,6 +121,67 @@ describe("WSClient", () => {
     expect(got.videoEnabled).toBe(false);
   });
 
+  it("accepts legacy event/data envelopes for participant.joined", () => {
+    let ws: MockWebSocket | null = null;
+
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    let got: any;
+    client.on("participant.joined", (p) => {
+      got = p;
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    ws?.receive({
+      event: "participant.joined",
+      data: {
+        participant_id: "p2",
+        room_id: "room_1",
+        display_name: "Bob",
+        role: "host",
+      },
+    });
+
+    expect(got).toBeDefined();
+    expect(got.id).toBe("p2");
+    expect(got.displayName).toBe("Bob");
+    expect(got.role).toBe("host");
+  });
+
+  it("accepts legacy event/data envelopes for participant.left", () => {
+    let ws: MockWebSocket | null = null;
+
+    const client = new WSClient("wss://example/ws", {
+      webSocketFactory: (url, protocols) => {
+        ws = new MockWebSocket(url, protocols);
+        return ws as unknown as WebSocket;
+      },
+    });
+
+    let got: any;
+    client.on("participant.left", (payload) => {
+      got = payload;
+    });
+
+    client.connect("tok", "room_1");
+    ws?.open();
+    ws?.receive({
+      event: "participant.left",
+      data: {
+        participant_id: "p2",
+        room_id: "room_1",
+      },
+    });
+
+    expect(got).toEqual({ participantId: "p2" });
+  });
+
   it("decodes chat.message + converts timestamp to Date", () => {
     let ws: MockWebSocket | null = null;
     const client = new WSClient("wss://example/ws", {

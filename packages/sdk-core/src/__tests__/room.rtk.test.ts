@@ -526,17 +526,38 @@ describe("ConferenceSession (RTK identity mapping)", () => {
     expect(ws.raiseHand).toHaveBeenCalledTimes(1);
   });
 
-  it("attempts RTK reconnect when roomLeft fires unexpectedly", async () => {
+  it("relies on RTK internal reconnect when roomLeft reports a disconnect", async () => {
     room._setStatus("connected");
 
-    rtk.self.emit("roomLeft");
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    rtk.self.emit("roomLeft", { state: "disconnected" });
 
-    expect(rtk.join).toHaveBeenCalledTimes(1);
     expect(room.status).toBe("reconnecting");
 
-    rtk.self.emit("roomJoined");
+    rtk.self.emit("roomJoined", { reconnected: true });
     expect(room.status).toBe("connected");
+    expect(rtk.join).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a failed RTK reconnect as a terminal connection error", () => {
+    room._setStatus("connected");
+
+    let emittedError: any = null;
+    room.on("error", (error) => {
+      emittedError = error;
+    });
+
+    rtk.self.emit("roomLeft", { state: "failed" });
+
+    expect(room.status).toBe("failed");
+    expect(emittedError).toMatchObject({
+      code: "CONNECTION_FAILED",
+      message: "Connection lost and could not be restored",
+      details: {
+        transport: "rtk",
+        roomId: "room_123",
+        roomState: "failed",
+      },
+    });
   });
 
   it("does not reconnect RTK when leave flow triggers roomLeft", async () => {

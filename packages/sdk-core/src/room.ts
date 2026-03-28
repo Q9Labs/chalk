@@ -307,6 +307,8 @@ export class ConferenceSession extends EventEmitter<ConferenceSessionEvents> {
       },
       validateTrack: (track, type, participantId) => this.validateTrack(track, type, participantId),
       logConnectionState: () => this.logConnectionState(),
+      reapplyBackgroundEffect: () => this.mediaController.reapplyBackgroundEffect(),
+      suspendBackgroundEffect: () => this.mediaController.suspendBackgroundEffect(),
     });
   }
 

@@ -333,6 +333,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     applyBackgroundEffect,
     clearBackgroundEffect,
     reapplyBackgroundEffect: videoBackgroundController.reapplySelectedBackgroundEffect,
+    suspendBackgroundEffect: videoBackgroundController.suspendBackgroundEffect,
     toggleVideo,
     toggleAudio,
     startScreenShare,

@@ -12,6 +12,54 @@ const isInboundType = (type: string): type is WSInboundType => Object.prototype.
 
 const decodeEnvelope = Schema.decodeUnknownSync(WSMessage);
 
+const normalizeEnvelope = (value: unknown): unknown => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const candidate = value as {
+    type?: unknown;
+    payload?: unknown;
+    event?: unknown;
+    data?: unknown;
+  };
+
+  if (typeof candidate.type === "string") {
+    return candidate;
+  }
+
+  if (typeof candidate.event === "string") {
+    return {
+      type: candidate.event,
+      payload: candidate.data,
+    };
+  }
+
+  return value;
+};
+
+const normalizePayload = (type: string, payload: unknown): unknown => {
+  if (type === "participant.joined" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const candidate = payload as {
+      participantId?: unknown;
+      roomId?: unknown;
+      displayName?: unknown;
+      role?: unknown;
+    };
+
+    if (typeof candidate.participantId === "string" && typeof candidate.displayName === "string") {
+      return {
+        id: candidate.participantId,
+        roomId: typeof candidate.roomId === "string" ? candidate.roomId : undefined,
+        displayName: candidate.displayName,
+        role: typeof candidate.role === "string" ? candidate.role : undefined,
+      };
+    }
+  }
+
+  return payload;
+};
+
 const decodePayload = <K extends WSInboundType>(type: K, payload: unknown): WSInboundPayloadMap[K] => {
   // TS can't correlate object index access with the key here; keep runtime schema validation,
   // then cast to the schema-derived type for this message type.
@@ -36,7 +84,7 @@ export const decodeIncomingMessage = (raw: string) => {
 
   let envelope: Schema.Schema.Type<typeof WSMessage>;
   try {
-    envelope = decodeEnvelope(json);
+    envelope = decodeEnvelope(normalizeEnvelope(json));
   } catch (err) {
     return {
       ok: false as const,
@@ -48,7 +96,12 @@ export const decodeIncomingMessage = (raw: string) => {
     };
   }
 
-  const payload = envelope.payload === undefined ? undefined : envelope.type === "whiteboard.data" || envelope.type === "whiteboard.snapshot" ? snakeToCamelExcept(envelope.payload, ["elements"]) : snakeToCamel(envelope.payload);
+  const normalizedPayload = envelope.payload === undefined
+    ? undefined
+    : envelope.type === "whiteboard.data" || envelope.type === "whiteboard.snapshot"
+      ? snakeToCamelExcept(envelope.payload, ["elements"])
+      : snakeToCamel(envelope.payload);
+  const payload = normalizePayload(envelope.type, normalizedPayload);
 
   if (!isInboundType(envelope.type)) {
     return {

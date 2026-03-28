@@ -10,6 +10,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/domain"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	wsapi "github.com/Q9Labs/chalk/internal/interfaces/websocket"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -385,11 +386,12 @@ func (s *Service) EndRoom(ctx context.Context, roomID uuid.UUID) error {
 
 	// Broadcast room.ended to all participants before cleanup
 	if s.hub != nil {
-		msg, _ := json.Marshal(map[string]interface{}{
-			"event": "room.ended",
-			"data": map[string]interface{}{
-				"room_id": roomID,
-			},
+		payload, _ := json.Marshal(map[string]interface{}{
+			"room_id": roomID,
+		})
+		msg, _ := json.Marshal(wsapi.Message{
+			Type:    wsapi.MessageType("room.ended"),
+			Payload: payload,
 		})
 		s.hub.BroadcastToRoom(roomID, msg, "")
 	}

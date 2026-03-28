@@ -13,6 +13,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/domain/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
+	wsapi "github.com/Q9Labs/chalk/internal/interfaces/websocket"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -592,14 +593,16 @@ func (s *Service) JoinRoom(ctx context.Context, input JoinRoomInput) (output *Jo
 
 	// Broadcast participant.joined to room
 	if s.hub != nil {
-		msg, _ := json.Marshal(map[string]interface{}{
-			"event": "participant.joined",
-			"data": map[string]interface{}{
-				"participant_id": participant.ID,
-				"room_id":        input.RoomID,
-				"display_name":   input.DisplayName,
-				"role":           role,
-			},
+		payload, _ := json.Marshal(map[string]interface{}{
+			"id":           participant.ID,
+			"room_id":      input.RoomID,
+			"display_name": input.DisplayName,
+			"role":         role,
+			"is_active":    true,
+		})
+		msg, _ := json.Marshal(wsapi.Message{
+			Type:    wsapi.MessageTypeParticipantJoined,
+			Payload: payload,
 		})
 		s.hub.BroadcastToRoom(input.RoomID, msg, participant.ID.String())
 	}
@@ -840,12 +843,12 @@ func (s *Service) LeaveRoom(ctx context.Context, roomID, participantID uuid.UUID
 		s.hub.RemoveParticipantMetadata(participantID)
 
 		// Broadcast participant.left to room
-		msg, _ := json.Marshal(map[string]interface{}{
-			"event": "participant.left",
-			"data": map[string]interface{}{
-				"participant_id": participantID,
-				"room_id":        roomID,
-			},
+		payload, _ := json.Marshal(wsapi.ParticipantLeftPayload{
+			ParticipantID: participantID,
+		})
+		msg, _ := json.Marshal(wsapi.Message{
+			Type:    wsapi.MessageTypeParticipantLeft,
+			Payload: payload,
 		})
 		s.hub.BroadcastToRoom(roomID, msg, "")
 	}

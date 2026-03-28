@@ -14,7 +14,8 @@ import (
 )
 
 type updateParticipantDBStub struct {
-	participant db.Participant
+	participant           db.Participant
+	participantLeaveValue db.Participant
 }
 
 func (d *updateParticipantDBStub) ActivateScheduledRoom(context.Context, uuid.UUID) (db.Room, error) {
@@ -74,7 +75,7 @@ func (d *updateParticipantDBStub) ListParticipantsByRoom(context.Context, uuid.U
 }
 
 func (d *updateParticipantDBStub) ParticipantLeave(context.Context, uuid.UUID) (db.Participant, error) {
-	panic("unexpected ParticipantLeave")
+	return d.participantLeaveValue, nil
 }
 
 func (d *updateParticipantDBStub) ReactivateRoom(context.Context, db.ReactivateRoomParams) (db.Room, error) {
@@ -94,6 +95,8 @@ type updateParticipantRoomStateStub struct {
 	lastRoomID        uuid.UUID
 	lastParticipantID uuid.UUID
 	lastMeta          domain.ParticipantMetadata
+	removedRoomID     uuid.UUID
+	removedID         uuid.UUID
 }
 
 func (s *updateParticipantRoomStateStub) AddParticipant(_ context.Context, roomID, participantID uuid.UUID, meta domain.ParticipantMetadata) error {
@@ -103,8 +106,10 @@ func (s *updateParticipantRoomStateStub) AddParticipant(_ context.Context, roomI
 	return nil
 }
 
-func (s *updateParticipantRoomStateStub) RemoveParticipant(context.Context, uuid.UUID, uuid.UUID) error {
-	panic("unexpected RemoveParticipant")
+func (s *updateParticipantRoomStateStub) RemoveParticipant(_ context.Context, roomID, participantID uuid.UUID) error {
+	s.removedRoomID = roomID
+	s.removedID = participantID
+	return nil
 }
 
 func (s *updateParticipantRoomStateStub) GetParticipants(context.Context, uuid.UUID) (map[uuid.UUID]domain.ParticipantMetadata, error) {
@@ -117,6 +122,7 @@ type updateParticipantHubStub struct {
 	lastRoomID        uuid.UUID
 	lastMessage       []byte
 	lastExcludeID     string
+	removedMetaID     uuid.UUID
 }
 
 func (h *updateParticipantHubStub) SetParticipantMetadata(participantID uuid.UUID, meta domain.ParticipantMetadata) {
@@ -124,8 +130,8 @@ func (h *updateParticipantHubStub) SetParticipantMetadata(participantID uuid.UUI
 	h.lastMeta = meta
 }
 
-func (h *updateParticipantHubStub) RemoveParticipantMetadata(uuid.UUID) {
-	panic("unexpected RemoveParticipantMetadata")
+func (h *updateParticipantHubStub) RemoveParticipantMetadata(participantID uuid.UUID) {
+	h.removedMetaID = participantID
 }
 
 func (h *updateParticipantHubStub) GetParticipantsInRoom(uuid.UUID) []uuid.UUID {

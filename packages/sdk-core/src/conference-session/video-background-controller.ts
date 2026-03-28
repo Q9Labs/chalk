@@ -6,6 +6,7 @@ import { resolveBackgroundImageSource } from "./resolve-background-image-source.
 type VideoMiddlewareCapableSelf = {
   addVideoMiddleware?: (middleware: unknown) => Promise<unknown>;
   removeAllVideoMiddlewares?: () => Promise<unknown>;
+  setVideoMiddlewareGlobalConfig?: (config: { disablePerFrameCanvasRendering?: boolean }) => Promise<unknown>;
 };
 
 const DEFAULT_BLUR_STRENGTH = 50;
@@ -46,9 +47,31 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
   let selectedEffect: VideoBackgroundEffect = { mode: "none" };
   let revokeResolvedBackgroundImage: (() => void) | undefined;
 
+  const resetResolvedBackgroundImage = () => {
+    revokeResolvedBackgroundImage?.();
+    revokeResolvedBackgroundImage = undefined;
+  };
+
+  const destroyTransformer = () => {
+    try {
+      transformer?.destruct?.();
+    } catch {
+      // best effort cleanup
+    }
+    transformer = null;
+  };
+
   const getTransformer = async (rtkClient: RealtimeKitClient) => {
     if (transformer) {
       return transformer;
+    }
+
+    try {
+      await (rtkClient.self as unknown as VideoMiddlewareCapableSelf).setVideoMiddlewareGlobalConfig?.({
+        disablePerFrameCanvasRendering: true,
+      });
+    } catch {
+      // best effort for RTK runtimes that do not expose this API
     }
 
     transformer = await RealtimeKitVideoBackgroundTransformer.init({
@@ -64,17 +87,32 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
   const clearBackgroundEffect = async (): Promise<boolean> => {
     const rtkClient = deps.getRtkClient();
     if (!hasMiddlewareApis(rtkClient)) {
-      revokeResolvedBackgroundImage?.();
-      revokeResolvedBackgroundImage = undefined;
+      resetResolvedBackgroundImage();
+      destroyTransformer();
       selectedEffect = { mode: "none" };
       return false;
     }
 
     await removeAllVideoMiddlewares(rtkClient);
-    revokeResolvedBackgroundImage?.();
-    revokeResolvedBackgroundImage = undefined;
+    resetResolvedBackgroundImage();
+    destroyTransformer();
     selectedEffect = { mode: "none" };
     return true;
+  };
+
+  const suspendBackgroundEffect = async (): Promise<boolean> => {
+    const rtkClient = deps.getRtkClient();
+    const hadSelectedEffect = selectedEffect.mode !== "none";
+
+    if (hasMiddlewareApis(rtkClient)) {
+      await rtkClient.self.removeAllVideoMiddlewares?.().catch?.(() => {
+        // best effort during transport loss
+      });
+    }
+
+    resetResolvedBackgroundImage();
+    destroyTransformer();
+    return hadSelectedEffect;
   };
 
   const applyBackgroundEffect = async (effect: VideoBackgroundEffect): Promise<boolean> => {
@@ -102,7 +140,7 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
               throw toBackgroundImageLoadError(effect.imageUrl, error);
             });
 
-            revokeResolvedBackgroundImage?.();
+            resetResolvedBackgroundImage();
             revokeResolvedBackgroundImage = resolvedImage.revoke;
             return staticMiddleware;
           } catch (error) {
@@ -131,5 +169,6 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
     clearBackgroundEffect,
     getSelectedBackgroundEffect,
     reapplySelectedBackgroundEffect,
+    suspendBackgroundEffect,
   };
 };

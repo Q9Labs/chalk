@@ -108,13 +108,6 @@ const getScreenShareDiagnostics = (participant: Participant) => ({
   audioTrackMuted: participant.screenShareAudioTrack?.muted ?? null,
 });
 
-const RTK_RECONNECT_DELAYS_MS = [0, 1000, 2000, 4000, 8000] as const;
-
-const waitFor = (delayMs: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-
 export const setupRtkParticipantDebugHooks = (deps: Pick<RtkSignalingDeps, "debug" | "getRtkClient">): void => {
   const rtkClient = deps.getRtkClient();
   if (!deps.debug || !rtkClient?.participants?.joined) {
@@ -141,105 +134,62 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
   }
 
   const participantsApi = toRtkParticipantsApi(rtkClient.participants);
-  let reconnectRunId = 0;
-  let reconnectInFlight = false;
-
-  const clearReconnectRun = (): void => {
-    reconnectRunId += 1;
-    reconnectInFlight = false;
-  };
-
-  const startReconnectLoop = (): void => {
-    if (reconnectInFlight) {
+  const syncLocalParticipantMediaState = (): void => {
+    const localParticipant = deps.getLocalParticipant();
+    if (!localParticipant) {
       return;
     }
 
-    reconnectInFlight = true;
-    reconnectRunId += 1;
-    const runId = reconnectRunId;
-    deps.setConnectionState("reconnecting");
+    localParticipant.videoEnabled = rtkClient.self.videoEnabled;
+    localParticipant.audioEnabled = rtkClient.self.audioEnabled;
+    localParticipant.videoTrack = rtkClient.self.videoTrack ?? undefined;
+    localParticipant.audioTrack = rtkClient.self.audioTrack ?? undefined;
 
-    void (async () => {
-      for (let attempt = 0; attempt < RTK_RECONNECT_DELAYS_MS.length; attempt += 1) {
-        if (runId !== reconnectRunId || deps.isLeaving()) {
-          return;
-        }
-
-        const delayMs = RTK_RECONNECT_DELAYS_MS[attempt] ?? 0;
-        if (delayMs > 0) {
-          await waitFor(delayMs);
-          if (runId !== reconnectRunId || deps.isLeaving()) {
-            return;
-          }
-        }
-
-        const nextRtkClient = deps.getRtkClient();
-        if (!nextRtkClient) {
-          return;
-        }
-
-        try {
-          await nextRtkClient.join();
-          return;
-        } catch (error) {
-          const isLastAttempt = attempt === RTK_RECONNECT_DELAYS_MS.length - 1;
-          if (!isLastAttempt) {
-            continue;
-          }
-
-          deps.setConnectionState("failed");
-          deps.emit("error", {
-            code: ChalkErrorCode.MAX_RECONNECT_ATTEMPTS,
-            message: "Failed to reconnect after multiple attempts",
-            details: {
-              transport: "rtk",
-              roomId: deps.roomId,
-              reconnectAttempts: RTK_RECONNECT_DELAYS_MS.length,
-              lastError: error instanceof Error ? error.message : String(error),
-            },
-          } as ChalkError);
-        }
-      }
-    })().finally(() => {
-      if (runId === reconnectRunId) {
-        reconnectInFlight = false;
-      }
-    });
+    if (localParticipant.videoEnabled) {
+      deps.validateTrack(localParticipant.videoTrack, "LOCAL_VIDEO", localParticipant.id);
+    }
+    if (localParticipant.audioEnabled) {
+      deps.validateTrack(localParticipant.audioTrack, "LOCAL_AUDIO", localParticipant.id);
+    }
   };
 
   rtkClient.self.on("roomJoined", () => {
-    clearReconnectRun();
     deps.setConnectionState("connected");
-
-    const localParticipant = deps.getLocalParticipant();
-    if (localParticipant) {
-      localParticipant.videoEnabled = rtkClient.self.videoEnabled;
-      localParticipant.audioEnabled = rtkClient.self.audioEnabled;
-      localParticipant.videoTrack = rtkClient.self.videoTrack ?? undefined;
-      localParticipant.audioTrack = rtkClient.self.audioTrack ?? undefined;
-
-      if (localParticipant.videoEnabled) {
-        deps.validateTrack(localParticipant.videoTrack, "LOCAL_VIDEO", localParticipant.id);
-      }
-      if (localParticipant.audioEnabled) {
-        deps.validateTrack(localParticipant.audioTrack, "LOCAL_AUDIO", localParticipant.id);
-      }
-    }
-
+    syncLocalParticipantMediaState();
     deps.logConnectionState();
     reconcileJoinedParticipants(deps, participantsApi, {
       pruneStaleRemotes: true,
     });
+    void deps.reapplyBackgroundEffect?.().catch(() => {
+      // best effort after RTK reconnect resets local tracks
+    });
   });
 
-  rtkClient.self.on("roomLeft", () => {
+  rtkClient.self.on("roomLeft", (payload: { state?: string } | undefined) => {
     if (deps.isLeaving()) {
-      clearReconnectRun();
       deps.setConnectionState("disconnected");
       return;
     }
 
-    startReconnectLoop();
+    void deps.suspendBackgroundEffect?.().catch(() => {
+      // best effort while RTK is disconnecting
+    });
+
+    if (payload?.state === "failed") {
+      deps.setConnectionState("failed");
+      deps.emit("error", {
+        code: ChalkErrorCode.CONNECTION_FAILED,
+        message: "Connection lost and could not be restored",
+        details: {
+          transport: "rtk",
+          roomId: deps.roomId,
+          roomState: payload.state,
+        },
+      } as ChalkError);
+      return;
+    }
+
+    deps.setConnectionState("reconnecting");
   });
 
   rtkClient.self.on("videoUpdate", (data: { videoEnabled: boolean; videoTrack: MediaStreamTrack | null }) => {
