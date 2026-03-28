@@ -571,4 +571,69 @@ describe("ConferenceSession (RTK identity mapping)", () => {
     expect(rtk.join).not.toHaveBeenCalled();
     expect(room.status).toBe("disconnected");
   });
+
+  it("suspends background effects when local video becomes unavailable", async () => {
+    room._setLocalParticipant({
+      id: "uuid_local",
+      userId: "uuid_local",
+      displayName: "Me",
+      role: "participant",
+      isLocal: true,
+      videoEnabled: true,
+      audioEnabled: false,
+      isSpeaking: false,
+      isScreenSharing: false,
+      handRaised: false,
+      connectionQuality: 100,
+    });
+
+    const suspendBackgroundEffect = mock(async () => true);
+    const reapplyBackgroundEffect = mock(async () => true);
+    (room as any).mediaController.suspendBackgroundEffect = suspendBackgroundEffect;
+    (room as any).mediaController.reapplyBackgroundEffect = reapplyBackgroundEffect;
+
+    rtk.self.emit("videoUpdate", {
+      videoEnabled: false,
+      videoTrack: null,
+    });
+
+    await Promise.resolve();
+
+    expect(suspendBackgroundEffect).toHaveBeenCalledTimes(1);
+    expect(reapplyBackgroundEffect).not.toHaveBeenCalled();
+  });
+
+  it("reapplies background effects when RTK publishes a fresh live local video track", async () => {
+    room._setLocalParticipant({
+      id: "uuid_local",
+      userId: "uuid_local",
+      displayName: "Me",
+      role: "participant",
+      isLocal: true,
+      videoEnabled: false,
+      audioEnabled: false,
+      isSpeaking: false,
+      isScreenSharing: false,
+      handRaised: false,
+      connectionQuality: 100,
+    });
+
+    const suspendBackgroundEffect = mock(async () => true);
+    const reapplyBackgroundEffect = mock(async () => true);
+    (room as any).mediaController.suspendBackgroundEffect = suspendBackgroundEffect;
+    (room as any).mediaController.reapplyBackgroundEffect = reapplyBackgroundEffect;
+
+    rtk.self.emit("videoUpdate", {
+      videoEnabled: true,
+      videoTrack: {
+        enabled: true,
+        readyState: "live",
+      } as MediaStreamTrack,
+    });
+
+    await Promise.resolve();
+
+    expect(reapplyBackgroundEffect).toHaveBeenCalledTimes(1);
+    expect(suspendBackgroundEffect).not.toHaveBeenCalled();
+  });
 });

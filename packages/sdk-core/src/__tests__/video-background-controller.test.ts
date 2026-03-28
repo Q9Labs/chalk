@@ -159,6 +159,7 @@ describe("createConferenceSessionVideoBackgroundController", () => {
 
     let videoEnabled = false;
     let videoTrack: MediaStreamTrack | undefined;
+    let rawVideoTrack: MediaStreamTrack | undefined;
 
     const controller = createConferenceSessionVideoBackgroundController({
       getRtkClient: () =>
@@ -169,6 +170,7 @@ describe("createConferenceSessionVideoBackgroundController", () => {
             setVideoMiddlewareGlobalConfig,
             videoEnabled,
             videoTrack,
+            rawVideoTrack,
           },
         }) as any,
     });
@@ -184,6 +186,20 @@ describe("createConferenceSessionVideoBackgroundController", () => {
 
     videoEnabled = true;
     videoTrack = {
+      enabled: true,
+      readyState: "live",
+    } as MediaStreamTrack;
+    rawVideoTrack = {
+      enabled: false,
+      readyState: "ended",
+    } as MediaStreamTrack;
+
+    await controller.reapplySelectedBackgroundEffect();
+
+    expect(RealtimeKitVideoBackgroundTransformer.init).not.toHaveBeenCalled();
+    expect(addVideoMiddleware).not.toHaveBeenCalled();
+
+    rawVideoTrack = {
       enabled: true,
       readyState: "live",
     } as MediaStreamTrack;

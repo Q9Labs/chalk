@@ -221,6 +221,17 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
     });
     ctx.complete("success");
     emitParticipantUpdated(deps, localParticipant.id, localParticipant);
+
+    if (!data.videoEnabled || !data.videoTrack || data.videoTrack.readyState !== "live" || !data.videoTrack.enabled) {
+      void deps.suspendBackgroundEffect?.().catch(() => {
+        // best effort while local video becomes unavailable
+      });
+      return;
+    }
+
+    void deps.reapplyBackgroundEffect?.().catch(() => {
+      // best effort when RTK swaps the local video track under an active effect
+    });
   });
 
   rtkClient.self.on("audioUpdate", (data: { audioEnabled: boolean; audioTrack: MediaStreamTrack | null }) => {

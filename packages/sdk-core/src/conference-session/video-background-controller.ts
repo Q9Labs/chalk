@@ -9,6 +9,7 @@ type VideoMiddlewareCapableSelf = {
   setVideoMiddlewareGlobalConfig?: (config: { disablePerFrameCanvasRendering?: boolean }) => Promise<unknown>;
   videoEnabled?: boolean;
   videoTrack?: MediaStreamTrack;
+  rawVideoTrack?: MediaStreamTrack;
 };
 
 const DEFAULT_BLUR_STRENGTH = 50;
@@ -36,6 +37,8 @@ const hasMiddlewareApis = (rtkClient: RealtimeKitClient | undefined): rtkClient 
   return typeof self.addVideoMiddleware === "function" && typeof self.removeAllVideoMiddlewares === "function";
 };
 
+const isLiveTrack = (track: MediaStreamTrack | undefined): boolean => !!track && track.readyState === "live" && track.enabled;
+
 const hasLiveLocalVideoTrack = (rtkClient: RealtimeKitClient | undefined): rtkClient is RealtimeKitClient & { self: VideoMiddlewareCapableSelf } => {
   if (!rtkClient) {
     return false;
@@ -43,8 +46,9 @@ const hasLiveLocalVideoTrack = (rtkClient: RealtimeKitClient | undefined): rtkCl
 
   const self = rtkClient.self as unknown as VideoMiddlewareCapableSelf;
   const track = self.videoTrack;
+  const rawTrack = self.rawVideoTrack;
 
-  return self.videoEnabled === true && !!track && track.readyState === "live" && track.enabled;
+  return self.videoEnabled === true && isLiveTrack(track) && (rawTrack === undefined || isLiveTrack(rawTrack));
 };
 
 export const isConferenceSessionVideoBackgroundSupported = (rtkClient?: RealtimeKitClient): boolean => {
@@ -141,6 +145,7 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
     selectedEffect = effect;
 
     if (!hasLiveLocalVideoTrack(rtkClient)) {
+      await suspendBackgroundEffect();
       return true;
     }
 

@@ -31,3 +31,14 @@
   - opened Settings -> Video -> selected Blur
   - waited 5s; no `Connection Failed` dialog surfaced
   - screenshots: `scratchpad/agent-browser-shots/screenshot-1774701292341.png`, `scratchpad/agent-browser-shots/screenshot-1774701320660.png`
+
+## 2026-03-28 18:52 PKT
+
+- User still reported `chunk-TFHWZHIZ.js ... TransportConnectionError ... ice connection failed` after the earlier camera-off deferral patch.
+- Extra root cause: the RTK virtual-background package renders from `meeting.self.rawVideoTrack`, not just `meeting.self.videoTrack`. Our previous guard only checked the published/local track, so a stale or unavailable raw camera track could still leave middleware eligible and keep the render loop alive into ICE failure.
+- Fixes:
+  - `sdk-core`: background controller now also requires a live+enabled `rawVideoTrack` when RTK exposes one, and if that precondition is not met it actively suspends stale middleware while preserving the selected effect.
+  - `sdk-core`: RTK local `videoUpdate` now suspends background middleware when local video becomes unavailable and reapplies it when RTK publishes a fresh live local video track.
+- Regression coverage:
+  - background controller test now proves a dead `rawVideoTrack` still defers middleware init
+  - RTK room tests now prove local `videoUpdate` suspends/reapplies background effects
