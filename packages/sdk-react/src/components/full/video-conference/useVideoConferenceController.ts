@@ -346,7 +346,7 @@ export function useVideoConferenceController({ roomId, joinToken, inviteLink, ro
       participantVolumes,
       onParticipantVolumeChange: setParticipantVolume,
       getParticipantVolume: getAudioVolume,
-      enableBackgroundEffects: featureFlags.backgroundEffects,
+      enableBackgroundEffects: false,
       isBackgroundEffectsSupported: media.isBackgroundEffectsSupported,
       isApplyingBackgroundEffect: media.isApplyingBackgroundEffect,
       selectedBackgroundEffect: media.selectedBackgroundEffect,

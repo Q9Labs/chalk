@@ -3,6 +3,8 @@ import type RealtimeKitClient from "@cloudflare/realtimekit";
 import type { VideoBackgroundEffect } from "../types/entities/media.ts";
 import { resolveBackgroundImageSource } from "./resolve-background-image-source.ts";
 
+const BACKGROUND_EFFECTS_TEMPORARILY_DISABLED = true;
+
 type VideoMiddlewareCapableSelf = {
   addVideoMiddleware?: (middleware: unknown) => Promise<unknown>;
   removeAllVideoMiddlewares?: () => Promise<unknown>;
@@ -53,6 +55,10 @@ const hasLiveLocalVideoTrack = (rtkClient: RealtimeKitClient | undefined): rtkCl
 
 export const isConferenceSessionVideoBackgroundSupported = (rtkClient?: RealtimeKitClient): boolean => {
   if (typeof window === "undefined") {
+    return false;
+  }
+
+  if (BACKGROUND_EFFECTS_TEMPORARILY_DISABLED) {
     return false;
   }
 

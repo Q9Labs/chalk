@@ -53,3 +53,20 @@
 - Regression coverage:
   - RTK room tests now prove duplicate disabled/no-track updates only suspend once
   - RTK room tests now prove live-track reapply still occurs once for a real transition
+
+## 2026-03-28 19:16 PKT
+
+- User confirmed the issue still feels background-related and asked for a temporary disable/removal path instead of continuing to fight RTK middleware instability.
+- Stabilization decision:
+  - treat virtual backgrounds as the likely trigger path
+  - temporarily hard-disable the capability in `sdk-core`
+  - remove the entry point from the Chalk meeting-room controller so users cannot trigger it from the app UI
+- Fixes:
+  - `sdk-core`: `isConferenceSessionVideoBackgroundSupported()` now returns `false` behind a temporary kill-switch
+  - `sdk-react`: video-conference controller now forces `enableBackgroundEffects: false`, hiding the feature from the meeting settings flow
+- Regression coverage:
+  - background controller tests now assert the kill-switch blocks all middleware initialization
+- Browser verification:
+  - `npx -y agent-browser` against `http://localhost:3070`
+  - joined a room, opened `Settings -> Video`
+  - verified only the camera selector remained; no `Background Effects` section was rendered
