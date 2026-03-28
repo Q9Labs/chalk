@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **SDK-Core/API: RTK reconnect no longer races itself and legacy WS envelopes no longer break room events** — the client now trusts RealtimeKit’s built-in reconnect lifecycle instead of issuing competing `join()` retries after `roomLeft`, video background middleware is suspended/reapplied across reconnects to avoid transport-loss error spam, the WS decoder accepts older `event/data` envelopes for compatibility, and API participant/room broadcasts now emit the canonical `type/payload` websocket shape so `participant.left` and related events stop throwing `WS_PARSE_ERROR`.
+- **SDK-Core: saved background effects no longer crash meetings while the camera is off** — background selections are now remembered without attaching RealtimeKit middleware until the local video track is actually live, turning video off explicitly suspends any attached background transformer, and background telemetry now records local track diagnostics so “joined with camera off -> connection failed” stops reproducing from deferred blur/image effects.
 
 ## [0.0.80] - 2026-03-27
 

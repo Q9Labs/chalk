@@ -116,6 +116,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
     try {
       if (rtkClient.self.videoEnabled) {
         await rtkClient.self.disableVideo();
+        await videoBackgroundController.suspendBackgroundEffect();
         localParticipant.videoEnabled = false;
         localParticipant.videoTrack = undefined;
       } else {
@@ -290,7 +291,11 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
 
     try {
       const applied = await videoBackgroundController.applyBackgroundEffect(effect);
-      ctx.complete("success", { applied });
+      ctx.complete("success", {
+        applied,
+        videoEnabled: rtkClient.self.videoEnabled,
+        ...getTrackDiagnostics(rtkClient.self.videoTrack ?? localParticipant.videoTrack),
+      });
       return applied;
     } catch (error) {
       ctx.complete("error", error);

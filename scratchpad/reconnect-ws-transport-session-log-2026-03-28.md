@@ -14,3 +14,20 @@
   - background suspend/reapply test
   - websocket legacy-envelope compatibility tests
   - Go participant leave websocket-envelope test
+
+## 2026-03-28 18:36 PKT
+
+- Follow-up from fresh browser log: join completed successfully with `audio=false` / `video=false`, then a persisted background effect still applied and RTK virtual-background started throwing repeated `UnhandledRejection ... ice connection failed`.
+- Root cause 4: Chalk treated “selected background effect” as “safe to attach middleware now”, even when the local camera was disabled and there was no live local video track.
+- Fixes:
+  - `sdk-core`: background controller now stores the selected effect first, but defers middleware attachment until `self.videoEnabled === true` and `self.videoTrack` is live+enabled.
+  - `sdk-core`: toggling camera off now suspends background middleware immediately while preserving the selected effect for later reapply.
+  - `sdk-core`: background apply telemetry now includes local video-track diagnostics for faster future triage.
+- Regression coverage:
+  - background controller test proving selection while camera-off does not initialize RTK middleware, but later reapplies once a live video track exists
+- Browser verification:
+  - `npx -y agent-browser` against `http://localhost:3070`
+  - joined room with camera off
+  - opened Settings -> Video -> selected Blur
+  - waited 5s; no `Connection Failed` dialog surfaced
+  - screenshots: `scratchpad/agent-browser-shots/screenshot-1774701292341.png`, `scratchpad/agent-browser-shots/screenshot-1774701320660.png`
