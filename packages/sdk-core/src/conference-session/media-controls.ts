@@ -337,6 +337,7 @@ export const createConferenceSessionMediaController = (deps: MediaControllerDeps
   return {
     applyBackgroundEffect,
     clearBackgroundEffect,
+    hasSelectedBackgroundEffect: () => videoBackgroundController.getSelectedBackgroundEffect().mode !== "none",
     reapplyBackgroundEffect: videoBackgroundController.reapplySelectedBackgroundEffect,
     suspendBackgroundEffect: videoBackgroundController.suspendBackgroundEffect,
     toggleVideo,

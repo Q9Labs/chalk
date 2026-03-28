@@ -580,6 +580,10 @@ describe("ConferenceSession (RTK identity mapping)", () => {
       role: "participant",
       isLocal: true,
       videoEnabled: true,
+      videoTrack: {
+        enabled: true,
+        readyState: "live",
+      } as MediaStreamTrack,
       audioEnabled: false,
       isSpeaking: false,
       isScreenSharing: false,
@@ -589,6 +593,8 @@ describe("ConferenceSession (RTK identity mapping)", () => {
 
     const suspendBackgroundEffect = mock(async () => true);
     const reapplyBackgroundEffect = mock(async () => true);
+    const hasSelectedBackgroundEffect = mock(() => true);
+    (room as any).mediaController.hasSelectedBackgroundEffect = hasSelectedBackgroundEffect;
     (room as any).mediaController.suspendBackgroundEffect = suspendBackgroundEffect;
     (room as any).mediaController.reapplyBackgroundEffect = reapplyBackgroundEffect;
 
@@ -601,6 +607,16 @@ describe("ConferenceSession (RTK identity mapping)", () => {
 
     expect(suspendBackgroundEffect).toHaveBeenCalledTimes(1);
     expect(reapplyBackgroundEffect).not.toHaveBeenCalled();
+    expect(hasSelectedBackgroundEffect).toHaveBeenCalledTimes(1);
+
+    rtk.self.emit("videoUpdate", {
+      videoEnabled: false,
+      videoTrack: null,
+    });
+
+    await Promise.resolve();
+
+    expect(suspendBackgroundEffect).toHaveBeenCalledTimes(1);
   });
 
   it("reapplies background effects when RTK publishes a fresh live local video track", async () => {
@@ -620,6 +636,8 @@ describe("ConferenceSession (RTK identity mapping)", () => {
 
     const suspendBackgroundEffect = mock(async () => true);
     const reapplyBackgroundEffect = mock(async () => true);
+    const hasSelectedBackgroundEffect = mock(() => true);
+    (room as any).mediaController.hasSelectedBackgroundEffect = hasSelectedBackgroundEffect;
     (room as any).mediaController.suspendBackgroundEffect = suspendBackgroundEffect;
     (room as any).mediaController.reapplyBackgroundEffect = reapplyBackgroundEffect;
 
@@ -635,5 +653,6 @@ describe("ConferenceSession (RTK identity mapping)", () => {
 
     expect(reapplyBackgroundEffect).toHaveBeenCalledTimes(1);
     expect(suspendBackgroundEffect).not.toHaveBeenCalled();
+    expect(hasSelectedBackgroundEffect).toHaveBeenCalledTimes(1);
   });
 });

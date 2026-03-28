@@ -108,6 +108,8 @@ const getScreenShareDiagnostics = (participant: Participant) => ({
   audioTrackMuted: participant.screenShareAudioTrack?.muted ?? null,
 });
 
+const isLiveTrack = (track: MediaStreamTrack | null | undefined): boolean => !!track && track.readyState === "live" && track.enabled;
+
 export const setupRtkParticipantDebugHooks = (deps: Pick<RtkSignalingDeps, "debug" | "getRtkClient">): void => {
   const rtkClient = deps.getRtkClient();
   if (!deps.debug || !rtkClient?.participants?.joined) {
@@ -198,6 +200,12 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       return;
     }
 
+    const hadLiveVideo = localParticipant.videoEnabled && isLiveTrack(localParticipant.videoTrack);
+    const previousTrack = localParticipant.videoTrack ?? null;
+    const hasLiveVideo = data.videoEnabled && isLiveTrack(data.videoTrack);
+    const trackChanged = previousTrack !== (data.videoTrack ?? null);
+    const backgroundSelected = deps.hasSelectedBackgroundEffect?.() ?? false;
+
     localParticipant.videoEnabled = data.videoEnabled;
     localParticipant.videoTrack = data.videoTrack ?? undefined;
 
@@ -222,16 +230,22 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
     ctx.complete("success");
     emitParticipantUpdated(deps, localParticipant.id, localParticipant);
 
-    if (!data.videoEnabled || !data.videoTrack || data.videoTrack.readyState !== "live" || !data.videoTrack.enabled) {
+    if (!backgroundSelected) {
+      return;
+    }
+
+    if (!hasLiveVideo && (hadLiveVideo || trackChanged)) {
       void deps.suspendBackgroundEffect?.().catch(() => {
         // best effort while local video becomes unavailable
       });
       return;
     }
 
-    void deps.reapplyBackgroundEffect?.().catch(() => {
-      // best effort when RTK swaps the local video track under an active effect
-    });
+    if (hasLiveVideo && (!hadLiveVideo || trackChanged)) {
+      void deps.reapplyBackgroundEffect?.().catch(() => {
+        // best effort when RTK swaps the local video track under an active effect
+      });
+    }
   });
 
   rtkClient.self.on("audioUpdate", (data: { audioEnabled: boolean; audioTrack: MediaStreamTrack | null }) => {

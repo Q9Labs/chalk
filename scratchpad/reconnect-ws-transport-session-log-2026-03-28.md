@@ -42,3 +42,14 @@
 - Regression coverage:
   - background controller test now proves a dead `rawVideoTrack` still defers middleware init
   - RTK room tests now prove local `videoUpdate` suspends/reapplies background effects
+
+## 2026-03-28 19:05 PKT
+
+- User reported a new regression: local video visibly re-rendered in a loop and logs showed 4-5 identical `media.video.update` events (`enabled=false`, `hasTrack=false`) at the same timestamp, followed by the RTK virtual-background unhandled rejection.
+- Root cause 5: the new RTK `videoUpdate` hook reacted to every RTK local-track churn event, even when the event was a duplicate “still disabled / still no track” state or when no background effect was selected. That let RTK’s own track transitions recursively trigger background suspend/reapply side-effects and fan out more local `videoUpdate` noise.
+- Fixes:
+  - `sdk-core`: RTK `videoUpdate` background side-effects now run only when a background effect is actually selected.
+  - `sdk-core`: suspend/reapply is now gated behind a real transition (`live -> not live`, `not live -> live`, or actual track object swap), so duplicate no-track updates no longer re-trigger middleware work.
+- Regression coverage:
+  - RTK room tests now prove duplicate disabled/no-track updates only suspend once
+  - RTK room tests now prove live-track reapply still occurs once for a real transition

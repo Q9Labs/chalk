@@ -21,6 +21,7 @@ export interface RtkSignalingDeps {
   emit: <K extends keyof ConferenceSessionEvents>(event: K, data: ConferenceSessionEvents[K]) => void;
   validateTrack: (track: MediaStreamTrack | undefined | null, type: string, participantId: string) => boolean;
   logConnectionState: () => void;
+  hasSelectedBackgroundEffect?: () => boolean;
   reapplyBackgroundEffect?: () => Promise<unknown>;
   suspendBackgroundEffect?: () => Promise<unknown>;
 }
