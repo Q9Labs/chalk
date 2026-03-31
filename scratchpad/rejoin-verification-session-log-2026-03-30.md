@@ -105,3 +105,13 @@
 - Browser-verified on local ET with `agent-browser` after installing missing Playwright Chromium:
   - mobile screenshot: `scratchpad/et-prejoin-logo-consumer-clamped-mobile-2026-03-31.png`
   - desktop screenshot: `scratchpad/et-prejoin-logo-consumer-clamped-desktop-2026-03-31.png`
+
+## 2026-03-31 12:05 PKT
+- Hasan clarified TH frontend prod no longer ships through Amplify because of the Bahrain incident; workflow doc was stale.
+- Re-validated live AWS state:
+  - CloudFront prod distribution: `E1MP2FPR95HKXM`
+  - alias: `portal.tuitionhighway.com`
+  - origin: `th-lms-portal-use1-emergency-20260324.s3-website-us-east-1.amazonaws.com`
+  - viewer-request function: `th-portal-dynamic-route-rewrite`
+  - S3 website bucket config exists with `index.html` and `404.html`
+- Updated `/Users/macmini/Desktop/Code/th-lms/CHALK_WORKFLOW.md` to mark Amplify as stale/non-prod control plane only, and to document the real prod frontend deploy path as local build -> S3 sync -> CloudFront invalidation.
