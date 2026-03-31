@@ -90,6 +90,51 @@ if (currentContents.includes(`name="${blobAuthorityName}"`)) {
   console.log(`[patch-realtimekit-react-native] wrote ${stringsXmlPath}`);
 }
 
+// Patch @cloudflare/react-native-webrtc EventEmitter (removed RN internal)
+const webrtcPackageRoot = [
+  join(mobileAppRoot, "node_modules", "@cloudflare", "react-native-webrtc"),
+  join(process.cwd(), "node_modules", "@cloudflare", "react-native-webrtc"),
+].find((candidate) => existsSync(join(candidate, "package.json")));
+
+if (webrtcPackageRoot) {
+  const webrtcEventEmitterTargets = [
+    join(webrtcPackageRoot, "lib", "commonjs", "EventEmitter.js"),
+    join(webrtcPackageRoot, "lib", "module", "EventEmitter.js"),
+  ];
+
+  // Minimal EventEmitter polyfill to replace the removed RN internal
+  const polyfill = `class _Emitter{constructor(){this._listeners={}}addListener(e,h){(this._listeners[e]||(this._listeners[e]=[])).push(h);return{remove:()=>{const a=this._listeners[e];if(a){const i=a.indexOf(h);if(i!==-1)a.splice(i,1)}}}}emit(e,...a){(this._listeners[e]||[]).forEach(h=>h(...a))}removeAllListeners(e){if(e)delete this._listeners[e];else this._listeners={}}}`;
+
+  for (const targetPath of webrtcEventEmitterTargets) {
+    if (!existsSync(targetPath)) {
+      continue;
+    }
+
+    let contents = readFileSync(targetPath, "utf8");
+
+    if (contents.includes("_Emitter")) {
+      continue; // already patched
+    }
+
+    // commonjs variant
+    contents = contents.replace(
+      /var _EventEmitter = _interopRequireDefault\(require\("react-native\/Libraries\/vendor\/emitter\/EventEmitter"\)\);/,
+      polyfill,
+    );
+    contents = contents.replace(/new _EventEmitter\.default\(\)/g, "new _Emitter()");
+
+    // module variant
+    contents = contents.replace(
+      /import EventEmitter from 'react-native\/Libraries\/vendor\/emitter\/EventEmitter';/,
+      polyfill,
+    );
+    contents = contents.replace(/new EventEmitter\(\)/g, "new _Emitter()");
+
+    writeFileSync(targetPath, contents, "utf8");
+    console.log(`[patch-realtimekit-react-native] patched webrtc EventEmitter: ${targetPath}`);
+  }
+}
+
 for (const targetPath of nativeEventEmitterTargets) {
   if (!existsSync(targetPath)) {
     continue;

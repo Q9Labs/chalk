@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { createJoinToken, createRoom, createSession, exchangeJoinToken, listRooms, scheduleRoom, updateOwnDisplayName } from "../conference-client/client-room-ops.ts";
 
 describe("client-room-ops", () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import { Badge } from "../../components/atomic/Badge";
 

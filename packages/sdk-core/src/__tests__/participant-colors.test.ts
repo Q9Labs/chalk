@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { getParticipantAvatarRecipe, getParticipantColor, getParticipantGradient, getParticipantInitial } from "../utils/participant-colors.ts";
 
 describe("participant colors", () => {

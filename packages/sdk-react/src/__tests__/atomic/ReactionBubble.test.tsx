@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "bun:test";
+import { describe, it, expect, vi } from "vitest";
 import { act, render } from "@testing-library/react";
 import { ReactionBubble } from "../../components/atomic/ReactionBubble";
 

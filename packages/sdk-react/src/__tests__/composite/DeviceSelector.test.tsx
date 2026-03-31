@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect, vi } from "bun:test";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, fireEvent, waitFor } from "@testing-library/react";
 import { DeviceSelector } from "../../components/composite/DeviceSelector";
 

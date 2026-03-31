@@ -25,10 +25,10 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit && bun run build:types",
+    "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external @cloudflare/realtimekit && pnpm run build:types",
     "build:types": "tsc --project tsconfig.json",
-    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external @cloudflare/realtimekit --watch",
-    "test": "bun test ./src/__tests__",
+    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external @cloudflare/realtimekit --watch",
+    "test": "pnpm exec vitest run ./src/__tests__",
     "test:mutation:participant-avatar-recipe": "../../apps/web/node_modules/.bin/stryker run stryker.participant-avatar.config.json",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",
@@ -43,10 +43,10 @@
     "effect": "^3.11.9"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "@types/express": "^5.0.0",
     "openapi-typescript": "^7.0.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "@types/node": "^24.10.1"
   },
   "peerDependencies": {
     "typescript": "^5"

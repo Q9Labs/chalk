@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 import {
   chalkWebhookMiddleware,
@@ -103,14 +103,14 @@ function createRequest(
     body: overrides.body,
     headers,
     id: overrides.id ?? "req_123",
-    is: mock((value: string) => (value === "application/json" ? (overrides.isJson ?? true) : false)),
+    is: vi.fn((value: string) => (value === "application/json" ? (overrides.isJson ?? true) : false)),
     originalUrl: overrides.originalUrl ?? "/webhook/chalk",
   } as unknown as Request;
 }
 
 describe("webhook express adapter", () => {
   beforeEach(() => {
-    mock.restore();
+    vi.restoreAllMocks();
   });
 
   it("normalizes raw hex signatures", () => {
@@ -130,7 +130,7 @@ describe("webhook express adapter", () => {
       body: Buffer.from("{}"),
     });
     const { response, state } = createResponseRecorder();
-    const next = mock(() => {});
+    const next = vi.fn(() => {});
 
     await middleware(req, response, next);
 
@@ -154,7 +154,7 @@ describe("webhook express adapter", () => {
     });
     const { response, state } = createResponseRecorder();
 
-    await middleware(req, response, mock(() => {}));
+    await middleware(req, response, vi.fn(() => {}));
 
     expect(state.statusCode).toBe(400);
     expect(state.body).toEqual({
@@ -180,7 +180,7 @@ describe("webhook express adapter", () => {
       },
     });
     const { response, state } = createResponseRecorder();
-    const next = mock(() => {});
+    const next = vi.fn(() => {});
 
     await middleware(req, response, next);
 
@@ -207,7 +207,7 @@ describe("webhook express adapter", () => {
         "x-chalk-timestamp": timestamp,
       },
     });
-    const next = mock(() => {});
+    const next = vi.fn(() => {});
 
     await middleware(req, createResponseRecorder().response, next);
 
@@ -230,7 +230,7 @@ describe("webhook express adapter", () => {
     });
     const { response, state } = createResponseRecorder();
 
-    await middleware(req, response, mock(() => {}));
+    await middleware(req, response, vi.fn(() => {}));
 
     expect(state.statusCode).toBe(400);
     expect(state.body).toEqual({
@@ -255,7 +255,7 @@ describe("webhook express adapter", () => {
     });
     const { response, state } = createResponseRecorder();
 
-    await middleware(req, response, mock(() => {}));
+    await middleware(req, response, vi.fn(() => {}));
 
     expect(state.statusCode).toBe(401);
     expect(state.body).toEqual({
@@ -268,7 +268,7 @@ describe("webhook express adapter", () => {
   it("maps parser errors to exact JSON responses", () => {
     const middleware = chalkWebhookParserErrorMiddleware();
     const { response, state } = createResponseRecorder();
-    const next = mock(() => {});
+    const next = vi.fn(() => {});
 
     middleware(
       { type: "entity.too.large" },

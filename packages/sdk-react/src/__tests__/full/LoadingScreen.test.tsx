@@ -1,6 +1,6 @@
 import React from "react";
 import { act, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoadingScreen } from "../../components/full/LoadingScreen";
 import { getParticipantColor } from "../../utils/colorGenerator";
 

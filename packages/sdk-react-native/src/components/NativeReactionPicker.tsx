@@ -1,6 +1,5 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View, Modal, TouchableWithoutFeedback } from "react-native";
-import { Theme } from "../ui/theme";
 
 export interface NativeReactionPickerProps {
   isOpen: boolean;
@@ -40,39 +39,38 @@ function NativeReactionPickerBase({ isOpen, onClose, onSelect }: NativeReactionP
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "flex-end",
     alignItems: "center",
-    paddingBottom: 110, // Position above the dock
+    paddingBottom: 100,
   },
   picker: {
     flexDirection: "row",
-    backgroundColor: Theme.colors.card,
-    borderRadius: 32,
-    padding: 8,
-    gap: 8,
+    backgroundColor: "#0c0c0e",
+    borderRadius: 28,
+    padding: 6,
+    gap: 4,
     borderWidth: 1,
-    borderColor: Theme.colors.border,
+    borderColor: "rgba(255,255,255,0.08)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
   },
   emojiButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
   },
   emojiButtonPressed: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    transform: [{ scale: 0.92 }],
+    backgroundColor: "rgba(255,255,255,0.12)",
+    transform: [{ scale: 0.88 }],
   },
   emojiText: {
-    fontSize: 24,
+    fontSize: 26,
   },
 });
 

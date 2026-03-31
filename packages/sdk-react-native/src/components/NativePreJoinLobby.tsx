@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RTCView } from "@cloudflare/react-native-webrtc";
-import { Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon, ArrowLeft01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
+import { Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon, ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { usePreJoinPreview } from "../hooks/usePreJoinPreview";
@@ -59,15 +59,13 @@ export function NativePreJoinLobby({ roomName, role = "participant", userName = 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.screen}>
       <View style={styles.content}>
-        {/* Ultra-Clean Top Bar */}
+        {/* Top Bar */}
         <View style={styles.topBar}>
-          <Pressable onPress={onCancel} style={styles.topIconButton}>
-            <HugeiconsIcon icon={ArrowLeft01Icon} size={24} color="white" />
+          <Pressable onPress={onCancel} style={({ pressed }) => [styles.topIconButton, pressed && styles.topIconButtonPressed]}>
+            <HugeiconsIcon icon={ArrowLeft01Icon} size={22} color="white" />
           </Pressable>
           <Text style={styles.brandText}>chalk</Text>
-          <Pressable style={styles.topIconButton}>
-            <HugeiconsIcon icon={Settings01Icon} size={22} color="white" />
-          </Pressable>
+          <View style={styles.topIconButton} />
         </View>
 
         {/* Hero Preview Box */}
@@ -77,16 +75,16 @@ export function NativePreJoinLobby({ roomName, role = "participant", userName = 
               <RTCView mirror objectFit="cover" streamURL={previewStream.toURL()} style={styles.previewVideo} zOrder={0} />
             ) : (
               <View style={styles.avatarContainer}>
-                <NativeFaceAvatar name={displayName} size={140} />
+                <NativeFaceAvatar name={displayName} size={100} textSize={38} />
               </View>
             )}
 
             <View style={styles.toggleOverlay}>
-              <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={[styles.toggleCircle, !audioEnabled && styles.toggleCircleOff]}>
-                <HugeiconsIcon icon={audioEnabled ? Mic01Icon : MicOff01Icon} size={24} color="white" />
+              <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={({ pressed }) => [styles.toggleCircle, !audioEnabled && styles.toggleCircleOff, pressed && styles.togglePressed]}>
+                <HugeiconsIcon icon={audioEnabled ? Mic01Icon : MicOff01Icon} size={22} color="white" />
               </Pressable>
-              <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={[styles.toggleCircle, !videoEnabled && styles.toggleCircleOff]}>
-                <HugeiconsIcon icon={videoEnabled ? Video01Icon : VideoOffIcon} size={24} color="white" />
+              <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={({ pressed }) => [styles.toggleCircle, !videoEnabled && styles.toggleCircleOff, pressed && styles.togglePressed]}>
+                <HugeiconsIcon icon={videoEnabled ? Video01Icon : VideoOffIcon} size={22} color="white" />
               </Pressable>
             </View>
           </View>
@@ -137,20 +135,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    height: 56,
-    marginBottom: 16,
+    height: 48,
+    marginBottom: 12,
   },
   topIconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  topIconButtonPressed: {
+    opacity: 0.6,
+    transform: [{ scale: 0.92 }],
   },
   brandText: {
     color: "white",
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
     letterSpacing: -0.5,
   },
@@ -158,18 +160,18 @@ const styles = StyleSheet.create({
   // Preview Area
   previewContainer: {
     flex: 1,
-    maxHeight: 480,
+    maxHeight: 440,
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   previewSurface: {
     width: "100%",
     aspectRatio: 3 / 4,
-    backgroundColor: "#111114",
-    borderRadius: 36,
+    backgroundColor: "#0e0e11",
+    borderRadius: Theme.radius["2xl"],
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.06)",
     position: "relative",
   },
   previewVideo: {
@@ -179,35 +181,39 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0f0f12",
+    backgroundColor: "#0c0c0f",
   },
   toggleOverlay: {
     position: "absolute",
-    bottom: 24,
+    bottom: 20,
     left: 0,
     right: 0,
     flexDirection: "row",
     justifyContent: "center",
-    gap: 20,
+    gap: 16,
   },
   toggleCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.55)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
+    borderColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   toggleCircleOff: {
-    backgroundColor: Theme.colors.error,
-    borderColor: Theme.colors.error,
+    backgroundColor: "rgba(239,68,68,0.85)",
+    borderColor: "rgba(239,68,68,0.85)",
+  },
+  togglePressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.9 }],
   },
   previewError: {
     color: Theme.colors.error,
     fontSize: 12,
-    marginTop: 12,
+    marginTop: 10,
     textAlign: "center",
     fontWeight: "600",
   },
@@ -215,69 +221,70 @@ const styles = StyleSheet.create({
   // Info Area
   infoArea: {
     alignItems: "center",
-    marginBottom: 24,
-    gap: 4,
+    marginBottom: 20,
+    gap: 3,
   },
   roomName: {
     color: Theme.colors.foreground,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
     textAlign: "center",
   },
   roleText: {
     color: Theme.colors.mutedForeground,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
   },
 
   // Footer
   footer: {
-    gap: 16,
+    gap: 14,
   },
   inputCard: {
     backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
   inputLabel: {
     color: Theme.colors.mutedForeground,
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 6,
   },
   nameInput: {
     color: "white",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
     padding: 0,
   },
   joinButton: {
     backgroundColor: Theme.colors.primary,
-    height: 64,
-    borderRadius: 24,
+    height: 56,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
   },
   joinButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   joinButtonText: {
     color: "white",
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "700",
   },
   globalError: {
     color: Theme.colors.error,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     textAlign: "center",
   },

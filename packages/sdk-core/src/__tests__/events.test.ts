@@ -3,7 +3,7 @@
  * @module @q9labs/chalk-core/__tests__/events
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "vitest";
 import { EventEmitter } from "../events.ts";
 
 interface TestEvents {

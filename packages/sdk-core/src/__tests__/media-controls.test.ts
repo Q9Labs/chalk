@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { ChalkError } from "../errors/chalk-error.ts";
 import { createConferenceSessionMediaController } from "../conference-session/media-controls.ts";
 
@@ -12,8 +12,8 @@ describe("createConferenceSessionMediaController", () => {
     } as any;
 
     const updates: Array<{ isScreenSharing: boolean; screenShareTrack: unknown; screenShareAudioTrack: unknown }> = [];
-    const emitError = mock(() => {});
-    const enableScreenShare = mock(async () => {
+    const emitError = vi.fn(() => {});
+    const enableScreenShare = vi.fn(async () => {
       participant.isScreenSharing = true;
       participant.screenShareTrack = { kind: "video" } as any;
       participant.screenShareAudioTrack = { kind: "audio" } as any;
@@ -78,8 +78,8 @@ describe("createConferenceSessionMediaController", () => {
       screenShareAudioTrack: undefined,
     } as any;
 
-    const emitError = mock(() => {});
-    const enableScreenShare = mock(async () => {
+    const emitError = vi.fn(() => {});
+    const enableScreenShare = vi.fn(async () => {
       const err = new Error("Could not start video source");
       (err as any).name = "NotReadableError";
       throw err;

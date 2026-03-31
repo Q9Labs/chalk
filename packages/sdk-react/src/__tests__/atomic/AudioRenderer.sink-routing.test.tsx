@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render } from "@testing-library/react";
 import { AudioRenderer } from "../../components/atomic/AudioRenderer";
 

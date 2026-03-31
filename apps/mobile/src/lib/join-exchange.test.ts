@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { getCanonicalJoinRoomId, getJoinRoomName } from "./join-exchange";
 
 describe("join exchange helpers", () => {

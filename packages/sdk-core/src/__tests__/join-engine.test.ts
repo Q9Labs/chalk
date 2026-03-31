@@ -1,11 +1,11 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { TimeoutError } from "../effect/errors.ts";
 import { joinRealtimeKitWithRetry } from "../conference-client/join-engine.ts";
 import { getRtkJoinPolicyForCurrentCohort } from "../rtk-join-policy.ts";
 
 describe("joinRealtimeKitWithRetry", () => {
   it("creates a fresh native join attempt after each timeout", async () => {
-    const join = mock(() => Promise.resolve());
+    const join = vi.fn(() => Promise.resolve());
     let waitCalls = 0;
 
     await joinRealtimeKitWithRetry(
@@ -41,7 +41,7 @@ describe("joinRealtimeKitWithRetry", () => {
   });
 
   it("stops retrying once a non-timeout join error is hit", async () => {
-    const join = mock(() => Promise.resolve());
+    const join = vi.fn(() => Promise.resolve());
 
     await expect(
       joinRealtimeKitWithRetry(

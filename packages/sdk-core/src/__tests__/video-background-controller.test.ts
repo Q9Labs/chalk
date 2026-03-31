@@ -1,5 +1,5 @@
 import RealtimeKitVideoBackgroundTransformer from "@cloudflare/realtimekit-virtual-background";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createConferenceSessionVideoBackgroundController, isConferenceSessionVideoBackgroundSupported } from "../conference-session/video-background-controller.ts";
 
@@ -26,7 +26,7 @@ describe("createConferenceSessionVideoBackgroundController", () => {
   });
 
   it("reports background effects as unsupported while the temporary kill-switch is active", () => {
-    RealtimeKitVideoBackgroundTransformer.isSupported = mock(() => true) as typeof RealtimeKitVideoBackgroundTransformer.isSupported;
+    RealtimeKitVideoBackgroundTransformer.isSupported = vi.fn(() => true) as typeof RealtimeKitVideoBackgroundTransformer.isSupported;
 
     const supported = isConferenceSessionVideoBackgroundSupported({
       self: {
@@ -39,15 +39,15 @@ describe("createConferenceSessionVideoBackgroundController", () => {
   });
 
   it("does not initialize RTK background middleware when asked to apply an effect", async () => {
-    const addVideoMiddleware = mock(async () => {});
-    const removeAllVideoMiddlewares = mock(async () => {});
+    const addVideoMiddleware = vi.fn(async () => {});
+    const removeAllVideoMiddlewares = vi.fn(async () => {});
 
-    RealtimeKitVideoBackgroundTransformer.init = mock(async () => ({
-      createBackgroundBlurVideoMiddleware: mock(async () => ({ id: "blur-middleware" })),
-      createStaticBackgroundVideoMiddleware: mock(async () => ({ id: "static-middleware" })),
-      destruct: mock(() => {}),
+    RealtimeKitVideoBackgroundTransformer.init = vi.fn(async () => ({
+      createBackgroundBlurVideoMiddleware: vi.fn(async () => ({ id: "blur-middleware" })),
+      createStaticBackgroundVideoMiddleware: vi.fn(async () => ({ id: "static-middleware" })),
+      destruct: vi.fn(() => {}),
     })) as typeof RealtimeKitVideoBackgroundTransformer.init;
-    RealtimeKitVideoBackgroundTransformer.isSupported = mock(() => true) as typeof RealtimeKitVideoBackgroundTransformer.isSupported;
+    RealtimeKitVideoBackgroundTransformer.isSupported = vi.fn(() => true) as typeof RealtimeKitVideoBackgroundTransformer.isSupported;
 
     const controller = createConferenceSessionVideoBackgroundController({
       getRtkClient: () =>

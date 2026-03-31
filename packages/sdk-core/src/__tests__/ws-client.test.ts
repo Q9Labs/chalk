@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WSClient } from "../ws-client.ts";
 import { wideEvents, type WideEvent } from "../wide-events/index.ts";
 import { serializeOutgoingMessage } from "../ws-client/outbound.ts";
@@ -417,8 +417,8 @@ describe("WSClient", () => {
   it("uses the updated token provider for reconnects after join", async () => {
     const { timers, timeouts } = makeFakeTimers();
     const sockets: MockWebSocket[] = [];
-    const rootTokenProvider = mock(async () => "root_token");
-    const sessionTokenProvider = mock(async () => "session_refreshed");
+    const rootTokenProvider = vi.fn(async () => "root_token");
+    const sessionTokenProvider = vi.fn(async () => "session_refreshed");
 
     const client = new WSClient("wss://example/ws", {
       webSocketFactory: (url, protocols) => {

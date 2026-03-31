@@ -1,4 +1,4 @@
-import { CallEnd01Icon, Chat01Icon, ComputerScreenShareIcon, Link01Icon, Mic01Icon, MicOff01Icon, Presentation01Icon, RecordIcon, Settings01Icon, SmileIcon, TextFontIcon, UserGroupIcon, Video01Icon, VideoOffIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
+import { CallEnd01Icon, Chat01Icon, Link01Icon, Presentation01Icon, RecordIcon, Settings01Icon, SmileIcon, TextFontIcon, UserGroupIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { memo } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
@@ -6,12 +6,8 @@ import { Theme } from "../ui/theme";
 
 interface NativeMeetingActionsSheetProps {
   visible: boolean;
-  isMuted: boolean;
-  isCameraOff: boolean;
-  isScreenSharing: boolean;
   isHandRaised: boolean;
   isRecording: boolean;
-  screenShareEnabled: boolean;
   chatEnabled: boolean;
   peopleEnabled: boolean;
   transcriptsEnabled: boolean;
@@ -22,9 +18,6 @@ interface NativeMeetingActionsSheetProps {
   participantCount: number;
   raisedHandCount: number;
   onClose: () => void;
-  onToggleAudio: () => void;
-  onToggleVideo: () => void;
-  onToggleScreenShare: () => void;
   onInviteParticipants: () => void;
   onOpenChat: () => void;
   onOpenParticipants: () => void;
@@ -38,16 +31,12 @@ interface NativeMeetingActionsSheetProps {
 }
 
 const accent = Theme.colors.primary;
-const tileBackground = "#11192a";
+const tileBackground = Theme.colors.secondary;
 
 function NativeMeetingActionsSheetBase({
   visible,
-  isMuted,
-  isCameraOff,
-  isScreenSharing,
   isHandRaised,
   isRecording,
-  screenShareEnabled,
   chatEnabled,
   peopleEnabled,
   transcriptsEnabled,
@@ -58,9 +47,6 @@ function NativeMeetingActionsSheetBase({
   participantCount,
   raisedHandCount,
   onClose,
-  onToggleAudio,
-  onToggleVideo,
-  onToggleScreenShare,
   onInviteParticipants,
   onOpenChat,
   onOpenParticipants,
@@ -80,46 +66,36 @@ function NativeMeetingActionsSheetBase({
             <View style={styles.sheet}>
               <View style={styles.dragHandle} />
 
-              <View style={styles.grid}>
-                <ActionTile
-                  active={false}
-                  danger={isMuted}
-                  icon={isMuted ? MicOff01Icon : Mic01Icon}
-                  label={isMuted ? "Unmute" : "Mute"}
-                  onPress={onToggleAudio}
-                />
-                <ActionTile
-                  active={false}
-                  danger={isCameraOff}
-                  icon={isCameraOff ? VideoOffIcon : Video01Icon}
-                  label={isCameraOff ? "Start Video" : "Stop Video"}
-                  onPress={onToggleVideo}
-                />
-                <ActionTile
-                  active={isScreenSharing}
-                  disabled={!screenShareEnabled}
-                  icon={ComputerScreenShareIcon}
-                  label={isScreenSharing ? "Stop Share" : "Share Screen"}
-                  onPress={onToggleScreenShare}
-                />
-                <ActionTile icon={Link01Icon} label="Invite" onPress={onInviteParticipants} />
-                <ActionTile badge={chatUnreadCount > 0 ? formatBadge(chatUnreadCount) : null} disabled={!chatEnabled} icon={Chat01Icon} label="Chat" onPress={onOpenChat} />
-                <ActionTile badge={participantCount > 1 ? formatBadge(participantCount) : null} disabled={!peopleEnabled} icon={UserGroupIcon} label="People" onPress={onOpenParticipants} />
-                <ActionTile
-                  active={isHandRaised}
-                  badge={raisedHandCount > 0 ? formatBadge(raisedHandCount) : null}
-                  icon={WavingHand01Icon}
-                  label="Raise Hand"
-                  onPress={onToggleHand}
-                />
-                <ActionTile icon={SmileIcon} label="Reactions" onPress={onOpenReactions} />
-                <ActionTile active={whiteboardEnabled} icon={Presentation01Icon} label="Whiteboard" onPress={onOpenWhiteboard} />
-                <ActionTile active={isRecording} disabled={!recordingEnabled} icon={RecordIcon} label="Record" onPress={onToggleRecording} />
-                <ActionTile disabled={!transcriptsEnabled} icon={TextFontIcon} label="Transcript" onPress={onOpenTranscripts} />
-                <ActionTile disabled={!settingsEnabled} icon={Settings01Icon} label="Settings" onPress={onOpenSettings} />
+              <View style={styles.sectionsContainer}>
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Communicate</Text>
+                  <View style={styles.grid}>
+                    <ActionTile icon={Link01Icon} label="Invite" onPress={onInviteParticipants} />
+                    <ActionTile badge={chatUnreadCount > 0 ? formatBadge(chatUnreadCount) : null} disabled={!chatEnabled} icon={Chat01Icon} label="Chat" onPress={onOpenChat} />
+                    <ActionTile icon={SmileIcon} label="Reactions" onPress={onOpenReactions} />
+                  </View>
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Collaborate</Text>
+                  <View style={styles.grid}>
+                    <ActionTile active={isHandRaised} badge={raisedHandCount > 0 ? formatBadge(raisedHandCount) : null} icon={WavingHand01Icon} label="Raise Hand" onPress={onToggleHand} />
+                    <ActionTile disabled={!whiteboardEnabled} icon={Presentation01Icon} label="Whiteboard" onPress={onOpenWhiteboard} />
+                    <ActionTile active={isRecording} disabled={!recordingEnabled} icon={RecordIcon} label="Record" onPress={onToggleRecording} />
+                  </View>
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Meeting</Text>
+                  <View style={styles.grid}>
+                    <ActionTile disabled={!transcriptsEnabled} icon={TextFontIcon} label="Transcript" onPress={onOpenTranscripts} />
+                    <ActionTile badge={participantCount > 1 ? formatBadge(participantCount) : null} disabled={!peopleEnabled} icon={UserGroupIcon} label="People" onPress={onOpenParticipants} />
+                    <ActionTile disabled={!settingsEnabled} icon={Settings01Icon} label="Settings" onPress={onOpenSettings} />
+                  </View>
+                </View>
               </View>
 
-              <Pressable onPress={onLeaveMeeting} style={styles.leaveButton}>
+              <Pressable onPress={onLeaveMeeting} style={({ pressed }) => [styles.leaveButton, pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}>
                 <HugeiconsIcon color="#ffffff" icon={CallEnd01Icon} size={22} />
                 <Text style={styles.leaveText}>Leave Meeting</Text>
               </Pressable>
@@ -131,31 +107,15 @@ function NativeMeetingActionsSheetBase({
   );
 }
 
-function ActionTile({
-  icon,
-  label,
-  onPress,
-  active = false,
-  danger = false,
-  disabled = false,
-  badge = null,
-}: {
-  icon: any;
-  label: string;
-  onPress: () => void;
-  active?: boolean;
-  danger?: boolean;
-  disabled?: boolean;
-  badge?: string | null;
-}): React.JSX.Element {
+function ActionTile({ icon, label, onPress, active = false, disabled = false, badge = null }: { icon: any; label: string; onPress: () => void; active?: boolean; disabled?: boolean; badge?: string | null }): React.JSX.Element {
   return (
-    <Pressable disabled={disabled} onPress={onPress} style={[styles.tile, active && styles.tileActive, disabled && styles.tileDisabled]}>
+    <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.tile, active && styles.tileActive, disabled && styles.tileDisabled, pressed && styles.tilePressed]}>
       {badge ? (
-        <View style={styles.badge}>
+        <View style={[styles.badge, active && styles.badgeActive]}>
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       ) : null}
-      <HugeiconsIcon color={danger ? dangerColor : active ? "#ffffff" : "#f4f4f5"} icon={icon} size={26} />
+      <HugeiconsIcon color={active ? "#ffffff" : "#e4e4e7"} icon={icon} size={24} />
       <Text style={[styles.tileText, active && styles.tileTextActive, disabled && styles.tileTextDisabled]}>{label}</Text>
     </Pressable>
   );
@@ -169,16 +129,14 @@ function formatBadge(value: number): string {
   return String(value);
 }
 
-const dangerColor = "#ff7b7b";
-
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.52)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: "#090f18",
+    backgroundColor: "#0c0c0e",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 10,
@@ -195,6 +153,20 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 14,
     backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  sectionsContainer: {
+    gap: 16,
+  },
+  section: {
+    gap: 8,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.colors.mutedForeground,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    paddingHorizontal: 4,
   },
   grid: {
     flexDirection: "row",
@@ -213,7 +185,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: tileBackground,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.06)",
   },
   tileActive: {
     backgroundColor: accent,
@@ -221,6 +193,10 @@ const styles = StyleSheet.create({
   },
   tileDisabled: {
     opacity: 0.42,
+  },
+  tilePressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.95 }],
   },
   tileText: {
     color: "#f4f4f5",
@@ -246,24 +222,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.12)",
   },
+  badgeActive: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
   badgeText: {
     color: "#ffffff",
     fontSize: 10,
     fontWeight: "700",
   },
   leaveButton: {
-    marginTop: 14,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: "#ff636b",
+    marginTop: 16,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: "#ef4444",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
   },
   leaveText: {
     color: "#ffffff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
   },
 });

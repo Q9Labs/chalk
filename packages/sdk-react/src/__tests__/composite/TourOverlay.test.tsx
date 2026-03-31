@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from "bun:test";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render } from "@testing-library/react";
 import { TourOverlay } from "../../components/composite/TourOverlay";
 

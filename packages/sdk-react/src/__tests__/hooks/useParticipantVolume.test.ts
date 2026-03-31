@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useParticipantVolume } from "../../hooks/ui/useParticipantVolume";
 

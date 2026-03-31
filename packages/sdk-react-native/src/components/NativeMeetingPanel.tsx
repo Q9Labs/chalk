@@ -1,7 +1,7 @@
-import type { ChatMessage, LayoutMode, MediaDevice, ParticipantState, Transcript } from "@q9labs/chalk-core";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Modal, TouchableWithoutFeedback, Platform } from "react-native";
+import { getParticipantAvatarRecipe, type ChatMessage, type LayoutMode, type MediaDevice, type ParticipantState, type Transcript } from "@q9labs/chalk-core";
+import { ArrowUp01Icon, Cancel01Icon, Chat01Icon, CheckmarkCircle01Icon, Mic01Icon, MicOff01Icon, Presentation01Icon, Refresh01Icon, Settings01Icon, TextFontIcon, UserGroupIcon, Video01Icon, VideoOffIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Cancel01Icon, Settings01Icon, Chat01Icon, UserGroupIcon, TextFontIcon, Presentation01Icon, CheckmarkCircle01Icon, Refresh01Icon, WavingHand01Icon } from "@hugeicons/core-free-icons";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Modal, TouchableWithoutFeedback, Platform } from "react-native";
 import { Theme } from "../ui/theme";
 
 export type NativeMeetingPanelName = "chat" | "participants" | "settings" | "transcripts" | "whiteboard";
@@ -89,152 +89,166 @@ export function NativeMeetingPanel({
               <View style={styles.sheetHeader}>
                 <View style={styles.titleRow}>
                   <HugeiconsIcon icon={panelIcon(panel)} size={20} color={Theme.colors.primary} />
-                  <Text style={styles.sheetTitle}>{panelTitle(panel)}</Text>
+                  <Text style={styles.sheetTitle}>
+                    {panelTitle(panel)}
+                    {panel === "participants" && <Text style={styles.headerCount}> ({participants.length})</Text>}
+                  </Text>
                 </View>
                 <Pressable onPress={onClose} style={styles.closeButton}>
                   <HugeiconsIcon icon={Cancel01Icon} size={20} color={Theme.colors.mutedForeground} />
                 </Pressable>
               </View>
 
-              <ScrollView contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator={false}>
-                {panel === "chat" && (
-                  <View style={styles.chatContainer}>
+              {panel === "chat" ? (
+                <View style={styles.chatWrapper}>
+                  <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent} showsVerticalScrollIndicator={false}>
                     {messages.length === 0 ? (
                       <View style={styles.emptyState}>
-                        <HugeiconsIcon icon={Chat01Icon} size={40} color={Theme.colors.muted} />
+                        <HugeiconsIcon icon={Chat01Icon} size={40} color={Theme.colors.mutedForeground} />
                         <Text style={styles.emptyText}>No messages yet.</Text>
                       </View>
                     ) : null}
-                    {messages.map((message, index) => (
-                      <View key={`${message.id ?? "message"}-${index}`} style={styles.messageCard}>
-                        <Text style={styles.messageAuthor}>{message.senderName}</Text>
-                        <Text style={styles.messageBody}>{message.content}</Text>
-                      </View>
-                    ))}
-                    <View style={styles.composerRow}>
-                      <TextInput onChangeText={onChatDraftChange} onSubmitEditing={onSendMessage} placeholder="Send a message" placeholderTextColor={Theme.colors.placeholder} style={styles.input} value={chatDraft} />
-                      <Pressable onPress={onSendMessage} style={styles.sendButton}>
-                        <HugeiconsIcon icon={Chat01Icon} size={20} color="white" />
-                      </Pressable>
-                    </View>
-                  </View>
-                )}
-
-                {panel === "participants" && (
-                  <View style={styles.listContainer}>
-                    {participants.map((participant, index) => {
-                      const isLocal = participant.id === localParticipantId;
+                    {messages.map((message, index) => {
+                      const isLocal = message.senderId === localParticipantId;
                       return (
-                        <View key={`${participant.id}-${index}`} style={styles.participantRow}>
-                          <View style={styles.participantInfo}>
-                            <View style={[styles.avatarCircle, { backgroundColor: Theme.colors.secondary }]}>
-                              <Text style={styles.avatarText}>{(participant.displayName?.charAt(0) || "P").toUpperCase()}</Text>
-                            </View>
-                            <View style={styles.participantMeta}>
-                              <Text style={styles.participantName}>
-                                {participant.displayName}
-                                {isLocal ? " (You)" : ""}
-                              </Text>
-                              <Text style={styles.metaText}>
-                                {participant.role} · {participant.audioEnabled ? "Unmuted" : "Muted"}
-                              </Text>
-                            </View>
+                        <View key={`${message.id ?? "msg"}-${index}`} style={styles.messageGroup}>
+                          {!isLocal && <Text style={styles.bubbleSender}>{message.senderName}</Text>}
+                          <View style={isLocal ? styles.localBubble : styles.remoteBubble}>
+                            <Text style={styles.bubbleText}>{message.content}</Text>
                           </View>
-                          {participant.handRaised ? (
-                            <View style={styles.handBadge}>
-                              <HugeiconsIcon color="#ffffff" icon={WavingHand01Icon} size={12} />
-                              <Text style={styles.handBadgeText}>Hand raised</Text>
-                            </View>
-                          ) : null}
-                          {isHost && !isLocal ? (
-                            <View style={styles.actionButtons}>
-                              <Pressable onPress={() => (participant.audioEnabled ? onMuteParticipant(participant.id) : onUnmuteParticipant(participant.id))} style={styles.iconActionButton}>
-                                <Text style={styles.actionButtonText}>{participant.audioEnabled ? "Mute" : "Unmute"}</Text>
-                              </Pressable>
-                              <Pressable onPress={() => onRemoveParticipant(participant.id)} style={[styles.iconActionButton, styles.dangerActionButton]}>
-                                <Text style={styles.dangerActionButtonText}>Remove</Text>
-                              </Pressable>
-                            </View>
-                          ) : null}
                         </View>
                       );
                     })}
-                  </View>
-                )}
-
-                {panel === "settings" && (
-                  <View style={styles.settingsContainer}>
-                    <Text style={styles.sectionLabel}>Participant Layout</Text>
-                    <Text style={styles.sectionCopy}>These controls tune participant arrangement and strip placement. Shared content still takes over the stage automatically.</Text>
-                    <View style={styles.rowWrap}>
-                      {(["auto", "grid", "spotlight", "speaker"] as const).map((option) => (
-                        <Pressable key={option} onPress={() => onSetLayout(option)} style={[styles.chip, layout === option && styles.chipActive]}>
-                          <Text style={[styles.chipText, layout === option && styles.chipTextActive]}>{layoutOptionLabel(option)}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    <Text style={styles.sectionLabel}>Camera</Text>
-                    <DeviceList devices={cameras} selectedId={selectedCamera} onSelect={onSelectCamera} />
-
-                    <Text style={styles.sectionLabel}>Microphone</Text>
-                    <DeviceList devices={microphones} selectedId={selectedMicrophone} onSelect={onSelectMicrophone} />
-
-                    <Text style={styles.sectionLabel}>Speaker</Text>
-                    <DeviceList devices={speakers} selectedId={selectedSpeaker} onSelect={onSelectSpeaker} />
-
-                    <Pressable onPress={onRefreshDevices} style={styles.refreshButton}>
-                      <HugeiconsIcon icon={Refresh01Icon} size={16} color={Theme.colors.primary} />
-                      <Text style={styles.refreshButtonText}>{isRefreshingDevices ? "Refreshing..." : "Refresh Devices"}</Text>
+                  </ScrollView>
+                  <View style={styles.composerRow}>
+                    <TextInput onChangeText={onChatDraftChange} onSubmitEditing={onSendMessage} placeholder="Type a message..." placeholderTextColor={Theme.colors.placeholder} style={styles.input} value={chatDraft} />
+                    <Pressable onPress={onSendMessage} style={styles.sendButton}>
+                      <HugeiconsIcon icon={ArrowUp01Icon} size={20} color="white" />
                     </Pressable>
                   </View>
-                )}
-
-                {panel === "transcripts" && (
-                  <View style={styles.chatContainer}>
-                    {transcripts.length === 0 ? (
-                      <View style={styles.emptyState}>
-                        <HugeiconsIcon icon={TextFontIcon} size={40} color={Theme.colors.muted} />
-                        <Text style={styles.emptyText}>No transcript lines yet.</Text>
-                      </View>
-                    ) : null}
-                    {transcripts.map((transcript, index) => (
-                      <View key={`${transcript.id ?? "transcript"}-${index}`} style={styles.messageCard}>
-                        <Text style={styles.messageAuthor}>{transcript.speakerName}</Text>
-                        <Text style={styles.messageBody}>{transcript.text}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {panel === "whiteboard" && (
-                  <View style={styles.whiteboardContainer}>
-                    <View style={styles.statusCard}>
-                      <View style={styles.statusHeader}>
-                        <HugeiconsIcon icon={Presentation01Icon} size={24} color={Theme.colors.primary} />
-                        <Text style={styles.statusTitle}>Whiteboard</Text>
-                      </View>
-                      <Text style={styles.metaText}>Mode: {whiteboardCanDraw ? "Collaborative" : "View Only"}</Text>
-                      <Text style={styles.metaText}>
-                        Elements: {whiteboardElementCount} · Active: {whiteboardParticipantCount}
-                      </Text>
+                </View>
+              ) : (
+                <ScrollView contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator={false}>
+                  {panel === "participants" && (
+                    <View style={styles.listContainer}>
+                      {participants.map((participant, index) => {
+                        const isLocal = participant.id === localParticipantId;
+                        return (
+                          <View key={`${participant.id}-${index}`} style={styles.participantRow}>
+                            <View style={styles.participantInfo}>
+                              <View style={[styles.avatarCircle, { backgroundColor: getParticipantAvatarRecipe(participant.displayName).colors.primary }]}>
+                                <Text style={styles.avatarText}>{(participant.displayName?.charAt(0) || "P").toUpperCase()}</Text>
+                              </View>
+                              <View style={styles.participantMeta}>
+                                <View style={styles.participantNameRow}>
+                                  <Text style={styles.participantName}>
+                                    {participant.displayName}
+                                    {isLocal ? " (You)" : ""}
+                                  </Text>
+                                  {participant.role === "host" && (
+                                    <View style={styles.roleChip}>
+                                      <Text style={styles.roleChipText}>Host</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                <View style={styles.participantStatusIcons}>
+                                  <HugeiconsIcon icon={participant.audioEnabled ? Mic01Icon : MicOff01Icon} size={14} color={participant.audioEnabled ? Theme.colors.success : Theme.colors.error} />
+                                  <HugeiconsIcon icon={participant.videoEnabled ? Video01Icon : VideoOffIcon} size={14} color={participant.videoEnabled ? Theme.colors.success : "rgba(255,255,255,0.3)"} />
+                                  {participant.handRaised && <HugeiconsIcon icon={WavingHand01Icon} size={14} color={Theme.colors.warning} />}
+                                </View>
+                              </View>
+                            </View>
+                            {isHost && !isLocal ? (
+                              <View style={styles.actionButtons}>
+                                <Pressable onPress={() => (participant.audioEnabled ? onMuteParticipant(participant.id) : onUnmuteParticipant(participant.id))} style={styles.iconActionBtn}>
+                                  <HugeiconsIcon icon={participant.audioEnabled ? MicOff01Icon : Mic01Icon} size={16} color={participant.audioEnabled ? Theme.colors.error : Theme.colors.success} />
+                                </Pressable>
+                                <Pressable onPress={() => onRemoveParticipant(participant.id)} style={[styles.iconActionBtn, styles.dangerActionBtn]}>
+                                  <HugeiconsIcon icon={Cancel01Icon} size={16} color={Theme.colors.error} />
+                                </Pressable>
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
                     </View>
-                    <View style={styles.buttonGrid}>
-                      <Pressable onPress={onToggleWhiteboard} style={styles.primaryPanelButton}>
-                        <Text style={styles.primaryButtonText}>{whiteboardOpen ? "Close Board" : "Open Board"}</Text>
+                  )}
+
+                  {panel === "settings" && (
+                    <View style={styles.settingsContainer}>
+                      <Text style={styles.sectionLabel}>Layout</Text>
+                      <View style={styles.rowWrap}>
+                        {(["auto", "grid", "spotlight", "speaker"] as const).map((option) => (
+                          <Pressable key={option} onPress={() => onSetLayout(option)} style={[styles.chip, layout === option && styles.chipActive]}>
+                            <Text style={[styles.chipText, layout === option && styles.chipTextActive]}>{layoutOptionLabel(option)}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+
+                      <Text style={styles.sectionLabel}>Camera</Text>
+                      <DeviceList devices={cameras} selectedId={selectedCamera} onSelect={onSelectCamera} />
+
+                      <Text style={styles.sectionLabel}>Microphone</Text>
+                      <DeviceList devices={microphones} selectedId={selectedMicrophone} onSelect={onSelectMicrophone} />
+
+                      <Text style={styles.sectionLabel}>Speaker</Text>
+                      <DeviceList devices={speakers} selectedId={selectedSpeaker} onSelect={onSelectSpeaker} />
+
+                      <Pressable onPress={onRefreshDevices} style={styles.refreshButton}>
+                        <HugeiconsIcon icon={Refresh01Icon} size={16} color={Theme.colors.primary} />
+                        <Text style={styles.refreshButtonText}>{isRefreshingDevices ? "Refreshing..." : "Refresh Devices"}</Text>
                       </Pressable>
-                      <View style={styles.row}>
-                        <Pressable onPress={onRequestWhiteboardSync} style={styles.secondaryPanelButton}>
-                          <Text style={styles.secondaryButtonText}>Sync</Text>
+                    </View>
+                  )}
+
+                  {panel === "transcripts" && (
+                    <View style={styles.transcriptsContainer}>
+                      {transcripts.length === 0 ? (
+                        <View style={styles.emptyState}>
+                          <HugeiconsIcon icon={Mic01Icon} size={40} color={Theme.colors.mutedForeground} />
+                          <Text style={styles.emptyText}>Transcription will appear here</Text>
+                          <Text style={styles.emptySubtext}>Audio will be transcribed in real-time</Text>
+                        </View>
+                      ) : null}
+                      {transcripts.map((transcript, index) => (
+                        <View key={`${transcript.id ?? "t"}-${index}`} style={styles.transcriptEntry}>
+                          <Text style={styles.transcriptSpeaker}>{transcript.speakerName}</Text>
+                          <View style={styles.transcriptDivider} />
+                          <Text style={styles.transcriptText}>{transcript.text}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {panel === "whiteboard" && (
+                    <View style={styles.whiteboardContainer}>
+                      <View style={styles.statusCard}>
+                        <View style={styles.statusHeader}>
+                          <HugeiconsIcon icon={Presentation01Icon} size={24} color={Theme.colors.primary} />
+                          <Text style={styles.statusTitle}>Whiteboard</Text>
+                        </View>
+                        <Text style={styles.metaText}>Mode: {whiteboardCanDraw ? "Collaborative" : "View Only"}</Text>
+                        <Text style={styles.metaText}>
+                          Elements: {whiteboardElementCount} · Active: {whiteboardParticipantCount}
+                        </Text>
+                      </View>
+                      <View style={styles.buttonGrid}>
+                        <Pressable onPress={onToggleWhiteboard} style={styles.primaryPanelButton}>
+                          <Text style={styles.primaryButtonText}>{whiteboardOpen ? "Close Board" : "Open Board"}</Text>
                         </Pressable>
-                        <Pressable onPress={onClearWhiteboard} style={styles.secondaryPanelButton}>
-                          <Text style={styles.secondaryButtonText}>Clear</Text>
-                        </Pressable>
+                        <View style={styles.row}>
+                          <Pressable onPress={onRequestWhiteboardSync} style={styles.secondaryPanelButton}>
+                            <Text style={styles.secondaryButtonText}>Sync</Text>
+                          </Pressable>
+                          <Pressable onPress={onClearWhiteboard} style={styles.secondaryPanelButton}>
+                            <Text style={styles.secondaryButtonText}>Clear</Text>
+                          </Pressable>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                )}
-              </ScrollView>
+                  )}
+                </ScrollView>
+              )}
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -317,16 +331,18 @@ function layoutOptionLabel(layout: LayoutMode): string {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: Theme.colors.background,
+    backgroundColor: "#0c0c0e",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    height: "70%",
     maxHeight: "85%",
     paddingBottom: Platform.OS === "ios" ? 40 : 24,
     borderWidth: 1,
+    borderBottomWidth: 0,
     borderColor: "rgba(255,255,255,0.08)",
   },
   dragHandle: {
@@ -357,6 +373,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.colors.foreground,
   },
+  headerCount: {
+    color: Theme.colors.mutedForeground,
+    fontWeight: "600",
+  },
   closeButton: {
     width: 32,
     height: 32,
@@ -369,7 +389,84 @@ const styles = StyleSheet.create({
     padding: 20,
   },
 
-  // Settings specific
+  // Chat
+  chatWrapper: {
+    flex: 1,
+  },
+  chatScroll: {
+    flex: 1,
+  },
+  chatScrollContent: {
+    padding: 16,
+    gap: 6,
+  },
+  messageGroup: {
+    marginBottom: 8,
+  },
+  bubbleSender: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.colors.primary,
+    marginBottom: 2,
+    marginLeft: 4,
+  },
+  remoteBubble: {
+    alignSelf: "flex-start",
+    backgroundColor: Theme.colors.secondary,
+    borderRadius: 16,
+    borderTopLeftRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: "78%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+  },
+  localBubble: {
+    alignSelf: "flex-end",
+    backgroundColor: "rgba(27, 182, 166, 0.22)",
+    borderRadius: 16,
+    borderTopRightRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: "78%",
+    borderWidth: 1,
+    borderColor: "rgba(27, 182, 166, 0.12)",
+  },
+  bubbleText: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: Theme.colors.foreground,
+  },
+  composerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.05)",
+  },
+  input: {
+    flex: 1,
+    backgroundColor: Theme.colors.secondary,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: Theme.colors.foreground,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Settings
   settingsContainer: {
     gap: 20,
   },
@@ -380,13 +477,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  sectionCopy: {
-    color: Theme.colors.mutedForeground,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: -8,
-    marginBottom: 4,
-  },
   rowWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -395,7 +485,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: Theme.radius.full,
     backgroundColor: Theme.colors.secondary,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
@@ -420,7 +510,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: Theme.colors.secondary,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
@@ -452,66 +542,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Chat
-  chatContainer: {
-    minHeight: 300,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-    gap: 12,
-  },
-  emptyText: {
-    color: Theme.colors.mutedForeground,
-    fontSize: 14,
-  },
-  messageCard: {
-    marginBottom: 16,
-    gap: 4,
-  },
-  messageAuthor: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.colors.primary,
-  },
-  messageBody: {
-    fontSize: 15,
-    color: Theme.colors.foreground,
-    lineHeight: 20,
-  },
-  composerRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 20,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: Theme.colors.secondary,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: Theme.colors.foreground,
-    fontSize: 15,
-  },
-  sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: Theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   // Participants
   listContainer: {
-    gap: 16,
+    gap: 8,
   },
   participantRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+    backgroundColor: Theme.colors.secondary,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
   },
   participantInfo: {
     flexDirection: "row",
@@ -531,54 +576,91 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   participantMeta: {
-    gap: 2,
+    gap: 4,
     flexShrink: 1,
+  },
+  participantNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   participantName: {
     fontSize: 15,
     fontWeight: "600",
     color: Theme.colors.foreground,
   },
-  metaText: {
-    fontSize: 13,
-    color: Theme.colors.mutedForeground,
+  roleChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: "rgba(27, 182, 166, 0.15)",
+  },
+  roleChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.colors.primary,
+    textTransform: "uppercase",
+  },
+  participantStatusIcons: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2,
   },
   actionButtons: {
     flexDirection: "row",
     gap: 8,
   },
-  handBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(27, 182, 166, 0.18)",
-  },
-  handBadgeText: {
-    color: "#c8fff8",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  iconActionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  iconActionBtn: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  actionButtonText: {
-    color: Theme.colors.foreground,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  dangerActionButton: {
+  dangerActionBtn: {
     backgroundColor: "rgba(239, 68, 68, 0.1)",
   },
-  dangerActionButtonText: {
-    color: Theme.colors.error,
+
+  // Transcripts
+  transcriptsContainer: {
+    gap: 4,
+  },
+  transcriptEntry: {
+    marginBottom: 20,
+    gap: 6,
+  },
+  transcriptSpeaker: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
+    color: Theme.colors.primary,
+  },
+  transcriptDivider: {
+    height: 1,
+    width: 40,
+    backgroundColor: "rgba(27, 182, 166, 0.3)",
+  },
+  transcriptText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: Theme.colors.foreground,
+  },
+
+  // Empty state
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyText: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 14,
+  },
+  emptySubtext: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 12,
+    opacity: 0.7,
   },
 
   // Whiteboard
@@ -601,6 +683,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: Theme.colors.foreground,
+  },
+  metaText: {
+    fontSize: 13,
+    color: Theme.colors.mutedForeground,
   },
   buttonGrid: {
     gap: 12,

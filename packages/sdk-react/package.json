@@ -35,15 +35,15 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "NODE_ENV=production bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw --external react-resizable-panels && bun run build:fix-use-client && bun run build:types && bun run build:styles && bun run build:assets",
+    "build": "NODE_ENV=production tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @chalk/core --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw --external react-resizable-panels && pnpm run build:fix-use-client && pnpm run build:types && pnpm run build:styles && pnpm run build:assets",
     "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
     "build:styles": "mkdir -p ./dist/styles && cp ./src/styles/styles.css ./dist/styles/",
-    "build:assets": "mkdir -p ./dist/assets/sounds ./dist/assets/logos && bun run build:copy-sounds && bun run build:copy-logos",
+    "build:assets": "mkdir -p ./dist/assets/sounds ./dist/assets/logos && pnpm run build:copy-sounds && pnpm run build:copy-logos",
     "build:copy-sounds": "for f in ./src/assets/sounds/*.mp3; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/sounds/; done",
     "build:copy-logos": "for f in ./src/assets/logos/*; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/logos/; done",
     "build:types": "tsc --project tsconfig.json",
-    "dev": "bun run build:styles && bun run build:assets && bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-dom --external @chalk/core --external react-resizable-panels --watch",
-    "test": "bun test ./src/__tests__ --preload ./src/__tests__/setup.ts",
+    "dev": "pnpm run build:styles && pnpm run build:assets && tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @chalk/core --external react-resizable-panels --watch",
+    "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",
     "clean": "rm -rf dist"
@@ -72,7 +72,6 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
-    "@types/bun": "latest",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitest/browser-playwright": "^4.0.16",
@@ -86,7 +85,8 @@
     "react-dom": "19.2.4",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.7.2",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.16",
+    "@types/node": "^24.10.1"
   },
   "peerDependencies": {
     "@excalidraw/excalidraw": "^0.17.0 || ^0.18.0",

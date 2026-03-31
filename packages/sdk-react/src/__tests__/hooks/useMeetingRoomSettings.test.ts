@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";

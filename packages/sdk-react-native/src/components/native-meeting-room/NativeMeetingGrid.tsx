@@ -62,8 +62,8 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyEyebrow}>Meeting ready</Text>
-        <Text style={styles.emptyTitle}>Waiting for participants</Text>
-        <Text style={styles.emptyCopy}>The grid will expand automatically as more people join.</Text>
+        <Text style={styles.emptyTitle}>You're the first one here</Text>
+        <Text style={styles.emptyCopy}>Others will appear when they join. Invite someone to get started.</Text>
       </View>
     );
   }
@@ -89,14 +89,43 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
       );
     }
 
-    if (participants.length <= 4) {
+    if (participants.length === 3) {
       return (
-        <View style={styles.compactQuad}>
-          {participants.map((participant, index) => (
-            <View key={`${participant.id}-${index}`} style={styles.compactQuadTile}>
-              <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
+        <View style={styles.compactThree}>
+          <View style={styles.compactThreeTop}>
+            <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
+          </View>
+          <View style={styles.compactThreeBottom}>
+            <View style={styles.compactThreeBottomTile}>
+              <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
             </View>
-          ))}
+            <View style={styles.compactThreeBottomTile}>
+              <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    if (participants.length === 4) {
+      return (
+        <View style={styles.compactFour}>
+          <View style={styles.compactFourRow}>
+            <View style={styles.compactFourTile}>
+              <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
+            </View>
+            <View style={styles.compactFourTile}>
+              <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
+            </View>
+          </View>
+          <View style={styles.compactFourRow}>
+            <View style={styles.compactFourTile}>
+              <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
+            </View>
+            <View style={styles.compactFourTile}>
+              <NativeMediaView emphasizeMuted participant={participants[3]!} track={getParticipantTileTrack(participants[3]!)} />
+            </View>
+          </View>
         </View>
       );
     }
@@ -205,6 +234,46 @@ const styles = StyleSheet.create({
   compactTwoUpTile: {
     flex: 1,
     minHeight: 0,
+    borderRadius: Theme.radius.xl,
+    overflow: "hidden",
+  },
+  compactThree: {
+    flex: 1,
+    gap: Theme.spacing.sm,
+  },
+  compactThreeTop: {
+    flex: 3,
+    minHeight: 0,
+    borderRadius: Theme.radius.xl,
+    overflow: "hidden",
+  },
+  compactThreeBottom: {
+    flex: 2,
+    flexDirection: "row",
+    gap: Theme.spacing.sm,
+    minHeight: 0,
+  },
+  compactThreeBottomTile: {
+    flex: 1,
+    minHeight: 0,
+    borderRadius: Theme.radius.xl,
+    overflow: "hidden",
+  },
+  compactFour: {
+    flex: 1,
+    gap: Theme.spacing.sm,
+  },
+  compactFourRow: {
+    flex: 1,
+    flexDirection: "row",
+    gap: Theme.spacing.sm,
+    minHeight: 0,
+  },
+  compactFourTile: {
+    flex: 1,
+    minHeight: 0,
+    borderRadius: Theme.radius.xl,
+    overflow: "hidden",
   },
   compactQuad: {
     flex: 1,
@@ -213,8 +282,11 @@ const styles = StyleSheet.create({
     gap: Theme.spacing.sm,
   },
   compactQuadTile: {
-    width: "48.6%",
-    minHeight: 180,
+    flexBasis: "48%",
+    flexGrow: 1,
+    aspectRatio: 4 / 3,
+    borderRadius: Theme.radius.xl,
+    overflow: "hidden",
   },
   compactPaged: {
     flex: 1,

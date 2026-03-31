@@ -1,13 +1,13 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 import { useConferenceMeetingActions } from "../../components/full/video-conference/useConferenceMeetingActions";
 
 describe("useConferenceMeetingActions", () => {
   it("does not play a local-only hand-raise sound shortcut", () => {
-    const play = mock(() => {});
-    const toggleHand = mock(() => {});
-    const incrementHandRaiseCount = mock(() => {});
+    const play = vi.fn(() => {});
+    const toggleHand = vi.fn(() => {});
+    const incrementHandRaiseCount = vi.fn(() => {});
 
     const { result } = renderHook(() =>
       useConferenceMeetingActions({
@@ -66,8 +66,8 @@ describe("useConferenceMeetingActions", () => {
   });
 
   it("does not play a local-only reaction sound shortcut", () => {
-    const play = mock(() => {});
-    const sendReaction = mock(() => {});
+    const play = vi.fn(() => {});
+    const sendReaction = vi.fn(() => {});
 
     const { result } = renderHook(() =>
       useConferenceMeetingActions({

@@ -144,7 +144,7 @@ export interface FileRoutesByFullPath {
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
   '/share/$token': typeof ShareTokenRoute
-  '/docs': typeof DocsIndexRoute
+  '/docs/': typeof DocsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -210,7 +210,7 @@ export interface FileRouteTypes {
     | '/room/$roomId'
     | '/room/end'
     | '/share/$token'
-    | '/docs'
+    | '/docs/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -331,7 +331,7 @@ declare module '@tanstack/react-router' {
     '/docs/': {
       id: '/docs/'
       path: '/docs'
-      fullPath: '/docs'
+      fullPath: '/docs/'
       preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }

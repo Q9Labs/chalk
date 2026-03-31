@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { buildStructuredDebugReport } from "../debug/report-v2.ts";
 
 describe("buildStructuredDebugReport", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { createFriendlyRoomName, humanizeRoomName } from "../utils/friendly-room-name.ts";
 
 describe("friendly-room-name", () => {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveBackgroundImageSource } from "../conference-session/resolve-background-image-source.ts";
 
@@ -6,8 +6,8 @@ describe("resolveBackgroundImageSource", () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
   const originalUrl = globalThis.URL;
-  const createObjectUrl = mock(() => "blob:resolved-background");
-  const revokeObjectUrl = mock(() => {});
+  const createObjectUrl = vi.fn(() => "blob:resolved-background");
+  const revokeObjectUrl = vi.fn(() => {});
 
   beforeEach(() => {
     Object.defineProperty(globalThis, "window", {
@@ -43,7 +43,7 @@ describe("resolveBackgroundImageSource", () => {
   });
 
   it("returns blob URLs as-is without fetching", async () => {
-    const fetchMock = mock();
+    const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as typeof fetch;
 
     const result = await resolveBackgroundImageSource("blob:already-local");
@@ -54,7 +54,7 @@ describe("resolveBackgroundImageSource", () => {
 
   it("fetches remote images and converts them to object URLs", async () => {
     const imageBlob = new Blob(["img"], { type: "image/png" });
-    globalThis.fetch = mock(async () => new Response(imageBlob, { status: 200 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response(imageBlob, { status: 200 })) as typeof fetch;
 
     const result = await resolveBackgroundImageSource("https://cdn.example.com/background.png");
 

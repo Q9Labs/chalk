@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { withPatchedGetDisplayMedia } from "../utils/get-display-media-fallback.ts";
 
 const setNavigator = (value: any) => {
@@ -18,7 +18,7 @@ describe("withPatchedGetDisplayMedia", () => {
 
   it("requests screen-share audio by default on Chrome-like browsers", async () => {
     const calls: any[] = [];
-    const getDisplayMedia = mock(async (constraints: any) => {
+    const getDisplayMedia = vi.fn(async (constraints: any) => {
       calls.push(constraints);
       return { stream: true, constraints };
     });
@@ -48,7 +48,7 @@ describe("withPatchedGetDisplayMedia", () => {
 
   it("defaults to audio=false on Safari when audio is not explicitly requested", async () => {
     const calls: any[] = [];
-    const getDisplayMedia = mock(async (constraints: any) => {
+    const getDisplayMedia = vi.fn(async (constraints: any) => {
       calls.push(constraints);
       return { stream: true, constraints };
     });
@@ -74,7 +74,7 @@ describe("withPatchedGetDisplayMedia", () => {
 
   it("honors explicit withAudio=false even on Chrome-like browsers", async () => {
     const calls: any[] = [];
-    const getDisplayMedia = mock(async (constraints: any) => {
+    const getDisplayMedia = vi.fn(async (constraints: any) => {
       calls.push(constraints);
       return { stream: true, constraints };
     });
@@ -103,7 +103,7 @@ describe("withPatchedGetDisplayMedia", () => {
 
   it("retries without audio when audio=true fails", async () => {
     const calls: any[] = [];
-    const getDisplayMedia = mock(async (constraints: any) => {
+    const getDisplayMedia = vi.fn(async (constraints: any) => {
       calls.push(constraints);
       if (constraints?.audio === true) {
         const err = new Error("Could not start with audio");
@@ -138,7 +138,7 @@ describe("withPatchedGetDisplayMedia", () => {
 
   it.each(["AbortError", "NotAllowedError"])("does not retry when the user cancels with %s", async (errorName) => {
     const calls: any[] = [];
-    const getDisplayMedia = mock(async (constraints: any) => {
+    const getDisplayMedia = vi.fn(async (constraints: any) => {
       calls.push(constraints);
       const err = new Error("User cancelled");
       (err as any).name = errorName;
@@ -171,7 +171,7 @@ describe("withPatchedGetDisplayMedia", () => {
 
   it("retries with video-only when constraints are overconstrained", async () => {
     const calls: any[] = [];
-    const getDisplayMedia = mock(async (constraints: any) => {
+    const getDisplayMedia = vi.fn(async (constraints: any) => {
       calls.push(constraints);
       const err = new Error("Overconstrained");
       (err as any).name = "OverconstrainedError";
@@ -204,7 +204,7 @@ describe("withPatchedGetDisplayMedia", () => {
   });
 
   it("restores the original getDisplayMedia after run()", async () => {
-    const getDisplayMedia = mock(async () => ({ ok: true }));
+    const getDisplayMedia = vi.fn(async () => ({ ok: true }));
     const md = { getDisplayMedia };
     setNavigator({
       userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",

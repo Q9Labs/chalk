@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "bun:test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 const createdSessions: Array<Record<string, unknown>> = [];
-const mockChalkSession = vi.fn().mockImplementation(() => {
+const mockChalkSession = vi.fn(function () {
   const session = {
     on: vi.fn(() => () => {}),
     configureIncident: vi.fn(),

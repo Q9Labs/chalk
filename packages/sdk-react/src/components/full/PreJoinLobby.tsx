@@ -210,6 +210,7 @@ function PreJoinLobbyBase({
     }),
     [
       settings.experience.autoOpenPictureInPicture,
+      settings.appearance.profileGradient,
       roomName,
       ui.displayName,
       pictureInPictureSource,
@@ -330,8 +331,8 @@ function PreJoinLobbyBase({
 
         <PreJoinHeader roomName={roomName} isDarkMode={isDarkMode} onToggleTheme={handleToggleTheme} />
 
-        <div className="flex-1 w-full max-w-6xl mx-auto flex items-center px-6 pb-12">
-          <div className="grid w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-10 items-center">
+        <div className="flex-1 w-full max-w-6xl mx-auto flex items-center px-6 lg:px-8 pb-16">
+          <div className="grid w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-12 lg:gap-16 items-center">
             <PreJoinPreviewPane
               videoRef={videoRef}
               displayName={ui.displayName}

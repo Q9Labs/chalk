@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { VIDEO_BACKGROUND_PRESETS, toRuntimeVideoBackgroundEffect } from "../../utils/videoBackgrounds";
 
 describe("videoBackgrounds", () => {

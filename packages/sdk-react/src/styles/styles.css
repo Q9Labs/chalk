@@ -241,9 +241,13 @@
   vertical-align: middle;
 }
 
-:where([data-chalk], .chalk-root) :where(img, video) {
+:where([data-chalk], .chalk-root) :where(img) {
   max-width: 100%;
   height: auto;
+}
+
+:where([data-chalk], .chalk-root) :where(video) {
+  max-width: 100%;
 }
 
 /* =============================================================================

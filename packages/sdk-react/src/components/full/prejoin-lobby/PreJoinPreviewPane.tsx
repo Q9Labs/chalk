@@ -22,34 +22,35 @@ export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAu
 
   return (
     <div className="w-full relative" style={{ "--primary": participantColors.primary } as React.CSSProperties}>
+      <div className="absolute -inset-2 rounded-[2rem] opacity-40 blur-2xl" style={{ background: participantGradient }} />
       <div className="absolute -inset-1 rounded-3xl opacity-30 blur-xl" style={{ background: participantGradient }} />
-      <div className="absolute -inset-0.5 rounded-2xl opacity-20 blur-md" style={{ background: participantGradient }} />
 
       <div
-        className="relative w-full aspect-video rounded-2xl overflow-hidden bg-[var(--chalk-bg-tile)]"
+        className="relative w-full aspect-video rounded-3xl overflow-hidden bg-[var(--chalk-bg-tile)]"
         style={{
           backgroundImage: participantGradient,
-          boxShadow: "var(--chalk-shadow-lg), inset 0 1px 0 rgba(255,255,255,0.1)",
+          boxShadow: "var(--chalk-shadow-xl), inset 0 1px 0 rgba(255,255,255,0.15)",
         }}
       >
         <video ref={videoRef} autoPlay playsInline muted className={cn("absolute inset-0 w-full h-full object-cover pointer-events-none", isVideoEnabled ? "opacity-100" : "opacity-0")} style={{ transform: "scaleX(-1)" }} />
 
-        <div className="absolute top-4 left-4 z-20">
+        <div className="absolute top-5 left-5 z-20">
           <div
-            className="flex items-center gap-3 px-3 py-2 rounded-full border bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[16px] dark:backdrop-blur-xl shadow-sm"
+            className="flex items-center gap-3 px-4 py-2.5 rounded-full border bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[20px] shadow-lg"
           >
-            <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors", isAudioEnabled ? "bg-primary shadow-[0_0_8px_var(--primary)]" : "bg-muted-foreground/40")} />
-            <span className="text-sm font-medium text-foreground">{displayName || "You"}</span>
+            <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all duration-300", isAudioEnabled ? "bg-primary shadow-[0_0_10px_var(--primary)] scale-110" : "bg-muted-foreground/40")} />
+            <span className="text-sm font-semibold text-foreground">{displayName || "You"}</span>
 
             {isAudioEnabled && (
-              <div className="w-16 h-1.5 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--primary)] rounded-full"
-                  style={{
-                    width: `${normalizedAudioLevel}%`,
-                    transition: "width 50ms ease-out",
-                  }}
-                />
+              <div className="flex items-center gap-1">
+                <div className="w-16 h-2 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[var(--primary)] rounded-full transition-all duration-75 ease-out"
+                    style={{
+                      width: `${normalizedAudioLevel}%`,
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>

@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { attachRoomToManagersAndBridgeState } from "../session/chalk-session-bridges";
 import { createDefaultMediaState, createSessionStateApis } from "../session/chalk-session-state";
 
@@ -11,7 +11,7 @@ describe("attachRoomToManagersAndBridgeState", () => {
     };
 
     const runtime = {
-      runPromise: mock(async () => syncedMediaState),
+      runPromise: vi.fn(async () => syncedMediaState),
     } as any;
 
     const room = {
@@ -27,7 +27,7 @@ describe("attachRoomToManagersAndBridgeState", () => {
         audioEnabled: true,
         joinedAt: new Date().toISOString(),
       },
-      on: mock(() => () => {}),
+      on: vi.fn(() => () => {}),
     } as any;
 
     const sessionState = createSessionStateApis({
@@ -35,12 +35,12 @@ describe("attachRoomToManagersAndBridgeState", () => {
       getCurrentRoom: () => room,
     });
 
-    const attachRoom = mock(() => {});
-    const setApiCallbacks = mock(() => {});
+    const attachRoom = vi.fn(() => {});
+    const setApiCallbacks = vi.fn(() => {});
 
     attachRoomToManagersAndBridgeState({
       room,
-      setCurrentRoom: mock(() => {}),
+      setCurrentRoom: vi.fn(() => {}),
       roomApi: sessionState.room,
       participantsApi: sessionState.participants,
       mediaApi: sessionState.media,

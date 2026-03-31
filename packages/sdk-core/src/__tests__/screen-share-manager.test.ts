@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { EventEmitter } from "node:events";
 import { ScreenShareManager } from "../managers/screen-share-manager";
 

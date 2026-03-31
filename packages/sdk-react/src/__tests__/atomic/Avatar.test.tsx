@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { Avatar } from "../../components/atomic/Avatar";
 

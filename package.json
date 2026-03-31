@@ -10,19 +10,19 @@
   "type": "module",
   "scripts": {
     "build": "turbo build",
-    "dev": "bash -lc 'trap \"kill 0\" EXIT; bun run dev:mobile & turbo dev'",
+    "dev": "bash -lc 'trap \"kill 0\" EXIT; pnpm run dev:mobile & turbo dev'",
     "mobile:connect": "bash .codex/skills/chalk-mobile-wireless-debug/scripts/connect-wireless-adb.sh",
     "mobile:launch": "bash .codex/skills/chalk-mobile-wireless-debug/scripts/launch-chalk-mobile-dev.sh",
     "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
-    "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL or run bun run mobile:connect.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",
-    "mobile:sync-local-env": "bun run scripts/sync-local-mobile-env.ts",
-    "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; bun run --cwd apps/mobile start'",
-    "dev:mobile:android": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; bun run --cwd apps/mobile android'",
-    "dev:mobile:ios": "bun run --cwd apps/mobile ios",
-    "postinstall": "bash -lc 'if [ -f scripts/patch-realtimekit-react-native.ts ]; then bun run scripts/patch-realtimekit-react-native.ts; else echo \"[patch-realtimekit-react-native] skipped: script not present\"; fi'",
+    "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL or run pnpm run mobile:connect.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",
+    "mobile:sync-local-env": "pnpm exec tsx scripts/sync-local-mobile-env.ts",
+    "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run start'",
+    "dev:mobile:android": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run android'",
+    "dev:mobile:ios": "pnpm --dir apps/mobile run ios",
+    "postinstall": "bash -lc 'if [ -f scripts/patch-realtimekit-react-native.ts ]; then pnpm exec tsx scripts/patch-realtimekit-react-native.ts; else echo \"[patch-realtimekit-react-native] skipped: script not present\"; fi'",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "dev:web:pages": "bun run --cwd apps/web dev:pages",
+    "dev:web:pages": "pnpm --dir apps/web run dev:pages",
     "test": "turbo test",
     "lint": "turbo lint",
     "check-types": "turbo check-types",
@@ -37,15 +37,18 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.17.1",
-    "@types/bun": "latest",
     "oxfmt": "^0.36.0",
     "turbo": "^2.7.2",
     "typescript": "^5.7.2",
     "wrangler": "^4.77.0",
-    "yaml": "^2.8.2"
+    "yaml": "^2.8.2",
+    "@types/node": "^24.10.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "vitest": "^4.0.16"
   },
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "bun@1.1.42"
+  "packageManager": "pnpm@10.26.2"
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { canUseLocalHostBootstrap, createStorageScopeId, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl } from "./mobile-runtime";
 
 describe("mobile runtime helpers", () => {

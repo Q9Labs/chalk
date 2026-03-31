@@ -15,7 +15,7 @@ const verifyScriptPath = join(scriptDir, "verify-production-mobile-host-key.ts")
 const command = process.argv.slice(2);
 
 if (command.length === 0) {
-  throw new Error("Usage: bun run ./scripts/run-with-production-mobile-env.ts -- <command> [args...]");
+  throw new Error("Usage: pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- <command> [args...]");
 }
 
 if (!process.env.EXPO_PUBLIC_CHALK_API_KEY?.trim()) {
@@ -31,7 +31,7 @@ try {
     renameSync(localEnvPath, backupEnvPath);
   }
 
-  const verifyResult = spawnSync("bun", [verifyScriptPath], {
+  const verifyResult = spawnSync("pnpm", ["exec", "tsx", verifyScriptPath], {
     cwd: mobileDir,
     stdio: "inherit",
     env: {

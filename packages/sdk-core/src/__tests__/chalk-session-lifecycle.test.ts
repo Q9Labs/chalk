@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { ChalkSession } from "../session/chalk-session";
 import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
 

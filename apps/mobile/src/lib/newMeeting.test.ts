@@ -1,13 +1,13 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHostedMeeting } from "./newMeeting";
 
 describe("createHostedMeeting", () => {
   afterEach(() => {
-    mock.restore();
+    vi.restoreAllMocks();
   });
 
   it("creates a real room with a host token", async () => {
-    const fetchMock = mock(async () => ({
+    const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({
         id: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
@@ -39,7 +39,7 @@ describe("createHostedMeeting", () => {
   });
 
   it("surfaces backend create failures", async () => {
-    const fetchMock = mock(async () => ({
+    const fetchMock = vi.fn(async () => ({
       ok: false,
       status: 500,
       json: async () => ({ error: "failed to create room" }),

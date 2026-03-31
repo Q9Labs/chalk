@@ -3,7 +3,7 @@
  * @module @q9labs/chalk-core/__tests__/client
  */
 
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Effect } from "effect";
 import { ConferenceClient } from "../client.ts";
 import { TimeoutError } from "../effect/errors.ts";
@@ -16,7 +16,7 @@ describe("ConferenceClient", () => {
     const encode = (value: Record<string, unknown>) => Buffer.from(JSON.stringify(value)).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
     return `${encode(header)}.${encode(payload)}.signature`;
   };
-  const createMockEmitter = () => ({ on: mock(() => () => {}) });
+  const createMockEmitter = () => ({ on: vi.fn(() => () => {}) });
   const createMockRtkClient = () => {
     const self = createMockEmitter() as any;
     self.videoEnabled = false;
@@ -27,7 +27,7 @@ describe("ConferenceClient", () => {
       self,
       participants: {
         joined: createMockEmitter(),
-        on: mock(() => () => {}),
+        on: vi.fn(() => () => {}),
       },
     };
   };
@@ -408,8 +408,8 @@ describe("ConferenceClient", () => {
 
   describe("realtimekit preload", () => {
     it("uses a custom RTK loader when provided", async () => {
-      const init = mock(async () => createMockRtkClient() as any);
-      const customLoader = mock(async () => ({ init }));
+      const init = vi.fn(async () => createMockRtkClient() as any);
+      const customLoader = vi.fn(async () => ({ init }));
       const client = new ConferenceClient({
         apiUrl: DEFAULT_API_URL,
         wsUrl: "",
@@ -432,8 +432,8 @@ describe("ConferenceClient", () => {
         wsUrl: "",
         token: "chalk_access_token",
       });
-      const init = mock(async () => createMockRtkClient() as any);
-      const importRealtimeKitClient = mock(async () => ({ init }));
+      const init = vi.fn(async () => createMockRtkClient() as any);
+      const importRealtimeKitClient = vi.fn(async () => ({ init }));
       (client as any)._importRealtimeKitClient = importRealtimeKitClient;
 
       const preloaded = await client.preloadRealtimeKit();
@@ -458,9 +458,9 @@ describe("ConferenceClient", () => {
         wsUrl: "",
         token: "chalk_access_token",
       });
-      const init = mock(async () => createMockRtkClient() as any);
+      const init = vi.fn(async () => createMockRtkClient() as any);
       let shouldFailFirstImport = true;
-      const importRealtimeKitClient = mock(async () => {
+      const importRealtimeKitClient = vi.fn(async () => {
         if (shouldFailFirstImport) {
           shouldFailFirstImport = false;
           throw new Error("chunk load failed");
@@ -481,7 +481,7 @@ describe("ConferenceClient", () => {
 
   describe("room joining resilience", () => {
     it("does not replace rtcToken with tokenProvider output when rtc token looks expired", async () => {
-      const tokenProvider = mock(async () => "api_access_jwt_from_provider");
+      const tokenProvider = vi.fn(async () => "api_access_jwt_from_provider");
       const client = new ConferenceClient({
         apiUrl: DEFAULT_API_URL,
         wsUrl: "",
@@ -492,7 +492,7 @@ describe("ConferenceClient", () => {
         scope: "rtk",
       });
       (client as any).apiClient = {
-        addParticipant: mock(async () => ({
+        addParticipant: vi.fn(async () => ({
           success: true,
           data: {
             participantId: "p_1",
@@ -511,14 +511,14 @@ describe("ConferenceClient", () => {
             },
           },
         })),
-        setToken: mock(() => {}),
+        setToken: vi.fn(() => {}),
       };
       let usedAuthToken = "";
       (client as any)._initRealtimeKitEffect = (authToken: string) => {
         usedAuthToken = authToken;
         return Effect.succeed(createMockRtkClient() as any);
       };
-      (client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+      (client as any)._joinRealtimeKitWithRetry = vi.fn(async () => {});
 
       await client.joinSession("room_1", { displayName: "Alice" });
 
@@ -533,7 +533,7 @@ describe("ConferenceClient", () => {
         token: "chalk_access_token",
       });
       (client as any).apiClient = {
-        addParticipant: mock(async () => ({
+        addParticipant: vi.fn(async () => ({
           success: true,
           data: {
             participantId: "p_1",
@@ -551,7 +551,7 @@ describe("ConferenceClient", () => {
             },
           },
         })),
-        setToken: mock(() => {}),
+        setToken: vi.fn(() => {}),
       };
 
       await expect(client.joinSession("room_1", { displayName: "Alice" })).rejects.toThrow("RealtimeKit token missing - API did not return rtcToken");
@@ -578,7 +578,7 @@ describe("ConferenceClient", () => {
         },
       });
       (client as any).apiClient = {
-        addParticipant: mock(
+        addParticipant: vi.fn(
           () =>
             new Promise((resolve) => {
               setTimeout(() => {
@@ -607,10 +607,10 @@ describe("ConferenceClient", () => {
               }, 25);
             }),
         ),
-        setToken: mock(() => {}),
+        setToken: vi.fn(() => {}),
       };
       (client as any)._initRealtimeKitEffect = () => Effect.succeed(createMockRtkClient() as any);
-      (client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+      (client as any)._joinRealtimeKitWithRetry = vi.fn(async () => {});
 
       await client.joinSession("room_1", { displayName: "Alice" });
 
@@ -625,9 +625,9 @@ describe("ConferenceClient", () => {
         apiUrl: DEFAULT_API_URL,
         token: "chalk_access_token",
       });
-      const join = mock(async () => {});
+      const join = vi.fn(async () => {});
       const timeoutSamples: number[] = [];
-      (client as any)._joinRealtimeKitEffect = mock((_joinPromise: Promise<void>, timeoutMs: number) => {
+      (client as any)._joinRealtimeKitEffect = vi.fn((_joinPromise: Promise<void>, timeoutMs: number) => {
         timeoutSamples.push(timeoutMs);
         return Effect.fail(new Error("join attempt failed"));
       });
@@ -656,9 +656,9 @@ describe("ConferenceClient", () => {
         apiUrl: DEFAULT_API_URL,
         token: "chalk_access_token",
       });
-      const join = mock(async () => {});
+      const join = vi.fn(async () => {});
       const timeoutSamples: number[] = [];
-      (client as any)._joinRealtimeKitEffect = mock((_joinPromise: Promise<void>, timeoutMs: number) => {
+      (client as any)._joinRealtimeKitEffect = vi.fn((_joinPromise: Promise<void>, timeoutMs: number) => {
         timeoutSamples.push(timeoutMs);
         return Effect.fail(new Error("join attempt failed"));
       });
@@ -703,7 +703,7 @@ describe("ConferenceClient", () => {
         },
       });
       (client as any).apiClient = {
-        addParticipant: mock(async () => ({
+        addParticipant: vi.fn(async () => ({
           success: true,
           data: {
             participantId: "p_1",
@@ -725,10 +725,10 @@ describe("ConferenceClient", () => {
             },
           },
         })),
-        setToken: mock(() => {}),
+        setToken: vi.fn(() => {}),
       };
       (client as any)._initRealtimeKitEffect = () => Effect.succeed(createMockRtkClient() as any);
-      (client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+      (client as any)._joinRealtimeKitWithRetry = vi.fn(async () => {});
 
       await withBrowserNetworkEnv({ effectiveType: "2g", saveData: true }, async () => {
         await client.joinSession("room_1", { displayName: "Alice" });
@@ -754,8 +754,8 @@ describe("ConferenceClient", () => {
         apiUrl: DEFAULT_API_URL,
         token: "chalk_access_token",
       });
-      const join = mock(async () => {});
-      const joinEffect = mock(() => {
+      const join = vi.fn(async () => {});
+      const joinEffect = vi.fn(() => {
         if (joinEffect.mock.calls.length < 3) {
           return Effect.fail(
             new TimeoutError({
@@ -805,7 +805,7 @@ describe("ConferenceClient", () => {
         },
       });
 
-      const join = mock(async () => {});
+      const join = vi.fn(async () => {});
       const timeoutError = new TimeoutError({
         message: "ConferenceSession join timed out after 1000ms",
         operation: "joinRTKRoom",
@@ -813,7 +813,7 @@ describe("ConferenceClient", () => {
       });
 
       let attemptCount = 0;
-      (client as any)._joinRealtimeKitEffect = mock(() => {
+      (client as any)._joinRealtimeKitEffect = vi.fn(() => {
         attemptCount += 1;
         if (attemptCount < 3) {
           return Effect.fail(timeoutError);
@@ -854,8 +854,8 @@ describe("ConferenceClient", () => {
         apiUrl: DEFAULT_API_URL,
         token: "chalk_access_token",
       });
-      const join = mock(async () => {});
-      const joinEffect = mock(
+      const join = vi.fn(async () => {});
+      const joinEffect = vi.fn(
         () =>
           Effect.fail(
             new TimeoutError({
@@ -888,7 +888,7 @@ describe("ConferenceClient", () => {
         apiUrl: DEFAULT_API_URL,
         token: "chalk_access_token",
       });
-      const join = mock(
+      const join = vi.fn(
         () =>
           new Promise<void>(() => {
             // Keep unresolved to simulate an in-flight join.
@@ -899,7 +899,7 @@ describe("ConferenceClient", () => {
         operation: "joinRTKRoom",
         timeoutMs: 30000,
       });
-      (client as any)._joinRealtimeKitEffect = mock(() => Effect.fail(timeoutError));
+      (client as any)._joinRealtimeKitEffect = vi.fn(() => Effect.fail(timeoutError));
 
       const originalSetTimeout = globalThis.setTimeout;
       globalThis.setTimeout = ((handler: TimerHandler) => {
@@ -944,9 +944,9 @@ describe("ConferenceClient", () => {
 
     it("starts replay and captures joined event on successful join", async () => {
       const posthog = {
-        startSessionRecording: mock(() => {}),
-        stopSessionRecording: mock(() => {}),
-        capture: mock(() => {}),
+        startSessionRecording: vi.fn(() => {}),
+        stopSessionRecording: vi.fn(() => {}),
+        capture: vi.fn(() => {}),
       };
       const client = new ConferenceClient({
         apiUrl: DEFAULT_API_URL,
@@ -955,11 +955,11 @@ describe("ConferenceClient", () => {
         posthog: { client: posthog },
       });
       (client as any).apiClient = {
-        addParticipant: mock(async () => buildJoinSuccessResponse()),
-        setToken: mock(() => {}),
+        addParticipant: vi.fn(async () => buildJoinSuccessResponse()),
+        setToken: vi.fn(() => {}),
       };
       (client as any)._initRealtimeKitEffect = () => Effect.succeed(createMockRtkClient() as any);
-      (client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+      (client as any)._joinRealtimeKitWithRetry = vi.fn(async () => {});
 
       await client.joinSession("room_1", { displayName: "Alice" });
 
@@ -978,9 +978,9 @@ describe("ConferenceClient", () => {
 
     it("stops replay and captures left event on disconnect", async () => {
       const posthog = {
-        startSessionRecording: mock(() => {}),
-        stopSessionRecording: mock(() => {}),
-        capture: mock(() => {}),
+        startSessionRecording: vi.fn(() => {}),
+        stopSessionRecording: vi.fn(() => {}),
+        capture: vi.fn(() => {}),
       };
       const client = new ConferenceClient({
         apiUrl: DEFAULT_API_URL,
@@ -989,11 +989,11 @@ describe("ConferenceClient", () => {
         posthog: { client: posthog },
       });
       (client as any).apiClient = {
-        addParticipant: mock(async () => buildJoinSuccessResponse()),
-        setToken: mock(() => {}),
+        addParticipant: vi.fn(async () => buildJoinSuccessResponse()),
+        setToken: vi.fn(() => {}),
       };
       (client as any)._initRealtimeKitEffect = () => Effect.succeed(createMockRtkClient() as any);
-      (client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+      (client as any)._joinRealtimeKitWithRetry = vi.fn(async () => {});
 
       await client.joinSession("room_1", { displayName: "Alice" });
       client.disconnect();
@@ -1012,9 +1012,9 @@ describe("ConferenceClient", () => {
 
     it("captures join failures for replay triage", async () => {
       const posthog = {
-        startSessionRecording: mock(() => {}),
-        stopSessionRecording: mock(() => {}),
-        capture: mock(() => {}),
+        startSessionRecording: vi.fn(() => {}),
+        stopSessionRecording: vi.fn(() => {}),
+        capture: vi.fn(() => {}),
       };
       const client = new ConferenceClient({
         apiUrl: DEFAULT_API_URL,
@@ -1023,11 +1023,11 @@ describe("ConferenceClient", () => {
         posthog: { client: posthog },
       });
       (client as any).apiClient = {
-        addParticipant: mock(async () => ({
+        addParticipant: vi.fn(async () => ({
           success: false,
           error: { message: "join api failed" },
         })),
-        setToken: mock(() => {}),
+        setToken: vi.fn(() => {}),
       };
 
       await expect(client.joinSession("room_1", { displayName: "Alice" })).rejects.toThrow("join api failed");
@@ -1046,13 +1046,13 @@ describe("ConferenceClient", () => {
 
     it("does not fail join/leave when posthog methods throw", async () => {
       const posthog = {
-        startSessionRecording: mock(() => {
+        startSessionRecording: vi.fn(() => {
           throw new Error("posthog start failed");
         }),
-        stopSessionRecording: mock(() => {
+        stopSessionRecording: vi.fn(() => {
           throw new Error("posthog stop failed");
         }),
-        capture: mock(() => {
+        capture: vi.fn(() => {
           throw new Error("posthog capture failed");
         }),
       };
@@ -1063,11 +1063,11 @@ describe("ConferenceClient", () => {
         posthog: { client: posthog },
       });
       (client as any).apiClient = {
-        addParticipant: mock(async () => buildJoinSuccessResponse()),
-        setToken: mock(() => {}),
+        addParticipant: vi.fn(async () => buildJoinSuccessResponse()),
+        setToken: vi.fn(() => {}),
       };
       (client as any)._initRealtimeKitEffect = () => Effect.succeed(createMockRtkClient() as any);
-      (client as any)._joinRealtimeKitWithRetry = mock(async () => {});
+      (client as any)._joinRealtimeKitWithRetry = vi.fn(async () => {});
 
       await expect(client.joinSession("room_1", { displayName: "Alice" })).resolves.toBeDefined();
       expect(() => client.disconnect()).not.toThrow();

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 
 import { PictureInPictureWindow } from "../../components/full/picture-in-picture/PictureInPictureWindow";

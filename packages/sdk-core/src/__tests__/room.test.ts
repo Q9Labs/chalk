@@ -3,7 +3,7 @@
  * @module @q9labs/chalk-core/__tests__/room
  */
 
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConferenceSession } from "../room.ts";
 import type { Participant, SessionInfo } from "../types.ts";
 import type { WSClient } from "../ws-client.ts";
@@ -35,12 +35,12 @@ const createMockWSClient = (): Partial<WSClient> => {
         list.forEach((handler) => handler(data));
       }
     },
-    connect: mock(() => {}),
-    disconnect: mock(() => {}),
-    sendChatMessage: mock(() => {}),
-    sendReaction: mock(() => {}),
-    raiseHand: mock(() => {}),
-    lowerHand: mock(() => {}),
+    connect: vi.fn(() => {}),
+    disconnect: vi.fn(() => {}),
+    sendChatMessage: vi.fn(() => {}),
+    sendReaction: vi.fn(() => {}),
+    raiseHand: vi.fn(() => {}),
+    lowerHand: vi.fn(() => {}),
     getHandlers: () => handlers,
   };
 };

@@ -1,6 +1,6 @@
 import type { LayoutMode, ParticipantState } from "@q9labs/chalk-core";
 import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
-import { ComputerScreenShareIcon, MicOff01Icon, Presentation01Icon, RecordIcon, UserGroupIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
+import { ComputerScreenShareIcon, MicOff01Icon, Presentation01Icon, RecordIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useMemo } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
@@ -177,10 +177,6 @@ export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryConte
 
       {stripParticipants.length > 0 ? (
         <View style={[styles.stripShell, verticalStrip ? styles.stripShellVertical : styles.stripShellHorizontal]}>
-          <View style={styles.stripHeader}>
-            <HugeiconsIcon color={Theme.colors.primary} icon={UserGroupIcon} size={16} />
-            <Text style={styles.stripTitle}>Participants</Text>
-          </View>
           <NativeParticipantStrip participants={stripParticipants} vertical={verticalStrip} />
         </View>
       ) : null}
@@ -247,22 +243,22 @@ const styles = StyleSheet.create({
   },
   infoChip: {
     position: "absolute",
-    top: Theme.spacing.md,
+    top: Theme.spacing.sm,
     flexDirection: "row",
     alignItems: "center",
-    gap: Theme.spacing.sm,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: Theme.radius.full,
     backgroundColor: "rgba(12,17,27,0.78)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.06)",
   },
   infoChipLeft: {
-    left: Theme.spacing.md,
+    left: Theme.spacing.sm,
   },
   infoChipRight: {
-    right: Theme.spacing.md,
+    right: Theme.spacing.sm,
   },
   infoChipText: {
     color: Theme.colors.foreground,
@@ -280,11 +276,13 @@ const styles = StyleSheet.create({
   reactionBubble: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Theme.spacing.sm,
+    gap: 6,
     borderRadius: Theme.radius.full,
     backgroundColor: "rgba(12,17,27,0.78)",
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
   reactionEmoji: {
     fontSize: 16,
@@ -297,44 +295,46 @@ const styles = StyleSheet.create({
   },
   selfPill: {
     position: "absolute",
-    left: Theme.spacing.md,
-    bottom: Theme.spacing.md,
+    left: Theme.spacing.sm,
+    bottom: Theme.spacing.sm,
     flexDirection: "row",
     alignItems: "center",
-    gap: Theme.spacing.sm,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(12,17,27,0.82)",
+    backgroundColor: "rgba(12,17,27,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
   selfAvatar: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     borderRadius: Theme.radius.full,
     alignItems: "center",
     justifyContent: "center",
   },
   selfAvatarText: {
     color: Theme.colors.primaryForeground,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
   },
   selfPillName: {
     color: Theme.colors.foreground,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   selfIndicator: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     borderRadius: Theme.radius.full,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(245, 158, 11, 0.88)",
   },
   selfIndicatorMuted: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     borderRadius: Theme.radius.full,
     alignItems: "center",
     justifyContent: "center",
@@ -348,42 +348,33 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   stripShellHorizontal: {
-    height: 146,
+    height: 100,
   },
   stripShellVertical: {
-    width: 148,
-  },
-  stripHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Theme.spacing.sm,
-    paddingHorizontal: Theme.spacing.md,
-    paddingTop: Theme.spacing.md,
-  },
-  stripTitle: {
-    color: Theme.colors.foreground,
-    fontSize: 13,
-    fontWeight: "700",
+    width: 120,
   },
   stripContent: {
-    gap: Theme.spacing.sm,
-    padding: Theme.spacing.md,
+    gap: Theme.spacing.xs,
+    padding: Theme.spacing.sm,
   },
   stripHorizontal: {
     flexDirection: "row",
+    alignItems: "center",
   },
   stripVertical: {
     flexDirection: "column",
+    alignItems: "center",
   },
   stripTile: {
     overflow: "hidden",
+    borderRadius: Theme.radius.md,
   },
   stripTileHorizontal: {
-    width: 168,
-    height: 92,
+    width: 120,
+    height: 68,
   },
   stripTileVertical: {
     width: "100%",
-    height: 92,
+    height: 68,
   },
 });

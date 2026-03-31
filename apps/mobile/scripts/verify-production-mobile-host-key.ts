@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
+
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 
 function getFingerprint(value: string): string {
-  return Bun.hash(value).toString(16).slice(0, 12);
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }
 
 async function main(): Promise<void> {

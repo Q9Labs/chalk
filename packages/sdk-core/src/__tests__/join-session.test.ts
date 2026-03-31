@@ -1,12 +1,12 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { joinConferenceSession } from "../conference-client/join-session.ts";
 
 describe("joinConferenceSession", () => {
   it("switches API auth onto the joined session token provider", async () => {
-    const setToken = mock(() => {});
-    const setTokenProvider = mock(() => {});
+    const setToken = vi.fn(() => {});
+    const setTokenProvider = vi.fn(() => {});
     const apiClient = {
-      addParticipant: mock(async () => ({
+      addParticipant: vi.fn(async () => ({
         success: true,
         data: {
           participantId: "p_1",
@@ -58,8 +58,8 @@ describe("joinConferenceSession", () => {
         debug: false,
         isTokenExpired: () => false,
         emitTokenExpired: () => {},
-        initRealtimeKitClient: mock(async () => rtkClient as any),
-        joinRealtimeKitWithRetry: mock(async () => {}),
+        initRealtimeKitClient: vi.fn(async () => rtkClient as any),
+        joinRealtimeKitWithRetry: vi.fn(async () => {}),
       },
     );
 

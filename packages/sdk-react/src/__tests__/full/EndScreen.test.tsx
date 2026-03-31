@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "bun:test";
+import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EndScreen } from "../../components/full/EndScreen";

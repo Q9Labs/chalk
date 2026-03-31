@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { canExecuteNativeJoin, canStartNativeJoin, shouldPromoteAfterJoinError } from "./native-join-guard";
 
 describe("canStartNativeJoin", () => {

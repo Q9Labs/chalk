@@ -1,5 +1,7 @@
+import { MediaStream, type MediaStreamTrack as NativeMediaStreamTrack, RTCView } from "@cloudflare/react-native-webrtc";
+import { MicOff01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import type { Participant } from "@q9labs/chalk-core";
-import { MediaStream, RTCView, type MediaStreamTrack as NativeMediaStreamTrack } from "@cloudflare/react-native-webrtc";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Theme } from "../ui/theme";
@@ -45,6 +47,7 @@ export function NativeMediaView({ participant, track, label, mirror = false, obj
         </View>
         {isMuted ? (
           <View style={[styles.badge, styles.mutedBadge]}>
+            <HugeiconsIcon icon={MicOff01Icon} size={12} color="#ffffff" />
             <Text style={styles.badgeText}>Muted</Text>
           </View>
         ) : null}
@@ -68,24 +71,29 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     position: "absolute",
-    left: Theme.spacing.md,
-    right: Theme.spacing.md,
-    bottom: Theme.spacing.md,
+    left: Theme.spacing.sm,
+    right: Theme.spacing.sm,
+    bottom: Theme.spacing.sm,
     flexDirection: "row",
-    gap: Theme.spacing.sm,
+    gap: 4,
   },
   badge: {
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.68)",
+    backgroundColor: "rgba(0,0,0,0.58)",
   },
   mutedBadge: {
-    backgroundColor: "rgba(239, 68, 68, 0.88)",
+    backgroundColor: "rgba(239, 68, 68, 0.85)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   badgeText: {
-    color: Theme.colors.foreground,
-    fontSize: 12,
+    color: "#ffffff",
+    fontSize: 11,
     fontWeight: "700",
   },
 });

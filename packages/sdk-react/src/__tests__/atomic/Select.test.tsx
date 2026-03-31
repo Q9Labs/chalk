@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "bun:test";
+import { describe, it, expect, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
 import { Select } from "../../components/atomic/Select";
 

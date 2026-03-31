@@ -1,6 +1,6 @@
 // @ts-ignore
 import { JSDOM } from "jsdom";
-import { afterEach, expect, vi } from "bun:test";
+import { afterEach, expect, vi } from "vitest";
 // @ts-ignore
 import * as matchers from "@testing-library/jest-dom/matchers";
 // @ts-ignore
@@ -13,38 +13,54 @@ expect.extend(matchers);
 const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
   url: "http://localhost",
 });
-// @ts-ignore
-globalThis.window = dom.window;
-// @ts-ignore
-globalThis.document = dom.window.document;
-// @ts-ignore
-globalThis.navigator = dom.window.navigator;
-// @ts-ignore
-globalThis.HTMLElement = dom.window.HTMLElement;
-// @ts-ignore
-globalThis.Element = dom.window.Element;
-// @ts-ignore
-globalThis.Node = dom.window.Node;
-// @ts-ignore
-globalThis.Event = dom.window.Event;
-// @ts-ignore
-globalThis.CustomEvent = dom.window.CustomEvent;
-// @ts-ignore
-globalThis.MouseEvent = dom.window.MouseEvent;
-// @ts-ignore
-globalThis.KeyboardEvent = dom.window.KeyboardEvent;
-// @ts-ignore
-globalThis.FocusEvent = dom.window.FocusEvent;
-// @ts-ignore
-globalThis.Audio = dom.window.Audio;
-// @ts-ignore
-globalThis.HTMLMediaElement = dom.window.HTMLMediaElement;
-// @ts-ignore
-globalThis.HTMLInputElement = dom.window.HTMLInputElement;
-// @ts-ignore
-globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
-// @ts-ignore
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
+
+const assignGlobal = (key: PropertyKey, value: unknown) => {
+  Object.defineProperty(globalThis, key, {
+    value,
+    configurable: true,
+    writable: true,
+  });
+};
+
+assignGlobal("window", dom.window);
+assignGlobal("document", dom.window.document);
+assignGlobal("navigator", dom.window.navigator);
+assignGlobal("HTMLElement", dom.window.HTMLElement);
+assignGlobal("Element", dom.window.Element);
+assignGlobal("Node", dom.window.Node);
+assignGlobal("Event", dom.window.Event);
+assignGlobal("CustomEvent", dom.window.CustomEvent);
+assignGlobal("MouseEvent", dom.window.MouseEvent);
+assignGlobal("PointerEvent", dom.window.PointerEvent ?? dom.window.MouseEvent);
+assignGlobal("KeyboardEvent", dom.window.KeyboardEvent);
+assignGlobal("FocusEvent", dom.window.FocusEvent);
+assignGlobal("Audio", dom.window.Audio);
+assignGlobal("HTMLMediaElement", dom.window.HTMLMediaElement);
+assignGlobal("HTMLInputElement", dom.window.HTMLInputElement);
+assignGlobal("HTMLTextAreaElement", dom.window.HTMLTextAreaElement);
+assignGlobal("HTMLSelectElement", dom.window.HTMLSelectElement);
+assignGlobal(
+  "MediaStream",
+  class {
+    #tracks: MediaStreamTrack[];
+
+    constructor(tracks: MediaStreamTrack[] = []) {
+      this.#tracks = tracks;
+    }
+
+    getTracks() {
+      return this.#tracks;
+    }
+
+    getVideoTracks() {
+      return this.#tracks;
+    }
+
+    getAudioTracks() {
+      return [];
+    }
+  },
+);
 
 // Media element shims used across many components
 // @ts-ignore
@@ -198,16 +214,14 @@ const localStorageMock = (() => {
     key: (index: number) => Object.keys(store)[index] || null,
   };
 })();
-// @ts-ignore
-globalThis.localStorage = localStorageMock;
+assignGlobal("localStorage", localStorageMock);
 
 // Mock requestAnimationFrame
-// @ts-ignore
-globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
-// @ts-ignore
-globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+assignGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(callback, 0));
+assignGlobal("cancelAnimationFrame", (id: ReturnType<typeof setTimeout>) => clearTimeout(id));
 
 Object.defineProperty(dom.window, "matchMedia", {
+  configurable: true,
   writable: true,
   value: (query: any) => ({
     matches: false,

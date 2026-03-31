@@ -3,7 +3,7 @@
  * Ensures stable participant IDs (userId/client_specific_id) drive join/leave and active speaker.
  */
 
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConferenceSession } from "../room.ts";
 
 const createMockRtkClient = () => {
@@ -27,11 +27,11 @@ const createMockRtkClient = () => {
   const self = makeEmitter();
   self.audioEnabled = true;
   self.audioTrack = {} as any;
-  self.enableAudio = mock(async () => {
+  self.enableAudio = vi.fn(async () => {
     self.audioEnabled = true;
     self.audioTrack = {} as any;
   });
-  self.disableAudio = mock(async () => {
+  self.disableAudio = vi.fn(async () => {
     self.audioEnabled = false;
     self.audioTrack = null;
   });
@@ -73,8 +73,8 @@ const createMockRtkClient = () => {
   return {
     self,
     participants,
-    join: mock(async () => {}),
-    leave: mock(async () => {}),
+    join: vi.fn(async () => {}),
+    leave: vi.fn(async () => {}),
   };
 };
 
@@ -93,10 +93,10 @@ const createMockWsClient = () => {
       if (!set) return;
       for (const h of set) h(payload);
     },
-    raiseHand: mock(() => {}),
-    lowerHand: mock(() => {}),
-    muteParticipant: mock(() => {}),
-    unmuteParticipant: mock(() => {}),
+    raiseHand: vi.fn(() => {}),
+    lowerHand: vi.fn(() => {}),
+    muteParticipant: vi.fn(() => {}),
+    unmuteParticipant: vi.fn(() => {}),
   };
 };
 
@@ -591,9 +591,9 @@ describe("ConferenceSession (RTK identity mapping)", () => {
       connectionQuality: 100,
     });
 
-    const suspendBackgroundEffect = mock(async () => true);
-    const reapplyBackgroundEffect = mock(async () => true);
-    const hasSelectedBackgroundEffect = mock(() => true);
+    const suspendBackgroundEffect = vi.fn(async () => true);
+    const reapplyBackgroundEffect = vi.fn(async () => true);
+    const hasSelectedBackgroundEffect = vi.fn(() => true);
     (room as any).mediaController.hasSelectedBackgroundEffect = hasSelectedBackgroundEffect;
     (room as any).mediaController.suspendBackgroundEffect = suspendBackgroundEffect;
     (room as any).mediaController.reapplyBackgroundEffect = reapplyBackgroundEffect;
@@ -634,9 +634,9 @@ describe("ConferenceSession (RTK identity mapping)", () => {
       connectionQuality: 100,
     });
 
-    const suspendBackgroundEffect = mock(async () => true);
-    const reapplyBackgroundEffect = mock(async () => true);
-    const hasSelectedBackgroundEffect = mock(() => true);
+    const suspendBackgroundEffect = vi.fn(async () => true);
+    const reapplyBackgroundEffect = vi.fn(async () => true);
+    const hasSelectedBackgroundEffect = vi.fn(() => true);
     (room as any).mediaController.hasSelectedBackgroundEffect = hasSelectedBackgroundEffect;
     (room as any).mediaController.suspendBackgroundEffect = suspendBackgroundEffect;
     (room as any).mediaController.reapplyBackgroundEffect = reapplyBackgroundEffect;

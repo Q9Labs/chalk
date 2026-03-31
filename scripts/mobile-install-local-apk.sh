@@ -111,7 +111,7 @@ if [[ -z "$serial" ]]; then
 fi
 
 if [[ -z "$serial" ]]; then
-  echo "No connected adb device found. Use --connect or bun run mobile:connect first." >&2
+  echo "No connected adb device found. Use --connect or pnpm run mobile:connect first." >&2
   exit 1
 fi
 

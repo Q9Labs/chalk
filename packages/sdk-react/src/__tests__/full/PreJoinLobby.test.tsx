@@ -5,7 +5,13 @@ import { SharedPictureInPictureProvider } from "../../components/full/picture-in
 
 // @ts-ignore
 window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
-global.MediaStream = vi.fn().mockImplementation(() => ({})) as any;
+global.MediaStream = vi.fn(function (tracks: MediaStreamTrack[] = []) {
+  return {
+    getTracks: () => tracks,
+    getVideoTracks: () => tracks,
+    getAudioTracks: () => [],
+  };
+}) as any;
 const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
 const originalDocumentPictureInPicture = window.documentPictureInPicture;
 

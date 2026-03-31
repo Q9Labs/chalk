@@ -6,11 +6,17 @@ on:
     paths:
       - "apps/web/**"
       - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/web.yml"
   pull_request:
     paths:
       - "apps/web/**"
       - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -34,16 +40,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          bun-version: latest
+          version: 9.15.9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
 
       - name: Prune monorepo for web app only
         run: |
-          bunx turbo prune web
+          pnpm exec turbo prune web
           # Copy root config files needed for builds
-          cp tsconfig.json turbo.json out/
+          cp tsconfig.json turbo.json pnpm-workspace.yaml out/
           # Fix workspaces to only include pruned packages
           cd out
           node -e "
@@ -54,11 +66,11 @@ jobs:
           "
 
       - name: Install dependencies (pruned)
-        run: cd out && bun install
+        run: cd out && pnpm install --frozen-lockfile
         timeout-minutes: 3
 
       - name: Build packages
-        run: cd out && bun run build --filter=@q9labs/* 2>&1 | tee packages-build.log
+        run: cd out && pnpm exec turbo run build --filter=@q9labs/* 2>&1 | tee packages-build.log
 
       - name: Check packages build
         run: |
@@ -73,7 +85,7 @@ jobs:
         run: |
           test -n "$VITE_CHALK_API_KEY"
           rm -f out/apps/web/.env.local
-          cd out && bun run build --filter=web 2>&1 | tee build.log
+          cd out && pnpm exec turbo run build --filter=web 2>&1 | tee build.log
         env:
           VITE_API_URL: https://chalk-api.q9labs.ai
           VITE_PUBLIC_APP_URL: https://chalkmeet.com

@@ -1,8 +1,8 @@
 import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
-import { CallEnd01Icon, ComputerScreenShareIcon, Mic01Icon, MicOff01Icon, MoreHorizontalIcon, Video01Icon, VideoOffIcon } from "@hugeicons/core-free-icons";
+import { CallEnd01Icon, Chat01Icon, Mic01Icon, MicOff01Icon, MoreHorizontalIcon, UserGroupIcon, Video01Icon, VideoOffIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { Alert, type AlertButton, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import { useChalkSession, useSession } from "../context/chalk-native-provider";
 import { useChat } from "../hooks/useChat";
 import { useDevices } from "../hooks/useDevices";
@@ -50,7 +50,7 @@ export interface NativeMeetingRoomProps {
 
 export type { NativeMeetingRoomDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
 
-export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: NativeMeetingRoomProps): React.JSX.Element {
+export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnosticsChange }: NativeMeetingRoomProps): React.JSX.Element {
   const session = useSession();
   const { removeParticipant, muteParticipant, unmuteParticipant } = useChalkSession();
   const media = useMedia();
@@ -124,7 +124,7 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
     if (panel === "chat") {
       chat.markAsRead();
     }
-  }, [panel, chat]);
+  }, [panel, chat.markAsRead]);
 
   useEffect(() => {
     if (!onDiagnosticsChange) {
@@ -147,6 +147,23 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
       console.warn("NativeMeetingRoom async action failed:", cause);
     }
   }, []);
+
+  const handleLeave = useCallback(() => {
+    const buttons: AlertButton[] = [
+      { text: "Cancel", style: "cancel" },
+      { text: "Leave", style: "destructive", onPress: () => void runAsync(async () => onLeave()) },
+    ];
+
+    if (isHost && onEndForAll) {
+      buttons.splice(1, 0, {
+        text: "End for All",
+        style: "destructive",
+        onPress: () => void runAsync(async () => onEndForAll()),
+      });
+    }
+
+    Alert.alert("Leave meeting?", "Are you sure you want to leave this meeting?", buttons);
+  }, [isHost, onEndForAll, onLeave, runAsync]);
 
   const openPanel = useCallback(
     (nextPanel: NativeMeetingPanelName) => {
@@ -186,6 +203,19 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
 
   return (
     <View style={styles.roomScreen}>
+      <View style={styles.topBar}>
+        <View style={styles.topBarLeft}>
+          <View style={styles.connectionDot} />
+          <Text style={styles.topBarRoomName} numberOfLines={1}>
+            {room.roomName || "Meeting"}
+          </Text>
+        </View>
+        <View style={styles.topBarRight}>
+          <HugeiconsIcon icon={UserGroupIcon} size={14} color={Theme.colors.mutedForeground} />
+          <Text style={styles.topBarCount}>{participants.participantCount}</Text>
+        </View>
+      </View>
+
       <View style={styles.stageFrame}>
         {derived.isStageMode ? (
           <NativeMeetingStage
@@ -216,27 +246,25 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
 
       <View style={styles.bottomDock}>
         <View style={styles.controlPill}>
-          <Pressable onPress={() => void runAsync(media.toggleAudio)} style={[styles.controlButton, isMuted && styles.controlButtonDanger]}>
-            <HugeiconsIcon color="#ffffff" icon={isMuted ? MicOff01Icon : Mic01Icon} size={24} />
+          <Pressable onPress={() => void runAsync(media.toggleAudio)} style={({ pressed }) => [styles.controlButton, isMuted && styles.controlButtonDanger, pressed && styles.controlButtonPressed]}>
+            <HugeiconsIcon color="#ffffff" icon={isMuted ? MicOff01Icon : Mic01Icon} size={22} />
           </Pressable>
-          <Pressable onPress={() => void runAsync(media.toggleVideo)} style={[styles.controlButton, isCameraOff && styles.controlButtonDanger]}>
-            <HugeiconsIcon color="#ffffff" icon={isCameraOff ? VideoOffIcon : Video01Icon} size={24} />
+          <Pressable onPress={() => void runAsync(media.toggleVideo)} style={({ pressed }) => [styles.controlButton, isCameraOff && styles.controlButtonDanger, pressed && styles.controlButtonPressed]}>
+            <HugeiconsIcon color="#ffffff" icon={isCameraOff ? VideoOffIcon : Video01Icon} size={22} />
           </Pressable>
-          {canScreenShare ? (
-            <Pressable onPress={() => void runAsync(() => screenShare.toggle())} style={[styles.controlButton, screenShare.isLocalSharing && styles.controlButtonActive]}>
-              <HugeiconsIcon color="#ffffff" icon={ComputerScreenShareIcon} size={24} />
-            </Pressable>
-          ) : null}
-          <Pressable onPress={() => setActionsOpen(true)} style={styles.controlButton}>
-            <HugeiconsIcon color="#ffffff" icon={MoreHorizontalIcon} size={24} />
+          <Pressable onPress={() => openPanel("chat")} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
+            <HugeiconsIcon color="#ffffff" icon={Chat01Icon} size={22} />
             {chat.unreadCount > 0 ? (
               <View style={styles.controlBadge}>
                 <Text style={styles.controlBadgeText}>{chat.unreadCount > 9 ? "9+" : String(chat.unreadCount)}</Text>
               </View>
             ) : null}
           </Pressable>
-          <Pressable onPress={() => void runAsync(async () => onLeave())} style={[styles.controlButton, styles.controlButtonEndCall]}>
-            <HugeiconsIcon color="#ffffff" icon={CallEnd01Icon} size={24} />
+          <Pressable onPress={() => setActionsOpen(true)} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
+            <HugeiconsIcon color="#ffffff" icon={MoreHorizontalIcon} size={22} />
+          </Pressable>
+          <Pressable onPress={handleLeave} style={({ pressed }) => [styles.controlButton, styles.controlButtonEndCall, pressed && styles.controlButtonPressed]}>
+            <HugeiconsIcon color="#ffffff" icon={CallEnd01Icon} size={22} />
           </Pressable>
         </View>
       </View>
@@ -244,16 +272,13 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
       <NativeMeetingActionsSheet
         chatEnabled={canChat}
         chatUnreadCount={chat.unreadCount}
-        isCameraOff={isCameraOff}
         isHandRaised={handRaised}
-        isMuted={isMuted}
         isRecording={recording.isRecording}
-        isScreenSharing={screenShare.isLocalSharing}
         onClose={() => setActionsOpen(false)}
         onInviteParticipants={handleInviteParticipants}
         onLeaveMeeting={() => {
           setActionsOpen(false);
-          void runAsync(async () => onLeave());
+          handleLeave();
         }}
         onOpenChat={() => openPanel("chat")}
         onOpenParticipants={() => openPanel("participants")}
@@ -264,7 +289,6 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
         onOpenSettings={() => openPanel("settings")}
         onOpenTranscripts={() => openPanel("transcripts")}
         onOpenWhiteboard={() => openPanel("whiteboard")}
-        onToggleAudio={() => void runAsync(media.toggleAudio)}
         onToggleHand={() => {
           setActionsOpen(false);
           if (canHandRaise) {
@@ -272,13 +296,10 @@ export function NativeMeetingRoom({ features, onLeave, onDiagnosticsChange }: Na
           }
         }}
         onToggleRecording={() => void runAsync(() => recording.toggle())}
-        onToggleScreenShare={() => void runAsync(() => screenShare.toggle())}
-        onToggleVideo={() => void runAsync(media.toggleVideo)}
         participantCount={participants.participantCount}
         peopleEnabled={canParticipants}
         raisedHandCount={raisedHandCount}
         recordingEnabled={canRecording}
-        screenShareEnabled={canScreenShare}
         settingsEnabled={canSettings}
         transcriptsEnabled={canTranscripts}
         visible={actionsOpen}
@@ -350,47 +371,86 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 8,
+    backgroundColor: Theme.colors.glassSurface,
+    borderRadius: Theme.radius.full,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  topBarLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.colors.success,
+  },
+  topBarRoomName: {
+    color: Theme.colors.foreground,
+    fontSize: 15,
+    fontWeight: "600",
+    flex: 1,
+  },
+  topBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  topBarCount: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   stageFrame: {
     flex: 1,
-    borderRadius: 36,
+    borderRadius: Theme.radius["2xl"],
     overflow: "hidden",
     backgroundColor: Theme.colors.stageBackground,
   },
   bottomDock: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: Platform.OS === "ios" ? 22 : 10,
     alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
     pointerEvents: "box-none",
   },
   controlPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: Theme.colors.controlsBackground,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
   controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  controlButtonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.93 }],
   },
   controlButtonDanger: {
-    backgroundColor: "rgba(239,68,68,0.24)",
-  },
-  controlButtonActive: {
-    backgroundColor: "rgba(27,182,166,0.24)",
+    backgroundColor: "rgba(239,68,68,0.35)",
   },
   controlButtonEndCall: {
-    backgroundColor: "rgba(239,68,68,0.92)",
+    backgroundColor: "#ef4444",
   },
   controlBadge: {
     position: "absolute",

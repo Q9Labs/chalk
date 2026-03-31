@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, it, expect, vi } from "bun:test";
+import { afterAll, beforeEach, describe, it, expect, vi } from "vitest";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { HotkeyManager } from "@tanstack/react-hotkeys";
 import { MeetingRoom } from "../../components/full/MeetingRoom";

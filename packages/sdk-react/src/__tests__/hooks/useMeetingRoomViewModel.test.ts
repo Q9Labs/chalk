@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 import { useMeetingRoomViewModel } from "../../components/full/video-conference/useMeetingRoomViewModel";

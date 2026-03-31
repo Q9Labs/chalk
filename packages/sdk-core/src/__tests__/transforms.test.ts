@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { camelToSnake, camelToSnakeString, snakeToCamel, snakeToCamelString } from "../transforms.ts";
 
 describe("snakeToCamelString", () => {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { wideEvents } from "@q9labs/chalk-core";
 import { VideoConference } from "../../components/full/VideoConference";

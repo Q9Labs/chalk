@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePwaInstall } from "../../hooks/ui/usePwaInstall";
 
 describe("usePwaInstall", () => {

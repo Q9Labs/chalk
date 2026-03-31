@@ -8,14 +8,16 @@ on:
     paths:
       - "packages/**"
       - "package.json"
-      - "bun.lock"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "scripts/**"
       - ".github/workflows/sdk.yml"
   pull_request:
     paths:
       - "packages/**"
       - "package.json"
-      - "bun.lock"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "scripts/**"
       - ".github/workflows/sdk.yml"
   workflow_dispatch:
@@ -46,17 +48,18 @@ jobs:
           node-version: "20"
           registry-url: "https://npm.pkg.github.com"
           scope: "@q9labs"
+          cache: pnpm
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          bun-version: latest
+          version: 9.15.9
 
       - name: Prune monorepo for SDK packages only
         run: |
-          bunx turbo prune @q9labs/chalk-core @q9labs/chalk-react @q9labs/chalk-react-native @q9labs/chalk-ui @q9labs/chalk-whiteboard
+          pnpm exec turbo prune @q9labs/chalk-core @q9labs/chalk-react @q9labs/chalk-react-native @q9labs/chalk-ui @q9labs/chalk-whiteboard
           # Copy root config files needed for builds
-          cp tsconfig.json turbo.json out/
+          cp tsconfig.json turbo.json pnpm-workspace.yaml out/
           cp -R scripts out/
           # Fix workspaces to only include pruned packages
           cd out
@@ -68,23 +71,23 @@ jobs:
           "
 
       - name: Install dependencies (pruned)
-        run: cd out && bun install
+        run: cd out && pnpm install --frozen-lockfile
         timeout-minutes: 3
 
       - name: Build SDK packages
-        run: cd out && bunx turbo build --filter="@q9labs/*"
+        run: cd out && pnpm exec turbo build --filter="@q9labs/*"
 
       - name: Publish @q9labs/chalk-core
-        run: cd out/packages/sdk-core && bun publish --access restricted
+        run: cd out/packages/sdk-core && pnpm publish --access restricted --no-git-checks
 
       - name: Publish @q9labs/chalk-react
-        run: cd out/packages/sdk-react && bun publish --access restricted
+        run: cd out/packages/sdk-react && pnpm publish --access restricted --no-git-checks
 
       - name: Publish @q9labs/chalk-react-native
-        run: cd out/packages/sdk-react-native && bun publish --access restricted
+        run: cd out/packages/sdk-react-native && pnpm publish --access restricted --no-git-checks
 
       - name: Publish @q9labs/chalk-ui
-        run: cd out/packages/ui && bun publish --access restricted
+        run: cd out/packages/ui && pnpm publish --access restricted --no-git-checks
 
       - name: Publish @q9labs/chalk-whiteboard
-        run: cd out/packages/chalk-whiteboard && bun publish --access restricted
+        run: cd out/packages/chalk-whiteboard && pnpm publish --access restricted --no-git-checks

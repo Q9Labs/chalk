@@ -31,9 +31,9 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && bun run build:types",
+    "build": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-    "dev": "bun build ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --outdir ./dist --target browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
+    "dev": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
     "test": "echo 'No tests configured yet'",
     "check-types": "tsc --noEmit",
     "lint": "echo 'No linter configured yet'",
@@ -43,9 +43,9 @@
     "@excalidraw/excalidraw": "^0.18.0"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "@types/react": "^19.0.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "@types/node": "^24.10.1"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

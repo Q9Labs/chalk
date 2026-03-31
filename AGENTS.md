@@ -61,6 +61,22 @@ Sometimes (rarely) the user might want to directly work on the app and later cre
 
 Never add client-side business logic to demo apps.
 
+## Consumer Rollout Shorthand
+
+- If Hasan says `update the consumers`, default meaning:
+  - `TH LMS` -> `/Users/macmini/Desktop/Code/th-lms`
+  - `ET LMS` -> `/Users/macmini/Desktop/Code/et-lms`
+  - `CollabDash` -> `/Users/macmini/Desktop/Code/collabdash`
+- Do not assume all three every time. Ask which ones.
+- For each consumer, use its local `CHALK_WORKFLOW.md` in the workspace root as the first source of truth for infra, bump steps, deploy order, verification, and rollback.
+- Default execution strategy:
+  - keep release/version choice, risk calls, and final deploy decisions local
+  - delegate consumer-specific dry runs, repo reading, CI polling, and bounded deploy prep to `gpt-5.4-mini` subagents
+  - one mini subagent per consumer when scopes are independent
+- Mini-subagent rule (instruct it):
+  - if anything unusual appears, docs look stale, infra does not match the workflow, a command may crash prod, or confidence drops on a prod-impacting step, the mini subagent must stop and escalate back instead of guessing
+  - minis are for support work, not final prod-risk decisions
+
 ## SDK-First Guardrail
 
 - For any product behavior, bug fix, feature, UX, observability, auth, networking, retries, or error handling: implement first in the Chalk package that owns it.

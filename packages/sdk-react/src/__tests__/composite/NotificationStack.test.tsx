@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "bun:test";
+import { describe, it, expect, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import { NotificationStack } from "../../components/composite/NotificationStack";
 

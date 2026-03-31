@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConferenceClient } from "../client.ts";
 import { createJoinTokenProvider, createSessionTokenProvider, extractJoinTokenFromInviteLink } from "../index.ts";
 
@@ -23,7 +23,7 @@ describe("extractJoinTokenFromInviteLink", () => {
 
 describe("createJoinTokenProvider", () => {
   beforeEach(() => {
-    globalThis.fetch = mock(async () => {
+    globalThis.fetch = vi.fn(async () => {
       return {
         ok: true,
         json: async () => ({
@@ -48,7 +48,7 @@ describe("createJoinTokenProvider", () => {
 
 describe("createSessionTokenProvider", () => {
   beforeEach(() => {
-    globalThis.fetch = mock(async () => {
+    globalThis.fetch = vi.fn(async () => {
       return {
         ok: true,
         headers: {
@@ -101,7 +101,7 @@ describe("ConferenceClient join token helpers", () => {
       token: "seed-token",
     });
     const apiClient = (client as unknown as { apiClient: { exchangeJoinToken: ReturnType<typeof mock>; setToken: ReturnType<typeof mock> } }).apiClient;
-    apiClient.exchangeJoinToken = mock(async () => ({
+    apiClient.exchangeJoinToken = vi.fn(async () => ({
       success: true,
       data: {
         accessToken: "jwt_123",
@@ -110,9 +110,9 @@ describe("ConferenceClient join token helpers", () => {
         roomName: "Proof Room",
       },
     }));
-    apiClient.setToken = mock(() => {});
+    apiClient.setToken = vi.fn(() => {});
 
-    const joinSession = mock(async () => ({ id: "5cf88a28-a9a2-4937-b9ea-46caa2515948" }));
+    const joinSession = vi.fn(async () => ({ id: "5cf88a28-a9a2-4937-b9ea-46caa2515948" }));
     (client as unknown as { joinSession: typeof joinSession }).joinSession = joinSession;
 
     await client.joinWithJoinToken("join-token-123", {
@@ -131,7 +131,7 @@ describe("ConferenceClient join token helpers", () => {
       apiUrl: "https://chalk-api.q9labs.ai",
       token: "seed-token",
     });
-    const joinWithJoinToken = mock(async () => ({ id: "room-1" }));
+    const joinWithJoinToken = vi.fn(async () => ({ id: "room-1" }));
     (client as unknown as { joinWithJoinToken: typeof joinWithJoinToken }).joinWithJoinToken = joinWithJoinToken;
 
     await client.joinWithInviteLink("https://chalk.q9labs.ai/j/join-token-123", {
@@ -148,7 +148,7 @@ describe("ConferenceClient join token helpers", () => {
       apiUrl: "https://chalk-api.q9labs.ai",
       token: "seed-token",
     });
-    const joinWithJoinToken = mock(async () => ({ id: "room-1" }));
+    const joinWithJoinToken = vi.fn(async () => ({ id: "room-1" }));
     (client as unknown as { joinWithJoinToken: typeof joinWithJoinToken }).joinWithJoinToken = joinWithJoinToken;
 
     await client.joinWithInviteLink("https://chalkmeet.com/j/join-token-123", {

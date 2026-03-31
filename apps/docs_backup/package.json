@@ -6,8 +6,8 @@
     "dev": "astro dev --port 3071",
     "build": "astro build",
     "preview": "astro preview",
-    "deploy": "bun run build && bun run alchemy.run.ts",
-    "destroy": "DESTROY=true bun run alchemy.run.ts"
+    "deploy": "pnpm run build && pnpm exec tsx alchemy.run.ts",
+    "destroy": "DESTROY=true pnpm exec tsx alchemy.run.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.3.0",

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from "bun:test";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../../components/composite/ChatPanel";

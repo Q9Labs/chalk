@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const fetchInternalAccessTokenMock = vi.fn();
+const getAccessTokenExpiryMsMock = vi.fn().mockReturnValue(null);
 
 vi.mock("./internalAuth", () => ({
   fetchInternalAccessToken: fetchInternalAccessTokenMock,
+  getAccessTokenExpiryMs: getAccessTokenExpiryMsMock,
 }));
 
 describe("createInternalMeeting", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     fetchInternalAccessTokenMock.mockReset();
+    getAccessTokenExpiryMsMock.mockClear();
+    getAccessTokenExpiryMsMock.mockReturnValue(null);
   });
 
   it("creates a real room and returns its canonical id", async () => {
@@ -32,6 +36,7 @@ describe("createInternalMeeting", () => {
     });
 
     expect(fetchInternalAccessTokenMock).toHaveBeenCalledWith("https://chalk-api.q9labs.ai");
+    expect(getAccessTokenExpiryMsMock).toHaveBeenCalledWith("access-123");
     expect(fetchMock).toHaveBeenCalledWith("https://chalk-api.q9labs.ai/api/v1/rooms", {
       method: "POST",
       headers: {

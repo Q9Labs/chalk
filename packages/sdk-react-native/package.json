@@ -26,19 +26,19 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core && bun run build:types",
+    "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core && pnpm run build:types",
     "build:types": "tsc --project tsconfig.json",
-    "dev": "bun build ./src/index.ts --outdir ./dist --target browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core --watch",
-    "test": "bun test",
+    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core --watch",
+    "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
-    "lint": "bunx oxfmt --check . && tsc --noEmit",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@q9labs/chalk-core": "workspace:^"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "typescript": "^5.7.2"
   },
