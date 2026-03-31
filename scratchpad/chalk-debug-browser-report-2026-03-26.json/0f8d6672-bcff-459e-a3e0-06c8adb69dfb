@@ -1,0 +1,495 @@
+{
+  "report": {
+    "generatedAt": "2026-03-26T14:52:57.990Z",
+    "app": "chalk-sdk-react",
+    "url": "http://localhost:3070/room/test-room",
+    "origin": "http://localhost:3070",
+    "host": "localhost:3070",
+    "pathname": "/room/test-room",
+    "search": "",
+    "hash": "",
+    "title": "Chalk",
+    "referrer": null
+  },
+  "browser": {
+    "navigator": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/146.0.0.0 Safari/537.36",
+      "language": "en-US",
+      "languages": [
+        "en-US",
+        "en"
+      ],
+      "platform": "MacIntel",
+      "vendor": "Google Inc.",
+      "online": true,
+      "cookieEnabled": true,
+      "hardwareConcurrency": 10,
+      "deviceMemory": 8,
+      "maxTouchPoints": 0,
+      "connection": {
+        "effectiveType": "3g",
+        "downlink": 1.5,
+        "rtt": 300,
+        "saveData": false
+      },
+      "screen": {
+        "width": 800,
+        "height": 600,
+        "availWidth": 800,
+        "availHeight": 600,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "devicePixelRatio": 1
+      },
+      "viewport": {
+        "innerWidth": 1280,
+        "innerHeight": 633,
+        "outerWidth": 1280,
+        "outerHeight": 720,
+        "visualViewport": {
+          "width": 1280,
+          "height": 633,
+          "scale": 1
+        }
+      },
+      "memory": {}
+    },
+    "permissions": {
+      "camera": "prompt",
+      "microphone": "prompt",
+      "notifications": "prompt"
+    },
+    "devices": [
+      {
+        "deviceId": "",
+        "groupId": "",
+        "kind": "audioinput",
+        "label": ""
+      },
+      {
+        "deviceId": "",
+        "groupId": "",
+        "kind": "videoinput",
+        "label": ""
+      },
+      {
+        "deviceId": "",
+        "groupId": "",
+        "kind": "audiooutput",
+        "label": ""
+      }
+    ],
+    "storage": {
+      "localStorage": {
+        "chalk_internal_client_id_v1": "3171efd4-28bc-4481-96dd-25ee31d92fc9",
+        "chalk-theme": "dark"
+      },
+      "sessionStorage": {
+        "tsr-scroll-restoration-v1_3": "{\"jl3zp\":{}}"
+      }
+    },
+    "document": {
+      "cookie": null,
+      "visibilityState": "visible"
+    }
+  },
+  "context": {
+    "source": "probe"
+  },
+  "logs": {
+    "generatedAt": "2026-03-26T14:52:58.101Z",
+    "fetch": [
+      {
+        "id": "1774536750898-2b401b83c5cae",
+        "timestamp": "2026-03-26T14:52:30.898Z",
+        "method": "GET",
+        "url": "http://localhost:8080/api/v1/internal/auth/access-token",
+        "requestHeaders": {
+          "x-chalk-local-client-id": "3171efd4-28bc-4481-96dd-25ee31d92fc9"
+        },
+        "requestBody": null,
+        "credentials": "include",
+        "mode": "cors",
+        "destination": "",
+        "referrer": "about:client",
+        "status": 200,
+        "statusText": "OK",
+        "ok": true,
+        "redirected": false,
+        "durationMs": 20,
+        "responseHeaders": {
+          "content-length": "658",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "responseBody": {
+          "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjaGFsayIsInN1YiI6ImNsYWltOmRiOTQ5YWJmLTAyY2EtNmVhNy1mNDEyLTNkMDQwMWQxNzBhNSIsImV4cCI6MTc3NDU0MDM1MCwiaWF0IjoxNzc0NTM2NzUwLCJqdGkiOiJjXzE0U05jclFOOG9CRWdJYXA3SUxRIiwidGVuYW50X2lkIjoiYjYwZmQ5ZGEtYWY4YS00YTUwLTg5MDMtMzQ3ZWU2NGM2MmI0Iiwid29ya3NwYWNlX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwicm9vbV9pZCI6IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMCIsInJvbGUiOiJob3N0IiwicGVybWlzc2lvbnMiOnsiY2FuX3JlY29yZCI6dHJ1ZSwiY2FuX3NjcmVlbl9zaGFyZSI6dHJ1ZSwiY2FuX2tpY2siOnRydWUsImNhbl9tdXRlIjp0cnVlfSwidHlwZSI6ImFjY2VzcyJ9.9uY8ieAoY5GBBnPDLmx7wALS2X8LkddqG0piXadMIJY",
+          "expires_in": 3600
+        }
+      },
+      {
+        "id": "1774536751417-189e0d48bc5e18",
+        "timestamp": "2026-03-26T14:52:31.417Z",
+        "method": "GET",
+        "url": "http://localhost:8080/api/v1/whats-new/releases",
+        "requestHeaders": {},
+        "requestBody": null,
+        "credentials": "same-origin",
+        "mode": "cors",
+        "destination": "",
+        "referrer": "about:client",
+        "durationMs": 0,
+        "error": "signal is aborted without reason"
+      },
+      {
+        "id": "1774536751429-2850fd824f71f",
+        "timestamp": "2026-03-26T14:52:31.429Z",
+        "method": "GET",
+        "url": "http://localhost:8080/api/v1/internal/auth/access-token",
+        "requestHeaders": {
+          "x-chalk-local-client-id": "3171efd4-28bc-4481-96dd-25ee31d92fc9"
+        },
+        "requestBody": null,
+        "credentials": "include",
+        "mode": "cors",
+        "destination": "",
+        "referrer": "about:client",
+        "status": 200,
+        "statusText": "OK",
+        "ok": true,
+        "redirected": false,
+        "durationMs": 75,
+        "responseHeaders": {
+          "content-length": "658",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "responseBody": {
+          "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjaGFsayIsInN1YiI6ImNsYWltOmRiOTQ5YWJmLTAyY2EtNmVhNy1mNDEyLTNkMDQwMWQxNzBhNSIsImV4cCI6MTc3NDU0MDM1MSwiaWF0IjoxNzc0NTM2NzUxLCJqdGkiOiIwYVJFenVJaldtSWREcy1lMVBPNEJBIiwidGVuYW50X2lkIjoiYjYwZmQ5ZGEtYWY4YS00YTUwLTg5MDMtMzQ3ZWU2NGM2MmI0Iiwid29ya3NwYWNlX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwicm9vbV9pZCI6IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMCIsInJvbGUiOiJob3N0IiwicGVybWlzc2lvbnMiOnsiY2FuX3JlY29yZCI6dHJ1ZSwiY2FuX3NjcmVlbl9zaGFyZSI6dHJ1ZSwiY2FuX2tpY2siOnRydWUsImNhbl9tdXRlIjp0cnVlfSwidHlwZSI6ImFjY2VzcyJ9.5Y9rbzVZ84Xwb0dbVMuFNFzzmlU8UBgLVt7W-5WudZE",
+          "expires_in": 3600
+        }
+      },
+      {
+        "id": "1774536751429-df87786c4406f",
+        "timestamp": "2026-03-26T14:52:31.429Z",
+        "method": "GET",
+        "url": "http://localhost:8080/api/v1/internal/auth/access-token",
+        "requestHeaders": {
+          "x-chalk-local-client-id": "3171efd4-28bc-4481-96dd-25ee31d92fc9"
+        },
+        "requestBody": null,
+        "credentials": "include",
+        "mode": "cors",
+        "destination": "",
+        "referrer": "about:client",
+        "status": 200,
+        "statusText": "OK",
+        "ok": true,
+        "redirected": false,
+        "durationMs": 75,
+        "responseHeaders": {
+          "content-length": "658",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "responseBody": {
+          "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjaGFsayIsInN1YiI6ImNsYWltOmRiOTQ5YWJmLTAyY2EtNmVhNy1mNDEyLTNkMDQwMWQxNzBhNSIsImV4cCI6MTc3NDU0MDM1MSwiaWF0IjoxNzc0NTM2NzUxLCJqdGkiOiJEZ1dTazJ5QkExZnRJYW5tV1hEYW1RIiwidGVuYW50X2lkIjoiYjYwZmQ5ZGEtYWY4YS00YTUwLTg5MDMtMzQ3ZWU2NGM2MmI0Iiwid29ya3NwYWNlX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwicm9vbV9pZCI6IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMCIsInJvbGUiOiJob3N0IiwicGVybWlzc2lvbnMiOnsiY2FuX3JlY29yZCI6dHJ1ZSwiY2FuX3NjcmVlbl9zaGFyZSI6dHJ1ZSwiY2FuX2tpY2siOnRydWUsImNhbl9tdXRlIjp0cnVlfSwidHlwZSI6ImFjY2VzcyJ9.fwAEx8xfCmg8yeOqoqtJoC_g-bcHppjIUsMvI5VdIjc",
+          "expires_in": 3600
+        }
+      },
+      {
+        "id": "1774536751432-13e5b5ac617be",
+        "timestamp": "2026-03-26T14:52:31.432Z",
+        "method": "POST",
+        "url": "http://localhost:8080/api/v1/rooms/test-room/join-token",
+        "requestHeaders": {
+          "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjaGFsayIsInN1YiI6ImNsYWltOmRiOTQ5YWJmLTAyY2EtNmVhNy1mNDEyLTNkMDQwMWQxNzBhNSIsImV4cCI6MTc3NDU0MDM1MSwiaWF0IjoxNzc0NTM2NzUxLCJqdGkiOiJEZ1dTazJ5QkExZnRJYW5tV1hEYW1RIiwidGVuYW50X2lkIjoiYjYwZmQ5ZGEtYWY4YS00YTUwLTg5MDMtMzQ3ZWU2NGM2MmI0Iiwid29ya3NwYWNlX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwicm9vbV9pZCI6IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMCIsInJvbGUiOiJob3N0IiwicGVybWlzc2lvbnMiOnsiY2FuX3JlY29yZCI6dHJ1ZSwiY2FuX3NjcmVlbl9zaGFyZSI6dHJ1ZSwiY2FuX2tpY2siOnRydWUsImNhbl9tdXRlIjp0cnVlfSwidHlwZSI6ImFjY2VzcyJ9.fwAEx8xfCmg8yeOqoqtJoC_g-bcHppjIUsMvI5VdIjc"
+        },
+        "requestBody": null,
+        "credentials": "same-origin",
+        "mode": "cors",
+        "destination": "",
+        "referrer": "about:client",
+        "status": 404,
+        "statusText": "Not Found",
+        "ok": false,
+        "redirected": false,
+        "durationMs": 3,
+        "responseHeaders": {
+          "content-length": "26",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "responseBody": {
+          "error": "room not found"
+        }
+      },
+      {
+        "id": "1774536751433-34b9c6d29b9e78",
+        "timestamp": "2026-03-26T14:52:31.433Z",
+        "method": "POST",
+        "url": "http://localhost:8080/api/v1/rooms/test-room/join-token",
+        "requestHeaders": {
+          "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjaGFsayIsInN1YiI6ImNsYWltOmRiOTQ5YWJmLTAyY2EtNmVhNy1mNDEyLTNkMDQwMWQxNzBhNSIsImV4cCI6MTc3NDU0MDM1MSwiaWF0IjoxNzc0NTM2NzUxLCJqdGkiOiIwYVJFenVJaldtSWREcy1lMVBPNEJBIiwidGVuYW50X2lkIjoiYjYwZmQ5ZGEtYWY4YS00YTUwLTg5MDMtMzQ3ZWU2NGM2MmI0Iiwid29ya3NwYWNlX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwicm9vbV9pZCI6IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMCIsInJvbGUiOiJob3N0IiwicGVybWlzc2lvbnMiOnsiY2FuX3JlY29yZCI6dHJ1ZSwiY2FuX3NjcmVlbl9zaGFyZSI6dHJ1ZSwiY2FuX2tpY2siOnRydWUsImNhbl9tdXRlIjp0cnVlfSwidHlwZSI6ImFjY2VzcyJ9.5Y9rbzVZ84Xwb0dbVMuFNFzzmlU8UBgLVt7W-5WudZE"
+        },
+        "requestBody": null,
+        "credentials": "same-origin",
+        "mode": "cors",
+        "destination": "",
+        "referrer": "about:client",
+        "status": 404,
+        "statusText": "Not Found",
+        "ok": false,
+        "redirected": false,
+        "durationMs": 3,
+        "responseHeaders": {
+          "content-length": "26",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "responseBody": {
+          "error": "room not found"
+        }
+      },
+      {
+        "id": "1774536751936-6f9c7963954f58",
+        "timestamp": "2026-03-26T14:52:31.936Z",
+        "method": "GET",
+        "url": "http://localhost:8080/api/v1/whats-new/releases",
+        "requestHeaders": {},
+        "requestBody": null,
+        "credentials": "same-origin",
+        "mode": "cors",
+        "destination": "",
+        "referrer": "about:client",
+        "status": 502,
+        "statusText": "Bad Gateway",
+        "ok": false,
+        "redirected": false,
+        "durationMs": 519,
+        "responseHeaders": {
+          "content-length": "40",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "responseBody": {
+          "error": "failed to fetch release info"
+        }
+      }
+    ],
+    "websocket": [],
+    "console": [
+      {
+        "id": "1774536750868-9f45c701093c18",
+        "timestamp": "2026-03-26T14:52:30.868Z",
+        "level": "error",
+        "args": [
+          "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s",
+          "https://react.dev/link/hydration-mismatch",
+          "\n\n  <StartClient>\n    <Await promise={Promise}>\n      <AwaitInner promise={Promise}>\n        <RouterProvider router={{...}}>\n          <RouterContextProvider router={{...}}>\n            <Matches>\n              <SafeFragment fallback={<_c>}>\n                <Transitioner>\n                <MatchesInner>\n                  <CatchBoundary getResetKey={function getResetKey} errorComponent={function ErrorComponent} ...>\n                    <CatchBoundaryImpl getResetKey={function getResetKey} onCatch={function onCatch}>\n                      <MatchImpl matchId=\"__root__/\">\n                        <RootDocument>\n                          <html\n                            lang=\"en\"\n-                           className=\"dark\"\n-                           data-chalk-theme=\"dark\"\n-                           style={{color-scheme:\"dark\"}}\n                          >\n"
+        ]
+      },
+      {
+        "id": "1774536751360-0f0a6d05e03cd",
+        "timestamp": "2026-03-26T14:52:31.360Z",
+        "level": "log",
+        "args": [
+          "[Chalk] session.init",
+          "{\n  \"eventId\": \"114adead-be6f-4405-b253-eac7fa2bf8bd\",\n  \"eventType\": \"session.init\",\n  \"timestamp\": \"2026-03-26T14:52:31.359Z\",\n  \"sdk\": {\n    \"version\": \"0.0.79\",\n    \"platform\": \"browser\",\n    \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/146.0.0.0 Safari/537.36\"\n  },\n  \"sessionId\": \"3b9cf23f-d9cf-4f7b-9db2-83cb488fde2e\",\n  \"durationMs\": 0,\n  \"outcome\": \"success\",\n  \"data\": {\n    \"config\": {\n      \"apiUrl\": \"http://localhost:8080\",\n      \"debug\": true,\n      \"demoMode\": false\n    }\n  }\n}"
+        ]
+      },
+      {
+        "id": "1774536751402-9a4254cef01448",
+        "timestamp": "2026-03-26T14:52:31.402Z",
+        "level": "log",
+        "args": [
+          "[useTranscripts] Setting up transcript subscription",
+          {
+            "hasRoom": false,
+            "isConnected": false
+          }
+        ]
+      },
+      {
+        "id": "1774536751403-5e60e826b17a8",
+        "timestamp": "2026-03-26T14:52:31.403Z",
+        "level": "log",
+        "args": [
+          "[useTranscripts] No room available or not connected"
+        ]
+      },
+      {
+        "id": "1774536751404-5bbc78cf43531",
+        "timestamp": "2026-03-26T14:52:31.404Z",
+        "level": "warn",
+        "args": [
+          "[chalk:web] PostHog disabled: VITE_POSTHOG_KEY is a personal API key (phx_*). Use the project API key (phc_*)."
+        ]
+      },
+      {
+        "id": "1774536751406-4e05c66da86998",
+        "timestamp": "2026-03-26T14:52:31.406Z",
+        "level": "log",
+        "args": [
+          "[useTranscripts] Setting up transcript subscription",
+          {
+            "hasRoom": false,
+            "isConnected": false
+          }
+        ]
+      },
+      {
+        "id": "1774536751406-5744b6fdf11fa8",
+        "timestamp": "2026-03-26T14:52:31.406Z",
+        "level": "log",
+        "args": [
+          "[useTranscripts] No room available or not connected"
+        ]
+      },
+      {
+        "id": "1774536751406-46bd9982fdd5b8",
+        "timestamp": "2026-03-26T14:52:31.406Z",
+        "level": "warn",
+        "args": [
+          "[chalk:web] PostHog disabled: VITE_POSTHOG_KEY is a personal API key (phx_*). Use the project API key (phc_*)."
+        ]
+      },
+      {
+        "id": "1774536751430-25da3923473b48",
+        "timestamp": "2026-03-26T14:52:31.430Z",
+        "level": "log",
+        "args": [
+          "[Chalk] room.join.rtk.preload",
+          "{\n  \"eventId\": \"e64e679d-db6d-4ad3-8eb8-2b0cbd65ec03\",\n  \"eventType\": \"room.join.rtk.preload\",\n  \"timestamp\": \"2026-03-26T14:52:31.430Z\",\n  \"sdk\": {\n    \"version\": \"0.0.79\",\n    \"platform\": \"browser\",\n    \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/146.0.0.0 Safari/537.36\"\n  },\n  \"sessionId\": \"3b9cf23f-d9cf-4f7b-9db2-83cb488fde2e\",\n  \"durationMs\": 27,\n  \"outcome\": \"success\",\n  \"data\": {}\n}"
+        ]
+      }
+    ],
+    "runtimeErrors": [],
+    "wideEvents": [
+      {
+        "eventId": "114adead-be6f-4405-b253-eac7fa2bf8bd",
+        "eventType": "session.init",
+        "timestamp": "2026-03-26T14:52:31.359Z",
+        "sdk": {
+          "version": "0.0.79",
+          "platform": "browser",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/146.0.0.0 Safari/537.36"
+        },
+        "sessionId": "3b9cf23f-d9cf-4f7b-9db2-83cb488fde2e",
+        "durationMs": 0,
+        "outcome": "success",
+        "data": {
+          "config": {
+            "apiUrl": "http://localhost:8080",
+            "debug": true,
+            "demoMode": false
+          }
+        }
+      },
+      {
+        "eventId": "e64e679d-db6d-4ad3-8eb8-2b0cbd65ec03",
+        "eventType": "room.join.rtk.preload",
+        "timestamp": "2026-03-26T14:52:31.430Z",
+        "sdk": {
+          "version": "0.0.79",
+          "platform": "browser",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/146.0.0.0 Safari/537.36"
+        },
+        "sessionId": "3b9cf23f-d9cf-4f7b-9db2-83cb488fde2e",
+        "durationMs": 27,
+        "outcome": "success",
+        "data": {}
+      }
+    ],
+    "incidents": [],
+    "breadcrumbs": [],
+    "sections": {
+      "chalkSession": {
+        "diagnostics": {
+          "isDisposed": false,
+          "roomStateRoomId": null,
+          "roomStateRoomName": null,
+          "roomStateStatus": "disconnected",
+          "roomStateIsJoining": false,
+          "hasActiveRoom": false,
+          "activeRoomId": null,
+          "activeRoomStatus": null,
+          "activeRoomHasRtkMeeting": false,
+          "connectedInputRoomId": null,
+          "inFlightJoinRoomId": null,
+          "hasInFlightJoinPromise": false,
+          "clientConnectionState": "disconnected",
+          "websocketConnectionState": "disconnected",
+          "localParticipantId": null,
+          "websocketLastClose": null
+        },
+        "roomState": {
+          "status": "disconnected",
+          "roomId": null,
+          "roomName": null,
+          "isJoining": false,
+          "hostId": null
+        },
+        "participantState": {
+          "participants": [],
+          "activeSpeaker": null,
+          "localParticipant": null,
+          "count": 0
+        },
+        "mediaState": {
+          "isVideoEnabled": false,
+          "isAudioEnabled": false,
+          "isTogglingVideo": false,
+          "isTogglingAudio": false,
+          "isBackgroundEffectsSupported": false,
+          "isApplyingBackgroundEffect": false,
+          "selectedCamera": null,
+          "selectedMicrophone": null,
+          "selectedSpeaker": null,
+          "selectedBackgroundEffect": {
+            "mode": "none"
+          },
+          "devices": []
+        },
+        "chatState": {
+          "messages": [],
+          "isEnabled": true,
+          "count": 0,
+          "unreadCount": 0
+        },
+        "interactionState": {
+          "isHandRaised": false,
+          "raisedHands": [],
+          "activeReactions": []
+        },
+        "recordingState": {
+          "isRecording": false,
+          "isStarting": false,
+          "isStopping": false,
+          "recordingId": null,
+          "status": null
+        },
+        "whiteboardState": {
+          "isOpen": false,
+          "canDraw": true,
+          "elements": [],
+          "files": {},
+          "cursors": [],
+          "lastSeq": 0,
+          "openParticipants": []
+        },
+        "uiState": {
+          "layout": "auto",
+          "activePanel": null,
+          "controlsVisible": true,
+          "notifications": [],
+          "isFullscreen": false,
+          "isMobileView": false
+        },
+        "screenShareState": {
+          "isActive": false,
+          "isStarting": false,
+          "isLocalSharer": false,
+          "sharerParticipantId": null,
+          "videoTrack": null,
+          "audioTrack": null
+        },
+        "activeRoom": null
+      }
+    }
+  }
+}

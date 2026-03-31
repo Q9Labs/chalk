@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chalk Production Analytics</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #06101f;
+        --bg-2: #0b1730;
+        --panel: rgba(10, 18, 38, 0.78);
+        --panel-strong: rgba(14, 24, 49, 0.96);
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #f5f7fb;
+        --muted: #9fb0ce;
+        --accent: #7df7c3;
+        --accent-2: #5ec8ff;
+        --accent-3: #8f8bff;
+        --danger: #ff7a8f;
+        --warning: #ffd166;
+        --shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          "Avenir Next",
+          "SF Pro Display",
+          "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(125, 247, 195, 0.16), transparent 30%),
+          radial-gradient(circle at top right, rgba(94, 200, 255, 0.14), transparent 28%),
+          linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 100%);
+      }
+
+      .shell {
+        width: min(1220px, calc(100vw - 32px));
+        margin: 24px auto 48px;
+      }
+
+      .hero,
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .hero {
+        padding: 28px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -8% -40% auto;
+        width: 340px;
+        height: 340px;
+        background: radial-gradient(circle, rgba(125, 247, 195, 0.18), transparent 62%);
+        pointer-events: none;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+        gap: 24px;
+        align-items: end;
+      }
+
+      h1 {
+        margin: 10px 0 12px;
+        font-size: clamp(2.3rem, 5vw, 4.2rem);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      .hero-copy {
+        max-width: 720px;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .meta-stack {
+        display: grid;
+        gap: 12px;
+        justify-items: end;
+      }
+
+      .meta-card {
+        width: 100%;
+        max-width: 320px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 16px 18px;
+      }
+
+      .meta-label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .meta-value {
+        margin-top: 6px;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .kpi-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      .kpi {
+        padding: 18px;
+      }
+
+      .kpi-label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .kpi-value {
+        margin-top: 8px;
+        font-size: clamp(1.5rem, 3vw, 2.3rem);
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
+
+      .kpi-sub {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .main-grid {
+        grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
+      }
+
+      .panel {
+        padding: 22px;
+      }
+
+      .panel-title {
+        margin: 0 0 16px;
+        font-size: 1.1rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      .panel-copy {
+        color: var(--muted);
+        margin: 0 0 18px;
+        font-size: 0.95rem;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        margin-bottom: 12px;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+      }
+
+      .chart-wrap {
+        height: 360px;
+      }
+
+      .chart {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .reliability-list {
+        display: grid;
+        gap: 16px;
+      }
+
+      .metric-row {
+        display: grid;
+        gap: 8px;
+      }
+
+      .metric-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: baseline;
+      }
+
+      .metric-name {
+        font-weight: 700;
+      }
+
+      .metric-value {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .bar {
+        width: 100%;
+        height: 14px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 999px;
+        overflow: hidden;
+        display: flex;
+      }
+
+      .bar > span {
+        height: 100%;
+      }
+
+      .bar-good {
+        background: linear-gradient(90deg, rgba(125, 247, 195, 0.75), var(--accent));
+      }
+
+      .bar-mid {
+        background: linear-gradient(90deg, rgba(255, 209, 102, 0.75), var(--warning));
+      }
+
+      .bar-bad {
+        background: linear-gradient(90deg, rgba(255, 122, 143, 0.75), var(--danger));
+      }
+
+      .insight-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .insight {
+        padding: 18px;
+      }
+
+      .insight h3 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+      }
+
+      .insight p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.55;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .tag-good {
+        color: #062218;
+        background: var(--accent);
+      }
+
+      .tag-warn {
+        color: #2b2107;
+        background: var(--warning);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 12px 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        white-space: nowrap;
+        font-size: 0.92rem;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .tenant-cell {
+        white-space: normal;
+      }
+
+      .tenant-name {
+        font-weight: 700;
+      }
+
+      .tenant-meta {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 3px;
+      }
+
+      .footnote {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      @media (max-width: 1180px) {
+        .kpi-grid,
+        .insight-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 920px) {
+        .hero-grid,
+        .main-grid,
+        .insight-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .meta-stack {
+          justify-items: start;
+        }
+
+        .kpi-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 560px) {
+        .shell {
+          width: min(100vw - 16px, 100%);
+          margin-top: 8px;
+        }
+
+        .hero,
+        .panel {
+          border-radius: 22px;
+        }
+
+        .kpi-grid {
+          grid-template-columns: 1fr;
+        }
+
+        th,
+        td {
+          padding-inline: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow">Production Snapshot</div>
+            <h1>Chalk Analytics</h1>
+            <p class="hero-copy">
+              Direct read from Chalk's production PlanetScale Postgres database.
+              This view compresses tenant footprint, media pipeline health,
+              reliability, and the last 30 days of room creation into one local
+              HTML dashboard.
+            </p>
+          </div>
+          <div class="meta-stack">
+            <div class="meta-card">
+              <div class="meta-label">Generated</div>
+              <div class="meta-value">2026-03-22 20:36:09 PKT</div>
+            </div>
+            <div class="meta-card">
+              <div class="meta-label">Source</div>
+              <div class="meta-value">PlanetScale Postgres / branch `main`</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid kpi-grid" id="kpiGrid"></section>
+
+      <section class="grid main-grid">
+        <div class="panel">
+          <h2 class="panel-title">30-Day Room, Recording, Transcript Flow</h2>
+          <p class="panel-copy">
+            March 4 through March 8 is the clearest acceleration window. Rooms
+            and media outputs move together, which suggests the pipeline is
+            tracking meeting creation closely.
+          </p>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-swatch" style="background: var(--accent)"></span>Rooms</span>
+            <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-2)"></span>Recordings</span>
+            <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-3)"></span>Transcripts</span>
+          </div>
+          <div class="chart-wrap" id="trendChartWrap"></div>
+        </div>
+
+        <div class="panel">
+          <h2 class="panel-title">Pipeline Reliability</h2>
+          <div class="reliability-list" id="reliabilityList"></div>
+        </div>
+      </section>
+
+      <section class="grid insight-grid" id="insightGrid"></section>
+
+      <section class="panel">
+        <h2 class="panel-title">Top Tenants By Meeting Time</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Kind</th>
+                <th>Meeting Hours</th>
+                <th>Rooms 30d</th>
+                <th>Recordings</th>
+                <th>Transcripts</th>
+                <th>Storage</th>
+                <th>Workspaces</th>
+                <th>Members</th>
+              </tr>
+            </thead>
+            <tbody id="tenantRows"></tbody>
+          </table>
+        </div>
+        <div class="footnote">
+          Tenant names are not unique in prod. `created_on` is shown under the
+          name to disambiguate repeated Chalk rows.
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const report = {
+        generatedAt: "2026-03-22 20:36:09 PKT",
+        overview: {
+          tenants_total: 219,
+          tenants_active: 219,
+          tenants_claimed: 2,
+          tenant_kind_breakdown: { internal: 195, external: 24 },
+          users_total: 2,
+          active_sessions: 7,
+          workspaces_total: 2,
+          rooms_total: 1837,
+          rooms_active: 84,
+          rooms_completed: 1751,
+          rooms_7d: 199,
+          rooms_30d: 1837,
+          started_rooms_7d: 198,
+          ended_rooms_7d: 184,
+          avg_participants_per_room: 2.52,
+          peak_participants_in_room: 34,
+          participants_total: 4614,
+          participants_live: 138,
+          avg_meeting_seconds: 3131.28,
+          median_meeting_seconds: 2320.95,
+          recordings_total: 1655,
+          recordings_ready: 1652,
+          recording_storage_bytes: 99249316704,
+          transcripts_total: 1661,
+          transcripts_completed: 1581,
+          transcript_statuses: [
+            { status: "completed", count: 1581 },
+            { status: "failed", count: 63 },
+            { status: "processing", count: 17 },
+          ],
+          chat_messages_total: 693,
+          chat_attachments_total: 10,
+          chat_attachment_bytes: 25956253,
+          webhooks_total: 954,
+          webhooks_delivered: 774,
+          webhooks_pending: 0,
+          webhooks_failed: 180,
+          webhook_statuses: [
+            { status: "delivered", count: 774 },
+            { status: "failed", count: 180 },
+          ],
+          whisper_jobs_total: 216,
+          whisper_jobs_completed: 211,
+          whisper_jobs_failed: 4,
+          whisper_statuses: [
+            {
+              status: "completed",
+              count: 211,
+              avg_duration_seconds: 3227.17,
+              avg_word_count: 2227.18,
+            },
+            { status: "timed_out", count: 4, avg_duration_seconds: 0, avg_word_count: 0 },
+            { status: "queued", count: 1, avg_duration_seconds: 0, avg_word_count: 0 },
+          ],
+        },
+        trend: [
+          { day: "2026-02-21", new_users: 0, new_tenants: 0, new_rooms: 0, new_recordings: 0, new_transcripts: 0, new_messages: 0 },
+          { day: "2026-02-22", new_users: 0, new_tenants: 0, new_rooms: 0, new_recordings: 0, new_transcripts: 0, new_messages: 0 },
+          { day: "2026-02-23", new_users: 0, new_tenants: 1, new_rooms: 1, new_recordings: 1, new_transcripts: 1, new_messages: 0 },
+          { day: "2026-02-24", new_users: 0, new_tenants: 8, new_rooms: 51, new_recordings: 52, new_transcripts: 53, new_messages: 0 },
+          { day: "2026-02-25", new_users: 0, new_tenants: 0, new_rooms: 51, new_recordings: 51, new_transcripts: 51, new_messages: 0 },
+          { day: "2026-02-26", new_users: 0, new_tenants: 0, new_rooms: 45, new_recordings: 45, new_transcripts: 44, new_messages: 0 },
+          { day: "2026-02-27", new_users: 0, new_tenants: 3, new_rooms: 50, new_recordings: 51, new_transcripts: 52, new_messages: 0 },
+          { day: "2026-02-28", new_users: 0, new_tenants: 0, new_rooms: 40, new_recordings: 42, new_transcripts: 42, new_messages: 0 },
+          { day: "2026-03-01", new_users: 0, new_tenants: 0, new_rooms: 30, new_recordings: 29, new_transcripts: 29, new_messages: 0 },
+          { day: "2026-03-02", new_users: 0, new_tenants: 3, new_rooms: 47, new_recordings: 46, new_transcripts: 45, new_messages: 0 },
+          { day: "2026-03-03", new_users: 0, new_tenants: 9, new_rooms: 57, new_recordings: 57, new_transcripts: 57, new_messages: 0 },
+          { day: "2026-03-04", new_users: 0, new_tenants: 10, new_rooms: 466, new_recordings: 312, new_transcripts: 312, new_messages: 0 },
+          { day: "2026-03-05", new_users: 0, new_tenants: 10, new_rooms: 271, new_recordings: 239, new_transcripts: 240, new_messages: 0 },
+          { day: "2026-03-06", new_users: 0, new_tenants: 0, new_rooms: 43, new_recordings: 43, new_transcripts: 43, new_messages: 0 },
+          { day: "2026-03-07", new_users: 1, new_tenants: 73, new_rooms: 187, new_recordings: 187, new_transcripts: 187, new_messages: 0 },
+          { day: "2026-03-08", new_users: 0, new_tenants: 57, new_rooms: 25, new_recordings: 27, new_transcripts: 27, new_messages: 0 },
+          { day: "2026-03-09", new_users: 0, new_tenants: 0, new_rooms: 42, new_recordings: 42, new_transcripts: 42, new_messages: 103 },
+          { day: "2026-03-10", new_users: 0, new_tenants: 0, new_rooms: 38, new_recordings: 39, new_transcripts: 39, new_messages: 74 },
+          { day: "2026-03-11", new_users: 0, new_tenants: 0, new_rooms: 44, new_recordings: 44, new_transcripts: 49, new_messages: 47 },
+          { day: "2026-03-12", new_users: 1, new_tenants: 7, new_rooms: 56, new_recordings: 55, new_transcripts: 54, new_messages: 64 },
+          { day: "2026-03-13", new_users: 0, new_tenants: 0, new_rooms: 44, new_recordings: 46, new_transcripts: 46, new_messages: 136 },
+          { day: "2026-03-14", new_users: 0, new_tenants: 5, new_rooms: 30, new_recordings: 31, new_transcripts: 31, new_messages: 24 },
+          { day: "2026-03-15", new_users: 0, new_tenants: 4, new_rooms: 28, new_recordings: 28, new_transcripts: 28, new_messages: 30 },
+          { day: "2026-03-16", new_users: 0, new_tenants: 19, new_rooms: 54, new_recordings: 45, new_transcripts: 45, new_messages: 35 },
+          { day: "2026-03-17", new_users: 0, new_tenants: 0, new_rooms: 50, new_recordings: 52, new_transcripts: 52, new_messages: 74 },
+          { day: "2026-03-18", new_users: 0, new_tenants: 0, new_rooms: 34, new_recordings: 36, new_transcripts: 36, new_messages: 66 },
+          { day: "2026-03-19", new_users: 0, new_tenants: 0, new_rooms: 32, new_recordings: 33, new_transcripts: 33, new_messages: 37 },
+          { day: "2026-03-20", new_users: 0, new_tenants: 2, new_rooms: 8, new_recordings: 9, new_transcripts: 9, new_messages: 3 },
+          { day: "2026-03-21", new_users: 0, new_tenants: 3, new_rooms: 13, new_recordings: 13, new_transcripts: 13, new_messages: 0 },
+          { day: "2026-03-22", new_users: 0, new_tenants: 5, new_rooms: 0, new_recordings: 0, new_transcripts: 0, new_messages: 0 },
+        ],
+        tenants: [
+          { name: "Tuition Highway", tenant_kind: "external", created_on: "2026-02-24", rooms_total: 845, rooms_30d: 845, completed_rooms: 793, meeting_seconds: 3645822, recordings_total: 861, storage_bytes: 97857567863, transcripts_completed: 800, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk", tenant_kind: "internal", created_on: "2026-03-04", rooms_total: 100, rooms_30d: 100, completed_rooms: 100, meeting_seconds: 213564, recordings_total: 72, storage_bytes: 11189250, transcripts_completed: 72, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk", tenant_kind: "internal", created_on: "2026-03-04", rooms_total: 100, rooms_30d: 100, completed_rooms: 99, meeting_seconds: 211284, recordings_total: 70, storage_bytes: 10878470, transcripts_completed: 70, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk", tenant_kind: "internal", created_on: "2026-03-04", rooms_total: 99, rooms_30d: 99, completed_rooms: 99, meeting_seconds: 210874, recordings_total: 53, storage_bytes: 8236615, transcripts_completed: 53, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk", tenant_kind: "internal", created_on: "2026-03-07", rooms_total: 99, rooms_30d: 99, completed_rooms: 99, meeting_seconds: 209946, recordings_total: 95, storage_bytes: 14766298, transcripts_completed: 95, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk", tenant_kind: "internal", created_on: "2026-03-05", rooms_total: 98, rooms_30d: 98, completed_rooms: 98, meeting_seconds: 208697, recordings_total: 86, storage_bytes: 13364861, transcripts_completed: 86, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk", tenant_kind: "internal", created_on: "2026-03-04", rooms_total: 97, rooms_30d: 97, completed_rooms: 97, meeting_seconds: 206575, recordings_total: 54, storage_bytes: 8392050, transcripts_completed: 54, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk", tenant_kind: "internal", created_on: "2026-03-05", rooms_total: 96, rooms_30d: 96, completed_rooms: 96, meeting_seconds: 203826, recordings_total: 78, storage_bytes: 12122042, transcripts_completed: 78, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk Web", tenant_kind: "external", created_on: "2026-02-24", rooms_total: 17, rooms_30d: 17, completed_rooms: 15, meeting_seconds: 140488, recordings_total: 22, storage_bytes: 456448040, transcripts_completed: 18, workspaces_total: 0, members_total: 0 },
+          { name: "Chalk First Party", tenant_kind: "internal", created_on: "2026-03-22", rooms_total: 20, rooms_30d: 20, completed_rooms: 17, meeting_seconds: 111724, recordings_total: 18, storage_bytes: 160632396, transcripts_completed: 18, workspaces_total: 2, members_total: 2 },
+          { name: "Collabdash", tenant_kind: "external", created_on: "2026-02-24", rooms_total: 29, rooms_30d: 29, completed_rooms: 27, meeting_seconds: 92958, recordings_total: 32, storage_bytes: 1906169670, transcripts_completed: 27, workspaces_total: 0, members_total: 0 },
+          { name: "Eman Time", tenant_kind: "external", created_on: "2026-02-24", rooms_total: 27, rooms_30d: 27, completed_rooms: 21, meeting_seconds: 59025, recordings_total: 31, storage_bytes: 2678489813, transcripts_completed: 30, workspaces_total: 0, members_total: 0 },
+        ],
+      };
+
+      const $ = (selector) => document.querySelector(selector);
+
+      function formatInt(value) {
+        return new Intl.NumberFormat("en-US").format(value);
+      }
+
+      function formatCompact(value) {
+        return new Intl.NumberFormat("en-US", {
+          notation: "compact",
+          maximumFractionDigits: value >= 100 ? 0 : 1,
+        }).format(value);
+      }
+
+      function formatPercent(value, total) {
+        if (!total) return "0.0%";
+        return `${((value / total) * 100).toFixed(1)}%`;
+      }
+
+      function formatBytes(bytes) {
+        if (bytes === 0) return "0 B";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const value = bytes / 1024 ** exp;
+        const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+        return `${value.toFixed(digits)} ${units[exp]}`;
+      }
+
+      function formatHours(seconds) {
+        return `${(seconds / 3600).toFixed(seconds / 3600 >= 100 ? 0 : 1)}h`;
+      }
+
+      function formatDuration(seconds) {
+        const totalMinutes = Math.round(seconds / 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (!hours) return `${minutes}m`;
+        return `${hours}h ${minutes}m`;
+      }
+
+      function renderKpis() {
+        const o = report.overview;
+        const cards = [
+          {
+            label: "Tenants",
+            value: formatInt(o.tenants_total),
+            sub: `${o.tenant_kind_breakdown.external} external / ${o.tenant_kind_breakdown.internal} internal`,
+          },
+          {
+            label: "Claimed Footprint",
+            value: formatPercent(o.tenants_claimed, o.tenants_total),
+            sub: `${formatInt(o.tenants_claimed)} claimed tenants`,
+          },
+          {
+            label: "Rooms",
+            value: formatInt(o.rooms_total),
+            sub: `${formatInt(o.rooms_7d)} in the last 7d / ${formatInt(o.rooms_active)} still active`,
+          },
+          {
+            label: "Media Pipeline",
+            value: formatInt(o.recordings_ready),
+            sub: `${formatInt(o.transcripts_completed)} completed transcripts`,
+          },
+          {
+            label: "Storage",
+            value: formatBytes(o.recording_storage_bytes),
+            sub: `recordings only / ${formatInt(o.chat_attachments_total)} chat attachments`,
+          },
+          {
+            label: "Identity Layer",
+            value: formatInt(o.users_total),
+            sub: `${formatInt(o.workspaces_total)} workspaces / ${formatInt(o.active_sessions)} active sessions`,
+          },
+        ];
+
+        $("#kpiGrid").innerHTML = cards
+          .map(
+            (card) => `
+              <article class="panel kpi">
+                <div class="kpi-label">${card.label}</div>
+                <div class="kpi-value">${card.value}</div>
+                <div class="kpi-sub">${card.sub}</div>
+              </article>
+            `,
+          )
+          .join("");
+      }
+
+      function renderTrendChart() {
+        const wrap = $("#trendChartWrap");
+        const width = wrap.clientWidth;
+        const height = wrap.clientHeight;
+        const pad = { top: 14, right: 18, bottom: 32, left: 40 };
+        const innerWidth = width - pad.left - pad.right;
+        const innerHeight = height - pad.top - pad.bottom;
+        const maxValue = Math.max(
+          ...report.trend.flatMap((point) => [point.new_rooms, point.new_recordings, point.new_transcripts]),
+        );
+
+        const x = (index) => pad.left + (index / (report.trend.length - 1)) * innerWidth;
+        const y = (value) => pad.top + innerHeight - (value / maxValue) * innerHeight;
+
+        const series = [
+          { key: "new_rooms", color: "var(--accent)", label: "Rooms" },
+          { key: "new_recordings", color: "var(--accent-2)", label: "Recordings" },
+          { key: "new_transcripts", color: "var(--accent-3)", label: "Transcripts" },
+        ];
+
+        const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
+          const lineY = pad.top + innerHeight * ratio;
+          return `<line x1="${pad.left}" y1="${lineY}" x2="${width - pad.right}" y2="${lineY}" stroke="rgba(255,255,255,0.08)" stroke-width="1" />`;
+        });
+
+        const xLabels = [
+          { idx: 0, text: "Feb 21" },
+          { idx: 11, text: "Mar 4" },
+          { idx: 16, text: "Mar 9" },
+          { idx: 22, text: "Mar 15" },
+          { idx: 29, text: "Mar 22" },
+        ].map(
+          ({ idx, text }) =>
+            `<text x="${x(idx)}" y="${height - 6}" fill="var(--muted)" font-size="11" text-anchor="middle">${text}</text>`,
+        );
+
+        const yLabels = [0, Math.round(maxValue / 2), maxValue].map((value) => {
+          const labelY = y(value);
+          return `<text x="${pad.left - 10}" y="${labelY + 4}" fill="var(--muted)" font-size="11" text-anchor="end">${value}</text>`;
+        });
+
+        const paths = series
+          .map((seriesDef) => {
+            const path = report.trend
+              .map((point, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(point[seriesDef.key])}`)
+              .join(" ");
+            return `<path d="${path}" fill="none" stroke="${seriesDef.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+          })
+          .join("");
+
+        wrap.innerHTML = `
+          <svg class="chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="30 day trend chart">
+            ${gridLines.join("")}
+            <line x1="${pad.left}" y1="${pad.top + innerHeight}" x2="${width - pad.right}" y2="${pad.top + innerHeight}" stroke="rgba(255,255,255,0.12)" stroke-width="1" />
+            ${paths}
+            ${xLabels.join("")}
+            ${yLabels.join("")}
+          </svg>
+        `;
+      }
+
+      function renderReliability() {
+        const o = report.overview;
+        const transcriptFailed = o.transcript_statuses.find((row) => row.status === "failed")?.count ?? 0;
+        const transcriptProcessing = o.transcript_statuses.find((row) => row.status === "processing")?.count ?? 0;
+        const whisperQueued = o.whisper_statuses.find((row) => row.status === "queued")?.count ?? 0;
+
+        const rows = [
+          {
+            name: "Webhook delivery",
+            total: o.webhooks_total,
+            parts: [
+              { value: o.webhooks_delivered, className: "bar-good" },
+              { value: o.webhooks_failed, className: "bar-bad" },
+            ],
+            copy: `${formatPercent(o.webhooks_delivered, o.webhooks_total)} delivered / ${formatInt(o.webhooks_failed)} terminal failures`,
+          },
+          {
+            name: "Whisper jobs",
+            total: o.whisper_jobs_total,
+            parts: [
+              { value: o.whisper_jobs_completed, className: "bar-good" },
+              { value: whisperQueued, className: "bar-mid" },
+              { value: o.whisper_jobs_failed, className: "bar-bad" },
+            ],
+            copy: `${formatPercent(o.whisper_jobs_completed, o.whisper_jobs_total)} completed / avg ${formatDuration(
+              o.whisper_statuses[0].avg_duration_seconds,
+            )} transcript length`,
+          },
+          {
+            name: "Transcript jobs",
+            total: o.transcripts_total,
+            parts: [
+              { value: o.transcripts_completed, className: "bar-good" },
+              { value: transcriptProcessing, className: "bar-mid" },
+              { value: transcriptFailed, className: "bar-bad" },
+            ],
+            copy: `${formatPercent(o.transcripts_completed, o.transcripts_total)} completed / ${formatInt(
+              transcriptProcessing,
+            )} still processing`,
+          },
+        ];
+
+        $("#reliabilityList").innerHTML = rows
+          .map(
+            (row) => `
+              <div class="metric-row">
+                <div class="metric-head">
+                  <div class="metric-name">${row.name}</div>
+                  <div class="metric-value">${row.copy}</div>
+                </div>
+                <div class="bar">
+                  ${row.parts
+                    .map(
+                      (part) =>
+                        `<span class="${part.className}" style="width: ${(part.value / row.total) * 100}%"></span>`,
+                    )
+                    .join("")}
+                </div>
+              </div>
+            `,
+          )
+          .join("");
+      }
+
+      function renderInsights() {
+        const o = report.overview;
+        const topTenant = report.tenants[0];
+        const topRoomDay = report.trend.reduce((best, point) =>
+          point.new_rooms > best.new_rooms ? point : best,
+        );
+        const topTenantDay = report.trend.reduce((best, point) =>
+          point.new_tenants > best.new_tenants ? point : best,
+        );
+        const topMessageDay = report.trend.reduce((best, point) =>
+          point.new_messages > best.new_messages ? point : best,
+        );
+        const insights = [
+          {
+            title: "Tenant concentration",
+            tag: "Watch",
+            tagClass: "tag-warn",
+            body: `${topTenant.name} alone accounts for ${formatPercent(
+              topTenant.rooms_total,
+              o.rooms_total,
+            )} of all rooms and ${formatBytes(topTenant.storage_bytes)} of recording storage.`,
+          },
+          {
+            title: "Media pipeline",
+            tag: "Healthy",
+            tagClass: "tag-good",
+            body: `${formatPercent(o.recordings_ready, o.recordings_total)} of recordings are ready and ${formatPercent(
+              o.transcripts_completed,
+              o.transcripts_total,
+            )} of transcripts are completed.`,
+          },
+          {
+            title: "Identity gap",
+            tag: "Early",
+            tagClass: "tag-warn",
+            body: `Prod has ${formatInt(o.users_total)} users, ${formatInt(o.workspaces_total)} workspaces, and only ${formatInt(
+              o.tenants_claimed,
+            )} claimed tenants despite ${formatInt(o.tenants_total)} tenants overall.`,
+          },
+          {
+            title: "Spike window",
+            tag: "Peak",
+            tagClass: "tag-good",
+            body: `Peak room creation hit ${formatInt(topRoomDay.new_rooms)} on ${topRoomDay.day}. Peak tenant creation hit ${formatInt(
+              topTenantDay.new_tenants,
+            )} on ${topTenantDay.day}, and chat peaked at ${formatInt(topMessageDay.new_messages)} messages on ${topMessageDay.day}.`,
+          },
+        ];
+
+        $("#insightGrid").innerHTML = insights
+          .map(
+            (insight) => `
+              <article class="panel insight">
+                <span class="tag ${insight.tagClass}">${insight.tag}</span>
+                <h3>${insight.title}</h3>
+                <p>${insight.body}</p>
+              </article>
+            `,
+          )
+          .join("");
+      }
+
+      function renderTenantRows() {
+        $("#tenantRows").innerHTML = report.tenants
+          .map(
+            (tenant) => `
+              <tr>
+                <td class="tenant-cell">
+                  <div class="tenant-name">${tenant.name}</div>
+                  <div class="tenant-meta">created ${tenant.created_on}</div>
+                </td>
+                <td>${tenant.tenant_kind}</td>
+                <td>${formatHours(tenant.meeting_seconds)}</td>
+                <td>${formatInt(tenant.rooms_30d)}</td>
+                <td>${formatInt(tenant.recordings_total)}</td>
+                <td>${formatInt(tenant.transcripts_completed)}</td>
+                <td>${formatBytes(tenant.storage_bytes)}</td>
+                <td>${formatInt(tenant.workspaces_total)}</td>
+                <td>${formatInt(tenant.members_total)}</td>
+              </tr>
+            `,
+          )
+          .join("");
+      }
+
+      renderKpis();
+      renderTrendChart();
+      renderReliability();
+      renderInsights();
+      renderTenantRows();
+      window.addEventListener("resize", renderTrendChart);
+    </script>
+  </body>
+</html>

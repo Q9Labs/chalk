@@ -1,0 +1,9 @@
+## 2026-03-25
+
+- 2026-03-25 16:07 PKT — Axiom datasets confirmed via MCP: `chalk-api-prod` (events), `chalk-prod-traces` (OTEL traces). Local `axiom-sre` config not wired, so investigation used bound Axiom MCP directly.
+- 2026-03-25 16:10 PKT — `chalk-api-prod` schema inspected. No broad literal `timeout` log burst in the last 24h. `http.request` 5xx summary showed only `/api/v1/whats-new/releases` (`502`, fast: `p50=23ms`, max `54ms`) and `/api/v1/auth/token` (`500`, `p50=9152ms`, max `9504ms`).
+- 2026-03-25 16:12 PKT — `chalk-prod-traces` server spans >5s in last 24h, excluding long-lived `/ws`, only showed `POST /api/v1/auth/token` with repeated durations around `10.1s` to `10.6s`.
+- 2026-03-25 16:15 PKT — Querying `/api/v1/auth/token` request logs showed `57` total requests in last 24h; `26` took `>=9s`; statuses: `46x 200`, `8x 401`, `3x 500`; `p50=244ms`, `p95=10440ms`, max `10625ms`.
+- 2026-03-25 16:17 PKT — Direct log evidence found: `msg="api key lookup slow (match found|no match)"` with durations `10103ms`–`10625ms`, `checked=263..271`, `workers=4`. This lines up with the slow `/api/v1/auth/token` requests.
+- 2026-03-25 16:20 PKT — Code path confirmed: `apps/api/internal/interfaces/http/handlers/auth.go` -> `TenantLookup.ResolveActiveTenant()` -> `ListActiveTenantAPIKeys` full active-tenant scan + bcrypt compare per candidate in `apps/api/internal/infrastructure/auth/tenant_lookup.go` and `apps/api/internal/infrastructure/auth/apikey.go`.
+- 2026-03-25 16:22 PKT — Conclusion: current request-timeout symptom is primarily slow API-key auth, not a general API stall. Mechanism is repeated scan/verify across ~263-271 active tenant hashes with only `4` verify workers, yielding ~10s request times. Same lookup path is also used by `X-API-Key` middleware, so risk extends beyond `/auth/token` when that path is exercised.

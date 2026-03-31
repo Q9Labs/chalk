@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auth Token Check</title>
+    <style>
+      body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: #0b1020;
+        color: #e5eefc;
+        margin: 0;
+        padding: 24px;
+      }
+      main {
+        max-width: 920px;
+        margin: 0 auto;
+      }
+      textarea,
+      input,
+      button {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 12px;
+        border-radius: 10px;
+        border: 1px solid #31405f;
+        background: #11192b;
+        color: #e5eefc;
+        padding: 12px;
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+        background: #1e5eff;
+        border-color: #1e5eff;
+        font-weight: 600;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin-top: 16px;
+        padding: 16px;
+        border-radius: 10px;
+        background: #11192b;
+        border: 1px solid #31405f;
+        min-height: 180px;
+      }
+      .muted {
+        color: #92a3c7;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Auth Token Check</h1>
+      <p class="muted">Posts to <code>http://localhost:18080/api/v1/auth/token</code>.</p>
+      <label for="apiKey">API key</label>
+      <textarea id="apiKey" rows="3" placeholder="ck_live_..."></textarea>
+      <button id="submit" type="button">Exchange key</button>
+      <pre id="result">Waiting…</pre>
+    </main>
+    <script>
+      const button = document.getElementById("submit");
+      const apiKey = document.getElementById("apiKey");
+      const result = document.getElementById("result");
+
+      async function submit() {
+        result.textContent = "Loading...";
+        try {
+          const response = await fetch("http://localhost:18080/api/v1/auth/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ api_key: apiKey.value.trim() }),
+          });
+          const payload = await response.json();
+          result.textContent = JSON.stringify(
+            {
+              ok: response.ok,
+              status: response.status,
+              payload,
+            },
+            null,
+            2,
+          );
+        } catch (error) {
+          result.textContent = String(error);
+        }
+      }
+
+      button.addEventListener("click", submit);
+    </script>
+  </body>
+</html>
