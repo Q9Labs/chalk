@@ -6,6 +6,7 @@ import { getParticipantGradient, getParticipantColor } from "../../utils/colorGe
 import { applyThemeToDocument } from "../../utils/theme";
 import { usePictureInPicture } from "../../hooks/ui/usePictureInPicture";
 import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
+import { useIsMobile } from "../../hooks/useMediaQuery";
 import { SettingsDialog } from "../composite/SettingsDialog";
 import { DiagnosticErrorSheet } from "../composite";
 import { LoadingScreen } from "./LoadingScreen";
@@ -14,6 +15,7 @@ import { useSharedPictureInPicture } from "./picture-in-picture/PictureInPicture
 import { PreJoinFloatingControls } from "./prejoin-lobby/PreJoinFloatingControls";
 import { PreJoinHeader } from "./prejoin-lobby/PreJoinHeader";
 import { PreJoinJoinPanel } from "./prejoin-lobby/PreJoinJoinPanel";
+import { PreJoinLobbyMobile } from "./prejoin-lobby/PreJoinLobbyMobile";
 import { PreJoinPreviewPane } from "./prejoin-lobby/PreJoinPreviewPane";
 import type { PreJoinLobbyProps } from "./prejoin-lobby/types";
 import { usePreJoinAudioMeter } from "./prejoin-lobby/usePreJoinAudioMeter";
@@ -275,6 +277,7 @@ function PreJoinLobbyBase({
   }, [pictureInPicture]);
 
   const normalizedAudioLevel = Math.min(100, Math.max(0, activeAudioLevel * 100));
+  const isMobile = useIsMobile();
 
   return (
     <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName, settings.appearance.profileGradient).primary } as React.CSSProperties}>
@@ -329,43 +332,77 @@ function PreJoinLobbyBase({
           isDarkMode={isDarkMode}
         />
 
-        <PreJoinHeader roomName={roomName} isDarkMode={isDarkMode} onToggleTheme={handleToggleTheme} />
+        {isMobile ? (
+          <PreJoinLobbyMobile
+            roomName={roomName}
+            displayName={ui.displayName}
+            isDarkMode={isDarkMode}
+            isLoading={isLoading}
+            isVideoEnabled={ui.isVideoEnabled}
+            isAudioEnabled={ui.isAudioEnabled}
+            audioLevel={activeAudioLevel}
+            normalizedAudioLevel={normalizedAudioLevel}
+            participantGradient={participantGradient}
+            participantGradientPreference={settings.appearance.profileGradient}
+            videoRef={videoRef}
+            effectiveVideoDevices={effectiveVideoDevices}
+            effectiveAudioInputDevices={effectiveAudioInputDevices}
+            selectedVideoDevice={resolvedSelectedVideoDevice}
+            selectedAudioInput={resolvedSelectedAudioInput}
+            onToggleTheme={handleToggleTheme}
+            onToggleVideo={ui.toggleVideo}
+            onToggleAudio={ui.toggleAudio}
+            onVideoDeviceChange={handleVideoInputPreference}
+            onAudioInputChange={handleAudioInputPreference}
+            onToggleSettings={ui.toggleSettings}
+            onDisplayNameChange={ui.setDisplayNameFromInput}
+            onJoin={handleJoin}
+            enablePictureInPicture={enablePictureInPicture}
+            isPictureInPictureSupported={pictureInPicture.isSupported}
+            isPictureInPictureActive={pictureInPicture.isActive}
+            onTogglePictureInPicture={pictureInPicture.toggle}
+          />
+        ) : (
+          <>
+            <PreJoinHeader roomName={roomName} isDarkMode={isDarkMode} onToggleTheme={handleToggleTheme} />
 
-        <div className="flex-1 w-full max-w-6xl mx-auto flex items-center px-6 lg:px-8 pb-16">
-          <div className="grid w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-12 lg:gap-16 items-center">
-            <PreJoinPreviewPane
-              videoRef={videoRef}
-              displayName={ui.displayName}
-              isVideoEnabled={ui.isVideoEnabled}
-              isAudioEnabled={ui.isAudioEnabled}
-              audioLevel={activeAudioLevel}
-              normalizedAudioLevel={normalizedAudioLevel}
-              participantGradient={participantGradient}
-              participantGradientPreference={settings.appearance.profileGradient}
-              controls={
-                <PreJoinFloatingControls
-                  isAudioEnabled={ui.isAudioEnabled}
+            <div className="flex-1 w-full max-w-6xl mx-auto flex items-center px-6 lg:px-8 pb-16">
+              <div className="grid w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-12 lg:gap-16 items-center">
+                <PreJoinPreviewPane
+                  videoRef={videoRef}
+                  displayName={ui.displayName}
                   isVideoEnabled={ui.isVideoEnabled}
-                  effectiveAudioInputDevices={effectiveAudioInputDevices}
-                  effectiveVideoDevices={effectiveVideoDevices}
-                  selectedAudioInput={resolvedSelectedAudioInput}
-                  selectedVideoDevice={resolvedSelectedVideoDevice}
-                  onAudioInputChange={handleAudioInputPreference}
-                  onVideoDeviceChange={handleVideoInputPreference}
-                  onToggleAudio={ui.toggleAudio}
-                  onToggleVideo={ui.toggleVideo}
-                  onToggleSettings={ui.toggleSettings}
-                  enablePictureInPicture={enablePictureInPicture}
-                  isPictureInPictureSupported={pictureInPicture.isSupported}
-                  isPictureInPictureActive={pictureInPicture.isActive}
-                  onTogglePictureInPicture={pictureInPicture.toggle}
+                  isAudioEnabled={ui.isAudioEnabled}
+                  audioLevel={activeAudioLevel}
+                  normalizedAudioLevel={normalizedAudioLevel}
+                  participantGradient={participantGradient}
+                  participantGradientPreference={settings.appearance.profileGradient}
+                  controls={
+                    <PreJoinFloatingControls
+                      isAudioEnabled={ui.isAudioEnabled}
+                      isVideoEnabled={ui.isVideoEnabled}
+                      effectiveAudioInputDevices={effectiveAudioInputDevices}
+                      effectiveVideoDevices={effectiveVideoDevices}
+                      selectedAudioInput={resolvedSelectedAudioInput}
+                      selectedVideoDevice={resolvedSelectedVideoDevice}
+                      onAudioInputChange={handleAudioInputPreference}
+                      onVideoDeviceChange={handleVideoInputPreference}
+                      onToggleAudio={ui.toggleAudio}
+                      onToggleVideo={ui.toggleVideo}
+                      onToggleSettings={ui.toggleSettings}
+                      enablePictureInPicture={enablePictureInPicture}
+                      isPictureInPictureSupported={pictureInPicture.isSupported}
+                      isPictureInPictureActive={pictureInPicture.isActive}
+                      onTogglePictureInPicture={pictureInPicture.toggle}
+                    />
+                  }
                 />
-              }
-            />
 
-            <PreJoinJoinPanel displayName={ui.displayName} isLoading={isLoading} canJoin={ui.canJoin} onDisplayNameChange={ui.setDisplayNameFromInput} onJoin={handleJoin} participantGradient={participantGradient} />
-          </div>
-        </div>
+                <PreJoinJoinPanel displayName={ui.displayName} isLoading={isLoading} canJoin={ui.canJoin} onDisplayNameChange={ui.setDisplayNameFromInput} onJoin={handleJoin} participantGradient={participantGradient} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
       {ui.localError && (
         <DiagnosticErrorSheet

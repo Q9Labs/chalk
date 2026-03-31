@@ -29,7 +29,7 @@ export interface UsePreJoinUiStateReturn {
   toggleVideo: () => void;
   toggleAudio: () => void;
   toggleSettings: () => void;
-  handleJoin: () => void;
+  handleJoin: (displayNameOverride?: string) => void;
 }
 
 export function usePreJoinUiState({ userName, error, initialVideoEnabled, initialAudioEnabled, initialShowSettings, selectedVideoDevice, selectedAudioInput, selectedAudioOutput, onJoin }: UsePreJoinUiStateParams): UsePreJoinUiStateReturn {
@@ -67,8 +67,8 @@ export function usePreJoinUiState({ userName, error, initialVideoEnabled, initia
     setShowSettings((previous) => !previous);
   }, []);
 
-  const handleJoin = useCallback(() => {
-    const trimmedDisplayName = displayName.trim();
+  const handleJoin = useCallback((displayNameOverride?: string) => {
+    const trimmedDisplayName = (displayNameOverride ?? displayName).trim();
     if (!trimmedDisplayName) return;
 
     onJoin({
