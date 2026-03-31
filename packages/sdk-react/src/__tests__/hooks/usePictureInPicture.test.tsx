@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect, useId, useMemo } from "react";
 
 import { SharedPictureInPictureProvider, useSharedPictureInPicture } from "../../components/full/picture-in-picture/PictureInPictureContext";
@@ -185,7 +185,24 @@ function UnstableSharedRegistrar() {
 }
 
 describe("usePictureInPicture", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  });
+
   afterEach(() => {
+    cleanup();
     window.documentPictureInPicture = originalDocumentPictureInPicture;
 
     if (originalUserActivationDescriptor) {
@@ -279,6 +296,29 @@ describe("usePictureInPicture", () => {
       expect(requestWindow).toHaveBeenCalledTimes(1);
       expect(getByText("active")).toBeDefined();
     });
+  });
+
+  it("swallows recoverable PiP open errors instead of surfacing an unhandled rejection", async () => {
+    const requestWindow = vi.fn().mockRejectedValue(new DOMException("Document PiP requires user activation", "NotAllowedError"));
+    const onUnhandledRejection = vi.fn();
+
+    window.documentPictureInPicture = {
+      requestWindow,
+    } as any;
+
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+
+    const { getByText } = render(<Harness />);
+
+    fireEvent.click(getByText("open"));
+
+    await waitFor(() => {
+      expect(requestWindow).toHaveBeenCalledTimes(1);
+      expect(getByText("inactive")).toBeDefined();
+    });
+
+    expect(onUnhandledRejection).not.toHaveBeenCalled();
+    window.removeEventListener("unhandledrejection", onUnhandledRejection);
   });
 
   it("keeps the same Document PiP window across phase transitions", async () => {

@@ -11,15 +11,21 @@ interface PreJoinHeaderProps {
 
 export function PreJoinHeader({ roomName, isDarkMode, onToggleTheme }: PreJoinHeaderProps): React.JSX.Element {
   const { trigger } = useHaptics();
+  const logoStyle = {
+    width: "auto",
+    height: "auto",
+    maxWidth: "clamp(140px, 24vw, 240px)",
+    maxHeight: "clamp(56px, 12vh, 120px)",
+  } satisfies React.CSSProperties;
 
   return (
-    <div className="flex justify-between items-center px-6 py-5 w-full max-w-6xl mx-auto">
-      <div className="flex items-center gap-3">
-        <img src="/chalk-logo.svg" alt="Chalk" className="h-8 w-auto" draggable={false} />
+    <div className="flex justify-between items-start md:items-center px-6 lg:px-8 py-6 w-full max-w-6xl mx-auto gap-4">
+      <div className="flex items-center gap-3 md:gap-4 min-w-0">
+        <img src="/chalk-logo.svg" alt="Chalk" className="block shrink-0" style={logoStyle} draggable={false} />
         {roomName && (
           <>
-            <div className="w-px h-6 bg-border/50 mx-1" />
-            <span className="text-sm font-medium text-(--muted-foreground) truncate max-w-[200px]">{roomName}</span>
+            <div className="hidden sm:block w-px h-6 bg-border/60 mx-1 shrink-0" />
+            <span className="text-sm font-semibold text-(--muted-foreground) truncate max-w-[240px]">{roomName}</span>
           </>
         )}
       </div>
@@ -32,9 +38,9 @@ export function PreJoinHeader({ roomName, isDarkMode, onToggleTheme }: PreJoinHe
         }}
         title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
         aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-        className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-muted text-foreground"
+        className="w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-muted hover:scale-105 active:scale-95 text-foreground shadow-sm hover:shadow-md"
       >
-        {isDarkMode ? <Sun02Icon size={20} /> : <Moon02Icon size={20} />}
+        {isDarkMode ? <Sun02Icon size={22} /> : <Moon02Icon size={22} />}
       </button>
     </div>
   );

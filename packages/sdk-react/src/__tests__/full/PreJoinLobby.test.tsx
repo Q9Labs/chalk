@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from "bun:test";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { PreJoinLobby } from "../../components/full/PreJoinLobby";
 import { SharedPictureInPictureProvider } from "../../components/full/picture-in-picture/PictureInPictureContext";
@@ -29,6 +29,15 @@ describe("PreJoinLobby", () => {
     expect(getByText("Big Meeting")).toBeDefined();
     expect(getByPlaceholderText("Enter your name")).toBeDefined();
     expect(getByText("Ask to join")).toBeDefined();
+  });
+
+  it("clamps the pre-join brand mark so large custom logos do not dominate the layout", async () => {
+    const { getByAltText } = render(<PreJoinLobby onJoin={() => {}} roomName="Big Meeting" initialVideoEnabled={false} initialAudioEnabled={false} />);
+    await act(async () => {});
+
+    const logo = getByAltText("Chalk") as HTMLImageElement;
+    expect(logo.style.maxWidth).toBe("clamp(140px, 24vw, 240px)");
+    expect(logo.style.maxHeight).toBe("clamp(56px, 12vh, 120px)");
   });
 
   it("starts with camera and microphone off by default", async () => {

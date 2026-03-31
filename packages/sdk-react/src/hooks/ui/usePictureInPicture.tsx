@@ -46,6 +46,10 @@ declare global {
 const PIP_WIDTH = 340;
 const PIP_HEIGHT = 400;
 
+function isRecoverablePictureInPictureError(error: unknown): error is DOMException {
+  return error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotSupportedError");
+}
+
 function hasTransientUserActivation() {
   if (typeof navigator === "undefined") {
     return false;
@@ -167,10 +171,21 @@ export function usePictureInPicture({ enabled = true, autoOpen = false, phase, r
       return;
     }
 
-    const pipWindow = await api.requestWindow({
-      width: PIP_WIDTH,
-      height: PIP_HEIGHT,
-    });
+    let pipWindow: DocumentPictureInPictureWindow;
+
+    try {
+      pipWindow = await api.requestWindow({
+        width: PIP_WIDTH,
+        height: PIP_HEIGHT,
+      });
+    } catch (error) {
+      if (isRecoverablePictureInPictureError(error)) {
+        setIsAutoOpenPending(error.name === "NotAllowedError");
+        return;
+      }
+
+      throw error;
+    }
 
     copyStylesIntoPictureInPicture(pipWindow.document);
 
@@ -204,7 +219,7 @@ export function usePictureInPicture({ enabled = true, autoOpen = false, phase, r
       await open();
       setIsAutoOpenPending(false);
     } catch (error) {
-      if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotSupportedError")) {
+      if (isRecoverablePictureInPictureError(error)) {
         setIsAutoOpenPending(error.name === "NotAllowedError");
         return;
       }
