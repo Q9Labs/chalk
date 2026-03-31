@@ -53,7 +53,7 @@ jobs:
 
       - name: Prune monorepo for web app only
         run: |
-          pnpm exec turbo prune web
+          pnpm dlx turbo prune web
           # Copy root config files needed for builds
           cp tsconfig.json turbo.json pnpm-workspace.yaml out/
           # Fix workspaces to only include pruned packages

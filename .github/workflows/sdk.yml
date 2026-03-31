@@ -57,7 +57,7 @@ jobs:
 
       - name: Prune monorepo for SDK packages only
         run: |
-          pnpm exec turbo prune @q9labs/chalk-core @q9labs/chalk-react @q9labs/chalk-react-native @q9labs/chalk-ui @q9labs/chalk-whiteboard
+          pnpm dlx turbo prune @q9labs/chalk-core @q9labs/chalk-react @q9labs/chalk-react-native @q9labs/chalk-ui @q9labs/chalk-whiteboard
           # Copy root config files needed for builds
           cp tsconfig.json turbo.json pnpm-workspace.yaml out/
           cp -R scripts out/
