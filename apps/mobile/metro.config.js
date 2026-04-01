@@ -4,10 +4,15 @@ const { getDefaultConfig } = require("expo/metro-config");
 const config = getDefaultConfig(__dirname);
 const appNodeModules = path.resolve(__dirname, "node_modules");
 const workspaceNodeModules = path.resolve(__dirname, "../../node_modules");
+const sdkCoreRoot = path.resolve(__dirname, "../../packages/sdk-core");
+const sdkReactNativeRoot = path.resolve(__dirname, "../../packages/sdk-react-native");
 const sdkNodeModules = path.resolve(__dirname, "../../packages/sdk-react-native/node_modules");
 const escapePathForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-config.watchFolders = [path.resolve(__dirname, "../..")];
+// Keep Metro focused on the app and the workspace packages it imports.
+// Watching the entire monorepo makes cold iOS dev bundles slow enough to
+// time out inside the Expo dev client splash screen.
+config.watchFolders = [workspaceNodeModules, sdkCoreRoot, sdkReactNativeRoot];
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 config.resolver.extraNodeModules = {
   "@hugeicons/core-free-icons": path.resolve(appNodeModules, "@hugeicons/core-free-icons"),

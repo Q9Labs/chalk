@@ -37,6 +37,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         backgroundColor: "#f4f1eb",
       },
       ios: {
+        jsEngine: "jsc",
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
         buildNumber: "16",

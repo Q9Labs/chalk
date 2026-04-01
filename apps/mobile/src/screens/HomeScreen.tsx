@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Linking } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Settings01Icon, KeyboardIcon, Add01Icon } from "@hugeicons/core-free-icons";
+import Settings01Icon from "@hugeicons/core-free-icons/dist/esm/Settings01Icon";
+import KeyboardIcon from "@hugeicons/core-free-icons/dist/esm/KeyboardIcon";
+import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { canCreateMeeting, createMeetingLobbyRoute, getApiUrl, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
 import { Theme } from "../lib/theme";

@@ -1,6 +1,6 @@
 import { wideEvents, type ChalkSession } from "@q9labs/chalk-core";
 import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
-import { Bug02Icon } from "@hugeicons/core-free-icons";
+import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
 import { type ComponentType, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";

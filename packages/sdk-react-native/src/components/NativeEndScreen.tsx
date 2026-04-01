@@ -1,6 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Clock01Icon, UserGroupIcon, Message01Icon, TextFontIcon, CheckmarkCircle01Icon, ArrowRight01Icon, Home01Icon } from "@hugeicons/core-free-icons";
+import ArrowRight01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowRight01Icon";
+import CheckmarkCircle01Icon from "@hugeicons/core-free-icons/dist/esm/CheckmarkCircle01Icon";
+import Clock01Icon from "@hugeicons/core-free-icons/dist/esm/Clock01Icon";
+import Home01Icon from "@hugeicons/core-free-icons/dist/esm/Home01Icon";
+import Message01Icon from "@hugeicons/core-free-icons/dist/esm/Message01Icon";
+import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
+import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import { Theme } from "../ui/theme";
 
 export interface NativeMeetingEndData {

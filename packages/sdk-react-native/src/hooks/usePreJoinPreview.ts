@@ -1,5 +1,6 @@
 import { mediaDevices, type MediaStream as NativeMediaStream } from "@cloudflare/react-native-webrtc";
 import { useEffect, useRef, useState } from "react";
+import { getIosSimulatorVideoMessage, isIosSimulator } from "../utils/ios-simulator";
 
 export interface UsePreJoinPreviewReturn {
   previewStream: NativeMediaStream | null;
@@ -20,16 +21,17 @@ export function usePreJoinPreview(enabled: boolean): UsePreJoinPreviewReturn {
   const [previewStream, setPreviewStream] = useState<NativeMediaStream | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const activeStreamRef = useRef<NativeMediaStream | null>(null);
+  const simulatorVideoDisabled = isIosSimulator();
 
   useEffect(() => {
     let active = true;
     let nextStream: NativeMediaStream | null = null;
 
-    if (!enabled) {
+    if (!enabled || simulatorVideoDisabled) {
       stopPreviewTracks(activeStreamRef.current);
       activeStreamRef.current = null;
       setPreviewStream(null);
-      setPreviewError(null);
+      setPreviewError(enabled && simulatorVideoDisabled ? getIosSimulatorVideoMessage() : null);
       return undefined;
     }
 
@@ -77,7 +79,7 @@ export function usePreJoinPreview(enabled: boolean): UsePreJoinPreviewReturn {
         activeStreamRef.current = null;
       }
     };
-  }, [enabled]);
+  }, [enabled, simulatorVideoDisabled]);
 
   return { previewStream, previewError };
 }

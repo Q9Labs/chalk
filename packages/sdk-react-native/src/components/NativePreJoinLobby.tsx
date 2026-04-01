@@ -1,10 +1,15 @@
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RTCView } from "@cloudflare/react-native-webrtc";
-import { Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon, ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import ArrowLeft01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowLeft01Icon";
+import Mic01Icon from "@hugeicons/core-free-icons/dist/esm/Mic01Icon";
+import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
+import Video01Icon from "@hugeicons/core-free-icons/dist/esm/Video01Icon";
+import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { usePreJoinPreview } from "../hooks/usePreJoinPreview";
 import { Theme } from "../ui/theme";
+import { getIosSimulatorMediaMessage, isIosSimulator } from "../utils/ios-simulator";
 import { NativeFaceAvatar } from "./NativeFaceAvatar";
 
 export interface NativeJoinSettings {
@@ -27,13 +32,21 @@ export interface NativePreJoinLobbyProps {
 }
 
 export function NativePreJoinLobby({ roomName, role = "participant", userName = role === "host" ? "Host" : "Guest", initialAudioEnabled = true, initialVideoEnabled = true, error, joinDisabled = false, onJoin, onCancel }: NativePreJoinLobbyProps): React.JSX.Element {
+  const simulatorMediaDisabled = isIosSimulator();
   const [displayName, setDisplayName] = useState(userName);
-  const [audioEnabled, setAudioEnabled] = useState(initialAudioEnabled);
-  const [videoEnabled, setVideoEnabled] = useState(initialVideoEnabled);
+  const [audioEnabled, setAudioEnabled] = useState(initialAudioEnabled && !simulatorMediaDisabled);
+  const [videoEnabled, setVideoEnabled] = useState(initialVideoEnabled && !simulatorMediaDisabled);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLatchRef = useRef(false);
 
   const { previewError, previewStream } = usePreJoinPreview(videoEnabled);
+
+  useEffect(() => {
+    if (simulatorMediaDisabled) {
+      setAudioEnabled(false);
+      setVideoEnabled(false);
+    }
+  }, [simulatorMediaDisabled]);
 
   useEffect(() => {
     if (!joinDisabled) {
@@ -80,16 +93,17 @@ export function NativePreJoinLobby({ roomName, role = "participant", userName = 
             )}
 
             <View style={styles.toggleOverlay}>
-              <Pressable onPress={() => setAudioEnabled(!audioEnabled)} style={({ pressed }) => [styles.toggleCircle, !audioEnabled && styles.toggleCircleOff, pressed && styles.togglePressed]}>
+              <Pressable disabled={simulatorMediaDisabled} onPress={() => setAudioEnabled(!audioEnabled)} style={({ pressed }) => [styles.toggleCircle, !audioEnabled && styles.toggleCircleOff, simulatorMediaDisabled && styles.toggleCircleDisabled, pressed && styles.togglePressed]}>
                 <HugeiconsIcon icon={audioEnabled ? Mic01Icon : MicOff01Icon} size={22} color="white" />
               </Pressable>
-              <Pressable onPress={() => setVideoEnabled(!videoEnabled)} style={({ pressed }) => [styles.toggleCircle, !videoEnabled && styles.toggleCircleOff, pressed && styles.togglePressed]}>
+              <Pressable disabled={simulatorMediaDisabled} onPress={() => setVideoEnabled(!videoEnabled)} style={({ pressed }) => [styles.toggleCircle, !videoEnabled && styles.toggleCircleOff, simulatorMediaDisabled && styles.toggleCircleDisabled, pressed && styles.togglePressed]}>
                 <HugeiconsIcon icon={videoEnabled ? Video01Icon : VideoOffIcon} size={22} color="white" />
               </Pressable>
             </View>
           </View>
 
           {previewError && videoEnabled ? <Text style={styles.previewError}>{previewError}</Text> : null}
+          {simulatorMediaDisabled ? <Text style={styles.previewHint}>{getIosSimulatorMediaMessage()}</Text> : null}
         </View>
 
         {/* Info Area */}
@@ -206,6 +220,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(239,68,68,0.85)",
     borderColor: "rgba(239,68,68,0.85)",
   },
+  toggleCircleDisabled: {
+    opacity: 0.45,
+  },
   togglePressed: {
     opacity: 0.7,
     transform: [{ scale: 0.9 }],
@@ -216,6 +233,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: "center",
     fontWeight: "600",
+  },
+  previewHint: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: "center",
+    lineHeight: 18,
   },
 
   // Info Area

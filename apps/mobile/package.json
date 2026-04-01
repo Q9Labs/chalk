@@ -4,6 +4,7 @@
   "main": "./index.ts",
   "scripts": {
     "start": "expo start --clear",
+    "start:ios-sim": "node ./scripts/start-ios-sim-dev-client.mjs",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "prebuild:android": "expo prebuild --platform android --no-install",

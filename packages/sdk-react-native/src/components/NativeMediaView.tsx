@@ -1,5 +1,5 @@
 import { MediaStream, type MediaStreamTrack as NativeMediaStreamTrack, RTCView } from "@cloudflare/react-native-webrtc";
-import { MicOff01Icon } from "@hugeicons/core-free-icons";
+import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import type { Participant } from "@q9labs/chalk-core";
 import { useMemo } from "react";

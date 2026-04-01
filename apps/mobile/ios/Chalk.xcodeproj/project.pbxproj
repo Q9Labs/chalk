@@ -13,6 +13,7 @@
 		6378BDE637F28F8DF474F61A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 530BDEA809FC013FF5C7E4DF /* PrivacyInfo.xcprivacy */; };
 		99CA4E3AB044AE01EF4F2987 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		C06F3BFA93E64265A698B31F /* ChalkRuntimeInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 3283D8E245714031B1AE3F35 /* ChalkRuntimeInfo.m */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -21,6 +22,7 @@
 		13B07F961A680F5B00A75B9A /* Chalk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chalk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Chalk/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Chalk/Info.plist; sourceTree = "<group>"; };
+		3283D8E245714031B1AE3F35 /* ChalkRuntimeInfo.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Chalk/ChalkRuntimeInfo.m; sourceTree = "<group>"; };
 		530BDEA809FC013FF5C7E4DF /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Chalk/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6F2A335583B0883B92A90539 /* libPods-Chalk.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Chalk.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Chalk/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
@@ -48,6 +50,7 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				3283D8E245714031B1AE3F35 /* ChalkRuntimeInfo.m */,
 				F11748442D0722820044C1D9 /* Chalk-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -345,6 +348,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				C06F3BFA93E64265A698B31F /* ChalkRuntimeInfo.m in Sources */,
 				99CA4E3AB044AE01EF4F2987 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -483,7 +487,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
-				USE_HERMES = true;
+				USE_HERMES = false;
 			};
 			name = Debug;
 		};
@@ -539,7 +543,7 @@
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
-				USE_HERMES = true;
+				USE_HERMES = false;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;

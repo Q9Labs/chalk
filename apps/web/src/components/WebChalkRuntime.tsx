@@ -156,7 +156,7 @@ export function WebChalkRuntime({ children, fallback = null }: WebChalkRuntimePr
       <ChalkDebugBridge />
       <WhatsNew apiBaseUrl={`${apiUrl}/api/v1`} />
 
-      <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+      <div className="fixed bottom-4 right-4 z-40 hidden sm:flex flex-col items-end gap-2">
         <button onClick={() => setIsDebugOpen(true)} className="text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer select-none" title="System Information">
           sdk v{__SDK_REACT_VERSION__} · web v{__WEB_APP_VERSION__}
         </button>

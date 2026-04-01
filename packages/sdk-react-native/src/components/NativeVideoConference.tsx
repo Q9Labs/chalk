@@ -13,6 +13,7 @@ import { NativeJoiningLoadingScreen } from "./NativeJoiningLoadingScreen";
 import { NativeMeetingRoom, type NativeMeetingRoomDiagnosticsSnapshot, type NativeMeetingRoomFeatures } from "./NativeMeetingRoom";
 import { NativePreJoinLobby, type NativeJoinSettings } from "./NativePreJoinLobby";
 import { canExecuteNativeJoin, canStartNativeJoin, shouldPromoteAfterJoinError } from "../utils/native-join-guard";
+import { isIosSimulator } from "../utils/ios-simulator";
 
 export type NativeVideoConferencePhase = "lobby" | "joining" | "meeting" | "end";
 
@@ -56,6 +57,7 @@ export interface NativeVideoConferenceDiagnosticsSnapshot {
 }
 
 export function NativeVideoConference({ roomId, roomName, userName, role = "participant", autoJoin = false, initialPhase, initialJoinSettings, features, onJoin, onLeave, onEnd, onClose, onError, onDiagnosticsChange }: NativeVideoConferenceProps): React.JSX.Element {
+  const simulatorMediaDisabled = isIosSimulator();
   const session = useSession();
   const connection = useConnection();
   const room = useRoom();
@@ -65,10 +67,10 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
   const defaultSettings = useMemo<NativeJoinSettings>(
     () => ({
       displayName: initialJoinSettings?.displayName?.trim() || userName || "Chalker",
-      audioEnabled: initialJoinSettings?.audioEnabled ?? true,
-      videoEnabled: initialJoinSettings?.videoEnabled ?? true,
+      audioEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.audioEnabled ?? true),
+      videoEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.videoEnabled ?? true),
     }),
-    [initialJoinSettings?.audioEnabled, initialJoinSettings?.displayName, initialJoinSettings?.videoEnabled, role, userName],
+    [initialJoinSettings?.audioEnabled, initialJoinSettings?.displayName, initialJoinSettings?.videoEnabled, role, simulatorMediaDisabled, userName],
   );
   const [phase, setPhase] = useState<NativeVideoConferencePhase>(() => initialPhase ?? (autoJoin ? "joining" : "lobby"));
   const [joinSettings, setJoinSettings] = useState(defaultSettings);
@@ -181,8 +183,8 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
       .join(roomId, {
         userName: joinSettings.displayName,
         role,
-        audioEnabled: joinSettings.audioEnabled,
-        videoEnabled: joinSettings.videoEnabled,
+        audioEnabled: simulatorMediaDisabled ? false : joinSettings.audioEnabled,
+        videoEnabled: simulatorMediaDisabled ? false : joinSettings.videoEnabled,
       })
       .catch((cause) => {
         if (cancelled) {
@@ -214,7 +216,7 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
     return () => {
       cancelled = true;
     };
-  }, [connection.join, joinNonce, joinSettings.audioEnabled, joinSettings.displayName, joinSettings.videoEnabled, phase, promoteToMeeting, role, roomId, session]);
+  }, [connection.join, joinNonce, joinSettings.audioEnabled, joinSettings.displayName, joinSettings.videoEnabled, phase, promoteToMeeting, role, roomId, session, simulatorMediaDisabled]);
 
   useEffect(() => {
     if (phase !== "joining" || !connection.isConnected) {
@@ -241,13 +243,13 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
       setEndData(null);
       setJoinSettings({
         displayName: settings.displayName.trim() || defaultSettings.displayName,
-        audioEnabled: settings.audioEnabled,
-        videoEnabled: settings.videoEnabled,
+        audioEnabled: simulatorMediaDisabled ? false : settings.audioEnabled,
+        videoEnabled: simulatorMediaDisabled ? false : settings.videoEnabled,
       });
       setPhase("joining");
       setJoinNonce((current) => current + 1);
     },
-    [connection.isConnected, connection.isJoining, defaultSettings.displayName, phase],
+    [connection.isConnected, connection.isJoining, defaultSettings.displayName, phase, simulatorMediaDisabled],
   );
 
   const retryJoin = useCallback(() => {

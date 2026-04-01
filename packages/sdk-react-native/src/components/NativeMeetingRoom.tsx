@@ -1,5 +1,12 @@
 import type { LayoutMode, ParticipantState, ReactionEmoji } from "@q9labs/chalk-core";
-import { CallEnd01Icon, Chat01Icon, Mic01Icon, MicOff01Icon, MoreHorizontalIcon, UserGroupIcon, Video01Icon, VideoOffIcon } from "@hugeicons/core-free-icons";
+import CallEnd01Icon from "@hugeicons/core-free-icons/dist/esm/CallEnd01Icon";
+import Chat01Icon from "@hugeicons/core-free-icons/dist/esm/Chat01Icon";
+import Mic01Icon from "@hugeicons/core-free-icons/dist/esm/Mic01Icon";
+import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
+import MoreHorizontalIcon from "@hugeicons/core-free-icons/dist/esm/MoreHorizontalIcon";
+import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
+import Video01Icon from "@hugeicons/core-free-icons/dist/esm/Video01Icon";
+import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, type AlertButton, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
@@ -18,6 +25,7 @@ import { useTranscripts } from "../hooks/useTranscripts";
 import { useWhiteboard } from "../hooks/useWhiteboard";
 import { Theme } from "../ui/theme";
 import { buildChalkInviteLink } from "../utils/build-chalk-invite-link";
+import { getIosSimulatorMediaMessage, isIosSimulator } from "../utils/ios-simulator";
 import { NativeMeetingActionsSheet } from "./NativeMeetingActionsSheet";
 import { NativeMeetingPanel, type NativeMeetingPanelName } from "./NativeMeetingPanel";
 import { NativeReactionPicker } from "./NativeReactionPicker";
@@ -51,6 +59,7 @@ export interface NativeMeetingRoomProps {
 export type { NativeMeetingRoomDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
 
 export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnosticsChange }: NativeMeetingRoomProps): React.JSX.Element {
+  const simulatorMediaDisabled = isIosSimulator();
   const session = useSession();
   const { removeParticipant, muteParticipant, unmuteParticipant } = useChalkSession();
   const media = useMedia();
@@ -246,10 +255,32 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
 
       <View style={styles.bottomDock}>
         <View style={styles.controlPill}>
-          <Pressable onPress={() => void runAsync(media.toggleAudio)} style={({ pressed }) => [styles.controlButton, isMuted && styles.controlButtonDanger, pressed && styles.controlButtonPressed]}>
+          <Pressable
+            disabled={simulatorMediaDisabled}
+            onPress={() => {
+              if (simulatorMediaDisabled) {
+                Alert.alert("Media unavailable", getIosSimulatorMediaMessage());
+                return;
+              }
+
+              void runAsync(media.toggleAudio);
+            }}
+            style={({ pressed }) => [styles.controlButton, isMuted && styles.controlButtonDanger, simulatorMediaDisabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}
+          >
             <HugeiconsIcon color="#ffffff" icon={isMuted ? MicOff01Icon : Mic01Icon} size={22} />
           </Pressable>
-          <Pressable onPress={() => void runAsync(media.toggleVideo)} style={({ pressed }) => [styles.controlButton, isCameraOff && styles.controlButtonDanger, pressed && styles.controlButtonPressed]}>
+          <Pressable
+            disabled={simulatorMediaDisabled}
+            onPress={() => {
+              if (simulatorMediaDisabled) {
+                Alert.alert("Media unavailable", getIosSimulatorMediaMessage());
+                return;
+              }
+
+              void runAsync(media.toggleVideo);
+            }}
+            style={({ pressed }) => [styles.controlButton, isCameraOff && styles.controlButtonDanger, simulatorMediaDisabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}
+          >
             <HugeiconsIcon color="#ffffff" icon={isCameraOff ? VideoOffIcon : Video01Icon} size={22} />
           </Pressable>
           <Pressable onPress={() => openPanel("chat")} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
@@ -441,6 +472,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  controlButtonDisabled: {
+    opacity: 0.45,
   },
   controlButtonPressed: {
     opacity: 0.7,

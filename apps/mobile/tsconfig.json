@@ -10,5 +10,5 @@
       "@q9labs/chalk-react-native": ["../../packages/sdk-react-native/src/index.ts"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"]
 }

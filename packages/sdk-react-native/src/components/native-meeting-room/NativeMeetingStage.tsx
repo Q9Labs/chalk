@@ -1,6 +1,10 @@
 import type { LayoutMode, ParticipantState } from "@q9labs/chalk-core";
 import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
-import { ComputerScreenShareIcon, MicOff01Icon, Presentation01Icon, RecordIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
+import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
+import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
+import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
+import RecordIcon from "@hugeicons/core-free-icons/dist/esm/RecordIcon";
+import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useMemo } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";

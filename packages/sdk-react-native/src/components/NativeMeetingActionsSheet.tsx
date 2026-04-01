@@ -1,4 +1,13 @@
-import { CallEnd01Icon, Chat01Icon, Link01Icon, Presentation01Icon, RecordIcon, Settings01Icon, SmileIcon, TextFontIcon, UserGroupIcon, WavingHand01Icon } from "@hugeicons/core-free-icons";
+import CallEnd01Icon from "@hugeicons/core-free-icons/dist/esm/CallEnd01Icon";
+import Chat01Icon from "@hugeicons/core-free-icons/dist/esm/Chat01Icon";
+import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
+import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
+import RecordIcon from "@hugeicons/core-free-icons/dist/esm/RecordIcon";
+import Settings01Icon from "@hugeicons/core-free-icons/dist/esm/Settings01Icon";
+import SmileIcon from "@hugeicons/core-free-icons/dist/esm/SmileIcon";
+import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
+import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
+import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { memo } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";

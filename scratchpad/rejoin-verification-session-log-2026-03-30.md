@@ -115,3 +115,187 @@
   - viewer-request function: `th-portal-dynamic-route-rewrite`
   - S3 website bucket config exists with `index.html` and `404.html`
 - Updated `/Users/macmini/Desktop/Code/th-lms/CHALK_WORKFLOW.md` to mark Amplify as stale/non-prod control plane only, and to document the real prod frontend deploy path as local build -> S3 sync -> CloudFront invalidation.
+
+## 2026-03-31 12:58 PKT
+- Hasan reported TH prod classroom routes returning the app-level `404` page after the manual CloudFront deploy.
+- Root cause: CloudFront viewer-request function rewrites dynamic routes like `/dashboard/class-room/:meeting_url` to nested static keys (`/dashboard/class-room/[meeting_url]/index.html`), but the published Next artifact only contained flat files (`/dashboard/class-room/[meeting_url].html`).
+- Verified the mismatch directly against prod:
+  - flat placeholder route key returned `200`
+  - nested placeholder route key returned `404 NoSuchKey`
+- Implemented durable TH client packaging fix in `th-lms-client/scripts/prepare-static-deploy.js`:
+  - copies the static export output into `out/`
+  - duplicates every non-root HTML page to a sibling nested `index.html`
+  - preserves both flat and nested route shapes so existing CloudFront rewrites and direct static file access both work
+- Added `prepare-static-deploy` script to TH client `package.json`.
+- Committed + pushed TH client fix: `1d60891b fix(client): emit nested static route fallbacks`.
+- Re-synced corrected `out/` artifact to `s3://th-lms-portal-use1-emergency-20260324` and completed CloudFront invalidation `ID2PGPF7JI6IY7MZVL1DBSMYOT`.
+- Re-verified live prod:
+  - `https://portal.tuitionhighway.com/dashboard/class-room/69ca69956655835e3a64a4cd` -> `200`
+  - `https://portal.tuitionhighway.com/dashboard/class-room/%5Bmeeting_url%5D/index.html` -> `200`
+- Assessment: this exact bug is TH-only because ET frontend still deploys through Amplify rather than TH's direct CloudFront static export pipeline.
+
+## 2026-03-31 13:36 PKT
+- Hasan reported TH still showing `room not found` for session `69cb8134cfbc45203c17ab52` after the room-id persistence patch.
+- Debug bundle `chalk-debug-1774945331590.txt` showed TH was joining persisted room UUID `f842069b-b1e7-65ba-2e0d-a56304b64422`, not falling back to the LMS session id.
+- Verified the TH session in prod Mongo (`test.sessions`) stores:
+  - `meeting_account: "chalk"`
+  - `chalk_room_id: "f842069b-b1e7-65ba-2e0d-a56304b64422"`
+  - no webhook or post-meeting Chalk fields populated yet
+- Queried Chalk directly:
+  - room `f842069b-b1e7-65ba-2e0d-a56304b64422` exists and is active
+  - room tenant is `9621ac51-fa9e-5a71-ea34-df050fdbfe7c`
+- Decoded the client token from the debug bundle and found it belonged to tenant `8bdd43fd-50f8-1ec5-fd3a-fd718ead13c7`, so the browser was authenticating into the wrong Chalk tenant and then trying to join a room owned by another tenant.
+- Confirmed live TH frontend bundle in S3 contained the wrong public Chalk key from local `.env.local`, while TH server `.env.prod` had the correct tenant/key.
+- Durable fix:
+  - updated `th-lms-client/scripts/validate-public-env.js` to mint a Chalk token at build time and fail the prod build if `NEXT_PUBLIC_CHALK_API_KEY` resolves to a tenant different from `NEXT_PUBLIC_CHALK_TENANT_ID`
+  - updated `th-lms-client/next.config.js` earlier to disable `next/image` optimization for static S3 + CloudFront hosting
+  - updated `/Users/macmini/Desktop/Code/th-lms/CHALK_WORKFLOW.md` to require explicit prod public Chalk env exports for frontend builds
+- Rebuilt TH frontend with explicit prod public Chalk envs:
+  - `NEXT_PUBLIC_BASE_URL=https://api.tuitionhighway.com/api/v1`
+  - `NEXT_PUBLIC_CHALK_API_URL=https://chalk-api.q9labs.ai`
+  - `NEXT_PUBLIC_CHALK_WS_URL=wss://chalk-ws.q9labs.ai/ws`
+  - `NEXT_PUBLIC_CHALK_API_KEY=<TH prod public Chalk key>`
+  - `NEXT_PUBLIC_CHALK_TENANT_ID=9621ac51-fa9e-5a71-ea34-df050fdbfe7c`
+- Build validation now logs:
+  - `Validated NEXT_PUBLIC_BASE_URL for production build: https://api.tuitionhighway.com`
+  - `Validated Chalk public tenant for production build: 9621ac51-fa9e-5a71-ea34-df050fdbfe7c`
+- Committed + pushed TH client fixes:
+  - `3707ae44 fix(client): disable next image optimizer for static deploy`
+  - `fcdeef08 fix(client): validate chalk tenant for prod builds`
+- Republished TH frontend to `s3://th-lms-portal-use1-emergency-20260324` and invalidated CloudFront `E1MP2FPR95HKXM` with invalidation `I6HW36BXHJKLHPK0KNXUEKHJU9`.
+- Live verification after publish:
+  - new build id `NwMh65Z07PsSQOqh1EBcR`
+  - live `_app-c4779955b82a2049.js` contains the correct TH prod Chalk key
+  - live HTML no longer references `/_next/image`
+  - direct asset URLs (`/assets/logo.png`, `/assets/login-img.png`, `/assets/vector-2.png`) return `200`
+
+## 2026-03-31 15:18 PKT
+- Hasan reported TH notifications still broken and suspected missing frontend env injection in the manual CloudFront build.
+- Tried reading the old TH Amplify app env surface via AWS CLI:
+  - `AWS_PROFILE=q9labs aws amplify get-app --app-id d17jmjn2v13h91 --region me-south-1`
+  - `aws amplify list-apps`
+  - `aws amplify list-branches --app-id d17jmjn2v13h91`
+  - All returned `InternalServerErrorException` from the Amplify control plane in `me-south-1`, so the exact old env map could not be read from AWS during this check.
+- Audited TH client env usage from source instead. Public vars referenced by code are:
+  - `NEXT_PUBLIC_BASE_URL`
+  - `NEXT_PUBLIC_CHALK_API_URL`
+  - `NEXT_PUBLIC_CHALK_WS_URL`
+  - `NEXT_PUBLIC_CHALK_API_KEY`
+  - `NEXT_PUBLIC_CHALK_TENANT_ID`
+  - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+  - `NEXT_PUBLIC_AWS_PROJECT_REGION`
+  - `NEXT_PUBLIC_AWS_COGNITO_IDENTITY_POOL_ID`
+  - `NEXT_PUBLIC_AWS_COGNITO_REGION`
+  - `NEXT_PUBLIC_AWS_USER_POOLS_ID`
+  - `NEXT_PUBLIC_AWS_USER_POOLS_WEB_CLIENT_ID`
+  - `NEXT_PUBLIC_AUTH0_BASE_URL`
+  - `NEXT_PUBLIC_AUTH0_CLIENT_ID`
+  - `NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL`
+  - `NEXT_PUBLIC_FIREBASE_API_KEY`
+  - `NEXT_PUBLIC_FIREBASE_APP_ID`
+  - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+  - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+  - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+  - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+  - `NEXT_PUBLIC_GTM_CONTAINER_ID`
+  - `NEXT_PUBLIC_MAPBOX_API_KEY`
+  - `NEXT_PUBLIC_ENABLE_CLARITY`
+  - `NEXT_PUBLIC_CLARITY_PROJECT_ID`
+  - `NEXT_PUBLIC_ENABLE_REDUX_DEV_TOOLS`
+- Current manual CloudFront build inputs came only from shell exports plus `.env.local`.
+  - `.env.local` provides:
+    - `NEXT_PUBLIC_BASE_URL`
+    - `NEXT_PUBLIC_CHALK_API_URL`
+    - `NEXT_PUBLIC_CHALK_WS_URL`
+    - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+    - `NEXT_PUBLIC_CHALK_API_KEY`
+    - `NEXT_PUBLIC_CHALK_TENANT_ID`
+  - Prod redeploys overrode the backend host and Chalk public vars, but did not inject the broader legacy public env surface that the app still references.
+- Verified current live TH frontend bundle through the CloudFront domain `dy9un6ve69k23.cloudfront.net`:
+  - present:
+    - `backend.tuitionhighway.com/api/v1`
+    - `chalk-api.q9labs.ai`
+    - the current `NEXT_PUBLIC_VAPID_PUBLIC_KEY` value
+  - absent:
+    - Firebase public config markers (`firebaseapp.com`, `AIza`)
+    - Auth0 markers
+    - Mapbox markers
+- Important nuance for push notifications:
+  - the frontend subscription path depends on `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, and that key is present in the current CloudFront build
+  - `public/service_worker.js` is live and serving `200`
+  - `usePushNotifications` never calls `Notification.requestPermission()`; it only subscribes if permission is already `granted`
+  - so missing public envs are real, but the notification breakage may not be purely an env injection issue
+
+## 2026-03-31 15:42 PKT
+- Implemented TH client notification hardening in `th-lms-client`:
+  - `usePushNotifications` now requests browser notification permission when the user is authenticated and the permission state is still `default`
+  - `PushManager.subscribe` now receives the VAPID key as a `Uint8Array` instead of the raw base64url string
+  - existing browser push subscriptions are reused and re-sent to the backend instead of always forcing a brand-new subscription
+- Tightened TH frontend build validation:
+  - production builds now require `NEXT_PUBLIC_VAPID_PUBLIC_KEY` in addition to the existing base URL + Chalk public envs
+  - this closes the silent-manual-build gap where CloudFront deploys could ship without the public key needed for web push
+- Updated TH client `CHANGELOG.md` with the notification fix and build-validation guardrail.
+- Local gate:
+  - `yarn lint` completed with pre-existing warnings only
+  - `yarn build` passed with explicit prod-style public env exports
+  - `npx tsc --noEmit` did not complete in a reasonable window in this repo, so the build result is the stronger verification available from this pass
+- Commit created in `th-lms-client`: `41f835e5 fix(client): harden web push registration`
+
+## 2026-03-31 18:18 PKT
+- Hasan said `ship it` for the TH notification fix.
+- Pushed TH client `main` to GitHub:
+  - `41f835e5 fix(client): harden web push registration`
+- TH frontend deploy remains manual through S3 + CloudFront, so rebuilt and republished with explicit prod public envs:
+  - `NEXT_PUBLIC_BASE_URL=https://backend.tuitionhighway.com/api/v1`
+  - `NEXT_PUBLIC_CHALK_API_URL=https://chalk-api.q9labs.ai`
+  - `NEXT_PUBLIC_CHALK_WS_URL=wss://chalk-ws.q9labs.ai/ws`
+  - `NEXT_PUBLIC_CHALK_API_KEY=<from th-lms-server .env.prod>`
+  - `NEXT_PUBLIC_CHALK_TENANT_ID=9621ac51-fa9e-5a71-ea34-df050fdbfe7c`
+  - `NEXT_PUBLIC_VAPID_PUBLIC_KEY=<from th-lms-server .env>`
+- Build validation passed:
+  - required public env set present
+  - base URL validated to `https://backend.tuitionhighway.com`
+  - Chalk public tenant validated to `9621ac51-fa9e-5a71-ea34-df050fdbfe7c`
+- Synced static export to `s3://th-lms-portal-use1-emergency-20260324`.
+- CloudFront invalidation created and completed:
+  - distribution `E1MP2FPR95HKXM`
+  - invalidation `I1LVJDTFXUR2ECNI1RIT0XGABN`
+- Live verification through CloudFront domain `dy9un6ve69k23.cloudfront.net`:
+  - current app chunk `/_next/static/chunks/pages/_app-55fd7bdbcff80ec8.js`
+  - bundle contains:
+    - `backend.tuitionhighway.com/api/v1`
+    - VAPID public key
+    - `requestPermission`
+    - `getSubscription`
+    - `Uint8Array.from`
+
+## 2026-04-01 09:36 PKT
+- Hasan reported new user reports that `portal.tuitionhighway.com` was not loading.
+- Live checks from this shell:
+  - initial portal GET returned `403 Forbidden`
+  - immediate retry returned `200 OK`
+  - repeated smoke checks then stayed healthy:
+    - portal HTML: 5/5 requests returned `200`
+    - current app chunk `/_next/static/chunks/pages/_app-55fd7bdbcff80ec8.js`: 5/5 requests returned `200`
+    - `/assets/logo.png`: 5/5 requests returned `200`
+- Current live portal page still points at app chunk `55fd7bdbcff80ec8`, which is the latest shipped TH frontend artifact.
+- Backend/API smoke from this shell was less clean:
+  - `POST https://backend.tuitionhighway.com/api/v1/login` with a dummy payload timed out on read instead of returning a fast app-level auth error.
+- Current assessment:
+  - could not reproduce a sustained full frontend outage
+  - saw one transient `403` at the edge followed by stable `200`s
+  - frontend shell and static assets currently look healthy
+  - backend responsiveness remains suspicious and may be what users perceive as the portal not loading/hanging
+
+## 2026-04-01 10:58 PKT
+- TH backend external probes all timed out for GET /api/v1/login, POST /api/v1/login, and GET / on backend.tuitionhighway.com (~15s each).
+- Portal shell still served 200s earlier, so current user symptom likely backend/API outage rather than full frontend outage.
+- AWS Elastic Beanstalk control-plane probe for th-lms-prod-v2 also failed with 502 Bad Gateway instead of returning environment health.
+
+- Confirmed backend.tuitionhighway.com now returns Cloudflare 522 after ~39.5s (origin timeout), while portal.tuitionhighway.com remains healthy 200.
+- Remote IP for both portal and backend resolves to Cloudflare edge IPv6 2606:4700:3033::ac43:b637, reinforcing that backend failure is on the Cloudflare->origin path rather than client-side DNS/browser.
+
+## 2026-04-01 12:18 PKT
+- Confirmed Cloudflare edge for backend.tuitionhighway.com accepts TCP on 80/443, but active TH prod EB origin th-lms-prod.eba-ddwh75rb.me-south-1.elasticbeanstalk.com times out at raw TCP connect on both 80 and 443.
+- This isolates the outage to the EB/ALB origin layer before app HTTP handling. Not a frontend bundle issue and not a pure Cloudflare edge issue.
+- AWS me-south-1 control-plane endpoints for STS/EB/ELB also timed out from this machine during investigation, preventing fresh target-health introspection via CLI.
