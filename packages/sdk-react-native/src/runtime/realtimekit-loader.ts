@@ -18,15 +18,12 @@ export const importReactNativeRealtimeKit = async () => {
   return {
     ...realtimeKit,
     init: async (config: any) => {
-      const mediaHandler = typeof realtimeKit.initMedia === "function" ? realtimeKit.initMedia({ audio: false, video: false }, false) : undefined;
-
       return realtimeKit.init({
         ...config,
         defaults: {
           ...(config?.defaults ?? {}),
           audio: false,
           video: false,
-          ...(mediaHandler ? { mediaHandler } : {}),
         },
       });
     },

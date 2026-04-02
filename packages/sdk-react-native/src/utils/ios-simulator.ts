@@ -6,6 +6,8 @@ const EMPTY_RTP_CAPABILITIES = Object.freeze({
   headerExtensions: [],
 });
 
+const CHALK_SIMULATOR_PATCHED = "__chalkSimulatorPatched";
+
 function createEmptyRtpCapabilities() {
   return {
     codecs: [...EMPTY_RTP_CAPABILITIES.codecs],
@@ -13,8 +15,17 @@ function createEmptyRtpCapabilities() {
   };
 }
 
+function markPatched(target: object, key: string) {
+  Object.defineProperty(target, key, {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+}
+
 function patchWebRtcCapabilities(target: any) {
-  if (!target || typeof target.getCapabilities !== "function" || target.getCapabilities.__chalkSimulatorPatched === true) {
+  if (!target || typeof target.getCapabilities !== "function" || target.getCapabilities[CHALK_SIMULATOR_PATCHED] === true) {
     return;
   }
 
@@ -26,14 +37,45 @@ function patchWebRtcCapabilities(target: any) {
     return createEmptyRtpCapabilities();
   };
 
-  Object.defineProperty(getCapabilities, "__chalkSimulatorPatched", {
-    value: true,
-    configurable: false,
-    enumerable: false,
-    writable: false,
-  });
+  markPatched(getCapabilities, CHALK_SIMULATOR_PATCHED);
 
   target.getCapabilities = getCapabilities;
+}
+
+function patchNativeWebRtcCapabilities(nativeModule: Record<string, unknown> | undefined) {
+  if (!nativeModule) {
+    return;
+  }
+
+  const capabilityMethods = ["receiverGetCapabilities", "senderGetCapabilities"] as const;
+
+  capabilityMethods.forEach((methodName) => {
+    const originalMethod = nativeModule[methodName];
+
+    if (typeof originalMethod !== "function" || (originalMethod as ((...args: Array<unknown>) => unknown) & { [CHALK_SIMULATOR_PATCHED]?: boolean })[CHALK_SIMULATOR_PATCHED] === true) {
+      return;
+    }
+
+    const safeMethod = () => createEmptyRtpCapabilities();
+    markPatched(safeMethod, CHALK_SIMULATOR_PATCHED);
+    nativeModule[methodName] = safeMethod;
+  });
+}
+
+function patchMediaDeviceEnumeration(mediaDevices: Record<string, unknown> | undefined) {
+  if (!mediaDevices) {
+    return;
+  }
+
+  const enumerateDevices = mediaDevices.enumerateDevices;
+
+  if (typeof enumerateDevices !== "function" || (enumerateDevices as ((...args: Array<unknown>) => unknown) & { [CHALK_SIMULATOR_PATCHED]?: boolean })[CHALK_SIMULATOR_PATCHED] === true) {
+    return;
+  }
+
+  const safeEnumerateDevices = async () => [];
+  markPatched(safeEnumerateDevices, CHALK_SIMULATOR_PATCHED);
+  mediaDevices.enumerateDevices = safeEnumerateDevices;
 }
 
 export function isIosSimulator(): boolean {
@@ -59,9 +101,13 @@ export function ensureIosSimulatorWebRtcSafety(webRtcModule?: any): void {
   }
 
   const scope = globalThis as any;
+  const nativeWebRtcModule = NativeModules.WebRTCModule as Record<string, unknown> | undefined;
+  const patchedMediaDevices = webRtcModule?.mediaDevices ?? scope.mediaDevices ?? scope.navigator?.mediaDevices;
   const sender = webRtcModule?.RTCRtpSender ?? scope.RTCRtpSender;
   const receiver = webRtcModule?.RTCRtpReceiver ?? scope.RTCRtpReceiver;
 
+  patchNativeWebRtcCapabilities(nativeWebRtcModule);
+  patchMediaDeviceEnumeration(patchedMediaDevices);
   patchWebRtcCapabilities(sender);
   patchWebRtcCapabilities(receiver);
 
@@ -71,5 +117,9 @@ export function ensureIosSimulatorWebRtcSafety(webRtcModule?: any): void {
 
   if (scope.RTCRtpReceiver) {
     patchWebRtcCapabilities(scope.RTCRtpReceiver);
+  }
+
+  if (scope.navigator?.mediaDevices) {
+    patchMediaDeviceEnumeration(scope.navigator.mediaDevices);
   }
 }

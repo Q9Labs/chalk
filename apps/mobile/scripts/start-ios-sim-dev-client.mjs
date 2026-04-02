@@ -146,7 +146,7 @@ async function main() {
       "--clear",
       "--dev-client",
       "--host",
-      "localhost",
+      "lan",
       "--port",
       String(expoPort),
     ],
