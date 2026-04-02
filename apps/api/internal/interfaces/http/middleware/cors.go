@@ -2,7 +2,10 @@ package middleware
 
 import (
 	"encoding/json"
+	"net"
+	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/gin-gonic/gin"
@@ -10,6 +13,39 @@ import (
 
 // localhostPattern matches http://localhost or http://localhost:PORT (numeric port only)
 var localhostPattern = regexp.MustCompile(`^http://(localhost|127\.0\.0\.1)(:\d+)?$`)
+
+func isDevelopmentOrigin(origin string) bool {
+	if localhostPattern.MatchString(origin) {
+		return true
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		return false
+	}
+
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	if ip.IsLoopback() {
+		return true
+	}
+
+	// Allow RFC1918 LAN hosts for local device/simulator development against
+	// a machine-local API, but only outside production.
+	return ip.IsPrivate()
+}
 
 // PlatformOrigins are the static origins always allowed by the platform
 var PlatformOrigins = map[string]bool{
@@ -34,8 +70,8 @@ func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Allow any localhost or 127.0.0.1 origin for development
-		isLocalhost := localhostPattern.MatchString(origin)
+		// Allow localhost plus private LAN origins for development.
+		isLocalhost := isDevelopmentOrigin(origin)
 		isAllowed := PlatformOrigins[origin] || isLocalhost
 
 		if isAllowed {
@@ -74,8 +110,8 @@ func IsOriginAllowedForTenant(origin string, tenant *db.Tenant) bool {
 		return true
 	}
 
-	// Localhost is always allowed for development
-	if localhostPattern.MatchString(origin) {
+	// Localhost and private LAN origins are allowed for local development.
+	if isDevelopmentOrigin(origin) {
 		return true
 	}
 

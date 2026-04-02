@@ -179,6 +179,8 @@ PODS:
     - Yoga
   - ExpoAsset (55.0.10):
     - ExpoModulesCore
+  - ExpoAudio (55.0.9):
+    - ExpoModulesCore
   - ExpoClipboard (55.0.9):
     - ExpoModulesCore
   - ExpoDomWebView (55.0.3):
@@ -225,6 +227,8 @@ PODS:
   - ExpoSecureStore (55.0.9):
     - ExpoModulesCore
   - ExpoSplashScreen (55.0.13):
+    - ExpoModulesCore
+  - ExpoSQLite (55.0.11):
     - ExpoModulesCore
   - EXUpdatesInterface (55.1.3):
     - ExpoModulesCore
@@ -2141,6 +2145,7 @@ DEPENDENCIES:
   - "expo-dev-menu (from `../../../node_modules/.pnpm/expo-dev-menu@55.0.17_expo@55.0.9/node_modules/expo-dev-menu`)"
   - "expo-dev-menu-interface (from `../../../node_modules/.pnpm/expo-dev-menu-interface@55.0.1_expo@55.0.9/node_modules/expo-dev-menu-interface/ios`)"
   - "ExpoAsset (from `../../../node_modules/.pnpm/expo-asset@55.0.10_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2_f3781d4e1bcbd72fd4e35fdc86e6d2d7/node_modules/expo-asset/ios`)"
+  - "ExpoAudio (from `../../../node_modules/.pnpm/expo-audio@55.0.9_expo-asset@55.0.10_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_2783aa9682e618dec588e55af3a262a4/node_modules/expo-audio/ios`)"
   - "ExpoClipboard (from `../../../node_modules/.pnpm/expo-clipboard@55.0.9_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0__react@19.2.0/node_modules/expo-clipboard/ios`)"
   - "ExpoDomWebView (from `../../../node_modules/.pnpm/@expo+dom-webview@55.0.3_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+reac_6224f7e567e010be200d78d5490ca616/node_modules/@expo/dom-webview/ios`)"
   - "ExpoFileSystem (from `../../../node_modules/.pnpm/expo-file-system@55.0.12_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0_/node_modules/expo-file-system/ios`)"
@@ -2152,6 +2157,7 @@ DEPENDENCIES:
   - "ExpoModulesJSI (from `../../../node_modules/.pnpm/expo-modules-core@55.0.18_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0__react@19.2.0/node_modules/expo-modules-core`)"
   - "ExpoSecureStore (from `../../../node_modules/.pnpm/expo-secure-store@55.0.9_expo@55.0.9/node_modules/expo-secure-store/ios`)"
   - "ExpoSplashScreen (from `../../../node_modules/.pnpm/expo-splash-screen@55.0.13_expo@55.0.9_typescript@5.9.3/node_modules/expo-splash-screen/ios`)"
+  - "ExpoSQLite (from `../../../node_modules/.pnpm/expo-sqlite@55.0.11_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0__react@19.2.0/node_modules/expo-sqlite/ios`)"
   - "EXUpdatesInterface (from `../../../node_modules/.pnpm/expo-updates-interface@55.1.3_expo@55.0.9/node_modules/expo-updates-interface/ios`)"
   - "FBLazyVector (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0/node_modules/react-native/Libraries/FBLazyVector`)"
   - "hermes-engine (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0/node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)"
@@ -2255,6 +2261,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-dev-menu-interface@55.0.1_expo@55.0.9/node_modules/expo-dev-menu-interface/ios"
   ExpoAsset:
     :path: "../../../node_modules/.pnpm/expo-asset@55.0.10_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2_f3781d4e1bcbd72fd4e35fdc86e6d2d7/node_modules/expo-asset/ios"
+  ExpoAudio:
+    :path: "../../../node_modules/.pnpm/expo-audio@55.0.9_expo-asset@55.0.10_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_2783aa9682e618dec588e55af3a262a4/node_modules/expo-audio/ios"
   ExpoClipboard:
     :path: "../../../node_modules/.pnpm/expo-clipboard@55.0.9_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0__react@19.2.0/node_modules/expo-clipboard/ios"
   ExpoDomWebView:
@@ -2277,6 +2285,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-secure-store@55.0.9_expo@55.0.9/node_modules/expo-secure-store/ios"
   ExpoSplashScreen:
     :path: "../../../node_modules/.pnpm/expo-splash-screen@55.0.13_expo@55.0.9_typescript@5.9.3/node_modules/expo-splash-screen/ios"
+  ExpoSQLite:
+    :path: "../../../node_modules/.pnpm/expo-sqlite@55.0.11_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.0_@types+react@19.2.14_react@19.2.0__react@19.2.0/node_modules/expo-sqlite/ios"
   EXUpdatesInterface:
     :path: "../../../node_modules/.pnpm/expo-updates-interface@55.1.3_expo@55.0.9/node_modules/expo-updates-interface/ios"
   FBLazyVector:
@@ -2445,6 +2455,7 @@ SPEC CHECKSUMS:
   expo-dev-menu: 46f293beccc20051731d85d84359226fe4ebeb9d
   expo-dev-menu-interface: bf6f816d29b45bec038080790963c635e8d588c2
   ExpoAsset: 4efd0227e808dfa84d286aa3663ded641ef73479
+  ExpoAudio: 9c6c4b4c9669be8e8892b423cc967c09d801bad4
   ExpoClipboard: fba6501fed478667b1cc888e999f82fb2838c685
   ExpoDomWebView: f101fb3db4b6eec4163fca51f7507189b7e48661
   ExpoFileSystem: 4ed8ccc90671813c861f212fba3668fe133b7e68
@@ -2456,9 +2467,10 @@ SPEC CHECKSUMS:
   ExpoModulesJSI: 92db390c19eb21af69005d94f430793c7ca7aec7
   ExpoSecureStore: 83d31183fecaae7a084e88e29d14d5a02d90882a
   ExpoSplashScreen: ab4d4c72364d5f60ca91c5b44ce00ec65a8a5950
+  ExpoSQLite: 6c9b9c2558a4194abe5cd1d236554ebbd59307cc
   EXUpdatesInterface: d48f288b92900bd95a27c6cf92a7b9aff826d49a
   FBLazyVector: 32e9ed0301d0fcbc1b2b341dd7fcbf291f51eb83
-  hermes-engine: e270c693826bda6c3f4150295fc1b07b26015103
+  hermes-engine: e66fed7140385aadb5662742bb8a4009a73ddc5e
   RCTDeprecation: a522c536d2c7be8f518dd834883cf6dce1d4f545
   RCTRequired: 44337def23abb244c025e9e7ab58f9cd3d63ec7d
   RCTSwiftUI: b2f0c2f2761631b8cd605767536cbb1cbf8d020f
@@ -2467,7 +2479,7 @@ SPEC CHECKSUMS:
   React: f4edc7518ccb0b54a6f580d89dd91471844b4990
   React-callinvoker: 79ef4e3f1c021571f6d2dafbe45ca432b2f3a146
   React-Core: c19ad4660fd48bc8abc060d979f8ee37f1fc4a5a
-  React-Core-prebuilt: 43f61e80fa6c933ac0e888e14adac9f75167551a
+  React-Core-prebuilt: 7a6509c40eae8d52a0ed0e358f022798807db668
   React-CoreModules: f94ec3ee2bac588d033ad15a2377af746284f8c8
   React-cxxreact: de66364f2d5fb77d3da3cfa927b2fd960892c711
   React-debug: 4f6739c820d7da9c20f48caa985573b6a847e5f5
@@ -2530,7 +2542,7 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: d69159b417e8c9d82b8fe4d0a27def4c3e8f767f
   ReactCodegen: 67448ac89265edfdb18647a961c452760279913c
   ReactCommon: 8868269b67561136a7970be188b40738135af077
-  ReactNativeDependencies: 869adbda9673536576847aefaf564ae1b23c3361
+  ReactNativeDependencies: c843372b105893737e67009833f6b37d086f3ede
   RealtimeKitCore: c4334bde326dba8759f9c0c59c7fa4f904b6c3c1
   RNSVG: 7bf7808626c62cdf93911573b9358f1601d58003
   RTKWebRTC: 943dc8c747e5f22c263148c2a0cb493001510690

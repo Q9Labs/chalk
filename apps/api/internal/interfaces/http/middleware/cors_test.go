@@ -300,6 +300,21 @@ func TestIsOriginAllowedForTenant_Localhost(t *testing.T) {
 	}
 }
 
+func TestIsOriginAllowedForTenant_PrivateLanDevelopmentOrigins(t *testing.T) {
+	privateOrigins := []string{
+		"http://192.168.18.84:8080",
+		"http://10.0.2.2:8080",
+		"http://172.20.10.5:3000",
+	}
+
+	for _, origin := range privateOrigins {
+		t.Run(origin, func(t *testing.T) {
+			allowed := IsOriginAllowedForTenant(origin, nil)
+			assert.True(t, allowed, "private development origin should be allowed: %s", origin)
+		})
+	}
+}
+
 func TestIsOriginAllowedForTenant_TenantConfig(t *testing.T) {
 	tenantConfig := []byte(`{"allowed_origins": ["https://tenant-app.com", "https://custom-domain.io"]}`)
 	tenant := &db.Tenant{

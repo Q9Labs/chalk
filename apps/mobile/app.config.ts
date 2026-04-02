@@ -22,15 +22,28 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
 
   return {
     expo: {
-      name: "Chalk",
-      slug: "chalk-mobile",
+      name: "Hasan Headquaters",
+      slug: "hasan-headquaters",
       scheme: "chalk",
       version: "0.0.16",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
-      plugins: [...(isProductionBuild ? [] : ["expo-dev-client"]), "expo-secure-store", "@cloudflare/realtimekit-react-native"],
+      plugins: [
+        ...(isProductionBuild ? [] : ["expo-dev-client"]),
+        "expo-secure-store",
+        [
+          "expo-audio",
+          {
+            enableBackgroundPlayback: false,
+            enableBackgroundRecording: true,
+            microphonePermission: "Hasan Headquaters uses your microphone for background dictation.",
+          },
+        ],
+        "expo-sqlite",
+        "@cloudflare/realtimekit-react-native",
+      ],
       splash: {
         image: "./assets/icon.png",
         resizeMode: "contain",
@@ -44,7 +57,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you during meetings.",
-          NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you during meetings.",
+          NSMicrophoneUsageDescription: "Hasan Headquaters uses your microphone for background dictation.",
           UIBackgroundModes: ["audio"],
         },
       },
@@ -74,8 +87,10 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
           "android.permission.BLUETOOTH",
           "android.permission.CAMERA",
           "android.permission.FOREGROUND_SERVICE",
+          "android.permission.FOREGROUND_SERVICE_MICROPHONE",
           "android.permission.INTERNET",
           "android.permission.MODIFY_AUDIO_SETTINGS",
+          "android.permission.POST_NOTIFICATIONS",
           "android.permission.RECORD_AUDIO",
           "android.permission.VIBRATE",
           "android.permission.WAKE_LOCK",

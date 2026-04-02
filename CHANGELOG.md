@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Mobile: Hasan Headquaters v1 dictation app now ships background-safe Groq Whisper transcription** — `apps/mobile` now boots into a new dictation-first Hasan Headquaters shell with persistent Groq API key storage, background-capable microphone recording, rolling `.m4a` chunk capture for hours-long sessions, queued Whisper Large V3 transcription, and a local recordings library with transcript history instead of the previous meeting-first home screen.
+
 ### Changed
 
 - **Repo/CI: Bun-based workspace scripts and release workflows now run through pnpm** — root/package build scripts, mobile/docs commands, and GitHub Actions now use pnpm/tsx/tsup equivalents, the repo ships `pnpm-lock.yaml` + `pnpm-workspace.yaml`, and the old Bun lock/config files have been removed so local and CI installs use one consistent package-manager path.

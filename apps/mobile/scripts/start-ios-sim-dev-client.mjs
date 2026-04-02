@@ -9,8 +9,7 @@ const proxyMappings = [
   [8082, 8089],
   [8083, 8090],
 ];
-const bundlePath =
-  "/apps/mobile/index.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.routerRoot=app";
+const bundlePath = "/apps/mobile/index.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.routerRoot=app";
 
 function getLanIp() {
   const interfaces = os.networkInterfaces();
@@ -134,28 +133,13 @@ function runCommand(command, args) {
 async function main() {
   const lanIp = getLanIp();
   const bundleUrl = `http://${lanIp}:8081${bundlePath}`;
-  const devClientUrl =
-    `exp+chalk-mobile://expo-development-client/?url=${encodeURIComponent(bundleUrl)}`;
+  const devClientUrl = `exp+chalk-mobile://expo-development-client/?url=${encodeURIComponent(bundleUrl)}`;
 
-  const expo = spawn(
-    "pnpm",
-    [
-      "exec",
-      "expo",
-      "start",
-      "--clear",
-      "--dev-client",
-      "--host",
-      "lan",
-      "--port",
-      String(expoPort),
-    ],
-    {
-      cwd: new URL("..", import.meta.url),
-      stdio: "inherit",
-      env: process.env,
-    }
-  );
+  const expo = spawn("pnpm", ["exec", "expo", "start", "--clear", "--dev-client", "--host", "lan", "--port", String(expoPort)], {
+    cwd: new URL("..", import.meta.url),
+    stdio: "inherit",
+    env: process.env,
+  });
 
   const servers = [];
   const cleanup = () => {
