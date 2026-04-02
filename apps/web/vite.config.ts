@@ -41,6 +41,14 @@ const config = defineConfig({
         replacement: fileURLToPath(new URL("../../packages/sdk-react/src/styles/styles.css", import.meta.url)),
       },
       {
+        find: /^@q9labs\/chalk-whiteboard$/,
+        replacement: fileURLToPath(new URL("../../packages/chalk-whiteboard/src/index.ts", import.meta.url)),
+      },
+      {
+        find: /^@q9labs\/chalk-whiteboard\/collab$/,
+        replacement: fileURLToPath(new URL("../../packages/chalk-whiteboard/src/collab/index.ts", import.meta.url)),
+      },
+      {
         find: /^@q9labs\/chalk-ui$/,
         replacement: fileURLToPath(new URL("../../packages/ui/src/index.ts", import.meta.url)),
       },
