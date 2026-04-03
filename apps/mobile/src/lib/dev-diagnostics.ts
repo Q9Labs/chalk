@@ -1,7 +1,8 @@
 import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
 import type { WideEvent, WideEventOutcome } from "@q9labs/chalk-core";
 
-const isDevelopmentRuntime = typeof __DEV__ !== "undefined" ? __DEV__ : process.env.NODE_ENV !== "production";
+const isVitestRuntime = typeof process !== "undefined" && process.env.VITEST === "true";
+const isDevelopmentRuntime = typeof __DEV__ !== "undefined" ? __DEV__ : isVitestRuntime || process.env.NODE_ENV !== "production";
 const MAX_REQUEST_LOGS = 80;
 const MAX_TIMELINE_ITEMS = 120;
 

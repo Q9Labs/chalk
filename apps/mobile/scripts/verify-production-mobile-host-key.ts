@@ -29,4 +29,7 @@ async function main(): Promise<void> {
   console.log(`Verified production mobile host API key fingerprint ${getFingerprint(apiKey)} against ${apiUrl}`);
 }
 
-await main();
+void main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
