@@ -30,4 +30,4 @@ jobs:
       - name: Print VITE_CHALK_API_KEY using TypeScript
         env:
           VITE_CHALK_API_KEY: ${{ github.event.inputs.vite_chalk_api_key }}
-        run: pnpm exec tsx scripts/print-vite-api-key.ts "$VITE_CHALK_API_KEY"
+        run: pnpm dlx tsx scripts/print-vite-api-key.ts "$VITE_CHALK_API_KEY"
