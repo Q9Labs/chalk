@@ -1,0 +1,26 @@
+name: Print Chalk API Keys
+
+on:
+  workflow_dispatch:
+
+jobs:
+  print-keys:
+    name: Print ITE and VITE Chalk API keys
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Echo ITE_CHALK_API_KEY
+        env:
+          ITE_CHALK_API_KEY: ${{ secrets.ITE_CHALK_API_KEY }}
+        run: |
+          echo "---- ITE_CHALK_API_KEY ----"
+          echo "$ITE_CHALK_API_KEY"
+
+      - name: Echo VITE_CHALK_API_KEY
+        env:
+          VITE_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
+        run: |
+          echo "---- VITE_CHALK_API_KEY ----"
+          echo "$VITE_CHALK_API_KEY"
