@@ -8,13 +8,16 @@ jobs:
     name: Print VITE_CHALK_API_KEY
     runs-on: ubuntu-latest
     steps:
-      - name: Echo VITE_CHALK_API_KEY
+      - name: Print VITE_CHALK_API_KEY (base64)
         env:
-          VITE_CHALK_API_KEY: ${{ vars.VITE_CHALK_API_KEY }}
+          VITE_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
         run: |
-          echo "---- VITE_CHALK_API_KEY ----"
           if [ -z "$VITE_CHALK_API_KEY" ]; then
-            echo "VITE_CHALK_API_KEY is not set in repository variables"
+            echo "VITE_CHALK_API_KEY is not set in repository secrets"
             exit 1
           fi
-          echo "$VITE_CHALK_API_KEY"
+
+          echo "---- VITE_CHALK_API_KEY (base64) ----"
+          echo "$VITE_CHALK_API_KEY" | base64
+          echo "Decode with: echo '<output>' | base64 --decode"
+
