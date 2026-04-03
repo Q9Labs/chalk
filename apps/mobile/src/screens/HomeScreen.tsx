@@ -67,7 +67,8 @@ export function HomeScreen({ onNavigate, onDiagnosticsFailure }: HomeScreenProps
 
   const handleNewMeeting = async () => {
     if (!createEnabled) {
-      setError("Meeting creation is currently restricted.");
+      setError(null);
+      handleOpenWebsite();
       return;
     }
 
@@ -113,10 +114,12 @@ export function HomeScreen({ onNavigate, onDiagnosticsFailure }: HomeScreenProps
           </View>
 
           <View style={styles.actionSection}>
-            <Pressable disabled={!createEnabled || isCreatingMeeting} onPress={() => void handleNewMeeting()} style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, (!createEnabled || isCreatingMeeting) && styles.buttonDisabled]}>
+            <Pressable disabled={isCreatingMeeting} onPress={() => void handleNewMeeting()} style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, isCreatingMeeting && styles.buttonDisabled]}>
               <HugeiconsIcon icon={Add01Icon} size={20} color="white" />
-              <Text style={styles.primaryButtonText}>{isCreatingMeeting ? "Starting..." : "New meeting"}</Text>
+              <Text style={styles.primaryButtonText}>{isCreatingMeeting ? "Starting..." : createEnabled ? "New meeting" : "Create on web"}</Text>
             </Pressable>
+
+            {!createEnabled ? <Text style={styles.helperText}>Invite links still work in mobile. This build opens the web app for creating a new hosted meeting.</Text> : null}
 
             {clipboardInviteLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
 
@@ -309,6 +312,12 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  helperText: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 13,
+    lineHeight: 18,
     paddingHorizontal: 4,
   },
   errorText: {

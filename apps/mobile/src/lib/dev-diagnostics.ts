@@ -96,7 +96,7 @@ export interface DevDiagnosticsState {
     routeSource: string | null;
   };
   auth: {
-    hostMode: "configured-api-key" | "local-bootstrap" | "none" | null;
+    hostMode: "configured-api-key" | "local-bootstrap" | "internal-bootstrap" | "none" | null;
     configuredHostApiKeyPreview: string | null;
     localDevHostApiKeyPreview: string | null;
     joinTokenPreview: string | null;
