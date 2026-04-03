@@ -1,26 +1,20 @@
-name: Print Chalk API Keys
+name: Print VITE Chalk API Key
 
 on:
   workflow_dispatch:
 
 jobs:
-  print-keys:
-    name: Print ITE and VITE Chalk API keys
+  print-key:
+    name: Print VITE_CHALK_API_KEY
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Echo ITE_CHALK_API_KEY
-        env:
-          ITE_CHALK_API_KEY: ${{ secrets.ITE_CHALK_API_KEY }}
-        run: |
-          echo "---- ITE_CHALK_API_KEY ----"
-          echo "$ITE_CHALK_API_KEY"
-
       - name: Echo VITE_CHALK_API_KEY
         env:
-          VITE_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
+          VITE_CHALK_API_KEY: ${{ vars.VITE_CHALK_API_KEY }}
         run: |
           echo "---- VITE_CHALK_API_KEY ----"
+          if [ -z "$VITE_CHALK_API_KEY" ]; then
+            echo "VITE_CHALK_API_KEY is not set in repository variables"
+            exit 1
+          fi
           echo "$VITE_CHALK_API_KEY"
