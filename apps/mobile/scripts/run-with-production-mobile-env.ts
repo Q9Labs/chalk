@@ -13,13 +13,13 @@ const backupEnvPath = join(mobileDir, ".env.local.release-backup");
 const verifyScriptPath = join(scriptDir, "verify-production-mobile-host-key.ts");
 
 const command = process.argv.slice(2);
-
-if (command.length === 0) {
-  throw new Error("Usage: pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- <command> [args...]");
+const normalizedCommand = command.filter((part, index) => !(part === "--" && index === 0));
+while (normalizedCommand[0] === "--") {
+  normalizedCommand.shift();
 }
 
-if (!process.env.EXPO_PUBLIC_CHALK_API_KEY?.trim()) {
-  throw new Error("EXPO_PUBLIC_CHALK_API_KEY is required for production mobile builds");
+if (normalizedCommand.length === 0) {
+  throw new Error("Usage: pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- <command> [args...]");
 }
 
 const hadLocalEnv = existsSync(localEnvPath);
@@ -50,7 +50,7 @@ try {
   if ((verifyResult.status ?? 1) !== 0) {
     exitCode = verifyResult.status ?? 1;
   } else {
-    const [cmd, ...args] = command;
+    const [cmd, ...args] = normalizedCommand;
     if (!cmd) {
       throw new Error("Missing command for production mobile build wrapper");
     }

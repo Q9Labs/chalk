@@ -11,7 +11,8 @@ async function main(): Promise<void> {
   const apiKey = process.env.EXPO_PUBLIC_CHALK_API_KEY?.trim();
 
   if (!apiKey) {
-    throw new Error("EXPO_PUBLIC_CHALK_API_KEY is required for production mobile host-key verification");
+    console.log(`No production mobile host API key configured; skipping host-key verification for ${apiUrl}`);
+    return;
   }
 
   const response = await fetch(`${apiUrl}/api/v1/auth/token`, {

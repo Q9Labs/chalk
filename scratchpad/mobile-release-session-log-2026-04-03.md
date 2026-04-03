@@ -23,3 +23,7 @@
 - Current release state:
   - Android can be retried through GitHub Actions after pushing the release-unblocking fix commit
   - iOS remains blocked on a valid current production host key and likely App Store distribution signing/exportability on this machine
+
+[2026-04-03 22:34:12 PKT] Tenant-agnostic local mobile release resumed. Built Android release APK 1.0 (17) at apps/mobile/android/app/build/outputs/apk/release/app-release.apk with sha256 7f7345cf51c8de6e3a145aaac107690d9a42deec25e8812d16e94262b96b351f. Built Android release AAB at apps/mobile/android/app/build/outputs/bundle/release/app-release.aab with sha256 cd243de353566f9b80836d8d4cd6457f340bd478618485cb24a5335977ad9551. Preparing iOS archive/upload on this Mac using automatic signing team 5K9635LZ6F and version 1.0 (17).
+
+[2026-04-03 22:42:25 PKT] iOS archive/upload succeeded after syncing CocoaPods with `pod install`. Archive path: apps/mobile/ios/build/Chalk-1.0.xcarchive. Export/upload path: scratchpad/upload-logs/fresh-1.0. xcodebuild reported `Uploaded Chalk` and `Upload succeeded`, with symbol-upload warnings for React.framework, ReactNativeDependencies.framework, and hermesvm.framework dSYMs. Re-ran apps/mobile gate: lint ok, check-types ok, test ok.
