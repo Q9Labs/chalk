@@ -280,7 +280,7 @@ export function useDictationController() {
 
       const recordingPermission = await requestRecordingPermissionsAsync();
       if (!recordingPermission.granted) {
-        Alert.alert("Microphone needed", "Hasan Headquaters needs microphone access to start dictation.");
+        Alert.alert("Microphone needed", "Chalk needs microphone access to start dictation.");
         return;
       }
 

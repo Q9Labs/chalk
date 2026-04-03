@@ -55,10 +55,15 @@ export function resolveDeviceLocalUrl(url: string, scriptUrl?: string | null, fa
     }
 
     const metroHost = getMetroHostFromScriptUrl(scriptUrl);
-    if (!metroHost || isDeviceLocalHostname(metroHost)) {
+    if (!metroHost) {
       if (fallbackUrl) {
         return stripTrailingSlash(fallbackUrl);
       }
+      return stripTrailingSlash(url);
+    }
+
+    // Dev clients running on simulators can legitimately reach localhost.
+    if (isDeviceLocalHostname(metroHost)) {
       return stripTrailingSlash(url);
     }
 

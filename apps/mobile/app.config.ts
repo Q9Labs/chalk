@@ -22,8 +22,8 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
 
   return {
     expo: {
-      name: "Hasan Headquaters",
-      slug: "hasan-headquaters",
+      name: "Chalk",
+      slug: "chalk-mobile",
       scheme: "chalk",
       version: "0.0.16",
       orientation: "portrait",
@@ -38,7 +38,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
           {
             enableBackgroundPlayback: false,
             enableBackgroundRecording: true,
-            microphonePermission: "Hasan Headquaters uses your microphone for background dictation.",
+            microphonePermission: "Chalk uses your microphone for background dictation.",
           },
         ],
         "expo-sqlite",
@@ -57,7 +57,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you during meetings.",
-          NSMicrophoneUsageDescription: "Hasan Headquaters uses your microphone for background dictation.",
+          NSMicrophoneUsageDescription: "Chalk uses your microphone for background dictation.",
           UIBackgroundModes: ["audio"],
         },
       },

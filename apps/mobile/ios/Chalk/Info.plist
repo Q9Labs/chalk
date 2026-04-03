@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hasan Headquaters</string>
+	<string>Chalk</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -64,7 +64,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Hasan Headquaters uses your microphone for background dictation.</string>
+	<string>Chalk uses your microphone for background dictation.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow $(PRODUCT_NAME) to access the files</string>
 	<key>RCTNewArchEnabled</key>

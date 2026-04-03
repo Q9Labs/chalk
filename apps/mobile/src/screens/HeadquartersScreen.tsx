@@ -38,7 +38,7 @@ export function HeadquartersScreen(): React.JSX.Element {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Future personal meta app</Text>
-          <Text style={styles.title}>Hasan Headquaters</Text>
+          <Text style={styles.title}>Chalk</Text>
           <Text style={styles.subtitle}>V1 ships one thing well: background dictation with rolling chunk uploads to Groq {GROQ_MODEL}, durable local recordings, and transcript assembly that can survive hours-long sessions.</Text>
         </View>
 

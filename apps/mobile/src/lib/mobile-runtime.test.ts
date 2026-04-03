@@ -25,6 +25,13 @@ describe("mobile runtime helpers", () => {
     expect(resolveDeviceLocalUrl("ws://127.0.0.1:8080/ws", undefined, "wss://chalk-ws.q9labs.ai/ws")).toBe("wss://chalk-ws.q9labs.ai/ws");
   });
 
+  it("preserves localhost URLs when the dev bundle is also served from localhost", () => {
+    const scriptUrl = "http://localhost:8081/index.bundle?platform=ios";
+
+    expect(resolveDeviceLocalUrl("http://localhost:8080", scriptUrl, "https://chalk-api.q9labs.ai")).toBe("http://localhost:8080");
+    expect(resolveDeviceLocalUrl("ws://127.0.0.1:8080/ws", scriptUrl, "wss://chalk-ws.q9labs.ai/ws")).toBe("ws://127.0.0.1:8080/ws");
+  });
+
   it("hard-forces production URLs when release builds disallow device-local hosts", () => {
     expect(
       resolveAppRuntimeUrl({
