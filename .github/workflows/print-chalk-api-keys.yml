@@ -2,22 +2,32 @@ name: Print VITE Chalk API Key
 
 on:
   workflow_dispatch:
+    inputs:
+      vite_chalk_api_key:
+        description: "Paste the VITE_CHALK_API_KEY value"
+        required: true
+        type: string
 
 jobs:
   print-key:
     name: Print VITE_CHALK_API_KEY
     runs-on: ubuntu-latest
     steps:
-      - name: Print VITE_CHALK_API_KEY (base64)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Print VITE_CHALK_API_KEY using TypeScript
         env:
-          VITE_CHALK_API_KEY: ${{ secrets.VITE_CHALK_API_KEY }}
-        run: |
-          if [ -z "$VITE_CHALK_API_KEY" ]; then
-            echo "VITE_CHALK_API_KEY is not set in repository secrets"
-            exit 1
-          fi
-
-          echo "---- VITE_CHALK_API_KEY (base64) ----"
-          echo "$VITE_CHALK_API_KEY" | base64
-          echo "Decode with: echo '<output>' | base64 --decode"
-
+          VITE_CHALK_API_KEY: ${{ github.event.inputs.vite_chalk_api_key }}
+        run: pnpm exec tsx scripts/print-vite-api-key.ts "$VITE_CHALK_API_KEY"
