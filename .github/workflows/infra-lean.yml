@@ -168,18 +168,6 @@ jobs:
           EXITCODE=$?
           set -e
 
-          if terraform show -json "${GITHUB_WORKSPACE}/tfplan-prod-lean" > "${RUNNER_TEMP}/tfplan-prod-lean.json" 2>/dev/null; then
-            if jq -e '
-              ([.resource_changes[]? | select(any(.change.actions[]; . != "no-op"))] | length) > 0
-              or
-              ([.output_changes | to_entries[]? | select(any(.value.actions[]; . != "no-op"))] | length) > 0
-            ' "${RUNNER_TEMP}/tfplan-prod-lean.json" >/dev/null; then
-              EXITCODE=2
-            else
-              EXITCODE=0
-            fi
-          fi
-
           echo "exitcode=$EXITCODE" >> $GITHUB_OUTPUT
 
           if [ "$EXITCODE" -eq 1 ]; then
@@ -219,6 +207,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Create plugin cache dir
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -255,6 +246,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Create plugin cache dir
+        run: mkdir -p /home/runner/.terraform.d/plugin-cache
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
