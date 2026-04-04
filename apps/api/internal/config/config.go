@@ -119,8 +119,11 @@ type CORSOriginsConfig struct {
 }
 
 type PostMeetingConfig struct {
-	TranscriptionDefaultProvider string // POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER (default: whisper)
+	TranscriptionDefaultProvider string // POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER (default: cloudflare)
 	GroqAPIKey                   string // POST_MEETING_GROQ_API_KEY
+	CloudflareAccountID          string // POST_MEETING_CLOUDFLARE_ACCOUNT_ID (falls back to CLOUDFLARE_ACCOUNT_ID)
+	CloudflareAPIToken           string // POST_MEETING_CLOUDFLARE_API_TOKEN (falls back to CLOUDFLARE_API_TOKEN)
+	CloudflareModel              string // POST_MEETING_CLOUDFLARE_MODEL (default: @cf/openai/whisper-large-v3-turbo)
 	WhisperEnabled               bool   // POST_MEETING_WHISPER_ENABLED (default: true)
 	WhisperRedisQueue            string // POST_MEETING_WHISPER_REDIS_QUEUE (default: transcription:jobs)
 
@@ -242,8 +245,11 @@ func Load() (*Config, error) {
 			Key:    getEnv("CORS_ORIGINS_KEY", "cors/allowed-origins.json"),
 		},
 		PostMeeting: PostMeetingConfig{
-			TranscriptionDefaultProvider: getEnv("POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER", "whisper"),
+			TranscriptionDefaultProvider: getEnv("POST_MEETING_TRANSCRIPTION_DEFAULT_PROVIDER", "cloudflare"),
 			GroqAPIKey:                   getEnv("POST_MEETING_GROQ_API_KEY", ""),
+			CloudflareAccountID:          getEnv("POST_MEETING_CLOUDFLARE_ACCOUNT_ID", getEnv("CLOUDFLARE_ACCOUNT_ID", "")),
+			CloudflareAPIToken:           getEnv("POST_MEETING_CLOUDFLARE_API_TOKEN", getEnv("CLOUDFLARE_API_TOKEN", "")),
+			CloudflareModel:              getEnv("POST_MEETING_CLOUDFLARE_MODEL", "@cf/openai/whisper-large-v3-turbo"),
 			WhisperEnabled:               getEnvBool("POST_MEETING_WHISPER_ENABLED", true),
 			WhisperRedisQueue:            getEnv("POST_MEETING_WHISPER_REDIS_QUEUE", "transcription:jobs"),
 			AIDefaultProvider:            getEnv("POST_MEETING_AI_DEFAULT_PROVIDER", "openrouter"),

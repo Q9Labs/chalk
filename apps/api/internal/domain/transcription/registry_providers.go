@@ -8,9 +8,15 @@ import (
 // This breaks the circular dependency between domain and infrastructure.
 
 var (
-	newGroqProviderFromRegistry    func(apiKey string) Provider
-	newWhisperProviderFromRegistry func(redis *goredis.Client, queueKey string, store WhisperJobStore) Provider
+	newCloudflareProviderFromRegistry func(accountID, apiToken, model string) Provider
+	newGroqProviderFromRegistry       func(apiKey string) Provider
+	newWhisperProviderFromRegistry    func(redis *goredis.Client, queueKey string, store WhisperJobStore) Provider
 )
+
+// RegisterCloudflareFactory registers the factory function for Cloudflare Workers AI provider.
+func RegisterCloudflareFactory(fn func(accountID, apiToken, model string) Provider) {
+	newCloudflareProviderFromRegistry = fn
+}
 
 // RegisterGroqFactory registers the factory function for Groq provider.
 func RegisterGroqFactory(fn func(apiKey string) Provider) {

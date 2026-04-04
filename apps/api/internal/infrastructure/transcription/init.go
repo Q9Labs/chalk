@@ -10,6 +10,10 @@ func init() {
 	// Register provider factories with the domain package.
 	// This breaks the circular dependency by having infrastructure
 	// register its implementations at package initialization time.
+	domain.RegisterCloudflareFactory(func(accountID, apiKey, model string) domain.Provider {
+		return NewCloudflareProvider(accountID, apiKey, model)
+	})
+
 	domain.RegisterGroqFactory(func(apiKey string) domain.Provider {
 		return NewGroqProvider(apiKey)
 	})

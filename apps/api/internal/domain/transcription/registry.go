@@ -4,28 +4,40 @@ import goredis "github.com/redis/go-redis/v9"
 
 // RegistryConfig holds configuration for the provider registry.
 type RegistryConfig struct {
-	GroqAPIKey     string
-	WhisperEnabled bool
-	WhisperQueue   string
+	DefaultProvider     string
+	GroqAPIKey          string
+	CloudflareAccountID string
+	CloudflareAPIToken  string
+	CloudflareModel     string
+	WhisperEnabled      bool
+	WhisperQueue        string
 }
 
 // ProviderRegistry manages transcription provider availability and creation.
 type ProviderRegistry struct {
-	groqAPIKey      string
-	whisperEnabled  bool
-	whisperQueue    string
-	whisperJobStore WhisperJobStore
-	redis           *goredis.Client
+	defaultProvider     string
+	groqAPIKey          string
+	cloudflareAccountID string
+	cloudflareAPIToken  string
+	cloudflareModel     string
+	whisperEnabled      bool
+	whisperQueue        string
+	whisperJobStore     WhisperJobStore
+	redis               *goredis.Client
 }
 
 // NewProviderRegistry creates a new provider registry.
 func NewProviderRegistry(cfg RegistryConfig, redis *goredis.Client, whisperJobStore WhisperJobStore) *ProviderRegistry {
 	return &ProviderRegistry{
-		groqAPIKey:      cfg.GroqAPIKey,
-		whisperEnabled:  cfg.WhisperEnabled,
-		whisperQueue:    cfg.WhisperQueue,
-		whisperJobStore: whisperJobStore,
-		redis:           redis,
+		defaultProvider:     cfg.DefaultProvider,
+		groqAPIKey:          cfg.GroqAPIKey,
+		cloudflareAccountID: cfg.CloudflareAccountID,
+		cloudflareAPIToken:  cfg.CloudflareAPIToken,
+		cloudflareModel:     cfg.CloudflareModel,
+		whisperEnabled:      cfg.WhisperEnabled,
+		whisperQueue:        cfg.WhisperQueue,
+		whisperJobStore:     whisperJobStore,
+		redis:               redis,
 	}
 }
 
@@ -43,11 +55,26 @@ type ProviderInfo struct {
 func (r *ProviderRegistry) GetAvailableProviders() []ProviderInfo {
 	providers := []ProviderInfo{
 		{
+			ID:            "cloudflare",
+			Name:          "Cloudflare Workers AI",
+			Type:          "cloud",
+			BYOKSupported: false,
+			Available:     r.cloudflareAccountID != "" && r.cloudflareAPIToken != "",
+			UnavailableReason: unavailableReason(
+				r.cloudflareAccountID != "" && r.cloudflareAPIToken != "",
+				"Cloudflare Workers AI credentials are not configured",
+			),
+		},
+		{
 			ID:            "groq",
 			Name:          "Groq",
 			Type:          "cloud",
 			BYOKSupported: true,
-			Available:     true,
+			Available:     r.groqAPIKey != "",
+			UnavailableReason: unavailableReason(
+				r.groqAPIKey != "",
+				"Groq transcription credentials are not configured",
+			),
 		},
 	}
 
@@ -76,6 +103,12 @@ func (r *ProviderRegistry) CreateProvider(providerName string, tenantAPIKey stri
 	}
 
 	switch providerName {
+	case "cloudflare":
+		if r.cloudflareAccountID == "" || r.cloudflareAPIToken == "" {
+			return nil, ErrProviderNotConfigured
+		}
+		return newCloudflareProviderFromRegistry(r.cloudflareAccountID, r.cloudflareAPIToken, r.cloudflareModel), nil
+
 	case "groq":
 		apiKey := tenantAPIKey
 		if apiKey == "" {
@@ -102,11 +135,15 @@ func (r *ProviderRegistry) CreateProvider(providerName string, tenantAPIKey stri
 
 // GetDefaultProvider returns the name of the default provider.
 func (r *ProviderRegistry) GetDefaultProvider() string {
-	if r.whisperEnabled && r.redis != nil && r.whisperQueue != "" {
-		return "whisper"
-	}
-	if r.groqAPIKey != "" {
-		return "groq"
+	for _, provider := range dedupeProviderOrder([]string{
+		r.defaultProvider,
+		"cloudflare",
+		"whisper",
+		"groq",
+	}) {
+		if r.HasProvider(provider) {
+			return provider
+		}
 	}
 	return ""
 }
@@ -114,6 +151,8 @@ func (r *ProviderRegistry) GetDefaultProvider() string {
 // HasProvider returns true if the registry can create the named provider.
 func (r *ProviderRegistry) HasProvider(name string) bool {
 	switch name {
+	case "cloudflare":
+		return r.cloudflareAccountID != "" && r.cloudflareAPIToken != ""
 	case "groq":
 		return r.groqAPIKey != ""
 	case "whisper":
@@ -121,4 +160,27 @@ func (r *ProviderRegistry) HasProvider(name string) bool {
 	default:
 		return false
 	}
+}
+
+func dedupeProviderOrder(names []string) []string {
+	seen := make(map[string]struct{}, len(names))
+	ordered := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		ordered = append(ordered, name)
+	}
+	return ordered
+}
+
+func unavailableReason(available bool, message string) string {
+	if available {
+		return ""
+	}
+	return message
 }

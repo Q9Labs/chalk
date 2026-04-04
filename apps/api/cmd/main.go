@@ -172,9 +172,13 @@ func main() {
 
 	queries := db.New(pool)
 	transcriptionRegistry := transcription.NewProviderRegistry(transcription.RegistryConfig{
-		GroqAPIKey:     cfg.PostMeeting.GroqAPIKey,
-		WhisperEnabled: cfg.PostMeeting.WhisperEnabled,
-		WhisperQueue:   cfg.PostMeeting.WhisperRedisQueue,
+		DefaultProvider:     cfg.PostMeeting.TranscriptionDefaultProvider,
+		GroqAPIKey:          cfg.PostMeeting.GroqAPIKey,
+		CloudflareAccountID: cfg.PostMeeting.CloudflareAccountID,
+		CloudflareAPIToken:  cfg.PostMeeting.CloudflareAPIToken,
+		CloudflareModel:     cfg.PostMeeting.CloudflareModel,
+		WhisperEnabled:      cfg.PostMeeting.WhisperEnabled,
+		WhisperQueue:        cfg.PostMeeting.WhisperRedisQueue,
 	}, redisClient.GetClient(), transcription.NewPostgresWhisperJobStore(queries))
 
 	var transcriptionService *transcription.Service
