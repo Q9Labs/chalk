@@ -106,13 +106,14 @@ locals {
   }
 
   secure_env_required = {
-    DATABASE_PASSWORD    = planetscale_postgres_branch_role.api.password
-    REDIS_URL            = local.redis_url
-    CLOUDFLARE_API_TOKEN = var.cloudflare_app_token
-    R2_ACCESS_KEY_ID     = var.r2_access_key_id
-    R2_SECRET_ACCESS_KEY = var.r2_secret_access_key
-    ADMIN_SECRET         = var.admin_secret
-    JWT_SIGNING_KEY      = var.jwt_signing_key
+    DATABASE_PASSWORD                 = planetscale_postgres_branch_role.api.password
+    REDIS_URL                         = local.redis_url
+    CLOUDFLARE_API_TOKEN              = var.cloudflare_app_token
+    POST_MEETING_CLOUDFLARE_API_TOKEN = var.post_meeting_cloudflare_api_token
+    R2_ACCESS_KEY_ID                  = var.r2_access_key_id
+    R2_SECRET_ACCESS_KEY              = var.r2_secret_access_key
+    ADMIN_SECRET                      = var.admin_secret
+    JWT_SIGNING_KEY                   = var.jwt_signing_key
   }
 
   plain_env_parameters = local.plain_env

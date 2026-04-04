@@ -24,6 +24,7 @@ planetscale_branch            = "main"
 
 cloudflare_app_id             = ""
 cloudflare_app_token          = ""
+post_meeting_cloudflare_api_token = ""
 jwt_signing_key               = ""
 admin_secret                  = ""
 

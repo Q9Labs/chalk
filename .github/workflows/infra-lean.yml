@@ -137,7 +137,7 @@ jobs:
           fi
 
           terraform plan $EXTRA_ARGS \
-            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
             -var="r2_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}" \
             -var="r2_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}" \
@@ -149,7 +149,8 @@ jobs:
             -var="planetscale_database=${{ secrets.PLANETSCALE_DATABASE }}" \
             -var="planetscale_branch=${{ secrets.PLANETSCALE_BRANCH || 'main' }}" \
             -var="cloudflare_app_id=${{ secrets.CLOUDFLARE_APP_ID }}" \
-            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_REALTIME_API_TOKEN }}" \
+            -var="post_meeting_cloudflare_api_token=${{ secrets.POST_MEETING_CLOUDFLARE_API_TOKEN }}" \
             -var="jwt_signing_key=${{ secrets.JWT_SIGNING_KEY }}" \
             -var="admin_secret=${{ secrets.ADMIN_SECRET }}" \
             -var="auth_link_signing_key=${{ secrets.AUTH_LINK_SIGNING_KEY }}" \
@@ -248,7 +249,7 @@ jobs:
       - name: Terraform Destroy
         run: |
           terraform destroy -auto-approve \
-            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
             -var="r2_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}" \
             -var="r2_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}" \
@@ -260,6 +261,7 @@ jobs:
             -var="planetscale_database=${{ secrets.PLANETSCALE_DATABASE }}" \
             -var="planetscale_branch=${{ secrets.PLANETSCALE_BRANCH || 'main' }}" \
             -var="cloudflare_app_id=${{ secrets.CLOUDFLARE_APP_ID }}" \
-            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_REALTIME_API_TOKEN }}" \
+            -var="post_meeting_cloudflare_api_token=${{ secrets.POST_MEETING_CLOUDFLARE_API_TOKEN }}" \
             -var="jwt_signing_key=${{ secrets.JWT_SIGNING_KEY }}" \
             -var="admin_secret=${{ secrets.ADMIN_SECRET }}"

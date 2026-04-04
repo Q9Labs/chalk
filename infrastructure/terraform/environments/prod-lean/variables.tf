@@ -137,6 +137,13 @@ variable "cloudflare_app_token" {
   sensitive   = true
 }
 
+variable "post_meeting_cloudflare_api_token" {
+  description = "Cloudflare Workers AI API token for post-meeting transcription"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "jwt_signing_key" {
   description = "JWT signing key"
   type        = string
