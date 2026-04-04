@@ -12,6 +12,7 @@ import { NativeEndScreen, type NativeMeetingEndData } from "./NativeEndScreen";
 import { NativeJoiningLoadingScreen } from "./NativeJoiningLoadingScreen";
 import { NativeMeetingRoom, type NativeMeetingRoomDiagnosticsSnapshot, type NativeMeetingRoomFeatures } from "./NativeMeetingRoom";
 import { NativePreJoinLobby, type NativeJoinSettings } from "./NativePreJoinLobby";
+import { resolveNativeJoinDefaults } from "./native-join-defaults";
 import { canExecuteNativeJoin, canStartNativeJoin, shouldPromoteAfterJoinError } from "../utils/native-join-guard";
 import { isIosSimulator } from "../utils/ios-simulator";
 
@@ -65,11 +66,12 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
   const chat = useChat();
   const transcripts = useTranscripts();
   const defaultSettings = useMemo<NativeJoinSettings>(
-    () => ({
-      displayName: initialJoinSettings?.displayName?.trim() || userName || "Chalker",
-      audioEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.audioEnabled ?? true),
-      videoEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.videoEnabled ?? true),
-    }),
+    () =>
+      resolveNativeJoinDefaults({
+        initialJoinSettings,
+        simulatorMediaDisabled,
+        userName,
+      }),
     [initialJoinSettings?.audioEnabled, initialJoinSettings?.displayName, initialJoinSettings?.videoEnabled, role, simulatorMediaDisabled, userName],
   );
   const [phase, setPhase] = useState<NativeVideoConferencePhase>(() => initialPhase ?? (autoJoin ? "joining" : "lobby"));

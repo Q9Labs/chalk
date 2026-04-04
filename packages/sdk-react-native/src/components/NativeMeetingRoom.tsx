@@ -304,7 +304,7 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
         chatEnabled={canChat}
         chatUnreadCount={chat.unreadCount}
         isHandRaised={handRaised}
-        isRecording={recording.isRecording}
+        isScreenSharing={screenShare.isLocalSharing}
         onClose={() => setActionsOpen(false)}
         onInviteParticipants={handleInviteParticipants}
         onLeaveMeeting={() => {
@@ -318,6 +318,7 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
           setReactionPickerOpen(true);
         }}
         onOpenSettings={() => openPanel("settings")}
+        onToggleScreenShare={() => void runAsync(() => screenShare.toggle())}
         onOpenTranscripts={() => openPanel("transcripts")}
         onOpenWhiteboard={() => openPanel("whiteboard")}
         onToggleHand={() => {
@@ -326,12 +327,11 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
             interactions.toggleHand();
           }
         }}
-        onToggleRecording={() => void runAsync(() => recording.toggle())}
         participantCount={participants.participantCount}
         peopleEnabled={canParticipants}
         raisedHandCount={raisedHandCount}
-        recordingEnabled={canRecording}
         settingsEnabled={canSettings}
+        screenShareEnabled={canScreenShare}
         transcriptsEnabled={canTranscripts}
         visible={actionsOpen}
         whiteboardEnabled={canWhiteboard}

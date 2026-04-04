@@ -1,8 +1,8 @@
 import CallEnd01Icon from "@hugeicons/core-free-icons/dist/esm/CallEnd01Icon";
 import Chat01Icon from "@hugeicons/core-free-icons/dist/esm/Chat01Icon";
+import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
 import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
-import RecordIcon from "@hugeicons/core-free-icons/dist/esm/RecordIcon";
 import Settings01Icon from "@hugeicons/core-free-icons/dist/esm/Settings01Icon";
 import SmileIcon from "@hugeicons/core-free-icons/dist/esm/SmileIcon";
 import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
@@ -16,12 +16,12 @@ import { Theme } from "../ui/theme";
 interface NativeMeetingActionsSheetProps {
   visible: boolean;
   isHandRaised: boolean;
-  isRecording: boolean;
+  isScreenSharing: boolean;
   chatEnabled: boolean;
   peopleEnabled: boolean;
   transcriptsEnabled: boolean;
   whiteboardEnabled: boolean;
-  recordingEnabled: boolean;
+  screenShareEnabled: boolean;
   settingsEnabled: boolean;
   chatUnreadCount: number;
   participantCount: number;
@@ -33,9 +33,9 @@ interface NativeMeetingActionsSheetProps {
   onToggleHand: () => void;
   onOpenReactions: () => void;
   onOpenWhiteboard: () => void;
+  onToggleScreenShare: () => void;
   onOpenTranscripts: () => void;
   onOpenSettings: () => void;
-  onToggleRecording: () => void;
   onLeaveMeeting: () => void;
 }
 
@@ -45,12 +45,12 @@ const tileBackground = Theme.colors.secondary;
 function NativeMeetingActionsSheetBase({
   visible,
   isHandRaised,
-  isRecording,
+  isScreenSharing,
   chatEnabled,
   peopleEnabled,
   transcriptsEnabled,
   whiteboardEnabled,
-  recordingEnabled,
+  screenShareEnabled,
   settingsEnabled,
   chatUnreadCount,
   participantCount,
@@ -62,9 +62,9 @@ function NativeMeetingActionsSheetBase({
   onToggleHand,
   onOpenReactions,
   onOpenWhiteboard,
+  onToggleScreenShare,
   onOpenTranscripts,
   onOpenSettings,
-  onToggleRecording,
   onLeaveMeeting,
 }: NativeMeetingActionsSheetProps): React.JSX.Element {
   return (
@@ -90,7 +90,7 @@ function NativeMeetingActionsSheetBase({
                   <View style={styles.grid}>
                     <ActionTile active={isHandRaised} badge={raisedHandCount > 0 ? formatBadge(raisedHandCount) : null} icon={WavingHand01Icon} label="Raise Hand" onPress={onToggleHand} />
                     <ActionTile disabled={!whiteboardEnabled} icon={Presentation01Icon} label="Whiteboard" onPress={onOpenWhiteboard} />
-                    <ActionTile active={isRecording} disabled={!recordingEnabled} icon={RecordIcon} label="Record" onPress={onToggleRecording} />
+                    <ActionTile active={isScreenSharing} disabled={!screenShareEnabled} icon={ComputerScreenShareIcon} label="Share Screen" onPress={onToggleScreenShare} />
                   </View>
                 </View>
 
