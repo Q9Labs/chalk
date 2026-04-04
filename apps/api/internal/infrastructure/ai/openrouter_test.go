@@ -137,6 +137,37 @@ func TestOpenRouterProvider_GenerateSummary_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse AI response as JSON")
 }
 
+func TestOpenRouterProvider_GenerateSummary_FallsBackToReasoning(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"content":   nil,
+						"reasoning": `{"summary":"Reasoning fallback summary.","action_items":["Capture transcript QA follow-up"]}`,
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	p := &OpenRouterProvider{
+		apiKey: "test-key",
+		model:  "test-model",
+		client: &http.Client{
+			Transport: &testTransport{server.URL, nil},
+		},
+	}
+
+	result, err := p.GenerateSummary(context.Background(), "test transcript")
+	require.NoError(t, err)
+	assert.Equal(t, "Reasoning fallback summary.", result.Summary)
+	assert.Equal(t, []string{"Capture transcript QA follow-up"}, result.ActionItems)
+}
+
 // testTransport redirects requests to the test server
 type testTransport struct {
 	serverURL string

@@ -124,7 +124,8 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
 		ID    string `json:"id"`
 		Choices []struct {
 			Message struct {
-				Content string `json:"content"`
+				Content   string `json:"content"`
+				Reasoning string `json:"reasoning"`
 			} `json:"message"`
 		} `json:"choices"`
 		Error json.RawMessage `json:"error"`
@@ -157,7 +158,13 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
 
 	content := openRouterResp.Choices[0].Message.Content
 	if strings.TrimSpace(content) == "" {
-		slog.Error("[chalk] OpenRouter: empty content in first choice",
+		content = openRouterResp.Choices[0].Message.Reasoning
+		slog.Warn("[chalk] OpenRouter: empty content in first choice, falling back to reasoning",
+			"response_id", openRouterResp.ID,
+			"reasoning_length", len(content))
+	}
+	if strings.TrimSpace(content) == "" {
+		slog.Error("[chalk] OpenRouter: empty content and reasoning in first choice",
 			"response_id", openRouterResp.ID,
 			"body_preview", string(bodyBytes[:min(len(bodyBytes), 500)]))
 		if openRouterResp.ID != "" {

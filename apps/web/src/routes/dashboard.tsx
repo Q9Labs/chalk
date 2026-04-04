@@ -10,6 +10,7 @@ import { useTheme } from "../context/theme";
 import { fetchInternalAccessToken, getApiUrl, logoutInternalSession, startGoogleOAuthSignIn } from "../lib/internalAuth";
 import { useProfileAvatar } from "../lib/useProfileAvatar";
 import { cn } from "../lib/utils";
+import { downloadRecordingFromDashboard, getRecordingPlaybackUrl, getRecordingShareUrl } from "../lib/dashboardMeetings";
 import { ScheduledClassesPanel } from "../features/classes/components/ScheduledClassesPanel";
 import { SettingsModal } from "../components/SettingsModal";
 import { ChalkLoader } from "../components/ChalkLoader";
@@ -30,6 +31,8 @@ type Meeting = {
   duration_seconds: number | null;
   size_bytes: number | null;
   created_at: string;
+  transcript_status?: "pending" | "processing" | "completed" | "failed" | null;
+  transcript_error_message?: string | null;
   transcript_summary: string | null;
   transcript_action_items: string[] | null;
 };
@@ -56,25 +59,13 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
-async function createShareLink(meetingId: string, token: string) {
-  const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/v1/internal/meetings/${meetingId}/share`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("failed to create share link");
-  const { url } = await res.json();
+async function createShareLink(recordingId: string, token: string) {
+  const url = await getRecordingShareUrl(getApiUrl(), recordingId, token);
   await navigator.clipboard.writeText(url);
 }
 
-async function downloadRecording(meetingId: string, token: string) {
-  const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/v1/internal/meetings/${meetingId}/download`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("failed to get download link");
-  const { url } = await res.json();
-  window.open(url, "_blank");
+async function downloadRecording(recordingId: string, token: string) {
+  await downloadRecordingFromDashboard(getApiUrl(), recordingId, token);
 }
 
 function DashboardPage() {
@@ -126,13 +117,9 @@ function DashboardPageContent() {
     setVideoError(null);
     setRecordingUrl(null);
 
-    fetch(`${apiUrl}/api/v1/internal/meetings/${selectedId}/playback`, {
-      headers: { Authorization: `Bearer ${state.token}` },
-    })
+    getRecordingPlaybackUrl(apiUrl, selectedId, state.token)
       .then(async (res) => {
-        if (!res.ok) throw new Error("playback unauthorized or expired");
-        const { url } = await res.json();
-        setRecordingUrl(url);
+        setRecordingUrl(res);
       })
       .catch((e) => setVideoError(e.message))
       .finally(() => setIsFetchingVideo(false));
@@ -571,6 +558,14 @@ function DashboardPageContent() {
                     <p className="text-[17px] font-medium text-white/70 leading-relaxed text-pretty tracking-tight">
                       {selectedMeeting.transcript_summary ? (
                         selectedMeeting.transcript_summary
+                      ) : selectedMeeting.transcript_status === "failed" ? (
+                        <span className="italic text-destructive/80">
+                          {selectedMeeting.transcript_error_message || "Summary generation failed for this session."}
+                        </span>
+                      ) : selectedMeeting.transcript_status === "completed" ? (
+                        <span className="italic text-white/30">
+                          No summary was generated for this session.
+                        </span>
                       ) : (
                         <span className="italic text-white/20 flex items-center gap-3">
                           <Loader2 className="w-5 h-5 animate-spin text-primary/50" />
@@ -609,7 +604,9 @@ function DashboardPageContent() {
                       ) : (
                         <div className="p-12 text-center flex flex-col items-center justify-center h-full opacity-20">
                           <HugeiconsIcon icon={CheckmarkCircle01Icon} size={40} className="text-white/50 mb-4" aria-hidden="true" />
-                          <p className="text-xs font-black uppercase tracking-widest italic">Clear Agenda</p>
+                          <p className="text-xs font-black uppercase tracking-widest italic">
+                            {selectedMeeting.transcript_status === "completed" ? "No Action Items" : "Clear Agenda"}
+                          </p>
                         </div>
                       )}
                     </div>
