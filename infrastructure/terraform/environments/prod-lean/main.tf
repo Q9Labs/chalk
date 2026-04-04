@@ -71,54 +71,38 @@ locals {
     upstash_redis_database.control_plane.port,
   )
 
-  whisper_env_static = {
-    ENVIRONMENT                      = local.environment
-    AWS_REGION                       = var.aws_region
-    LOG_LEVEL                        = var.whisper_log_level
-    AXIOM_DATASET                    = var.axiom_dataset
-    AXIOM_DOMAIN                     = "api.axiom.co"
-    AXIOM_TRACES_DATASET             = var.axiom_traces_dataset
-    WHISPER_LOG_TRANSCRIPT           = "false"
-    WHISPER_LOG_TRANSCRIPT_MAX_CHARS = "0"
-    WHISPER_DEVICE                   = var.whisper_device
-    WHISPER_COMPUTE_TYPE             = var.whisper_compute_type
-    WHISPER_CPU_THREADS              = tostring(var.whisper_cpu_threads)
-    WHISPER_GPU_METRICS_ENABLED      = tostring(var.whisper_gpu_metrics_enabled)
-  }
-
   plain_env = {
-    ENV                              = "production"
-    PORT                             = "8080"
-    DATABASE_HOST                    = planetscale_postgres_branch_role.api.access_host_url
-    DATABASE_PORT                    = "5432"
-    DATABASE_NAME                    = var.planetscale_database_name
-    DATABASE_USER                    = planetscale_postgres_branch_role.api.username
-    DATABASE_SSLMODE                 = "require"
-    DATABASE_MAX_CONNS               = tostring(var.db_max_conns)
-    DATABASE_MIN_CONNS               = tostring(var.db_min_conns)
-    REDIS_HOST                       = upstash_redis_database.control_plane.endpoint
-    REDIS_PORT                       = tostring(upstash_redis_database.control_plane.port)
-    REDIS_TLS                        = tostring(var.upstash_tls)
-    CHALK_ENABLE_DEMO                = "true"
-    CLOUDFLARE_ACCOUNT_ID            = var.cloudflare_account_id
-    CLOUDFLARE_APP_ID                = var.cloudflare_app_id
-    R2_BUCKET_NAME                   = module.cloudflare.recordings_bucket_name
-    R2_ACCOUNT_ID                    = var.cloudflare_account_id
-    GITHUB_OWNER                     = var.github_owner
-    GITHUB_REPO                      = var.github_repo
-    AXIOM_DATASET                    = var.axiom_dataset
-    AXIOM_DOMAIN                     = "api.axiom.co"
-    AXIOM_TRACES_DATASET             = var.axiom_traces_dataset
-    OTEL_TRACE_SAMPLER_RATIO         = "0.1"
-    POST_MEETING_WHISPER_ENABLED     = tostring(var.whisper_enabled)
-    POST_MEETING_WHISPER_REDIS_QUEUE = "transcription:jobs"
-    RESEND_FROM_EMAIL                = var.resend_from_email
-    INTERNAL_APP_URL                 = var.internal_app_url
-    INTERNAL_APP_URLS                = var.internal_app_urls
-    AUTH_COOKIE_DOMAIN               = var.auth_cookie_domain
-    API_PUBLIC_URL                   = "https://${local.api_domain}"
-    ADMIN_ENABLED                    = "true"
-    ADMIN_ALLOWED_IPS                = var.admin_allowed_ips
+    ENV                          = "production"
+    PORT                         = "8080"
+    DATABASE_HOST                = planetscale_postgres_branch_role.api.access_host_url
+    DATABASE_PORT                = "5432"
+    DATABASE_NAME                = var.planetscale_database_name
+    DATABASE_USER                = planetscale_postgres_branch_role.api.username
+    DATABASE_SSLMODE             = "require"
+    DATABASE_MAX_CONNS           = tostring(var.db_max_conns)
+    DATABASE_MIN_CONNS           = tostring(var.db_min_conns)
+    REDIS_HOST                   = upstash_redis_database.control_plane.endpoint
+    REDIS_PORT                   = tostring(upstash_redis_database.control_plane.port)
+    REDIS_TLS                    = tostring(var.upstash_tls)
+    CHALK_ENABLE_DEMO            = "true"
+    CLOUDFLARE_ACCOUNT_ID        = var.cloudflare_account_id
+    CLOUDFLARE_APP_ID            = var.cloudflare_app_id
+    R2_BUCKET_NAME               = module.cloudflare.recordings_bucket_name
+    R2_ACCOUNT_ID                = var.cloudflare_account_id
+    GITHUB_OWNER                 = var.github_owner
+    GITHUB_REPO                  = var.github_repo
+    AXIOM_DATASET                = var.axiom_dataset
+    AXIOM_DOMAIN                 = "api.axiom.co"
+    AXIOM_TRACES_DATASET         = var.axiom_traces_dataset
+    OTEL_TRACE_SAMPLER_RATIO     = "0.1"
+    POST_MEETING_WHISPER_ENABLED = "false"
+    RESEND_FROM_EMAIL            = var.resend_from_email
+    INTERNAL_APP_URL             = var.internal_app_url
+    INTERNAL_APP_URLS            = var.internal_app_urls
+    AUTH_COOKIE_DOMAIN           = var.auth_cookie_domain
+    API_PUBLIC_URL               = "https://${local.api_domain}"
+    ADMIN_ENABLED                = "true"
+    ADMIN_ALLOWED_IPS            = var.admin_allowed_ips
   }
 
   secure_env_required = {
@@ -276,22 +260,6 @@ module "ec2_api" {
   container_image    = "${module.ecr.repository_url}:latest"
   ssm_parameter_path = var.ssm_parameter_path
   app_env_static     = {}
-  ssh_ingress_cidrs  = var.ssh_ingress_cidrs
-  alert_actions      = var.alert_actions
-}
-
-module "ec2_whisper" {
-  count  = var.whisper_enabled ? 1 : 0
-  source = "../../modules/ec2-whisper-lean"
-
-  environment        = local.environment
-  aws_region         = var.aws_region
-  instance_type      = var.whisper_instance_type
-  use_spot           = var.whisper_use_spot
-  ecr_repository_arn = module.ecr.whisper_repository_arn
-  container_image    = "${module.ecr.whisper_repository_url}:latest"
-  ssm_parameter_path = var.whisper_ssm_parameter_path
-  app_env_static     = local.whisper_env_static
   ssh_ingress_cidrs  = var.ssh_ingress_cidrs
   alert_actions      = var.alert_actions
 }

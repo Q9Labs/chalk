@@ -6,13 +6,11 @@ on:
     paths:
       - "infrastructure/terraform/environments/prod-lean/**"
       - "infrastructure/terraform/modules/ec2-api-lean/**"
-      - "infrastructure/terraform/modules/ec2-whisper-lean/**"
       - ".github/workflows/infra-lean.yml"
   pull_request:
     paths:
       - "infrastructure/terraform/environments/prod-lean/**"
       - "infrastructure/terraform/modules/ec2-api-lean/**"
-      - "infrastructure/terraform/modules/ec2-whisper-lean/**"
   workflow_dispatch:
     inputs:
       action:
@@ -69,7 +67,7 @@ jobs:
 
       - name: Validate lean EC2 modules
         run: |
-          for module in ec2-api-lean ec2-whisper-lean; do
+          for module in ec2-api-lean; do
             cd "infrastructure/terraform/modules/$module"
             terraform init -backend=false
             terraform validate

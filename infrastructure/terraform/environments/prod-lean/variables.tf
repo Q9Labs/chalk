@@ -291,7 +291,7 @@ variable "ssh_ingress_cidrs" {
 variable "whisper_enabled" {
   description = "Enable dedicated whisper worker in lean stack"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "whisper_instance_type" {
