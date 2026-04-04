@@ -12,6 +12,7 @@ import { NativeGradientSurface } from "./NativeGradientSurface";
 interface NativeMediaViewProps {
   participant: Participant | null;
   track: MediaStreamTrack | NativeMediaStreamTrack | null | undefined;
+  mediaKind?: "camera" | "screen-share";
   label?: string;
   mirror?: boolean;
   objectFit?: "cover" | "contain";
@@ -19,8 +20,8 @@ interface NativeMediaViewProps {
   zOrder?: number;
 }
 
-export function NativeMediaView({ participant, track, label, mirror = false, objectFit = "cover", emphasizeMuted = false, zOrder = 0 }: NativeMediaViewProps): React.JSX.Element {
-  const shouldRenderVideo = shouldRenderNativeMediaTrack({ participant, track });
+export function NativeMediaView({ participant, track, mediaKind = "camera", label, mirror = false, objectFit = "cover", emphasizeMuted = false, zOrder = 0 }: NativeMediaViewProps): React.JSX.Element {
+  const shouldRenderVideo = shouldRenderNativeMediaTrack({ participant, track, mediaKind });
   const stream = useMemo(() => {
     if (!shouldRenderVideo || !track) {
       return null;

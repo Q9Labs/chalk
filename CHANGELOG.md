@@ -1134,6 +1134,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native mobile participant tiles now fall back to the avatar as soon as `videoEnabled` turns off or the track ends, so camera-off events no longer leave the last frozen video frame stuck on screen.
 - Native mobile prejoin now defaults camera and microphone to off unless explicit join settings opt in, matching the safer join-by-default behavior across the product.
 - Native mobile meeting actions now expose screen sharing in the detailed bottom sheet instead of recording, keeping the secondary actions focused on collaboration controls.
+- Native mobile screen sharing now renders on the stage even when the sharer camera is off, so an active share no longer disappears behind the avatar fallback.
 
 ### Changed
 

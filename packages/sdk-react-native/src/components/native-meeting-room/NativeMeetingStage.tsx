@@ -124,7 +124,7 @@ export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryConte
       <View style={styles.splitStage}>
         <View style={styles.splitPanel}>
           <StageSurface>
-            <NativeMediaView participant={screenSharer} track={screenShareTrack} objectFit="contain" />
+            <NativeMediaView mediaKind="screen-share" participant={screenSharer} track={screenShareTrack} objectFit="contain" />
           </StageSurface>
         </View>
         <View style={styles.splitPanel}>
@@ -135,7 +135,7 @@ export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryConte
   } else {
     primaryStage = (
       <StageSurface>
-        <NativeMediaView participant={screenSharer} track={screenShareTrack} label={screenSharer?.displayName || "Participant"} objectFit="contain" />
+        <NativeMediaView mediaKind="screen-share" participant={screenSharer} track={screenShareTrack} label={screenSharer?.displayName || "Participant"} objectFit="contain" />
       </StageSurface>
     );
   }

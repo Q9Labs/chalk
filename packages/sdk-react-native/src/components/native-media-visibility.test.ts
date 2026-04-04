@@ -60,4 +60,18 @@ describe("shouldRenderNativeMediaTrack", () => {
       }),
     ).toBe(true);
   });
+
+  it("renders a live screen-share track even when the sharer camera is off", () => {
+    expect(
+      shouldRenderNativeMediaTrack({
+        participant: participant({
+          videoEnabled: false,
+          isScreenSharing: true,
+          screenShareTrack: track(),
+        }),
+        track: track(),
+        mediaKind: "screen-share",
+      }),
+    ).toBe(true);
+  });
 });
