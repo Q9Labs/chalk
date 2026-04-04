@@ -1,12 +1,10 @@
 import type { LayoutMode, ParticipantState } from "@q9labs/chalk-core";
-import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
 import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
 import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
 import RecordIcon from "@hugeicons/core-free-icons/dist/esm/RecordIcon";
 import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useMemo } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import type { NativeMeetingPrimaryContent } from "../../utils/native-meeting-layout";
 import { Theme } from "../../ui/theme";
@@ -57,32 +55,32 @@ function InfoChip({ icon, label, align = "left" }: { icon: React.ComponentProps<
 function NativeWhiteboardPlaceholder({ whiteboard }: Pick<NativeMeetingStageProps, "whiteboard">): React.JSX.Element {
   return (
     <StageSurface>
-      <NativeGradientSurface angle="diagonal" borderRadius={Theme.radius["2xl"]} opacity={0.88} participantId="whiteboard-stage" />
+      <NativeGradientSurface angle="diagonal" borderRadius={24} opacity={0.6} participantId="whiteboard-stage" />
       <View style={styles.placeholderCenter}>
-        <View style={styles.placeholderIconCircle}>
-          <HugeiconsIcon color="#ffffff" icon={Presentation01Icon} size={28} />
+        <View style={styles.presentingIconCircle}>
+          <HugeiconsIcon color={Theme.colors.primary} icon={Presentation01Icon} size={32} />
         </View>
-        <Text style={styles.placeholderEyebrow}>Shared canvas</Text>
-        <Text style={styles.placeholderTitle}>Whiteboard takes the stage</Text>
+        <Text style={styles.placeholderEyebrow}>SHARED CANVAS</Text>
+        <Text style={styles.placeholderTitle}>Whiteboard active</Text>
         <Text style={styles.placeholderCopy}>
-          {whiteboard.canDraw ? "Collaborative board is open." : "Board is open in view-only mode."} {whiteboard.elementCount} elements · {whiteboard.participantCount} active.
+          {whiteboard.canDraw ? "Collaborative board is open." : "Board is open in view-only mode."}
         </Text>
       </View>
     </StageSurface>
   );
 }
 
-function NativeLocalSharePlaceholder({ screenSharer }: Pick<NativeMeetingStageProps, "screenSharer">): React.JSX.Element {
+function NativeLocalSharePlaceholder(): React.JSX.Element {
   return (
     <StageSurface>
-      <NativeGradientSurface angle="diagonal" borderRadius={Theme.radius["2xl"]} opacity={0.9} participantId={screenSharer?.displayName || "local-share"} />
+      <NativeGradientSurface angle="diagonal" borderRadius={24} opacity={0.4} participantId="local-presenting" />
       <View style={styles.placeholderCenter}>
-        <View style={styles.placeholderIconCircle}>
-          <HugeiconsIcon color="#ffffff" icon={ComputerScreenShareIcon} size={28} />
+        <View style={styles.presentingIconCircle}>
+          <HugeiconsIcon color={Theme.colors.primary} icon={ComputerScreenShareIcon} size={32} />
         </View>
-        <Text style={styles.placeholderEyebrow}>Screen share active</Text>
-        <Text style={styles.placeholderTitle}>Preview hidden in this window</Text>
-        <Text style={styles.placeholderCopy}>Chalk hides your own shared screen here so you do not get an infinite mirror effect.</Text>
+        <Text style={styles.placeholderEyebrow}>YOU ARE PRESENTING</Text>
+        <Text style={styles.placeholderTitle}>Screen sharing active</Text>
+        <Text style={styles.placeholderCopy}>Your preview is hidden here to prevent an infinite mirror effect. Everyone else can see your screen.</Text>
       </View>
     </StageSurface>
   );
@@ -111,20 +109,19 @@ function NativeParticipantStrip({ participants, vertical }: { participants: read
 }
 
 export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryContent, screenSharer, screenShareTrack, stripParticipants, isHost, selfName, isMuted, handRaised, raisedHandCount, isRecording, activeReactions, whiteboard }: NativeMeetingStageProps): React.JSX.Element {
-  const selfAvatarRecipe = useMemo(() => getParticipantAvatarRecipe(selfName), [selfName]);
   const verticalStrip = !isCompactViewport && layoutMode === "speaker";
 
   let primaryStage: React.JSX.Element;
   if (primaryContent === "whiteboard") {
     primaryStage = <NativeWhiteboardPlaceholder whiteboard={whiteboard} />;
   } else if (primaryContent === "screen-share-placeholder") {
-    primaryStage = <NativeLocalSharePlaceholder screenSharer={screenSharer} />;
+    primaryStage = <NativeLocalSharePlaceholder />;
   } else if (primaryContent === "split") {
     primaryStage = (
       <View style={styles.splitStage}>
         <View style={styles.splitPanel}>
           <StageSurface>
-            <NativeMediaView mediaKind="screen-share" participant={screenSharer} track={screenShareTrack} objectFit="contain" />
+            <NativeMediaView participant={screenSharer} track={screenShareTrack} objectFit="contain" />
           </StageSurface>
         </View>
         <View style={styles.splitPanel}>
@@ -135,7 +132,7 @@ export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryConte
   } else {
     primaryStage = (
       <StageSurface>
-        <NativeMediaView mediaKind="screen-share" participant={screenSharer} track={screenShareTrack} label={screenSharer?.displayName || "Participant"} objectFit="contain" />
+        <NativeMediaView participant={screenSharer} track={screenShareTrack} label={screenSharer?.displayName || "Participant"} objectFit="contain" />
       </StageSurface>
     );
   }
@@ -161,19 +158,18 @@ export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryConte
           </View>
         ) : null}
 
-        <View style={styles.selfPill}>
-          <View style={[styles.selfAvatar, { backgroundColor: selfAvatarRecipe.colors.primary }]}>
-            <Text style={styles.selfAvatarText}>{selfAvatarRecipe.initials}</Text>
-          </View>
-          <Text style={styles.selfPillName}>{isHost ? "Host" : selfName}</Text>
-          {handRaised ? (
-            <View style={styles.selfIndicator}>
-              <HugeiconsIcon color="#ffffff" icon={WavingHand01Icon} size={10} />
+        <View style={styles.identityBar}>
+          <Text style={styles.nameLabel} numberOfLines={1}>
+            {isHost ? "Host" : selfName}
+          </Text>
+          {isMuted ? (
+            <View style={styles.muteIndicator}>
+              <HugeiconsIcon color="#ffffff" icon={MicOff01Icon} size={10} />
             </View>
           ) : null}
-          {isMuted ? (
-            <View style={styles.selfIndicatorMuted}>
-              <HugeiconsIcon color="#ffffff" icon={MicOff01Icon} size={10} />
+          {handRaised ? (
+            <View style={styles.handIndicator}>
+              <HugeiconsIcon color="#ffffff" icon={WavingHand01Icon} size={10} />
             </View>
           ) : null}
         </View>
@@ -191,7 +187,8 @@ export function NativeMeetingStage({ layoutMode, isCompactViewport, primaryConte
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: Theme.spacing.sm,
+    width: "100%",
+    paddingHorizontal: 12, // Restored framing here
   },
   containerVertical: {
     flexDirection: "row",
@@ -199,17 +196,20 @@ const styles = StyleSheet.create({
   primaryFrame: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    marginBottom: 12, // Vertical gap between main stage and strip
   },
   surface: {
     flex: 1,
-    borderRadius: Theme.radius["2xl"],
-    overflow: "hidden",
     backgroundColor: Theme.colors.stageBackground,
+    width: "100%",
+    borderRadius: 24,
+    overflow: "hidden",
   },
   splitStage: {
     flex: 1,
     flexDirection: "row",
-    gap: Theme.spacing.sm,
+    gap: 10,
   },
   splitPanel: {
     flex: 1,
@@ -219,35 +219,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: Theme.spacing["3xl"],
-    gap: Theme.spacing.md,
+    gap: 12,
   },
-  placeholderIconCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: Theme.radius.full,
+  presentingIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(255,255,255,0.12)",
+    marginBottom: 8,
   },
   placeholderEyebrow: {
-    ...Theme.typography.eyebrow,
-    color: Theme.colors.primaryForeground,
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.colors.primary,
+    letterSpacing: 1,
   },
   placeholderTitle: {
-    ...Theme.typography.heading,
-    color: Theme.colors.foreground,
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#ffffff",
     textAlign: "center",
+    letterSpacing: -0.5,
   },
   placeholderCopy: {
-    ...Theme.typography.body,
-    color: "rgba(255,255,255,0.78)",
+    fontSize: 14,
+    color: "rgba(255,255,255,0.5)",
     textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 20,
   },
   infoChip: {
     position: "absolute",
-    top: Theme.spacing.sm,
+    top: 20,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
@@ -273,7 +280,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: Theme.spacing.md,
     right: Theme.spacing.md,
-    bottom: Theme.spacing["4xl"],
+    bottom: 80,
     flexDirection: "row",
     gap: Theme.spacing.sm,
   },
@@ -297,58 +304,44 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     maxWidth: 110,
   },
-  selfPill: {
+  identityBar: {
     position: "absolute",
-    left: Theme.spacing.sm,
-    bottom: Theme.spacing.sm,
+    left: 12,
+    bottom: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(12,17,27,0.78)",
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.45)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  selfAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: Theme.radius.full,
+  nameLabel: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "700",
+    maxWidth: 100,
+  },
+  muteIndicator: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#ea4335",
   },
-  selfAvatarText: {
-    color: Theme.colors.primaryForeground,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  selfPillName: {
-    color: Theme.colors.foreground,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  selfIndicator: {
-    width: 16,
-    height: 16,
-    borderRadius: Theme.radius.full,
+  handIndicator: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(245, 158, 11, 0.88)",
-  },
-  selfIndicatorMuted: {
-    width: 16,
-    height: 16,
-    borderRadius: Theme.radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.88)",
+    backgroundColor: "#f59e0b",
   },
   stripShell: {
-    borderRadius: Theme.radius["2xl"],
-    backgroundColor: Theme.colors.card,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
+    backgroundColor: "transparent",
     overflow: "hidden",
   },
   stripShellHorizontal: {
@@ -356,10 +349,12 @@ const styles = StyleSheet.create({
   },
   stripShellVertical: {
     width: 120,
+    marginLeft: 12,
+    marginBottom: 12,
   },
   stripContent: {
-    gap: Theme.spacing.xs,
-    padding: Theme.spacing.sm,
+    gap: 12, // Increased gap in strip
+    padding: 0,
   },
   stripHorizontal: {
     flexDirection: "row",
@@ -371,14 +366,13 @@ const styles = StyleSheet.create({
   },
   stripTile: {
     overflow: "hidden",
-    borderRadius: Theme.radius.md,
   },
   stripTileHorizontal: {
-    width: 120,
-    height: 68,
+    width: 130,
+    height: "100%",
   },
   stripTileVertical: {
     width: "100%",
-    height: 68,
+    height: 130,
   },
 });

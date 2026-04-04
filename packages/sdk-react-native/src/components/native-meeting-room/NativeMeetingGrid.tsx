@@ -1,7 +1,6 @@
 import type { ParticipantState } from "@q9labs/chalk-core";
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import type { LayoutMode } from "@q9labs/chalk-core";
 import { Theme } from "../../ui/theme";
 import { NativeMediaView } from "../NativeMediaView";
 
@@ -10,8 +9,6 @@ type RoomParticipant = ParticipantState["participants"][number];
 interface NativeMeetingGridProps {
   participants: readonly RoomParticipant[];
   gridPages: readonly (readonly RoomParticipant[])[];
-  isCompactViewport: boolean;
-  layoutMode: LayoutMode;
 }
 
 function buildWideParticipantRows(participants: readonly RoomParticipant[], columnCount: number): RoomParticipant[][] {
@@ -31,32 +28,28 @@ function getParticipantTileTrack(participant: RoomParticipant): MediaStreamTrack
   return participant.videoTrack ?? null;
 }
 
-function getWideColumnCount(participantCount: number, layoutMode: LayoutMode): number {
-  if (layoutMode === "speaker") {
-    return participantCount > 6 ? 3 : 2;
-  }
-
-  if (participantCount <= 4) {
-    return 2;
-  }
-
-  if (participantCount <= 9) {
-    return 3;
-  }
-
-  return 4;
-}
-
-export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, layoutMode }: NativeMeetingGridProps): React.JSX.Element {
-  const { width } = useWindowDimensions();
-  const wideColumns = useMemo(() => getWideColumnCount(participants.length, layoutMode), [participants.length, layoutMode]);
-  const wideRows = useMemo(() => buildWideParticipantRows(participants, wideColumns), [participants, wideColumns]);
+export function NativeMeetingGrid({ participants, gridPages }: NativeMeetingGridProps): React.JSX.Element {
+  const { width, height } = useWindowDimensions();
+  const isTablet = width > 600;
   const [activePage, setActivePage] = useState(0);
-  const [pageWidth, setPageWidth] = useState(Math.max(0, width - 24));
+
+  // Determine pages based on platform
+  const finalPages = useMemo(() => {
+    // If phone, use the pre-calculated pages from the hook
+    if (!isTablet) return gridPages;
+    
+    // For tablets, we force a 6-per-page logic to keep things spacious
+    const perPage = 6;
+    const pages: RoomParticipant[][] = [];
+    for (let i = 0; i < participants.length; i += perPage) {
+      pages.push(participants.slice(i, i + perPage));
+    }
+    return pages;
+  }, [isTablet, gridPages, participants]);
 
   useEffect(() => {
-    setActivePage((currentPage) => Math.min(currentPage, Math.max(0, gridPages.length - 1)));
-  }, [gridPages.length]);
+    setActivePage((currentPage) => Math.min(currentPage, Math.max(0, finalPages.length - 1)));
+  }, [finalPages.length]);
 
   if (participants.length === 0) {
     return (
@@ -68,11 +61,12 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
     );
   }
 
-  if (isCompactViewport) {
+  // Hero Layouts for small groups on Phone
+  if (!isTablet && participants.length <= 4) {
     if (participants.length === 1) {
       return (
         <View style={styles.singleTile}>
-          <NativeMediaView emphasizeMuted participant={participants[0] ?? null} track={participants[0] ? getParticipantTileTrack(participants[0]) : null} />
+          <NativeMediaView emphasizeMuted participant={participants[0] ?? null} track={getParticipantTileTrack(participants[0]!)} />
         </View>
       );
     }
@@ -81,7 +75,7 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
       return (
         <View style={styles.compactTwoUp}>
           {participants.map((participant, index) => (
-            <View key={`${participant.id}-${index}`} style={styles.compactTwoUpTile}>
+            <View key={`${participant.id}-${index}`} style={styles.gridTile}>
               <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
             </View>
           ))}
@@ -96,10 +90,10 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
             <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
           </View>
           <View style={styles.compactThreeBottom}>
-            <View style={styles.compactThreeBottomTile}>
+            <View style={styles.gridTile}>
               <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
             </View>
-            <View style={styles.compactThreeBottomTile}>
+            <View style={styles.gridTile}>
               <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
             </View>
           </View>
@@ -110,96 +104,84 @@ export function NativeMeetingGrid({ participants, gridPages, isCompactViewport, 
     if (participants.length === 4) {
       return (
         <View style={styles.compactFour}>
-          <View style={styles.compactFourRow}>
-            <View style={styles.compactFourTile}>
+          <View style={styles.gridRow}>
+            <View style={styles.gridTile}>
               <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
             </View>
-            <View style={styles.compactFourTile}>
+            <View style={styles.gridTile}>
               <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
             </View>
           </View>
-          <View style={styles.compactFourRow}>
-            <View style={styles.compactFourTile}>
+          <View style={styles.gridRow}>
+            <View style={styles.gridTile}>
               <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
             </View>
-            <View style={styles.compactFourTile}>
+            <View style={styles.gridTile}>
               <NativeMediaView emphasizeMuted participant={participants[3]!} track={getParticipantTileTrack(participants[3]!)} />
             </View>
           </View>
         </View>
       );
     }
-
-    return (
-      <View style={styles.compactPaged}>
-        <FlatList
-          data={gridPages}
-          horizontal
-          keyExtractor={(_, index) => `page-${index + 1}`}
-          onMomentumScrollEnd={(event) => {
-            const measuredPageWidth = Math.max(1, event.nativeEvent.layoutMeasurement.width);
-            setActivePage(Math.round(event.nativeEvent.contentOffset.x / measuredPageWidth));
-          }}
-          onLayout={(event) => {
-            setPageWidth(event.nativeEvent.layout.width);
-          }}
-          pagingEnabled
-          removeClippedSubviews
-          renderItem={({ item: page }) => (
-            <View style={[styles.page, { width: pageWidth }]}>
-              <View style={styles.compactQuad}>
-                {page.map((participant, index) => (
-                  <View key={`${participant.id}-${index}`} style={styles.compactQuadTile}>
-                    <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-          showsHorizontalScrollIndicator={false}
-          windowSize={3}
-        />
-
-        <View style={styles.pageIndicators}>
-          {gridPages.map((_, index) => (
-            <View key={`indicator-${index + 1}`} style={[styles.pageIndicator, index === activePage && styles.pageIndicatorActive]} />
-          ))}
-        </View>
-      </View>
-    );
   }
 
   return (
-    <FlatList
-      contentContainerStyle={styles.wideScrollContent}
-      data={wideRows}
-      key={`wide-grid-${wideColumns}`}
-      keyExtractor={(_, index) => `row-${index + 1}`}
-      removeClippedSubviews
-      renderItem={({ item: row }) => (
-        <View style={styles.wideRow}>
-          {Array.from({ length: wideColumns }, (_, columnIndex) => {
-            const participant = row[columnIndex] ?? null;
-
-            return (
-              <View key={`${participant?.id ?? "empty"}-${columnIndex + 1}`} style={styles.wideGridTile}>
-                {participant ? (
-                  <View style={styles.wideGridTileInner}>
-                    <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
+    <View style={styles.pagedContainer}>
+      <FlatList
+        data={finalPages}
+        horizontal
+        keyExtractor={(_, index) => `page-${index + 1}`}
+        onMomentumScrollEnd={(event) => {
+          const measuredPageWidth = Math.max(1, event.nativeEvent.layoutMeasurement.width);
+          setActivePage(Math.round(event.nativeEvent.contentOffset.x / measuredPageWidth));
+        }}
+        pagingEnabled
+        snapToInterval={width}
+        snapToAlignment="center"
+        decelerationRate="fast"
+        disableIntervalMomentum
+        scrollEventThrottle={16}
+        removeClippedSubviews={false}
+        showsHorizontalScrollIndicator={false}
+        windowSize={3}
+        renderItem={({ item: page }) => {
+          const cols = isTablet ? (width > height ? 3 : 2) : 2;
+          const rows = buildWideParticipantRows(page, cols);
+          
+          return (
+            <View style={[styles.page, { width }]}>
+              <View style={styles.gridContainer}>
+                {rows.map((row, rowIndex) => (
+                  <View key={`row-${rowIndex}`} style={styles.gridRow}>
+                    {row.map((participant, colIndex) => (
+                      <View key={`${participant.id}-${colIndex}`} style={styles.gridTile}>
+                        <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
+                      </View>
+                    ))}
+                    {/* Filler for incomplete rows to maintain column widths */}
+                    {row.length < cols && Array.from({ length: cols - row.length }).map((_, i) => (
+                      <View key={`filler-${i}`} style={[styles.gridTile, { backgroundColor: "transparent" }]} />
+                    ))}
                   </View>
-                ) : (
-                  <View style={styles.wideGridSpacer} />
+                ))}
+                {/* Filler for incomplete page height on tablet */}
+                {isTablet && rows.length < (width > height ? 2 : 3) && (
+                  <View style={{ flex: (width > height ? 2 : 3) - rows.length }} />
                 )}
               </View>
-            );
-          })}
+            </View>
+          );
+        }}
+      />
+
+      {finalPages.length > 1 && (
+        <View style={styles.pageIndicators}>
+          {finalPages.map((_, index) => (
+            <View key={`indicator-${index + 1}`} style={[styles.pageIndicator, index === activePage && styles.pageIndicatorActive]} />
+          ))}
         </View>
       )}
-      showsVerticalScrollIndicator={false}
-      windowSize={6}
-      initialNumToRender={4}
-      maxToRenderPerBatch={6}
-    />
+    </View>
   );
 }
 
@@ -226,108 +208,76 @@ const styles = StyleSheet.create({
   },
   singleTile: {
     flex: 1,
+    padding: 10,
   },
   compactTwoUp: {
     flex: 1,
-    gap: Theme.spacing.sm,
-  },
-  compactTwoUpTile: {
-    flex: 1,
-    minHeight: 0,
-    borderRadius: Theme.radius.xl,
-    overflow: "hidden",
+    gap: 10,
+    padding: 10,
   },
   compactThree: {
     flex: 1,
-    gap: Theme.spacing.sm,
+    gap: 10,
+    padding: 10,
   },
   compactThreeTop: {
     flex: 3,
     minHeight: 0,
-    borderRadius: Theme.radius.xl,
     overflow: "hidden",
   },
   compactThreeBottom: {
     flex: 2,
     flexDirection: "row",
-    gap: Theme.spacing.sm,
+    gap: 10,
     minHeight: 0,
-  },
-  compactThreeBottomTile: {
-    flex: 1,
-    minHeight: 0,
-    borderRadius: Theme.radius.xl,
-    overflow: "hidden",
   },
   compactFour: {
     flex: 1,
-    gap: Theme.spacing.sm,
+    gap: 10,
+    padding: 10,
   },
-  compactFourRow: {
+  pagedContainer: {
     flex: 1,
-    flexDirection: "row",
-    gap: Theme.spacing.sm,
-    minHeight: 0,
-  },
-  compactFourTile: {
-    flex: 1,
-    minHeight: 0,
-    borderRadius: Theme.radius.xl,
-    overflow: "hidden",
-  },
-  compactQuad: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Theme.spacing.sm,
-  },
-  compactQuadTile: {
-    flexBasis: "48%",
-    flexGrow: 1,
-    aspectRatio: 4 / 3,
-    borderRadius: Theme.radius.xl,
-    overflow: "hidden",
-  },
-  compactPaged: {
-    flex: 1,
+    width: "100%",
+    paddingBottom: 20,
   },
   page: {
     flex: 1,
-    paddingRight: Theme.spacing.sm,
+  },
+  gridContainer: {
+    flex: 1,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  gridRow: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 10,
+  },
+  gridTile: {
+    flex: 1,
+    overflow: "hidden",
   },
   pageIndicators: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: Theme.spacing.sm,
-    paddingTop: Theme.spacing.md,
+    gap: 8,
+    paddingVertical: 12,
+    position: "absolute",
+    bottom: -10,
+    alignSelf: "center",
+    zIndex: 30,
   },
   pageIndicator: {
     width: 8,
     height: 8,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(255,255,255,0.24)",
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.4)",
   },
   pageIndicatorActive: {
     width: 22,
+    borderRadius: 4,
     backgroundColor: Theme.colors.primary,
-  },
-  wideScrollContent: {
-    paddingBottom: Theme.spacing.sm,
-  },
-  wideRow: {
-    flexDirection: "row",
-    gap: Theme.spacing.sm,
-    paddingBottom: Theme.spacing.sm,
-  },
-  wideGridTile: {
-    flex: 1,
-  },
-  wideGridTileInner: {
-    aspectRatio: 1.18,
-  },
-  wideGridSpacer: {
-    aspectRatio: 1.18,
-    borderRadius: Theme.radius.xl,
-    backgroundColor: "transparent",
   },
 });

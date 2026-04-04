@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-04-03T08:35:06.862409",
+  "screenshot_mode": "file",
+  "output_dir": "scratchpad/ios-iphone-state-2026-04-03-b/app-state-20260403-083506",
+  "screenshot": {
+    "mode": "file",
+    "file": "screenshot.png",
+    "size_bytes": 230467
+  },
+  "accessibility": {
+    "captured": true,
+    "element_count": 15
+  },
+  "logs": {
+    "captured": true,
+    "lines": 2,
+    "warnings": 0,
+    "errors": 0
+  },
+  "device": {
+    "name": "iPhone 17 Pro",
+    "udid": "CD87FEDC-5C2A-4A29-93B3-943C431410E9",
+    "state": "Booted"
+  }
+}

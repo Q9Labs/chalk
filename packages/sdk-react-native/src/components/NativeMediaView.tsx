@@ -39,21 +39,22 @@ export function NativeMediaView({ participant, track, mediaKind = "camera", labe
 
       {!stream ? (
         <View style={styles.fallback}>
-          <NativeGradientSurface borderRadius={Theme.radius.xl} opacity={0.92} participantId={name} />
+          <NativeGradientSurface borderRadius={0} opacity={0.92} participantId={name} />
           <NativeFaceAvatar name={name} size={88} textSize={34} />
         </View>
       ) : null}
 
       <View style={styles.badgeRow}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{label || name}</Text>
+        <View style={styles.integratedBadge}>
+          <Text style={styles.badgeText} numberOfLines={1}>
+            {label || name}
+          </Text>
+          {isMuted ? (
+            <View style={styles.muteIndicator}>
+              <HugeiconsIcon icon={MicOff01Icon} size={10} color="#ffffff" />
+            </View>
+          ) : null}
         </View>
-        {isMuted ? (
-          <View style={[styles.badge, styles.mutedBadge]}>
-            <HugeiconsIcon icon={MicOff01Icon} size={12} color="#ffffff" />
-            <Text style={styles.badgeText}>Muted</Text>
-          </View>
-        ) : null}
       </View>
     </View>
   );
@@ -63,40 +64,49 @@ const styles = StyleSheet.create({
   surface: {
     flex: 1,
     minHeight: 80,
+    width: "100%",
+    height: "100%",
     overflow: "hidden",
-    borderRadius: Theme.radius.xl,
     backgroundColor: Theme.colors.stageBackground,
+    borderRadius: 24,
+    position: "relative",
   },
   fallback: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
+    height: "100%",
   },
   badgeRow: {
     position: "absolute",
-    left: Theme.spacing.sm,
-    right: Theme.spacing.sm,
-    bottom: Theme.spacing.sm,
+    left: 10,
+    bottom: 10,
     flexDirection: "row",
-    gap: 4,
   },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.58)",
-  },
-  mutedBadge: {
-    backgroundColor: "rgba(239, 68, 68, 0.85)",
+  integratedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   badgeText: {
     color: "#ffffff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
+    maxWidth: 100,
+  },
+  muteIndicator: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#ea4335",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

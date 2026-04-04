@@ -1,4 +1,4 @@
-import { getParticipantAvatarRecipe, type ChatMessage, type LayoutMode, type MediaDevice, type ParticipantState, type Transcript } from "@q9labs/chalk-core";
+import { getParticipantAvatarRecipe, type ChatMessage, type MediaDevice, type ParticipantState, type Transcript } from "@q9labs/chalk-core";
 import ArrowUp01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowUp01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/dist/esm/Cancel01Icon";
 import Chat01Icon from "@hugeicons/core-free-icons/dist/esm/Chat01Icon";
@@ -28,7 +28,6 @@ interface NativeMeetingPanelProps {
   messages: readonly ChatMessage[];
   transcripts: readonly Transcript[];
   chatDraft: string;
-  layout: LayoutMode;
   cameras: readonly MediaDevice[];
   microphones: readonly MediaDevice[];
   speakers: readonly MediaDevice[];
@@ -43,7 +42,6 @@ interface NativeMeetingPanelProps {
   onChatDraftChange: (value: string) => void;
   onSendMessage: () => void;
   onClose: () => void;
-  onSetLayout: (layout: LayoutMode) => void;
   onSelectCamera: (deviceId: string) => void;
   onSelectMicrophone: (deviceId: string) => void;
   onSelectSpeaker: (deviceId: string) => void;
@@ -64,7 +62,6 @@ export function NativeMeetingPanel({
   messages,
   transcripts,
   chatDraft,
-  layout,
   cameras,
   microphones,
   speakers,
@@ -79,7 +76,6 @@ export function NativeMeetingPanel({
   onChatDraftChange,
   onSendMessage,
   onClose,
-  onSetLayout,
   onSelectCamera,
   onSelectMicrophone,
   onSelectSpeaker,
@@ -189,15 +185,6 @@ export function NativeMeetingPanel({
 
                   {panel === "settings" && (
                     <View style={styles.settingsContainer}>
-                      <Text style={styles.sectionLabel}>Layout</Text>
-                      <View style={styles.rowWrap}>
-                        {(["auto", "grid", "spotlight", "speaker"] as const).map((option) => (
-                          <Pressable key={option} onPress={() => onSetLayout(option)} style={[styles.chip, layout === option && styles.chipActive]}>
-                            <Text style={[styles.chipText, layout === option && styles.chipTextActive]}>{layoutOptionLabel(option)}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-
                       <Text style={styles.sectionLabel}>Camera</Text>
                       <DeviceList devices={cameras} selectedId={selectedCamera} onSelect={onSelectCamera} />
 
@@ -323,21 +310,6 @@ function panelIcon(panel: NativeMeetingPanelName | null): any {
       return Presentation01Icon;
     default:
       return Settings01Icon;
-  }
-}
-
-function layoutOptionLabel(layout: LayoutMode): string {
-  switch (layout) {
-    case "auto":
-      return "Auto";
-    case "grid":
-      return "Grid";
-    case "spotlight":
-      return "Focus";
-    case "speaker":
-      return "Speaker Rail";
-    default:
-      return layout;
   }
 }
 

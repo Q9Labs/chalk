@@ -409,6 +409,44 @@ export const setupRtkParticipantSync = (deps: RtkSignalingDeps): void => {
       const isValid = deps.validateTrack(participant.screenShareTrack, "REMOTE_SCREENSHARE", participant.id);
       if (!isValid) {
         emitTrackError(deps, {
+          code: "MEDIA_ERROR",
+          message: "Screen share enabled but track unavailable or invalid",
+          details: { trackState: participant.screenShareTrack?.readyState },
+        } as ChalkError);
+      }
+    }
+
+    const ctx = wideEvents.start("screenshare.update");
+    ctx.merge({
+      scope: "remote",
+      participantId: updated.id,
+      participantName: updated.displayName,
+      enabled: updated.isScreenSharing,
+      ...getScreenShareDiagnostics(updated),
+    });
+    ctx.complete("success");
+    emitParticipantUpdated(deps, participant.id, updated);
+  });
+
+  onParticipantsEvent(emitters, "screenShareUpdate", (rtkParticipant: unknown) => {
+    const participant = ensureRemoteParticipant(deps, rtkParticipant);
+    if (!participant) {
+      return;
+    }
+
+    const participants = deps.getParticipants();
+    const existing = participants.get(participant.id);
+    if (!existing) {
+      return;
+    }
+
+    const updated = applyScreenShareUpdatePatch(existing, participant);
+    participants.set(participant.id, updated);
+
+    if (participant.isScreenSharing) {
+      const isValid = deps.validateTrack(participant.screenShareTrack, "REMOTE_SCREENSHARE", participant.id);
+      if (!isValid) {
+        emitTrackError(deps, {
           code: "SCREEN_SHARE_ERROR",
           message: `Screen share track unavailable for participant ${participant.displayName}`,
           details: { participantId: participant.id },

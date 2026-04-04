@@ -5,11 +5,12 @@ export function ClipboardInviteSuggestion({ isLoading, onPress }: { isLoading: b
   return (
     <Pressable onPress={onPress} disabled={isLoading} style={({ pressed }) => [styles.card, pressed && !isLoading && styles.cardPressed, isLoading && styles.cardDisabled]}>
       <View style={styles.copy}>
-        <Text style={styles.eyebrow}>Copied invite ready</Text>
-        <Text style={styles.title}>Join copied invite</Text>
-        <Text style={styles.subtitle}>We found a Chalk invite link in your clipboard.</Text>
+        <Text style={styles.title}>Join from clipboard</Text>
+        <Text style={styles.subtitle} numberOfLines={1}>We found an invite link in your clipboard</Text>
       </View>
-      <Text style={styles.action}>{isLoading ? "..." : "Open"}</Text>
+      <View style={styles.actionButton}>
+        <Text style={styles.actionText}>{isLoading ? "..." : "Join"}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -19,45 +20,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(27, 182, 166, 0.28)",
-    backgroundColor: "rgba(27, 182, 166, 0.08)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   cardPressed: {
-    transform: [{ scale: 0.99 }],
-    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
   },
   cardDisabled: {
     opacity: 0.5,
   },
   copy: {
     flex: 1,
-    gap: 4,
-  },
-  eyebrow: {
-    color: Theme.colors.primary,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-    textTransform: "uppercase",
+    gap: 2,
   },
   title: {
     color: Theme.colors.foreground,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
   },
   subtitle: {
     color: Theme.colors.mutedForeground,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    fontWeight: "500",
   },
-  action: {
-    color: Theme.colors.primary,
-    fontSize: 14,
-    fontWeight: "700",
+  actionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: Theme.colors.primary,
+    borderRadius: 10,
+  },
+  actionText: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
 });

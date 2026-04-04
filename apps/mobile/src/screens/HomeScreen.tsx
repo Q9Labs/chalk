@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Linking } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import Settings01Icon from "@hugeicons/core-free-icons/dist/esm/Settings01Icon";
 import KeyboardIcon from "@hugeicons/core-free-icons/dist/esm/KeyboardIcon";
 import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -26,6 +25,7 @@ export function HomeScreen({ onNavigate, onDiagnosticsFailure }: HomeScreenProps
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
   const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
   const clipboardInviteLink = useClipboardInviteSuggestion(input);
@@ -96,13 +96,6 @@ export function HomeScreen({ onNavigate, onDiagnosticsFailure }: HomeScreenProps
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
-        <View style={styles.header}>
-          <Text style={styles.brandLogo}>chalk</Text>
-          <Pressable style={styles.iconButton}>
-            <HugeiconsIcon icon={Settings01Icon} size={22} color={Theme.colors.foreground} />
-          </Pressable>
-        </View>
-
         <ScrollView bounces={true} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.heroSection}>
             <View style={styles.illustrationFrame}>
@@ -124,11 +117,13 @@ export function HomeScreen({ onNavigate, onDiagnosticsFailure }: HomeScreenProps
             {clipboardInviteLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
 
             <View style={styles.inputWrapper}>
-              <View style={styles.inputContainer}>
-                <HugeiconsIcon icon={KeyboardIcon} size={20} color={Theme.colors.mutedForeground} style={styles.inputIcon} />
+              <View style={[styles.inputContainer, isInputFocused && styles.inputContainerFocused]}>
+                <HugeiconsIcon icon={KeyboardIcon} size={20} color={isInputFocused ? Theme.colors.primary : Theme.colors.mutedForeground} style={styles.inputIcon} />
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
                   onChangeText={(text) => {
                     setInput(text);
                     if (error) setError(null);
@@ -138,11 +133,9 @@ export function HomeScreen({ onNavigate, onDiagnosticsFailure }: HomeScreenProps
                   style={styles.input}
                   value={input}
                 />
-                {input.length > 0 && (
-                  <Pressable onPress={() => void handleOpenInput()} style={({ pressed }) => [styles.joinAction, pressed && !isResolving && canOpenInviteLink && styles.buttonPressed, (!canOpenInviteLink || isResolving) && styles.joinActionDisabled]} disabled={!canOpenInviteLink || isResolving}>
-                    <Text style={styles.joinActionText}>{isResolving ? "..." : "Open"}</Text>
-                  </Pressable>
-                )}
+                <Pressable onPress={() => void handleOpenInput()} style={({ pressed }) => [styles.joinAction, pressed && !isResolving && canOpenInviteLink && styles.buttonPressed, (!canOpenInviteLink || isResolving) && styles.joinActionDisabled]} disabled={!canOpenInviteLink || isResolving}>
+                  <Text style={styles.joinActionText}>{isResolving ? "..." : "Join"}</Text>
+                </Pressable>
               </View>
             </View>
 
@@ -277,38 +270,44 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    height: 54,
+    borderColor: "rgba(255,255,255,0.08)",
+    height: 58,
     paddingHorizontal: 16,
   },
+  inputContainerFocused: {
+    borderColor: Theme.colors.primary,
+    backgroundColor: "rgba(27, 182, 166, 0.04)",
+  },
   inputIcon: {
-    marginRight: 12,
-    marginTop: Platform.OS === "android" ? 2 : 0, // Small adjustment for icon alignment
+    marginRight: 16,
+    marginTop: Platform.OS === "android" ? 2 : 0,
   },
   input: {
     flex: 1,
     color: Theme.colors.foreground,
     fontSize: 16,
-    fontWeight: "500",
-    paddingVertical: 0, // Fixes vertical alignment on some platforms
+    fontWeight: "600",
+    paddingVertical: 0,
     height: "100%",
   },
   joinAction: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: "rgba(27, 182, 166, 0.1)",
-    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Theme.colors.primary,
+    borderRadius: 12,
   },
   joinActionDisabled: {
     opacity: 0.45,
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   joinActionText: {
-    color: Theme.colors.primary,
-    fontWeight: "700",
-    fontSize: 14,
+    color: "white",
+    fontWeight: "800",
+    fontSize: 13,
+    textTransform: "uppercase",
   },
   errorContainer: {
     marginTop: 8,

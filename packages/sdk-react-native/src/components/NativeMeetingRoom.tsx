@@ -56,7 +56,13 @@ export interface NativeMeetingRoomProps {
   onDiagnosticsChange?: (snapshot: NativeMeetingRoomDiagnosticsSnapshot) => void;
 }
 
-export type { NativeMeetingRoomDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
+export type { NativeMeetingRoomDiagnosticsSnapshot };
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
 
 export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnosticsChange }: NativeMeetingRoomProps): React.JSX.Element {
   const simulatorMediaDisabled = isIosSimulator();
@@ -85,6 +91,14 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
   const [chatDraft, setChatDraft] = useState("");
   const [localPanel, setLocalPanel] = useState<NativeMeetingPanelName | null>(null);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsElapsed((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const isHost = (participants.localParticipant?.role ?? "participant") === "host";
   const panel = localPanel ?? (panels.activePanel as NativeMeetingPanelName | null);
@@ -218,9 +232,12 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
           <Text style={styles.topBarRoomName} numberOfLines={1}>
             {room.roomName || "Meeting"}
           </Text>
+          <View style={styles.timerBadge}>
+            <Text style={styles.timerText}>{formatDuration(secondsElapsed)}</Text>
+          </View>
         </View>
         <View style={styles.topBarRight}>
-          <HugeiconsIcon icon={UserGroupIcon} size={14} color={Theme.colors.mutedForeground} />
+          <HugeiconsIcon icon={UserGroupIcon} size={14} color="#ffffff" />
           <Text style={styles.topBarCount}>{participants.participantCount}</Text>
         </View>
       </View>
@@ -249,7 +266,7 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
             }}
           />
         ) : (
-          <NativeMeetingGrid gridPages={derived.gridPages} isCompactViewport={derived.isCompactViewport} layoutMode={layout.layout} participants={derived.allParticipants} />
+          <NativeMeetingGrid gridPages={derived.gridPages} participants={derived.allParticipants} />
         )}
       </View>
 
@@ -267,7 +284,7 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
             }}
             style={({ pressed }) => [styles.controlButton, isMuted && styles.controlButtonDanger, simulatorMediaDisabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}
           >
-            <HugeiconsIcon color="#ffffff" icon={isMuted ? MicOff01Icon : Mic01Icon} size={22} />
+            <HugeiconsIcon color={isMuted ? "white" : Theme.colors.primary} icon={isMuted ? MicOff01Icon : Mic01Icon} size={22} />
           </Pressable>
           <Pressable
             disabled={simulatorMediaDisabled}
@@ -281,10 +298,10 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
             }}
             style={({ pressed }) => [styles.controlButton, isCameraOff && styles.controlButtonDanger, simulatorMediaDisabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}
           >
-            <HugeiconsIcon color="#ffffff" icon={isCameraOff ? VideoOffIcon : Video01Icon} size={22} />
+            <HugeiconsIcon color={isCameraOff ? "white" : Theme.colors.primary} icon={isCameraOff ? VideoOffIcon : Video01Icon} size={22} />
           </Pressable>
           <Pressable onPress={() => openPanel("chat")} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
-            <HugeiconsIcon color="#ffffff" icon={Chat01Icon} size={22} />
+            <HugeiconsIcon color="white" icon={Chat01Icon} size={22} />
             {chat.unreadCount > 0 ? (
               <View style={styles.controlBadge}>
                 <Text style={styles.controlBadgeText}>{chat.unreadCount > 9 ? "9+" : String(chat.unreadCount)}</Text>
@@ -292,10 +309,10 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
             ) : null}
           </Pressable>
           <Pressable onPress={() => setActionsOpen(true)} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
-            <HugeiconsIcon color="#ffffff" icon={MoreHorizontalIcon} size={22} />
+            <HugeiconsIcon color="white" icon={MoreHorizontalIcon} size={22} />
           </Pressable>
           <Pressable onPress={handleLeave} style={({ pressed }) => [styles.controlButton, styles.controlButtonEndCall, pressed && styles.controlButtonPressed]}>
-            <HugeiconsIcon color="#ffffff" icon={CallEnd01Icon} size={22} />
+            <HugeiconsIcon color="white" icon={CallEnd01Icon} size={22} />
           </Pressable>
         </View>
       </View>
@@ -354,7 +371,6 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
         chatDraft={chatDraft}
         isHost={isHost}
         isRefreshingDevices={devices.isLoading}
-        layout={layout.layout}
         localParticipantId={participants.localParticipant?.id ?? null}
         messages={chat.messages}
         microphones={devices.microphones}
@@ -375,7 +391,6 @@ export function NativeMeetingRoom({ features, onLeave, onEndForAll, onDiagnostic
           chat.sendMessage(chatDraft.trim());
           setChatDraft("");
         }}
-        onSetLayout={(nextLayout: LayoutMode) => layout.setLayout(nextLayout)}
         onToggleWhiteboard={whiteboard.toggle}
         onUnmuteParticipant={unmuteParticipant}
         panel={panel}
@@ -398,98 +413,115 @@ const styles = StyleSheet.create({
   roomScreen: {
     flex: 1,
     backgroundColor: "#000000",
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+    paddingHorizontal: 0,
   },
   topBar: {
+    paddingTop: Platform.OS === "ios" ? 54 : 42,
+    paddingBottom: 14,
+    paddingHorizontal: 24,
+    backgroundColor: "#000000",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 8,
-    backgroundColor: Theme.colors.glassSurface,
-    borderRadius: Theme.radius.full,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+    width: "100%",
   },
   topBarLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     flex: 1,
   },
   connectionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: Theme.colors.success,
   },
   topBarRoomName: {
-    color: Theme.colors.foreground,
-    fontSize: 15,
-    fontWeight: "600",
-    flex: 1,
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  timerBadge: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  timerText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 11,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
   topBarRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   topBarCount: {
-    color: Theme.colors.mutedForeground,
-    fontSize: 13,
-    fontWeight: "600",
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
   },
   stageFrame: {
     flex: 1,
-    borderRadius: Theme.radius["2xl"],
+    backgroundColor: "#000000",
+    width: "100%",
+    borderRadius: 24,
     overflow: "hidden",
-    backgroundColor: Theme.colors.stageBackground,
+    justifyContent: "center",
   },
   bottomDock: {
-    alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 4,
-    pointerEvents: "box-none",
+    paddingTop: 20,
+    paddingBottom: Platform.OS === "ios" ? 38 : 24,
+    paddingHorizontal: 24,
+    backgroundColor: "#000000",
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    width: "100%",
   },
   controlPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: Theme.colors.controlsBackground,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    justifyContent: "space-between",
+    width: "100%",
   },
   controlButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   controlButtonDisabled: {
     opacity: 0.45,
   },
   controlButtonPressed: {
     opacity: 0.7,
-    transform: [{ scale: 0.93 }],
+    transform: [{ scale: 0.92 }],
   },
   controlButtonDanger: {
-    backgroundColor: "rgba(239,68,68,0.35)",
+    backgroundColor: "#ea4335",
   },
   controlButtonEndCall: {
     backgroundColor: "#ef4444",
+    width: 68,
+    borderRadius: 18,
   },
   controlBadge: {
     position: "absolute",
-    top: 6,
-    right: 4,
+    top: -2,
+    right: -2,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -497,6 +529,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: "#000000",
   },
   controlBadgeText: {
     color: "#ffffff",
