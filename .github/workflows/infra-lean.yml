@@ -136,6 +136,7 @@ jobs:
             EXTRA_ARGS="-destroy"
           fi
 
+          set +e
           terraform plan $EXTRA_ARGS \
             -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}" \
             -var="cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
@@ -161,7 +162,15 @@ jobs:
             -var="groq_api_key=${{ secrets.GROQ_API_KEY }}" \
             -var="cloudflare_webhook_secret=${{ secrets.CLOUDFLARE_WEBHOOK_SECRET }}" \
             -out="${GITHUB_WORKSPACE}/tfplan-prod-lean" \
-            -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
+            -detailed-exitcode
+          EXITCODE=$?
+          set -e
+
+          echo "exitcode=$EXITCODE" >> $GITHUB_OUTPUT
+
+          if [ "$EXITCODE" -eq 1 ]; then
+            echo "::error::Terraform exited with code 1."
+          fi
         continue-on-error: true
 
       - name: Upload Plan
