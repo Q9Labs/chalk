@@ -5,6 +5,7 @@ import type { Participant } from "@q9labs/chalk-core";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Theme } from "../ui/theme";
+import { shouldRenderNativeMediaTrack } from "./native-media-visibility";
 import { NativeFaceAvatar } from "./NativeFaceAvatar";
 import { NativeGradientSurface } from "./NativeGradientSurface";
 
@@ -19,13 +20,14 @@ interface NativeMediaViewProps {
 }
 
 export function NativeMediaView({ participant, track, label, mirror = false, objectFit = "cover", emphasizeMuted = false, zOrder = 0 }: NativeMediaViewProps): React.JSX.Element {
+  const shouldRenderVideo = shouldRenderNativeMediaTrack({ participant, track });
   const stream = useMemo(() => {
-    if (!track) {
+    if (!shouldRenderVideo || !track) {
       return null;
     }
 
     return new MediaStream([track as NativeMediaStreamTrack]);
-  }, [track]);
+  }, [shouldRenderVideo, track]);
 
   const name = participant?.displayName?.trim() || label || "Participant";
   const isMuted = emphasizeMuted && participant ? !participant.audioEnabled : false;

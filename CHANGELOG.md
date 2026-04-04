@@ -1131,6 +1131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mobile host meeting creation now self-heals one stale `host role required` failure by clearing the cached host JWT set and retrying room creation once, so already-stored pre-fix tokens stop blocking `New meeting`.
 - Mobile/native join now latches duplicate submit attempts, treats same-room `Already connected to a room` races as a successful join, and clears stale connected room state before retrying, so host create-and-join no longer bounces back with a misleading prejoin error before entering the meeting room.
 - Mobile diagnostics now log chat send/receive transport, queued hand-raise intent, richer audio/video/screen-share track state, and RTK media propagation updates, and `Copy all` has regression coverage proving it serializes the full diagnostics snapshot instead of only the visible rows.
+- Native mobile participant tiles now fall back to the avatar as soon as `videoEnabled` turns off or the track ends, so camera-off events no longer leave the last frozen video frame stuck on screen.
 
 ### Changed
 
