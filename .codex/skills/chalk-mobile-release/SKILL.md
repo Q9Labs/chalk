@@ -7,18 +7,26 @@ description: Release Chalk mobile builds to Google Play and iOS/TestFlight. Use 
 
 Use this for Chalk mobile release work only.
 
+This file is the single source of truth for Chalk mobile release work.
+Do not create or maintain parallel release docs under `apps/mobile/` for the same flow.
+If a real release attempt reveals anything inaccurate here, update this skill before closing the task.
+
 Companion skills/tools:
 - `gplay-cli-usage` for CLI flags/patterns
 - global `agent-browser-helium` when Hasan wants Helium/CDP browser automation
 
 Primary files:
-- `apps/mobile/RELEASE.md`
-- `apps/mobile/RELEASE_CHECKLIST.md`
 - `apps/mobile/app.config.ts`
 - `apps/mobile/android/gradle.properties`
 - `apps/mobile/android/app/build.gradle`
+- `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj`
+- `apps/mobile/ios/Chalk/Info.plist`
+- `apps/mobile/ios/Podfile.lock`
+- `apps/mobile/scripts/run-with-production-mobile-env.ts`
+- `apps/mobile/scripts/verify-production-mobile-host-key.ts`
 - `apps/mobile/src/lib/chalk.ts`
 - `apps/mobile/src/lib/mobile-runtime.ts`
+- `scratchpad/upload-logs/ExportOptions.plist`
 
 ## Defaults
 
@@ -27,34 +35,69 @@ Primary files:
 - preserve existing Play/Helium session
 - prefer CLI for repeatable state; use Play Console UI when Play API gets flaky
 
+## Current Release Truths
+
+- Current release baseline is `1.0 (17)` unless the repo has been bumped since this was last updated.
+- Version alignment lives in:
+  - `apps/mobile/app.config.ts`
+  - `apps/mobile/android/gradle.properties`
+  - `apps/mobile/android/app/build.gradle`
+  - `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj`
+  - `apps/mobile/ios/Chalk/Info.plist`
+- Chalk mobile release builds are now tenant-agnostic.
+- Do not assume `EXPO_PUBLIC_CHALK_API_KEY` is required for release builds.
+- The guarded production wrapper still forces:
+  - `https://chalk-api.q9labs.ai`
+  - `wss://chalk-ws.q9labs.ai/ws`
+- The wrapper temporarily removes `apps/mobile/.env.local` during release commands so local dev values do not leak into store builds.
+- If no host API key is present, `apps/mobile/scripts/verify-production-mobile-host-key.ts` now skips verification instead of blocking the build.
+- Local signed Android artifacts built on this Mac are valid release artifacts.
+- Local iOS archive and TestFlight upload from this Mac are also valid when Xcode signing is working.
+- Do not assume GitHub Actions is the preferred or only release lane.
+- App Store Connect upload succeeded locally via `xcodebuild -exportArchive` using:
+  - automatic signing
+  - team `5K9635LZ6F`
+  - `scratchpad/upload-logs/ExportOptions.plist`
+- Current known iOS warning from successful upload:
+  - symbol upload warnings for `React.framework`, `ReactNativeDependencies.framework`, and `hermesvm.framework`
+- If `xcodebuild archive` fails with `[CP] Check Pods Manifest.lock`, run `cd apps/mobile/ios && pod install` and retry.
+
 ## Android release flow
 
 1. Verify versioning
    - `apps/mobile/app.config.ts`
    - `apps/mobile/android/gradle.properties`
+   - `apps/mobile/android/app/build.gradle`
    - keep `version`, `buildNumber`, `versionCode`, `chalk.versionCode`, `chalk.versionName` aligned
 2. Run mobile gate
-   - `bun run --cwd apps/mobile lint`
-   - `bun run --cwd apps/mobile check-types`
-   - `bun run --cwd apps/mobile test`
+   - `cd apps/mobile && pnpm run lint`
+   - `cd apps/mobile && pnpm run check-types`
+   - `cd apps/mobile && pnpm run test`
    - when RN package changed too:
-     - `bun run --cwd packages/sdk-react-native lint`
-     - `bun run --cwd packages/sdk-react-native check-types`
-     - `bun run --cwd packages/sdk-react-native test`
-3. Build signed AAB
-   - `bun run --cwd apps/mobile build:android:release`
-   - if you need a direct sideload fallback too:
-     - `cd apps/mobile/android && ./gradlew assembleRelease`
-4. Preferred upload
+     - `cd packages/sdk-react-native && pnpm run lint`
+     - `cd packages/sdk-react-native && pnpm run check-types`
+     - `cd packages/sdk-react-native && pnpm run test`
+3. Build signed APK if you want a direct installer artifact
+   - `cd apps/mobile && pnpm run build:android:apk:release:production`
+4. Build signed AAB for Play upload
+   - `cd apps/mobile && pnpm run build:android:release:production`
+5. Record artifact paths and checksums
+   - APK:
+     - `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
+     - `cd apps/mobile/android/app/build/outputs/apk/release && shasum -a 256 app-release.apk`
+   - AAB:
+     - `apps/mobile/android/app/build/outputs/bundle/release/app-release.aab`
+     - `cd apps/mobile/android/app/build/outputs/bundle/release && shasum -a 256 app-release.aab`
+6. Preferred upload when Play CLI is healthy
    - `cd apps/mobile`
-   - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --release-notes "..." --changes-not-sent-for-review`
-5. If `gplay` is flaky, inspect/patch track state manually
+   - `gplay release --package ai.q9labs.chalk.mobile --track internal --bundle android/app/build/outputs/bundle/release/app-release.aab --release-notes "..."`
+7. If `gplay` is flaky, inspect/patch track state manually
    - `gplay edits create`
    - `gplay bundles list`
    - `gplay tracks get --track internal`
    - `gplay tracks update`
    - `gplay edits commit`
-6. If Play API still fights, use Play Console UI in Helium
+8. If Play API still fights, use Play Console UI in Helium
 
 ### Chalk production env rule
 
@@ -70,6 +113,7 @@ Verify both:
 - `apps/mobile/app.config.ts`
 - `apps/mobile/src/lib/chalk.ts`
 - `apps/mobile/src/lib/mobile-runtime.ts`
+- `apps/mobile/scripts/run-with-production-mobile-env.ts`
 
 If a tester reports `New Meeting -> Network Error`, suspect release env leakage first.
 
@@ -173,6 +217,7 @@ Important:
 - Play can accept the bundle upload but still leave internal release as draft
 - `gplay` local install may be a dev build; if behavior looks wrong, verify with `gplay version`
 - direct APK fallback used in practice: build `app-release.apk`, then upload to a temporary host only when testers are blocked by Play review/caching
+- for this Play app, `--changes-not-sent-for-review` should not be passed when Play is auto-sending changes for review; it can fail with `400`
 
 ## iOS lane
 
@@ -181,6 +226,7 @@ Use when asked, but Android remains the default critical path.
 Checklist:
 - verify `buildNumber` bump
 - verify signing/team in Xcode
+- run `pod install` if CocoaPods drift appears
 - archive build
 - upload to TestFlight
 - validate camera/mic/background-audio behavior
@@ -189,6 +235,45 @@ If iOS screen share is in scope:
 - ReplayKit broadcast extension
 - app groups
 - explicit QA before release
+
+## iOS / TestFlight Flow
+
+Current repo-backed state:
+
+- native bundle id: `ai.q9labs.chalk.mobile`
+- current V1 release contract: no mobile-originated screen share on either platform
+- Xcode archive on this Mac succeeded with automatic signing
+- successful local upload used the export options at `scratchpad/upload-logs/ExportOptions.plist`
+
+Exact working flow:
+
+1. Verify release metadata is aligned
+   - `apps/mobile/app.config.ts`
+   - `apps/mobile/ios/Chalk.xcodeproj/project.pbxproj`
+   - `apps/mobile/ios/Chalk/Info.plist`
+2. Verify signing in Xcode if needed
+   - open `apps/mobile/ios/Chalk.xcworkspace`
+   - target `Chalk` -> `Signing & Capabilities`
+   - confirm team `5K9635LZ6F`
+   - confirm `Automatically manage signing` is enabled
+3. If archive fails with CocoaPods sync errors
+   - `cd apps/mobile/ios && pod install`
+4. Archive from CLI
+   - `cd apps/mobile && pnpm run with:production-release-env -- xcodebuild -workspace ios/Chalk.xcworkspace -scheme Chalk -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -archivePath ios/build/Chalk-<version>.xcarchive archive -allowProvisioningUpdates`
+5. Export and upload to TestFlight
+   - `cd apps/mobile && pnpm run with:production-release-env -- xcodebuild -exportArchive -archivePath ios/build/Chalk-<version>.xcarchive -exportPath /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/fresh-<version> -exportOptionsPlist /Users/macmini/Desktop/Code/chalk/scratchpad/upload-logs/ExportOptions.plist -allowProvisioningUpdates`
+6. Watch for final success markers
+   - `Uploaded Chalk`
+   - `Upload succeeded`
+   - `EXPORT SUCCEEDED`
+7. Treat dSYM upload warnings as follow-up work, not necessarily a release blocker, unless App Store Connect rejects processing
+
+Current known successful example:
+
+- archive path:
+  - `apps/mobile/ios/build/Chalk-1.0.xcarchive`
+- export path:
+  - `scratchpad/upload-logs/fresh-1.0`
 
 ## Release handoff
 
@@ -205,3 +290,39 @@ Never say “released” unless:
 - artifact built
 - store accepted it
 - target track/test channel points at the new version
+
+## Human Checks Before Wider Rollout
+
+- Play listing assets
+- App Store screenshots
+- privacy policy URL
+- Play data safety
+- App Store App Privacy answers
+- app content declarations
+- App Store pricing
+- App Store content rights
+- App Review notes and contact details
+- clipboard invite suggestion:
+  - Android: no new manifest permission required
+  - iOS: direct pasteboard reads may show the Apple paste prompt
+- real device QA:
+  - create meeting
+  - join meeting
+  - audio/video both ways
+  - chat
+  - transcripts
+  - reconnect
+  - speaker routing
+  - camera + mic permission prompts
+  - background audio
+  - verify Android and iOS V1 behavior without mobile-originated screen share
+
+## Maintenance Rule
+
+After every real release attempt:
+
+1. Reconcile this skill with what actually happened.
+2. Update commands, blockers, version assumptions, signing notes, and store behavior if reality differed.
+3. Remove stale instructions instead of layering contradictory notes on top.
+4. If the release required improvisation not covered here, encode that learning here before closing the task.
+5. Treat doc reconciliation as part of the release task, not optional follow-up.

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Repo/CI: Bun-based workspace scripts and release workflows now run through pnpm** — root/package build scripts, mobile/docs commands, and GitHub Actions now use pnpm/tsx/tsup equivalents, the repo ships `pnpm-lock.yaml` + `pnpm-workspace.yaml`, and the old Bun lock/config files have been removed so local and CI installs use one consistent package-manager path.
+- **Mobile/docs: Chalk mobile release guidance now lives in one maintained skill file** — the repo-specific mobile release docs were consolidated into `.codex/skills/chalk-mobile-release/SKILL.md`, which now serves as the single source of truth for Android/iOS release flow, current tenant-agnostic production behavior, store blockers, troubleshooting, and the explicit rule to update release guidance after every real release attempt.
 - **API/Infra: post-meeting transcription now defaults to Cloudflare Workers AI and the lean Whisper worker is retired** — `apps/api` now prefers Cloudflare Workers AI Whisper Large V3 Turbo using the existing Cloudflare account/token wiring (with post-meeting overrides when needed), provider discovery exposes the new managed option, and lean Terraform/CI no longer manages or redeploys the dedicated Whisper EC2 worker path.
 
 ### Fixed
