@@ -30,7 +30,7 @@ function getParticipantTileTrack(participant: RoomParticipant): MediaStreamTrack
 
 export function NativeMeetingGrid({ participants, gridPages }: NativeMeetingGridProps): React.JSX.Element {
   const { width, height } = useWindowDimensions();
-  const isTablet = width > 600;
+  const isTablet = width >= 768; // Standardized tablet threshold
   const [activePage, setActivePage] = useState(0);
 
   // Determine pages based on platform
@@ -61,16 +61,17 @@ export function NativeMeetingGrid({ participants, gridPages }: NativeMeetingGrid
     );
   }
 
+  // Universal Hero for 1 participant (Works on Phone and Tablet)
+  if (participants.length === 1) {
+    return (
+      <View style={styles.singleTile}>
+        <NativeMediaView emphasizeMuted participant={participants[0] ?? null} track={getParticipantTileTrack(participants[0]!)} />
+      </View>
+    );
+  }
+
   // Hero Layouts for small groups on Phone
   if (!isTablet && participants.length <= 4) {
-    if (participants.length === 1) {
-      return (
-        <View style={styles.singleTile}>
-          <NativeMediaView emphasizeMuted participant={participants[0] ?? null} track={getParticipantTileTrack(participants[0]!)} />
-        </View>
-      );
-    }
-
     if (participants.length === 2) {
       return (
         <View style={styles.compactTwoUp}>
