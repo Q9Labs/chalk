@@ -70,16 +70,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Ensure queues exist
+      - name: Configure Wrangler auth
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_WRANGLER_OAUTH_CONFIG: ${{ secrets.CLOUDFLARE_WRANGLER_OAUTH_CONFIG }}
+        run: |
+          mkdir -p ~/.config/.wrangler/config
+          printf '%s\n' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG" > ~/.config/.wrangler/config/default.toml
+
+      - name: Ensure queues exist
         run: |
           pnpm --dir infrastructure/cloudflare-worker exec wrangler queues create chalk-post-meeting-transcription || true
           pnpm --dir infrastructure/cloudflare-worker exec wrangler queues create chalk-post-meeting-transcription-dlq || true
 
       - name: Sync worker secrets
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CHALK_TRANSCRIPTION_DISPATCH_SECRET: ${{ secrets.CHALK_TRANSCRIPTION_DISPATCH_SECRET }}
           CHALK_TRANSCRIPTION_CALLBACK_SECRET: ${{ secrets.CHALK_TRANSCRIPTION_CALLBACK_SECRET }}
         run: |
@@ -91,6 +95,4 @@ jobs:
           fi
 
       - name: Deploy worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: pnpm --dir infrastructure/cloudflare-worker run deploy
