@@ -46,7 +46,7 @@ async function handleDispatch(request: Request, env: Env): Promise<Response> {
     return badRequest("timestamp expired", 401)
   }
 
-  if (!verifySignature(env.CHALK_TRANSCRIPTION_DISPATCH_SECRET, timestamp, body, signature)) {
+  if (!(await verifySignature(env.CHALK_TRANSCRIPTION_DISPATCH_SECRET, timestamp, body, signature))) {
     return badRequest("invalid signature", 401)
   }
 
@@ -70,7 +70,7 @@ async function sendCallback(env: Env, callbackURL: string, payload: CallbackPayl
     headers: {
       "content-type": "application/json",
       [TIMESTAMP_HEADER]: String(timestamp),
-      [SIGNATURE_HEADER]: generateSignature(env.CHALK_TRANSCRIPTION_CALLBACK_SECRET, timestamp, body),
+      [SIGNATURE_HEADER]: await generateSignature(env.CHALK_TRANSCRIPTION_CALLBACK_SECRET, timestamp, body),
     },
     body,
   })

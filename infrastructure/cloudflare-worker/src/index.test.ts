@@ -55,7 +55,7 @@ describe("cloudflare transcription worker", () => {
         headers: {
           "content-type": "application/json",
           [TIMESTAMP_HEADER]: String(nowSeconds),
-          [SIGNATURE_HEADER]: generateSignature(env.CHALK_TRANSCRIPTION_DISPATCH_SECRET, nowSeconds, payload),
+          [SIGNATURE_HEADER]: await generateSignature(env.CHALK_TRANSCRIPTION_DISPATCH_SECRET, nowSeconds, payload),
         },
         body: payload,
       }),
