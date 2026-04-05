@@ -26,9 +26,9 @@ func (p registryStubProvider) MaxFileSize() int64 {
 
 func TestProviderRegistry_GetDefaultProviderUsesConfiguredDefault(t *testing.T) {
 	registry := NewProviderRegistry(RegistryConfig{
-		DefaultProvider:     "cloudflare",
-		CloudflareAccountID: "account",
-		CloudflareAPIToken:  "token",
+		DefaultProvider:          "cloudflare",
+		CloudflareWorkerURL:      "https://worker.example.com",
+		CloudflareDispatchSecret: "token",
 	}, nil, nil)
 
 	require.Equal(t, "cloudflare", registry.GetDefaultProvider())
@@ -45,10 +45,10 @@ func TestProviderRegistry_GetDefaultProviderFallsBackWhenConfiguredDefaultUnavai
 
 func TestProviderRegistry_GetAvailableProvidersIncludesCloudflareAvailability(t *testing.T) {
 	registry := NewProviderRegistry(RegistryConfig{
-		CloudflareAccountID: "account",
-		CloudflareAPIToken:  "token",
-		WhisperEnabled:      true,
-		WhisperQueue:        "transcription:jobs",
+		CloudflareWorkerURL:      "https://worker.example.com",
+		CloudflareDispatchSecret: "token",
+		WhisperEnabled:           true,
+		WhisperQueue:             "transcription:jobs",
 	}, &goredis.Client{}, nil)
 
 	providers := registry.GetAvailableProviders()

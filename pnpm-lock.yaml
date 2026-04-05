@@ -321,6 +321,15 @@ importers:
         specifier: ^5.1.0
         version: 5.2.0
 
+  infrastructure/cloudflare-worker:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.16
+        version: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@24.12.0)(@vitest/browser-playwright@4.1.2)(happy-dom@20.8.9)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.12.14(@types/node@24.12.0)(typescript@5.9.3))(vite@7.3.1(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+
   packages/chalk-whiteboard:
     dependencies:
       '@excalidraw/excalidraw':
@@ -11896,7 +11905,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-    optional: true
 
   '@expo/code-signing-certificates@0.0.6':
     dependencies:
@@ -11959,7 +11967,6 @@ snapshots:
     optionalDependencies:
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
 
   '@expo/dom-webview@55.0.3(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
     dependencies:
@@ -11972,7 +11979,6 @@ snapshots:
       expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
 
   '@expo/env@2.1.1':
     dependencies:
@@ -12038,7 +12044,6 @@ snapshots:
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)
       stacktrace-parser: 0.1.11
-    optional: true
 
   '@expo/metro-config@55.0.11(expo@55.0.9)(typescript@5.9.3)':
     dependencies:
@@ -12062,7 +12067,7 @@ snapshots:
       postcss: 8.4.49
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
+      expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -12118,7 +12123,7 @@ snapshots:
       '@expo/json-file': 10.0.12
       '@react-native/normalize-colors': 0.83.4
       debug: 4.4.3(supports-color@10.2.2)
-      expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
+      expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       resolve-from: 5.0.0
       semver: 7.7.4
       xml2js: 0.6.0
@@ -12161,7 +12166,6 @@ snapshots:
       react-dom: 19.2.4(react@19.2.4)
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   '@expo/schema-utils@55.0.2': {}
 
@@ -12184,7 +12188,6 @@ snapshots:
       expo-font: 55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
 
   '@expo/ws-tunnel@1.0.6': {}
 
@@ -15446,7 +15449,7 @@ snapshots:
       resolve-from: 5.0.0
     optionalDependencies:
       '@babel/runtime': 7.29.2
-      expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
+      expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -16595,7 +16598,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
-    optional: true
 
   expo-audio@55.0.9(expo-asset@55.0.10(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
@@ -16635,7 +16637,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
-    optional: true
 
   expo-dev-client@55.0.19(expo@55.0.9)(typescript@5.9.3):
     dependencies:
@@ -16677,7 +16678,6 @@ snapshots:
     dependencies:
       expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
 
   expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
@@ -16692,7 +16692,6 @@ snapshots:
       fontfaceobserver: 2.3.0
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
 
   expo-json-utils@55.0.0: {}
 
@@ -16705,7 +16704,6 @@ snapshots:
     dependencies:
       expo: 55.0.9(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react: 19.2.4
-    optional: true
 
   expo-linking@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3):
     dependencies:
@@ -16748,7 +16746,6 @@ snapshots:
       invariant: 2.2.4
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
 
   expo-secure-store@55.0.9(expo@55.0.9):
     dependencies:
@@ -16868,7 +16865,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-    optional: true
 
   exponential-backoff@3.1.3: {}
 

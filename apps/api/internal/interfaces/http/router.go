@@ -17,6 +17,7 @@ import (
 	"github.com/Q9Labs/chalk/internal/infrastructure/auth"
 	"github.com/Q9Labs/chalk/internal/infrastructure/cloudflare"
 	"github.com/Q9Labs/chalk/internal/infrastructure/github"
+	"github.com/Q9Labs/chalk/internal/infrastructure/jobs"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres"
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 	"github.com/Q9Labs/chalk/internal/infrastructure/redis"
@@ -48,24 +49,26 @@ type Router struct {
 	appConfig          *config.Config
 	corsOriginsService *s3.CORSOriginsService
 
-	roomService                     *room.Service
-	participantService              *participant.Service
-	recordingService                *recording.Service
-	transcriptService               *transcript.Service
-	postMeetingTranscriptionService *postmeetingtranscription.Service
-	postMeetingService              *webhook.PostMeetingService
-	chatService                     *chatdomain.Service
+	roomService                      *room.Service
+	participantService               *participant.Service
+	recordingService                 *recording.Service
+	transcriptService                *transcript.Service
+	postMeetingTranscriptionService  *postmeetingtranscription.Service
+	postMeetingService               *webhook.PostMeetingService
+	transcriptionCompletionProcessor *jobs.TranscriptionCompletionProcessor
+	chatService                      *chatdomain.Service
 }
 
 type RouterConfig struct {
-	Pool                            *postgres.Pool
-	CFClient                        *cloudflare.Client
-	RedisClient                     *redis.Client
-	StorageR2                       storage.StorageClient
-	StorageS3                       storage.StorageClient
-	AppConfig                       *config.Config
-	PostMeetingTranscriptionService *postmeetingtranscription.Service
-	PostMeetingService              *webhook.PostMeetingService
+	Pool                             *postgres.Pool
+	CFClient                         *cloudflare.Client
+	RedisClient                      *redis.Client
+	StorageR2                        storage.StorageClient
+	StorageS3                        storage.StorageClient
+	AppConfig                        *config.Config
+	PostMeetingTranscriptionService  *postmeetingtranscription.Service
+	PostMeetingService               *webhook.PostMeetingService
+	TranscriptionCompletionProcessor *jobs.TranscriptionCompletionProcessor
 }
 
 func NewRouter(cfg RouterConfig) *Router {
@@ -141,27 +144,28 @@ func NewRouter(cfg RouterConfig) *Router {
 	wsHub.SetChatService(chatService)
 
 	r := &Router{
-		engine:                          engine,
-		pool:                            cfg.Pool,
-		queries:                         queries,
-		jwtService:                      jwtService,
-		apiKeyService:                   apiKeyService,
-		cfClient:                        cfg.CFClient,
-		redisClient:                     cfg.RedisClient,
-		roomState:                       roomState,
-		wsHub:                           wsHub,
-		storageR2:                       cfg.StorageR2,
-		storageS3:                       cfg.StorageS3,
-		githubClient:                    githubClient,
-		appConfig:                       cfg.AppConfig,
-		corsOriginsService:              corsOriginsService,
-		roomService:                     roomService,
-		participantService:              participantService,
-		recordingService:                recordingService,
-		transcriptService:               transcriptService,
-		postMeetingTranscriptionService: cfg.PostMeetingTranscriptionService,
-		postMeetingService:              cfg.PostMeetingService,
-		chatService:                     chatService,
+		engine:                           engine,
+		pool:                             cfg.Pool,
+		queries:                          queries,
+		jwtService:                       jwtService,
+		apiKeyService:                    apiKeyService,
+		cfClient:                         cfg.CFClient,
+		redisClient:                      cfg.RedisClient,
+		roomState:                        roomState,
+		wsHub:                            wsHub,
+		storageR2:                        cfg.StorageR2,
+		storageS3:                        cfg.StorageS3,
+		githubClient:                     githubClient,
+		appConfig:                        cfg.AppConfig,
+		corsOriginsService:               corsOriginsService,
+		roomService:                      roomService,
+		participantService:               participantService,
+		recordingService:                 recordingService,
+		transcriptService:                transcriptService,
+		postMeetingTranscriptionService:  cfg.PostMeetingTranscriptionService,
+		postMeetingService:               cfg.PostMeetingService,
+		transcriptionCompletionProcessor: cfg.TranscriptionCompletionProcessor,
+		chatService:                      chatService,
 	}
 
 	r.setupRoutes()
@@ -339,7 +343,11 @@ func (r *Router) setupRoutes() {
 
 			// Post-meeting transcription for recordings
 			if r.postMeetingTranscriptionService != nil {
-				pmTranscription := handlers.NewPostMeetingTranscriptionHandler(r.postMeetingTranscriptionService)
+				pmTranscription := handlers.NewPostMeetingTranscriptionHandler(
+					r.postMeetingTranscriptionService,
+					r.appConfig.PostMeeting.CloudflareWorkerCallbackSecret,
+					r.transcriptionCompletionProcessor,
+				)
 				recordingsGroup.GET("/:id/transcript", pmTranscription.GetTranscriptByRecording)
 				recordingsGroup.POST("/:id/transcribe", pmTranscription.QueueTranscription)
 			}
@@ -347,10 +355,15 @@ func (r *Router) setupRoutes() {
 
 		// Post-meeting transcription endpoints
 		if r.postMeetingTranscriptionService != nil {
+			pmTranscription := handlers.NewPostMeetingTranscriptionHandler(
+				r.postMeetingTranscriptionService,
+				r.appConfig.PostMeeting.CloudflareWorkerCallbackSecret,
+				r.transcriptionCompletionProcessor,
+			)
 			transcriptionGroup := v1.Group("/transcription")
 			{
-				pmTranscription := handlers.NewPostMeetingTranscriptionHandler(r.postMeetingTranscriptionService)
 				transcriptionGroup.GET("/providers", pmTranscription.GetProviders)
+				transcriptionGroup.POST("/providers/cloudflare/callback", pmTranscription.HandleCloudflareCallback)
 
 				transcriptionGroup.Use(authMw.RequireJWT())
 				transcriptionGroup.GET("/:id", pmTranscription.GetTranscript)

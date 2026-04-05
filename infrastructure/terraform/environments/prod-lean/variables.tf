@@ -144,6 +144,26 @@ variable "post_meeting_cloudflare_api_token" {
   default     = ""
 }
 
+variable "post_meeting_cloudflare_worker_url" {
+  description = "Cloudflare Worker URL for post-meeting transcription dispatch"
+  type        = string
+  default     = "https://chalk-transcription.q9labs.ai"
+}
+
+variable "post_meeting_cloudflare_worker_dispatch_secret" {
+  description = "Shared secret used by Chalk API to sign Cloudflare worker dispatch requests"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "post_meeting_cloudflare_worker_callback_secret" {
+  description = "Shared secret used by the Cloudflare worker to sign callback requests back to Chalk API"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "jwt_signing_key" {
   description = "JWT signing key"
   type        = string

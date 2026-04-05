@@ -11,6 +11,7 @@
 
 ### Changed
 
+- **Cloudflare post-meeting transcription now runs through a queue-backed Worker**: the API `cloudflare` provider dispatches signed jobs to `infrastructure/cloudflare-worker`, Cloudflare Queue + DLQ handle retries/terminal failures, and signed callbacks update Chalk before AI summary and tenant webhook delivery continue.
 - **Post-meeting webhook payloads**: Include participant metadata and external IDs in tenant webhook payloads for easier identification.
 - **First-party auth scope now resolves shared tenant + personal workspace**: internal Chalk auth now issues first-party tokens with `workspace_id`, creates/reuses a personal workspace per user inside a shared internal tenant, scopes dashboard meeting/recording queries by workspace, and writes new first-party rooms with `workspace_id`/`created_by_user_id` instead of relying on per-user internal tenants.
 - **DB join hot-path indexing**: Add composite indexes on `rooms(tenant_id, name, created_at DESC)` and `participants(room_id, external_user_id, created_at DESC)` to reduce join/read-path latency.
@@ -24,6 +25,7 @@
 
 ### Fixed
 
+- **Cloudflare transcription OOM path**: removed the in-process Workers AI upload path that buffered full recordings in API memory and replaced it with callback-based completion plus provider job/error metadata on `post_meeting_transcripts`.
 - **Hosted first-party auth bootstrap + client incident CORS**: hosted Chalk web clients now reuse a stable bootstrap identity even when cross-site cookies drop between requests, and the debug incident endpoint now explicitly allows `x-chalk-source` so browser incident reports from `chalkmeet.com` do not fail preflight.
 - **First-party room joins no longer fork Cloudflare meetings by auth context**: signed join-token exchange now preserves canonical `room_id`, first-party room joins reject room-name fallback/auto-create behavior, and authenticated users now converge on the original room/meeting instead of silently creating a second tenant-scoped room behind the same visible code.
 - **First-party room creation no longer explodes on non-user host subjects**: room create/schedule now only stamp `created_by_user_id` for workspace-scoped user claims, so host/API-key and claim-based tokens stop tripping `rooms_created_by_user_id_fkey` during room creation.

@@ -4,40 +4,40 @@ import goredis "github.com/redis/go-redis/v9"
 
 // RegistryConfig holds configuration for the provider registry.
 type RegistryConfig struct {
-	DefaultProvider     string
-	GroqAPIKey          string
-	CloudflareAccountID string
-	CloudflareAPIToken  string
-	CloudflareModel     string
-	WhisperEnabled      bool
-	WhisperQueue        string
+	DefaultProvider          string
+	GroqAPIKey               string
+	CloudflareWorkerURL      string
+	CloudflareDispatchSecret string
+	CloudflareModel          string
+	WhisperEnabled           bool
+	WhisperQueue             string
 }
 
 // ProviderRegistry manages transcription provider availability and creation.
 type ProviderRegistry struct {
-	defaultProvider     string
-	groqAPIKey          string
-	cloudflareAccountID string
-	cloudflareAPIToken  string
-	cloudflareModel     string
-	whisperEnabled      bool
-	whisperQueue        string
-	whisperJobStore     WhisperJobStore
-	redis               *goredis.Client
+	defaultProvider          string
+	groqAPIKey               string
+	cloudflareWorkerURL      string
+	cloudflareDispatchSecret string
+	cloudflareModel          string
+	whisperEnabled           bool
+	whisperQueue             string
+	whisperJobStore          WhisperJobStore
+	redis                    *goredis.Client
 }
 
 // NewProviderRegistry creates a new provider registry.
 func NewProviderRegistry(cfg RegistryConfig, redis *goredis.Client, whisperJobStore WhisperJobStore) *ProviderRegistry {
 	return &ProviderRegistry{
-		defaultProvider:     cfg.DefaultProvider,
-		groqAPIKey:          cfg.GroqAPIKey,
-		cloudflareAccountID: cfg.CloudflareAccountID,
-		cloudflareAPIToken:  cfg.CloudflareAPIToken,
-		cloudflareModel:     cfg.CloudflareModel,
-		whisperEnabled:      cfg.WhisperEnabled,
-		whisperQueue:        cfg.WhisperQueue,
-		whisperJobStore:     whisperJobStore,
-		redis:               redis,
+		defaultProvider:          cfg.DefaultProvider,
+		groqAPIKey:               cfg.GroqAPIKey,
+		cloudflareWorkerURL:      cfg.CloudflareWorkerURL,
+		cloudflareDispatchSecret: cfg.CloudflareDispatchSecret,
+		cloudflareModel:          cfg.CloudflareModel,
+		whisperEnabled:           cfg.WhisperEnabled,
+		whisperQueue:             cfg.WhisperQueue,
+		whisperJobStore:          whisperJobStore,
+		redis:                    redis,
 	}
 }
 
@@ -59,10 +59,10 @@ func (r *ProviderRegistry) GetAvailableProviders() []ProviderInfo {
 			Name:          "Cloudflare Workers AI",
 			Type:          "cloud",
 			BYOKSupported: false,
-			Available:     r.cloudflareAccountID != "" && r.cloudflareAPIToken != "",
+			Available:     r.cloudflareWorkerURL != "" && r.cloudflareDispatchSecret != "",
 			UnavailableReason: unavailableReason(
-				r.cloudflareAccountID != "" && r.cloudflareAPIToken != "",
-				"Cloudflare Workers AI credentials are not configured",
+				r.cloudflareWorkerURL != "" && r.cloudflareDispatchSecret != "",
+				"Cloudflare queue worker dispatch is not configured",
 			),
 		},
 		{
@@ -104,10 +104,10 @@ func (r *ProviderRegistry) CreateProvider(providerName string, tenantAPIKey stri
 
 	switch providerName {
 	case "cloudflare":
-		if r.cloudflareAccountID == "" || r.cloudflareAPIToken == "" {
+		if r.cloudflareWorkerURL == "" || r.cloudflareDispatchSecret == "" {
 			return nil, ErrProviderNotConfigured
 		}
-		return newCloudflareProviderFromRegistry(r.cloudflareAccountID, r.cloudflareAPIToken, r.cloudflareModel), nil
+		return newCloudflareProviderFromRegistry(r.cloudflareWorkerURL, r.cloudflareDispatchSecret, r.cloudflareModel), nil
 
 	case "groq":
 		apiKey := tenantAPIKey
@@ -152,7 +152,7 @@ func (r *ProviderRegistry) GetDefaultProvider() string {
 func (r *ProviderRegistry) HasProvider(name string) bool {
 	switch name {
 	case "cloudflare":
-		return r.cloudflareAccountID != "" && r.cloudflareAPIToken != ""
+		return r.cloudflareWorkerURL != "" && r.cloudflareDispatchSecret != ""
 	case "groq":
 		return r.groqAPIKey != ""
 	case "whisper":
@@ -160,6 +160,10 @@ func (r *ProviderRegistry) HasProvider(name string) bool {
 	default:
 		return false
 	}
+}
+
+func (r *ProviderRegistry) GetCloudflareModel() string {
+	return r.cloudflareModel
 }
 
 func dedupeProviderOrder(names []string) []string {

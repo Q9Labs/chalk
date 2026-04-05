@@ -555,7 +555,7 @@ func (q *Queries) AdminListTenants(ctx context.Context, arg AdminListTenantsPara
 
 const adminListTranscripts = `-- name: AdminListTranscripts :many
 SELECT
-    pmt.id, pmt.recording_id, pmt.room_id, pmt.transcript_text, pmt.transcript_json, pmt.language, pmt.duration_seconds, pmt.word_count, pmt.provider, pmt.summary, pmt.action_items, pmt.status, pmt.error_message, pmt.created_at, pmt.completed_at,
+    pmt.id, pmt.recording_id, pmt.room_id, pmt.transcript_text, pmt.transcript_json, pmt.language, pmt.duration_seconds, pmt.word_count, pmt.provider, pmt.summary, pmt.action_items, pmt.status, pmt.error_message, pmt.created_at, pmt.completed_at, pmt.provider_job_id, pmt.provider_error_code, pmt.provider_error_metadata, pmt.dispatched_at,
     r.name AS room_name,
     t.name AS tenant_name,
     rec.duration_seconds AS recording_duration_seconds
@@ -588,6 +588,10 @@ type AdminListTranscriptsRow struct {
 	ErrorMessage             *string            `db:"error_message" json:"error_message"`
 	CreatedAt                time.Time          `db:"created_at" json:"created_at"`
 	CompletedAt              pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ProviderJobID            *string            `db:"provider_job_id" json:"provider_job_id"`
+	ProviderErrorCode        *string            `db:"provider_error_code" json:"provider_error_code"`
+	ProviderErrorMetadata    []byte             `db:"provider_error_metadata" json:"provider_error_metadata"`
+	DispatchedAt             pgtype.Timestamptz `db:"dispatched_at" json:"dispatched_at"`
 	RoomName                 *string            `db:"room_name" json:"room_name"`
 	TenantName               string             `db:"tenant_name" json:"tenant_name"`
 	RecordingDurationSeconds *int32             `db:"recording_duration_seconds" json:"recording_duration_seconds"`
@@ -618,6 +622,10 @@ func (q *Queries) AdminListTranscripts(ctx context.Context, arg AdminListTranscr
 			&i.ErrorMessage,
 			&i.CreatedAt,
 			&i.CompletedAt,
+			&i.ProviderJobID,
+			&i.ProviderErrorCode,
+			&i.ProviderErrorMetadata,
+			&i.DispatchedAt,
 			&i.RoomName,
 			&i.TenantName,
 			&i.RecordingDurationSeconds,

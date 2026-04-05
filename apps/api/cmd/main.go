@@ -172,18 +172,18 @@ func main() {
 
 	queries := db.New(pool)
 	transcriptionRegistry := transcription.NewProviderRegistry(transcription.RegistryConfig{
-		DefaultProvider:     cfg.PostMeeting.TranscriptionDefaultProvider,
-		GroqAPIKey:          cfg.PostMeeting.GroqAPIKey,
-		CloudflareAccountID: cfg.PostMeeting.CloudflareAccountID,
-		CloudflareAPIToken:  cfg.PostMeeting.CloudflareAPIToken,
-		CloudflareModel:     cfg.PostMeeting.CloudflareModel,
-		WhisperEnabled:      cfg.PostMeeting.WhisperEnabled,
-		WhisperQueue:        cfg.PostMeeting.WhisperRedisQueue,
+		DefaultProvider:          cfg.PostMeeting.TranscriptionDefaultProvider,
+		GroqAPIKey:               cfg.PostMeeting.GroqAPIKey,
+		CloudflareWorkerURL:      cfg.PostMeeting.CloudflareWorkerURL,
+		CloudflareDispatchSecret: cfg.PostMeeting.CloudflareWorkerDispatchSecret,
+		CloudflareModel:          cfg.PostMeeting.CloudflareModel,
+		WhisperEnabled:           cfg.PostMeeting.WhisperEnabled,
+		WhisperQueue:             cfg.PostMeeting.WhisperRedisQueue,
 	}, redisClient.GetClient(), transcription.NewPostgresWhisperJobStore(queries))
 
 	var transcriptionService *transcription.Service
 	if storageR2 != nil {
-		transcriptionService = transcription.NewService(queries, transcriptionRegistry, storageR2)
+		transcriptionService = transcription.NewService(queries, transcriptionRegistry, storageR2, cfg.API.PublicURL)
 		slog.Info("initialized post-meeting transcription service",
 			"default_provider", transcriptionRegistry.GetDefaultProvider())
 	} else {
@@ -224,15 +224,25 @@ func main() {
 		slog.Default(),
 	)
 
+	tenantGetter := jobs.NewDBTenantGetter(queries)
+	completionProcessor := jobs.NewTranscriptionCompletionProcessor(
+		aiService,
+		postMeetingService,
+		queries,
+		tenantGetter,
+		slog.Default(),
+	)
+
 	router := http.NewRouter(http.RouterConfig{
-		Pool:                            pool,
-		CFClient:                        cfClient,
-		RedisClient:                     redisClient,
-		StorageR2:                       storageR2,
-		StorageS3:                       storageS3,
-		AppConfig:                       cfg,
-		PostMeetingTranscriptionService: transcriptionService,
-		PostMeetingService:              postMeetingService,
+		Pool:                             pool,
+		CFClient:                         cfClient,
+		RedisClient:                      redisClient,
+		StorageR2:                        storageR2,
+		StorageS3:                        storageS3,
+		AppConfig:                        cfg,
+		PostMeetingTranscriptionService:  transcriptionService,
+		PostMeetingService:               postMeetingService,
+		TranscriptionCompletionProcessor: completionProcessor,
 	})
 
 	var workerWG sync.WaitGroup
@@ -245,13 +255,9 @@ func main() {
 	}
 
 	if transcriptionService != nil {
-		tenantGetter := jobs.NewDBTenantGetter(queries)
 		transcriptionWorker := jobs.NewTranscriptionWorker(
 			transcriptionService,
-			aiService,
-			postMeetingService,
-			queries,
-			tenantGetter,
+			completionProcessor,
 			slog.Default(),
 		)
 		startWorker(transcriptionWorker.Run)

@@ -15,7 +15,7 @@ const createPostMeetingTranscript = `-- name: CreatePostMeetingTranscript :one
 
 INSERT INTO post_meeting_transcripts (recording_id, room_id, provider, status)
 VALUES ($1, $2, $3, 'pending')
-RETURNING id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at
+RETURNING id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at, provider_job_id, provider_error_code, provider_error_metadata, dispatched_at
 `
 
 type CreatePostMeetingTranscriptParams struct {
@@ -45,12 +45,16 @@ func (q *Queries) CreatePostMeetingTranscript(ctx context.Context, arg CreatePos
 		&i.ErrorMessage,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProviderJobID,
+		&i.ProviderErrorCode,
+		&i.ProviderErrorMetadata,
+		&i.DispatchedAt,
 	)
 	return i, err
 }
 
 const getPendingTranscripts = `-- name: GetPendingTranscripts :many
-SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at FROM post_meeting_transcripts
+SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at, provider_job_id, provider_error_code, provider_error_metadata, dispatched_at FROM post_meeting_transcripts
 WHERE status = 'pending'
 ORDER BY created_at ASC
 LIMIT $1
@@ -81,6 +85,10 @@ func (q *Queries) GetPendingTranscripts(ctx context.Context, limit int32) ([]Pos
 			&i.ErrorMessage,
 			&i.CreatedAt,
 			&i.CompletedAt,
+			&i.ProviderJobID,
+			&i.ProviderErrorCode,
+			&i.ProviderErrorMetadata,
+			&i.DispatchedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -93,7 +101,7 @@ func (q *Queries) GetPendingTranscripts(ctx context.Context, limit int32) ([]Pos
 }
 
 const getPostMeetingTranscript = `-- name: GetPostMeetingTranscript :one
-SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at FROM post_meeting_transcripts
+SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at, provider_job_id, provider_error_code, provider_error_metadata, dispatched_at FROM post_meeting_transcripts
 WHERE id = $1 LIMIT 1
 `
 
@@ -116,12 +124,16 @@ func (q *Queries) GetPostMeetingTranscript(ctx context.Context, id uuid.UUID) (P
 		&i.ErrorMessage,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProviderJobID,
+		&i.ProviderErrorCode,
+		&i.ProviderErrorMetadata,
+		&i.DispatchedAt,
 	)
 	return i, err
 }
 
 const getPostMeetingTranscriptByRecordingID = `-- name: GetPostMeetingTranscriptByRecordingID :one
-SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at FROM post_meeting_transcripts
+SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at, provider_job_id, provider_error_code, provider_error_metadata, dispatched_at FROM post_meeting_transcripts
 WHERE recording_id = $1 LIMIT 1
 `
 
@@ -144,12 +156,16 @@ func (q *Queries) GetPostMeetingTranscriptByRecordingID(ctx context.Context, rec
 		&i.ErrorMessage,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProviderJobID,
+		&i.ProviderErrorCode,
+		&i.ProviderErrorMetadata,
+		&i.DispatchedAt,
 	)
 	return i, err
 }
 
 const getProcessingTranscripts = `-- name: GetProcessingTranscripts :many
-SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at FROM post_meeting_transcripts
+SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at, provider_job_id, provider_error_code, provider_error_metadata, dispatched_at FROM post_meeting_transcripts
 WHERE status = 'processing'
 ORDER BY created_at ASC
 LIMIT $1
@@ -180,6 +196,10 @@ func (q *Queries) GetProcessingTranscripts(ctx context.Context, limit int32) ([]
 			&i.ErrorMessage,
 			&i.CreatedAt,
 			&i.CompletedAt,
+			&i.ProviderJobID,
+			&i.ProviderErrorCode,
+			&i.ProviderErrorMetadata,
+			&i.DispatchedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -192,7 +212,7 @@ func (q *Queries) GetProcessingTranscripts(ctx context.Context, limit int32) ([]
 }
 
 const listPostMeetingTranscriptsByRoom = `-- name: ListPostMeetingTranscriptsByRoom :many
-SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at FROM post_meeting_transcripts
+SELECT id, recording_id, room_id, transcript_text, transcript_json, language, duration_seconds, word_count, provider, summary, action_items, status, error_message, created_at, completed_at, provider_job_id, provider_error_code, provider_error_metadata, dispatched_at FROM post_meeting_transcripts
 WHERE room_id = $1
 ORDER BY created_at DESC
 `
@@ -222,6 +242,10 @@ func (q *Queries) ListPostMeetingTranscriptsByRoom(ctx context.Context, roomID u
 			&i.ErrorMessage,
 			&i.CreatedAt,
 			&i.CompletedAt,
+			&i.ProviderJobID,
+			&i.ProviderErrorCode,
+			&i.ProviderErrorMetadata,
+			&i.DispatchedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -233,9 +257,35 @@ func (q *Queries) ListPostMeetingTranscriptsByRoom(ctx context.Context, roomID u
 	return items, nil
 }
 
+const markPostMeetingTranscriptDispatched = `-- name: MarkPostMeetingTranscriptDispatched :exec
+UPDATE post_meeting_transcripts
+SET status = 'processing',
+    provider_job_id = COALESCE($2, provider_job_id),
+    error_message = NULL,
+    provider_error_code = NULL,
+    provider_error_metadata = NULL,
+    completed_at = NULL,
+    dispatched_at = NOW()
+WHERE id = $1
+`
+
+type MarkPostMeetingTranscriptDispatchedParams struct {
+	ID            uuid.UUID `db:"id" json:"id"`
+	ProviderJobID *string   `db:"provider_job_id" json:"provider_job_id"`
+}
+
+func (q *Queries) MarkPostMeetingTranscriptDispatched(ctx context.Context, arg MarkPostMeetingTranscriptDispatchedParams) error {
+	_, err := q.db.Exec(ctx, markPostMeetingTranscriptDispatched, arg.ID, arg.ProviderJobID)
+	return err
+}
+
 const markPostMeetingTranscriptFailed = `-- name: MarkPostMeetingTranscriptFailed :exec
 UPDATE post_meeting_transcripts
-SET status = 'failed', error_message = $2
+SET status = 'failed',
+    error_message = $2,
+    provider_error_code = NULL,
+    provider_error_metadata = NULL,
+    completed_at = NOW()
 WHERE id = $1
 `
 
@@ -249,9 +299,37 @@ func (q *Queries) MarkPostMeetingTranscriptFailed(ctx context.Context, arg MarkP
 	return err
 }
 
+const markPostMeetingTranscriptFailedDetailed = `-- name: MarkPostMeetingTranscriptFailedDetailed :exec
+UPDATE post_meeting_transcripts
+SET status = 'failed',
+    error_message = $2,
+    provider_error_code = $3,
+    provider_error_metadata = $4,
+    completed_at = NOW()
+WHERE id = $1
+`
+
+type MarkPostMeetingTranscriptFailedDetailedParams struct {
+	ID                    uuid.UUID `db:"id" json:"id"`
+	ErrorMessage          *string   `db:"error_message" json:"error_message"`
+	ProviderErrorCode     *string   `db:"provider_error_code" json:"provider_error_code"`
+	ProviderErrorMetadata []byte    `db:"provider_error_metadata" json:"provider_error_metadata"`
+}
+
+func (q *Queries) MarkPostMeetingTranscriptFailedDetailed(ctx context.Context, arg MarkPostMeetingTranscriptFailedDetailedParams) error {
+	_, err := q.db.Exec(ctx, markPostMeetingTranscriptFailedDetailed,
+		arg.ID,
+		arg.ErrorMessage,
+		arg.ProviderErrorCode,
+		arg.ProviderErrorMetadata,
+	)
+	return err
+}
+
 const markPostMeetingTranscriptProcessing = `-- name: MarkPostMeetingTranscriptProcessing :exec
 UPDATE post_meeting_transcripts
-SET status = 'processing'
+SET status = 'processing',
+    completed_at = NULL
 WHERE id = $1
 `
 
@@ -285,6 +363,10 @@ SET
     language = $4,
     duration_seconds = $5,
     word_count = $6,
+    provider_job_id = COALESCE($7, provider_job_id),
+    error_message = NULL,
+    provider_error_code = NULL,
+    provider_error_metadata = NULL,
     status = 'completed',
     completed_at = NOW()
 WHERE id = $1
@@ -297,6 +379,7 @@ type UpdatePostMeetingTranscriptResultParams struct {
 	Language        *string   `db:"language" json:"language"`
 	DurationSeconds *int32    `db:"duration_seconds" json:"duration_seconds"`
 	WordCount       *int32    `db:"word_count" json:"word_count"`
+	ProviderJobID   *string   `db:"provider_job_id" json:"provider_job_id"`
 }
 
 func (q *Queries) UpdatePostMeetingTranscriptResult(ctx context.Context, arg UpdatePostMeetingTranscriptResultParams) error {
@@ -307,6 +390,7 @@ func (q *Queries) UpdatePostMeetingTranscriptResult(ctx context.Context, arg Upd
 		arg.Language,
 		arg.DurationSeconds,
 		arg.WordCount,
+		arg.ProviderJobID,
 	)
 	return err
 }

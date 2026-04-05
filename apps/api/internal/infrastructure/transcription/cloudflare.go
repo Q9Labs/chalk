@@ -3,113 +3,97 @@ package transcription
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	domain "github.com/Q9Labs/chalk/internal/domain/transcription"
+	domainwebhook "github.com/Q9Labs/chalk/internal/domain/webhook"
+	"github.com/google/uuid"
 )
 
 const (
 	cloudflareWhisperDefaultModel = "@cf/openai/whisper-large-v3-turbo"
-	cloudflareAIBaseURL           = "https://api.cloudflare.com/client/v4/accounts"
+	cloudflareDispatchPath        = "/dispatch"
 )
 
-// CloudflareProvider implements transcription using Cloudflare Workers AI.
+// CloudflareProvider dispatches transcription jobs to the dedicated Cloudflare Worker.
 type CloudflareProvider struct {
-	accountID      string
-	apiToken       string
+	workerURL      string
+	dispatchSecret string
 	model          string
-	baseURL        string
 	client         *http.Client
-	downloadClient *http.Client
 }
 
-// NewCloudflareProvider creates a new Cloudflare Workers AI transcription provider.
-func NewCloudflareProvider(accountID, apiToken, model string) *CloudflareProvider {
+// NewCloudflareProvider creates a new Cloudflare queue-backed transcription provider.
+func NewCloudflareProvider(workerURL, dispatchSecret, model string) *CloudflareProvider {
 	if strings.TrimSpace(model) == "" {
 		model = cloudflareWhisperDefaultModel
 	}
 
 	return &CloudflareProvider{
-		accountID:      accountID,
-		apiToken:       apiToken,
+		workerURL:      strings.TrimRight(workerURL, "/"),
+		dispatchSecret: dispatchSecret,
 		model:          model,
-		baseURL:        cloudflareAIBaseURL,
-		client:         &http.Client{Timeout: 10 * time.Minute},
-		downloadClient: &http.Client{Timeout: 30 * time.Minute},
+		client:         &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-func (p *CloudflareProvider) Transcribe(ctx context.Context, request domain.TranscriptionRequest) (*domain.TranscriptionResult, error) {
-	audioBytes, err := p.downloadAudio(ctx, request.AudioURL)
+func (p *CloudflareProvider) Transcribe(context.Context, domain.TranscriptionRequest) (*domain.TranscriptionResult, error) {
+	return nil, fmt.Errorf("cloudflare provider dispatches asynchronously")
+}
+
+func (p *CloudflareProvider) Dispatch(ctx context.Context, request domain.TranscriptionRequest) (*domain.DispatchResult, error) {
+	payload := cloudflareDispatchRequest{
+		TranscriptID:     request.TranscriptID,
+		RecordingID:      request.RecordingID,
+		RoomID:           request.RoomID,
+		AudioURL:         request.AudioURL,
+		AudioStoragePath: request.AudioStoragePath,
+		LanguageHint:     request.LanguageHint,
+		CallbackURL:      request.CallbackURL,
+		ProviderModel:    firstNonEmpty(request.ProviderModel, p.model),
+	}
+
+	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal cloudflare dispatch request: %w", err)
 	}
 
-	reqBody := cloudflareTranscriptionRequest{
-		Audio: base64.StdEncoding.EncodeToString(audioBytes),
-		Task:  "transcribe",
-	}
-	if request.LanguageHint != "" {
-		reqBody.Language = request.LanguageHint
-	}
-
-	payload, err := json.Marshal(reqBody)
+	endpoint := p.workerURL + cloudflareDispatchPath
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("marshal cloudflare request: %w", err)
+		return nil, fmt.Errorf("create cloudflare dispatch request: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/%s/ai/run/%s", strings.TrimRight(p.baseURL, "/"), p.accountID, p.model)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("create cloudflare request: %w", err)
-	}
-
-	httpReq.Header.Set("Authorization", "Bearer "+p.apiToken)
+	timestamp := time.Now().Unix()
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Chalk-Timestamp", fmt.Sprintf("%d", timestamp))
+	httpReq.Header.Set("X-Chalk-Signature", domainwebhook.GenerateSignature(p.dispatchSecret, timestamp, body))
 
-	start := time.Now()
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("cloudflare workers ai request: %w", err)
+		return nil, fmt.Errorf("dispatch cloudflare transcription job: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read cloudflare response: %w", err)
+	var response cloudflareDispatchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("decode cloudflare dispatch response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("cloudflare workers ai error: status=%s body=%s", resp.Status, strings.TrimSpace(string(body)))
-	}
-
-	var wrapped cloudflareAPIResponse
-	if err := json.Unmarshal(body, &wrapped); err == nil && wrapped.Result != nil {
-		if !wrapped.Success && len(wrapped.Errors) > 0 {
-			return nil, fmt.Errorf("cloudflare workers ai error: %s", joinCloudflareErrors(wrapped.Errors))
+		if response.Error != "" {
+			return nil, fmt.Errorf("cloudflare dispatch failed: %s", response.Error)
 		}
-		return mapCloudflareTranscriptionResult(*wrapped.Result), nil
+		return nil, fmt.Errorf("cloudflare dispatch failed: status=%s", resp.Status)
 	}
 
-	var direct cloudflareTranscriptionResponse
-	if err := json.Unmarshal(body, &direct); err != nil {
-		return nil, fmt.Errorf("decode cloudflare response: %w", err)
-	}
-
-	slog.Info("[chalk] Cloudflare Workers AI transcription completed",
-		"model", p.model,
-		"duration_ms", time.Since(start).Milliseconds(),
-		"text_length", len(direct.Text),
-		"segments_count", len(direct.Segments))
-
-	return mapCloudflareTranscriptionResult(direct), nil
+	return &domain.DispatchResult{
+		ProviderJobID: response.JobID,
+	}, nil
 }
 
 func (p *CloudflareProvider) Name() string {
@@ -120,91 +104,28 @@ func (p *CloudflareProvider) MaxFileSize() int64 {
 	return 0
 }
 
-func (p *CloudflareProvider) downloadAudio(ctx context.Context, audioURL string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, audioURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create audio download request: %w", err)
-	}
-
-	resp, err := p.downloadClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("download audio: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download audio failed: status=%d", resp.StatusCode)
-	}
-
-	audioBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read audio response: %w", err)
-	}
-
-	return audioBytes, nil
+type cloudflareDispatchRequest struct {
+	TranscriptID     uuid.UUID `json:"transcript_id"`
+	RecordingID      uuid.UUID `json:"recording_id"`
+	RoomID           uuid.UUID `json:"room_id"`
+	AudioURL         string    `json:"audio_url"`
+	AudioStoragePath string    `json:"audio_storage_path"`
+	LanguageHint     string    `json:"language_hint,omitempty"`
+	CallbackURL      string    `json:"callback_url"`
+	ProviderModel    string    `json:"provider_model,omitempty"`
 }
 
-func mapCloudflareTranscriptionResult(result cloudflareTranscriptionResponse) *domain.TranscriptionResult {
-	segments := make([]domain.Segment, 0, len(result.Segments))
-	for _, segment := range result.Segments {
-		segments = append(segments, domain.Segment{
-			Start: segment.Start,
-			End:   segment.End,
-			Text:  strings.TrimSpace(segment.Text),
-		})
-	}
-
-	wordCount := result.WordCount
-	if wordCount == 0 {
-		wordCount = len(strings.Fields(result.Text))
-	}
-
-	return &domain.TranscriptionResult{
-		Text:            result.Text,
-		Segments:        segments,
-		Language:        result.TranscriptionInfo.Language,
-		DurationSeconds: int(result.TranscriptionInfo.Duration),
-		WordCount:       wordCount,
-	}
+type cloudflareDispatchResponse struct {
+	Accepted bool   `json:"accepted"`
+	JobID    string `json:"job_id,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-func joinCloudflareErrors(errors []cloudflareAPIError) string {
-	messages := make([]string, 0, len(errors))
-	for _, err := range errors {
-		if err.Message == "" {
-			continue
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
 		}
-		messages = append(messages, err.Message)
 	}
-	return strings.Join(messages, "; ")
-}
-
-type cloudflareTranscriptionRequest struct {
-	Audio    string `json:"audio"`
-	Task     string `json:"task,omitempty"`
-	Language string `json:"language,omitempty"`
-}
-
-type cloudflareAPIResponse struct {
-	Success bool                             `json:"success"`
-	Errors  []cloudflareAPIError             `json:"errors"`
-	Result  *cloudflareTranscriptionResponse `json:"result"`
-}
-
-type cloudflareAPIError struct {
-	Message string `json:"message"`
-}
-
-type cloudflareTranscriptionResponse struct {
-	TranscriptionInfo struct {
-		Language string  `json:"language"`
-		Duration float64 `json:"duration"`
-	} `json:"transcription_info"`
-	Text      string `json:"text"`
-	WordCount int    `json:"word_count"`
-	Segments  []struct {
-		Start float64 `json:"start"`
-		End   float64 `json:"end"`
-		Text  string  `json:"text"`
-	} `json:"segments"`
+	return ""
 }

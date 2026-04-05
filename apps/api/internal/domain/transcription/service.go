@@ -3,13 +3,17 @@ package transcription
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/Q9Labs/chalk/internal/infrastructure/postgres/db"
 )
+
+const cloudflareCallbackPath = "/api/v1/transcription/providers/cloudflare/callback"
 
 // StorageClient provides access to presigned URLs for audio files.
 type StorageClient interface {
@@ -18,17 +22,19 @@ type StorageClient interface {
 
 // Service handles post-meeting transcription operations.
 type Service struct {
-	queries  *db.Queries
-	registry *ProviderRegistry
-	r2Client StorageClient
+	queries      *db.Queries
+	registry     *ProviderRegistry
+	r2Client     StorageClient
+	apiPublicURL string
 }
 
 // NewService creates a new transcription service.
-func NewService(queries *db.Queries, registry *ProviderRegistry, r2 StorageClient) *Service {
+func NewService(queries *db.Queries, registry *ProviderRegistry, r2 StorageClient, apiPublicURL string) *Service {
 	return &Service{
-		queries:  queries,
-		registry: registry,
-		r2Client: r2,
+		queries:      queries,
+		registry:     registry,
+		r2Client:     r2,
+		apiPublicURL: strings.TrimRight(apiPublicURL, "/"),
 	}
 }
 
@@ -72,72 +78,149 @@ func (s *Service) QueueTranscription(ctx context.Context, recordingID, roomID uu
 
 // ProcessTranscription processes a pending transcript.
 // tenantAPIKey is used for BYOK; pass empty string to use platform defaults.
-func (s *Service) ProcessTranscription(ctx context.Context, transcriptID uuid.UUID, tenantAPIKey string) error {
+func (s *Service) ProcessTranscription(ctx context.Context, transcriptID uuid.UUID, tenantAPIKey string) (*ProcessResult, error) {
 	start := time.Now()
 	slog.Info("[chalk] processing transcription", "transcript_id", transcriptID)
 
 	transcript, err := s.queries.GetPostMeetingTranscript(ctx, transcriptID)
 	if err != nil {
 		slog.Error("[chalk] transcript not found", "transcript_id", transcriptID, "error", err)
-		return ErrTranscriptNotFound
+		return nil, ErrTranscriptNotFound
 	}
 
-	slog.Debug("[chalk] transcript loaded",
+	recording, providerName, provider, audioURL, callbackURL, err := s.prepareProcessing(ctx, transcript, tenantAPIKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if asyncProvider, ok := provider.(AsyncProvider); ok {
+		dispatchStart := time.Now()
+		dispatchResult, err := asyncProvider.Dispatch(ctx, TranscriptionRequest{
+			AudioURL:         audioURL,
+			AudioStoragePath: derefString(recording.StoragePath),
+			TranscriptID:     transcriptID,
+			RecordingID:      transcript.RecordingID,
+			RoomID:           transcript.RoomID,
+			CallbackURL:      callbackURL,
+			ProviderModel:    s.registry.GetCloudflareModel(),
+		})
+		dispatchDuration := time.Since(dispatchStart)
+		if err != nil {
+			slog.Error("[chalk] transcription dispatch failed",
+				"transcript_id", transcriptID,
+				"provider", providerName,
+				"error", err,
+				"dispatch_duration_ms", dispatchDuration.Milliseconds(),
+				"total_duration_ms", time.Since(start).Milliseconds())
+			s.markFailedDetailed(ctx, transcriptID, err.Error(), "", nil)
+			return nil, err
+		}
+
+		providerJobID := ""
+		if dispatchResult != nil {
+			providerJobID = dispatchResult.ProviderJobID
+		}
+		if err := s.queries.MarkPostMeetingTranscriptDispatched(ctx, db.MarkPostMeetingTranscriptDispatchedParams{
+			ID:            transcriptID,
+			ProviderJobID: stringPtr(providerJobID),
+		}); err != nil {
+			return nil, err
+		}
+
+		slog.Info("[chalk] transcription dispatched",
+			"transcript_id", transcriptID,
+			"recording_id", transcript.RecordingID,
+			"provider", providerName,
+			"provider_job_id", providerJobID,
+			"dispatch_duration_ms", dispatchDuration.Milliseconds(),
+			"total_duration_ms", time.Since(start).Milliseconds())
+
+		return &ProcessResult{
+			Outcome:       ProcessOutcomeDispatched,
+			Provider:      providerName,
+			ProviderJobID: providerJobID,
+		}, nil
+	}
+
+	if err := s.queries.MarkPostMeetingTranscriptProcessing(ctx, transcriptID); err != nil {
+		slog.Error("[chalk] failed to mark transcript processing", "transcript_id", transcriptID, "error", err)
+		return nil, err
+	}
+
+	result, err := provider.Transcribe(ctx, TranscriptionRequest{
+		AudioURL:         audioURL,
+		AudioStoragePath: derefString(recording.StoragePath),
+		TranscriptID:     transcriptID,
+		RecordingID:      transcript.RecordingID,
+		RoomID:           transcript.RoomID,
+	})
+	if err != nil {
+		slog.Error("[chalk] transcription failed",
+			"transcript_id", transcriptID,
+			"provider", providerName,
+			"error", err,
+			"total_duration_ms", time.Since(start).Milliseconds())
+		s.markFailedDetailed(ctx, transcriptID, err.Error(), "", nil)
+		return nil, err
+	}
+
+	if err := s.persistCompletedResult(ctx, transcriptID, "", result); err != nil {
+		return nil, err
+	}
+
+	slog.Info("[chalk] transcription completed",
 		"transcript_id", transcriptID,
+		"recording_id", transcript.RecordingID,
+		"provider", providerName,
+		"word_count", result.WordCount,
+		"segments_count", len(result.Segments),
+		"language", result.Language,
+		"total_duration_ms", time.Since(start).Milliseconds())
+
+	return &ProcessResult{
+		Outcome:  ProcessOutcomeCompleted,
+		Provider: providerName,
+	}, nil
+}
+
+func (s *Service) prepareProcessing(
+	ctx context.Context,
+	transcript db.PostMeetingTranscript,
+	tenantAPIKey string,
+) (*db.Recording, string, Provider, string, string, error) {
+	slog.Debug("[chalk] transcript loaded",
+		"transcript_id", transcript.ID,
 		"recording_id", transcript.RecordingID,
 		"room_id", transcript.RoomID,
 		"status", transcript.Status)
 
-	if err := s.queries.MarkPostMeetingTranscriptProcessing(ctx, transcriptID); err != nil {
-		slog.Error("[chalk] failed to mark transcript processing", "transcript_id", transcriptID, "error", err)
-		return err
-	}
-
-	slog.Debug("[chalk] transcript marked as processing", "transcript_id", transcriptID)
-
 	recording, err := s.queries.GetRecording(ctx, transcript.RecordingID)
 	if err != nil {
 		slog.Error("[chalk] recording not found for transcript",
-			"transcript_id", transcriptID,
+			"transcript_id", transcript.ID,
 			"recording_id", transcript.RecordingID,
 			"error", err)
-		s.markFailed(ctx, transcriptID, "recording not found")
-		return ErrRecordingNotFound
+		s.markFailedDetailed(ctx, transcript.ID, "recording not found", "", nil)
+		return nil, "", nil, "", "", ErrRecordingNotFound
 	}
-
-	slog.Debug("[chalk] recording loaded for transcription",
-		"transcript_id", transcriptID,
-		"recording_id", transcript.RecordingID,
-		"storage_path", recording.StoragePath,
-		"size_bytes", recording.SizeBytes)
 
 	if recording.StoragePath == nil {
 		slog.Error("[chalk] recording has no storage path",
-			"transcript_id", transcriptID,
+			"transcript_id", transcript.ID,
 			"recording_id", transcript.RecordingID)
-		s.markFailed(ctx, transcriptID, "recording has no storage path")
-		return ErrRecordingNotFound
+		s.markFailedDetailed(ctx, transcript.ID, "recording has no storage path", "", nil)
+		return nil, "", nil, "", "", ErrRecordingNotFound
 	}
 
-	slog.Debug("[chalk] generating presigned URL",
-		"transcript_id", transcriptID,
-		"storage_path", *recording.StoragePath)
-
-	// Worker + queue-based transcription can be delayed (backlog, scale events). Use a longer TTL
-	// so the presigned URL doesn't expire before the GPU worker downloads it.
 	audioURL, err := s.r2Client.GetPresignedURL(ctx, *recording.StoragePath, 24*time.Hour)
 	if err != nil {
 		slog.Error("[chalk] failed to generate presigned URL",
-			"transcript_id", transcriptID,
+			"transcript_id", transcript.ID,
 			"storage_path", *recording.StoragePath,
 			"error", err)
-		s.markFailed(ctx, transcriptID, "failed to generate presigned URL: "+err.Error())
-		return err
+		s.markFailedDetailed(ctx, transcript.ID, "failed to generate presigned URL: "+err.Error(), "", nil)
+		return nil, "", nil, "", "", err
 	}
-
-	slog.Debug("[chalk] presigned URL generated",
-		"transcript_id", transcriptID,
-		"url_length", len(audioURL))
 
 	providerName := s.registry.GetDefaultProvider()
 	if transcript.Provider != nil && *transcript.Provider != "" {
@@ -145,60 +228,75 @@ func (s *Service) ProcessTranscription(ctx context.Context, transcriptID uuid.UU
 	}
 	if providerName == "" {
 		slog.Error("[chalk] no transcription provider available",
-			"transcript_id", transcriptID,
+			"transcript_id", transcript.ID,
 			"recording_id", transcript.RecordingID)
-		s.markFailed(ctx, transcriptID, ErrNoProviderAvailable.Error())
-		return ErrNoProviderAvailable
+		s.markFailedDetailed(ctx, transcript.ID, ErrNoProviderAvailable.Error(), "", nil)
+		return nil, "", nil, "", "", ErrNoProviderAvailable
 	}
-
-	slog.Info("[chalk] starting transcription with provider",
-		"transcript_id", transcriptID,
-		"recording_id", transcript.RecordingID,
-		"provider", providerName,
-		"byok", tenantAPIKey != "")
 
 	provider, err := s.registry.CreateProvider(providerName, tenantAPIKey)
 	if err != nil {
 		slog.Error("[chalk] failed to create transcription provider",
-			"transcript_id", transcriptID,
+			"transcript_id", transcript.ID,
 			"provider", providerName,
 			"error", err)
-		s.markFailed(ctx, transcriptID, err.Error())
-		return err
+		s.markFailedDetailed(ctx, transcript.ID, err.Error(), "", nil)
+		return nil, "", nil, "", "", err
 	}
 
-	slog.Debug("[chalk] calling transcription provider",
-		"transcript_id", transcriptID,
-		"provider", providerName)
+	if recording.SizeBytes != nil {
+		if maxFileSize := provider.MaxFileSize(); maxFileSize > 0 && *recording.SizeBytes > maxFileSize {
+			err = fmt.Errorf("recording exceeds provider max file size: size_bytes=%d max_bytes=%d", *recording.SizeBytes, maxFileSize)
+			s.markFailedDetailed(ctx, transcript.ID, err.Error(), "file_too_large", marshalMetadata(map[string]any{
+				"size_bytes": *recording.SizeBytes,
+				"max_bytes":  maxFileSize,
+				"provider":   providerName,
+			}))
+			return nil, "", nil, "", "", err
+		}
+	}
 
-	transcribeStart := time.Now()
-	result, err := provider.Transcribe(ctx, TranscriptionRequest{
-		AudioURL:         audioURL,
-		AudioStoragePath: *recording.StoragePath,
-		TranscriptID:     transcriptID,
-		RecordingID:      transcript.RecordingID,
-		RoomID:           transcript.RoomID,
-	})
-	transcribeDuration := time.Since(transcribeStart)
+	callbackURL := s.callbackURL(providerName)
+	if providerName == "cloudflare" && callbackURL == "" {
+		err = fmt.Errorf("cloudflare callback URL is not configured")
+		s.markFailedDetailed(ctx, transcript.ID, err.Error(), "callback_not_configured", nil)
+		return nil, "", nil, "", "", err
+	}
+	return &recording, providerName, provider, audioURL, callbackURL, nil
+}
 
+func (s *Service) ApplyCallback(ctx context.Context, payload ProviderCallbackPayload) (*db.PostMeetingTranscript, bool, error) {
+	transcript, err := s.queries.GetPostMeetingTranscript(ctx, payload.TranscriptID)
 	if err != nil {
-		slog.Error("[chalk] transcription failed",
-			"transcript_id", transcriptID,
-			"provider", providerName,
-			"error", err,
-			"transcribe_duration_ms", transcribeDuration.Milliseconds(),
-			"total_duration_ms", time.Since(start).Milliseconds())
-		s.markFailed(ctx, transcriptID, err.Error())
-		return err
+		return nil, false, ErrTranscriptNotFound
 	}
 
-	slog.Debug("[chalk] transcription API call completed",
-		"transcript_id", transcriptID,
-		"provider", providerName,
-		"text_length", len(result.Text),
-		"segments_count", len(result.Segments),
-		"transcribe_duration_ms", transcribeDuration.Milliseconds())
+	if transcript.Status == string(CallbackStatusCompleted) || transcript.Status == string(CallbackStatusFailed) {
+		return &transcript, false, nil
+	}
 
+	switch payload.Status {
+	case CallbackStatusCompleted:
+		if payload.Result == nil {
+			return nil, false, fmt.Errorf("callback payload missing result")
+		}
+		if err := s.persistCompletedResult(ctx, payload.TranscriptID, payload.ProviderJobID, payload.Result); err != nil {
+			return nil, false, err
+		}
+	case CallbackStatusFailed:
+		s.markFailedDetailed(ctx, payload.TranscriptID, payload.ErrorMessage, payload.ProviderErrorCode, payload.ProviderErrorMetadata)
+	default:
+		return nil, false, fmt.Errorf("unsupported callback status: %s", payload.Status)
+	}
+
+	updated, err := s.queries.GetPostMeetingTranscript(ctx, payload.TranscriptID)
+	if err != nil {
+		return nil, false, err
+	}
+	return &updated, true, nil
+}
+
+func (s *Service) persistCompletedResult(ctx context.Context, transcriptID uuid.UUID, providerJobID string, result *TranscriptionResult) error {
 	segmentsJSON, err := json.Marshal(result.Segments)
 	if err != nil {
 		slog.Warn("[chalk] failed to marshal segments", "transcript_id", transcriptID, "error", err)
@@ -208,36 +306,15 @@ func (s *Service) ProcessTranscription(ctx context.Context, transcriptID uuid.UU
 	durationSeconds := int32(result.DurationSeconds)
 	wordCount := int32(result.WordCount)
 
-	slog.Debug("[chalk] saving transcription result",
-		"transcript_id", transcriptID,
-		"word_count", wordCount,
-		"language", result.Language)
-
-	if err := s.queries.UpdatePostMeetingTranscriptResult(ctx, db.UpdatePostMeetingTranscriptResultParams{
+	return s.queries.UpdatePostMeetingTranscriptResult(ctx, db.UpdatePostMeetingTranscriptResultParams{
 		ID:              transcriptID,
 		TranscriptText:  &result.Text,
 		TranscriptJson:  segmentsJSON,
-		Language:        &result.Language,
+		Language:        stringPtr(result.Language),
 		DurationSeconds: &durationSeconds,
 		WordCount:       &wordCount,
-	}); err != nil {
-		slog.Error("[chalk] failed to save transcription result",
-			"transcript_id", transcriptID,
-			"error", err)
-		return err
-	}
-
-	slog.Info("[chalk] transcription completed",
-		"transcript_id", transcriptID,
-		"recording_id", transcript.RecordingID,
-		"provider", providerName,
-		"word_count", wordCount,
-		"segments_count", len(result.Segments),
-		"language", result.Language,
-		"transcribe_duration_ms", transcribeDuration.Milliseconds(),
-		"total_duration_ms", time.Since(start).Milliseconds())
-
-	return nil
+		ProviderJobID:   stringPtr(providerJobID),
+	})
 }
 
 // GetTranscript retrieves a transcript by ID.
@@ -273,9 +350,51 @@ func (s *Service) GetRegistry() *ProviderRegistry {
 	return s.registry
 }
 
-func (s *Service) markFailed(ctx context.Context, id uuid.UUID, errMsg string) {
-	_ = s.queries.MarkPostMeetingTranscriptFailed(ctx, db.MarkPostMeetingTranscriptFailedParams{
-		ID:           id,
-		ErrorMessage: &errMsg,
+func (s *Service) callbackURL(providerName string) string {
+	if providerName != "cloudflare" || s.apiPublicURL == "" {
+		return ""
+	}
+	return s.apiPublicURL + cloudflareCallbackPath
+}
+
+func (s *Service) markFailedDetailed(ctx context.Context, id uuid.UUID, errMsg, providerErrorCode string, providerErrorMetadata []byte) {
+	var errorMessage *string
+	if strings.TrimSpace(errMsg) != "" {
+		errorMessage = &errMsg
+	}
+	var errorCode *string
+	if strings.TrimSpace(providerErrorCode) != "" {
+		errorCode = &providerErrorCode
+	}
+	_ = s.queries.MarkPostMeetingTranscriptFailedDetailed(ctx, db.MarkPostMeetingTranscriptFailedDetailedParams{
+		ID:                    id,
+		ErrorMessage:          errorMessage,
+		ProviderErrorCode:     errorCode,
+		ProviderErrorMetadata: providerErrorMetadata,
 	})
+}
+
+func stringPtr(value string) *string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return &value
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func marshalMetadata(value map[string]any) []byte {
+	if len(value) == 0 {
+		return nil
+	}
+	body, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	return body
 }

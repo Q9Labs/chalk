@@ -1,0 +1,14 @@
+{
+  "name": "@chalk/cloudflare-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
+  }
+}

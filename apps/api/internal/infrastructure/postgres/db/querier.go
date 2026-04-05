@@ -178,7 +178,9 @@ type Querier interface {
 	ListRoomsWithParticipantCountByWorkspaceAndStatuses(ctx context.Context, arg ListRoomsWithParticipantCountByWorkspaceAndStatusesParams) ([]ListRoomsWithParticipantCountByWorkspaceAndStatusesRow, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
 	ListTranscriptsByRoom(ctx context.Context, arg ListTranscriptsByRoomParams) ([]Transcript, error)
+	MarkPostMeetingTranscriptDispatched(ctx context.Context, arg MarkPostMeetingTranscriptDispatchedParams) error
 	MarkPostMeetingTranscriptFailed(ctx context.Context, arg MarkPostMeetingTranscriptFailedParams) error
+	MarkPostMeetingTranscriptFailedDetailed(ctx context.Context, arg MarkPostMeetingTranscriptFailedDetailedParams) error
 	MarkPostMeetingTranscriptProcessing(ctx context.Context, id uuid.UUID) error
 	MarkRecordingDeleted(ctx context.Context, id uuid.UUID) (Recording, error)
 	MarkRecordingFailed(ctx context.Context, id uuid.UUID) (Recording, error)

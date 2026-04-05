@@ -96,6 +96,7 @@ locals {
     AXIOM_TRACES_DATASET         = var.axiom_traces_dataset
     OTEL_TRACE_SAMPLER_RATIO     = "0.1"
     POST_MEETING_WHISPER_ENABLED = "false"
+    POST_MEETING_CLOUDFLARE_WORKER_URL = var.post_meeting_cloudflare_worker_url
     RESEND_FROM_EMAIL            = var.resend_from_email
     INTERNAL_APP_URL             = var.internal_app_url
     INTERNAL_APP_URLS            = var.internal_app_urls
@@ -215,6 +216,22 @@ resource "aws_ssm_parameter" "openrouter_api_key" {
   name  = "${trimsuffix(var.ssm_parameter_path, "/")}/POST_MEETING_OPENROUTER_API_KEY"
   type  = "SecureString"
   value = var.openrouter_api_key
+}
+
+resource "aws_ssm_parameter" "post_meeting_cloudflare_worker_dispatch_secret" {
+  count = trimspace(nonsensitive(var.post_meeting_cloudflare_worker_dispatch_secret)) != "" ? 1 : 0
+
+  name  = "${trimsuffix(var.ssm_parameter_path, "/")}/POST_MEETING_CLOUDFLARE_WORKER_DISPATCH_SECRET"
+  type  = "SecureString"
+  value = var.post_meeting_cloudflare_worker_dispatch_secret
+}
+
+resource "aws_ssm_parameter" "post_meeting_cloudflare_worker_callback_secret" {
+  count = trimspace(nonsensitive(var.post_meeting_cloudflare_worker_callback_secret)) != "" ? 1 : 0
+
+  name  = "${trimsuffix(var.ssm_parameter_path, "/")}/POST_MEETING_CLOUDFLARE_WORKER_CALLBACK_SECRET"
+  type  = "SecureString"
+  value = var.post_meeting_cloudflare_worker_callback_secret
 }
 
 resource "aws_ssm_parameter" "groq_api_key" {

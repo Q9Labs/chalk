@@ -35,3 +35,17 @@ func TestLoad_PostMeetingCloudflareUsesOverrides(t *testing.T) {
 	require.Equal(t, "post-token", cfg.PostMeeting.CloudflareAPIToken)
 	require.Equal(t, "groq", cfg.PostMeeting.TranscriptionDefaultProvider)
 }
+
+func TestLoad_PostMeetingCloudflareWorkerConfig(t *testing.T) {
+	t.Setenv("CLOUDFLARE_MOCK", "true")
+	t.Setenv("POST_MEETING_CLOUDFLARE_WORKER_URL", "https://chalk-transcription.q9labs.ai")
+	t.Setenv("POST_MEETING_CLOUDFLARE_WORKER_DISPATCH_SECRET", "dispatch-secret")
+	t.Setenv("POST_MEETING_CLOUDFLARE_WORKER_CALLBACK_SECRET", "callback-secret")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.Equal(t, "https://chalk-transcription.q9labs.ai", cfg.PostMeeting.CloudflareWorkerURL)
+	require.Equal(t, "dispatch-secret", cfg.PostMeeting.CloudflareWorkerDispatchSecret)
+	require.Equal(t, "callback-secret", cfg.PostMeeting.CloudflareWorkerCallbackSecret)
+}

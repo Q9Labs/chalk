@@ -2,108 +2,91 @@ package transcription
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	domain "github.com/Q9Labs/chalk/internal/domain/transcription"
+	domainwebhook "github.com/Q9Labs/chalk/internal/domain/webhook"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewCloudflareProvider_DefaultModel(t *testing.T) {
-	provider := NewCloudflareProvider("account", "token", "")
+	provider := NewCloudflareProvider("https://worker.example.com", "secret", "")
 
 	require.Equal(t, cloudflareWhisperDefaultModel, provider.model)
 }
 
-func TestCloudflareProvider_TranscribeSuccess(t *testing.T) {
-	audioServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("audio-bytes"))
-	}))
-	defer audioServer.Close()
+func TestCloudflareProvider_DispatchSuccess(t *testing.T) {
+	transcriptID := uuid.New()
+	recordingID := uuid.New()
+	roomID := uuid.New()
 
-	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "Bearer token", r.Header.Get("Authorization"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, cloudflareDispatchPath, r.URL.Path)
+		require.NotEmpty(t, r.Header.Get("X-Chalk-Timestamp"))
+		require.NotEmpty(t, r.Header.Get("X-Chalk-Signature"))
 
-		var req cloudflareTranscriptionRequest
+		var req cloudflareDispatchRequest
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-		require.Equal(t, base64.StdEncoding.EncodeToString([]byte("audio-bytes")), req.Audio)
-		require.Equal(t, "transcribe", req.Task)
-		require.Equal(t, "en", req.Language)
+		require.Equal(t, transcriptID, req.TranscriptID)
+		require.Equal(t, recordingID, req.RecordingID)
+		require.Equal(t, roomID, req.RoomID)
+		require.Equal(t, "https://storage.example.com/audio", req.AudioURL)
+		require.Equal(t, "recordings/audio.webm", req.AudioStoragePath)
+		require.Equal(t, "https://chalk-api.q9labs.ai/api/v1/transcription/providers/cloudflare/callback", req.CallbackURL)
+		require.Equal(t, cloudflareWhisperDefaultModel, req.ProviderModel)
+
+		timestamp := r.Header.Get("X-Chalk-Timestamp")
+		signature := r.Header.Get("X-Chalk-Signature")
+		raw, err := json.Marshal(req)
+		require.NoError(t, err)
+		var ts int64
+		_, err = fmt.Sscanf(timestamp, "%d", &ts)
+		require.NoError(t, err)
+		require.True(t, domainwebhook.VerifySignature("dispatch-secret", ts, raw, signature))
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(cloudflareAPIResponse{
-			Success: true,
-			Result: &cloudflareTranscriptionResponse{
-				Text:      "hello world",
-				WordCount: 2,
-				Segments: []struct {
-					Start float64 `json:"start"`
-					End   float64 `json:"end"`
-					Text  string  `json:"text"`
-				}{
-					{Start: 0, End: 1.5, Text: "hello world"},
-				},
-				TranscriptionInfo: struct {
-					Language string  `json:"language"`
-					Duration float64 `json:"duration"`
-				}{
-					Language: "en",
-					Duration: 12.4,
-				},
-			},
+		_ = json.NewEncoder(w).Encode(cloudflareDispatchResponse{
+			Accepted: true,
+			JobID:    "job-123",
 		})
 	}))
-	defer aiServer.Close()
+	defer server.Close()
 
-	provider := NewCloudflareProvider("account", "token", "")
-	provider.baseURL = aiServer.URL
-
-	result, err := provider.Transcribe(context.Background(), domain.TranscriptionRequest{
-		AudioURL:     audioServer.URL,
-		LanguageHint: "en",
+	provider := NewCloudflareProvider(server.URL, "dispatch-secret", "")
+	result, err := provider.Dispatch(context.Background(), domain.TranscriptionRequest{
+		TranscriptID:     transcriptID,
+		RecordingID:      recordingID,
+		RoomID:           roomID,
+		AudioURL:         "https://storage.example.com/audio",
+		AudioStoragePath: "recordings/audio.webm",
+		CallbackURL:      "https://chalk-api.q9labs.ai/api/v1/transcription/providers/cloudflare/callback",
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "hello world", result.Text)
-	require.Equal(t, "en", result.Language)
-	require.Equal(t, 12, result.DurationSeconds)
-	require.Equal(t, 2, result.WordCount)
-	require.Len(t, result.Segments, 1)
+	require.Equal(t, "job-123", result.ProviderJobID)
 }
 
-func TestCloudflareProvider_TranscribeReturnsAPIError(t *testing.T) {
-	audioServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("audio-bytes"))
+func TestCloudflareProvider_DispatchReturnsAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"bad input"}`, http.StatusBadRequest)
 	}))
-	defer audioServer.Close()
+	defer server.Close()
 
-	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, `{"success":false,"errors":[{"message":"bad input"}]}`, http.StatusBadRequest)
-	}))
-	defer aiServer.Close()
-
-	provider := NewCloudflareProvider("account", "token", "")
-	provider.baseURL = aiServer.URL
-
-	_, err := provider.Transcribe(context.Background(), domain.TranscriptionRequest{AudioURL: audioServer.URL})
+	provider := NewCloudflareProvider(server.URL, "dispatch-secret", "")
+	_, err := provider.Dispatch(context.Background(), domain.TranscriptionRequest{
+		TranscriptID: uuid.New(),
+		RecordingID:  uuid.New(),
+		RoomID:       uuid.New(),
+		AudioURL:     "https://storage.example.com/audio",
+		CallbackURL:  "https://chalk-api.q9labs.ai/api/v1/transcription/providers/cloudflare/callback",
+	})
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "bad input")
-}
-
-func TestCloudflareProvider_TranscribeReturnsDownloadError(t *testing.T) {
-	audioServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "missing", http.StatusNotFound)
-	}))
-	defer audioServer.Close()
-
-	provider := NewCloudflareProvider("account", "token", "")
-
-	_, err := provider.Transcribe(context.Background(), domain.TranscriptionRequest{AudioURL: audioServer.URL})
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "download audio failed")
 }

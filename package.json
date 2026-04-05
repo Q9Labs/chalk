@@ -5,7 +5,8 @@
     "packages/*",
     "apps/mobile",
     "apps/web",
-    "apps/docs"
+    "apps/docs",
+    "infrastructure/cloudflare-worker"
   ],
   "type": "module",
   "scripts": {

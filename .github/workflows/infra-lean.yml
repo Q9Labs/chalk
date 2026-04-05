@@ -154,6 +154,8 @@ jobs:
             -var="cloudflare_app_id=${{ secrets.CLOUDFLARE_APP_ID }}" \
             -var="cloudflare_app_token=${{ secrets.CLOUDFLARE_REALTIME_API_TOKEN }}" \
             -var="post_meeting_cloudflare_api_token=${{ secrets.POST_MEETING_CLOUDFLARE_API_TOKEN }}" \
+            -var="post_meeting_cloudflare_worker_dispatch_secret=${{ secrets.CHALK_TRANSCRIPTION_DISPATCH_SECRET }}" \
+            -var="post_meeting_cloudflare_worker_callback_secret=${{ secrets.CHALK_TRANSCRIPTION_CALLBACK_SECRET }}" \
             -var="jwt_signing_key=${{ secrets.JWT_SIGNING_KEY }}" \
             -var="admin_secret=${{ secrets.ADMIN_SECRET }}" \
             -var="auth_link_signing_key=${{ secrets.AUTH_LINK_SIGNING_KEY }}" \

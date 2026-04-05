@@ -1,0 +1,29 @@
+name = "chalk-post-meeting-transcription"
+main = "src/index.ts"
+compatibility_date = "2026-04-05"
+
+[ai]
+binding = "AI"
+
+[vars]
+CLOUDFLARE_MODEL = "@cf/openai/whisper-large-v3-turbo"
+
+routes = [
+  { pattern = "chalk-transcription.q9labs.ai", custom_domain = true }
+]
+
+[[queues.producers]]
+queue = "chalk-post-meeting-transcription"
+binding = "TRANSCRIPTION_QUEUE"
+
+[[queues.consumers]]
+queue = "chalk-post-meeting-transcription"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "chalk-post-meeting-transcription-dlq"
+
+[[queues.consumers]]
+queue = "chalk-post-meeting-transcription-dlq"
+max_batch_size = 1
+max_batch_timeout = 5

@@ -331,17 +331,36 @@ CREATE TABLE IF NOT EXISTS post_meeting_transcripts (
     duration_seconds INT,
     word_count INT,
     provider VARCHAR(50),
+    provider_job_id TEXT,
+    provider_error_code TEXT,
+    provider_error_metadata JSONB,
     summary TEXT,
     action_items TEXT[],
     status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    dispatched_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_recording_id ON post_meeting_transcripts(recording_id);
 CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_room_id ON post_meeting_transcripts(room_id);
 CREATE INDEX IF NOT EXISTS idx_post_meeting_transcripts_status ON post_meeting_transcripts(status);
+
+-- ============================================================================
+-- MIGRATION 013: Post-meeting transcript provider metadata
+-- ============================================================================
+ALTER TABLE post_meeting_transcripts
+    ADD COLUMN IF NOT EXISTS provider_job_id TEXT;
+
+ALTER TABLE post_meeting_transcripts
+    ADD COLUMN IF NOT EXISTS provider_error_code TEXT;
+
+ALTER TABLE post_meeting_transcripts
+    ADD COLUMN IF NOT EXISTS provider_error_metadata JSONB;
+
+ALTER TABLE post_meeting_transcripts
+    ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
 
 -- ============================================================================
 -- MIGRATION 007: Webhook deliveries table for retry support

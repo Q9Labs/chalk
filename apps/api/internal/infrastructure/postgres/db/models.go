@@ -71,21 +71,25 @@ type Participant struct {
 }
 
 type PostMeetingTranscript struct {
-	ID              uuid.UUID          `db:"id" json:"id"`
-	RecordingID     uuid.UUID          `db:"recording_id" json:"recording_id"`
-	RoomID          uuid.UUID          `db:"room_id" json:"room_id"`
-	TranscriptText  *string            `db:"transcript_text" json:"transcript_text"`
-	TranscriptJson  []byte             `db:"transcript_json" json:"transcript_json"`
-	Language        *string            `db:"language" json:"language"`
-	DurationSeconds *int32             `db:"duration_seconds" json:"duration_seconds"`
-	WordCount       *int32             `db:"word_count" json:"word_count"`
-	Provider        *string            `db:"provider" json:"provider"`
-	Summary         *string            `db:"summary" json:"summary"`
-	ActionItems     []string           `db:"action_items" json:"action_items"`
-	Status          string             `db:"status" json:"status"`
-	ErrorMessage    *string            `db:"error_message" json:"error_message"`
-	CreatedAt       time.Time          `db:"created_at" json:"created_at"`
-	CompletedAt     pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ID                    uuid.UUID          `db:"id" json:"id"`
+	RecordingID           uuid.UUID          `db:"recording_id" json:"recording_id"`
+	RoomID                uuid.UUID          `db:"room_id" json:"room_id"`
+	TranscriptText        *string            `db:"transcript_text" json:"transcript_text"`
+	TranscriptJson        []byte             `db:"transcript_json" json:"transcript_json"`
+	Language              *string            `db:"language" json:"language"`
+	DurationSeconds       *int32             `db:"duration_seconds" json:"duration_seconds"`
+	WordCount             *int32             `db:"word_count" json:"word_count"`
+	Provider              *string            `db:"provider" json:"provider"`
+	Summary               *string            `db:"summary" json:"summary"`
+	ActionItems           []string           `db:"action_items" json:"action_items"`
+	Status                string             `db:"status" json:"status"`
+	ErrorMessage          *string            `db:"error_message" json:"error_message"`
+	CreatedAt             time.Time          `db:"created_at" json:"created_at"`
+	CompletedAt           pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ProviderJobID         *string            `db:"provider_job_id" json:"provider_job_id"`
+	ProviderErrorCode     *string            `db:"provider_error_code" json:"provider_error_code"`
+	ProviderErrorMetadata []byte             `db:"provider_error_metadata" json:"provider_error_metadata"`
+	DispatchedAt          pgtype.Timestamptz `db:"dispatched_at" json:"dispatched_at"`
 }
 
 type Recording struct {
