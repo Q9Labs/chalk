@@ -83,8 +83,12 @@ jobs:
           CHALK_TRANSCRIPTION_DISPATCH_SECRET: ${{ secrets.CHALK_TRANSCRIPTION_DISPATCH_SECRET }}
           CHALK_TRANSCRIPTION_CALLBACK_SECRET: ${{ secrets.CHALK_TRANSCRIPTION_CALLBACK_SECRET }}
         run: |
-          printf '%s' "$CHALK_TRANSCRIPTION_DISPATCH_SECRET" | pnpm --dir infrastructure/cloudflare-worker exec wrangler secret put CHALK_TRANSCRIPTION_DISPATCH_SECRET
-          printf '%s' "$CHALK_TRANSCRIPTION_CALLBACK_SECRET" | pnpm --dir infrastructure/cloudflare-worker exec wrangler secret put CHALK_TRANSCRIPTION_CALLBACK_SECRET
+          if ! printf '%s' "$CHALK_TRANSCRIPTION_DISPATCH_SECRET" | pnpm --dir infrastructure/cloudflare-worker exec wrangler secret put CHALK_TRANSCRIPTION_DISPATCH_SECRET; then
+            echo "::warning::Unable to sync CHALK_TRANSCRIPTION_DISPATCH_SECRET via CI token; retaining existing remote secret."
+          fi
+          if ! printf '%s' "$CHALK_TRANSCRIPTION_CALLBACK_SECRET" | pnpm --dir infrastructure/cloudflare-worker exec wrangler secret put CHALK_TRANSCRIPTION_CALLBACK_SECRET; then
+            echo "::warning::Unable to sync CHALK_TRANSCRIPTION_CALLBACK_SECRET via CI token; retaining existing remote secret."
+          fi
 
       - name: Deploy worker
         env:

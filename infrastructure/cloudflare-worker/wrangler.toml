@@ -8,9 +8,9 @@ binding = "AI"
 [vars]
 CLOUDFLARE_MODEL = "@cf/openai/whisper-large-v3-turbo"
 
-routes = [
-  { pattern = "chalk-transcription.q9labs.ai", custom_domain = true }
-]
+[[routes]]
+pattern = "chalk-transcription.q9labs.ai"
+custom_domain = true
 
 [[queues.producers]]
 queue = "chalk-post-meeting-transcription"
