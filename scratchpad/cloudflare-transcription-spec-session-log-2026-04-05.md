@@ -1,0 +1,12 @@
+# Cloudflare Transcription Spec Session Log - 2026-04-05
+
+- 2026-04-05 13:52:38 PKT - User asked for the fix direction after the OOM RCA and clarified that Chalk wants to keep Cloudflare as the transcription provider.
+- 2026-04-05 13:52:38 PKT - Reviewed current transcription provider registry, Cloudflare/Groq/Whisper implementations, transcript status model, and current auto-queue flow from recording completion.
+- 2026-04-05 13:52:38 PKT - Verified official Cloudflare Workers AI docs for `@cf/openai/whisper-large-v3-turbo`: model accepts either base64 audio or `audio: { body, contentType }`, which makes a Worker-streamed implementation viable.
+- 2026-04-05 13:52:38 PKT - Drafted spec recommending a Cloudflare Worker-backed async transcription path: Chalk API remains source of truth, Cloudflare Worker performs media fetch + Workers AI invocation, and results return through a signed callback.
+- 2026-04-05 13:52:38 PKT - Saved implementation spec to `scratchpad/cloudflare-worker-transcription-spec-2026-04-05.md`.
+- 2026-04-05 13:52:38 PKT - User locked v1 decisions: direct Worker callback flow; place Worker in infrastructure alongside prior Whisper worker; no conservative file-size cap; do not keep the legacy in-process Cloudflare path after verification.
+- 2026-04-05 13:52:38 PKT - User revised the execution model to include Cloudflare Queues. Spec updated to use producer Worker -> Queue -> consumer Worker -> signed Chalk callback, while still avoiding Workflows in v1.
+- 2026-04-05 13:52:38 PKT - User locked queue-specific decisions: dedicated DLQ from day one; producer and consumer can live in one Worker project under infrastructure; DLQ terminal outcome should mark the transcript failed with provider error metadata. Added end-to-end ASCII architecture diagram to the spec.
+- 2026-04-05 13:52:38 PKT - Expanded the spec with explicit Cloudflare transcription failure semantics: transient retries do not notify tenants yet; DLQ marks terminal failure; terminal transcription failure still triggers tenant-facing post-meeting webhook with recording plus `errors[]`, but without transcript/summary/action items. Added a dedicated ASCII failure-path diagram and linked current Chalk code paths that already approximate this behavior.
+- 2026-04-05 13:52:38 PKT - Added an execution-oriented implementation checklist to the spec covering schema, API dispatch/callback work, Worker project, Queue/DLQ handling, webhook semantics, config/secrets, deploy, observability, verification, and cleanup.

@@ -1,0 +1,4 @@
+## 2026-04-02 21:05 PKT\n- Started investigating debug logs: /Users/macmini/Downloads/chalk-debug-1775131453211.txt and /Users/macmini/Downloads/chalk-debug-1775137821580.txt\n
+- Axiom evidence: 2026-04-02T13:50Z join timeout traced to Cloudflare add-participant outbound calls timing out (3 attempts, 8s overall). 2026-04-02T12:03:48Z auth/token client failure had no matching API log/trace entry in chalk-api datasets, suggesting request did not reach Chalk API service.\n
+- Conclusion: issue #1 is a client/edge-side auth-token fetch failure with no matching chalk-api server log/trace; issue #2 is an upstream Cloudflare RealtimeKit add-participant timeout causing Chalk to return 504 after retries.\n
+## 2026-04-02 21:18 PKT\n- User asked to dive deeper into issue 2 (Cloudflare add-participant timeout path). Expanding Axiom investigation across time/tenant scope and re-reading join instrumentation.\n

@@ -13,6 +13,7 @@ If a real release attempt reveals anything inaccurate here, update this skill be
 
 Companion skills/tools:
 - `gplay-cli-usage` for CLI flags/patterns
+- `asc` for iOS App Store Connect / TestFlight upload, distribution, validation, and submission steps after local archive/export
 - global `agent-browser-helium` when Hasan wants Helium/CDP browser automation
 
 Primary files:
@@ -34,6 +35,7 @@ Primary files:
 - internal track first
 - preserve existing Play/Helium session
 - prefer CLI for repeatable state; use Play Console UI when Play API gets flaky
+- on future iOS release runs, explicitly consider `asc` anywhere it helps complete App Store Connect / TestFlight work before handing off to Hasan
 
 ## Current Release Truths
 
