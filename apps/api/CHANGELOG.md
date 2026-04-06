@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- **Cloudflare queue transcription now normalizes MP4 recording MIME types for Workers AI**: the queue consumer no longer forwards `video/mp4` post-meeting recording MIME types directly into Workers AI, and instead rewrites supported recording containers to audio-safe content types like `audio/mp4` so valid recordings do not retry into the DLQ before transcript completion.
 - **Cloudflare transcription OOM path**: removed the in-process Workers AI upload path that buffered full recordings in API memory and replaced it with callback-based completion plus provider job/error metadata on `post_meeting_transcripts`.
 - **Hosted first-party auth bootstrap + client incident CORS**: hosted Chalk web clients now reuse a stable bootstrap identity even when cross-site cookies drop between requests, and the debug incident endpoint now explicitly allows `x-chalk-source` so browser incident reports from `chalkmeet.com` do not fail preflight.
 - **First-party room joins no longer fork Cloudflare meetings by auth context**: signed join-token exchange now preserves canonical `room_id`, first-party room joins reject room-name fallback/auto-create behavior, and authenticated users now converge on the original room/meeting instead of silently creating a second tenant-scoped room behind the same visible code.

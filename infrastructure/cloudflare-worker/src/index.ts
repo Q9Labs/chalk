@@ -100,6 +100,45 @@ function normalizeTranscriptionResult(result: any): TranscriptionResult {
   }
 }
 
+function normalizeAudioContentType(contentType: string | null, storagePath?: string, audioURL?: string): string {
+  const raw = (contentType || "").trim().toLowerCase()
+  const path = `${storagePath || ""} ${audioURL || ""}`.toLowerCase()
+
+  if (raw === "video/mp4" || raw === "audio/mp4") {
+    return "audio/mp4"
+  }
+
+  if (raw === "video/webm" || raw === "audio/webm") {
+    return "audio/webm"
+  }
+
+  if (raw.startsWith("audio/")) {
+    return raw
+  }
+
+  if (path.includes(".m4a") || path.includes(".mp4")) {
+    return "audio/mp4"
+  }
+
+  if (path.includes(".webm")) {
+    return "audio/webm"
+  }
+
+  if (path.includes(".mp3")) {
+    return "audio/mpeg"
+  }
+
+  if (path.includes(".wav")) {
+    return "audio/wav"
+  }
+
+  if (path.includes(".ogg") || path.includes(".oga")) {
+    return "audio/ogg"
+  }
+
+  return "audio/webm"
+}
+
 async function processQueueJob(message: QueueMessage<QueueJob>, env: Env): Promise<void> {
   const job = message.body
   const audioResponse = await fetch(job.audio_url)
@@ -107,7 +146,11 @@ async function processQueueJob(message: QueueMessage<QueueJob>, env: Env): Promi
     throw new Error(`audio fetch failed: status=${audioResponse.status}`)
   }
 
-  const contentType = audioResponse.headers.get("content-type") || "audio/webm"
+  const contentType = normalizeAudioContentType(
+    audioResponse.headers.get("content-type"),
+    job.audio_storage_path,
+    job.audio_url,
+  )
   const aiResult = await env.AI.run(job.provider_model || env.CLOUDFLARE_MODEL, {
     audio: {
       body: audioResponse.body,
@@ -170,7 +213,15 @@ export default {
           continue
         }
         await processQueueJob(message, env)
-      } catch (_error) {
+      } catch (error) {
+        console.error("cloudflare transcription queue job failed", {
+          queue: batch.queue,
+          transcript_id: message.body.transcript_id,
+          recording_id: message.body.recording_id,
+          provider_job_id: message.body.provider_job_id,
+          error: error instanceof Error ? error.message : String(error),
+          attempts: message.attempts,
+        })
         message.retry()
       }
     }

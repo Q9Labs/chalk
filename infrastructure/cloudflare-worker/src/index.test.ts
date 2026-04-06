@@ -120,7 +120,67 @@ describe("cloudflare transcription worker", () => {
     )
 
     expect(env.AI.run).toHaveBeenCalledTimes(1)
+    expect(env.AI.run).toHaveBeenCalledWith(
+      env.CLOUDFLARE_MODEL,
+      expect.objectContaining({
+        audio: expect.objectContaining({
+          contentType: "audio/webm",
+        }),
+      }),
+    )
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(ack).toHaveBeenCalledTimes(1)
+    expect(retry).not.toHaveBeenCalled()
+  })
+
+  it("normalizes mp4 recordings to audio/mp4 before calling Workers AI", async () => {
+    const env = makeEnv()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response("video-bytes", {
+          status: 200,
+          headers: { "content-type": "video/mp4" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const ack = vi.fn()
+    const retry = vi.fn()
+
+    await worker.queue(
+      {
+        queue: "chalk-post-meeting-transcription",
+        messages: [
+          {
+            id: "message-2",
+            attempts: 1,
+            body: {
+              transcript_id: "11111111-1111-1111-1111-111111111111",
+              recording_id: "22222222-2222-2222-2222-222222222222",
+              room_id: "33333333-3333-3333-3333-333333333333",
+              audio_url: "https://example.com/recording.mp4",
+              audio_storage_path: "recordings/room/recording.mp4",
+              callback_url: "https://chalk-api.q9labs.ai/api/v1/transcription/providers/cloudflare/callback",
+              provider_job_id: "job-2",
+            },
+            ack,
+            retry,
+          },
+        ],
+      },
+      env as any,
+      { waitUntil: vi.fn() } as any,
+    )
+
+    expect(env.AI.run).toHaveBeenCalledWith(
+      env.CLOUDFLARE_MODEL,
+      expect.objectContaining({
+        audio: expect.objectContaining({
+          contentType: "audio/mp4",
+        }),
+      }),
+    )
     expect(ack).toHaveBeenCalledTimes(1)
     expect(retry).not.toHaveBeenCalled()
   })
