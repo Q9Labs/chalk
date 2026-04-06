@@ -74,8 +74,9 @@ jobs:
         env:
           CLOUDFLARE_WRANGLER_OAUTH_CONFIG: ${{ secrets.CLOUDFLARE_WRANGLER_OAUTH_CONFIG }}
         run: |
-          mkdir -p ~/.config/.wrangler/config
+          mkdir -p ~/.config/.wrangler/config ~/.wrangler/config
           printf '%s\n' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG" > ~/.config/.wrangler/config/default.toml
+          printf '%s\n' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG" > ~/.wrangler/config/default.toml
 
       - name: Ensure queues exist
         run: |

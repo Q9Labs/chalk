@@ -1,6 +1,7 @@
 name = "chalk-post-meeting-transcription"
 main = "src/index.ts"
 compatibility_date = "2026-04-05"
+account_id = "5281943bd26d5bdcf4c3915606cd6bfb"
 
 [ai]
 binding = "AI"
