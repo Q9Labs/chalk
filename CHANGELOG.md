@@ -1121,6 +1121,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- sdk-react-native native meeting UI now routes `PreJoinLobby`, `JoiningLoadingScreen`, `MeetingRoom`, and `EndScreen` through platform-owned renderer files for Android, iPhone, iPadOS, and macOS while preserving the existing UI behavior as the first-pass isolation baseline.
+- Native meeting room surfaces now isolate `TopBar`, `Stage`, `BottomDock`, `ActionSheet`, and `Panel` behind platform routers so later platform-specific UI work can land with lower regression risk and without reopening shared JSX shells.
+- Mobile `HomeScreen` now keeps the existing shared Android/iPhone path while giving iPadOS and macOS their own layout entrypoints, matching the platform-isolation spec without redesigning the screen yet.
 - Chalk full-debug copy now prebuilds the payload before the click, uses plain-text clipboard write first, verifies the write when the browser allows clipboard reads, and exposes a dedicated download fallback in the shared SDK error sheets instead of silently reporting fake clipboard success.
 - Mobile dev diagnostics now stay visible in debug builds even when the app is pointed at production/custom APIs, so local debug APKs stop hiding the diagnostics sheet just because the target is not classified as `local`.
 - Web join routes now force room-scoped auth instead of reusing the dashboard/demo API-key token provider, and the React SDK provider can rotate its cached session by route context so invite links no longer land on prejoin with a hidden `room not found` auth mismatch.
@@ -1142,6 +1145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- sdk-react-native now exports the shared platform foundation needed by app-owned surfaces, including `resolveNativePlatformVariant`, `Theme`, and `ChalkLogoElements`, so `apps/mobile` can consume the SDK-owned design foundation while screen chrome stays platform-owned.
 - Web mobile invite links now try `chalk://j/<token>` first, so phone users are handed into the native lobby flow instead of being dropped into the mobile web room; Android falls back to the Play Store automatically, and iOS fallback is now driven by configurable `VITE_IOS_APP_STORE_URL`.
 - Mobile native room action accents now use the Chalk theme primary green instead of hard-coded purple values, keeping the meeting sheet and hand/share states on-brand.
 - Android mobile APK builds now use a dedicated fast CI workflow, while the slower AAB/Play bundle build moved to its own on-demand workflow.

@@ -109,3 +109,54 @@
   - locked platform variant resolution, file selection/export pattern, `HomeScreen` shared-foundation boundary, parity definition, allowed deviations, state ownership, and parallelization conditions
 - Final spec path:
   - `scratchpad/sdk-react-native-platform-ui-architecture-spec-2026-04-06.md`
+
+## 2026-04-06 17:28:10 PKT
+
+- Started implementation of final platform UI spec.
+- Worktree was clean on `master`; creating branch `feat/sdk-rn-platform-ui-split`.
+- Next: establish shared foundation/variant routing, then extract controllers, then split platform-owned renderers phase by phase.
+
+## 2026-04-06 18:02:11 PKT
+
+- Implemented the structural platform split across the current scope of the spec:
+  - added shared platform variant resolution in `sdk-react-native`
+  - moved shared foundation exports into `sdk-react-native` for cross-surface consumption
+  - split `PreJoinLobby` into platform-owned renderer files with a shared controller
+  - split `JoiningLoadingScreen` and `EndScreen` into platform-owned renderer files
+  - split `MeetingRoom` into a platform router plus platform-owned shells
+  - split the core `MeetingRoom` surfaces (`TopBar`, `Stage`, `BottomDock`, `ActionSheet`, `Panel`) into platform-owned renderer files
+  - split `HomeScreen` routing so iPadOS and macOS now own separate layout files while Android and iPhone remain on the shared path
+- Current focus moved to stabilization and verification:
+  - fix controller/router mistakes introduced during the split
+  - run root-level lint, typecheck, and tests from the workspace context
+  - patch any parity-preserving breakages surfaced by the gate
+
+## 2026-04-06 18:51:44 PKT
+
+- Stabilization / verification pass results:
+  - fixed the shared `MeetingRoom` controller so `roomName` now resolves from the screen props or active room state instead of the unrelated `features` object
+  - `sdk-react-native` tests passed after the split via `pnpm --dir packages/sdk-react-native run test`
+  - `git diff --check` passed with no whitespace/conflict-marker issues
+- Workspace gate status:
+  - root `bun run lint` and `bun run check-types` are currently blocked by pre-existing workspace dependency / build issues centered in `packages/sdk-core`
+  - root `bun run test` is currently blocked by unrelated workspace test-environment issues, including missing `@mdx-js/rollup` for `apps/web`
+  - `pnpm --dir apps/mobile run test` is currently blocked by missing `effect` resolution from `packages/sdk-core`
+  - package-local `lint` for `sdk-react-native` and `apps/mobile` is currently blocked by missing local install/type environment state (`react`, `react-native`, built `sdk-core` declarations, `expo/types`)
+- Current conclusion:
+  - the platform split implementation is structurally complete for the requested phases
+  - remaining verification blockers are environment / workspace-state issues outside the migration scope, not newly identified logic regressions inside the split itself
+
+## 2026-04-06 18:50:27 PKT
+
+- Verification pass status:
+  - root `bun run lint` and `bun run check-types` are blocked by pre-existing workspace issues in `packages/sdk-core` plus missing local dependency/type resolution (`effect`, `@cloudflare/*`, built `sdk-core` declarations, etc.)
+  - root `bun run test` is blocked by unrelated monorepo test environment issues, including missing `@mdx-js/rollup` for `apps/web`
+  - `pnpm --dir packages/sdk-react-native run test` passed (`10` files, `35` tests)
+  - `pnpm --dir apps/mobile run test` is blocked by the same underlying missing `effect` dependency chain through `packages/sdk-core`
+  - package-local lint runs for `sdk-react-native` and `apps/mobile` are also blocked by missing local install/type state (`react`, `react-native`, `expo/types`, built declarations), not by a newly surfaced migration-specific runtime failure
+- Migration-specific stabilization completed:
+  - fixed the shared `MeetingRoom` controller to derive `roomName` from `NativeMeetingRoomProps` / room state rather than a non-existent feature flag field
+  - normalized generated split files with `oxfmt`
+  - confirmed `git diff --check` is clean
+- Final phase review requested:
+  - spawned a `gpt-5.4` high-reasoning review pass against the finalized platform split spec before handoff

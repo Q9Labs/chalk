@@ -1,12 +1,14 @@
+import { Theme } from "@q9labs/chalk-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Theme } from "../lib/theme";
 
 export function ClipboardInviteSuggestion({ isLoading, onPress }: { isLoading: boolean; onPress: () => void }): React.JSX.Element {
   return (
     <Pressable onPress={onPress} disabled={isLoading} style={({ pressed }) => [styles.card, pressed && !isLoading && styles.cardPressed, isLoading && styles.cardDisabled]}>
       <View style={styles.copy}>
         <Text style={styles.title}>Join from clipboard</Text>
-        <Text style={styles.subtitle} numberOfLines={1}>We found an invite link in your clipboard</Text>
+        <Text style={styles.subtitle} numberOfLines={1}>
+          We found an invite link in your clipboard
+        </Text>
       </View>
       <View style={styles.actionButton}>
         <Text style={styles.actionText}>{isLoading ? "..." : "Join"}</Text>

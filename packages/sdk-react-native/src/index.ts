@@ -2,6 +2,7 @@ export { ChalkNativeProvider, ChalkNativeProvider as ChalkProvider, useChalkSess
 export type { ChalkNativeProviderProps, ChalkNativeProviderProps as ChalkProviderProps } from "./context/chalk-native-provider";
 export { NativeEndScreen } from "./components/NativeEndScreen";
 export type { NativeEndScreenProps, NativeMeetingEndData } from "./components/NativeEndScreen";
+export { ChalkLogoElements } from "./components/ChalkLogoElements";
 export { NativeJoiningLoadingScreen } from "./components/NativeJoiningLoadingScreen";
 export type { NativeJoiningLoadingScreenProps } from "./components/NativeJoiningLoadingScreen";
 export { NativeMediaView } from "./components/NativeMediaView";
@@ -37,4 +38,7 @@ export { useTranscripts } from "./hooks/useTranscripts";
 export type { UseTranscriptsReturn } from "./hooks/useTranscripts";
 export { useWhiteboard } from "./hooks/useWhiteboard";
 export type { UseWhiteboardReturn } from "./hooks/useWhiteboard";
+export type { NativePlatformVariant } from "./platform/native-platform";
+export { resolveNativePlatformVariant } from "./platform/native-platform";
 export { importReactNativeRealtimeKit } from "./runtime/realtimekit-loader";
+export { Theme } from "./ui/theme";
