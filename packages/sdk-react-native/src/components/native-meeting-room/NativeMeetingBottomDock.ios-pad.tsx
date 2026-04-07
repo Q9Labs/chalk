@@ -10,7 +10,7 @@ import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/Compute
 import SmileIcon from "@hugeicons/core-free-icons/dist/esm/SmileIcon";
 import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../../ui/theme";
 import type { NativeMeetingBottomDockProps } from "./types";
 
@@ -168,7 +168,7 @@ export function NativeMeetingBottomDockIosPad({
 const styles = StyleSheet.create({
   bottomDock: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 32 : 24,
+    bottom: 0,
     left: 0,
     right: 0,
     alignItems: "center",

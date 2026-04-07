@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { FlatList, StyleSheet, Text, View, useWindowDimensions, type DimensionValue } from "react-native";
+import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Theme } from "../../ui/theme";
 import { NativeMediaView } from "../NativeMediaView";
 import type { RoomParticipant } from "./types";
@@ -20,10 +22,6 @@ function buildWideParticipantRows(participants: readonly RoomParticipant[], colu
   }
 
   return rows;
-}
-
-function getParticipantTileTrack(participant: RoomParticipant): MediaStreamTrack | null {
-  return participant.videoTrack ?? null;
 }
 
 export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMeetingGridProps): React.JSX.Element {
@@ -61,7 +59,7 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
   if (participants.length === 1) {
     return (
       <View style={styles.singleTile}>
-        <NativeMediaView emphasizeMuted participant={participants[0] ?? null} track={getParticipantTileTrack(participants[0]!)} />
+        <ParticipantTile participant={participants[0]!} />
       </View>
     );
   }
@@ -71,9 +69,7 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
       return (
         <View style={styles.compactTwoUp}>
           {participants.map((participant, index) => (
-            <View key={`${participant.id}-${index}`} style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
-            </View>
+            <ParticipantTile key={`${participant.id}-${index}`} participant={participant} />
           ))}
         </View>
       );
@@ -83,15 +79,11 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
       return (
         <View style={styles.compactThree}>
           <View style={styles.compactThreeTop}>
-            <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
+            <ParticipantTile participant={participants[0]!} />
           </View>
           <View style={styles.compactThreeBottom}>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
-            </View>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
-            </View>
+            <ParticipantTile participant={participants[1]!} />
+            <ParticipantTile participant={participants[2]!} />
           </View>
         </View>
       );
@@ -101,20 +93,12 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
       return (
         <View style={styles.compactFour}>
           <View style={styles.gridRow}>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
-            </View>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
-            </View>
+            <ParticipantTile participant={participants[0]!} />
+            <ParticipantTile participant={participants[1]!} />
           </View>
           <View style={styles.gridRow}>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
-            </View>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[3]!} track={getParticipantTileTrack(participants[3]!)} />
-            </View>
+            <ParticipantTile participant={participants[2]!} />
+            <ParticipantTile participant={participants[3]!} />
           </View>
         </View>
       );
@@ -150,9 +134,7 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
                 {rows.map((row, rowIndex) => (
                   <View key={`row-${rowIndex}`} style={styles.gridRow}>
                     {row.map((participant, columnIndex) => (
-                      <View key={`${participant.id}-${columnIndex}`} style={styles.gridTile}>
-                        <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
-                      </View>
+                      <ParticipantTile key={`${participant.id}-${columnIndex}`} participant={participant} />
                     ))}
                     {row.length < columns && Array.from({ length: columns - row.length }).map((_, index) => <View key={`filler-${index}`} style={[styles.gridTile, { backgroundColor: "transparent" }]} />)}
                   </View>
@@ -171,6 +153,24 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
           ))}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function ParticipantTile({ participant, width, height }: { participant: RoomParticipant; width?: DimensionValue; height?: DimensionValue }) {
+  return (
+    <View style={[styles.tile, width !== undefined && { width }, height !== undefined && { height }]}>
+      <NativeMediaView participant={participant} track={participant.videoTrack ?? null} />
+      <View style={styles.identityPuck}>
+        <Text style={styles.participantName} numberOfLines={1}>
+          {participant.displayName || "Participant"}
+        </Text>
+        {!participant.audioEnabled && (
+          <View style={styles.muteDot}>
+            <HugeiconsIcon icon={MicOff01Icon} size={10} color="white" />
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -263,5 +263,45 @@ const styles = StyleSheet.create({
   pageIndicatorActive: {
     width: 18,
     backgroundColor: Theme.colors.primary,
+  },
+  tile: {
+    borderRadius: 32,
+    overflow: "hidden",
+    backgroundColor: "#0d0d0f",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    flex: 1,
+  },
+  identityPuck: {
+    position: "absolute",
+    left: 16,
+    bottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(10, 10, 12, 0.82)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  participantName: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: "800",
+    maxWidth: 140,
+  },
+  muteDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Theme.colors.error,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

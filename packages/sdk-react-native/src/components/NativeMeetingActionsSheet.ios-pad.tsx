@@ -12,7 +12,29 @@ import { memo } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { Theme } from "../ui/theme";
 
-import type { NativeMeetingActionsSheetProps } from "./native-meeting-room/types";
+export interface NativeMeetingActionsSheetProps {
+  visible: boolean;
+  isHandRaised: boolean;
+  isScreenSharing: boolean;
+  chatEnabled: boolean;
+  peopleEnabled: boolean;
+  transcriptsEnabled: boolean;
+  screenShareEnabled: boolean;
+  settingsEnabled: boolean;
+  chatUnreadCount: number;
+  participantCount: number;
+  raisedHandCount: number;
+  onClose: () => void;
+  onInviteParticipants: () => void;
+  onOpenChat: () => void;
+  onOpenParticipants: () => void;
+  onToggleHand: () => void;
+  onOpenReactions: () => void;
+  onToggleScreenShare: () => void;
+  onOpenTranscripts: () => void;
+  onOpenSettings: () => void;
+  onLeaveMeeting: () => void;
+}
 
 const accent = Theme.colors.primary;
 const tileBackground = Theme.colors.secondary;

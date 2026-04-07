@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Pressable, StyleSheet, Text, View, Modal, TouchableWithoutFeedback, Platform } from "react-native";
+import { Pressable, StyleSheet, Text, View, Modal, TouchableWithoutFeedback } from "react-native";
 
 export interface NativeReactionPickerProps {
   isOpen: boolean;
@@ -71,7 +71,6 @@ const styles = StyleSheet.create({
   },
   emojiText: {
     fontSize: 26,
-    fontFamily: Platform.OS === "ios" ? "Apple Color Emoji" : undefined,
   },
 });
 
