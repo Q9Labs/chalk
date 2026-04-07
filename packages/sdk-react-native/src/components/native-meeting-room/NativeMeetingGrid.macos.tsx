@@ -175,6 +175,8 @@ export function NativeMeetingGridMacos({ participants, gridPages }: NativeMeetin
   );
 }
 
+export { NativeMeetingGridMacos as NativeMeetingGrid };
+
 const styles = StyleSheet.create({
   emptyState: {
     flex: 1,

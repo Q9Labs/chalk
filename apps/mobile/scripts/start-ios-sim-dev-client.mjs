@@ -2,6 +2,7 @@ import http from "node:http";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import net from "node:net";
+import { execFileSync } from "node:child_process";
 
 const expoPort = 8088;
 const proxyMappings = [
@@ -130,6 +131,46 @@ function runCommand(command, args) {
   });
 }
 
+function getAdbDevices() {
+  try {
+    const output = execFileSync("adb", ["devices"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+
+    return output
+      .split("\n")
+      .slice(1)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.split(/\s+/))
+      .filter(([serial, state]) => Boolean(serial) && state === "device")
+      .map(([serial]) => serial);
+  } catch {
+    return [];
+  }
+}
+
+function reverseAdbPorts() {
+  const devices = getAdbDevices();
+  if (devices.length === 0) {
+    return;
+  }
+
+  for (const serial of devices) {
+    for (const [listenPort] of proxyMappings) {
+      try {
+        execFileSync("adb", ["-s", serial, "reverse", `tcp:${listenPort}`, `tcp:${listenPort}`], {
+          stdio: ["ignore", "ignore", "ignore"],
+        });
+        console.log(`adb reverse ${serial} tcp:${listenPort}`);
+      } catch (error) {
+        console.warn(`Failed adb reverse for ${serial} on port ${listenPort}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+}
+
 async function main() {
   const lanIp = getLanIp();
   const bundleUrl = `http://${lanIp}:8081${bundlePath}`;
@@ -168,6 +209,8 @@ async function main() {
     for (const [listenPort, targetPort] of proxyMappings) {
       servers.push(await startProxy(listenPort, targetPort));
     }
+
+    reverseAdbPorts();
 
     await waitForHttp(`http://[::1]:${expoPort}/`, 30_000);
     await prewarmBundle(bundleUrl);

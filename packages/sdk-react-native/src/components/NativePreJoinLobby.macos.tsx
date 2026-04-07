@@ -86,6 +86,8 @@ export function NativePreJoinLobbyMacos({ roomName, error, joinDisabled = false,
   );
 }
 
+export { NativePreJoinLobbyMacos as NativePreJoinLobby };
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,

@@ -181,6 +181,8 @@ export function NativeMeetingStageMacos({ layoutMode, isCompactViewport, primary
   );
 }
 
+export { NativeMeetingStageMacos as NativeMeetingStage };
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -29,6 +29,8 @@ export function NativeMeetingTopBarAndroid({ roomName, participantCount, formatt
   );
 }
 
+export { NativeMeetingTopBarAndroid as NativeMeetingTopBar };
+
 const styles = StyleSheet.create({
   topBar: {
     paddingTop: Platform.OS === "ios" ? 54 : 42,

@@ -79,6 +79,8 @@ export function NativeJoiningLoadingScreenMacos({ displayName, message = "Joinin
   );
 }
 
+export { NativeJoiningLoadingScreenMacos as NativeJoiningLoadingScreen };
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,

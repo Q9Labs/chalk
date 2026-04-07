@@ -50,6 +50,8 @@ export function NativeMeetingBottomDockMacos({ simulatorMediaDisabled, isMuted, 
   );
 }
 
+export { NativeMeetingBottomDockMacos as NativeMeetingBottomDock };
+
 const styles = StyleSheet.create({
   bottomDock: {
     paddingTop: 20,

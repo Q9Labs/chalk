@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canUseLocalHostBootstrap, createStorageScopeId, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl } from "./mobile-runtime";
+import { canUseLocalHostBootstrap, createStorageScopeId, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl, shouldAutoReadClipboard } from "./mobile-runtime";
 
 describe("mobile runtime helpers", () => {
   it("derives a stable scoped token namespace", () => {
@@ -69,5 +69,11 @@ describe("mobile runtime helpers", () => {
     expect(canUseLocalHostBootstrap("http://localhost:8080", true)).toBe(true);
     expect(canUseLocalHostBootstrap("https://chalk-api.q9labs.ai", true)).toBe(false);
     expect(canUseLocalHostBootstrap("http://localhost:8080", false)).toBe(false);
+  });
+
+  it("skips eager clipboard reads on the iOS simulator", () => {
+    expect(shouldAutoReadClipboard({ platform: "ios", isSimulator: true })).toBe(false);
+    expect(shouldAutoReadClipboard({ platform: "ios", isSimulator: false })).toBe(true);
+    expect(shouldAutoReadClipboard({ platform: "android", isSimulator: false })).toBe(true);
   });
 });

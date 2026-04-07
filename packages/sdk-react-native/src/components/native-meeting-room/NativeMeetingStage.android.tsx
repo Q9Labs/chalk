@@ -181,6 +181,8 @@ export function NativeMeetingStageAndroid({ layoutMode, isCompactViewport, prima
   );
 }
 
+export { NativeMeetingStageAndroid as NativeMeetingStage };
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

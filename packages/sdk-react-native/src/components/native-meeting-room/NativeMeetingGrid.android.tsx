@@ -175,6 +175,8 @@ export function NativeMeetingGridAndroid({ participants, gridPages }: NativeMeet
   );
 }
 
+export { NativeMeetingGridAndroid as NativeMeetingGrid };
+
 const styles = StyleSheet.create({
   emptyState: {
     flex: 1,

@@ -143,6 +143,8 @@ export function NativeMeetingRoomMacos(props: NativeMeetingRoomProps): React.JSX
   );
 }
 
+export { NativeMeetingRoomMacos as NativeMeetingRoom };
+
 const styles = StyleSheet.create({
   roomScreen: {
     flex: 1,

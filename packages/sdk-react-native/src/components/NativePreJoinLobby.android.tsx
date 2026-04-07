@@ -86,6 +86,8 @@ export function NativePreJoinLobbyAndroid({ roomName, error, joinDisabled = fals
   );
 }
 
+export { NativePreJoinLobbyAndroid as NativePreJoinLobby };
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,

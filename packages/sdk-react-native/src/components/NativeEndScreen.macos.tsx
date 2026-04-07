@@ -47,6 +47,8 @@ export function NativeEndScreenMacos({ data, onRejoin, onGoHome }: NativeEndScre
   );
 }
 
+export { NativeEndScreenMacos as NativeEndScreen };
+
 function StatItem({ icon, label, value }: { icon: any; label: string; value: string }): React.JSX.Element {
   return (
     <View style={styles.statRow}>

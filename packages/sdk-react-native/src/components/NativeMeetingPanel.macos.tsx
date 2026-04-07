@@ -254,6 +254,8 @@ export function NativeMeetingPanelMacos({
   );
 }
 
+export { NativeMeetingPanelMacos as NativeMeetingPanel };
+
 function DeviceList({ devices, selectedId, onSelect }: { devices: readonly MediaDevice[]; selectedId: string | null; onSelect: (deviceId: string) => void }): React.JSX.Element {
   return (
     <View style={styles.deviceList}>

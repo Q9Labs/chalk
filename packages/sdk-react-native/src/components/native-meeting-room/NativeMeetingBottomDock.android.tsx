@@ -50,6 +50,8 @@ export function NativeMeetingBottomDockAndroid({ simulatorMediaDisabled, isMuted
   );
 }
 
+export { NativeMeetingBottomDockAndroid as NativeMeetingBottomDock };
+
 const styles = StyleSheet.create({
   bottomDock: {
     paddingTop: 20,

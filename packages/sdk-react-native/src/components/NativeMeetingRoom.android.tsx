@@ -143,6 +143,8 @@ export function NativeMeetingRoomAndroid(props: NativeMeetingRoomProps): React.J
   );
 }
 
+export { NativeMeetingRoomAndroid as NativeMeetingRoom };
+
 const styles = StyleSheet.create({
   roomScreen: {
     flex: 1,

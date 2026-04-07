@@ -2451,7 +2451,7 @@ SPEC CHECKSUMS:
   EXManifests: 46a2c1d8b795315028a17cd60b2e939d1e6bb086
   Expo: 55d24f07827a295a2860cbba79709fc0536adc96
   expo-dev-client: 35d5b05391703c3dde3f76e813a5799a3c007222
-  expo-dev-launcher: b5462737a64d7823b3a839ad63b69941e5647397
+  expo-dev-launcher: 6c0dba0b788496ca7fbe57f4aab1f7ead8aa716f
   expo-dev-menu: 46f293beccc20051731d85d84359226fe4ebeb9d
   expo-dev-menu-interface: bf6f816d29b45bec038080790963c635e8d588c2
   ExpoAsset: 4efd0227e808dfa84d286aa3663ded641ef73479
@@ -2470,7 +2470,7 @@ SPEC CHECKSUMS:
   ExpoSQLite: 6c9b9c2558a4194abe5cd1d236554ebbd59307cc
   EXUpdatesInterface: d48f288b92900bd95a27c6cf92a7b9aff826d49a
   FBLazyVector: 32e9ed0301d0fcbc1b2b341dd7fcbf291f51eb83
-  hermes-engine: e270c693826bda6c3f4150295fc1b07b26015103
+  hermes-engine: e66fed7140385aadb5662742bb8a4009a73ddc5e
   RCTDeprecation: a522c536d2c7be8f518dd834883cf6dce1d4f545
   RCTRequired: 44337def23abb244c025e9e7ab58f9cd3d63ec7d
   RCTSwiftUI: b2f0c2f2761631b8cd605767536cbb1cbf8d020f
@@ -2479,7 +2479,7 @@ SPEC CHECKSUMS:
   React: f4edc7518ccb0b54a6f580d89dd91471844b4990
   React-callinvoker: 79ef4e3f1c021571f6d2dafbe45ca432b2f3a146
   React-Core: c19ad4660fd48bc8abc060d979f8ee37f1fc4a5a
-  React-Core-prebuilt: 43f61e80fa6c933ac0e888e14adac9f75167551a
+  React-Core-prebuilt: 7a6509c40eae8d52a0ed0e358f022798807db668
   React-CoreModules: f94ec3ee2bac588d033ad15a2377af746284f8c8
   React-cxxreact: de66364f2d5fb77d3da3cfa927b2fd960892c711
   React-debug: 4f6739c820d7da9c20f48caa985573b6a847e5f5
@@ -2542,7 +2542,7 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: d69159b417e8c9d82b8fe4d0a27def4c3e8f767f
   ReactCodegen: 67448ac89265edfdb18647a961c452760279913c
   ReactCommon: 8868269b67561136a7970be188b40738135af077
-  ReactNativeDependencies: 869adbda9673536576847aefaf564ae1b23c3361
+  ReactNativeDependencies: c843372b105893737e67009833f6b37d086f3ede
   RealtimeKitCore: c4334bde326dba8759f9c0c59c7fa4f904b6c3c1
   RNSVG: 7bf7808626c62cdf93911573b9358f1601d58003
   RTKWebRTC: 943dc8c747e5f22c263148c2a0cb493001510690

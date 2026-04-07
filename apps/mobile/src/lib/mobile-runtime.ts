@@ -1,5 +1,9 @@
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
 
+export function shouldAutoReadClipboard({ platform, isSimulator }: { platform: string; isSimulator: boolean }): boolean {
+  return !(platform === "ios" && isSimulator);
+}
+
 export function createStorageScopeId(apiUrl: string, apiKey: string): string {
   let hash = 2166136261;
   for (const char of `${apiUrl}|${apiKey}`) {

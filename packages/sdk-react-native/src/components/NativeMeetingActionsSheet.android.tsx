@@ -256,3 +256,4 @@ const styles = StyleSheet.create({
 });
 
 export const NativeMeetingActionsSheetAndroid = memo(NativeMeetingActionsSheetAndroidBase);
+export { NativeMeetingActionsSheetAndroid as NativeMeetingActionsSheet };

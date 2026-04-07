@@ -256,3 +256,4 @@ const styles = StyleSheet.create({
 });
 
 export const NativeMeetingActionsSheetMacos = memo(NativeMeetingActionsSheetMacosBase);
+export { NativeMeetingActionsSheetMacos as NativeMeetingActionsSheet };

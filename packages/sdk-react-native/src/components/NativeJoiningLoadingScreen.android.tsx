@@ -79,6 +79,8 @@ export function NativeJoiningLoadingScreenAndroid({ displayName, message = "Join
   );
 }
 
+export { NativeJoiningLoadingScreenAndroid as NativeJoiningLoadingScreen };
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
