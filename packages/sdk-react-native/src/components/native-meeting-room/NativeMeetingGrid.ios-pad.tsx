@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { FlatList, StyleSheet, Text, View, useWindowDimensions, LayoutAnimation } from "react-native";
+import React, { useEffect, useMemo } from "react";
+import { FlatList, StyleSheet, Text, View, useWindowDimensions, LayoutAnimation, type DimensionValue } from "react-native";
 import { Theme } from "../../ui/theme";
 import { NativeMediaView } from "../NativeMediaView";
 import type { RoomParticipant } from "./types";
@@ -16,9 +16,9 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
   
   // Adaptive Mesh Constants
   const GAP = 16;
-  const TOP_BAR_H = 100;
+  const TOP_BAR_H = 40; 
   const BOTTOM_DOCK_H = 120;
-  const containerWidth = width - 40; // 20px side padding
+  const containerWidth = width - 40; 
   const containerHeight = height - TOP_BAR_H - BOTTOM_DOCK_H;
 
   const count = participants.length;
@@ -64,13 +64,15 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
   if (count === 3) {
     return (
       <View style={styles.meshContainer}>
-        <View style={styles.trioTop}>
-          {participants.slice(0, 2).map((p, i) => (
-            <ParticipantTile key={`${p.id}-${i}`} participant={p} width={(containerWidth - GAP) / 2} height={(containerHeight - GAP) / 2} />
-          ))}
-        </View>
-        <View style={styles.trioBottom}>
-          <ParticipantTile key={`${participants[2]!.id}-2`} participant={participants[2]!} width={containerWidth} height={(containerHeight - GAP) / 2} />
+        <View style={styles.meshContentFlat}>
+          <View style={styles.trioTop}>
+            {participants.slice(0, 2).map((p, i) => (
+              <ParticipantTile key={`${p.id}-${i}`} participant={p} width={(containerWidth - GAP) / 2} height="100%" />
+            ))}
+          </View>
+          <View style={styles.trioBottom}>
+            <ParticipantTile key={`${participants[2]!.id}-2`} participant={participants[2]!} width={containerWidth} height="100%" />
+          </View>
         </View>
       </View>
     );
@@ -103,7 +105,7 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
   );
 }
 
-function ParticipantTile({ participant, width, height }: { participant: RoomParticipant; width: number; height: number }) {
+function ParticipantTile({ participant, width, height }: { participant: RoomParticipant; width: DimensionValue; height: DimensionValue }) {
   return (
     <View style={[styles.tile, { width, height }]}>
       <NativeMediaView 
@@ -111,6 +113,7 @@ function ParticipantTile({ participant, width, height }: { participant: RoomPart
         participant={participant} 
         track={participant.videoTrack ?? null} 
       />
+      {/* Pinned Identity Puck */}
       <View style={styles.identityPuck}>
         <Text style={styles.participantName} numberOfLines={1}>
           {participant.displayName || "Participant"}
@@ -125,7 +128,6 @@ function ParticipantTile({ participant, width, height }: { participant: RoomPart
   );
 }
 
-
 const styles = StyleSheet.create({
   meshContainer: {
     flex: 1,
@@ -133,18 +135,27 @@ const styles = StyleSheet.create({
   meshContent: {
     gap: 16,
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingTop: 40, 
+    paddingBottom: 20,
+  },
+  meshContentFlat: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    paddingBottom: 20,
+    gap: 16,
   },
   meshRow: {
     gap: 16,
   },
   trioTop: {
+    flex: 1,
     flexDirection: "row",
     gap: 16,
-    marginBottom: 16,
     justifyContent: "center",
   },
   trioBottom: {
+    flex: 1,
     alignItems: "center",
   },
   tile: {

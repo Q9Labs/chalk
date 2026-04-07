@@ -32,7 +32,7 @@ export function NativeMeetingTopBarIosPad({ roomName, participantCount, formatte
 const styles = StyleSheet.create({
   topBarLayer: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 54 : 32,
+    bottom: Platform.OS === "ios" ? 40 : 32,
     left: 40,
     right: 40,
     flexDirection: "row",
