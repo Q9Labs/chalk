@@ -443,13 +443,13 @@ export async function getJoinAccessToken(apiUrl: string, joinToken: string): Pro
   return nextContext.accessToken;
 }
 
-export async function createMeetingLobbyRoute(apiUrl: string): Promise<LobbyRoute> {
+export async function createMeetingLobbyRoute(apiUrl: string, roomName?: string): Promise<LobbyRoute> {
   const getAccessToken = getHostTokenProvider(apiUrl);
   if (!getAccessToken) {
     throw new Error("Meeting creation is currently restricted.");
   }
 
-  const createdRoom = await createHostedMeeting(apiUrl, getAccessToken);
+  const createdRoom = await createHostedMeeting(apiUrl, getAccessToken, roomName);
   return {
     kind: "lobby",
     roomId: createdRoom.roomId,

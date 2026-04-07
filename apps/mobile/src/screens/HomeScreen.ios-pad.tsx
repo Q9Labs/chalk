@@ -23,12 +23,30 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
   const apiUrl = useMemo(() => getApiUrl(), []);
   const createEnabled = useMemo(() => canCreateMeeting(), []);
   const [input, setInput] = useState("");
+  const [newRoomName, setNewRoomName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [showNamingDialog, setShowNamingDialog] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  
+  const namingInputRef = useRef<TextInput>(null);
+
+  const namingDialogAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(namingDialogAnim, {
+      toValue: showNamingDialog ? 1 : 0,
+      tension: 30,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+
+    if (showNamingDialog) {
+      setTimeout(() => namingInputRef.current?.focus(), 100);
+    }
+  }, [showNamingDialog, namingDialogAnim]);
+
   const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
   const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
   const clipboardInviteLink = useClipboardInviteSuggestion(input);
@@ -95,7 +113,8 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
     try {
       setError(null);
       setIsCreatingMeeting(true);
-      onNavigate(await createMeetingLobbyRoute(apiUrl));
+      onNavigate(await createMeetingLobbyRoute(apiUrl, newRoomName.trim() || undefined));
+      setShowNamingDialog(false);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to create meeting";
       setError(message);
@@ -155,23 +174,16 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
             <View style={styles.commandSurface}>
               <Pressable
                 disabled={isCreatingMeeting}
-                onPress={() => void handleNewMeeting()}
+                onPress={() => setShowNamingDialog(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Create a new meeting"
                 style={({ pressed }) => [
                   styles.newMeetingAction,
                   pressed && styles.buttonPressed,
-                  isCreatingMeeting && styles.buttonDisabled,
                 ]}
               >
-                {isCreatingMeeting ? (
-                  <ActivityIndicator color={Theme.colors.primary} size="small" />
-                ) : (
-                  <>
-                    <HugeiconsIcon icon={Add01Icon} size={24} color={Theme.colors.primary} />
-                    <Text style={styles.actionLabel}>New Meeting</Text>
-                  </>
-                )}
+                <HugeiconsIcon icon={Add01Icon} size={24} color={Theme.colors.primary} />
+                <Text style={styles.actionLabel}>New Meeting</Text>
               </Pressable>
 
               <View style={styles.divider} />
@@ -246,6 +258,70 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
           </Animated.View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Naming Dialog Overlay */}
+      {showNamingDialog && (
+        <Animated.View 
+          style={[
+            StyleSheet.absoluteFill, 
+            styles.dialogOverlay,
+            { opacity: namingDialogAnim }
+          ]}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowNamingDialog(false)} />
+          <Animated.View 
+            style={[
+              styles.namingDialog,
+              {
+                transform: [
+                  { scale: namingDialogAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+                  { translateY: namingDialogAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }
+                ]
+              }
+            ]}
+          >
+            <View style={styles.dialogHeader}>
+              <Text style={styles.dialogTitle}>Name your meeting</Text>
+              <Text style={styles.dialogSubtitle}>Give your space a unique name or leave it blank for a surprise.</Text>
+            </View>
+
+            <View style={styles.namingInputContainer}>
+              <TextInput
+                ref={namingInputRef}
+                onChangeText={setNewRoomName}
+                placeholder="Meeting Name (Optional)"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                style={styles.namingInput}
+                value={newRoomName}
+                onSubmitEditing={() => void handleNewMeeting()}
+                maxLength={40}
+              />
+              <Pressable
+                onPress={() => void handleNewMeeting()}
+                disabled={isCreatingMeeting}
+                style={({ pressed }) => [
+                  styles.namingGoButton,
+                  pressed && styles.buttonPressed,
+                  isCreatingMeeting && styles.buttonDisabled,
+                ]}
+              >
+                {isCreatingMeeting ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <HugeiconsIcon icon={ArrowRight02Icon} size={24} color="white" />
+                )}
+              </Pressable>
+            </View>
+
+            <Pressable 
+              onPress={() => setShowNamingDialog(false)} 
+              style={({ pressed }) => [styles.cancelNaming, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.cancelNamingText}>Cancel</Text>
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -302,11 +378,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 28,
     maxWidth: 500,
-  },
-  actionsContainer: {
-    width: "100%",
-    maxWidth: 900,
-    gap: 24,
   },
   commandSurface: {
     flexDirection: "row",
@@ -405,6 +476,75 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     textAlign: "center",
+  },
+  dialogOverlay: {
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+  },
+  namingDialog: {
+    width: 480,
+    backgroundColor: "rgba(20,20,22,0.95)",
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    padding: 32,
+    gap: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    elevation: 30,
+  },
+  dialogHeader: {
+    alignItems: "center",
+    gap: 8,
+  },
+  dialogTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  dialogSubtitle: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  namingInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 20,
+    padding: 8,
+    height: 72,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  namingInput: {
+    flex: 1,
+    color: "white",
+    fontSize: 18,
+    fontWeight: "700",
+    paddingHorizontal: 16,
+  },
+  namingGoButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelNaming: {
+    alignSelf: "center",
+    padding: 8,
+  },
+  cancelNamingText: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
 
