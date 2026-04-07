@@ -25,25 +25,83 @@ export function NativeMeetingBottomDockIosPad({ simulatorMediaDisabled, isMuted,
   return (
     <View style={styles.bottomDock}>
       <View style={styles.controlPill}>
-        <Pressable disabled={simulatorMediaDisabled} onPress={onToggleAudio} style={({ pressed }) => [styles.controlButton, isMuted && styles.controlButtonDanger, simulatorMediaDisabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}>
-          <HugeiconsIcon color={isMuted ? "white" : Theme.colors.primary} icon={isMuted ? MicOff01Icon : Mic01Icon} size={22} />
+        {/* Media Group */}
+        <Pressable 
+          disabled={simulatorMediaDisabled} 
+          onPress={onToggleAudio} 
+          style={({ pressed }) => [
+            styles.controlButton, 
+            isMuted && styles.buttonDanger, 
+            simulatorMediaDisabled && styles.buttonDisabled, 
+            pressed && styles.buttonPressed
+          ]}
+        >
+          <HugeiconsIcon 
+            color="white" 
+            icon={isMuted ? MicOff01Icon : Mic01Icon} 
+            size={24} 
+          />
         </Pressable>
-        <Pressable disabled={simulatorMediaDisabled} onPress={onToggleVideo} style={({ pressed }) => [styles.controlButton, isCameraOff && styles.controlButtonDanger, simulatorMediaDisabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}>
-          <HugeiconsIcon color={isCameraOff ? "white" : Theme.colors.primary} icon={isCameraOff ? VideoOffIcon : Video01Icon} size={22} />
+        
+        <Pressable 
+          disabled={simulatorMediaDisabled} 
+          onPress={onToggleVideo} 
+          style={({ pressed }) => [
+            styles.controlButton, 
+            isCameraOff && styles.buttonDanger, 
+            simulatorMediaDisabled && styles.buttonDisabled, 
+            pressed && styles.buttonPressed
+          ]}
+        >
+          <HugeiconsIcon 
+            color="white" 
+            icon={isCameraOff ? VideoOffIcon : Video01Icon} 
+            size={24} 
+          />
         </Pressable>
-        <Pressable onPress={onOpenChat} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
-          <HugeiconsIcon color="white" icon={Chat01Icon} size={22} />
-          {unreadChatCount > 0 ? (
-            <View style={styles.controlBadge}>
-              <Text style={styles.controlBadgeText}>{unreadChatCount > 9 ? "9+" : String(unreadChatCount)}</Text>
+
+        <View style={styles.divider} />
+
+        {/* Action Group */}
+        <Pressable 
+          onPress={onOpenChat} 
+          style={({ pressed }) => [
+            styles.controlButton, 
+            styles.secondaryButton,
+            pressed && styles.buttonPressed
+          ]}
+        >
+          <HugeiconsIcon color="white" icon={Chat01Icon} size={24} />
+          {unreadChatCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{unreadChatCount > 9 ? "9+" : unreadChatCount}</Text>
             </View>
-          ) : null}
+          )}
         </Pressable>
-        <Pressable onPress={onOpenMore} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
-          <HugeiconsIcon color="white" icon={MoreHorizontalIcon} size={22} />
+
+        <Pressable 
+          onPress={onOpenMore} 
+          style={({ pressed }) => [
+            styles.controlButton, 
+            styles.secondaryButton,
+            pressed && styles.buttonPressed
+          ]}
+        >
+          <HugeiconsIcon color="white" icon={MoreHorizontalIcon} size={24} />
         </Pressable>
-        <Pressable onPress={onLeave} style={({ pressed }) => [styles.controlButton, styles.controlButtonEndCall, pressed && styles.controlButtonPressed]}>
-          <HugeiconsIcon color="white" icon={CallEnd01Icon} size={22} />
+
+        <View style={styles.divider} />
+
+        {/* Exit Action */}
+        <Pressable 
+          onPress={onLeave} 
+          style={({ pressed }) => [
+            styles.controlButton, 
+            styles.exitButton, 
+            pressed && styles.buttonPressed
+          ]}
+        >
+          <HugeiconsIcon color="white" icon={CallEnd01Icon} size={24} />
         </Pressable>
       </View>
     </View>
@@ -53,70 +111,77 @@ export function NativeMeetingBottomDockIosPad({ simulatorMediaDisabled, isMuted,
 const styles = StyleSheet.create({
   bottomDock: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 40 : 24,
-    left: 24,
-    right: 24,
+    bottom: Platform.OS === "ios" ? 48 : 32,
+    left: 0,
+    right: 0,
     alignItems: "center",
-    justifyContent: "center",
     zIndex: 100,
   },
   controlPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(20, 20, 24, 0.85)",
-    borderRadius: 32,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 16,
+    backgroundColor: "rgba(10, 10, 12, 0.88)",
+    borderRadius: 40,
+    padding: 8,
+    gap: 8,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
+    elevation: 20,
   },
   controlButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  controlButtonDisabled: {
-    opacity: 0.45,
-  },
-  controlButtonPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.92 }],
-  },
-  controlButtonDanger: {
-    backgroundColor: "#ea4335",
-  },
-  controlButtonEndCall: {
-    backgroundColor: "#ef4444",
-    width: 76,
-    borderRadius: 22,
-    marginLeft: 8,
-  },
-  controlBadge: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
     backgroundColor: Theme.colors.primary,
+  },
+  secondaryButton: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  buttonDanger: {
+    backgroundColor: Theme.colors.error,
+  },
+  exitButton: {
+    backgroundColor: "#ff4d4d",
+  },
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  buttonPressed: {
+    transform: [{ scale: 0.94 }],
+    opacity: 0.8,
+  },
+  divider: {
+    width: 1,
+    height: 32,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    marginHorizontal: 4,
+  },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: Theme.colors.primary,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: "#000000",
+    borderColor: "#0a0a0b",
+    paddingHorizontal: 4,
   },
-  controlBadgeText: {
-    color: "#ffffff",
+  badgeText: {
+    color: "white",
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 });
+

@@ -1,3 +1,4 @@
+import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
 import { RTCView } from "@cloudflare/react-native-webrtc";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowLeft01Icon";
 import Mic01Icon from "@hugeicons/core-free-icons/dist/esm/Mic01Icon";
@@ -12,9 +13,11 @@ import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
 import { NativeFaceAvatar } from "./NativeFaceAvatar";
 import type { NativePreJoinLobbyProps } from "./NativePreJoinLobby";
 import { useNativePreJoinLobbyController } from "./native-prejoin/useNativePreJoinLobbyController";
+import { useMemo } from "react";
 
 export function NativePreJoinLobbyAndroid({ roomName, error, joinDisabled = false, onCancel, ...props }: NativePreJoinLobbyProps): React.JSX.Element {
   const controller = useNativePreJoinLobbyController({ ...props, joinDisabled });
+  const avatarColors = useMemo(() => getParticipantAvatarRecipe(controller.displayName || "guest").colors, [controller.displayName]);
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.screen}>
@@ -76,7 +79,12 @@ export function NativePreJoinLobbyAndroid({ roomName, error, joinDisabled = fals
           <Pressable
             disabled={joinDisabled || controller.isSubmitting}
             onPress={controller.handleJoin}
-            style={({ pressed }) => [styles.joinButton, (joinDisabled || controller.isSubmitting) && styles.joinButtonDisabled, !controller.displayName && styles.joinButtonDimmed, pressed && styles.togglePressed]}
+            style={({ pressed }) => [
+              styles.joinButton,
+              { backgroundColor: controller.displayName ? avatarColors.primary : "rgba(255,255,255,0.05)" },
+              (joinDisabled || controller.isSubmitting) && styles.joinButtonDisabled,
+              pressed && styles.togglePressed
+            ]}
           >
             <Text style={styles.joinButtonText}>{controller.isSubmitting || joinDisabled ? "Joining..." : "Join Meeting"}</Text>
           </Pressable>
@@ -239,20 +247,10 @@ const styles = StyleSheet.create({
   },
   joinButton: {
     width: "100%",
-    backgroundColor: Theme.colors.primary,
     height: 58,
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  joinButtonDimmed: {
-    opacity: 0.5,
-    backgroundColor: "rgba(255,255,255,0.1)",
   },
   joinButtonDisabled: {
     opacity: 0.6,
