@@ -111,7 +111,7 @@ export function NativeMeetingBottomDockIosPad({ simulatorMediaDisabled, isMuted,
 const styles = StyleSheet.create({
   bottomDock: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 48 : 32,
+    bottom: Platform.OS === "ios" ? 32 : 24,
     left: 0,
     right: 0,
     alignItems: "center",

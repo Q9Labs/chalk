@@ -15,7 +15,12 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
 
   return (
     <View style={styles.roomScreen}>
-      <NativeMeetingTopBar formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
+      {/* Top HUD: Floating Pods */}
+      <NativeMeetingTopBar 
+        formattedDuration={controller.formattedDuration} 
+        participantCount={controller.participantCount} 
+        roomName={controller.roomName} 
+      />
 
       <View style={styles.stageFrame}>
         {controller.derived.isStageMode ? (
@@ -45,6 +50,42 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
         )}
       </View>
 
+      {/* Side Panel: Floating Glass Sidebar */}
+      <NativeMeetingPanel
+        cameras={controller.devices.cameras}
+        chatDraft={controller.chatDraft}
+        isHost={controller.isHost}
+        isRefreshingDevices={controller.devices.isLoading}
+        localParticipantId={controller.participants.localParticipant?.id ?? null}
+        messages={controller.chat.messages}
+        microphones={controller.devices.microphones}
+        onChatDraftChange={controller.setChatDraft}
+        onClearWhiteboard={controller.whiteboard.clear}
+        onClose={controller.closePanel}
+        onMuteParticipant={controller.muteParticipant}
+        onRefreshDevices={controller.refreshDevices}
+        onRemoveParticipant={controller.removeParticipant}
+        onRequestWhiteboardSync={controller.whiteboard.requestSync}
+        onSelectCamera={controller.selectCamera}
+        onSelectMicrophone={controller.selectMicrophone}
+        onSelectSpeaker={controller.selectSpeaker}
+        onSendMessage={controller.sendChatMessage}
+        onToggleWhiteboard={controller.whiteboard.toggle}
+        onUnmuteParticipant={controller.unmuteParticipant}
+        panel={controller.panel}
+        participants={controller.participants.participants}
+        selectedCamera={controller.devices.selectedCamera}
+        selectedMicrophone={controller.devices.selectedMicrophone}
+        selectedSpeaker={controller.devices.selectedSpeaker}
+        speakers={controller.devices.speakers}
+        transcripts={controller.transcripts.transcripts}
+        whiteboardCanDraw={controller.whiteboard.canDraw}
+        whiteboardElementCount={controller.whiteboard.elements.length}
+        whiteboardOpen={controller.whiteboard.isOpen}
+        whiteboardParticipantCount={controller.whiteboard.openParticipants.length}
+      />
+
+      {/* Bottom HUD: Glass Pill Dock */}
       <NativeMeetingBottomDock
         isCameraOff={controller.isCameraOff}
         isMuted={controller.isMuted}
@@ -105,40 +146,6 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
       />
 
       <NativeReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={controller.sendReaction} />
-
-      <NativeMeetingPanel
-        cameras={controller.devices.cameras}
-        chatDraft={controller.chatDraft}
-        isHost={controller.isHost}
-        isRefreshingDevices={controller.devices.isLoading}
-        localParticipantId={controller.participants.localParticipant?.id ?? null}
-        messages={controller.chat.messages}
-        microphones={controller.devices.microphones}
-        onChatDraftChange={controller.setChatDraft}
-        onClearWhiteboard={controller.whiteboard.clear}
-        onClose={controller.closePanel}
-        onMuteParticipant={controller.muteParticipant}
-        onRefreshDevices={controller.refreshDevices}
-        onRemoveParticipant={controller.removeParticipant}
-        onRequestWhiteboardSync={controller.whiteboard.requestSync}
-        onSelectCamera={controller.selectCamera}
-        onSelectMicrophone={controller.selectMicrophone}
-        onSelectSpeaker={controller.selectSpeaker}
-        onSendMessage={controller.sendChatMessage}
-        onToggleWhiteboard={controller.whiteboard.toggle}
-        onUnmuteParticipant={controller.unmuteParticipant}
-        panel={controller.panel}
-        participants={controller.participants.participants}
-        selectedCamera={controller.devices.selectedCamera}
-        selectedMicrophone={controller.devices.selectedMicrophone}
-        selectedSpeaker={controller.devices.selectedSpeaker}
-        speakers={controller.devices.speakers}
-        transcripts={controller.transcripts.transcripts}
-        whiteboardCanDraw={controller.whiteboard.canDraw}
-        whiteboardElementCount={controller.whiteboard.elements.length}
-        whiteboardOpen={controller.whiteboard.isOpen}
-        whiteboardParticipantCount={controller.whiteboard.openParticipants.length}
-      />
     </View>
   );
 }

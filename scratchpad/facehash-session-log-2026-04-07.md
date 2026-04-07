@@ -24,3 +24,6 @@
 - Investigating iOS/iPad facehash blink regression where the eye transform appears to stay collapsed after the first blink; checking native SVG transform reset behavior.
 - Fixed iOS native blink reset by always returning an explicit identity eye transform instead of clearing the transform prop, and added a regression test for the transform helper.
 - Kept the native root entry separated from the web source index so package tests stay web-safe while RN still resolves the native root via package exports and tsconfig paths.
+
+## 2026-04-07 20:14:11 PKT
+- Restarting mobile dev stack after power outage: Metro/dev client plus iPhone, iPad, and Android emulator.

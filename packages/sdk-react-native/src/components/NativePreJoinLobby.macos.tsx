@@ -49,8 +49,8 @@ export function NativePreJoinLobbyMacos({ roomName, error, joinDisabled = false,
             </Text>
           </View>
 
-          <View style={[styles.inputCard, controller.isInputFocused && styles.inputCardFocused]}>
-            <HugeiconsIcon icon={UserIcon} size={18} color={controller.isInputFocused ? Theme.colors.primary : "rgba(255,255,255,0.4)"} style={styles.inputIcon} />
+          <View style={[styles.inputCard, controller.isInputFocused && { borderColor: avatarColors.primary }]}>
+            <HugeiconsIcon icon={UserIcon} size={18} color={controller.isInputFocused ? avatarColors.primary : "rgba(255,255,255,0.4)"} style={styles.inputIcon} />
             <TextInput
               onChangeText={controller.setDisplayName}
               onFocus={() => controller.setInputFocused(true)}

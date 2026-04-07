@@ -2,6 +2,7 @@ import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "
 import { FacehashNative } from "@q9labs/facehash";
 import { memo, useMemo, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { NativeGradientSurface } from "./NativeGradientSurface";
 
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type AvatarStatus = "online" | "away" | "busy" | "offline";
@@ -72,7 +73,12 @@ function NativeFaceAvatarBase({ name, src, size = "md", status, gradientPreferen
         {hasUploadedImage ? (
           <Image source={{ uri: src }} style={{ width: pxSize, height: pxSize, borderRadius: pxSize / 2 }} onError={() => setImageError(true)} />
         ) : (
-          <FacehashNative colors={avatarRecipe.facehashColors} enableBlink interactive name={name || "guest"} size={pxSize} testID="native-facehash" />
+          <>
+            <NativeGradientSurface variant="avatar" participantId={name} gradientPreference={gradientPreference} borderRadius={pxSize / 2} />
+            <View style={StyleSheet.absoluteFillObject}>
+              <FacehashNative colors={avatarRecipe.facehashColors} enableBlink interactive name={name || "guest"} size={pxSize} testID="native-facehash" />
+            </View>
+          </>
         )}
       </View>
       {status && (
