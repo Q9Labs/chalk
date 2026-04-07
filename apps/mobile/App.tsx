@@ -3,7 +3,7 @@ import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-rea
 import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
-import { type ComponentType, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
@@ -23,10 +23,8 @@ import {
   setDevDiagnosticsToken,
 } from "./src/lib/dev-diagnostics";
 import { Theme } from "./src/lib/theme";
-import type { MeetingScreenProps } from "./src/meeting/MobileMeetingScreen";
+import { MobileMeetingScreen } from "./src/meeting/MobileMeetingScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
-
-type LazyMeetingScreenComponent = ComponentType<MeetingScreenProps>;
 
 export default function App(): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
@@ -38,7 +36,6 @@ export default function App(): React.JSX.Element {
   const [isBooting, setIsBooting] = useState(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [isRefreshingDiagnosticsAuth, setIsRefreshingDiagnosticsAuth] = useState(false);
-  const [MeetingScreen, setMeetingScreen] = useState<LazyMeetingScreenComponent | null>(null);
   const diagnosticsSessionRef = useRef<ChalkSession | null>(null);
   const lastJoinErrorRef = useRef<string | null>(null);
 
@@ -169,25 +166,6 @@ export default function App(): React.JSX.Element {
       subscription.remove();
     };
   }, [apiUrl, openDiagnosticsForFailure]);
-
-  useEffect(() => {
-    if (route.kind !== "lobby" || MeetingScreen) {
-      return;
-    }
-
-    let isMounted = true;
-
-    void import("./src/meeting/MobileMeetingScreen").then((module) => {
-      if (!isMounted) {
-        return;
-      }
-      setMeetingScreen(() => module.MobileMeetingScreen);
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [MeetingScreen, route.kind]);
 
   useEffect(() => {
     if (!diagnosticsEnabled) {
@@ -333,7 +311,6 @@ export default function App(): React.JSX.Element {
       <View style={styles.appShell}>
         <StatusBar style="light" />
         {renderContent({
-          MeetingScreen,
           apiUrl,
           diagnosticsEnabled,
           handleConferenceDiagnostics,
@@ -371,7 +348,6 @@ export default function App(): React.JSX.Element {
 }
 
 function renderContent({
-  MeetingScreen,
   apiUrl,
   diagnosticsEnabled,
   handleConferenceDiagnostics,
@@ -386,7 +362,6 @@ function renderContent({
   wideEvents,
   wsUrl,
 }: {
-  MeetingScreen: LazyMeetingScreenComponent | null;
   apiUrl: string;
   diagnosticsEnabled: boolean;
   handleConferenceDiagnostics: (snapshot: NativeVideoConferenceDiagnosticsSnapshot) => void;
@@ -409,12 +384,8 @@ function renderContent({
     return <HomeScreen onDiagnosticsFailure={onDiagnosticsFailure} onNavigate={onNavigate} />;
   }
 
-  if (!MeetingScreen) {
-    return <AppBootstrapScreen label="Preparing meeting..." />;
-  }
-
   return (
-    <MeetingScreen
+    <MobileMeetingScreen
       apiUrl={apiUrl}
       diagnosticsEnabled={diagnosticsEnabled}
       onClose={onClose}

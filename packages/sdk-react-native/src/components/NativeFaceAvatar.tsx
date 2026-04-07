@@ -1,18 +1,18 @@
 import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "@q9labs/chalk-core";
+import { FacehashNative } from "@q9labs/facehash";
 import { memo, useMemo, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
-import { NativeGradientSurface } from "./NativeGradientSurface";
+import { Image, StyleSheet, View } from "react-native";
 
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type AvatarStatus = "online" | "away" | "busy" | "offline";
 
-const sizeMap: Record<AvatarSize, { size: number; fontSize: number }> = {
-  xs: { size: 24, fontSize: 10 },
-  sm: { size: 32, fontSize: 12 },
-  md: { size: 48, fontSize: 16 },
-  lg: { size: 64, fontSize: 24 },
-  xl: { size: 96, fontSize: 36 },
-  "2xl": { size: 120, fontSize: 44 },
+const sizeMap: Record<AvatarSize, { size: number }> = {
+  xs: { size: 24 },
+  sm: { size: 32 },
+  md: { size: 48 },
+  lg: { size: 64 },
+  xl: { size: 96 },
+  "2xl": { size: 120 },
 };
 
 const statusColorMap: Record<AvatarStatus, string> = {
@@ -32,25 +32,17 @@ export interface NativeFaceAvatarProps {
   textSize?: number;
 }
 
-function NativeFaceAvatarBase({
-  name,
-  src,
-  size = "md",
-  status,
-  gradientPreference,
-  audioLevel = 0,
-  textSize,
-}: NativeFaceAvatarProps): React.JSX.Element {
+function NativeFaceAvatarBase({ name, src, size = "md", status, gradientPreference, audioLevel = 0 }: NativeFaceAvatarProps): React.JSX.Element {
   const [imageError, setImageError] = useState(false);
   const hasUploadedImage = Boolean(src) && !imageError;
 
-  const { pxSize, fontSize } = useMemo(() => {
+  const { pxSize } = useMemo(() => {
     if (typeof size === "number") {
-      return { pxSize: size, fontSize: textSize ?? Math.round(size * 0.34) };
+      return { pxSize: size };
     }
     const mapped = sizeMap[size];
-    return { pxSize: mapped.size, fontSize: textSize ?? mapped.fontSize };
-  }, [size, textSize]);
+    return { pxSize: mapped.size };
+  }, [size]);
 
   const avatarRecipe = useMemo(() => getParticipantAvatarRecipe(name || "unknown", gradientPreference), [gradientPreference, name]);
 
@@ -78,18 +70,9 @@ function NativeFaceAvatarBase({
     <View style={[styles.wrapper, wrapperStyle]}>
       <View style={[styles.avatar, avatarStyle]}>
         {hasUploadedImage ? (
-          <Image
-            source={{ uri: src }}
-            style={{ width: pxSize, height: pxSize, borderRadius: pxSize / 2 }}
-            onError={() => setImageError(true)}
-          />
+          <Image source={{ uri: src }} style={{ width: pxSize, height: pxSize, borderRadius: pxSize / 2 }} onError={() => setImageError(true)} />
         ) : (
-          <>
-            <NativeGradientSurface angle="diagonal" borderRadius={pxSize / 2} gradientPreference={gradientPreference} participantId={name} variant="avatar" />
-            <View style={styles.initialsContainer}>
-              <Text style={[styles.initial, { fontSize, color: "#ffffff" }]}>{avatarRecipe.initials}</Text>
-            </View>
-          </>
+          <FacehashNative colors={avatarRecipe.facehashColors} enableBlink interactive name={name || "guest"} size={pxSize} testID="native-facehash" />
         )}
       </View>
       {status && (
@@ -118,15 +101,6 @@ const styles = StyleSheet.create({
   },
   avatar: {
     overflow: "hidden",
-  },
-  initialsContainer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  initial: {
-    color: "#ffffff",
-    fontWeight: "700",
   },
   statusIndicator: {
     position: "absolute",

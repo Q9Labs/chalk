@@ -7,13 +7,14 @@ import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import ArrowRight02Icon from "@hugeicons/core-free-icons/dist/esm/ArrowRight02Icon";
 import CancelCircleIcon from "@hugeicons/core-free-icons/dist/esm/CancelCircleIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, Animated, ActivityIndicator } from "react-native";
 import { Theme } from "../ui/theme";
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
 import { NativeFaceAvatar } from "./NativeFaceAvatar";
 import type { NativePreJoinLobbyProps } from "./NativePreJoinLobby";
 import { useNativePreJoinLobbyController } from "./native-prejoin/useNativePreJoinLobbyController";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false, onCancel, ...props }: NativePreJoinLobbyProps): React.JSX.Element {
   const controller = useNativePreJoinLobbyController({ ...props, joinDisabled });
@@ -39,6 +40,8 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
   }, [entryAnim, islandAnim]);
 
   const canJoin = controller.displayName.trim().length > 0 && !joinDisabled && !controller.isSubmitting;
+  
+  const avatarColors = useMemo(() => getParticipantAvatarRecipe(controller.displayName || "guest").colors, [controller.displayName]);
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.screen}>
@@ -57,8 +60,8 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
             <NativeFaceAvatar name={controller.displayName} size={200} textSize={80} />
           </View>
         )}
-        {/* Subtle Brand Frost */}
-        <View style={styles.frostOverlay} />
+        {/* Subtle Brand Frost - only show over video, not avatar */}
+        {controller.previewStream && controller.videoEnabled && <View style={styles.frostOverlay} />}
       </View>
       
       <View style={styles.hudLayer}>
@@ -149,7 +152,13 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
               onPress={controller.handleJoin}
               style={({ pressed }) => [
                 styles.joinArrow,
-                canJoin && styles.joinArrowReady,
+                canJoin && { 
+                  backgroundColor: avatarColors.primary,
+                  shadowColor: avatarColors.primary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                },
                 pressed && canJoin && styles.pressed,
                 controller.isSubmitting && styles.disabled
               ]}
@@ -307,13 +316,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.05)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  joinArrowReady: {
-    backgroundColor: Theme.colors.primary,
-    shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
   },
   immersiveError: {
     color: Theme.colors.error,

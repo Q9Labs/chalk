@@ -35,7 +35,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@q9labs/chalk-core": "workspace:^"
+    "@q9labs/chalk-core": "workspace:^",
+    "@q9labs/facehash": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

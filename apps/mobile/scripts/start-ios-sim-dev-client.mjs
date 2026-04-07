@@ -191,7 +191,8 @@ function getBootedAppleSimulators() {
 async function main() {
   const lanIp = getLanIp();
   const bundleUrl = `http://${lanIp}:8081${bundlePath}`;
-  const devClientUrl = `exp+chalk-mobile://expo-development-client/?url=${encodeURIComponent(bundleUrl)}`;
+  const projectUrl = `http://${lanIp}:${expoPort}`;
+  const devClientUrl = `exp+chalk-mobile://expo-development-client/?url=${encodeURIComponent(projectUrl)}`;
 
   const expo = spawn("pnpm", ["exec", "expo", "start", "--clear", "--dev-client", "--host", "lan", "--port", String(expoPort)], {
     cwd: new URL("..", import.meta.url),

@@ -2,11 +2,11 @@ import { ensureIosSimulatorWebRtcSafety, isIosSimulator } from "../utils/ios-sim
 
 export const importReactNativeRealtimeKit = async () => {
   if (isIosSimulator()) {
-    const webRtcModule = await import("@cloudflare/react-native-webrtc");
+    const webRtcModule = require("@cloudflare/react-native-webrtc") as typeof import("@cloudflare/react-native-webrtc");
     ensureIosSimulatorWebRtcSafety(webRtcModule);
   }
 
-  const module = await import("@cloudflare/realtimekit-react-native");
+  const module = require("@cloudflare/realtimekit-react-native") as typeof import("@cloudflare/realtimekit-react-native");
   const realtimeKit = module.default as any;
 
   if (!isIosSimulator()) {

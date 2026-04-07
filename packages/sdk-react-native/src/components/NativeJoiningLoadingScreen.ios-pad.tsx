@@ -1,35 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import { useEffect, useRef } from "react";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../ui/theme";
-import { NativeFaceAvatar } from "./NativeFaceAvatar";
 import type { NativeJoiningLoadingScreenProps } from "./NativeJoiningLoadingScreen";
+import { ChalkLogoElements } from "./ChalkLogoElements";
 
-export function NativeJoiningLoadingScreenIosPad({ displayName, message = "Joining room...", supportingMessages = [] }: NativeJoiningLoadingScreenProps): React.JSX.Element {
-  const [messageIndex, setMessageIndex] = useState(0);
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+export function NativeJoiningLoadingScreenIosPad({ message = "Preparing meeting..." }: NativeJoiningLoadingScreenProps): React.JSX.Element {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (supportingMessages.length <= 1) {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      setMessageIndex((current) => (current + 1) % supportingMessages.length);
-    }, 2500);
-
-    return () => clearInterval(intervalId);
-  }, [supportingMessages]);
-
-  useEffect(() => {
+    // Subtle Pulse: Organic breathing
     Animated.loop(
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 1500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.1, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
     ).start();
 
     Animated.timing(fadeAnim, {
@@ -37,44 +22,26 @@ export function NativeJoiningLoadingScreenIosPad({ displayName, message = "Joini
       duration: 800,
       useNativeDriver: true,
     }).start();
-  }, [fadeAnim, rotateAnim]);
-
-  const spin = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-  const activeSupportingMessage = supportingMessages[messageIndex] ?? "Initializing...";
+  }, [fadeAnim, pulseAnim]);
 
   return (
     <View style={styles.screen}>
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <View style={styles.heroWrapper}>
-          <Animated.View style={[styles.ringContainer, { transform: [{ rotate: spin }] }]}>
-            <Svg height="160" width="160" viewBox="0 0 100 100">
-              <Circle cx="50" cy="50" r="48" stroke="rgba(255,255,255,0.04)" strokeWidth="1.5" fill="none" />
-              <Circle cx="50" cy="50" r="48" stroke={Theme.colors.primary} strokeWidth="2" strokeDasharray="50 210" strokeLinecap="round" fill="none" />
-            </Svg>
-          </Animated.View>
-
-          <View style={styles.avatarInner}>
-            <NativeFaceAvatar name={displayName} size={100} />
-          </View>
+        <View style={styles.illustrationFrame}>
+          <Animated.View 
+            style={[
+              styles.glow, 
+              { 
+                transform: [{ scale: pulseAnim }],
+                opacity: pulseAnim.interpolate({ inputRange: [1, 1.1], outputRange: [0.12, 0.18] })
+              }
+            ]} 
+          />
+          <ChalkLogoElements size={100} />
         </View>
-
-        <View style={styles.infoArea}>
-          <Text style={styles.messageText}>{message}</Text>
-          <Text style={styles.participantName}>{displayName}</Text>
-        </View>
-
-        <View style={styles.statusBadge}>
-          <View style={styles.dot} />
-          <Text style={styles.supportingText}>{activeSupportingMessage}</Text>
-        </View>
+        <Text style={styles.brand}>chalk</Text>
+        <Text style={styles.label}>{message}</Text>
       </Animated.View>
-
-      <View style={styles.footer}>
-        <Text style={styles.brandText}>chalk</Text>
-      </View>
     </View>
   );
 }
@@ -88,72 +55,39 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: "center",
-    width: "100%",
-    paddingHorizontal: 40,
+    justifyContent: "center",
+    gap: 16,
   },
-  heroWrapper: {
-    width: 200,
-    height: 200,
+  illustrationFrame: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(27, 182, 166, 0.04)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 48,
-  },
-  ringContainer: {
-    position: "absolute",
-  },
-  avatarInner: {
-    zIndex: 2,
-  },
-  infoArea: {
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 40,
-  },
-  messageText: {
-    color: Theme.colors.foreground,
-    fontSize: 28,
-    fontWeight: "800",
-    textAlign: "center",
-    letterSpacing: -0.6,
-  },
-  participantName: {
-    color: Theme.colors.mutedForeground,
-    fontSize: 18,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 9999,
+    position: "relative",
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(27, 182, 166, 0.08)",
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  glow: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: Theme.colors.primary,
   },
-  supportingText: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 13,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-  },
-  footer: {
-    position: "absolute",
-    bottom: Platform.OS === "ios" ? 50 : 36,
-  },
-  brandText: {
-    color: "rgba(255,255,255,0.08)",
-    fontSize: 16,
+  brand: {
+    fontSize: 32,
     fontWeight: "800",
-    letterSpacing: -0.5,
+    color: Theme.colors.foreground,
+    letterSpacing: -1,
+  },
+  label: {
+    fontSize: 17,
+    lineHeight: 24,
+    color: Theme.colors.mutedForeground,
+    textAlign: "center",
+    maxWidth: 300,
   },
 });
