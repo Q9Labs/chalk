@@ -11,82 +11,70 @@ export interface NativeMeetingTopBarProps {
 
 export function NativeMeetingTopBarIosPad({ roomName, participantCount, formattedDuration }: NativeMeetingTopBarProps): React.JSX.Element {
   return (
-    <View style={styles.topBarLayer}>
-      {/* Identity Pod */}
-      <View style={styles.pod}>
-        <View style={styles.connectionDot} />
-        <Text style={styles.roomName} numberOfLines={1}>{roomName}</Text>
-        <View style={styles.divider} />
-        <Text style={styles.duration}>{formattedDuration}</Text>
+    <View style={styles.hudLayer}>
+      {/* Left HUD: Room & Time */}
+      <View style={styles.hudGroup}>
+        <View style={styles.statusDot} />
+        <Text style={styles.roomText}>{roomName}</Text>
+        <Text style={styles.timeText}>{formattedDuration}</Text>
       </View>
 
-      {/* Presence Pod */}
-      <View style={styles.pod}>
-        <HugeiconsIcon icon={UserGroupIcon} size={18} color={Theme.colors.primary} />
-        <Text style={styles.count}>{participantCount}</Text>
+      {/* Right HUD: Presence */}
+      <View style={styles.hudGroup}>
+        <HugeiconsIcon icon={UserGroupIcon} size={16} color="rgba(255,255,255,0.7)" />
+        <Text style={styles.countText}>{participantCount}</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  topBarLayer: {
+  hudLayer: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 40 : 32,
-    left: 40,
-    right: 40,
+    top: Platform.OS === "ios" ? 44 : 24,
+    left: 32,
+    right: 32,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     zIndex: 100,
   },
-  pod: {
+  hudGroup: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(10, 10, 12, 0.85)",
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    height: 48,
     gap: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
   },
-  connectionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: Theme.colors.success,
     shadowColor: Theme.colors.success,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
+    shadowOpacity: 1,
     shadowRadius: 6,
   },
-  roomName: {
+  roomText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
-    letterSpacing: -0.2,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  divider: {
-    width: 1,
-    height: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-  },
-  duration: {
-    color: "rgba(255,255,255,0.6)",
+  timeText: {
+    color: "rgba(255,255,255,0.5)",
     fontSize: 13,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
-  count: {
+  countText: {
     color: "white",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 });
+
 

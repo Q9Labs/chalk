@@ -1,8 +1,9 @@
 import { resolveNativePlatformVariant } from "../../platform/native-platform";
-import { NativeMeetingBottomDockAndroid, type NativeMeetingBottomDockProps } from "./NativeMeetingBottomDock.android";
+import { NativeMeetingBottomDockAndroid } from "./NativeMeetingBottomDock.android";
 import { NativeMeetingBottomDockIosPad } from "./NativeMeetingBottomDock.ios-pad";
 import { NativeMeetingBottomDockIosPhone } from "./NativeMeetingBottomDock.ios-phone";
 import { NativeMeetingBottomDockMacos } from "./NativeMeetingBottomDock.macos";
+import type { NativeMeetingBottomDockProps } from "./types";
 
 export function NativeMeetingBottomDock(props: NativeMeetingBottomDockProps): React.JSX.Element {
   switch (resolveNativePlatformVariant()) {

@@ -89,11 +89,18 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
       <NativeMeetingBottomDock
         isCameraOff={controller.isCameraOff}
         isMuted={controller.isMuted}
+        isHandRaised={controller.handRaised}
+        isScreenSharing={controller.screenShare.isLocalSharing}
         simulatorMediaDisabled={controller.simulatorMediaDisabled}
         unreadChatCount={controller.chat.unreadCount}
+        participantCount={controller.participantCount}
         onLeave={controller.handleLeave}
         onOpenChat={() => controller.openPanel("chat")}
+        onOpenParticipants={() => controller.openPanel("participants")}
+        onOpenReactions={() => controller.setReactionPickerOpen(true)}
         onOpenMore={() => controller.setActionsOpen(true)}
+        onToggleHand={controller.toggleHand}
+        onToggleScreenShare={controller.toggleScreenShare}
         onToggleAudio={() => {
           if (controller.simulatorMediaDisabled) {
             Alert.alert("Media unavailable", getIosSimulatorMediaMessage());
@@ -129,7 +136,6 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
         }}
         onOpenSettings={() => controller.openPanel("settings")}
         onOpenTranscripts={() => controller.openPanel("transcripts")}
-        onOpenWhiteboard={() => controller.openPanel("whiteboard")}
         onToggleHand={() => {
           controller.setActionsOpen(false);
           controller.toggleHand();
@@ -142,7 +148,6 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
         screenShareEnabled={controller.canScreenShare}
         transcriptsEnabled={controller.canTranscripts}
         visible={controller.actionsOpen}
-        whiteboardEnabled={controller.canWhiteboard}
       />
 
       <NativeReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={controller.sendReaction} />

@@ -2,7 +2,6 @@ import CallEnd01Icon from "@hugeicons/core-free-icons/dist/esm/CallEnd01Icon";
 import Chat01Icon from "@hugeicons/core-free-icons/dist/esm/Chat01Icon";
 import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
-import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
 import Settings01Icon from "@hugeicons/core-free-icons/dist/esm/Settings01Icon";
 import SmileIcon from "@hugeicons/core-free-icons/dist/esm/SmileIcon";
 import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
@@ -13,31 +12,7 @@ import { memo } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { Theme } from "../ui/theme";
 
-export interface NativeMeetingActionsSheetProps {
-  visible: boolean;
-  isHandRaised: boolean;
-  isScreenSharing: boolean;
-  chatEnabled: boolean;
-  peopleEnabled: boolean;
-  transcriptsEnabled: boolean;
-  whiteboardEnabled: boolean;
-  screenShareEnabled: boolean;
-  settingsEnabled: boolean;
-  chatUnreadCount: number;
-  participantCount: number;
-  raisedHandCount: number;
-  onClose: () => void;
-  onInviteParticipants: () => void;
-  onOpenChat: () => void;
-  onOpenParticipants: () => void;
-  onToggleHand: () => void;
-  onOpenReactions: () => void;
-  onOpenWhiteboard: () => void;
-  onToggleScreenShare: () => void;
-  onOpenTranscripts: () => void;
-  onOpenSettings: () => void;
-  onLeaveMeeting: () => void;
-}
+import type { NativeMeetingActionsSheetProps } from "./native-meeting-room/types";
 
 const accent = Theme.colors.primary;
 const tileBackground = Theme.colors.secondary;
@@ -49,7 +24,6 @@ function NativeMeetingActionsSheetIosPadBase({
   chatEnabled,
   peopleEnabled,
   transcriptsEnabled,
-  whiteboardEnabled,
   screenShareEnabled,
   settingsEnabled,
   chatUnreadCount,
@@ -61,20 +35,17 @@ function NativeMeetingActionsSheetIosPadBase({
   onOpenParticipants,
   onToggleHand,
   onOpenReactions,
-  onOpenWhiteboard,
   onToggleScreenShare,
   onOpenTranscripts,
   onOpenSettings,
   onLeaveMeeting,
 }: NativeMeetingActionsSheetProps): React.JSX.Element {
   return (
-    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop}>
           <TouchableWithoutFeedback>
             <View style={styles.sheet}>
-              <View style={styles.dragHandle} />
-
               <View style={styles.sectionsContainer}>
                 <View style={styles.section}>
                   <Text style={styles.sectionLabel}>Communicate</Text>
@@ -86,10 +57,9 @@ function NativeMeetingActionsSheetIosPadBase({
                 </View>
 
                 <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Collaborate</Text>
+                  <Text style={styles.sectionLabel}>Collaboration</Text>
                   <View style={styles.grid}>
                     <ActionTile active={isHandRaised} badge={raisedHandCount > 0 ? formatBadge(raisedHandCount) : null} icon={WavingHand01Icon} label="Raise Hand" onPress={onToggleHand} />
-                    <ActionTile disabled={!whiteboardEnabled} icon={Presentation01Icon} label="Whiteboard" onPress={onOpenWhiteboard} />
                     <ActionTile active={isScreenSharing} disabled={!screenShareEnabled} icon={ComputerScreenShareIcon} label="Share Screen" onPress={onToggleScreenShare} />
                   </View>
                 </View>
@@ -140,28 +110,25 @@ function formatBadge(value: number): string {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.1)",
     justifyContent: "center",
     alignItems: "center",
   },
   sheet: {
-    backgroundColor: "#0c0c0e",
+    backgroundColor: "rgba(12, 12, 14, 0.98)",
     borderRadius: 32,
-    paddingTop: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingTop: 32,
+    paddingHorizontal: 32,
+    paddingBottom: 32,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.12)",
     width: "100%",
-    maxWidth: 480,
+    maxWidth: 520,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.5,
-    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.6,
+    shadowRadius: 32,
     elevation: 24,
-  },
-  dragHandle: {
-    display: "none",
   },
   sectionsContainer: {
     gap: 20,

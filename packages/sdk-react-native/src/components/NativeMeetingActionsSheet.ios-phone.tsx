@@ -13,31 +13,7 @@ import { memo } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { Theme } from "../ui/theme";
 
-export interface NativeMeetingActionsSheetProps {
-  visible: boolean;
-  isHandRaised: boolean;
-  isScreenSharing: boolean;
-  chatEnabled: boolean;
-  peopleEnabled: boolean;
-  transcriptsEnabled: boolean;
-  whiteboardEnabled: boolean;
-  screenShareEnabled: boolean;
-  settingsEnabled: boolean;
-  chatUnreadCount: number;
-  participantCount: number;
-  raisedHandCount: number;
-  onClose: () => void;
-  onInviteParticipants: () => void;
-  onOpenChat: () => void;
-  onOpenParticipants: () => void;
-  onToggleHand: () => void;
-  onOpenReactions: () => void;
-  onOpenWhiteboard: () => void;
-  onToggleScreenShare: () => void;
-  onOpenTranscripts: () => void;
-  onOpenSettings: () => void;
-  onLeaveMeeting: () => void;
-}
+import type { NativeMeetingActionsSheetProps } from "./native-meeting-room/types";
 
 const accent = Theme.colors.primary;
 const tileBackground = Theme.colors.secondary;
@@ -89,7 +65,9 @@ function NativeMeetingActionsSheetIosPhoneBase({
                   <Text style={styles.sectionLabel}>Collaborate</Text>
                   <View style={styles.grid}>
                     <ActionTile active={isHandRaised} badge={raisedHandCount > 0 ? formatBadge(raisedHandCount) : null} icon={WavingHand01Icon} label="Raise Hand" onPress={onToggleHand} />
-                    <ActionTile disabled={!whiteboardEnabled} icon={Presentation01Icon} label="Whiteboard" onPress={onOpenWhiteboard} />
+                    {onOpenWhiteboard && (
+                      <ActionTile disabled={!whiteboardEnabled} icon={Presentation01Icon} label="Whiteboard" onPress={onOpenWhiteboard} />
+                    )}
                     <ActionTile active={isScreenSharing} disabled={!screenShareEnabled} icon={ComputerScreenShareIcon} label="Share Screen" onPress={onToggleScreenShare} />
                   </View>
                 </View>

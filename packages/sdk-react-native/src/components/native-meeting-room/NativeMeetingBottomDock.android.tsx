@@ -9,17 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../../ui/theme";
 
-export interface NativeMeetingBottomDockProps {
-  simulatorMediaDisabled: boolean;
-  isMuted: boolean;
-  isCameraOff: boolean;
-  unreadChatCount: number;
-  onToggleAudio: () => void;
-  onToggleVideo: () => void;
-  onOpenChat: () => void;
-  onOpenMore: () => void;
-  onLeave: () => void;
-}
+import type { NativeMeetingBottomDockProps } from "./types";
 
 export function NativeMeetingBottomDockAndroid({ simulatorMediaDisabled, isMuted, isCameraOff, unreadChatCount, onToggleAudio, onToggleVideo, onOpenChat, onOpenMore, onLeave }: NativeMeetingBottomDockProps): React.JSX.Element {
   return (

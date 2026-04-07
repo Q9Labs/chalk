@@ -5,7 +5,7 @@ import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation
 import RecordIcon from "@hugeicons/core-free-icons/dist/esm/RecordIcon";
 import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
 import type { NativeMeetingPrimaryContent } from "../../utils/native-meeting-layout";
 import { Theme } from "../../ui/theme";
 import { NativeGradientSurface } from "../NativeGradientSurface";
@@ -304,6 +304,7 @@ const styles = StyleSheet.create({
   },
   reactionEmoji: {
     fontSize: 20,
+    fontFamily: Platform.OS === "ios" ? "Apple Color Emoji" : undefined,
   },
   reactionName: {
     flex: 1,
