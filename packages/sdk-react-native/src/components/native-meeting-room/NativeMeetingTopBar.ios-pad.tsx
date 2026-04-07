@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 export interface NativeMeetingTopBarProps {
   roomName: string;
@@ -22,25 +22,25 @@ export function NativeMeetingTopBarIosPad({ roomName, formattedDuration }: Nativ
 const styles = StyleSheet.create({
   hudLayer: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 44 : 24,
+    bottom: 20,
     left: 32,
     zIndex: 100,
   },
   roomPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(10, 10, 12, 0.85)",
+    backgroundColor: "rgba(10, 10, 12, 0.45)",
     borderRadius: 20,
     paddingHorizontal: 16,
     height: 40,
     gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.15)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   roomText: {
     color: "white",

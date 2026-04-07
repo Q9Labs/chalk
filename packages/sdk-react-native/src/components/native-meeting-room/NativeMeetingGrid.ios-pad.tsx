@@ -17,7 +17,7 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
   // Adaptive Mesh Constants
   const GAP = 16;
   const TOP_BAR_H = 40; 
-  const BOTTOM_DOCK_H = 120;
+  const BOTTOM_DOCK_H = 150; // Increased to create a visual channel above the bezel-locked dock
   const containerWidth = width - 40; 
   const containerHeight = height - TOP_BAR_H - BOTTOM_DOCK_H;
 
@@ -136,13 +136,13 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 20,
     paddingTop: 40, 
-    paddingBottom: 20,
+    paddingBottom: 40, // Balanced vertical buffer
   },
   meshContentFlat: {
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 40,
-    paddingBottom: 20,
+    paddingBottom: 40, // Balanced vertical buffer
     gap: 16,
   },
   meshRow: {

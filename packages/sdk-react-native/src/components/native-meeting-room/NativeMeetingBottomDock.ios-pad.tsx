@@ -218,6 +218,8 @@ const styles = StyleSheet.create({
   },
   exitButton: {
     backgroundColor: "#ff4d4d",
+    width: 84,
+    borderRadius: 20,
   },
   buttonDisabled: {
     opacity: 0.4,
