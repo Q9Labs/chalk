@@ -13,7 +13,7 @@ import Video01Icon from "@hugeicons/core-free-icons/dist/esm/Video01Icon";
 import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View, useWindowDimensions } from "react-native";
 import { Theme } from "../ui/theme";
 import type { NativeMeetingPanelName, RoomParticipant } from "./native-meeting-room/types";
 
@@ -84,13 +84,16 @@ export function NativeMeetingPanelIosPad({
   onUnmuteParticipant,
   onRemoveParticipant,
 }: NativeMeetingPanelProps): React.JSX.Element | null {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
   return (
     <Modal animationType="slide" transparent={true} visible={!!panel} onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop}>
+        <View style={[styles.backdrop, !isLandscape && styles.backdropPortrait]}>
           <TouchableWithoutFeedback>
-            <View style={styles.sheet}>
-              <View style={styles.dragHandle} />
+            <View style={[styles.sheet, isLandscape ? styles.sheetLandscape : styles.sheetPortrait]}>
+              {isLandscape ? null : <View style={styles.dragHandle} />}
 
               <View style={styles.sheetHeader}>
                 <View style={styles.titleRow}>
@@ -258,10 +261,10 @@ function DeviceList({ devices, selectedId, onSelect }: { devices: readonly Media
   return (
     <View style={styles.deviceList}>
       {devices.map((device) => {
-        const selected = device.id === selectedId;
+        const selected = device.deviceId === selectedId;
         return (
-          <Pressable key={device.id} onPress={() => onSelect(device.id)} style={[styles.deviceRow, selected && styles.deviceRowSelected]}>
-            <Text style={[styles.deviceName, selected && styles.deviceNameSelected]}>{device.label || device.id}</Text>
+          <Pressable key={device.deviceId} onPress={() => onSelect(device.deviceId)} style={[styles.deviceRow, selected && styles.deviceRowSelected]}>
+            <Text style={[styles.deviceName, selected && styles.deviceNameSelected]}>{device.label || device.deviceId}</Text>
             {selected ? <HugeiconsIcon icon={Settings01Icon} size={14} color={Theme.colors.primary} /> : null}
           </Pressable>
         );
@@ -307,20 +310,43 @@ function panelIcon(panel: NativeMeetingPanelName | null): any {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  backdropPortrait: {
     justifyContent: "flex-end",
   },
   sheet: {
     backgroundColor: "#101115",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    shadowColor: "#000",
+  },
+  sheetLandscape: {
+    width: 380,
+    height: "100%",
+    paddingTop: Platform.OS === "ios" ? 60 : 24,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    borderLeftWidth: 1,
+    borderBottomWidth: 0,
+    shadowOffset: { width: -8, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+  },
+  sheetPortrait: {
+    width: "100%",
+    maxHeight: "82%",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 10,
     paddingHorizontal: 18,
     paddingBottom: Platform.OS === "ios" ? 40 : 24,
-    borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: "rgba(255,255,255,0.06)",
-    maxHeight: "82%",
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
   },
   dragHandle: {
     width: 42,

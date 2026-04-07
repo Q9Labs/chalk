@@ -6,14 +6,17 @@ import Message01Icon from "@hugeicons/core-free-icons/dist/esm/Message01Icon";
 import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Theme } from "../ui/theme";
 import type { NativeEndScreenProps } from "./NativeEndScreen";
 
 export function NativeEndScreenIosPad({ data, onRejoin, onGoHome }: NativeEndScreenProps): React.JSX.Element {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
   return (
     <View style={styles.screen}>
-      <View style={styles.content}>
+      <View style={[styles.content, isLandscape && styles.contentLandscape]}>
         <View style={styles.header}>
           <View style={styles.iconCircle}>
             <HugeiconsIcon icon={CheckmarkCircle01Icon} size={40} color={Theme.colors.success} />
@@ -24,14 +27,14 @@ export function NativeEndScreenIosPad({ data, onRejoin, onGoHome }: NativeEndScr
           </Text>
         </View>
 
-        <View style={styles.statsContainer}>
-          <StatItem icon={Clock01Icon} label="Duration" value={formatDuration(data.durationSeconds)} />
-          <StatItem icon={UserGroupIcon} label="Participants" value={data.participantCount.toString()} />
-          <StatItem icon={Message01Icon} label="Messages" value={data.chatCount.toString()} />
-          <StatItem icon={TextFontIcon} label="Transcript" value={`${data.transcriptCount} lines`} />
+        <View style={[styles.statsContainer, isLandscape && styles.statsContainerLandscape]}>
+          <StatItem icon={Clock01Icon} isLandscape={isLandscape} label="Duration" value={formatDuration(data.durationSeconds)} />
+          <StatItem icon={UserGroupIcon} isLandscape={isLandscape} label="Participants" value={data.participantCount.toString()} />
+          <StatItem icon={Message01Icon} isLandscape={isLandscape} label="Messages" value={data.chatCount.toString()} />
+          <StatItem icon={TextFontIcon} isLandscape={isLandscape} label="Transcript" value={`${data.transcriptCount} lines`} />
         </View>
 
-        <View style={styles.actions}>
+        <View style={[styles.actions, isLandscape && styles.actionsLandscape]}>
           <Pressable onPress={onRejoin} style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Rejoin Meeting</Text>
             <HugeiconsIcon icon={ArrowRight01Icon} size={20} color="white" />
@@ -47,9 +50,9 @@ export function NativeEndScreenIosPad({ data, onRejoin, onGoHome }: NativeEndScr
   );
 }
 
-function StatItem({ icon, label, value }: { icon: any; label: string; value: string }): React.JSX.Element {
+function StatItem({ icon, label, value, isLandscape }: { icon: any; label: string; value: string; isLandscape?: boolean }): React.JSX.Element {
   return (
-    <View style={styles.statRow}>
+    <View style={[styles.statRow, isLandscape && styles.statRowLandscape]}>
       <View style={styles.statIconBox}>
         <HugeiconsIcon icon={icon} size={20} color={Theme.colors.primary} />
       </View>
@@ -85,55 +88,71 @@ const styles = StyleSheet.create({
   },
   content: {
     width: "100%",
-    maxWidth: 400,
+    maxWidth: 640,
     alignSelf: "center",
+  },
+  contentLandscape: {
+    maxWidth: 900,
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 48,
   },
   iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: "rgba(34, 197, 94, 0.1)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(34, 197, 94, 0.2)",
   },
   eyebrow: {
     color: Theme.colors.success,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1.5,
-    marginBottom: 8,
+    letterSpacing: 2,
+    marginBottom: 12,
   },
   title: {
     color: "white",
-    fontSize: 32,
+    fontSize: 42,
     fontWeight: "800",
     textAlign: "center",
-    letterSpacing: -0.5,
+    letterSpacing: -1,
   },
   statsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 24,
-    padding: 24,
-    gap: 20,
+    borderRadius: 32,
+    padding: 32,
+    gap: 32,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
-    marginBottom: 40,
+    marginBottom: 48,
+    justifyContent: "space-between",
+  },
+  statsContainerLandscape: {
+    padding: 40,
+    gap: 24,
   },
   statRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
+    width: "45%",
+  },
+  statRowLandscape: {
+    width: "22%",
   },
   statIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     backgroundColor: "rgba(27, 182, 166, 0.1)",
     alignItems: "center",
     justifyContent: "center",
@@ -143,30 +162,37 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     color: Theme.colors.mutedForeground,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   statValue: {
     color: "white",
-    fontSize: 17,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
   },
   actions: {
-    gap: 12,
+    flexDirection: "row",
+    gap: 16,
+  },
+  actionsLandscape: {
+    maxWidth: 540,
+    alignSelf: "center",
+    width: "100%",
   },
   primaryButton: {
+    flex: 1.5,
     backgroundColor: Theme.colors.primary,
-    height: 64,
-    borderRadius: 20,
+    height: 68,
+    borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     shadowColor: Theme.colors.primary,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
-    shadowRadius: 15,
+    shadowRadius: 16,
     elevation: 8,
   },
   primaryButtonText: {
@@ -175,17 +201,20 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   secondaryButton: {
-    height: 60,
-    borderRadius: 20,
+    flex: 1,
+    height: 68,
+    borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   secondaryButtonText: {
-    color: Theme.colors.mutedForeground,
-    fontSize: 16,
-    fontWeight: "600",
+    color: "white",
+    fontSize: 18,
+    fontWeight: "700",
   },
 });

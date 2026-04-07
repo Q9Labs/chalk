@@ -10,7 +10,7 @@ const proxyMappings = [
   [8082, 8089],
   [8083, 8090],
 ];
-const bundlePath = "/apps/mobile/index.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.routerRoot=app";
+const bundlePath = "/apps/mobile/index.bundle?platform=ios&dev=true&hot=true&lazy=true&transform.routerRoot=app";
 
 function getLanIp() {
   const interfaces = os.networkInterfaces();
@@ -171,6 +171,23 @@ function reverseAdbPorts() {
   }
 }
 
+function getBootedAppleSimulators() {
+  try {
+    const output = execFileSync("xcrun", ["simctl", "list", "devices", "--json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const parsed = JSON.parse(output);
+    const devices = Object.values(parsed.devices ?? {}).flatMap((entries) => entries ?? []);
+
+    return devices
+      .filter((device) => device.state === "Booted" && typeof device.udid === "string")
+      .map((device) => device.udid);
+  } catch {
+    return ["booted"];
+  }
+}
+
 async function main() {
   const lanIp = getLanIp();
   const bundleUrl = `http://${lanIp}:8081${bundlePath}`;
@@ -218,8 +235,10 @@ async function main() {
     console.log("Bundle prewarm finished.");
     console.log(`Opening iOS dev client with ${devClientUrl}`);
 
-    await runCommand("xcrun", ["simctl", "launch", "booted", "ai.q9labs.chalk.mobile"]).catch(() => {});
-    await runCommand("xcrun", ["simctl", "openurl", "booted", devClientUrl]);
+    for (const simulatorUdid of getBootedAppleSimulators()) {
+      await runCommand("xcrun", ["simctl", "launch", simulatorUdid, "ai.q9labs.chalk.mobile"]).catch(() => {});
+      await runCommand("xcrun", ["simctl", "openurl", simulatorUdid, devClientUrl]);
+    }
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     cleanup();

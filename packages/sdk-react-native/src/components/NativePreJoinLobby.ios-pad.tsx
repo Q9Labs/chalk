@@ -6,7 +6,7 @@ import UserIcon from "@hugeicons/core-free-icons/dist/esm/UserIcon";
 import Video01Icon from "@hugeicons/core-free-icons/dist/esm/Video01Icon";
 import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { Theme } from "../ui/theme";
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
 import { NativeFaceAvatar } from "./NativeFaceAvatar";
@@ -14,13 +14,15 @@ import type { NativePreJoinLobbyProps } from "./NativePreJoinLobby";
 import { useNativePreJoinLobbyController } from "./native-prejoin/useNativePreJoinLobbyController";
 
 export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false, onCancel, ...props }: NativePreJoinLobbyProps): React.JSX.Element {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
   const controller = useNativePreJoinLobbyController({ ...props, joinDisabled });
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.screen}>
-      <View style={styles.content}>
-        <View style={styles.previewContainer}>
-          <View style={styles.previewSurface}>
+      <View style={[styles.content, isLandscape && styles.contentLandscape]}>
+        <View style={[styles.previewContainer, isLandscape && styles.previewContainerLandscape]}>
+          <View style={[styles.previewSurface, isLandscape && styles.previewSurfaceLandscape]}>
             {controller.previewStream && controller.videoEnabled ? (
               <RTCView mirror objectFit="cover" streamURL={controller.previewStream.toURL()} style={styles.previewVideo} zOrder={0} />
             ) : (
@@ -38,8 +40,8 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
           {controller.simulatorMediaDisabled ? <Text style={styles.previewHint}>{getIosSimulatorMediaMessage()}</Text> : null}
         </View>
 
-        <View style={styles.sheetContainer}>
-          <View style={styles.sheetHandle} />
+        <View style={[styles.sheetContainer, isLandscape && styles.sheetContainerLandscape]}>
+          {!isLandscape && <View style={styles.sheetHandle} />}
           <View style={styles.sheetHeader}>
             <Text style={styles.roomName} numberOfLines={1}>
               {roomName}
@@ -94,6 +96,12 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  contentLandscape: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 40,
+    gap: 40,
+  },
   floatingBack: {
     position: "absolute",
     top: Platform.OS === "ios" ? 24 : 20,
@@ -111,12 +119,20 @@ const styles = StyleSheet.create({
   previewContainer: {
     flex: 1,
     justifyContent: "center",
-    paddingTop: Platform.OS === "ios" ? 10 : 0,
-    marginBottom: 0,
+    padding: 24,
+    maxWidth: 900,
+    alignSelf: "center",
+    width: "100%",
+  },
+  previewContainerLandscape: {
+    flex: 1.4,
+    maxWidth: undefined,
+    alignSelf: "auto",
+    padding: 0,
   },
   previewSurface: {
     width: "100%",
-    aspectRatio: 0.72,
+    aspectRatio: 1.33,
     backgroundColor: "#0e0e11",
     borderRadius: 32,
     alignSelf: "center",
@@ -124,6 +140,13 @@ const styles = StyleSheet.create({
     position: "relative",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+  },
+  previewSurfaceLandscape: {
+    aspectRatio: 1.4,
   },
   previewVideo: {
     ...StyleSheet.absoluteFillObject,
@@ -136,66 +159,81 @@ const styles = StyleSheet.create({
   },
   togglePressed: {
     opacity: 0.7,
-    transform: [{ scale: 0.9 }],
+    transform: [{ scale: 0.96 }],
   },
   previewError: {
     color: Theme.colors.error,
-    fontSize: 12,
-    marginTop: 10,
+    fontSize: 14,
+    marginTop: 16,
     textAlign: "center",
     fontWeight: "600",
     paddingHorizontal: 24,
   },
   previewHint: {
     color: Theme.colors.mutedForeground,
-    fontSize: 12,
-    marginTop: 10,
+    fontSize: 14,
+    marginTop: 16,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 22,
     paddingHorizontal: 24,
   },
   sheetContainer: {
     backgroundColor: "#16161a",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === "ios" ? 44 : 32,
-    gap: 20,
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    paddingHorizontal: 48,
+    paddingTop: 24,
+    paddingBottom: Platform.OS === "ios" ? 48 : 32,
+    gap: 24,
     borderTopWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -12 },
     shadowOpacity: 0.3,
-    shadowRadius: 16,
+    shadowRadius: 24,
     elevation: 20,
+    maxWidth: 600,
+    alignSelf: "center",
+    width: "100%",
+  },
+  sheetContainerLandscape: {
+    flex: 1,
+    maxWidth: 420,
+    borderRadius: 32,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderWidth: 1,
+    paddingHorizontal: 32,
+    paddingTop: 32,
+    paddingBottom: 32,
+    alignSelf: "auto",
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+    width: 48,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: "rgba(255,255,255,0.1)",
     alignSelf: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   sheetHeader: {
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   roomName: {
     color: Theme.colors.foreground,
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "800",
     textAlign: "center",
-    letterSpacing: -0.6,
+    letterSpacing: -0.8,
   },
   inputCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    height: 56,
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    height: 64,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
@@ -204,24 +242,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(27, 182, 166, 0.04)",
   },
   inputIcon: {
-    marginRight: 24,
+    marginRight: 16,
   },
   nameInput: {
     flex: 1,
     color: "white",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     padding: 0,
   },
   mediaRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 20,
+    gap: 24,
   },
   controlCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
@@ -238,14 +276,14 @@ const styles = StyleSheet.create({
   joinButton: {
     width: "100%",
     backgroundColor: Theme.colors.primary,
-    height: 58,
-    borderRadius: 18,
+    height: 64,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
     elevation: 6,
   },
   joinButtonDimmed: {
@@ -257,8 +295,8 @@ const styles = StyleSheet.create({
   },
   joinButtonText: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
   },
   globalError: {
     color: Theme.colors.error,

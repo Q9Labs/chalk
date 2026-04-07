@@ -147,14 +147,10 @@ const styles = StyleSheet.create({
   roomScreen: {
     flex: 1,
     backgroundColor: "#000000",
-    paddingHorizontal: 0,
   },
   stageFrame: {
     flex: 1,
     backgroundColor: "#000000",
     width: "100%",
-    borderRadius: 24,
-    overflow: "hidden",
-    justifyContent: "center",
   },
 });

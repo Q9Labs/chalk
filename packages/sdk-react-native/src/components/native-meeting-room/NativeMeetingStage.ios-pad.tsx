@@ -340,7 +340,8 @@ const styles = StyleSheet.create({
     minHeight: 96,
   },
   stripShellHorizontal: {
-    height: 110,
+    height: 140,
+    paddingBottom: 40,
   },
   stripShellVertical: {
     width: 110,

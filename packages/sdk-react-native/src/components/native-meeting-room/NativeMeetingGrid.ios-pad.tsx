@@ -36,7 +36,7 @@ export function NativeMeetingGridIosPad({ participants, gridPages }: NativeMeeti
       return gridPages;
     }
 
-    const perPage = 6;
+    const perPage = 12;
     const pages: RoomParticipant[][] = [];
     for (let index = 0; index < participants.length; index += perPage) {
       pages.push(participants.slice(index, index + perPage));
@@ -66,61 +66,6 @@ export function NativeMeetingGridIosPad({ participants, gridPages }: NativeMeeti
     );
   }
 
-  if (!isTablet && participants.length <= 4) {
-    if (participants.length === 2) {
-      return (
-        <View style={styles.compactTwoUp}>
-          {participants.map((participant, index) => (
-            <View key={`${participant.id}-${index}`} style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participant} track={getParticipantTileTrack(participant)} />
-            </View>
-          ))}
-        </View>
-      );
-    }
-
-    if (participants.length === 3) {
-      return (
-        <View style={styles.compactThree}>
-          <View style={styles.compactThreeTop}>
-            <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
-          </View>
-          <View style={styles.compactThreeBottom}>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
-            </View>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    if (participants.length === 4) {
-      return (
-        <View style={styles.compactFour}>
-          <View style={styles.gridRow}>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[0]!} track={getParticipantTileTrack(participants[0]!)} />
-            </View>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[1]!} track={getParticipantTileTrack(participants[1]!)} />
-            </View>
-          </View>
-          <View style={styles.gridRow}>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[2]!} track={getParticipantTileTrack(participants[2]!)} />
-            </View>
-            <View style={styles.gridTile}>
-              <NativeMediaView emphasizeMuted participant={participants[3]!} track={getParticipantTileTrack(participants[3]!)} />
-            </View>
-          </View>
-        </View>
-      );
-    }
-  }
-
   return (
     <View style={styles.pagedContainer}>
       <FlatList
@@ -141,7 +86,10 @@ export function NativeMeetingGridIosPad({ participants, gridPages }: NativeMeeti
         showsHorizontalScrollIndicator={false}
         windowSize={3}
         renderItem={({ item: page }) => {
-          const columns = isTablet ? (width > height ? 3 : 2) : 2;
+          let columns = 2;
+          if (isTablet) {
+            columns = width > height ? 4 : 3;
+          }
           const rows = buildWideParticipantRows(page, columns);
 
           return (
@@ -157,7 +105,6 @@ export function NativeMeetingGridIosPad({ participants, gridPages }: NativeMeeti
                     {row.length < columns && Array.from({ length: columns - row.length }).map((_, index) => <View key={`filler-${index}`} style={[styles.gridTile, { backgroundColor: "transparent" }]} />)}
                   </View>
                 ))}
-                {isTablet && rows.length < (width > height ? 2 : 3) ? <View style={{ flex: (width > height ? 2 : 3) - rows.length }} /> : null}
               </View>
             </View>
           );
