@@ -1,9 +1,7 @@
 import { MediaStream, type MediaStreamTrack as NativeMediaStreamTrack, RTCView } from "@cloudflare/react-native-webrtc";
-import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
-import { HugeiconsIcon } from "@hugeicons/react-native";
 import type { Participant } from "@q9labs/chalk-core";
 import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Theme } from "../ui/theme";
 import { shouldRenderNativeMediaTrack } from "./native-media-visibility";
 import { NativeFaceAvatar } from "./NativeFaceAvatar";
@@ -20,7 +18,7 @@ interface NativeMediaViewProps {
   zOrder?: number;
 }
 
-export function NativeMediaView({ participant, track, mediaKind = "camera", label, mirror = false, objectFit = "cover", emphasizeMuted = false, zOrder = 0 }: NativeMediaViewProps): React.JSX.Element {
+export function NativeMediaView({ participant, track, mediaKind = "camera", label, mirror = false, objectFit = "cover", zOrder = 0 }: NativeMediaViewProps): React.JSX.Element {
   const shouldRenderVideo = shouldRenderNativeMediaTrack({ participant, track, mediaKind });
   const stream = useMemo(() => {
     if (!shouldRenderVideo || !track) {
@@ -31,7 +29,6 @@ export function NativeMediaView({ participant, track, mediaKind = "camera", labe
   }, [shouldRenderVideo, track]);
 
   const name = participant?.displayName?.trim() || label || "Participant";
-  const isMuted = emphasizeMuted && participant ? !participant.audioEnabled : false;
 
   return (
     <View style={styles.surface}>
@@ -44,18 +41,7 @@ export function NativeMediaView({ participant, track, mediaKind = "camera", labe
         </View>
       ) : null}
 
-      <View style={styles.badgeRow}>
-        <View style={styles.integratedBadge}>
-          <Text style={styles.badgeText} numberOfLines={1}>
-            {label || name}
-          </Text>
-          {isMuted ? (
-            <View style={styles.muteIndicator}>
-              <HugeiconsIcon icon={MicOff01Icon} size={10} color="#ffffff" />
-            </View>
-          ) : null}
-        </View>
-      </View>
+
     </View>
   );
 }
@@ -77,36 +63,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "100%",
     height: "100%",
-  },
-  badgeRow: {
-    position: "absolute",
-    left: 10,
-    bottom: 10,
-    flexDirection: "row",
-  },
-  integratedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.45)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  badgeText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-    maxWidth: 100,
-  },
-  muteIndicator: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#ea4335",
-    alignItems: "center",
-    justifyContent: "center",
   },
 });
