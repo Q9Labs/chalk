@@ -1,0 +1,41 @@
+aws_region               = "us-east-1"
+cloudflare_zone_name     = "example.com"
+api_subdomain            = "api"
+ws_subdomain             = "ws"
+cloudflare_proxy_enabled = false
+
+cloudflare_account_id = ""
+cloudflare_api_token  = ""
+r2_access_key_id      = ""
+r2_secret_access_key  = ""
+
+upstash_email         = ""
+upstash_api_key       = ""
+upstash_region        = "us-east-1"
+upstash_database_name = "chalk"
+upstash_tls           = true
+upstash_eviction      = false
+
+planetscale_service_token_id = ""
+planetscale_service_token    = ""
+planetscale_organization     = ""
+planetscale_database         = ""
+planetscale_branch           = "main"
+
+cloudflare_app_id                  = ""
+cloudflare_app_token               = ""
+post_meeting_cloudflare_api_token = ""
+jwt_signing_key                    = ""
+admin_secret                       = ""
+
+# Optional secrets/features
+auth_link_signing_key     = ""
+resend_api_key            = ""
+axiom_token               = ""
+github_token              = ""
+openrouter_api_key        = ""
+groq_api_key              = ""
+cloudflare_webhook_secret = ""
+
+instance_type      = "t4g.micro"
+ssm_parameter_path = "/chalk/prod/api"

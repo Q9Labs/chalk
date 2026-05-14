@@ -1,0 +1,864 @@
+/**
+ * ChalkSession - Main orchestrator for Chalk SDK
+ *
+ * @packageDocumentation
+ * @module @q9labs/chalk-core/session
+ */
+
+import { Effect, ManagedRuntime } from "effect";
+import { ConferenceClient } from "../client";
+import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
+import { ChatManager } from "../managers/chat-manager";
+import { InteractionManager } from "../managers/interaction-manager";
+import { RecordingManager } from "../managers/recording-manager";
+import { ScreenShareManager } from "../managers/screen-share-manager";
+import { UIManager } from "../managers/ui-manager";
+import { WhiteboardManager } from "../managers/whiteboard-manager";
+import type { ConferenceSession, ConferenceSessionDiagnosticsSnapshot } from "../room";
+import { makeManagerServicesLayer } from "../effect/services/manager-layers";
+import { RoomService } from "../effect/services/room-service";
+import type { ParticipantService } from "../effect/services/participant-service";
+import type { MediaService } from "../effect/services/media-service";
+import type { JoinOptions, LeaveOptions } from "../effect/services/room-service";
+import { RoomError } from "../effect/errors";
+import { TypedEventEmitter } from "../utils/typed-emitter";
+import { wideEvents } from "../wide-events/index";
+import type { ChalkIncident, ChalkIncidentBreadcrumb, ChalkIncidentConfig, ChalkIncidentInput, ChalkIncidentSource } from "../incident.ts";
+import type { ConferenceClientConfig, CreateJoinTokenResponse, ExchangeJoinTokenResponse, ListRoomsOptions, ListRoomsResponse, CreateRoomOptions, RealtimeKitLoader, RoomResource, ScheduleRoomOptions } from "../types.ts";
+import { createDefaultMediaState, createDefaultParticipantState, createDefaultRoomState, createSessionStateApis, type MediaSessionApi, type ParticipantSessionApi, type RoomSessionApi, type SessionStateUpdaters } from "./chalk-session-state";
+import { ChalkSessionIncidentPipeline } from "./chalk-session-incidents";
+import { attachRoomToManagersAndBridgeState } from "./chalk-session-bridges";
+
+/** ChalkSession configuration */
+export interface ChalkSessionConfig {
+  /** Base API URL */
+  apiUrl: string;
+  /** WebSocket URL (optional, derived from apiUrl if not provided) */
+  wsUrl?: string;
+  /** JWT access token */
+  token?: string;
+  /** Token provider for refresh */
+  tokenProvider?: () => Promise<string>;
+  /** Optional platform-specific RealtimeKit loader override. */
+  realtimeKitLoader?: RealtimeKitLoader;
+  /**
+   * API key (deprecated; prefer `token` or `tokenProvider`).
+   * @deprecated Will be removed in v2.
+   */
+  apiKey?: string;
+  /** Enable debug logging */
+  debug?: boolean;
+  /** Use demo API endpoints (demoJoin instead of addParticipant) */
+  demoMode?: boolean;
+  /** Incident reporting callback + transport options. */
+  incident?: ChalkIncidentConfig;
+  /** Optional wide events configuration passthrough. */
+  wideEvents?: ConferenceClientConfig["wideEvents"];
+}
+
+/** ChalkSession events */
+export interface ChalkSessionEvents {
+  /** Successfully connected to room */
+  connected: { roomId: string };
+  /** Disconnected from room */
+  disconnected: { reason: string };
+  /** Connection status changed */
+  "status:changed": { status: string };
+  /** Error occurred */
+  error: ChalkError;
+  /** Token expired (need to provide new token) */
+  "token.expired": void;
+}
+
+export interface ChalkSessionDiagnosticsSnapshot {
+  isDisposed: boolean;
+  roomStateRoomId: string | null;
+  roomStateRoomName: string | null;
+  roomStateStatus: string;
+  roomStateIsJoining: boolean;
+  hasActiveRoom: boolean;
+  activeRoomId: string | null;
+  activeRoomStatus: string | null;
+  activeRoomHasRtkMeeting: boolean;
+  connectedInputRoomId: string | null;
+  inFlightJoinRoomId: string | null;
+  hasInFlightJoinPromise: boolean;
+  clientConnectionState: string;
+  websocketConnectionState: string;
+  localParticipantId: string | null;
+  websocketLastClose: { code: number; reason: string; wasClean: boolean } | null;
+  activeRoomDiagnostics: ConferenceSessionDiagnosticsSnapshot | null;
+  rtkDiagnostics: ConferenceSessionDiagnosticsSnapshot["rtk"] | null;
+}
+
+/**
+ * ChalkSession orchestrates all managers and provides
+ * a unified interface for video conferencing.
+ *
+ * @example
+ * ```ts
+ * const session = new ChalkSession({
+ *   apiUrl: 'https://api.chalk.video',
+ *   token: 'jwt_xxx',
+ * });
+ *
+ * await session.join('room_123', { userName: 'John' });
+ *
+ * // Access managers
+ * await session.media.toggleVideo();
+ * session.chat.sendMessage('Hello!');
+ * ```
+ */
+export class ChalkSession extends TypedEventEmitter<ChalkSessionEvents> {
+  /** ConferenceSession API object with state and events */
+  readonly room: RoomSessionApi;
+
+  /** Participants API object with state and events */
+  readonly participants: ParticipantSessionApi;
+
+  /** Media API object with state and events */
+  readonly media: MediaSessionApi;
+
+  /** Screen share manager */
+  readonly screenShare: ScreenShareManager;
+
+  /** Chat messages manager */
+  readonly chat: ChatManager;
+
+  /** Recording manager */
+  readonly recording: RecordingManager;
+
+  /** Reactions and hand raise manager */
+  readonly interactions: InteractionManager;
+
+  /** UI state manager */
+  readonly ui: UIManager;
+
+  /** Whiteboard collaboration manager */
+  readonly whiteboard: WhiteboardManager;
+
+  private readonly client: ConferenceClient;
+  private _runtime: ManagedRuntime.ManagedRuntime<RoomService | ParticipantService | MediaService, never>;
+  private _currentRoom: ConferenceSession | null = null;
+  private readonly incidentPipeline: ChalkSessionIncidentPipeline;
+  private readonly stateUpdaters: SessionStateUpdaters;
+  private readonly externalSubscriptions: Array<() => void> = [];
+  private roomBridgeCleanup: (() => void) | null = null;
+  private connectedInputRoomId: string | null = null;
+  private inFlightJoinRoomId: string | null = null;
+  private inFlightJoinPromise: Promise<void> | null = null;
+  private disposed = false;
+
+  constructor(config: ChalkSessionConfig) {
+    super();
+    const debug = config.debug ?? false;
+
+    // Initialize ConferenceClient for API/WebRTC
+    this.client = new ConferenceClient({
+      apiUrl: config.apiUrl,
+      wsUrl: config.wsUrl,
+      token: config.token,
+      tokenProvider: config.tokenProvider,
+      realtimeKitLoader: config.realtimeKitLoader,
+      apiKey: config.apiKey,
+      debug,
+      demoMode: config.demoMode,
+      wideEvents: config.wideEvents,
+    });
+
+    // Create managed runtime for Effect services
+    this._runtime = ManagedRuntime.make(makeManagerServicesLayer(debug));
+
+    const sessionState = createSessionStateApis({
+      runtime: this._runtime,
+      getCurrentRoom: () => this._currentRoom,
+    });
+    this.room = sessionState.room;
+    this.participants = sessionState.participants;
+    this.media = sessionState.media;
+    this.stateUpdaters = sessionState.updaters;
+    this.incidentPipeline = new ChalkSessionIncidentPipeline({
+      emitError: (error) => this.emit("error", error),
+      getSnapshot: () => ({
+        roomId: this.room.getState().roomId,
+        localParticipantId: this.participants.getState().localParticipant?.id ?? null,
+      }),
+    });
+    this.configureIncident(config.incident);
+
+    // Initialize other managers (non-Effect)
+    this.screenShare = new ScreenShareManager();
+    this.chat = new ChatManager();
+    this.recording = new RecordingManager();
+    this.interactions = new InteractionManager();
+    this.ui = new UIManager();
+    this.whiteboard = new WhiteboardManager();
+    this.chat.configureTransport({
+      presignUpload: async (files) => {
+        const roomId = this.room.getState().roomId;
+        if (!roomId) {
+          throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+        }
+        return this.client.presignChatAttachmentsUpload(roomId, files);
+      },
+      uploadAttachment: async (attachmentId, file) => {
+        const roomId = this.room.getState().roomId;
+        if (!roomId) {
+          throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+        }
+        return this.client.uploadChatAttachment(roomId, attachmentId, file);
+      },
+      presignDownload: async (attachmentId) => {
+        const roomId = this.room.getState().roomId;
+        if (!roomId) {
+          throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+        }
+        const response = await this.client.presignChatAttachmentDownload(roomId, attachmentId);
+        return response.downloadUrl;
+      },
+    });
+
+    // Emit session init event
+    const initCtx = wideEvents.start("session.init");
+    initCtx.set("config", { apiUrl: config.apiUrl, debug, demoMode: config.demoMode });
+    initCtx.complete("success");
+
+    this.setupEventForwarding();
+    this._initEventBridges();
+  }
+
+  configureIncident(config?: ChalkIncidentConfig): void {
+    this.incidentPipeline.configure(config);
+  }
+
+  async preloadRealtimeKit(): Promise<boolean> {
+    return this.client.preloadRealtimeKit();
+  }
+
+  recordIncidentBreadcrumb(
+    breadcrumb: Omit<ChalkIncidentBreadcrumb, "timestamp"> & {
+      timestamp?: string;
+    },
+  ): void {
+    this.incidentPipeline.recordBreadcrumb(breadcrumb);
+  }
+
+  private emitErrorWithIncident(error: ChalkError, source: ChalkIncidentSource, details?: Record<string, unknown>): void {
+    this.incidentPipeline.emitErrorWithIncident(error, source, details);
+  }
+
+  async reportIncident(incidentInput: ChalkIncidentInput): Promise<ChalkIncident | null> {
+    return this.incidentPipeline.reportIncident(incidentInput);
+  }
+
+  private addExternalSubscription(unsubscribe: () => void): void {
+    this.externalSubscriptions.push(unsubscribe);
+  }
+
+  private teardownExternalSubscriptions(): void {
+    while (this.externalSubscriptions.length > 0) {
+      const unsubscribe = this.externalSubscriptions.pop();
+      if (!unsubscribe) {
+        continue;
+      }
+
+      try {
+        unsubscribe();
+      } catch {
+        // best effort cleanup
+      }
+    }
+  }
+
+  private setupEventForwarding(): void {
+    this.teardownExternalSubscriptions();
+
+    // Forward room events
+    this.addExternalSubscription(
+      this.room._emitter.on("connected", (data) => {
+        this.recordIncidentBreadcrumb({
+          category: "room",
+          message: "ConferenceSession connected",
+          data,
+        });
+        this.emit("connected", data);
+      }),
+    );
+
+    this.addExternalSubscription(
+      this.room._emitter.on("disconnected", (data) => {
+        this.connectedInputRoomId = null;
+        this.recordIncidentBreadcrumb({
+          category: "room",
+          message: "ConferenceSession disconnected",
+          data,
+        });
+        this.emit("disconnected", data);
+      }),
+    );
+
+    this.addExternalSubscription(
+      this.room._emitter.on("status:changed", (data) => {
+        this.recordIncidentBreadcrumb({
+          category: "room",
+          message: "ConferenceSession status changed",
+          data,
+        });
+        this.emit("status:changed", data);
+      }),
+    );
+
+    this.addExternalSubscription(
+      this.room._emitter.on("error", (error) => {
+        this.emitErrorWithIncident(error, "room");
+      }),
+    );
+
+    // Forward errors from all managers
+    this.addExternalSubscription(this.media._emitter.on("error", (error) => this.emitErrorWithIncident(error, "media")));
+    this.addExternalSubscription(this.screenShare.on("error", (error) => this.emitErrorWithIncident(error, "screen_share")));
+    this.addExternalSubscription(this.chat.on("error", (error) => this.emitErrorWithIncident(error, "chat")));
+    this.addExternalSubscription(this.recording.on("error", (error) => this.emitErrorWithIncident(error, "recording")));
+    this.addExternalSubscription(this.interactions.on("error", (error) => this.emitErrorWithIncident(error, "interactions")));
+    this.addExternalSubscription(this.whiteboard.on("error", (error) => this.emitErrorWithIncident(error, "whiteboard")));
+
+    // Forward token expired from client
+    this.addExternalSubscription(
+      this.client.on("token.expired", () => {
+        this.emit("token.expired", undefined);
+        void this.reportIncident({
+          severity: "warning",
+          source: "api",
+          code: "TOKEN_EXPIRED",
+          message: "Token expired",
+          stage: "auth_refresh",
+        });
+      }),
+    );
+  }
+
+  private _initEventBridges(): void {
+    // State bridges are set up in attachRoomToManagers when room connects
+    // This method is kept for initialization order consistency
+  }
+
+  private attachRoomToManagers(room: ConferenceSession): void {
+    this.roomBridgeCleanup?.();
+    this.roomBridgeCleanup = attachRoomToManagersAndBridgeState({
+      room,
+      setCurrentRoom: (nextRoom) => {
+        this._currentRoom = nextRoom;
+      },
+      roomApi: this.room,
+      participantsApi: this.participants,
+      mediaApi: this.media,
+      stateUpdaters: this.stateUpdaters,
+      runtime: this._runtime,
+      screenShare: this.screenShare,
+      chat: this.chat,
+      recording: this.recording,
+      interactions: this.interactions,
+      whiteboard: this.whiteboard,
+      startRecording: () => this.client.startRecording(),
+      stopRecording: () => this.client.stopRecording(),
+    });
+  }
+
+  private recoverStaleConnectedRoomState(): void {
+    const roomState = this.room.getState();
+    if (roomState.status !== "connected" || this.room.getRoom()) {
+      return;
+    }
+
+    this.recordIncidentBreadcrumb({
+      category: "room",
+      message: "Recovering stale connected room state before join",
+      data: {
+        roomId: roomState.roomId,
+      },
+    });
+
+    this.connectedInputRoomId = null;
+    this.inFlightJoinRoomId = null;
+    this.inFlightJoinPromise = null;
+    this.resetSessionState();
+  }
+
+  /**
+   * Join a room
+   *
+   * @param roomId - ConferenceSession ID to join
+   * @param options - Join options including userName
+   */
+  async join(roomId: string, options: JoinOptions): Promise<void> {
+    this.recoverStaleConnectedRoomState();
+
+    if (this.connectedInputRoomId === roomId && this.room.getState().status === "connected") {
+      return;
+    }
+
+    if (this.inFlightJoinRoomId === roomId && this.inFlightJoinPromise) {
+      return this.inFlightJoinPromise;
+    }
+
+    const joinPromise = (async () => {
+      try {
+        // Signal join starting via Effect service
+        await this._runtime.runPromise(
+          Effect.gen(function* () {
+            const roomSvc = yield* RoomService;
+            yield* roomSvc.requestJoin(roomId, options);
+          }),
+        );
+
+        // Actually join via ConferenceClient
+        const room = await this.client.joinSession(roomId, {
+          displayName: options.userName,
+          role: options.role,
+          audio: options.audioEnabled,
+          video: options.videoEnabled,
+          metadata: options.metadata,
+        });
+
+        // Attach room to all managers
+        this.attachRoomToManagers(room);
+        this.connectedInputRoomId = roomId;
+      } catch (err) {
+        const error = ChalkError.wrap(err);
+        const roomError = new RoomError({
+          code: "ROOM_NOT_FOUND",
+          message: error.message,
+          recoverable: false,
+        });
+        await this._runtime
+          .runPromise(
+            Effect.gen(function* () {
+              const roomSvc = yield* RoomService;
+              yield* roomSvc.joinFailed(roomError);
+            }),
+          )
+          .catch(() => {
+            // Ignore if join failed operation fails
+          });
+        this.emitErrorWithIncident(error, "session", {
+          operation: "join",
+          roomId,
+        });
+        throw error;
+      }
+    })();
+
+    this.inFlightJoinRoomId = roomId;
+    this.inFlightJoinPromise = joinPromise.finally(() => {
+      if (this.inFlightJoinPromise === joinPromise) {
+        this.inFlightJoinPromise = null;
+        this.inFlightJoinRoomId = null;
+      }
+    });
+
+    return this.inFlightJoinPromise;
+  }
+
+  async joinWithJoinToken(joinToken: string, options: JoinOptions): Promise<void> {
+    try {
+      await this._runtime.runPromise(
+        Effect.gen(function* () {
+          const roomSvc = yield* RoomService;
+          yield* roomSvc.requestJoin(joinToken, options);
+        }),
+      );
+
+      const room = await this.client.joinWithJoinToken(joinToken, {
+        displayName: options.userName,
+        role: options.role,
+        audio: options.audioEnabled,
+        video: options.videoEnabled,
+        metadata: options.metadata,
+      });
+
+      this.attachRoomToManagers(room);
+      this.connectedInputRoomId = room.id;
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      const roomError = new RoomError({
+        code: "ROOM_NOT_FOUND",
+        message: error.message,
+        recoverable: false,
+      });
+      await this._runtime
+        .runPromise(
+          Effect.gen(function* () {
+            const roomSvc = yield* RoomService;
+            yield* roomSvc.joinFailed(roomError);
+          }),
+        )
+        .catch(() => {
+          // Ignore if join failed operation fails
+        });
+      this.emitErrorWithIncident(error, "session", {
+        operation: "join_with_join_token",
+      });
+      throw error;
+    }
+  }
+
+  async joinWithInviteLink(inviteLink: string, options: JoinOptions): Promise<void> {
+    try {
+      await this._runtime.runPromise(
+        Effect.gen(function* () {
+          const roomSvc = yield* RoomService;
+          yield* roomSvc.requestJoin(inviteLink, options);
+        }),
+      );
+
+      const room = await this.client.joinWithInviteLink(inviteLink, {
+        displayName: options.userName,
+        role: options.role,
+        audio: options.audioEnabled,
+        video: options.videoEnabled,
+        metadata: options.metadata,
+      });
+
+      this.attachRoomToManagers(room);
+      this.connectedInputRoomId = room.id;
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      const roomError = new RoomError({
+        code: "ROOM_NOT_FOUND",
+        message: error.message,
+        recoverable: false,
+      });
+      await this._runtime
+        .runPromise(
+          Effect.gen(function* () {
+            const roomSvc = yield* RoomService;
+            yield* roomSvc.joinFailed(roomError);
+          }),
+        )
+        .catch(() => {
+          // Ignore if join failed operation fails
+        });
+      this.emitErrorWithIncident(error, "session", {
+        operation: "join_with_invite_link",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Leave the current room
+   *
+   * @param options - Leave options (endForAll for hosts)
+   */
+  async leave(options?: LeaveOptions): Promise<void> {
+    try {
+      await this._runtime.runPromise(
+        Effect.gen(function* () {
+          const roomSvc = yield* RoomService;
+          yield* roomSvc.leave(options);
+        }),
+      );
+      this.client.disconnect();
+      this.roomBridgeCleanup?.();
+      this.roomBridgeCleanup = null;
+      this._currentRoom = null;
+      this.connectedInputRoomId = null;
+      this.inFlightJoinRoomId = null;
+      this.inFlightJoinPromise = null;
+
+      // Ensure hooks see a clean slate after leaving (ConferenceSession.leave clears maps without per-participant events).
+      this.resetSessionState();
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "leave",
+      });
+      throw error;
+    }
+  }
+
+  private resetSessionState(): void {
+    this.stateUpdaters.updateRoomState(createDefaultRoomState());
+    this.stateUpdaters.updateParticipantState(createDefaultParticipantState());
+    this.stateUpdaters.updateMediaState(createDefaultMediaState());
+  }
+
+  /**
+   * Create a new room (requires API key or host permissions)
+   *
+   * @param name - Optional room name
+   * @param config - Optional room configuration
+   * @returns ConferenceSession ID
+   */
+  async createSession(name?: string, config?: Record<string, unknown>): Promise<string> {
+    try {
+      return await this.client.createSession(name, config);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "create_room",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Create a room without joining it.
+   */
+  async createRoom(options: CreateRoomOptions = {}): Promise<RoomResource> {
+    try {
+      return await this.client.createRoom(options);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "create_room_resource",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Schedule a room for future activation.
+   */
+  async scheduleRoom(options: ScheduleRoomOptions): Promise<RoomResource> {
+    try {
+      return await this.client.scheduleRoom(options);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "schedule_room",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * List rooms for the current tenant.
+   */
+  async listRooms(options: ListRoomsOptions = {}): Promise<ListRoomsResponse> {
+    try {
+      return await this.client.listRooms(options);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "list_rooms",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Create an opaque join token for a room.
+   */
+  async createJoinToken(roomId: string): Promise<CreateJoinTokenResponse> {
+    try {
+      return await this.client.createJoinToken(roomId);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "create_join_token",
+        roomId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Exchange an opaque join token for an access token.
+   */
+  async exchangeJoinToken(joinToken: string): Promise<ExchangeJoinTokenResponse> {
+    try {
+      return await this.client.exchangeJoinToken(joinToken);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "exchange_join_token",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * End a room for all participants (host only)
+   *
+   * @param roomId - ConferenceSession ID to end
+   */
+  async endSession(roomId: string): Promise<void> {
+    try {
+      await this.client.endSession(roomId);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "end_room",
+        roomId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a participant from the room (host only)
+   *
+   * @param participantId - Participant ID to remove
+   */
+  async removeParticipant(participantId: string): Promise<void> {
+    try {
+      await this.client.removeParticipant(participantId);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "remove_participant",
+        participantId,
+      });
+      throw error;
+    }
+  }
+
+  async updateOwnDisplayName(displayName: string): Promise<void> {
+    try {
+      await this.client.updateOwnDisplayName(displayName);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "session", {
+        operation: "update_own_display_name",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Mute a participant (host only).
+   *
+   * @param participantId - Participant ID to mute
+   */
+  muteParticipant(participantId: string): void {
+    const room = this.room.getRoom();
+    room?.muteParticipant(participantId);
+  }
+
+  /**
+   * Unmute a participant (host only).
+   *
+   * @param participantId - Participant ID to unmute
+   */
+  unmuteParticipant(participantId: string): void {
+    const room = this.room.getRoom();
+    room?.unmuteParticipant(participantId);
+  }
+
+  async whiteboardPresignUpload(fileId: string, mimeType: string): Promise<{ uploadUrl: string; expiresAtMs: number }> {
+    const roomId = this.room.getState().roomId;
+    if (!roomId) {
+      throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+    }
+
+    try {
+      return await this.client.presignWhiteboardUpload(roomId, fileId, mimeType);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "whiteboard", {
+        operation: "presign_upload",
+        fileId,
+      });
+      throw error;
+    }
+  }
+
+  async whiteboardPresignDownload(fileId: string): Promise<{ downloadUrl: string; expiresAtMs: number }> {
+    const roomId = this.room.getState().roomId;
+    if (!roomId) {
+      throw new ChalkError(ChalkErrorCode.NOT_IN_ROOM, "Not connected to a room");
+    }
+
+    try {
+      return await this.client.presignWhiteboardDownload(roomId, fileId);
+    } catch (err) {
+      const error = ChalkError.wrap(err);
+      this.emitErrorWithIncident(error, "whiteboard", {
+        operation: "presign_download",
+        fileId,
+      });
+      throw error;
+    }
+  }
+
+  /** Get current connection status */
+  get status(): string {
+    return this.room.getState().status;
+  }
+
+  /** Whether currently connected to a room */
+  get isConnected(): boolean {
+    return this.room.getState().status === "connected";
+  }
+
+  /** Current room ID (null if not connected) */
+  get roomId(): string | null {
+    return this.room.getState().roomId;
+  }
+
+  /** Get underlying ConferenceClient (for advanced use) */
+  get chalkClient(): ConferenceClient {
+    return this.client;
+  }
+
+  getDiagnosticsSnapshot(): ChalkSessionDiagnosticsSnapshot {
+    const roomState = this.room.getState();
+    const activeRoom = this.room.getRoom();
+    const clientDiagnostics = this.client.getDiagnosticsSnapshot();
+
+    const activeRoomDiagnostics = activeRoom?.getDiagnosticsSnapshot() ?? clientDiagnostics.currentSession;
+
+    return {
+      isDisposed: this.disposed,
+      roomStateRoomId: roomState.roomId,
+      roomStateRoomName: roomState.roomName,
+      roomStateStatus: roomState.status,
+      roomStateIsJoining: roomState.isJoining,
+      hasActiveRoom: activeRoom !== null,
+      activeRoomId: activeRoom?.id ?? null,
+      activeRoomStatus: activeRoom?.connectionState ?? null,
+      activeRoomHasRtkMeeting: Boolean(activeRoom?.rtkMeeting),
+      connectedInputRoomId: this.connectedInputRoomId,
+      inFlightJoinRoomId: this.inFlightJoinRoomId,
+      hasInFlightJoinPromise: this.inFlightJoinPromise !== null,
+      clientConnectionState: clientDiagnostics.connectionState,
+      websocketConnectionState: clientDiagnostics.websocketConnectionState,
+      localParticipantId: clientDiagnostics.localParticipantId,
+      websocketLastClose: clientDiagnostics.websocketLastClose,
+      activeRoomDiagnostics,
+      rtkDiagnostics: activeRoomDiagnostics?.rtk ?? null,
+    };
+  }
+
+  /**
+   * Cleanup all resources
+   */
+  dispose(): void {
+    this.disposed = true;
+    const ctx = wideEvents.start("session.dispose");
+
+    // Dispose Effect services runtime
+    this._runtime.dispose();
+
+    // Dispose non-Effect managers
+    this.screenShare.dispose();
+    this.chat.dispose();
+    this.recording.dispose();
+    this.interactions.dispose();
+    this.ui.dispose();
+    this.whiteboard.dispose();
+
+    this.client.disconnect();
+    this.teardownExternalSubscriptions();
+    this.roomBridgeCleanup?.();
+    this.roomBridgeCleanup = null;
+    this._currentRoom = null;
+    this.connectedInputRoomId = null;
+    this.inFlightJoinRoomId = null;
+    this.inFlightJoinPromise = null;
+    this.removeAllListeners();
+
+    ctx.complete("success");
+  }
+}

@@ -1,0 +1,194 @@
+import { describe, expect, it } from "vitest";
+import { ChalkSession } from "../session/chalk-session";
+import { ChalkError, ChalkErrorCode } from "../errors/chalk-error";
+
+const createSession = (): ChalkSession =>
+  new ChalkSession({
+    apiUrl: "https://api.chalk.test",
+    token: "test-token",
+  });
+
+describe("ChalkSession lifecycle listener graph", () => {
+  it("constructs safely when window exists without DOM event APIs", () => {
+    const originalWindow = globalThis.window;
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      writable: true,
+      value: { innerWidth: 390 },
+    });
+
+    try {
+      const session = createSession();
+      expect(session.ui.getState().isMobileView).toBe(false);
+      session.dispose();
+    } finally {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        writable: true,
+        value: originalWindow,
+      });
+    }
+  });
+
+  it("keeps a single external forwarding graph when setup runs multiple times", () => {
+    const session = createSession();
+
+    expect(session.room._emitter.listenerCount("connected")).toBe(1);
+    expect(session.room._emitter.listenerCount("disconnected")).toBe(1);
+    expect(session.room._emitter.listenerCount("status:changed")).toBe(1);
+    expect(session.room._emitter.listenerCount("error")).toBe(1);
+    expect(session.media._emitter.listenerCount("error")).toBe(1);
+
+    (session as any).setupEventForwarding();
+
+    expect(session.room._emitter.listenerCount("connected")).toBe(1);
+    expect(session.room._emitter.listenerCount("disconnected")).toBe(1);
+    expect(session.room._emitter.listenerCount("status:changed")).toBe(1);
+    expect(session.room._emitter.listenerCount("error")).toBe(1);
+    expect(session.media._emitter.listenerCount("error")).toBe(1);
+
+    let connectedCount = 0;
+    let errorCount = 0;
+    session.on("connected", () => {
+      connectedCount += 1;
+    });
+    session.on("error", () => {
+      errorCount += 1;
+    });
+
+    session.room._emitter.emit("connected", { roomId: "room-1" });
+    session.media._emitter.emit("error", new ChalkError(ChalkErrorCode.MEDIA_ERROR, "media test"));
+
+    expect(connectedCount).toBe(1);
+    expect(errorCount).toBe(1);
+
+    session.dispose();
+  });
+
+  it("tears down external forwarding subscriptions on dispose", () => {
+    const session = createSession();
+
+    expect(session.room._emitter.listenerCount("connected")).toBe(1);
+    expect(session.media._emitter.listenerCount("error")).toBe(1);
+
+    session.dispose();
+
+    expect(session.room._emitter.listenerCount("connected")).toBe(0);
+    expect(session.room._emitter.listenerCount("disconnected")).toBe(0);
+    expect(session.room._emitter.listenerCount("status:changed")).toBe(0);
+    expect(session.room._emitter.listenerCount("error")).toBe(0);
+    expect(session.media._emitter.listenerCount("error")).toBe(0);
+  });
+
+  it("deduplicates duplicate joins for the same input room after a successful connect", async () => {
+    const session = createSession();
+    let joinCalls = 0;
+
+    (session as any)._runtime = {
+      runPromise: async () => undefined,
+      dispose: () => undefined,
+    };
+
+    (session as any).client = {
+      joinSession: async () => {
+        joinCalls += 1;
+        return {
+          id: "connected-room-id",
+        };
+      },
+      disconnect: () => undefined,
+      on: () => () => undefined,
+    };
+
+    (session as any).attachRoomToManagers = () => {
+      (session as any)._currentRoom = {
+        id: "connected-room-id",
+      };
+      session.room._state = {
+        ...session.room._state,
+        status: "connected",
+        roomId: "connected-room-id",
+      };
+    };
+
+    await session.join("room-alias", { userName: "Hasan" });
+    await session.join("room-alias", { userName: "Hasan" });
+
+    expect(joinCalls).toBe(1);
+
+    session.dispose();
+  });
+
+  it("recovers stale connected state without an active room before joining again", async () => {
+    const session = createSession();
+    let joinCalls = 0;
+
+    session.room._state = {
+      status: "connected",
+      roomId: "ghost-room",
+      roomName: "Ghost room",
+      isJoining: false,
+      hostId: null,
+    };
+
+    (session as any)._runtime = {
+      runPromise: async () => undefined,
+      dispose: () => undefined,
+    };
+
+    (session as any).client = {
+      joinSession: async () => {
+        joinCalls += 1;
+        return {
+          id: "fresh-room-id",
+        };
+      },
+      disconnect: () => undefined,
+      on: () => () => undefined,
+    };
+
+    (session as any).attachRoomToManagers = () => {
+      session.room._state = {
+        ...session.room._state,
+        status: "connected",
+        roomId: "fresh-room-id",
+      };
+    };
+
+    await expect(session.join("fresh-room", { userName: "Hasan" })).resolves.toBeUndefined();
+    expect(joinCalls).toBe(1);
+
+    session.dispose();
+  });
+
+  it("surfaces a diagnostics snapshot before and after dispose", () => {
+    const session = createSession();
+
+    const initialSnapshot = session.getDiagnosticsSnapshot();
+    expect(initialSnapshot.isDisposed).toBe(false);
+    expect(initialSnapshot.roomStateStatus).toBe("disconnected");
+    expect(initialSnapshot.hasActiveRoom).toBe(false);
+    expect(initialSnapshot.websocketConnectionState).toBe("disconnected");
+
+    session.dispose();
+
+    const disposedSnapshot = session.getDiagnosticsSnapshot();
+    expect(disposedSnapshot.isDisposed).toBe(true);
+    expect(disposedSnapshot.hasActiveRoom).toBe(false);
+  });
+
+  it("delegates RealtimeKit preloading to the underlying client", async () => {
+    const session = createSession();
+    const preloadRealtimeKit = async () => true;
+
+    (session as any).client = {
+      preloadRealtimeKit,
+      disconnect: () => undefined,
+    };
+
+    await expect(session.preloadRealtimeKit()).resolves.toBe(true);
+
+    session.dispose();
+  });
+});

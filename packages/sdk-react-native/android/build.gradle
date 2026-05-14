@@ -1,0 +1,43 @@
+buildscript {
+  ext.safeExtGet = { prop, fallback ->
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+  }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+
+android {
+  namespace "ai.q9labs.chalk.reactnative"
+  compileSdkVersion safeExtGet("compileSdkVersion", 36)
+
+  defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 24)
+    targetSdkVersion safeExtGet("targetSdkVersion", 36)
+    consumerProguardFiles "consumer-rules.pro"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = JavaVersion.VERSION_17.toString()
+  }
+
+  sourceSets {
+    main.java.srcDirs += "src/main/kotlin"
+  }
+}
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  implementation("com.facebook.react:react-android")
+  implementation("androidx.core:core:1.16.0")
+}

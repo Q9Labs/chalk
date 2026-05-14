@@ -1,0 +1,87 @@
+{
+  "name": "chalk",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/mobile",
+    "apps/web",
+    "apps/docs",
+    "infrastructure/cloudflare-worker",
+    "infrastructure/cloudflare-ops-monitor"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "bash -lc 'trap \"kill 0\" EXIT; pnpm run dev:mobile & turbo dev'",
+    "mobile:connect": "bash .agents/skills/chalk-mobile-wireless-debug/scripts/connect-wireless-adb.sh",
+    "mobile:launch": "bash .agents/skills/chalk-mobile-wireless-debug/scripts/launch-chalk-mobile-dev.sh",
+    "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
+    "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
+    "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL or run pnpm run mobile:connect.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",
+    "infra:tf": "bash scripts/terraform-op.sh",
+    "infra:plan": "bash scripts/terraform-op.sh plan",
+    "infra:apply": "bash scripts/terraform-op.sh apply",
+    "incident:tui": "bun scripts/ops-tui.tsx",
+    "mobile:sync-local-env": "pnpm exec tsx scripts/sync-local-mobile-env.ts",
+    "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run start'",
+    "dev:mobile:android": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run android'",
+    "dev:mobile:ios": "pnpm --dir apps/mobile run ios",
+    "postinstall": "bash -lc 'if [ -f scripts/patch-realtimekit-react-native.ts ]; then pnpm exec tsx scripts/patch-realtimekit-react-native.ts; else echo \"[patch-realtimekit-react-native] skipped: script not present\"; fi'",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "dev:web:pages": "pnpm --dir apps/web run dev:pages",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "check-types": "turbo check-types",
+    "clean": "turbo clean && rm -rf node_modules",
+    "generate:openapi": "node apps/api/scripts/generate-openapi-from-router.mjs && node apps/api/scripts/enrich-openapi-contracts.mjs",
+    "generate:openapi:check": "node apps/api/scripts/generate-openapi-from-router.mjs --check",
+    "generate": "pnpm run generate:openapi && turbo run generate:types"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
+    "@opentui/core": "^0.2.8",
+    "@opentui/react": "^0.2.8",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.26",
+    "react": "^19.2.6",
+    "scheduler": "^0.27.0",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.17.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.14",
+    "oxfmt": "^0.36.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "turbo": "^2.7.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16",
+    "wrangler": "^4.77.0",
+    "yaml": "^2.8.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@hono/node-server": "^1.19.14",
+      "@xmldom/xmldom": "^0.8.13",
+      "defu": "^6.1.7",
+      "dompurify": "^3.4.0",
+      "fast-xml-parser": "^5.7.3",
+      "h3": "^2.0.1-rc.18",
+      "h3-v2": "npm:h3@^2.0.1-rc.20",
+      "hono": "^4.12.16",
+      "lodash-es": "^4.18.1",
+      "nanoid@<3.3.8": "^3.3.11",
+      "nanoid@>=4.0.0 <5.0.9": "^5.1.6",
+      "postcss": "^8.5.10",
+      "uuid": "^14.0.0",
+      "vite": "^7.3.2"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.26.2"
+}

@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mdx"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "@cloudflare/workers-types"],
+
+    /* Bundler mode */
+    "verbatimModuleSyntax": false,
+
+    /* Linting */
+    "noUncheckedSideEffectImports": true,
+
+    /* Path aliases - must redeclare since paths don't merge */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@q9labs/chalk-core": ["../../packages/sdk-core/src/index.ts"],
+      "@q9labs/chalk-react": ["../../packages/sdk-react/src/index.ts"],
+      "@q9labs/chalk-ui": ["../../packages/ui/src/index.ts"]
+    }
+  }
+}

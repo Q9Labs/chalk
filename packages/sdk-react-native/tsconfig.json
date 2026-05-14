@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "composite": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "paths": {
+      "@q9labs/chalk-core": ["packages/sdk-core/src/index.ts"],
+      "@q9labs/facehash": ["packages/facehash/src/index.native.ts"],
+      "@q9labs/facehash/react-native": ["packages/facehash/src/index.native.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
+  "references": [{ "path": "../sdk-core" }, { "path": "../facehash" }]
+}

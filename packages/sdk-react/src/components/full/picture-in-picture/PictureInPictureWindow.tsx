@@ -1,0 +1,820 @@
+import { useEffect, useRef, useMemo, useState } from "react";
+
+import { cn } from "../../../utils/cn";
+import { getParticipantColor, getParticipantGradient, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
+import { Avatar, ControlButton } from "../../atomic";
+import { DeviceControlButton, ReactionPicker } from "../../composite";
+import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, RefreshIcon, ArrowLeft01Icon, Shield01Icon, WifiOffIcon, InformationCircleIcon, ArrowDown01Icon, ArrowUp01Icon, Copy01Icon, Download01Icon, CheckmarkCircle02Icon } from "../../../utils/icons";
+import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
+import { useMeetingRoomTheme } from "../meeting-room/useMeetingRoomTheme";
+import { LoadingScreen } from "../LoadingScreen";
+import type { PictureInPictureControls, PictureInPictureMeetingLayout, PictureInPicturePhase, PictureInPictureSource } from "./types";
+import { copyPreparedDebugExport, downloadDebugReport, prepareFullDebugExport, type PreparedDebugExport } from "../../../utils/debugExport";
+
+interface PictureInPictureWindowProps {
+  phase: PictureInPicturePhase;
+  roomName?: string;
+  displayName?: string;
+  source: PictureInPictureSource | null;
+  previewSource?: PictureInPictureSource | null;
+  participantSources?: PictureInPictureSource[];
+  meetingLayout?: PictureInPictureMeetingLayout;
+  controls: PictureInPictureControls;
+  onReturnToTab: () => void;
+}
+
+function Equalizer() {
+  return (
+    <div className="flex items-end gap-[2px] h-3 ml-2 shrink-0">
+      <div className="w-[3px] bg-white rounded-full h-full origin-bottom" style={{ animation: "pip-eq 0.8s ease-in-out infinite" }} />
+      <div className="w-[3px] bg-white rounded-full h-full origin-bottom" style={{ animation: "pip-eq 0.8s ease-in-out infinite 0.2s" }} />
+      <div className="w-[3px] bg-white rounded-full h-full origin-bottom" style={{ animation: "pip-eq 0.8s ease-in-out infinite 0.4s" }} />
+      <style>{`
+        @keyframes pip-eq {
+          0%, 100% { transform: scaleY(0.4); }
+          50% { transform: scaleY(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function isTransparentBoardColor(color: unknown) {
+  if (typeof color !== "string") {
+    return true;
+  }
+
+  const normalized = color.trim().toLowerCase();
+  return normalized === "" || normalized === "transparent" || normalized === "#0000" || normalized === "#00000000" || normalized === "rgba(0,0,0,0)" || normalized === "rgba(0, 0, 0, 0)";
+}
+
+function WhiteboardPictureInPictureStage({
+  snapshot,
+  className,
+}: {
+  snapshot: NonNullable<PictureInPictureSource["whiteboardSnapshot"]>;
+  className?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const backgroundColor = isTransparentBoardColor(snapshot.appState.viewBackgroundColor)
+    ? "#ffffff"
+    : String(snapshot.appState.viewBackgroundColor);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const renderWhiteboard = async () => {
+      const container = containerRef.current;
+      if (!container) {
+        return;
+      }
+
+      const { exportToCanvas, getNonDeletedElements } = await import("@excalidraw/excalidraw");
+
+      const canvas = await exportToCanvas({
+        elements: getNonDeletedElements(snapshot.elements as never[]),
+        appState: {
+          ...(snapshot.appState as Record<string, unknown>),
+          exportBackground: true,
+          exportWithDarkMode: false,
+          theme: "light",
+          viewBackgroundColor: backgroundColor,
+        },
+        files: snapshot.files as never,
+        exportPadding: 0,
+        getDimensions: () => ({
+          width: Math.max(container.clientWidth, 320),
+          height: Math.max(container.clientHeight, 240),
+          scale: 1,
+        }),
+      });
+
+      if (!isCancelled) {
+        setDataUrl(canvas.toDataURL("image/png"));
+      }
+    };
+
+    void renderWhiteboard();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [backgroundColor, snapshot]);
+
+  return (
+    <div ref={containerRef} className={cn("relative flex-1 overflow-hidden", className)} style={{ backgroundColor }}>
+      {dataUrl ? <img src={dataUrl} alt="Whiteboard" className="h-full w-full object-contain" style={{ backgroundColor }} /> : <div className="absolute inset-0" style={{ backgroundColor }} />}
+    </div>
+  );
+}
+
+function getSourceGradientPreference(source: PictureInPictureSource | null, localParticipantGradientPreference?: ParticipantGradientPreference) {
+  return source?.isLocal ? localParticipantGradientPreference : undefined;
+}
+
+function PictureInPictureStage({
+  source,
+  className,
+  gradientPreference,
+}: {
+  source: PictureInPictureSource | null;
+  className?: string;
+  hideOverlay?: boolean;
+  gradientPreference?: ParticipantGradientPreference;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hasVideo = Boolean(source?.videoTrack);
+  const { settings } = useMeetingRoomSettings();
+  const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
+  const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
+  const participantColors = useMemo(() => getParticipantColor(source?.title || source?.id || "unknown", gradientPreference), [gradientPreference, source?.title, source?.id]);
+
+  const participantGradient = useMemo(
+    () => (isDarkerGradient ? `linear-gradient(180deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantGradient(source?.title || source?.id || "unknown", gradientPreference)),
+    [gradientPreference, source?.title, source?.id, isDarkerGradient, participantColors],
+  );
+
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    const track = source?.videoTrack;
+
+    if (!videoElement) return;
+    if (!track || track.readyState === "ended") {
+      videoElement.srcObject = null;
+      return;
+    }
+
+    videoElement.srcObject = new MediaStream([track]);
+    void videoElement.play().catch(() => {});
+
+    return () => {
+      videoElement.srcObject = null;
+    };
+  }, [source?.videoTrack]);
+
+  return (
+    <div className={cn("relative flex-1 bg-[var(--chalk-bg-tile)] overflow-hidden transition-all duration-300", className)}>
+      {source?.kind === "whiteboard" && source.whiteboardSnapshot ? (
+        <WhiteboardPictureInPictureStage snapshot={source.whiteboardSnapshot} className="h-full w-full" />
+      ) : hasVideo ? (
+        <video ref={videoRef} autoPlay playsInline muted className={cn("h-full w-full", source?.kind === "screen-share" ? "object-contain bg-black" : "object-cover")} />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300" style={{ backgroundImage: participantGradient }}>
+          <Avatar name={source?.title ?? "Chalker"} src={source?.avatarUrl} size="xl" className="opacity-90" gradientPreference={gradientPreference} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PictureInPictureTile({
+  source,
+  className,
+  gradientPreference,
+}: {
+  source: PictureInPictureSource | null;
+  className?: string;
+  gradientPreference?: ParticipantGradientPreference;
+}) {
+  if (!source) {
+    return null;
+  }
+
+  const isPlaceholder = source.kind === "placeholder";
+
+  return (
+    <div
+      className={cn(
+        "relative min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-[var(--chalk-bg-tile)] shadow-lg transition-all duration-300",
+        source.isSpeaking && !source.isMuted && "ring-2 ring-emerald-500/80 shadow-[0_0_24px_rgba(16,185,129,0.2)]",
+        className,
+      )}
+      role="group"
+      aria-label={isPlaceholder ? `PiP overflow ${source.title}` : `PiP tile for ${source.title}`}
+      data-testid="pip-tile"
+      data-kind={source.kind}
+    >
+      {isPlaceholder ? (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
+          style={{
+            background:
+              "radial-gradient(circle at top, var(--primary) 0%, transparent 65%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+          }}
+        >
+          <p className="text-4xl font-semibold tracking-tight text-white">{source.title}</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/60">{source.subtitle ?? "more"}</p>
+        </div>
+      ) : (
+        <>
+          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={gradientPreference} />
+          <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
+            <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/5 bg-zinc-950/80 px-1.5 py-1">
+              {!source.videoTrack && <Avatar name={source.title} src={source.avatarUrl} size="xs" gradientPreference={gradientPreference} />}
+              <span className="max-w-[96px] truncate text-xs font-medium text-white">{source.title}</span>
+              {source.subtitle ? <span className="text-[11px] text-white/70">{source.subtitle}</span> : null}
+              {source.isSpeaking && !source.isMuted ? <Equalizer /> : null}
+              <div className="ml-auto flex items-center gap-1">
+                {source.isMuted && (
+                  <div className="rounded-full bg-red-500/80 p-0.5">
+                    <MicrophoneOff01Icon size={10} className="text-white" />
+                  </div>
+                )}
+                {source.isHandRaised && (
+                  <div className="rounded-full bg-amber-500/80 p-0.5">
+                    <HandIcon size={10} className="text-white" />
+                  </div>
+                )}
+                {source.kind === "screen-share" && (
+                  <div className="rounded-full bg-white/15 p-0.5">
+                    <Monitor01Icon size={10} className="text-white" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function getMeetingLayoutClass(layout: PictureInPictureMeetingLayout, count: number) {
+  if (layout === "split") {
+    return "grid-cols-2 grid-rows-1";
+  }
+
+  if (layout === "grid") {
+    return "grid-cols-2 grid-rows-2";
+  }
+
+  if (layout === "single" && count <= 1) {
+    return "grid-cols-1 grid-rows-1";
+  }
+
+  return "grid-cols-2 grid-rows-2";
+}
+
+function getPictureInPictureTileKey(source: PictureInPictureSource, index: number) {
+  return `${source.kind}:${source.id}:${index}`;
+}
+
+function MeetingPictureInPictureLayout({
+  source,
+  participantSources,
+  meetingLayout,
+  localParticipantGradientPreference,
+}: {
+  source: PictureInPictureSource | null;
+  participantSources: PictureInPictureSource[];
+  meetingLayout: PictureInPictureMeetingLayout;
+  localParticipantGradientPreference?: ParticipantGradientPreference;
+}) {
+  if (meetingLayout === "screen-share") {
+    return (
+      <div className="flex h-full min-h-0 gap-3 overflow-hidden p-3" data-testid="pip-layout" data-layout="screen-share">
+        <PictureInPictureTile source={source} className="min-w-0 flex-1 shadow-2xl" gradientPreference={getSourceGradientPreference(source, localParticipantGradientPreference)} />
+        {participantSources.length > 0 && (
+          <div className="flex w-24 shrink-0 flex-col gap-3">
+            {participantSources.map((participant, index) => (
+              <PictureInPictureTile key={getPictureInPictureTileKey(participant, index)} source={participant} className="flex-1 shadow-xl" gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const tiles = participantSources.length > 0 ? participantSources : source ? [source] : [];
+
+  return (
+    <div
+      className={cn("grid h-full min-h-0 gap-3 overflow-hidden p-3", getMeetingLayoutClass(meetingLayout, tiles.length))}
+      data-testid="pip-layout"
+      data-layout={meetingLayout}
+    >
+      {tiles.map((participant, index) => (
+        <PictureInPictureTile
+          key={getPictureInPictureTileKey(participant, index)}
+          source={participant}
+          gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)}
+          className={cn(
+            "shadow-xl",
+            meetingLayout === "single" && "col-span-1 row-span-1",
+            meetingLayout === "grid" && tiles.length === 3 && index === 0 && "row-span-2",
+          )}
+        />
+      ))}
+      {meetingLayout === "grid" && tiles.length === 3 && <div key="grid-filler" className="hidden" aria-hidden="true" />}
+    </div>
+  );
+}
+
+export function PictureInPictureWindow({ phase, source, previewSource, participantSources, meetingLayout = "single", controls, onReturnToTab }: PictureInPictureWindowProps) {
+  const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [debugExportState, setDebugExportState] = useState<"idle" | "preparing" | "copied" | "failed" | "downloaded">("idle");
+  const [debugExportLog, setDebugExportLog] = useState<string | null>(null);
+  const [preparedDebugExport, setPreparedDebugExport] = useState<PreparedDebugExport | null>(null);
+  const [manualCopyText, setManualCopyText] = useState<string | null>(null);
+  const manualCopyRef = useRef<HTMLTextAreaElement | null>(null);
+  const showErrorOverlay = phase !== "meeting" && Boolean(controls.errorMessage);
+
+  const errorInfo = useMemo(() => {
+    if (!controls.errorMessage) return null;
+    const lowerError = controls.errorMessage.toLowerCase();
+
+    if (lowerError.includes("api key") || lowerError.includes("auth") || lowerError.includes("token")) {
+      return {
+        title: "Let's get you back in",
+        message: "It looks like your link expired or isn't quite right. No worries, request a new link to join.",
+        type: "auth" as const,
+        Icon: Shield01Icon,
+      };
+    }
+
+    if (lowerError.includes("timeout") || lowerError.includes("network") || lowerError.includes("reach")) {
+      return {
+        title: "Quick connection hiccup",
+        message: "We're having trouble reaching the network. A quick refresh usually does the trick.",
+        type: "network" as const,
+        Icon: WifiOffIcon,
+      };
+    }
+
+    return {
+      title: "Just a small bump in the road",
+      message: "We encountered a routine hiccup while getting you set up. Click try again.",
+      type: "server" as const,
+      Icon: InformationCircleIcon,
+    };
+  }, [controls.errorMessage]);
+
+  const localParticipantGradientPreference = controls.localParticipantGradientPreference;
+  const sourceGradientPreference = getSourceGradientPreference(source, localParticipantGradientPreference);
+  const effectiveSourceGradientPreference = sourceGradientPreference ?? localParticipantGradientPreference;
+  const actionButtons = useMemo(() => {
+    const base = [
+      {
+        key: "mute",
+        label: controls.isMuted ? "Unmute" : "Mute",
+        icon: controls.isMuted ? <MicrophoneOff01Icon size={18} className="text-[#dc2626]" /> : <Microphone01Icon size={18} />,
+        active: !controls.isMuted,
+        danger: false,
+        onClick: controls.onToggleMute,
+      },
+      {
+        key: "video",
+        label: controls.isVideoEnabled ? "Stop Video" : "Start Video",
+        icon: controls.isVideoEnabled ? <Video01Icon size={18} /> : <VideoOffIcon size={18} className="text-[#dc2626]" />,
+        active: controls.isVideoEnabled,
+        danger: false,
+        onClick: controls.onToggleVideo,
+      },
+    ];
+
+    if (phase === "prejoin") {
+      return [...base, { key: "return", label: "Return", icon: <Home01Icon size={18} />, active: false, danger: false, onClick: onReturnToTab }];
+    }
+
+    return [
+      ...base,
+      controls.enableScreenShare && {
+        key: "screenshare",
+        label: "Share",
+        icon: controls.isScreenSharing ? <MonitorOffIcon size={18} /> : <Monitor01Icon size={18} />,
+        active: controls.isScreenSharing,
+        danger: false,
+        activeClassName: "bg-primary text-primary-foreground hover:bg-primary/90",
+        onClick: controls.onToggleScreenShare,
+      },
+      controls.enableHandRaise && {
+        key: "handraise",
+        label: "Hand",
+        icon: <HandIcon size={18} />,
+        active: controls.isHandRaised,
+        danger: false,
+        activeClassName: "bg-primary text-primary-foreground hover:bg-primary/90",
+        onClick: controls.onToggleHandRaise,
+      },
+      controls.enableReactions && {
+        key: "reactions",
+        label: "React",
+        icon: <ThumbsUpIcon size={18} className="text-[#FFD700]" />,
+        active: isReactionPickerOpen,
+        danger: false,
+        onClick: () => setIsReactionPickerOpen(!isReactionPickerOpen),
+      },
+      { key: "return", label: "Return", icon: <Home01Icon size={18} />, active: false, danger: false, onClick: onReturnToTab },
+      controls.onLeave && {
+        key: "leave",
+        label: "Leave",
+        icon: <CallEnd01Icon size={18} />,
+        active: true,
+        danger: true,
+        onClick: () => {
+          onReturnToTab();
+          controls.onLeave?.();
+        },
+      },
+    ].filter((btn): btn is Exclude<typeof btn, false | undefined | null> => Boolean(btn));
+  }, [controls, onReturnToTab, phase]);
+
+  const participantThemeVariables = useMemo(
+    () => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown", effectiveSourceGradientPreference) as React.CSSProperties & Record<"--primary" | "--primary-foreground", string>,
+    [source?.title, source?.id, effectiveSourceGradientPreference],
+  );
+  const { settings } = useMeetingRoomSettings();
+  const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
+  const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
+  const reduceMotion = settings.appearance.reducedMotion;
+
+  useEffect(() => {
+    if (!showErrorOverlay) {
+      setPreparedDebugExport(null);
+      setDebugExportLog(null);
+      setDebugExportState("idle");
+      setManualCopyText(null);
+      return;
+    }
+
+    let cancelled = false;
+    setDebugExportState("preparing");
+    void prepareFullDebugExport({
+      source: "pip-error-overlay",
+      phase,
+      error: controls.errorMessage ?? null,
+      supportCode: controls.supportCode ?? null,
+      roomName: source?.title ?? null,
+    })
+      .then((prepared) => {
+        if (cancelled) return;
+        setPreparedDebugExport(prepared);
+        setDebugExportState("idle");
+      })
+      .catch((preparationError) => {
+        if (cancelled) return;
+        setDebugExportLog(JSON.stringify({ preparationError: preparationError instanceof Error ? preparationError.message : String(preparationError) }, null, 2));
+        setDebugExportState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [controls.errorMessage, controls.supportCode, phase, showErrorOverlay, source?.title]);
+
+  useEffect(() => {
+    if (!manualCopyText || !manualCopyRef.current) {
+      return;
+    }
+
+    manualCopyRef.current.focus();
+    manualCopyRef.current.select();
+    manualCopyRef.current.setSelectionRange(0, manualCopyText.length);
+  }, [manualCopyText]);
+
+  const handleDebugExport = async () => {
+    if (!preparedDebugExport) {
+      setDebugExportState("preparing");
+      setDebugExportLog(JSON.stringify({ error: "Debug report still preparing. Click again in a second." }, null, 2));
+      return;
+    }
+
+    const result = await copyPreparedDebugExport(preparedDebugExport);
+    setDebugExportState(result.outcome);
+    setDebugExportLog(JSON.stringify(result.diagnostics, null, 2));
+    setManualCopyText(result.outcome === "failed" ? preparedDebugExport.text : null);
+    window.setTimeout(() => setDebugExportState("idle"), 2500);
+  };
+
+  const handleDebugDownload = async () => {
+    const prepared = preparedDebugExport ?? (await prepareFullDebugExport({
+      source: "pip-error-overlay",
+      phase,
+      error: controls.errorMessage ?? null,
+      supportCode: controls.supportCode ?? null,
+      roomName: source?.title ?? null,
+    }));
+    setPreparedDebugExport(prepared);
+    downloadDebugReport(prepared.report);
+    setDebugExportState("downloaded");
+    setDebugExportLog(JSON.stringify(prepared.diagnostics, null, 2));
+    window.setTimeout(() => setDebugExportState("idle"), 2500);
+  };
+
+  return (
+    <div className="flex h-screen w-full flex-col bg-background text-foreground chalk-theme-transition relative overflow-hidden" style={participantThemeVariables as React.CSSProperties}>
+      {phase !== "joining" && (
+        <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "mix-blend-screen" : "mix-blend-multiply")}>
+        {settings.appearance.ambientBackground && (
+          <>
+            <div
+              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkerGradient ? "opacity-10" : "opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
+              style={{
+                background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
+                filter: "blur(60px)",
+              }}
+            />
+            <div
+              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkerGradient ? "opacity-5" : "opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
+              style={{
+                background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
+                filter: "blur(80px)",
+              }}
+            />
+          </>
+        )}
+        </div>
+      )}
+      
+      <div className="relative z-10 flex flex-1 flex-col overflow-hidden shadow-2xl transition-all duration-300">
+        {phase === "meeting" && (
+          <MeetingPictureInPictureLayout source={source} participantSources={participantSources ?? []} meetingLayout={meetingLayout} localParticipantGradientPreference={localParticipantGradientPreference} />
+        )}
+        {phase === "prejoin" && (
+          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={effectiveSourceGradientPreference} />
+        )}
+
+        {phase === "prejoin" && !showErrorOverlay && (
+          <div className="absolute inset-x-0 top-12 flex flex-col items-center pointer-events-none z-10">
+            <h2 className="text-white text-lg font-semibold drop-shadow-md">You're not in the room yet</h2>
+          </div>
+        )}
+
+        {phase === "joining" && (
+          <div className="absolute inset-0 z-50 bg-background flex items-center justify-center">
+             <LoadingScreen 
+               displayName={source?.title ?? "Chalker"} 
+               className="w-full h-full min-h-0" 
+               message="Joining room..."
+               supportingMessages={controls.loadingMessages}
+               gradientPreference={effectiveSourceGradientPreference}
+             />
+          </div>
+        )}
+
+        {showErrorOverlay && errorInfo && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/40 backdrop-blur-[6px] p-4 animate-in fade-in duration-500 font-app">
+            <div 
+              className="relative w-full max-w-[320px] max-h-[100%] overflow-y-auto scrollbar-none overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/72 px-5 pb-5 pt-6 text-center text-white shadow-[0_24px_60px_rgba(2,6,23,0.42)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-500 ease-[cubic-bezier(0.2,0,0,1)]"
+              style={{
+                backdropFilter: "blur(40px)",
+              }}
+            >
+              <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none -z-10" />
+
+              <div className="h-20 w-full flex items-center justify-center mb-4 relative">
+                <div className="absolute inset-0 flex items-center justify-center animate-friendly-float">
+                  <div className="absolute w-20 h-20 bg-primary/5 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
+                  <div className="absolute w-14 h-14 bg-primary/10 rounded-full animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]" />
+                  <div className="relative w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center shadow-lg shadow-primary/10 border border-primary/30 backdrop-blur-md">
+                    <errorInfo.Icon size={18} className="text-primary-foreground" />
+                  </div>
+                </div>
+              </div>
+
+              <h2 className="font-display text-xl font-bold tracking-tight text-white mb-3 leading-snug">{errorInfo.title}</h2>
+              <p className="mx-auto mb-6 max-w-[260px] text-xs leading-normal text-white/70">
+                {errorInfo.message}
+              </p>
+
+              <div className="flex flex-col gap-2 w-full mb-5">
+                {controls.onJoin && (
+                  <button
+                    onClick={controls.onJoin}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[13px] font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
+                  >
+                    <RefreshIcon size={16} />
+                    Try Again
+                  </button>
+                )}
+                <button
+                  onClick={onReturnToTab}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] text-[13px] font-semibold text-white transition-all hover:bg-white/[0.06] active:scale-95"
+                >
+                  <ArrowLeft01Icon size={16} />
+                  Go Back
+                </button>
+              </div>
+
+              <div className="mb-5 flex w-full flex-wrap justify-center gap-2">
+                <button
+                  onClick={() => void handleDebugExport()}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95"
+                >
+                  {debugExportState === "copied" ? (
+                    <>
+                      <CheckmarkCircle02Icon size={16} />
+                      Copied Full Debug
+                    </>
+                  ) : debugExportState === "preparing" ? (
+                    <>
+                      <Download01Icon size={16} />
+                      Preparing Debug...
+                    </>
+                  ) : debugExportState === "failed" ? (
+                    <>
+                      <Copy01Icon size={16} />
+                      Copy Failed
+                    </>
+                  ) : debugExportState === "downloaded" ? (
+                    <>
+                      <Download01Icon size={16} />
+                      Downloaded Debug JSON
+                    </>
+                  ) : (
+                    <>
+                      <Copy01Icon size={16} />
+                      Copy Full Debug
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => void handleDebugDownload()}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95"
+                >
+                  <Download01Icon size={16} />
+                  Download JSON
+                </button>
+              </div>
+
+              {manualCopyText && (
+                <div className="mb-5 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5 text-left">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Manual copy fallback</p>
+                  <p className="mb-2 text-[10px] leading-4 text-white/70">Clipboard write could not be verified. Press Cmd/Ctrl+C on the selected text below.</p>
+                  <textarea
+                    ref={manualCopyRef}
+                    readOnly
+                    value={manualCopyText}
+                    className="h-24 w-full resize-none rounded-xl border border-white/10 bg-slate-950/70 p-2 text-[10px] font-mono leading-4 text-white/88"
+                  />
+                </div>
+              )}
+
+              <div className="w-full text-left">
+                <button onClick={() => setShowDetails(!showDetails)} className="flex items-center justify-center gap-1.5 mx-auto text-[11px] font-medium text-white/50 hover:text-white transition-all duration-200 group">
+                  {showDetails ? <ArrowUp01Icon size={12} /> : <ArrowDown01Icon size={12} />}
+                  <span>Technical details</span>
+                </button>
+
+                <div className={cn("grid transition-all duration-300 ease-in-out w-full", showDetails ? "grid-rows-[1fr] opacity-100 mt-4" : "grid-rows-[0fr] opacity-0")}>
+                  <div className="overflow-hidden min-h-0 space-y-2">
+                    {controls.supportCode && (
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40 mb-1.5">Support code</p>
+                        <p className="text-[11px] font-mono leading-4 text-white/88 break-all">{controls.supportCode}</p>
+                      </div>
+                    )}
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40 mb-1.5">Error Log</p>
+                      <pre className="text-[10px] leading-4 font-mono text-white/88 overflow-x-auto whitespace-pre-wrap max-h-24 scrollbar-thin">{controls.errorMessage}</pre>
+                    </div>
+                    {debugExportLog && (
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40 mb-1.5">Debug Export Log</p>
+                        <pre className="text-[10px] leading-4 font-mono text-white/88 overflow-x-auto whitespace-pre-wrap max-h-28 scrollbar-thin">{debugExportLog}</pre>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <style
+                dangerouslySetInnerHTML={{
+                  __html: `
+                @keyframes friendly-float {
+                  0%, 100% { transform: translateY(0px) scale(1); }
+                  50% { transform: translateY(-4px) scale(1.02); }
+                }
+                .animate-friendly-float {
+                  animation: friendly-float 4s ease-in-out infinite;
+                }
+              `,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {phase === "prejoin" && !showErrorOverlay && (
+          <div className={cn("absolute inset-x-0 bottom-0 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-center justify-between", phase === "prejoin" ? "p-6 pb-20 pt-12" : "p-4 pb-5 pt-8")}>
+            <div className="flex items-center min-w-0">
+              <p className="max-w-[140px] truncate text-[15px] font-medium text-white drop-shadow-md">
+                {phase === "prejoin" ? "" : (source?.title ?? "Waiting for video")}
+              </p>
+              {source?.isSpeaking && !source?.isMuted && <Equalizer />}
+            </div>
+          </div>
+        )}
+
+        {phase === "meeting" && meetingLayout === "single" && previewSource && (
+          <div className="absolute right-4 bottom-4 h-28 w-20 overflow-hidden rounded-xl border border-border shadow-xl bg-muted/80">
+            <PictureInPictureStage source={previewSource} className="h-full w-full" gradientPreference={getSourceGradientPreference(previewSource, localParticipantGradientPreference)} />
+          </div>
+        )}
+
+        {isReactionPickerOpen && (
+          <ReactionPicker
+            isOpen={isReactionPickerOpen}
+            onClose={() => setIsReactionPickerOpen(false)}
+            onSelect={(emoji) => {
+              controls.onSendReaction?.(emoji);
+              setIsReactionPickerOpen(false);
+            }}
+            position="top"
+            size="mini"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2"
+          />
+        )}
+
+        {phase === "prejoin" && !showErrorOverlay && (
+          <div className="absolute inset-x-0 bottom-6 flex justify-center items-center px-4 pointer-events-none">
+            <div
+              className={cn(
+                "pointer-events-auto flex items-center gap-1.5 rounded-full border px-1.5 py-1.5 shadow-2xl",
+                isDarkMode ? "dark border-white/10 bg-black/60 backdrop-blur-xl" : "border-black/[0.08] bg-white/80 backdrop-blur-[18px]",
+              )}
+            >
+              <div className="flex items-center gap-1 px-1">
+                <DeviceControlButton
+                  type="mic"
+                  isActive={!controls.isMuted}
+                  onToggle={controls.onToggleMute ?? (() => {})}
+                  devices={controls.audioInputDevices ?? []}
+                  selectedDeviceId={controls.selectedAudioInput}
+                  onDeviceChange={controls.onAudioInputChange ?? (() => {})}
+                  className="!pointer-events-auto"
+                  haptic="medium"
+                  size="sm"
+                />
+                <DeviceControlButton
+                  type="video"
+                  isActive={Boolean(controls.isVideoEnabled)}
+                  onToggle={controls.onToggleVideo ?? (() => {})}
+                  devices={controls.videoInputDevices ?? []}
+                  selectedDeviceId={controls.selectedVideoInput}
+                  onDeviceChange={controls.onVideoInputChange ?? (() => {})}
+                  className="!pointer-events-auto"
+                  haptic="medium"
+                  size="sm"
+                />
+              </div>
+              <button
+                onClick={controls.onJoin}
+                className="h-9 rounded-full px-6 text-sm font-semibold shadow-lg transition-all hover:scale-105 active:scale-95"
+                style={{
+                  backgroundColor: participantThemeVariables["--primary"],
+                  color: participantThemeVariables["--primary-foreground"],
+                }}
+              >
+                Join Now
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {phase === "meeting" && (
+        <div className="relative z-10 flex flex-wrap shrink-0 items-center justify-center gap-1.5 pb-2 pt-2 px-2 bg-background border-t border-border shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] overflow-hidden">
+          <div className="flex items-center shrink-0 gap-0.5 px-1 py-0.5 bg-muted rounded-full border border-border">
+            {actionButtons
+              .filter((b) => b.key === "mute" || b.key === "video")
+              .map((btn) => (
+                <ControlButton key={btn.key} icon={btn.icon} label={btn.label} active={btn.active} danger={"danger" in btn ? btn.danger : false} onClick={btn.onClick} size="sm" activeClassName={"activeClassName" in btn ? (btn as any).activeClassName : undefined} hideTooltip className="h-8 w-8" />
+              ))}
+          </div>
+
+          {actionButtons.some((b) => b.key === "screenshare" || b.key === "handraise" || b.key === "reactions") && (
+            <div className="flex items-center shrink-0 gap-0.5 px-1 py-0.5 bg-muted rounded-full border border-border">
+              {actionButtons
+                .filter((b) => b.key === "screenshare" || b.key === "handraise" || b.key === "reactions")
+                .map((btn) => (
+                  <ControlButton key={btn.key} icon={btn.icon} label={btn.label} active={btn.active} danger={"danger" in btn ? btn.danger : false} onClick={btn.onClick} size="sm" activeClassName={"activeClassName" in btn ? (btn as any).activeClassName : undefined} hideTooltip className="h-8 w-8" />
+                ))}
+            </div>
+          )}
+
+          <div className="flex items-center shrink-0 gap-0.5 px-1 py-0.5 bg-muted rounded-full border border-border">
+            {actionButtons
+              .filter((b) => b.key === "return" || b.key === "leave")
+              .map((btn) => (
+                <ControlButton
+                  key={btn.key}
+                  icon={btn.icon}
+                  label={btn.label}
+                  active={btn.active}
+                  danger={"danger" in btn ? btn.danger : false}
+                  onClick={btn.onClick}
+                  size="sm"
+                  activeClassName={"activeClassName" in btn ? (btn as any).activeClassName : undefined}
+                  hideTooltip
+                  className={btn.key === "leave" ? "h-8 w-auto px-4 rounded-full hover:scale-105 transition-transform" : "h-8 w-8"}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

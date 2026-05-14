@@ -1,0 +1,174 @@
+---
+title: Rooms
+description: Room management API
+---
+
+## Create Room
+
+```http
+POST /api/v1/rooms
+```
+
+### Request
+
+```json
+{
+  "name": "CS101 Lecture",
+  "config": {
+    "max_participants": 100,
+    "recording_enabled": true,
+    "chat_enabled": true
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "id": "room_abc123",
+  "name": "CS101 Lecture",
+  "status": "active",
+  "config": {
+    "max_participants": 100,
+    "recording_enabled": true,
+    "chat_enabled": true
+  },
+  "created_at": "2026-01-06T10:00:00Z"
+}
+```
+
+## List Rooms
+
+```http
+GET /api/v1/rooms
+```
+
+### Query Parameters
+
+| Parameter | Type    | Default | Description                       |
+| --------- | ------- | ------- | --------------------------------- |
+| `limit`   | integer | 20      | Maximum number of rooms to return |
+| `offset`  | integer | 0       | Number of rooms to skip           |
+
+### Response
+
+```json
+{
+  "rooms": [
+    {
+      "id": "room_abc123",
+      "name": "CS101 Lecture",
+      "status": "active",
+      "participant_count": 25,
+      "config": {
+        "max_participants": 100,
+        "recording_enabled": true,
+        "chat_enabled": true
+      },
+      "created_at": "2026-01-06T10:00:00Z"
+    }
+  ],
+  "total": 42,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+## Get Room
+
+```http
+GET /api/v1/rooms/{id}
+```
+
+### Response
+
+```json
+{
+  "id": "room_abc123",
+  "name": "CS101 Lecture",
+  "status": "active",
+  "participant_count": 25,
+  "config": {
+    "max_participants": 100,
+    "recording_enabled": true,
+    "chat_enabled": true
+  },
+  "created_at": "2026-01-06T10:00:00Z"
+}
+```
+
+## Update Room
+
+```http
+PATCH /api/v1/rooms/{id}
+```
+
+### Request
+
+All fields are optional.
+
+```json
+{
+  "name": "CS101 Lecture - Updated",
+  "config": {
+    "max_participants": 150,
+    "recording_enabled": false
+  }
+}
+```
+
+### Response
+
+Returns the updated room object.
+
+```json
+{
+  "id": "room_abc123",
+  "name": "CS101 Lecture - Updated",
+  "status": "active",
+  "config": {
+    "max_participants": 150,
+    "recording_enabled": false,
+    "chat_enabled": true
+  },
+  "created_at": "2026-01-06T10:00:00Z"
+}
+```
+
+## Delete Room
+
+```http
+DELETE /api/v1/rooms/{id}
+```
+
+Permanently deletes the room.
+
+### Response
+
+Returns `204 No Content` on success.
+
+## End Room
+
+```http
+POST /api/v1/rooms/{id}/end
+```
+
+Ends the room session. Unlike delete, this marks the room as ended but preserves the record.
+
+### Response
+
+```json
+{
+  "id": "room_abc123",
+  "name": "CS101 Lecture",
+  "status": "ended",
+  "config": {
+    "max_participants": 100,
+    "recording_enabled": true,
+    "chat_enabled": true
+  },
+  "created_at": "2026-01-06T10:00:00Z",
+  "ended_at": "2026-01-06T11:30:00Z"
+}
+```

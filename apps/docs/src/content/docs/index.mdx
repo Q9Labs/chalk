@@ -1,0 +1,35 @@
+---
+title: ""
+description: Ultra low-latency video infrastructure for high-stakes learning.
+template: splash
+hero:
+  tagline: The Infrastructure for High-Stakes Learning.
+  image:
+    file: ../../assets/chalk-logo.svg
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: API Reference
+      link: /api/
+      icon: rocket
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+<CardGrid stagger>
+  <Card title="React SDK" icon="rocket">
+    Turnkey components for web-based tutoring and virtual classrooms. Launch in minutes.
+  </Card>
+  <Card title="Rest API" icon="setting">
+    Programmatically manage rooms, participants, and session metadata at global scale.
+  </Card>
+  <Card title="Enterprise Auth" icon="lock">
+    Secure rooms with JWT-based authentication, role-based access, and granular permissions.
+  </Card>
+  <Card title="Sub-100ms Latency" icon="document">
+    Leverage Cloudflare RealtimeKit for global, low-latency video delivery worldwide.
+  </Card>
+</CardGrid>

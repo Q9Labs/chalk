@@ -1,0 +1,61 @@
+{
+  "name": "@q9labs/chalk-react-native",
+  "version": "0.0.85",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "packages/sdk-react-native"
+  },
+  "files": [
+    "dist",
+    "src",
+    "android",
+    "ios",
+    "*.podspec"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "scripts": {
+    "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core && pnpm run build:types",
+    "build:types": "tsc --project tsconfig.json",
+    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core --watch",
+    "test": "pnpm exec vitest run",
+    "check-types": "tsc --noEmit",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@q9labs/chalk-core": "workspace:^",
+    "@q9labs/facehash": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "@cloudflare/react-native-webrtc": "~125.0.1 || ~125.0.3",
+    "@cloudflare/realtimekit-react-native": "^0.3.1",
+    "@hugeicons/core-free-icons": "^4.0.0",
+    "@hugeicons/react-native": "^1.0.13",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-native": ">=0.77",
+    "react-native-svg": "^15.15.3"
+  }
+}

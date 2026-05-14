@@ -1,0 +1,110 @@
+# Dependencies
+node_modules
+
+# Build output
+out
+dist
+*.tgz
+
+# Code coverage
+coverage
+*.lcov
+.scratchpad/
+# Logs
+logs
+*.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# Environment files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+.private/
+.codex/
+scratchpad/private/
+scratchpad/raw/
+scratchpad/upload-logs/
+
+# Caches
+.eslintcache
+.cache
+.bun-cache
+.gocache
+.tmp
+.stryker-tmp
+reports/mutation
+apps/web/reports
+.agent-browser-home
+.turbo-prune-*
+*.tsbuildinfo
+.turbo
+.gradle
+**/.gradle
+**/build
+
+# Android
+*.aab
+*.apk
+**/.idea
+/.maestro/debug/
+/.maestro/test-output/
+**/.expo
+**/.expo-shared
+**/.metro-health-check*
+**/dist
+**/web-build
+apps/mobile/.env.local
+apps/mobile/.gplay
+apps/mobile/.turbo
+apps/mobile/android/app/.cxx
+apps/mobile/android/app/debug.keystore
+apps/mobile/android/app/keystore.properties
+apps/mobile/android/app/*.jks
+apps/mobile/android/app/*.keystore
+packages/sdk-react-native/.turbo
+packages/sdk-react-native/dist
+packages/sdk-react-native/tsconfig.tsbuildinfo
+
+# iOS / Xcode
+*.ipa
+DerivedData
+**/*.xcuserstate
+**/xcuserdata
+**/*.xccheckout
+.build
+**/.build
+
+# IDEs
+.idea
+.vscode
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+apps/api/main
+apps/api/server
+
+# Terraform (handled in infrastructure/.gitignore)
+# *.tfstate
+# .terraform/
+
+
+# Worktrees
+.worktrees/
+
+.codex-tmp/
+.collaborator
+.claude/
