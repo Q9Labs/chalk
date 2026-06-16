@@ -19,9 +19,12 @@ missing scripts referenced by `scripts/gates/commit.sh`, Turbo
 `<NONEXISTENT>` task resolution, and generated OpenAPI stubs. This keeps the
 gate honest before deeper checks run.
 
-`pnpm run test:presence` requires meaningful source files to have nearby tests.
-It excludes generated files, declarations, barrels, assets, style-only files,
-config files, migrations, scripts, and test helpers by explicit Chalk policy.
+`pnpm run test:presence` requires newly added meaningful source files to have
+nearby tests against `origin/master` by default. It excludes generated files,
+declarations, barrels, assets, style-only files, config files, migrations,
+scripts, and test helpers by explicit Chalk policy. Set
+`TEST_PRESENCE_BASE_REF` or `TEST_PRESENCE_FILES` to change the comparison
+scope.
 
 The gate also runs Fallow, Semgrep, Gitleaks, OSV-Scanner, Syncpack, CSpell,
 OpenAPI drift/stub checks, TypeScript, lint, tests, coverage, build, publint,

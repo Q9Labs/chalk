@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -54,6 +55,48 @@ function isMeaningfulSourceFile(relativePath) {
   return hasSourceExtension && !isIgnoredFile && !ignoredPathMatchers.some((matches) => matches(relativePath));
 }
 
+function gitLines(args) {
+  try {
+    return execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function getExplicitFiles() {
+  const raw = process.env.TEST_PRESENCE_FILES;
+  if (!raw) return [];
+  return raw
+    .split(/[\r\n,]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function getAddedFiles() {
+  const explicitFiles = getExplicitFiles();
+  if (explicitFiles.length > 0) return explicitFiles;
+
+  const addedFiles = new Set([...gitLines(["diff", "--cached", "--name-only", "--diff-filter=A"]), ...gitLines(["diff", "--name-only", "--diff-filter=A"]), ...gitLines(["ls-files", "--others", "--exclude-standard"])]);
+
+  const baseRef = process.env.TEST_PRESENCE_BASE_REF ?? "origin/master";
+  const mergeBase = gitLines(["merge-base", baseRef, "HEAD"])[0];
+  if (mergeBase) {
+    for (const relativePath of gitLines(["diff", "--name-only", "--diff-filter=A", `${mergeBase}..HEAD`])) {
+      addedFiles.add(relativePath);
+    }
+    return [...addedFiles];
+  }
+
+  return sourceRoots.flatMap(walk);
+}
+
+function isInSourceRoot(relativePath) {
+  return sourceRoots.some((sourceRoot) => relativePath.startsWith(`${sourceRoot}/`));
+}
+
 function candidateTestsFor(relativePath) {
   const parsed = path.parse(relativePath);
   const dir = parsed.dir;
@@ -71,7 +114,7 @@ function candidateTestsFor(relativePath) {
   ].filter(Boolean);
 }
 
-const meaningfulSourceFiles = sourceRoots.flatMap(walk).filter(isMeaningfulSourceFile);
+const meaningfulSourceFiles = getAddedFiles().filter(isInSourceRoot).filter(isMeaningfulSourceFile);
 
 for (const relativePath of meaningfulSourceFiles) {
   if (!candidateTestsFor(relativePath).some((candidate) => existsSync(path.join(repoRoot, candidate)))) {
@@ -85,4 +128,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`Test presence passed for ${meaningfulSourceFiles.length} meaningful source files.`);
+console.log(`Test presence passed for ${meaningfulSourceFiles.length} newly added meaningful source files.`);
