@@ -2,10 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import z from "zod";
 import { exchangeJoinToken, getApiUrl, setJoinContext } from "../../lib/internalAuth";
-import {
-  buildMobileJoinIntent,
-  type MobileJoinPlatform,
-} from "../../lib/mobileJoinRedirect";
+import { buildMobileJoinIntent, type MobileJoinPlatform } from "../../lib/mobileJoinRedirect";
 
 const MOBILE_REDIRECT_FALLBACK_DEEP_LINK_DELAY_MS = 900;
 const MOBILE_REDIRECT_STORE_FALLBACK_TIMEOUT_MS = 1800;
@@ -72,11 +69,7 @@ function JoinLinkPage() {
     };
 
     const fallbackDeepLinkTimeout = window.setTimeout(() => {
-      if (
-        didHandOffToApp ||
-        didAttemptFallbackDeepLink ||
-        !mobileJoinIntent.fallbackDeepLinkUrl
-      ) {
+      if (didHandOffToApp || didAttemptFallbackDeepLink || !mobileJoinIntent.fallbackDeepLinkUrl) {
         return;
       }
 
@@ -105,14 +98,7 @@ function JoinLinkPage() {
   }, [mobileJoinIntent]);
 
   if (mobileJoinIntent) {
-    return (
-      <MobileJoinRedirectScreen
-        deepLinkUrl={mobileJoinIntent.deepLinkUrl}
-        fallbackReady={mobileFallbackReady}
-        platform={mobileJoinIntent.platform}
-        storeUrl={mobileJoinIntent.storeUrl}
-      />
-    );
+    return <MobileJoinRedirectScreen deepLinkUrl={mobileJoinIntent.deepLinkUrl} fallbackReady={mobileFallbackReady} platform={mobileJoinIntent.platform} storeUrl={mobileJoinIntent.storeUrl} />;
   }
 
   return (
@@ -126,67 +112,30 @@ function JoinLinkPage() {
   );
 }
 
-function MobileJoinRedirectScreen({
-  deepLinkUrl,
-  fallbackReady,
-  platform,
-  storeUrl,
-}: {
-  deepLinkUrl: string;
-  fallbackReady: boolean;
-  platform: MobileJoinPlatform;
-  storeUrl: string | null;
-}) {
+function MobileJoinRedirectScreen({ deepLinkUrl, fallbackReady, platform, storeUrl }: { deepLinkUrl: string; fallbackReady: boolean; platform: MobileJoinPlatform; storeUrl: string | null }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-3xl border border-border/60 bg-card/80 p-6 shadow-2xl backdrop-blur-sm space-y-5">
         <div className="space-y-2 text-center">
-          <p className="text-xs font-medium uppercase tracking-[0.28em] text-primary/80">
-            Open in Chalk
-          </p>
-          <h1 className="text-3xl font-semibold leading-tight">
-            Joining on mobile works better in the app.
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            We’re opening Chalk now so you land directly in the lobby instead of
-            the mobile web room.
-          </p>
+          <p className="text-xs font-medium uppercase tracking-[0.28em] text-primary/80">Open in Chalk</p>
+          <h1 className="text-3xl font-semibold leading-tight">Joining on mobile works better in the app.</h1>
+          <p className="text-sm text-muted-foreground">We’re opening Chalk now so you land directly in the lobby instead of the mobile web room.</p>
         </div>
 
         <div className="rounded-2xl border border-primary/20 bg-primary/8 p-4 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">Invite token ready</p>
-          <p className="mt-1">
-            If the app is already installed, it should open automatically.
-          </p>
-          {fallbackReady && storeUrl ? (
-            <p className="mt-2 text-foreground">
-              Didn’t open? Download Chalk below and retry the same link.
-            </p>
-          ) : null}
-          {fallbackReady && !storeUrl ? (
-            <p className="mt-2 text-foreground">
-              Didn’t open? Install Chalk from the{" "}
-              {platform === "ios" ? "App Store" : "Play Store"} once the store
-              URL is configured.
-            </p>
-          ) : null}
+          <p className="mt-1">If the app is already installed, it should open automatically.</p>
+          {fallbackReady && storeUrl ? <p className="mt-2 text-foreground">Didn’t open? Download Chalk below and retry the same link.</p> : null}
+          {fallbackReady && !storeUrl ? <p className="mt-2 text-foreground">Didn’t open? Install Chalk from the {platform === "ios" ? "App Store" : "Play Store"} once the store URL is configured.</p> : null}
         </div>
 
         <div className="grid gap-3">
-          <a
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-95"
-            href={deepLinkUrl}
-          >
+          <a className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-95" href={deepLinkUrl}>
             Open Chalk app
           </a>
           {storeUrl ? (
-            <a
-              className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-background px-4 text-sm font-medium text-foreground transition hover:bg-muted"
-              href={storeUrl}
-            >
-              {platform === "ios"
-                ? "Download on the App Store"
-                : "Get it on Google Play"}
+            <a className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-background px-4 text-sm font-medium text-foreground transition hover:bg-muted" href={storeUrl}>
+              {platform === "ios" ? "Download on the App Store" : "Get it on Google Play"}
             </a>
           ) : null}
         </div>

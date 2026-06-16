@@ -7,9 +7,7 @@ describe("docsRedirect", () => {
   });
 
   it("preserves nested docs paths, search, and hash", () => {
-    expect(getDocsExternalUrl("/docs/getting-started", "?tab=react", "#install")).toBe(
-      `${DOCS_BASE_URL}/getting-started?tab=react#install`,
-    );
+    expect(getDocsExternalUrl("/docs/getting-started", "?tab=react", "#install")).toBe(`${DOCS_BASE_URL}/getting-started?tab=react#install`);
   });
 
   it("treats /documentation as a legacy docs path", () => {

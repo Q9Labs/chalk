@@ -22,8 +22,7 @@ function NewRoomPage() {
 
     void (async () => {
       try {
-        const { roomId, roomName, accessToken, expiresAtMs } =
-          await createInternalMeeting(apiUrl);
+        const { roomId, roomName, accessToken, expiresAtMs } = await createInternalMeeting(apiUrl);
         setJoinContext({
           roomId,
           roomName,

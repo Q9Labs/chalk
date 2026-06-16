@@ -36,15 +36,7 @@ export function shouldHidePwaPrompt(pathname: string) {
   return pathname.startsWith("/room/") || pathname.startsWith("/share/") || pathname.startsWith("/j/") || pathname.startsWith("/auth/");
 }
 
-export function getPwaInstallPromptContent({
-  hasNativePrompt,
-  installPlatform,
-  requiresManualInstall,
-}: {
-  hasNativePrompt: boolean;
-  installPlatform: PwaInstallPlatform;
-  requiresManualInstall: boolean;
-}): PwaInstallPromptContent {
+export function getPwaInstallPromptContent({ hasNativePrompt, installPlatform, requiresManualInstall }: { hasNativePrompt: boolean; installPlatform: PwaInstallPlatform; requiresManualInstall: boolean }): PwaInstallPromptContent {
   if (hasNativePrompt && installPlatform === "android") {
     return {
       badge: "Home screen app",

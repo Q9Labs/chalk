@@ -92,8 +92,8 @@
 
 /* Live Sketch Dashboard - Textured Surface */
 .slate-canvas {
-  background-color: #0A0A0B;
-  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0);
+  background-color: #0a0a0b;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
   background-size: 32px 32px;
 }
 
@@ -108,30 +108,32 @@
 
 /* Skeleton Sketch Animation */
 @keyframes sketch-pulse {
-  0%, 100% { opacity: 0.3; transform: scale(0.995); }
-  50% { opacity: 0.5; transform: scale(1); }
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.995);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
 }
 
 .sketch-loading {
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 10px,
-    rgba(255, 255, 255, 0.03) 10px,
-    rgba(255, 255, 255, 0.03) 20px
-  );
+  background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 255, 255, 0.03) 10px, rgba(255, 255, 255, 0.03) 20px);
   animation: sketch-pulse 2s ease-in-out infinite;
   border: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
 @keyframes chalk-wave {
-  0%, 100% { 
-    transform: translateY(0) scale(1); 
-    opacity: 0.8; 
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
   }
-  50% { 
-    transform: translateY(-6px) scale(1.05); 
-    opacity: 1; 
+  50% {
+    transform: translateY(-6px) scale(1.05);
+    opacity: 1;
   }
 }
 
@@ -141,7 +143,15 @@
   transform-box: fill-box;
 }
 
-.chalk-s1 { animation-delay: 0s; }
-.chalk-s2 { animation-delay: 0.15s; }
-.chalk-s3 { animation-delay: 0.3s; }
-.chalk-s4 { animation-delay: 0.45s; }
+.chalk-s1 {
+  animation-delay: 0s;
+}
+.chalk-s2 {
+  animation-delay: 0.15s;
+}
+.chalk-s3 {
+  animation-delay: 0.3s;
+}
+.chalk-s4 {
+  animation-delay: 0.45s;
+}

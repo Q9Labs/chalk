@@ -7,6 +7,7 @@ import { ChalkLogo } from "../components/ChalkLogo";
 import { useTheme } from "../context/theme";
 import { getApiUrl } from "../lib/internalAuth";
 import { getPublicAppUrl } from "../lib/publicUrl";
+import { EdgeDiagnostics } from "../components/EdgeDiagnostics";
 
 const STATUS_META_TITLE = "Chalk Status";
 const STATUS_META_DESCRIPTION = "Live system status, incidents, uptime, and maintenance updates for Chalk.";
@@ -176,13 +177,10 @@ function PublicStatusPage() {
 
     void (async () => {
       try {
-        const res = await fetch(
-          `${apiUrl}/api/v1/status/incidents/${encodeURIComponent(expandedIncidentCode)}`,
-          {
-            headers: { Accept: "application/json" },
-            cache: "no-store",
-          },
-        );
+        const res = await fetch(`${apiUrl}/api/v1/status/incidents/${encodeURIComponent(expandedIncidentCode)}`, {
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
         if (!res.ok) {
           throw new Error(`Incident endpoint returned ${res.status}`);
         }
@@ -217,8 +215,8 @@ function PublicStatusPage() {
   const groupedIncidents = useMemo(() => {
     if (!summary) return [];
     const groups: Record<string, StatusIncident[]> = {};
-    
-    summary.recentIncidents.forEach(incident => {
+
+    summary.recentIncidents.forEach((incident) => {
       const timestamp = incident.resolvedAt || incident.lastSeenAt || incident.firstSeenAt;
       const dateKey = timestamp ? formatDateKey(timestamp) : "Unresolved";
       if (!groups[dateKey]) groups[dateKey] = [];
@@ -234,7 +232,7 @@ function PublicStatusPage() {
 
   const aggregateUptime = useMemo(() => {
     if (!summary) return null;
-    const withUptime = summary.components.filter(c => c.recentUptimePct !== null);
+    const withUptime = summary.components.filter((c) => c.recentUptimePct !== null);
     if (withUptime.length === 0) return null;
     const avg = withUptime.reduce((sum, c) => sum + (c.recentUptimePct ?? 0), 0) / withUptime.length;
     return avg.toFixed(avg % 1 === 0 ? 0 : 2);
@@ -250,11 +248,10 @@ function PublicStatusPage() {
   const overallMeta = stateMeta(overallState);
   const isHealthy = overallState === "operational";
   const isLoading = loading && !summary;
-  const affectedComponents = summary?.components.filter(c => c.state !== "operational") ?? [];
+  const affectedComponents = summary?.components.filter((c) => c.state !== "operational") ?? [];
 
   return (
     <div className="font-app min-h-screen bg-white dark:bg-[#030303] text-zinc-900 dark:text-zinc-100 antialiased tracking-tight">
-      
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between max-w-7xl">
           <div className="flex items-center gap-6">
@@ -284,11 +281,7 @@ function PublicStatusPage() {
       >
         <div
           className={`container mx-auto max-w-7xl px-6 transition-[padding,gap] duration-500 ease-in-out ${
-            isLoading
-              ? "py-3 flex items-center justify-center gap-3 text-center"
-              : isHealthy
-                ? "py-3 flex items-center justify-center gap-3 text-center"
-                : "py-16 md:py-20 flex flex-col items-center justify-center gap-5 text-center"
+            isLoading ? "py-3 flex items-center justify-center gap-3 text-center" : isHealthy ? "py-3 flex items-center justify-center gap-3 text-center" : "py-16 md:py-20 flex flex-col items-center justify-center gap-5 text-center"
           }`}
         >
           {isLoading ? (
@@ -301,30 +294,10 @@ function PublicStatusPage() {
             </>
           ) : (
             <>
-              <overallMeta.Icon
-                className={`shrink-0 ${overallMeta.iconClass} transition-[width,height] duration-500 ${
-                  isHealthy ? "h-5 w-5" : "h-10 w-10 opacity-80"
-                }`}
-              />
+              <overallMeta.Icon className={`shrink-0 ${overallMeta.iconClass} transition-[width,height] duration-500 ${isHealthy ? "h-5 w-5" : "h-10 w-10 opacity-80"}`} />
               <div className={`min-w-0 flex flex-col items-center transition-[gap] duration-500 ${isHealthy ? "" : "gap-2"}`}>
-                <h1
-                  className={`font-medium tracking-tight transition-[font-size,line-height] duration-500 ${
-                    isHealthy
-                      ? "text-sm leading-tight"
-                      : "text-2xl md:text-3xl text-zinc-900 dark:text-zinc-50"
-                  }`}
-                >
-                  {overallMeta.headline}
-                </h1>
-                <p
-                  className={`opacity-80 leading-relaxed transition-[font-size,opacity] duration-500 ${
-                    isHealthy
-                      ? "mt-0.5 text-xs"
-                      : "text-sm md:text-base max-w-xl text-zinc-600 dark:text-zinc-400"
-                  }`}
-                >
-                  {overallMeta.subtext}
-                </p>
+                <h1 className={`font-medium tracking-tight transition-[font-size,line-height] duration-500 ${isHealthy ? "text-sm leading-tight" : "text-2xl md:text-3xl text-zinc-900 dark:text-zinc-50"}`}>{overallMeta.headline}</h1>
+                <p className={`opacity-80 leading-relaxed transition-[font-size,opacity] duration-500 ${isHealthy ? "mt-0.5 text-xs" : "text-sm md:text-base max-w-xl text-zinc-600 dark:text-zinc-400"}`}>{overallMeta.subtext}</p>
               </div>
 
               {/* Affected component pills — only when unhealthy */}
@@ -333,10 +306,7 @@ function PublicStatusPage() {
                   {affectedComponents.map((c) => {
                     const cMeta = stateMeta(c.state);
                     return (
-                      <span
-                        key={c.id}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/60 dark:bg-white/[0.04] border border-zinc-200/80 dark:border-white/[0.08] text-sm font-medium text-zinc-700 dark:text-zinc-300 backdrop-blur-sm"
-                      >
+                      <span key={c.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/60 dark:bg-white/[0.04] border border-zinc-200/80 dark:border-white/[0.08] text-sm font-medium text-zinc-700 dark:text-zinc-300 backdrop-blur-sm">
                         <span className={`h-2 w-2 rounded-full ${cMeta.dotClass} animate-pulse`} />
                         {c.name}
                       </span>
@@ -349,12 +319,7 @@ function PublicStatusPage() {
         </div>
       </div>
 
-      <main
-        className={`relative mx-auto flex w-full max-w-3xl flex-col px-6 pb-24 transition-[gap,padding] duration-500 ${
-          isHealthy ? "gap-20 pt-12" : "gap-10 pt-8"
-        }`}
-      >
-
+      <main className={`relative mx-auto flex w-full max-w-3xl flex-col px-6 pb-24 transition-[gap,padding] duration-500 ${isHealthy ? "gap-20 pt-12" : "gap-10 pt-8"}`}>
         {/* Active Incidents — prominent when unhealthy, naturally follows hero */}
         {isLoading ? (
           <section className="space-y-5">
@@ -373,7 +338,7 @@ function PublicStatusPage() {
             </div>
           </section>
         ) : null}
-        {!isLoading && summary?.activeIncidents.length > 0 && (
+        {!isLoading && summary && summary.activeIncidents && summary.activeIncidents.length > 0 && (
           <section className="space-y-5">
             <h2 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 px-1">Active Incidents</h2>
             <div className="space-y-4">
@@ -394,7 +359,7 @@ function PublicStatusPage() {
         )}
 
         {/* Maintenance */}
-        {!isLoading && summary?.maintenance.length > 0 && (
+        {!isLoading && summary && summary.maintenance && summary.maintenance.length > 0 && (
           <section className="space-y-5">
             <h2 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 px-1">Scheduled Maintenance</h2>
             <div className="space-y-4">
@@ -406,13 +371,7 @@ function PublicStatusPage() {
         )}
 
         {/* Receding group — system status & history fade when unhealthy, hero when healthy */}
-        <div
-          className={`flex flex-col ${
-            isHealthy
-              ? "gap-20"
-              : "gap-8 opacity-70 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
-          }`}
-        >
+        <div className={`flex flex-col ${isHealthy ? "gap-20" : "gap-8 opacity-70 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300"}`}>
           {/* System Status Card */}
           <section className="space-y-5">
             <h2 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 px-1">System Status</h2>
@@ -446,13 +405,13 @@ function PublicStatusPage() {
                   <div className="flex items-center gap-2">
                     <overallMeta.Icon className={`h-4 w-4 ${overallMeta.iconClass}`} />
                     <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{statusCardHeadline(summary?.overall ?? "unknown")}</span>
-                    {aggregateUptime !== null && (
-                      <span className="ml-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">{aggregateUptime}% uptime</span>
-                    )}
+                    {aggregateUptime !== null && <span className="ml-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">{aggregateUptime}% uptime</span>}
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                     <Clock3 className="h-3 w-3" />
-                    <span>{summary?.historyWindowLabel || "Live snapshot"} · {formatDateTime(summary?.generatedAt ?? null)}</span>
+                    <span>
+                      {summary?.historyWindowLabel || "Live snapshot"} · {formatDateTime(summary?.generatedAt ?? null)}
+                    </span>
                   </div>
                 </div>
 
@@ -464,6 +423,9 @@ function PublicStatusPage() {
               </div>
             )}
           </section>
+
+          {/* Edge Latency & Network Diagnostics Playground */}
+          <EdgeDiagnostics />
 
           {/* History Log */}
           <section className="space-y-5">
@@ -517,7 +479,6 @@ function PublicStatusPage() {
             )}
           </section>
         </div>
-
       </main>
 
       {/* Footer */}
@@ -561,10 +522,7 @@ function ComponentRow({ component }: { component: StatusComponent }) {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{component.name}</span>
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="flex items-center gap-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 transition-colors"
-              >
+              <button onClick={() => setIsExpanded(!isExpanded)} className="flex items-center gap-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 transition-colors">
                 <span>{isExpanded ? "Hide" : "Details"}</span>
                 <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
               </button>
@@ -572,14 +530,12 @@ function ComponentRow({ component }: { component: StatusComponent }) {
             <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{detailText}</p>
           </div>
         </div>
-        <span className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${meta.shortLabelClass}`}>
-          {uptime}
-        </span>
+        <span className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${meta.shortLabelClass}`}>{uptime}</span>
       </div>
       <div className="px-6 pb-4">
         <UptimeHistoryBars history={component.history} showLegend />
       </div>
-      
+
       <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
         <div className="overflow-hidden">
           <div className="bg-zinc-50/60 dark:bg-white/[0.02] border-t border-zinc-100 dark:border-white/[0.06] px-10 py-5 space-y-4 transition-colors">
@@ -618,76 +574,66 @@ function UptimeHistoryBars({ history, compact, showLegend }: { history: StatusHi
             if (bar.state === "outage") colorClass = "bg-rose-500/90 dark:bg-rose-500/60";
             if (bar.state === "maintenance") colorClass = "bg-sky-400 dark:bg-sky-500/60";
           }
-          
-          return (
-            <div 
-              key={i} 
-              className={`flex-1 min-w-[3px] rounded-sm transition-[opacity,transform] hover:opacity-70 hover:scale-y-110 ${colorClass} ${compact ? "min-h-[6px]" : "min-h-[10px]"}`}
-              title={historyBucketTitle(bar)}
-            />
-          );
+
+          return <div key={i} className={`flex-1 min-w-[3px] rounded-sm transition-[opacity,transform] hover:opacity-70 hover:scale-y-110 ${colorClass} ${compact ? "min-h-[6px]" : "min-h-[10px]"}`} title={historyBucketTitle(bar)} />;
         })}
       </div>
       {showLegend && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-600">
-          <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-500/90 dark:bg-emerald-500/60" />Operational</span>
-          <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-sm bg-amber-400 dark:bg-amber-500/60" />Degraded</span>
-          <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-sm bg-rose-500/90 dark:bg-rose-500/60" />Outage</span>
-          <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-sm bg-sky-400 dark:bg-sky-500/60" />Maintenance</span>
-          <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-sm bg-zinc-200 dark:bg-zinc-800" />No data</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500/90 dark:bg-emerald-500/60" />
+            Operational
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-sm bg-amber-400 dark:bg-amber-500/60" />
+            Degraded
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-sm bg-rose-500/90 dark:bg-rose-500/60" />
+            Outage
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-sm bg-sky-400 dark:bg-sky-500/60" />
+            Maintenance
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-sm bg-zinc-200 dark:bg-zinc-800" />
+            No data
+          </span>
         </div>
       )}
     </div>
   );
 }
 
-
-
-function HistoryIncidentRow({
-  incident,
-  expanded,
-  onToggle,
-  loading,
-  details,
-  error,
-}: {
-  incident: StatusIncident;
-  expanded: boolean;
-  onToggle: () => void;
-  loading: boolean;
-  details: IncidentDetails | undefined;
-  error: string | undefined;
-}) {
+function HistoryIncidentRow({ incident, expanded, onToggle, loading, details, error }: { incident: StatusIncident; expanded: boolean; onToggle: () => void; loading: boolean; details: IncidentDetails | undefined; error: string | undefined }) {
   const isResolved = !!incident.resolvedAt;
   const isOutage = incident.severity === "outage";
 
   return (
     <div className="rounded-xl border border-zinc-200/80 dark:border-white/[0.08] bg-white dark:bg-white/[0.02] overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-start justify-between gap-4 p-6 text-left"
-      >
+      <button type="button" onClick={onToggle} className="flex w-full items-start justify-between gap-4 p-6 text-left">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{incident.title}</h3>
             {isResolved ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/8 px-2 py-0.5 text-xs font-medium text-emerald-600/80 dark:text-emerald-400/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80" />Resolved
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80" />
+                Resolved
               </span>
             ) : isOutage ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/8 px-2 py-0.5 text-xs font-medium text-rose-500/80 dark:text-rose-400/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-500/80" />Outage
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500/80" />
+                Outage
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/8 px-2 py-0.5 text-xs font-medium text-amber-600/80 dark:text-amber-400/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500/80" />Degraded
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500/80" />
+                Degraded
               </span>
             )}
           </div>
-          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500 leading-relaxed max-w-2xl line-clamp-2">
-            {incident.message || "No public summary provided."}
-          </p>
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500 leading-relaxed max-w-2xl line-clamp-2">{incident.message || "No public summary provided."}</p>
           <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-600">
             <span>{isResolved ? `Resolved ${formatDateTime(incident.resolvedAt)}` : `Updated ${formatDateTime(incident.lastSeenAt || incident.firstSeenAt)}`}</span>
           </div>
@@ -712,9 +658,7 @@ function HistoryIncidentRow({
                   <p className="text-sm text-zinc-500 dark:text-zinc-500 leading-relaxed">{event.message}</p>
                 </div>
               ))}
-              {!loading && !error && details && details.events.length === 0 && (
-                <p className="text-xs text-zinc-400 dark:text-zinc-600 italic">Historical timeline data unavailable for this record.</p>
-              )}
+              {!loading && !error && details && details.events.length === 0 && <p className="text-xs text-zinc-400 dark:text-zinc-600 italic">Historical timeline data unavailable for this record.</p>}
             </div>
           </div>
         </div>
@@ -744,13 +688,7 @@ function MaintenanceCard({ window, components }: { window: StatusMaintenance; co
   }, [hasValidStart, hasValidEnd, startMs, endMs]);
 
   // Duration badge label
-  const durationLabel = durationHours !== null
-    ? durationHours < 1
-      ? `${Math.round((endMs - startMs) / (1000 * 60))}m window`
-      : durationHours === 1
-        ? "1h window"
-        : `${durationHours}h window`
-    : null;
+  const durationLabel = durationHours !== null ? (durationHours < 1 ? `${Math.round((endMs - startMs) / (1000 * 60))}m window` : durationHours === 1 ? "1h window" : `${durationHours}h window`) : null;
 
   // Relative time callout (not memoized — Date.now() changes every render)
   const relativeCallout = (() => {
@@ -776,24 +714,12 @@ function MaintenanceCard({ window, components }: { window: StatusMaintenance; co
     if (hrsUntil < 24) return `Starts in ${hrsUntil}h`;
     const daysUntil = Math.round(hrsUntil / 24);
     return daysUntil === 1 ? "Tomorrow" : `In ${daysUntil} days`;
-  })()
+  })();
 
   // Visual intensity based on proximity
-  const accentColor = isImminent || isActive
-    ? "bg-sky-500/80"
-    : isPast
-      ? "bg-amber-500/80"
-      : "bg-zinc-300 dark:bg-zinc-600";
-  const borderColor = isImminent || isActive
-    ? "border-sky-200/60 dark:border-sky-800/30"
-    : isPast
-      ? "border-amber-200/60 dark:border-amber-800/30"
-      : "border-zinc-200/80 dark:border-white/[0.08]";
-  const calloutColor = isImminent || isActive
-    ? "text-sky-600 dark:text-sky-400"
-    : isPast
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-zinc-400 dark:text-zinc-500";
+  const accentColor = isImminent || isActive ? "bg-sky-500/80" : isPast ? "bg-amber-500/80" : "bg-zinc-300 dark:bg-zinc-600";
+  const borderColor = isImminent || isActive ? "border-sky-200/60 dark:border-sky-800/30" : isPast ? "border-amber-200/60 dark:border-amber-800/30" : "border-zinc-200/80 dark:border-white/[0.08]";
+  const calloutColor = isImminent || isActive ? "text-sky-600 dark:text-sky-400" : isPast ? "text-amber-600 dark:text-amber-400" : "text-zinc-400 dark:text-zinc-500";
 
   return (
     <article className={`rounded-xl border ${borderColor} bg-white dark:bg-white/[0.02] overflow-hidden`}>
@@ -820,51 +746,38 @@ function MaintenanceCard({ window, components }: { window: StatusMaintenance; co
               Scheduled
             </span>
           )}
-          {durationLabel && (
-            <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/60 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
-              {durationLabel}
-            </span>
-          )}
+          {durationLabel && <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/60 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">{durationLabel}</span>}
         </div>
 
         {/* Affected components — inline pills */}
         {window.componentIds.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {window.componentIds.slice(0, 4).map(id => {
-              const comp = components.find(c => c.id === id);
+            {window.componentIds.slice(0, 4).map((id) => {
+              const comp = components.find((c) => c.id === id);
               const compMeta = comp ? stateMeta(comp.state) : null;
               return (
-                <span
-                  key={id}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-50 dark:bg-white/[0.04] border border-zinc-200/80 dark:border-white/[0.08] text-xs font-medium text-zinc-600 dark:text-zinc-400"
-                >
+                <span key={id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-50 dark:bg-white/[0.04] border border-zinc-200/80 dark:border-white/[0.08] text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   <span className={`h-1.5 w-1.5 rounded-full ${compMeta?.dotClass ?? "bg-zinc-400"}`} />
                   {comp?.name || id}
                 </span>
               );
             })}
-            {window.componentIds.length > 4 && (
-              <span className="text-xs text-zinc-400 dark:text-zinc-600">+{window.componentIds.length - 4} more</span>
-            )}
+            {window.componentIds.length > 4 && <span className="text-xs text-zinc-400 dark:text-zinc-600">+{window.componentIds.length - 4} more</span>}
           </div>
         )}
 
         {/* Relative time callout + absolute time range */}
         <div className="mt-4 space-y-1">
-          <span className={`text-sm font-medium ${calloutColor}`}>
-            {relativeCallout}
-          </span>
+          <span className={`text-sm font-medium ${calloutColor}`}>{relativeCallout}</span>
           <div className="flex items-center gap-3 text-xs text-zinc-400 dark:text-zinc-600">
-            <span>{formatShortDateTime(window.startsAt)} — {formatShortDateTime(window.endsAt)}</span>
+            <span>
+              {formatShortDateTime(window.startsAt)} — {formatShortDateTime(window.endsAt)}
+            </span>
           </div>
         </div>
 
         {/* Message — secondary */}
-        {(window.message || window.summary) && (
-          <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-500 leading-relaxed">
-            {window.message || window.summary}
-          </p>
-        )}
+        {(window.message || window.summary) && <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-500 leading-relaxed">{window.message || window.summary}</p>}
       </div>
     </article>
   );
@@ -874,15 +787,16 @@ function formatShortDateTime(value: string | null): string {
   if (!value) return "TBD";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.valueOf())) return "TBD";
-  return new Intl.DateTimeFormat(undefined, { 
-    month: "short", 
-    day: "numeric", 
-    hour: "numeric", 
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: true 
-  }).format(parsed).toLowerCase();
+    hour12: true,
+  })
+    .format(parsed)
+    .toLowerCase();
 }
-
 
 function IncidentCard({ incident, expanded, onToggle, loading, details, error, isActive }: { incident: StatusIncident; expanded: boolean; onToggle: () => void; loading: boolean; details: IncidentDetails | undefined; error: string | undefined; isActive?: boolean }) {
   const duration = useMemo(() => {
@@ -904,16 +818,19 @@ function IncidentCard({ incident, expanded, onToggle, loading, details, error, i
             {isActive ? (
               isOutage ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/8 px-2 py-0.5 text-xs font-medium text-rose-500/80 dark:text-rose-400/80">
-                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500/80 animate-pulse" />Outage
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500/80 animate-pulse" />
+                  Outage
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/8 px-2 py-0.5 text-xs font-medium text-amber-600/80 dark:text-amber-400/80">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500/80 animate-pulse" />Degraded
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500/80 animate-pulse" />
+                  Degraded
                 </span>
               )
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/8 px-2 py-0.5 text-xs font-medium text-emerald-600/80 dark:text-emerald-400/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80" />Resolved
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80" />
+                Resolved
               </span>
             )}
           </div>
@@ -944,9 +861,7 @@ function IncidentCard({ incident, expanded, onToggle, loading, details, error, i
                   <p className="text-sm text-zinc-500 dark:text-zinc-500 leading-relaxed">{event.message}</p>
                 </div>
               ))}
-              {!loading && !error && details && details.events.length === 0 && (
-                <p className="text-xs text-zinc-400 dark:text-zinc-600 italic">Historical timeline data unavailable for this record.</p>
-              )}
+              {!loading && !error && details && details.events.length === 0 && <p className="text-xs text-zinc-400 dark:text-zinc-600 italic">Historical timeline data unavailable for this record.</p>}
             </div>
           </div>
         </div>

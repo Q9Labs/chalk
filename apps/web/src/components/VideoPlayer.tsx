@@ -8,7 +8,7 @@ interface VideoPlayerProps {
   autoPlay?: boolean;
 }
 
-export function formatTime(seconds: number) {
+function formatTime(seconds: number) {
   if (!isFinite(seconds) || seconds < 0) return "0:00";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -37,8 +37,7 @@ export function VideoPlayer({ url, className, autoPlay = false }: VideoPlayerPro
 
   useEffect(() => {
     if (autoPlay && videoRef.current) {
-      videoRef.current.play().catch((e) => {
-        console.error("Auto-play failed:", e);
+      videoRef.current.play().catch(() => {
         setIsPlaying(false);
       });
     }
@@ -127,7 +126,9 @@ export function VideoPlayer({ url, className, autoPlay = false }: VideoPlayerPro
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(console.error);
+      containerRef.current.requestFullscreen().catch(() => {
+        setIsFullscreen(false);
+      });
     } else {
       document.exitFullscreen();
     }

@@ -82,18 +82,9 @@ describe("pwa helpers", () => {
     };
     const rootRouteSource = readFileSync(resolve(process.cwd(), "src/routes/__root.tsx"), "utf8");
 
-    expect(manifest.icons.map((icon) => icon.src)).toEqual([
-      "/favicon.ico",
-      "/brand/chalk/chalk-icon-192.png",
-      "/brand/chalk/chalk-icon-512.png",
-      "/brand/chalk/chalk-icon-maskable-192.png",
-      "/brand/chalk/chalk-icon-maskable-512.png",
-    ]);
+    expect(manifest.icons.map((icon) => icon.src)).toEqual(["/favicon.ico", "/brand/chalk/chalk-icon-192.png", "/brand/chalk/chalk-icon-512.png", "/brand/chalk/chalk-icon-maskable-192.png", "/brand/chalk/chalk-icon-maskable-512.png"]);
     expect(manifest.icons.map((icon) => icon.purpose ?? "default")).toEqual(["default", "any", "any", "maskable", "maskable"]);
-    expect(manifest.shortcuts.flatMap((shortcut) => shortcut.icons.map((icon) => icon.src))).toEqual([
-      "/brand/chalk/shortcut-new-192.png",
-      "/brand/chalk/shortcut-dashboard-192.png",
-    ]);
+    expect(manifest.shortcuts.flatMap((shortcut) => shortcut.icons.map((icon) => icon.src))).toEqual(["/brand/chalk/shortcut-new-192.png", "/brand/chalk/shortcut-dashboard-192.png"]);
     expect(rootRouteSource).toContain('href: "/brand/chalk/apple-touch-icon.png"');
     expect(rootRouteSource).not.toContain('href: "/logo192.png"');
   });

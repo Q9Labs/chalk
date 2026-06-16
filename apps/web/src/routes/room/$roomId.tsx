@@ -69,7 +69,14 @@ function RoomPage() {
   const [storedUserName, setStoredUserName] = useState<string>(() => getStoredUserName());
   const [now, setNow] = useState(Date.now());
   const [defaults, setDefaults] = useState(() => getStoredJoinDefaults());
-  const { availability, isLoading: isCheckingRoom, meetingLink, role, room, shouldForceInternalAuth } = useRoomEntryModel({
+  const {
+    availability,
+    isLoading: isCheckingRoom,
+    meetingLink,
+    role,
+    room,
+    shouldForceInternalAuth,
+  } = useRoomEntryModel({
     apiUrl,
     authMode: auth,
     joinContext: joinCtx,
@@ -210,9 +217,7 @@ function RoomPage() {
             }}
             userName={storedUserName || "Chalker"}
             autoJoin={autoJoin}
-            onJoin={(data) => {
-              console.log("Joined: ", data);
-            }}
+            onJoin={() => {}}
             onEnd={(data) => {
               writeMeetingEndSummaryFromData(data, {
                 roomName: room?.name || roomName || "Meeting On Chalk",

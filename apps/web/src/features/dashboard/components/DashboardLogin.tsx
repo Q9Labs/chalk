@@ -23,42 +23,29 @@ export function DashboardLogin({ onSignIn, isSigningIn }: DashboardLoginProps) {
             <div className="mx-auto mb-8 flex justify-center">
               <ChalkLogo />
             </div>
-            
+
             <div className="space-y-2">
-              <CardTitle className="text-3xl font-bold tracking-tight text-foreground">
-                Welcome Back
-              </CardTitle>
-              <CardDescription className="text-base font-medium text-muted-foreground">
-                Sign in to access your creative workspace.
-              </CardDescription>
+              <CardTitle className="text-3xl font-bold tracking-tight text-foreground">Welcome Back</CardTitle>
+              <CardDescription className="text-base font-medium text-muted-foreground">Sign in to access your creative workspace.</CardDescription>
             </div>
           </CardHeader>
 
           <CardContent className="space-y-8 px-10 pb-12">
             <div className="space-y-4">
-              <Button
-                onClick={onSignIn}
-                disabled={isSigningIn}
-                size="lg"
-                className="w-full h-14 rounded-xl font-bold text-base shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 transition-all"
-              >
+              <Button onClick={onSignIn} disabled={isSigningIn} size="lg" className="w-full h-14 rounded-xl font-bold text-base shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 transition-all">
                 {isSigningIn ? (
                   <span className="flex items-center justify-center gap-3">
                     <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                     Connecting...
                   </span>
                 ) : (
-                  <span className="flex items-center justify-center gap-3">
-                    Continue with Google
-                  </span>
+                  <span className="flex items-center justify-center gap-3">Continue with Google</span>
                 )}
               </Button>
 
               <div className="p-4 rounded-xl bg-secondary border border-border/50 flex gap-4">
                 <HugeiconsIcon icon={InformationCircleIcon} size={20} className="text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-sm font-medium text-muted-foreground leading-snug text-balance">
-                  Use your Chalk Google workspace account. Access is restricted to authorized team members.
-                </p>
+                <p className="text-sm font-medium text-muted-foreground leading-snug text-balance">Use your Chalk Google workspace account. Access is restricted to authorized team members.</p>
               </div>
             </div>
           </CardContent>

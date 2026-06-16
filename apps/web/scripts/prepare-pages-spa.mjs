@@ -51,9 +51,7 @@ function collectClientFiles(dir) {
   });
 }
 
-const precacheUrls = Array.from(
-  new Set(["/", "/index.html", "/404.html", ...collectClientFiles(clientDir)]),
-).sort();
+const precacheUrls = Array.from(new Set(["/", "/index.html", "/404.html", ...collectClientFiles(clientDir)])).sort();
 
 const swSource = `
 const BUILD_META = ${JSON.stringify(buildMeta, null, 2)};
@@ -164,10 +162,7 @@ function injectStatusMeta(html) {
   let next = html;
 
   next = next.replace(/<title>.*?<\/title>/i, `<title>${STATUS_TITLE}</title>`);
-  next = next.replace(
-    /<link rel="canonical" href="[^"]*"\s*\/?>/i,
-    `<link rel="canonical" href="${STATUS_CANONICAL}" />`,
-  );
+  next = next.replace(/<link rel="canonical" href="[^"]*"\s*\/?>/i, `<link rel="canonical" href="${STATUS_CANONICAL}" />`);
 
   const statusMeta = [
     `<meta name="description" content="${STATUS_DESCRIPTION}" />`,

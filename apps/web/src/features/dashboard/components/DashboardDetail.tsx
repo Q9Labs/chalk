@@ -19,9 +19,7 @@ interface DashboardDetailProps {
   onDownload: (id: string, token: string) => void;
 }
 
-export function DashboardDetail({
-  meeting, recordingUrl, isFetchingVideo, videoError, token, onShare, onDownload
-}: DashboardDetailProps) {
+export function DashboardDetail({ meeting, recordingUrl, isFetchingVideo, videoError, token, onShare, onDownload }: DashboardDetailProps) {
   const [activeTab, setActiveTab] = useState<"intelligence" | "details">("intelligence");
 
   if (!meeting) {
@@ -32,9 +30,7 @@ export function DashboardDetail({
             <HugeiconsIcon icon={Video01Icon} size={32} className="text-muted-foreground" />
           </div>
           <h3 className="text-xl font-bold tracking-tight text-foreground">Select a Recording</h3>
-          <p className="text-sm font-medium text-muted-foreground leading-relaxed text-balance">
-            Choose a session from the timeline to view playback, read the AI summary, and review action items.
-          </p>
+          <p className="text-sm font-medium text-muted-foreground leading-relaxed text-balance">Choose a session from the timeline to view playback, read the AI summary, and review action items.</p>
         </div>
       </div>
     );
@@ -49,29 +45,16 @@ export function DashboardDetail({
             <Badge variant={meeting.status === "ready" ? "default" : "secondary"} className="rounded-md font-bold text-[10px] tracking-wider px-2 py-0.5 uppercase">
               {meeting.status}
             </Badge>
-            <span className="text-xs font-medium text-muted-foreground">ID: {meeting.id.split('-')[0]}</span>
+            <span className="text-xs font-medium text-muted-foreground">ID: {meeting.id.split("-")[0]}</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground text-balance">
-            {meeting.room_name || "Untitled Room"}
-          </h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground text-balance">{meeting.room_name || "Untitled Room"}</h1>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={meeting.status !== "ready"}
-            onClick={() => onShare(meeting.id, token)}
-            className="font-semibold rounded-lg text-sm bg-background hover:bg-secondary transition-colors"
-          >
+          <Button size="sm" variant="outline" disabled={meeting.status !== "ready"} onClick={() => onShare(meeting.id, token)} className="font-semibold rounded-lg text-sm bg-background hover:bg-secondary transition-colors">
             <HugeiconsIcon icon={Share01Icon} size={16} className="mr-2" /> Share
           </Button>
-          <Button
-            size="sm"
-            disabled={meeting.status !== "ready"}
-            onClick={() => onDownload(meeting.id, token)}
-            className="font-semibold rounded-lg text-sm shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all"
-          >
+          <Button size="sm" disabled={meeting.status !== "ready"} onClick={() => onDownload(meeting.id, token)} className="font-semibold rounded-lg text-sm shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all">
             <HugeiconsIcon icon={Download01Icon} size={16} className="mr-2" /> Download
           </Button>
         </div>
@@ -104,22 +87,10 @@ export function DashboardDetail({
       {/* Details & Intelligence (Custom Tabs) */}
       <div className="w-full">
         <div className="flex items-center border-b border-border/50 gap-6 mb-6">
-          <button
-            onClick={() => setActiveTab("intelligence")}
-            className={cn(
-              "px-0 py-3 border-b-2 text-sm font-semibold transition-colors outline-none",
-              activeTab === "intelligence" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
+          <button onClick={() => setActiveTab("intelligence")} className={cn("px-0 py-3 border-b-2 text-sm font-semibold transition-colors outline-none", activeTab === "intelligence" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
             Intelligence
           </button>
-          <button
-            onClick={() => setActiveTab("details")}
-            className={cn(
-              "px-0 py-3 border-b-2 text-sm font-semibold transition-colors outline-none",
-              activeTab === "details" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
+          <button onClick={() => setActiveTab("details")} className={cn("px-0 py-3 border-b-2 text-sm font-semibold transition-colors outline-none", activeTab === "details" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
             Session Details
           </button>
         </div>
@@ -139,9 +110,7 @@ export function DashboardDetail({
                   {meeting.transcript_summary ? (
                     meeting.transcript_summary
                   ) : meeting.transcript_status === "failed" ? (
-                    <span className="text-destructive/80">
-                      {meeting.transcript_error_message || "Summary generation failed."}
-                    </span>
+                    <span className="text-destructive/80">{meeting.transcript_error_message || "Summary generation failed."}</span>
                   ) : meeting.transcript_status === "completed" ? (
                     <span className="italic">No summary generated.</span>
                   ) : (
@@ -174,9 +143,7 @@ export function DashboardDetail({
                   ) : (
                     <div className="p-8 text-center flex flex-col items-center justify-center h-full opacity-60">
                       <HugeiconsIcon icon={CheckmarkCircle01Icon} size={24} className="text-muted-foreground mb-2" />
-                      <p className="text-xs font-semibold text-muted-foreground">
-                        {meeting.transcript_status === "completed" ? "No Actions Found" : "Pending..."}
-                      </p>
+                      <p className="text-xs font-semibold text-muted-foreground">{meeting.transcript_status === "completed" ? "No Actions Found" : "Pending..."}</p>
                     </div>
                   )}
                 </div>

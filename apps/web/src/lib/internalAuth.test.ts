@@ -91,9 +91,7 @@ function restoreBrowserEnv() {
 
 describe("resolveApiUrl", () => {
   it("prefers localhost api when localhost is running with prod config", () => {
-    expect(resolveApiUrl("https://chalk-api.q9labs.ai", "localhost")).toBe(
-      "http://localhost:8080",
-    );
+    expect(resolveApiUrl("https://chalk-api.q9labs.ai", "localhost")).toBe("http://localhost:8080");
   });
 
   it("prefers localhost api when localhost has no explicit api url", () => {
@@ -101,27 +99,19 @@ describe("resolveApiUrl", () => {
   });
 
   it("keeps explicit local overrides", () => {
-    expect(resolveApiUrl("http://localhost:9090", "localhost")).toBe(
-      "http://localhost:9090",
-    );
+    expect(resolveApiUrl("http://localhost:9090", "localhost")).toBe("http://localhost:9090");
   });
 
   it("overrides any remote api host on localhost", () => {
-    expect(resolveApiUrl("https://staging-api.q9labs.ai", "localhost")).toBe(
-      "http://localhost:8080",
-    );
+    expect(resolveApiUrl("https://staging-api.q9labs.ai", "localhost")).toBe("http://localhost:8080");
   });
 
   it("keeps prod api on hosted origins", () => {
-    expect(
-      resolveApiUrl("https://chalk-api.q9labs.ai", "chalkmeet.com"),
-    ).toBe("https://chalk-api.q9labs.ai");
+    expect(resolveApiUrl("https://chalk-api.q9labs.ai", "chalkmeet.com")).toBe("https://chalk-api.q9labs.ai");
   });
 
   it("ignores a localhost build-time api url on hosted origins", () => {
-    expect(resolveApiUrl("http://localhost:8080", "chalkmeet.com")).toBe(
-      "https://chalk-api.q9labs.ai",
-    );
+    expect(resolveApiUrl("http://localhost:8080", "chalkmeet.com")).toBe("https://chalk-api.q9labs.ai");
   });
 });
 
@@ -184,12 +174,8 @@ describe("fetchInternalAccessToken", () => {
 
 describe("getAccessTokenExpiryMs", () => {
   it("reads exp from a jwt payload", () => {
-    const payload = Buffer.from(JSON.stringify({ exp: 1_700_000_000 })).toString(
-      "base64url",
-    );
-    expect(getAccessTokenExpiryMs(`header.${payload}.sig`)).toBe(
-      1_700_000_000_000,
-    );
+    const payload = Buffer.from(JSON.stringify({ exp: 1_700_000_000 })).toString("base64url");
+    expect(getAccessTokenExpiryMs(`header.${payload}.sig`)).toBe(1_700_000_000_000);
   });
 
   it("returns null for malformed tokens", () => {
@@ -208,9 +194,7 @@ describe("internal session helpers", () => {
       status: 401,
     } as Response);
 
-    await expect(
-      fetchInternalSession("https://chalk-api.q9labs.ai"),
-    ).resolves.toBeNull();
+    await expect(fetchInternalSession("https://chalk-api.q9labs.ai")).resolves.toBeNull();
   });
 
   it("posts the google auth code for sign-in", async () => {
@@ -220,9 +204,7 @@ describe("internal session helpers", () => {
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
 
-    await expect(
-      signInWithGoogleCode("https://chalk-api.q9labs.ai", "oauth-code"),
-    ).resolves.toEqual({ ok: true, user: { email: "hasan@q9labs.ai" } });
+    await expect(signInWithGoogleCode("https://chalk-api.q9labs.ai", "oauth-code")).resolves.toEqual({ ok: true, user: { email: "hasan@q9labs.ai" } });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://chalk-api.q9labs.ai/api/v1/internal/auth/google",
       expect.objectContaining({
@@ -266,9 +248,7 @@ describe("createRoomJoinLink", () => {
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
 
-    await expect(
-      createRoomJoinLink("https://chalk-api.q9labs.ai", "room-123", "access-123"),
-    ).resolves.toBe("https://chalkmeet.com/j/join-token-123");
+    await expect(createRoomJoinLink("https://chalk-api.q9labs.ai", "room-123", "access-123")).resolves.toBe("https://chalkmeet.com/j/join-token-123");
   });
 });
 
@@ -355,34 +335,17 @@ describe("getChalkSessionCacheKey", () => {
   });
 
   it("keeps room session state keyed by room path and search", () => {
-    expect(
-      getChalkSessionCacheKey(
-        "/room/2f0b302b-2449-43f5-ae3b-de57decb9f09",
-        "?auth=internal",
-      ),
-    ).toBe(
-      'room:/room/2f0b302b-2449-43f5-ae3b-de57decb9f09:"?auth=internal"',
-    );
+    expect(getChalkSessionCacheKey("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "?auth=internal")).toBe('room:/room/2f0b302b-2449-43f5-ae3b-de57decb9f09:"?auth=internal"');
   });
 });
 
 describe("shouldUseInternalRoomAuth", () => {
   it("uses internal auth for dashboard room links flagged with auth=internal", () => {
-    expect(
-      shouldUseInternalRoomAuth(
-        "/room/2f0b302b-2449-43f5-ae3b-de57decb9f09",
-        "?auth=internal",
-      ),
-    ).toBe(true);
+    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "?auth=internal")).toBe(true);
   });
 
   it("does not force internal auth for regular room links", () => {
-    expect(
-      shouldUseInternalRoomAuth(
-        "/room/2f0b302b-2449-43f5-ae3b-de57decb9f09",
-        "",
-      ),
-    ).toBe(false);
+    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "")).toBe(false);
   });
 });
 

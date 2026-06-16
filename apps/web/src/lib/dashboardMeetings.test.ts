@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  downloadRecordingFromDashboard,
-  getRecordingPlaybackUrl,
-  getRecordingShareUrl,
-} from "./dashboardMeetings";
+import { downloadRecordingFromDashboard, getRecordingPlaybackUrl, getRecordingShareUrl } from "./dashboardMeetings";
 
 const originalWindow = globalThis.window;
 
@@ -38,9 +34,7 @@ describe("getRecordingPlaybackUrl", () => {
       json: async () => ({ status: "ready", download_url: "https://r2.example.com/file.mp4" }),
     } as Response);
 
-    await expect(
-      getRecordingPlaybackUrl("https://chalk-api.q9labs.ai", "rec_123", "token-123"),
-    ).resolves.toBe("https://r2.example.com/file.mp4");
+    await expect(getRecordingPlaybackUrl("https://chalk-api.q9labs.ai", "rec_123", "token-123")).resolves.toBe("https://r2.example.com/file.mp4");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "https://chalk-api.q9labs.ai/api/v1/recordings/rec_123/download",
@@ -57,9 +51,7 @@ describe("getRecordingPlaybackUrl", () => {
       json: async () => ({ status: "processing", message: "recording is still processing" }),
     } as Response);
 
-    await expect(
-      getRecordingPlaybackUrl("https://chalk-api.q9labs.ai", "rec_123", "token-123"),
-    ).rejects.toThrow("recording is still processing");
+    await expect(getRecordingPlaybackUrl("https://chalk-api.q9labs.ai", "rec_123", "token-123")).rejects.toThrow("recording is still processing");
   });
 });
 
@@ -72,9 +64,7 @@ describe("getRecordingShareUrl", () => {
       json: async () => ({ share_token: "share-123" }),
     } as Response);
 
-    await expect(
-      getRecordingShareUrl("https://chalk-api.q9labs.ai", "rec_123", "token-123"),
-    ).resolves.toBe("https://chalkmeet.com/share/share-123");
+    await expect(getRecordingShareUrl("https://chalk-api.q9labs.ai", "rec_123", "token-123")).resolves.toBe("https://chalkmeet.com/share/share-123");
   });
 });
 
@@ -89,10 +79,6 @@ describe("downloadRecordingFromDashboard", () => {
 
     await downloadRecordingFromDashboard("https://chalk-api.q9labs.ai", "rec_123", "token-123");
 
-    expect(open).toHaveBeenCalledWith(
-      "https://r2.example.com/file.mp4",
-      "_blank",
-      "noopener,noreferrer",
-    );
+    expect(open).toHaveBeenCalledWith("https://r2.example.com/file.mp4", "_blank", "noopener,noreferrer");
   });
 });

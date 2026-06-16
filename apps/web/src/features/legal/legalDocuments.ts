@@ -1,5 +1,8 @@
 export function slugifyLegalSection(title: string) {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
 const LEGAL_DOCUMENTS = {
@@ -7,8 +10,7 @@ const LEGAL_DOCUMENTS = {
     slug: "privacy",
     title: "Privacy Policy",
     lastUpdated: "March 22, 2026",
-    introHtml:
-      "<p>Chalk is operated by Q9 Labs. This Privacy Policy explains how Chalk accesses, collects, uses, retains, and shares data when you create or join meetings, use chat and whiteboards, or interact with related collaboration features on our web and mobile apps.</p>",
+    introHtml: "<p>Chalk is operated by Q9 Labs. This Privacy Policy explains how Chalk accesses, collects, uses, retains, and shares data when you create or join meetings, use chat and whiteboards, or interact with related collaboration features on our web and mobile apps.</p>",
     sections: [
       {
         title: "1. Information We Collect",
@@ -44,8 +46,7 @@ const LEGAL_DOCUMENTS = {
       },
       {
         title: "5. Security",
-        bodyHtml:
-          "<p>We use administrative, technical, and organizational safeguards designed to protect personal and sensitive data in transit and at rest. No method of transmission or storage is perfectly secure, but we work to reduce risk and respond quickly to issues.</p>",
+        bodyHtml: "<p>We use administrative, technical, and organizational safeguards designed to protect personal and sensitive data in transit and at rest. No method of transmission or storage is perfectly secure, but we work to reduce risk and respond quickly to issues.</p>",
       },
       {
         title: "6. Retention and Deletion",
@@ -59,8 +60,7 @@ const LEGAL_DOCUMENTS = {
       },
       {
         title: "8. Contact Us",
-        bodyHtml:
-          '<p>Questions, requests, or concerns about this policy may be sent to <a href="mailto:privacy@chalk.com">privacy@chalk.com</a>.</p>',
+        bodyHtml: '<p>Questions, requests, or concerns about this policy may be sent to <a href="mailto:privacy@chalk.com">privacy@chalk.com</a>.</p>',
       },
     ],
   },
@@ -68,18 +68,15 @@ const LEGAL_DOCUMENTS = {
     slug: "terms",
     title: "Terms of Service",
     lastUpdated: "March 22, 2026",
-    introHtml:
-      '<p>These Terms of Service ("Terms") govern your access to and use of Chalk ("the Service"), operated by Q9 Labs ("we," "us," or "our"). Please read these Terms carefully before using the Service.</p>',
+    introHtml: '<p>These Terms of Service ("Terms") govern your access to and use of Chalk ("the Service"), operated by Q9 Labs ("we," "us," or "our"). Please read these Terms carefully before using the Service.</p>',
     sections: [
       {
         title: "1. Acceptance of Terms",
-        bodyHtml:
-          "<p>By accessing or using the Service, you agree to be bound by these Terms and our Privacy Policy. If you do not agree to these Terms, do not use the Service.</p>",
+        bodyHtml: "<p>By accessing or using the Service, you agree to be bound by these Terms and our Privacy Policy. If you do not agree to these Terms, do not use the Service.</p>",
       },
       {
         title: "2. Description of Service",
-        bodyHtml:
-          "<p>Chalk provides an ultra low-latency video conferencing platform, including features such as real-time audio and video communication, whiteboarding, screen sharing, and AI-driven meeting summaries.</p>",
+        bodyHtml: "<p>Chalk provides an ultra low-latency video conferencing platform, including features such as real-time audio and video communication, whiteboarding, screen sharing, and AI-driven meeting summaries.</p>",
       },
       {
         title: "3. User Conduct",
@@ -95,13 +92,11 @@ const LEGAL_DOCUMENTS = {
       },
       {
         title: "4. Account Registration via Google OAuth",
-        bodyHtml:
-          "<p>To use certain features of the Service, you may be required to register using your Google account. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.</p>",
+        bodyHtml: "<p>To use certain features of the Service, you may be required to register using your Google account. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.</p>",
       },
       {
         title: "5. Intellectual Property",
-        bodyHtml:
-          "<p>The Service and its original content, features, and functionality are and will remain the exclusive property of Q9 Labs and its licensors. The Service is protected by copyright, trademark, and other laws.</p>",
+        bodyHtml: "<p>The Service and its original content, features, and functionality are and will remain the exclusive property of Q9 Labs and its licensors. The Service is protected by copyright, trademark, and other laws.</p>",
       },
       {
         title: "6. Limitation of Liability",
@@ -110,8 +105,7 @@ const LEGAL_DOCUMENTS = {
       },
       {
         title: "7. Contact Information",
-        bodyHtml:
-          '<p>For any questions about these Terms, please contact us at <a href="mailto:support@example.com">support@example.com</a>.</p>',
+        bodyHtml: '<p>For any questions about these Terms, please contact us at <a href="mailto:support@example.com">support@example.com</a>.</p>',
       },
     ],
   },

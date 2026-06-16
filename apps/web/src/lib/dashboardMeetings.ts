@@ -1,10 +1,6 @@
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+const asRecord = (value: unknown): Record<string, unknown> | null => (value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
-const asString = (value: unknown): string | null =>
-  typeof value === "string" && value.length > 0 ? value : null;
+const asString = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
 
 export async function getRecordingPlaybackUrl(apiUrl: string, recordingId: string, token: string) {
   const res = await fetch(`${apiUrl}/api/v1/recordings/${recordingId}/download`, {
@@ -23,9 +19,7 @@ export async function getRecordingPlaybackUrl(apiUrl: string, recordingId: strin
 
   const payload = asRecord(await res.json().catch(() => null));
   if (!res.ok) {
-    throw new Error(
-      asString(payload?.error) ?? asString(payload?.message) ?? "failed to load playback",
-    );
+    throw new Error(asString(payload?.error) ?? asString(payload?.message) ?? "failed to load playback");
   }
 
   if (payload?.status && payload.status !== "ready") {

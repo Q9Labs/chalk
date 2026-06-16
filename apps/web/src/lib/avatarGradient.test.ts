@@ -177,10 +177,7 @@ describe("avatarGradient", () => {
       const preset = AVATAR_GRADIENT_PRESETS[2]!;
       writeStoredAvatarGradientPreference({ mode: "preset", presetId: preset.id });
 
-      expect(browser.storage.setItem).toHaveBeenCalledWith(
-        "chalk_avatar_gradient",
-        JSON.stringify({ mode: "preset", presetId: preset.id }),
-      );
+      expect(browser.storage.setItem).toHaveBeenCalledWith("chalk_avatar_gradient", JSON.stringify({ mode: "preset", presetId: preset.id }));
       expect(browser.dispatchEvent).toHaveBeenCalledTimes(1);
       const event = browser.dispatchEvent.mock.calls[0]?.[0];
       expect(event).toBeInstanceOf(Event);

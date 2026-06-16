@@ -24,22 +24,13 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+const asRecord = (value: unknown): Record<string, unknown> | null => (value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
 function isMeeting(value: unknown): value is Meeting {
   const record = asRecord(value);
   if (!record) return false;
 
-  return (
-    typeof record.id === "string" &&
-    typeof record.room_id === "string" &&
-    (typeof record.room_name === "string" || record.room_name === null) &&
-    (record.status === "ready" || record.status === "processing" || record.status === "error") &&
-    typeof record.created_at === "string"
-  );
+  return typeof record.id === "string" && typeof record.room_id === "string" && (typeof record.room_name === "string" || record.room_name === null) && (record.status === "ready" || record.status === "processing" || record.status === "error") && typeof record.created_at === "string";
 }
 
 function parseMeetingsResponse(value: unknown): MeetingsResponse {
@@ -62,10 +53,7 @@ function readJwtEmail(token: string) {
       .replace(/-/g, "+")
       .replace(/_/g, "/")
       .padEnd(Math.ceil(payloadPart.length / 4) * 4, "=");
-    const decoded =
-      typeof atob === "function"
-        ? atob(payload)
-        : Buffer.from(payload, "base64").toString("utf8");
+    const decoded = typeof atob === "function" ? atob(payload) : Buffer.from(payload, "base64").toString("utf8");
     const claims = asRecord(JSON.parse(decoded));
     return typeof claims?.email === "string" ? claims.email : "";
   } catch {
@@ -83,11 +71,7 @@ async function downloadRecording(recordingId: string, token: string) {
 }
 
 function DashboardPage() {
-  return (
-    <WebChalkRuntime fallback={<div className="min-h-screen bg-background" />}>
-      {() => <DashboardPageContent />}
-    </WebChalkRuntime>
-  );
+  return <WebChalkRuntime fallback={<div className="min-h-screen bg-background" />}>{() => <DashboardPageContent />}</WebChalkRuntime>;
 }
 
 function DashboardPageContent() {
@@ -140,9 +124,7 @@ function DashboardPageContent() {
       .then((url: string) => {
         setRecordingUrl(url);
       })
-      .catch((error: unknown) =>
-        setVideoError(error instanceof Error ? error.message : "Playback unavailable"),
-      )
+      .catch((error: unknown) => setVideoError(error instanceof Error ? error.message : "Playback unavailable"))
       .finally(() => setIsFetchingVideo(false));
   }, [apiUrl, selectedId, state]);
 
@@ -241,41 +223,31 @@ function DashboardPageContent() {
 
   return (
     <div className="font-app min-h-screen bg-background selection:bg-primary/20 flex flex-col text-foreground overflow-hidden">
-      <DashboardHeader 
-        userEmail={userEmail}
-        avatarProfile={avatarProfile}
-        theme={theme}
-        toggleTheme={toggleTheme}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onLogout={handleLogout}
-      />
+      <DashboardHeader userEmail={userEmail} avatarProfile={avatarProfile} theme={theme} toggleTheme={toggleTheme} onOpenSettings={() => setIsSettingsOpen(true)} onLogout={handleLogout} />
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       {/* Main Content Area - Slim Sidebar & Content Split */}
       <div className="flex-1 flex w-full relative overflow-hidden">
-        <DashboardSidebar 
-          meetings={state.data.meetings}
-          search={search}
-          onSearchChange={setSearch}
-          selectedId={selectedId}
-          onSelectMeeting={setSelectedId}
-          sdkClient={sdkClient}
-          scheduledRooms={scheduledRooms}
-          roomsLoading={roomsLoading}
-          roomsError={roomsError}
-          onRefreshRooms={refreshRooms}
-        />
+        <DashboardSidebar meetings={state.data.meetings} search={search} onSearchChange={setSearch} selectedId={selectedId} onSelectMeeting={setSelectedId} sdkClient={sdkClient} scheduledRooms={scheduledRooms} roomsLoading={roomsLoading} roomsError={roomsError} onRefreshRooms={refreshRooms} />
 
         <main className="flex-1 min-w-0 bg-background h-[calc(100vh-4rem)] overflow-y-auto outline-none" tabIndex={-1}>
-          <DashboardDetail 
+          <DashboardDetail
             meeting={selectedMeeting}
             recordingUrl={recordingUrl}
             isFetchingVideo={isFetchingVideo}
             videoError={videoError}
             token={state.token}
-            onShare={(id, token) => createShareLink(id, token).then(() => toast.success("Link copied to clipboard")).catch((e) => toast.error(e.message))}
-            onDownload={(id, token) => downloadRecording(id, token).then(() => toast.success("Download started")).catch((e) => toast.error(e.message))}
+            onShare={(id, token) =>
+              createShareLink(id, token)
+                .then(() => toast.success("Link copied to clipboard"))
+                .catch((e) => toast.error(e.message))
+            }
+            onDownload={(id, token) =>
+              downloadRecording(id, token)
+                .then(() => toast.success("Download started"))
+                .catch((e) => toast.error(e.message))
+            }
           />
         </main>
       </div>

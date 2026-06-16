@@ -44,10 +44,7 @@ export const Route = createRootRoute({
     );
   },
   head: () => {
-    const canonicalPath =
-      typeof window === "undefined"
-        ? "/"
-        : `${window.location.pathname}${window.location.search}`;
+    const canonicalPath = typeof window === "undefined" ? "/" : `${window.location.pathname}${window.location.search}`;
 
     return {
       meta: [

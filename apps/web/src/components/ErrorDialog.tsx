@@ -104,11 +104,13 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
   };
 
   const handleDownloadDebug = async () => {
-    const prepared = preparedDebugReport ?? (await prepareFullDebugExport({
-      source: "web-error-dialog",
-      error: message,
-      traceId: traceId ?? null,
-    }));
+    const prepared =
+      preparedDebugReport ??
+      (await prepareFullDebugExport({
+        source: "web-error-dialog",
+        error: message,
+        traceId: traceId ?? null,
+      }));
     setPreparedDebugReport(prepared);
     downloadDebugReport(prepared.report);
     setDownloadingDebug(true);
@@ -141,7 +143,13 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
 
           <div className="mt-6 space-y-3 rounded-lg bg-muted/50 border border-border p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => void handleCopyFullDebug()} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors", copiedDebug === "copied" ? "bg-green-500/15 text-green-600" : copiedDebug === "failed" ? "bg-red-500/15 text-red-600" : "bg-primary/10 text-primary hover:bg-primary/15")}>
+              <button
+                onClick={() => void handleCopyFullDebug()}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                  copiedDebug === "copied" ? "bg-green-500/15 text-green-600" : copiedDebug === "failed" ? "bg-red-500/15 text-red-600" : "bg-primary/10 text-primary hover:bg-primary/15",
+                )}
+              >
                 {copiedDebug === "copied" ? (
                   <>
                     <CheckIcon size={12} /> Copied Full Debug
@@ -183,21 +191,21 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({ isOpen, onClose, messa
 
             {traceId && (
               <>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Trace ID</span>
-                <button onClick={handleCopyTrace} className={cn("text-[10px] font-medium flex items-center gap-1 transition-colors", copied ? "text-green-500" : "text-primary hover:underline")}>
-                  {copied ? (
-                    <>
-                      <CheckIcon size={10} /> Copied
-                    </>
-                  ) : (
-                    <>
-                      <CopyIcon size={10} /> Copy ID
-                    </>
-                  )}
-                </button>
-              </div>
-              <code className="text-[11px] font-mono text-muted-foreground break-all select-all">{traceId}</code>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Trace ID</span>
+                  <button onClick={handleCopyTrace} className={cn("text-[10px] font-medium flex items-center gap-1 transition-colors", copied ? "text-green-500" : "text-primary hover:underline")}>
+                    {copied ? (
+                      <>
+                        <CheckIcon size={10} /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <CopyIcon size={10} /> Copy ID
+                      </>
+                    )}
+                  </button>
+                </div>
+                <code className="text-[11px] font-mono text-muted-foreground break-all select-all">{traceId}</code>
               </>
             )}
             <p className="text-[10px] leading-relaxed text-muted-foreground">Full debug includes requests, responses, websocket traffic, console logs, runtime errors, browser/device info, cookies, storage, and active Chalk session state captured in this tab.</p>

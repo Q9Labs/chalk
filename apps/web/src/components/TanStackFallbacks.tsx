@@ -32,49 +32,30 @@ export const ErrorComponent = memo(({ error, reset }: { error: Error; reset?: ()
 
       <div className="text-center space-y-6 max-w-md">
         <div className="space-y-2">
-          <h2 className="font-app font-bold text-2xl tracking-tight text-foreground">
-            Something went wrong
-          </h2>
-          <p className="text-sm text-muted-foreground leading-relaxed balance-text">
-            An unexpected error occurred. Please try refreshing the page or going back.
-          </p>
+          <h2 className="font-app font-bold text-2xl tracking-tight text-foreground">Something went wrong</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed balance-text">An unexpected error occurred. Please try refreshing the page or going back.</p>
         </div>
 
         {error.message && (
           <div className="p-4 rounded-xl bg-secondary/50 border border-border text-left overflow-hidden">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Error Trace</p>
-            <p className="text-xs font-mono text-muted-foreground break-all leading-normal">
-              {error.message}
-            </p>
+            <p className="text-xs font-mono text-muted-foreground break-all leading-normal">{error.message}</p>
           </div>
         )}
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
           {reset ? (
-            <Button
-              size="lg"
-              onClick={reset}
-              className="w-full sm:w-auto px-10 h-12 font-medium"
-            >
+            <Button size="lg" onClick={reset} className="w-full sm:w-auto px-10 h-12 font-medium">
               <RefreshCcw className="w-4 h-4 mr-2" />
               Try Again
             </Button>
           ) : (
-            <Button
-              size="lg"
-              onClick={() => window.location.reload()}
-              className="w-full sm:w-auto px-10 h-12 font-medium"
-            >
+            <Button size="lg" onClick={() => window.location.reload()} className="w-full sm:w-auto px-10 h-12 font-medium">
               <RefreshCcw className="w-4 h-4 mr-2" />
               Refresh Page
             </Button>
           )}
-          <Button
-            size="lg"
-            variant="secondary"
-            onClick={() => window.history.back()}
-            className="w-full sm:w-auto px-10 h-12 font-medium"
-          >
+          <Button size="lg" variant="secondary" onClick={() => window.history.back()} className="w-full sm:w-auto px-10 h-12 font-medium">
             Go Back
           </Button>
         </div>
@@ -123,37 +104,25 @@ export const NotFoundComponent = memo(() => {
       <main className="flex-1 flex flex-col items-center justify-center p-4 relative z-10">
         <div className="max-w-3xl w-full text-center space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="relative inline-flex items-center justify-center mb-4">
-             <div className="relative z-10 flex items-center justify-center">
-               <ChalkLoader size={140} />
-             </div>
-             <div className="absolute inset-0 bg-primary/20 blur-[50px] rounded-full scale-150 opacity-40 animate-pulse" />
+            <div className="relative z-10 flex items-center justify-center">
+              <ChalkLoader size={140} />
+            </div>
+            <div className="absolute inset-0 bg-primary/20 blur-[50px] rounded-full scale-150 opacity-40 animate-pulse" />
           </div>
 
           <div className="space-y-4">
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-foreground balance-text leading-[1.1]">
-              Lost in space.
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-xl mx-auto balance-text">
-              The page you're looking for doesn't exist or has been moved to a different coordinate.
-            </p>
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-foreground balance-text leading-[1.1]">Lost in space.</h1>
+            <p className="text-xl text-muted-foreground max-w-xl mx-auto balance-text">The page you're looking for doesn't exist or has been moved to a different coordinate.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <Link to="/" className="w-full sm:w-auto">
-              <Button
-                size="lg"
-                className="w-full px-10 h-12 font-medium shadow-lg shadow-primary/10"
-              >
+              <Button size="lg" className="w-full px-10 h-12 font-medium shadow-lg shadow-primary/10">
                 <HomeIcon className="w-4 h-4 mr-2" />
                 Return Home
               </Button>
             </Link>
-            <Button
-              size="lg"
-              variant="secondary"
-              onClick={() => window.history.back()}
-              className="w-full sm:w-auto px-10 h-12 font-medium"
-            >
+            <Button size="lg" variant="secondary" onClick={() => window.history.back()} className="w-full sm:w-auto px-10 h-12 font-medium">
               <ArrowLeftIcon className="w-4 h-4 mr-2" />
               Go Back
             </Button>
@@ -169,10 +138,18 @@ export const NotFoundComponent = memo(() => {
             <span>© {new Date().getFullYear()} Chalk</span>
           </div>
           <nav className="flex gap-8 text-sm text-muted-foreground">
-            <Link to="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
-            <a href={DOCS_BASE_URL} className="hover:text-foreground transition-colors">Documentation</a>
-            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
-            <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>
+            <Link to="/dashboard" className="hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+            <a href={DOCS_BASE_URL} className="hover:text-foreground transition-colors">
+              Documentation
+            </a>
+            <a href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy
+            </a>
+            <a href="/terms" className="hover:text-foreground transition-colors">
+              Terms
+            </a>
           </nav>
         </div>
       </footer>

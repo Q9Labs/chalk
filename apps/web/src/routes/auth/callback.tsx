@@ -25,26 +25,16 @@ function AuthCallbackPage() {
         </div>
 
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
-          <h1 className="text-2xl font-black tracking-tight text-foreground">
-            Google Sign-In Lives on Dashboard
-          </h1>
-          <p className="text-base font-medium text-muted-foreground/80 max-w-[320px] mx-auto leading-relaxed">
-            Magic links are gone. Continue with Google from the dashboard to
-            open your Chalk workspace.
-          </p>
+          <h1 className="text-2xl font-black tracking-tight text-foreground">Google Sign-In Lives on Dashboard</h1>
+          <p className="text-base font-medium text-muted-foreground/80 max-w-[320px] mx-auto leading-relaxed">Magic links are gone. Continue with Google from the dashboard to open your Chalk workspace.</p>
 
           {error && (
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-left">
-              <p className="text-xs font-mono text-destructive/90 break-all">
-                {error}
-              </p>
+              <p className="text-xs font-mono text-destructive/90 break-all">{error}</p>
             </div>
           )}
 
-          <Link
-            to="/dashboard"
-            className="inline-flex w-full items-center justify-center h-12 rounded-full bg-background border border-border hover:bg-muted font-bold text-sm transition-colors"
-          >
+          <Link to="/dashboard" className="inline-flex w-full items-center justify-center h-12 rounded-full bg-background border border-border hover:bg-muted font-bold text-sm transition-colors">
             Return to Dashboard
           </Link>
         </div>

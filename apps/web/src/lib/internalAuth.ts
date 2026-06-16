@@ -24,14 +24,7 @@ declare global {
     google?: {
       accounts: {
         oauth2: {
-          initCodeClient(config: {
-            client_id: string;
-            scope: string;
-            ux_mode?: "popup" | "redirect";
-            redirect_uri?: string;
-            callback: (response: GoogleOAuthCodeResponse) => void;
-            error_callback?: () => void;
-          }): {
+          initCodeClient(config: { client_id: string; scope: string; ux_mode?: "popup" | "redirect"; redirect_uri?: string; callback: (response: GoogleOAuthCodeResponse) => void; error_callback?: () => void }): {
             requestCode(): void;
           };
         };
@@ -45,29 +38,16 @@ const INTERNAL_CLIENT_ID_KEY = "chalk_internal_client_id_v1";
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 const LOCAL_API_URL = "http://localhost:8080";
 const GOOGLE_IDENTITY_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
-const CHALK_TOKEN_STORAGE_KEYS = [
-  "chalk_access_token",
-  "chalk_refresh_token",
-  "chalk_token_expires",
-] as const;
+const CHALK_TOKEN_STORAGE_KEYS = ["chalk_access_token", "chalk_refresh_token", "chalk_token_expires"] as const;
 let googleIdentityScriptPromise: Promise<void> | null = null;
 
 export function isLocalHost(hostname: string | undefined) {
   if (!hostname) return false;
   const normalized = hostname.trim().toLowerCase();
-  return (
-    normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized === "::1" ||
-    normalized === "[::1]" ||
-    normalized.endsWith(".localhost")
-  );
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]" || normalized.endsWith(".localhost");
 }
 
-export function resolveApiUrl(
-  configuredApiUrl?: string,
-  currentHostname?: string,
-) {
+export function resolveApiUrl(configuredApiUrl?: string, currentHostname?: string) {
   const normalizedConfigured = configuredApiUrl?.trim();
   const currentIsLocal = isLocalHost(currentHostname);
   if (!normalizedConfigured) {
@@ -90,10 +70,7 @@ export function resolveApiUrl(
 }
 
 export function getApiUrl() {
-  return resolveApiUrl(
-    import.meta.env.VITE_API_URL,
-    typeof window === "undefined" ? undefined : window.location.hostname,
-  );
+  return resolveApiUrl(import.meta.env.VITE_API_URL, typeof window === "undefined" ? undefined : window.location.hostname);
 }
 
 export function getOrCreateLocalClientId() {
@@ -107,10 +84,7 @@ export function getOrCreateLocalClientId() {
       return existing;
     }
 
-    const next =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `chalk-local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const next = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `chalk-local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     localStorage.setItem(INTERNAL_CLIENT_ID_KEY, next);
     return next;
   } catch {
@@ -133,9 +107,7 @@ function isJoinContextActiveForCurrentRoom(ctx: JoinContextV1) {
   if (typeof window === "undefined") return true;
   if (!ctx.roomId) return false;
   if (!window.location.pathname.startsWith("/room/")) return false;
-  const currentRoomID = decodeURIComponent(
-    window.location.pathname.slice("/room/".length),
-  );
+  const currentRoomID = decodeURIComponent(window.location.pathname.slice("/room/".length));
   return currentRoomID === ctx.roomId;
 }
 
@@ -145,10 +117,7 @@ export function getJoinContext(): JoinContextV1 | null {
   return isJoinContextActiveForCurrentRoom(ctx) ? ctx : null;
 }
 
-export function shouldUseInternalRoomAuth(
-  pathname: string | undefined,
-  search: string | undefined,
-) {
+export function shouldUseInternalRoomAuth(pathname: string | undefined, search: string | undefined) {
   if (!(pathname ?? "").startsWith("/room/")) {
     return false;
   }
@@ -159,17 +128,10 @@ export function shouldUseInternalRoomAuth(
 
 export function shouldUseRoomScopedTokenProvider(pathname: string | undefined) {
   const normalizedPath = pathname ?? "";
-  return (
-    normalizedPath.startsWith("/room/") ||
-    normalizedPath.startsWith("/j/") ||
-    normalizedPath.startsWith("/dashboard")
-  );
+  return normalizedPath.startsWith("/room/") || normalizedPath.startsWith("/j/") || normalizedPath.startsWith("/dashboard");
 }
 
-export function getChalkSessionCacheKey(
-  pathname: string | undefined,
-  search: string | undefined,
-) {
+export function getChalkSessionCacheKey(pathname: string | undefined, search: string | undefined) {
   const normalizedPath = pathname ?? "";
   if (normalizedPath.startsWith("/room/")) {
     return `room:${normalizedPath}:${JSON.stringify(search ?? "")}`;
@@ -221,10 +183,7 @@ export function getAccessTokenExpiryMs(accessToken: string) {
       .replace(/-/g, "+")
       .replace(/_/g, "/")
       .padEnd(Math.ceil(payloadPart.length / 4) * 4, "=");
-    const decoded =
-      typeof atob === "function"
-        ? atob(payload)
-        : Buffer.from(payload, "base64").toString("utf8");
+    const decoded = typeof atob === "function" ? atob(payload) : Buffer.from(payload, "base64").toString("utf8");
     const parsed = JSON.parse(decoded) as { exp?: number };
     if (typeof parsed.exp !== "number") {
       return null;
@@ -254,9 +213,7 @@ export async function fetchInternalAccessToken(apiUrl: string) {
   return data.access_token;
 }
 
-export async function fetchInternalSession(
-  apiUrl: string,
-): Promise<InternalSession | null> {
+export async function fetchInternalSession(apiUrl: string): Promise<InternalSession | null> {
   const res = await fetch(`${apiUrl}/api/v1/internal/auth/session`, {
     method: "GET",
     credentials: "include",
@@ -314,16 +271,10 @@ async function loadGoogleIdentityScript() {
   }
   if (!googleIdentityScriptPromise) {
     googleIdentityScriptPromise = new Promise<void>((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>(
-        `script[src="${GOOGLE_IDENTITY_SCRIPT_SRC}"]`,
-      );
+      const existing = document.querySelector<HTMLScriptElement>(`script[src="${GOOGLE_IDENTITY_SCRIPT_SRC}"]`);
       if (existing) {
         existing.addEventListener("load", () => resolve(), { once: true });
-        existing.addEventListener(
-          "error",
-          () => reject(new Error("Failed to load Google sign-in.")),
-          { once: true },
-        );
+        existing.addEventListener("error", () => reject(new Error("Failed to load Google sign-in.")), { once: true });
         return;
       }
 
@@ -332,8 +283,7 @@ async function loadGoogleIdentityScript() {
       script.async = true;
       script.defer = true;
       script.onload = () => resolve();
-      script.onerror = () =>
-        reject(new Error("Failed to load Google sign-in."));
+      script.onerror = () => reject(new Error("Failed to load Google sign-in."));
       document.head.appendChild(script);
     }).finally(() => {
       if (!window.google?.accounts.oauth2) {
@@ -375,8 +325,7 @@ export async function startGoogleOAuthSignIn(apiUrl: string) {
           reject(error instanceof Error ? error : new Error(String(error)));
         }
       },
-      error_callback: () =>
-        reject(new Error("Google OAuth sign-in was cancelled or blocked.")),
+      error_callback: () => reject(new Error("Google OAuth sign-in was cancelled or blocked.")),
     });
 
     if (!client) {
@@ -403,12 +352,7 @@ export async function exchangeJoinToken(apiUrl: string, joinToken: string) {
   };
 }
 
-export async function createRoomJoinLink(
-  apiUrl: string,
-  roomId: string,
-  accessToken: string,
-  origin?: string,
-) {
+export async function createRoomJoinLink(apiUrl: string, roomId: string, accessToken: string, origin?: string) {
   const res = await fetch(`${apiUrl}/api/v1/rooms/${roomId}/join-token`, {
     method: "POST",
     headers: {
@@ -424,19 +368,14 @@ export async function createRoomJoinLink(
     throw new Error("missing join token");
   }
 
-  const baseOrigin =
-    origin ?? getPublicAppOrigin();
+  const baseOrigin = origin ?? getPublicAppOrigin();
   return new URL(`/j/${data.join_token}`, baseOrigin).toString();
 }
 
 export function createWebTokenProvider(apiUrl: string) {
   return async () => {
     const jc = getJoinContext();
-    if (
-      jc?.accessToken &&
-      jc.expiresAtMs &&
-      Date.now() < jc.expiresAtMs - 5_000
-    ) {
+    if (jc?.accessToken && jc.expiresAtMs && Date.now() < jc.expiresAtMs - 5_000) {
       return jc.accessToken;
     }
 

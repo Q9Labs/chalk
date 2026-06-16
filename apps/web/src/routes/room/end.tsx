@@ -107,12 +107,8 @@ function MeetingEndPage() {
       <main className="flex-1 flex flex-col items-center justify-center p-4">
         <div className="max-w-3xl w-full text-center space-y-12">
           <div className="space-y-4">
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground balance-text">
-              Meeting complete.
-            </h1>
-            <p className="text-lg text-muted-foreground max-w-xl mx-auto balance-text">
-              Your session has ended successfully. Thank you for using Chalk.
-            </p>
+            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground balance-text">Meeting complete.</h1>
+            <p className="text-lg text-muted-foreground max-w-xl mx-auto balance-text">Your session has ended successfully. Thank you for using Chalk.</p>
           </div>
 
           {/* Stats Section */}
@@ -154,12 +150,8 @@ function MeetingEndPage() {
           {/* Feedback Section */}
           <div className="bg-secondary/20 border border-border/40 rounded-3xl p-8 max-w-xl mx-auto w-full space-y-6">
             <div className="space-y-1">
-              <h3 className="text-lg font-semibold">
-                {feedbackSubmitted ? "Feedback received" : "How was the quality?"}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {feedbackSubmitted ? "Thank you for helping us improve Chalk." : "Let us know how your experience was."}
-              </p>
+              <h3 className="text-lg font-semibold">{feedbackSubmitted ? "Feedback received" : "How was the quality?"}</h3>
+              <p className="text-sm text-muted-foreground">{feedbackSubmitted ? "Thank you for helping us improve Chalk." : "Let us know how your experience was."}</p>
             </div>
 
             <div className="flex justify-center gap-3">
@@ -174,11 +166,7 @@ function MeetingEndPage() {
                   className={`p-1 transition-all duration-200 focus:outline-none ${feedbackSubmitted ? "cursor-default" : "hover:scale-110 active:scale-95"}`}
                   aria-label={`Rate ${star} star${star !== 1 ? "s" : ""}`}
                 >
-                  <Star
-                    className={`h-10 w-10 transition-colors ${
-                      star <= displayRating ? "fill-primary text-primary" : "text-muted-foreground/20"
-                    }`}
-                  />
+                  <Star className={`h-10 w-10 transition-colors ${star <= displayRating ? "fill-primary text-primary" : "text-muted-foreground/20"}`} />
                 </button>
               ))}
             </div>
@@ -211,10 +199,18 @@ function MeetingEndPage() {
             <span>© {new Date().getFullYear()} Chalk</span>
           </div>
           <nav className="flex gap-8 text-sm text-muted-foreground">
-            <Link to="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
-            <a href={DOCS_BASE_URL} className="hover:text-foreground transition-colors">Documentation</a>
-            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
-            <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>
+            <Link to="/dashboard" className="hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+            <a href={DOCS_BASE_URL} className="hover:text-foreground transition-colors">
+              Documentation
+            </a>
+            <a href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy
+            </a>
+            <a href="/terms" className="hover:text-foreground transition-colors">
+              Terms
+            </a>
           </nav>
         </div>
       </footer>

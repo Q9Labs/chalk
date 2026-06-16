@@ -44,17 +44,10 @@ export function PwaInstallPrompt() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={reloadToUpdate}
-            >
+            <Button size="sm" onClick={reloadToUpdate}>
               Reload to update
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={dismissUpdate}
-            >
+            <Button size="sm" variant="ghost" onClick={dismissUpdate}>
               Later
             </Button>
           </div>

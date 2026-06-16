@@ -6,7 +6,7 @@
   --chalk-primary: #1bb6a6;
   --chalk-bg: #030303;
   --chalk-border: rgba(255, 255, 255, 0.08);
-  
+
   /* Starlight Variable Overrides */
   --sl-font-body: "Inter", sans-serif;
   --sl-font-headings: "Sora", sans-serif;
@@ -23,7 +23,7 @@
   --sl-color-gray-5: #353841;
   --sl-color-gray-6: #24272f;
   --sl-color-black: var(--chalk-bg);
-  
+
   --sl-content-width: 68rem;
 }
 
@@ -43,9 +43,7 @@ body::before {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  background: 
-    radial-gradient(circle at 50% -20%, rgba(27, 182, 166, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 0% 100%, rgba(27, 182, 166, 0.03) 0%, transparent 40%);
+  background: radial-gradient(circle at 50% -20%, rgba(27, 182, 166, 0.1) 0%, transparent 50%), radial-gradient(circle at 0% 100%, rgba(27, 182, 166, 0.03) 0%, transparent 40%);
   z-index: -1;
 }
 
@@ -81,13 +79,19 @@ header {
 }
 
 /* Typography */
-h1, h2, h3, h4, h5 {
+h1,
+h2,
+h3,
+h4,
+h5 {
   color: var(--sl-color-white);
   letter-spacing: -0.03em;
   font-weight: 700;
 }
 
-h1 { font-size: 2.75rem !important; }
+h1 {
+  font-size: 2.75rem !important;
+}
 
 /* Code Blocks */
 pre {

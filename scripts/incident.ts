@@ -201,13 +201,7 @@ function normalizeBaseUrl(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-async function requestApi(
-  apiUrl: string,
-  adminSecret: string,
-  method: string,
-  path: string,
-  options?: { query?: Record<string, string | number | undefined>; body?: unknown },
-) {
+async function requestApi(apiUrl: string, adminSecret: string, method: string, path: string, options?: { query?: Record<string, string | number | undefined>; body?: unknown }) {
   const url = new URL(path, normalizeBaseUrl(apiUrl));
   const params = new URLSearchParams();
   if (options?.query) {
@@ -431,13 +425,7 @@ async function main(): Promise<void> {
       updated_summary: trimOrUndefined(flagValue(flags, "summary")),
       actor: extractActor(flags),
     });
-    result = await requestApi(
-      apiUrl,
-      adminSecret,
-      "POST",
-      `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/events`,
-      { body },
-    );
+    result = await requestApi(apiUrl, adminSecret, "POST", `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/events`, { body });
   } else if (command === "publish") {
     const incidentCode = positionals[1];
     if (!incidentCode) {
@@ -450,13 +438,7 @@ async function main(): Promise<void> {
       event_at: parseIsoFlag(flags, "event-at"),
       actor: extractActor(flags),
     });
-    result = await requestApi(
-      apiUrl,
-      adminSecret,
-      "POST",
-      `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/publish`,
-      { body },
-    );
+    result = await requestApi(apiUrl, adminSecret, "POST", `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/publish`, { body });
   } else if (command === "resolve") {
     const incidentCode = positionals[1];
     if (!incidentCode) {
@@ -468,13 +450,7 @@ async function main(): Promise<void> {
       event_at: parseIsoFlag(flags, "event-at"),
       actor: extractActor(flags),
     });
-    result = await requestApi(
-      apiUrl,
-      adminSecret,
-      "POST",
-      `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/resolve`,
-      { body },
-    );
+    result = await requestApi(apiUrl, adminSecret, "POST", `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/resolve`, { body });
   } else if (command === "list") {
     const limit = parseIntegerFlag(flags, "limit", 20);
     const offset = parseIntegerFlag(flags, "offset", 0);
@@ -509,12 +485,7 @@ async function main(): Promise<void> {
       if (!maintenanceId) {
         throw new Error("Usage: maintenance cancel <maintenanceId>");
       }
-      result = await requestApi(
-        apiUrl,
-        adminSecret,
-        "POST",
-        `${INCIDENTS_ROOT}/maintenance/${encodeURIComponent(maintenanceId)}/cancel`,
-      );
+      result = await requestApi(apiUrl, adminSecret, "POST", `${INCIDENTS_ROOT}/maintenance/${encodeURIComponent(maintenanceId)}/cancel`);
     } else {
       throw new Error("Usage: maintenance <schedule|cancel>");
     }
@@ -523,12 +494,7 @@ async function main(): Promise<void> {
     if (!incidentCode) {
       throw new Error("Usage: ai-summary <incidentCode>");
     }
-    result = await requestApi(
-      apiUrl,
-      adminSecret,
-      "POST",
-      `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/ai-drafts`,
-    );
+    result = await requestApi(apiUrl, adminSecret, "POST", `${INCIDENTS_ROOT}/incidents/${encodeURIComponent(incidentCode)}/ai-drafts`);
   } else {
     throw new Error(`Unknown command: ${command}\n\n${usage()}`);
   }

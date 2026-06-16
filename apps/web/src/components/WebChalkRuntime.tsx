@@ -74,10 +74,7 @@ export function WebChalkRuntime({ children, fallback = null }: WebChalkRuntimePr
     });
   }, [apiKey, apiUrl]);
 
-  const sessionCacheKey = useMemo(
-    () => getChalkSessionCacheKey(location.pathname, locationSearch),
-    [location.pathname, locationSearch],
-  );
+  const sessionCacheKey = useMemo(() => getChalkSessionCacheKey(location.pathname, locationSearch), [location.pathname, locationSearch]);
   const authExpiresAt = (() => {
     if (isServer) {
       return null;

@@ -155,38 +155,36 @@ export function ScheduledRoomsPanel({ client, rooms, isLoading, error, onRefresh
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-[480px] rounded-[2.5rem] border-white/10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] p-0 overflow-hidden bg-[#030303] outline-none ring-0">
           <DialogClose className="absolute right-8 top-8 rounded-full p-2 text-white/30 hover:text-white hover:bg-white/5 transition-all outline-none" />
-          
+
           <div className="px-10 pt-12 pb-8">
             <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 border border-primary/20">
               <HugeiconsIcon icon={Calendar01Icon} className="text-primary" size={24} />
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-white leading-tight">Schedule a Room</h2>
-            <p className="text-base font-medium text-white/40 mt-2 leading-relaxed">
-              Prepare a new live space and get an invite link for your team.
-            </p>
+            <p className="text-base font-medium text-white/40 mt-2 leading-relaxed">Prepare a new live space and get an invite link for your team.</p>
           </div>
 
           <div className="px-10 pb-12 space-y-8">
             <div className="space-y-3">
               <label className="text-[11px] font-bold text-white/30 uppercase tracking-[0.15em] ml-1">Room Title</label>
-              <Input 
-                type="text" 
-                autoComplete="off" 
-                value={sessionName} 
-                onChange={(e) => setSessionName(e.target.value)} 
-                placeholder="e.g. Project Sync" 
-                className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 rounded-2xl px-5 text-base font-medium transition-all text-white placeholder:text-white/20" 
+              <Input
+                type="text"
+                autoComplete="off"
+                value={sessionName}
+                onChange={(e) => setSessionName(e.target.value)}
+                placeholder="e.g. Project Sync"
+                className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 rounded-2xl px-5 text-base font-medium transition-all text-white placeholder:text-white/20"
               />
             </div>
 
             <div className="space-y-3">
               <label className="text-[11px] font-bold text-white/30 uppercase tracking-[0.15em] ml-1">Start Time</label>
-              <Input 
-                type="datetime-local" 
-                value={startAtLocal} 
-                onChange={(e) => setStartAtLocal(e.target.value)} 
-                className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 block w-full rounded-2xl px-5 text-base font-medium transition-all text-white" 
-                style={{ colorScheme: "dark" }} 
+              <Input
+                type="datetime-local"
+                value={startAtLocal}
+                onChange={(e) => setStartAtLocal(e.target.value)}
+                className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 block w-full rounded-2xl px-5 text-base font-medium transition-all text-white"
+                style={{ colorScheme: "dark" }}
               />
             </div>
 
@@ -194,13 +192,7 @@ export function ScheduledRoomsPanel({ client, rooms, isLoading, error, onRefresh
               <div className="space-y-3">
                 <label className="text-[11px] font-bold text-white/30 uppercase tracking-[0.15em] ml-1">Duration</label>
                 <div className="relative group">
-                  <Input 
-                    type="number" 
-                    min={1} 
-                    value={durationMinutes} 
-                    onChange={(e) => setDurationMinutes(e.target.value)} 
-                    className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 rounded-2xl px-5 text-base font-medium transition-all text-white pr-14" 
-                  />
+                  <Input type="number" min={1} value={durationMinutes} onChange={(e) => setDurationMinutes(e.target.value)} className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 rounded-2xl px-5 text-base font-medium transition-all text-white pr-14" />
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 text-xs font-bold text-white/20 pointer-events-none group-focus-within:text-white/40">MIN</span>
                 </div>
               </div>
@@ -208,12 +200,12 @@ export function ScheduledRoomsPanel({ client, rooms, isLoading, error, onRefresh
               <div className="space-y-3">
                 <label className="text-[11px] font-bold text-white/30 uppercase tracking-[0.15em] ml-1">Early Join</label>
                 <div className="relative group">
-                  <Input 
-                    type="number" 
-                    min={0} 
-                    value={allowEarlyJoinMinutes} 
-                    onChange={(e) => setAllowEarlyJoinMinutes(e.target.value)} 
-                    className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 rounded-2xl px-5 text-base font-medium transition-all text-white pr-14" 
+                  <Input
+                    type="number"
+                    min={0}
+                    value={allowEarlyJoinMinutes}
+                    onChange={(e) => setAllowEarlyJoinMinutes(e.target.value)}
+                    className="h-14 bg-white/[0.03] border-white/10 hover:border-white/20 focus-visible:ring-primary/30 rounded-2xl px-5 text-base font-medium transition-all text-white pr-14"
                   />
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 text-xs font-bold text-white/20 pointer-events-none group-focus-within:text-white/40">MIN</span>
                 </div>
@@ -222,18 +214,10 @@ export function ScheduledRoomsPanel({ client, rooms, isLoading, error, onRefresh
           </div>
 
           <div className="bg-white/[0.02] border-t border-white/[0.05] px-10 py-8 flex items-center justify-between gap-4">
-            <Button 
-              variant="ghost" 
-              onClick={() => setShowForm(false)} 
-              className="font-bold h-12 px-8 rounded-2xl hover:bg-white/5 transition-colors text-white/40 hover:text-white"
-            >
+            <Button variant="ghost" onClick={() => setShowForm(false)} className="font-bold h-12 px-8 rounded-2xl hover:bg-white/5 transition-colors text-white/40 hover:text-white">
               Cancel
             </Button>
-            <Button 
-              disabled={isCreating} 
-              onClick={() => void createScheduledSession()} 
-              className="h-12 px-10 font-bold rounded-2xl shadow-[0_0_40px_rgba(27,182,166,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all bg-primary text-white hover:brightness-110"
-            >
+            <Button disabled={isCreating} onClick={() => void createScheduledSession()} className="h-12 px-10 font-bold rounded-2xl shadow-[0_0_40px_rgba(27,182,166,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all bg-primary text-white hover:brightness-110">
               {isCreating ? "Scheduling..." : "Schedule Room"}
             </Button>
           </div>

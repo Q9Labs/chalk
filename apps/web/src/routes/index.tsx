@@ -53,35 +53,23 @@ function App() {
           {/* Background Illustration / Image */}
           <div className="absolute inset-0 z-0 pointer-events-none flex items-start justify-center pt-20">
             <div className="relative w-full max-w-[1200px] flex items-center justify-center opacity-40 dark:opacity-60 transition-opacity duration-700 blur-[2px]">
-              <img
-                src="/images/marketing/hero-1.png"
-                alt=""
-                className="w-full h-auto object-cover mask-image-gradient"
-                style={{ WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 20%, rgba(0,0,0,0) 100%)' }}
-              />
+              <img src="/images/marketing/hero-1.png" alt="" className="w-full h-auto object-cover mask-image-gradient" style={{ WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 20%, rgba(0,0,0,0) 100%)" }} />
             </div>
           </div>
 
           <div className="container relative z-10 mx-auto px-6 max-w-5xl py-24 lg:py-32 flex flex-col items-center">
             <div className="space-y-10 flex flex-col items-center w-full">
-              
               <div className="space-y-6 flex flex-col items-center w-full text-center">
-                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05] max-w-4xl text-balance">
-                  Video meetings for modern teams.
-                </h1>
+                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05] max-w-4xl text-balance">Video meetings for modern teams.</h1>
 
-                <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-2xl text-balance text-center mx-auto">
-                  High-fidelity audio and video routed through the edge. Experience communication without the friction.
-                </p>
+                <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-2xl text-balance text-center mx-auto">High-fidelity audio and video routed through the edge. Experience communication without the friction.</p>
               </div>
 
               <div className="flex flex-col gap-6 w-full justify-center items-center mt-4">
                 <Button size="lg" className="h-12 md:h-14 px-8 md:px-10 text-base font-semibold rounded-full shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" onClick={handleStartMeeting}>
                   Start a Meeting
                 </Button>
-                <p className="max-w-lg text-center text-sm text-muted-foreground">
-                  Joining a meeting? Open your Chalk invite link to jump straight into the right room.
-                </p>
+                <p className="max-w-lg text-center text-sm text-muted-foreground">Joining a meeting? Open your Chalk invite link to jump straight into the right room.</p>
               </div>
 
               <div className="flex flex-wrap justify-center items-center gap-6 md:gap-10 text-sm font-medium text-muted-foreground pt-8">
@@ -102,7 +90,6 @@ function App() {
         {/* Features Grid */}
         <section className="bg-secondary/20 relative z-10">
           <div className="container mx-auto px-6 max-w-7xl py-24 md:py-32">
-            
             <div className="text-center mb-16 space-y-4">
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Built for speed and privacy.</h2>
             </div>
@@ -113,27 +100,21 @@ function App() {
                   <MonitorPlay className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="text-xl font-semibold mb-3 tracking-tight">Edge Routing</h3>
-                <p className="text-muted-foreground leading-relaxed text-sm md:text-base">
-                  Connections are routed through the closest data center globally, physically minimizing latency for all participants.
-                </p>
+                <p className="text-muted-foreground leading-relaxed text-sm md:text-base">Connections are routed through the closest data center globally, physically minimizing latency for all participants.</p>
               </div>
               <div className="p-8 bg-background rounded-[1.5rem] border border-border/50 shadow-sm transition-all hover:shadow-md hover:border-border/80 group">
                 <div className="w-12 h-12 bg-secondary rounded-xl flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
                   <MousePointerClick className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="text-xl font-semibold mb-3 tracking-tight">Zero Friction</h3>
-                <p className="text-muted-foreground leading-relaxed text-sm md:text-base">
-                  No apps to download or accounts to create. Share a link and your participants can join instantly.
-                </p>
+                <p className="text-muted-foreground leading-relaxed text-sm md:text-base">No apps to download or accounts to create. Share a link and your participants can join instantly.</p>
               </div>
               <div className="p-8 bg-background rounded-[1.5rem] border border-border/50 shadow-sm transition-all hover:shadow-md hover:border-border/80 group">
                 <div className="w-12 h-12 bg-secondary rounded-xl flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
                   <Lock className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="text-xl font-semibold mb-3 tracking-tight">Absolute Privacy</h3>
-                <p className="text-muted-foreground leading-relaxed text-sm md:text-base">
-                  Sessions are ephemeral and end-to-end encrypted. We never record or store your meetings.
-                </p>
+                <p className="text-muted-foreground leading-relaxed text-sm md:text-base">Sessions are ephemeral and end-to-end encrypted. We never record or store your meetings.</p>
               </div>
             </div>
           </div>
