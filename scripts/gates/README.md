@@ -25,4 +25,6 @@ config files, migrations, scripts, and test helpers by explicit Chalk policy.
 
 The gate also runs Fallow, Semgrep, Gitleaks, OSV-Scanner, Syncpack, CSpell,
 OpenAPI drift/stub checks, TypeScript, lint, tests, coverage, build, publint,
-Are The Types Wrong, and Go `govulncheck`.
+Are The Types Wrong, and Go `govulncheck`. Gitleaks scans the commit delta from
+`origin/master` by default; set `GITLEAKS_BASE_REF` or `GITLEAKS_LOG_OPTS` to
+change that range.
