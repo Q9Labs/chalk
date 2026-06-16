@@ -17,6 +17,15 @@ pnpm generate
 cd apps/api && go run ./cmd/main.go
 ```
 
+## Quality Gate
+
+- `pnpm run gate` is the canonical pre-remote quality contract for agents and
+  humans. Run it before asking for a commit, PR, or deployment.
+- `pnpm run gate:explain` prints the gate script descriptions and hook
+  behavior.
+- Hooks are non-mutating: do not rely on them to format, fix, stage, regenerate,
+  stash, reset, or revert files.
+
 ## Database Migrations
 
 - Treat DB schema changes as release blockers.

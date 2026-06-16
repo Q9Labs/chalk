@@ -1,7 +1,7 @@
 packages:
-  - 'packages/*'
-  - 'apps/mobile'
-  - 'apps/web'
-  - 'apps/docs'
-  - 'infrastructure/cloudflare-worker'
-  - 'infrastructure/cloudflare-ops-monitor'
+  - "packages/*"
+  - "apps/mobile"
+  - "apps/web"
+  - "apps/docs"
+  - "infrastructure/cloudflare-worker"
+  - "infrastructure/cloudflare-ops-monitor"

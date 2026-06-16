@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JamieMason/syncpack/main/schema.json",
+  "versionGroups": [
+    {
+      "label": "Private apps and publishable packages intentionally pin runtime and peer ranges independently.",
+      "isIgnored": true,
+      "dependencyTypes": ["local", "peer"]
+    },
+    {
+      "label": "Framework/runtime versions are allowed to diverge where app and SDK compatibility windows differ.",
+      "isIgnored": true,
+      "dependencies": [
+        "@base-ui/react",
+        "@cloudflare/react-native-webrtc",
+        "@excalidraw/excalidraw",
+        "@hugeicons/core-free-icons",
+        "@hugeicons/react",
+        "@tailwindcss/vite",
+        "@testing-library/dom",
+        "@testing-library/react",
+        "@types/node",
+        "@types/react",
+        "@types/react-dom",
+        "jsdom",
+        "lucide-react",
+        "nitro",
+        "@q9labs/chalk-core",
+        "@q9labs/chalk-whiteboard",
+        "react",
+        "react-dom",
+        "react-native",
+        "sonner",
+        "tailwindcss",
+        "tw-animate-css",
+        "typescript"
+      ]
+    }
+  ]
+}

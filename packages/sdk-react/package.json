@@ -26,7 +26,7 @@
       "require": "./dist/styles/styles.css",
       "default": "./dist/styles/styles.css"
     },
-    "./src/styles.css": "./src/styles/styles.css",
+    "./src/styles.css": "./dist/styles/styles.css",
     "./styles/*": "./dist/styles/*",
     "./dist/styles/*": "./dist/styles/*",
     "./sounds/*": "./dist/assets/sounds/*",
@@ -42,11 +42,11 @@
     "build:assets": "mkdir -p ./dist/assets/sounds ./dist/assets/logos && pnpm run build:copy-sounds && pnpm run build:copy-logos",
     "build:copy-sounds": "for f in ./src/assets/sounds/*.mp3; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/sounds/; done",
     "build:copy-logos": "for f in ./src/assets/logos/*; do [ -f \"$f\" ] && cp \"$f\" ./dist/assets/logos/; done",
-    "build:types": "tsc --project tsconfig.json",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
     "dev": "pnpm run build:styles && pnpm run build:assets && tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @chalk/core --external react-resizable-panels --watch",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --noEmit",
-    "lint": "echo 'No linter configured yet'",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -68,16 +68,17 @@
     "web-haptics": "^0.0.6"
   },
   "devDependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
     "@tailwindcss/vite": "^4.1.18",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
-    "@excalidraw/excalidraw": "^0.18.1",
+    "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitest/browser-playwright": "^4.0.16",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@vitest/browser-playwright": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.8",
     "autoprefixer": "^10.4.23",
     "happy-dom": "^20.0.11",
     "jsdom": "^27.4.0",
@@ -87,8 +88,7 @@
     "react-dom": "19.2.4",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.7.2",
-    "vitest": "^4.0.16",
-    "@types/node": "^24.10.1"
+    "vitest": "^4.1.8"
   },
   "peerDependencies": {
     "@excalidraw/excalidraw": "^0.17.0 || ^0.18.0",

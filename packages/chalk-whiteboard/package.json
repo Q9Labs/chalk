@@ -14,6 +14,19 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "react": [
+        "./dist/react/index.d.ts"
+      ],
+      "collab": [
+        "./dist/collab/index.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,18 +48,18 @@
     "build": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
-    "test": "echo 'No tests configured yet'",
+    "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
-    "lint": "echo 'No linter configured yet'",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1"
   },
   "devDependencies": {
+    "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
-    "typescript": "^5.7.2",
-    "@types/node": "^24.10.1"
+    "typescript": "^5.7.2"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

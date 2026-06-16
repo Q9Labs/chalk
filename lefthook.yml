@@ -1,0 +1,9 @@
+pre-commit:
+  commands:
+    quality-gate:
+      run: pnpm run gate
+
+post-commit:
+  commands:
+    codex-review:
+      run: pnpm run review:commit

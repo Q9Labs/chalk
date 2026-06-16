@@ -1,0 +1,172 @@
+rules:
+  - id: chalk.forbid-dynamic-code
+    message: Avoid eval, new Function, and string-based timers.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: setTimeout("...", ...)
+      - pattern: setTimeout('...', ...)
+      - pattern: setTimeout(`...`, ...)
+      - pattern: setInterval("...", ...)
+      - pattern: setInterval('...', ...)
+      - pattern: setInterval(`...`, ...)
+    paths:
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "**/__tests__/**"
+        - "**/test/**"
+        - "**/dist/**"
+        - "**/coverage/**"
+        - "**/node_modules/**"
+
+  - id: chalk.forbid-focused-or-skipped-tests
+    message: Do not commit focused or skipped tests.
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-either:
+          - pattern: test.only(...)
+          - pattern: describe.only(...)
+          - pattern: it.only(...)
+          - pattern: test.skip(...)
+          - pattern: describe.skip(...)
+          - pattern: it.skip(...)
+    paths:
+      include:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.spec.ts"
+        - "**/*.spec.tsx"
+
+  - id: chalk.forbid-unjustified-ts-ignore
+    message: TypeScript and lint suppressions need a same-line justification.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-regex: '(?m)//\s*(?:@ts-ignore|eslint-disable(?:-next-line|-line)?)(?:\s*$)'
+    paths:
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "**/__tests__/**"
+        - "**/routeTree.gen.ts"
+        - "**/generated/**"
+        - "**/openapi-generated/**"
+
+  - id: chalk.forbid-console-in-app-code
+    message: Route application logging through the repo logger or an approved diagnostics module.
+    severity: WARNING
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-either:
+          - pattern: console.log(...)
+          - pattern: console.error(...)
+    paths:
+      include:
+        - "/apps/**/src/**"
+        - "/packages/**/src/**"
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "**/debug/**"
+        - "**/diagnostics/**"
+        - "/packages/sdk-core/src/wide-events/**"
+        - "/packages/sdk-react/src/utils/debug*.ts"
+        - "/packages/sdk-react/src/components/composite/DiagnosticErrorSheet.tsx"
+
+  - id: chalk.forbid-direct-process-env
+    message: Read environment through approved config modules, app config, or scripts.
+    severity: WARNING
+    languages: [javascript, typescript]
+    pattern: process.env.$NAME
+    paths:
+      include:
+        - "/apps/**/src/**"
+        - "/packages/**/src/**"
+        - "/infrastructure/**/src/**"
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "/apps/mobile/src/lib/chalk.ts"
+        - "/apps/mobile/src/lib/dev-diagnostics.ts"
+
+  - id: chalk.forbid-raw-token-storage
+    message: Do not persist auth/session/token material through raw browser storage.
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($KEY, ...)
+          - pattern: sessionStorage.setItem($KEY, ...)
+          - pattern: window.localStorage.setItem($KEY, ...)
+          - pattern: window.sessionStorage.setItem($KEY, ...)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: .*?(token|auth|session|secret|key).*?
+    paths:
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "/packages/sdk-core/src/token-provider.ts"
+        - "/packages/sdk-react/src/hooks/useMeetingRoomSettings.ts"
+
+  - id: chalk.forbid-placeholder-scripts
+    message: Package scripts must not be placeholders or use --passWithNoTests.
+    severity: ERROR
+    languages: [json]
+    pattern-regex: '("(?:lint|test)"\s*:\s*"(?:echo ''No (?:linter|tests?) configured yet''|true|exit 0)"|--passWithNoTests)'
+    paths:
+      include:
+        - "**/package.json"
+
+  - id: chalk.forbid-generated-openapi-stubs
+    message: Generated OpenAPI stubs and TODO operations must be enriched before commit.
+    severity: ERROR
+    languages: [generic]
+    pattern-either:
+      - pattern: "x-generated-stub: true"
+      - pattern: "TODO: document"
+    paths:
+      include:
+        - "/apps/api/openapi.yaml"
+        - "/packages/sdk-core/src/generated/**"
+        - "/packages/sdk-core/openapi-generated/**"
+
+  - id: chalk.forbid-source-path-package-exports
+    message: Publishable package exports should point at built artifacts, not source paths.
+    severity: ERROR
+    languages: [json]
+    pattern-regex: '"(?:import|require|default|types|react-native)"\s*:\s*"\./src/'
+    paths:
+      include:
+        - "/packages/*/package.json"
+
+  - id: chalk.forbid-sdk-importing-app-code
+    message: SDK packages must not import app-only modules.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-regex: 'from\s+["''](?:\.\./)*apps/'
+    paths:
+      include:
+        - "/packages/sdk-core/src/**"
+        - "/packages/sdk-react/src/**"
+        - "/packages/sdk-react-native/src/**"
+        - "/packages/chalk-whiteboard/src/**"
+
+  - id: chalk.forbid-shell-true-with-interpolation
+    message: Avoid interpolating untrusted values into shell commands.
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-inside: |
+          $FN(..., { ..., shell: true, ... })
+      - metavariable-regex:
+          metavariable: $FN
+          regex: .*?(exec|spawn).*?
+    paths:
+      include:
+        - "/scripts/**"
+        - "/apps/**/scripts/**"
+        - "/packages/**/scripts/**"

@@ -1,0 +1,9 @@
+title = "Chalk gitleaks policy"
+
+[[allowlists]]
+description = "Local mobile/app credentials and generated artifacts are not part of the public gate surface."
+paths = ['''^apps/mobile/\.gplay/''', '''^apps/mobile/android/app/keystore\.properties$''', '''^apps/mobile/ios/Pods/''', '''^apps/web/\.dev\.vars$''', '''^packages/.*/dist/''']
+
+[[allowlists]]
+description = "Checked-in tests and API docs use obvious placeholder credentials."
+paths = ['''^apps/docs/src/content/docs/api/authentication\.mdx$''', '''_test\.go$''', '''\.test\.ts$''', '''\.test\.tsx$''']

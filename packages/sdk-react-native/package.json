@@ -18,11 +18,11 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "react-native": "./src/index.ts",
+  "react-native": "./dist/index.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "react-native": "./src/index.ts",
+      "react-native": "./dist/index.js",
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
@@ -33,7 +33,7 @@
   },
   "scripts": {
     "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core && pnpm run build:types",
-    "build:types": "tsc --project tsconfig.json",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
     "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core --watch",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",

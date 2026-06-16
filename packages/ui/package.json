@@ -27,12 +27,12 @@
   },
   "scripts": {
     "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform node --external react --external @chalk/core && pnpm run build:types && pnpm run build:css",
-    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
     "dev": "pnpm run build:css && tsup ./src/index.ts --format esm --out-dir ./dist --platform node --external react --external @chalk/core --watch",
-    "test": "echo 'No tests configured yet'",
+    "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
-    "lint": "echo 'No linter configured yet'",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -45,10 +45,10 @@
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.18",
+    "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "tailwindcss": "^4.1.18",
-    "typescript": "^5.7.2",
-    "@types/node": "^24.10.1"
+    "typescript": "^5.7.2"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"

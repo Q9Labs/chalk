@@ -9,7 +9,7 @@
     "build": "bun run sync:public && vite build && node scripts/prepare-pages-spa.mjs",
     "sync:public": "bun scripts/sync-public-assets.ts",
     "preview": "vite preview",
-    "test": "vitest run --passWithNoTests",
+    "test": "pnpm exec vitest run",
     "test:mutation:avatar-gradient": "stryker run stryker.config.json"
   },
   "dependencies": {
@@ -57,11 +57,12 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "^4.1.8",
     "jsdom": "^27.0.0",
     "react-grab": "^0.0.98",
     "typescript": "^5.7.2",
     "vite": "^7.3.2",
-    "vitest": "^3.0.5",
+    "vitest": "^4.1.8",
     "web-vitals": "^5.1.0"
   }
 }

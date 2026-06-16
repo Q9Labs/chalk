@@ -15,6 +15,16 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "react-native": [
+        "./dist/index.native.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,8 +45,9 @@
   },
   "scripts": {
     "build": "tsup ./src/index.ts ./src/index.native.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external react-native --external react-native-svg && pnpm run build:types",
-    "build:types": "tsc --project tsconfig.json",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
     "dev": "tsup ./src/index.ts ./src/index.native.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external react-native --external react-native-svg --watch",
+    "prepack": "pnpm run build",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit"

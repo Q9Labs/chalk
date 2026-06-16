@@ -27,12 +27,12 @@
   },
   "scripts": {
     "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external @cloudflare/realtimekit && pnpm run build:types",
-    "build:types": "tsc --project tsconfig.json",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
     "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external @cloudflare/realtimekit --watch",
     "test": "pnpm exec vitest run ./src/__tests__",
     "test:mutation:participant-avatar-recipe": "../../apps/web/node_modules/.bin/stryker run stryker.participant-avatar.config.json",
     "check-types": "tsc --noEmit",
-    "lint": "echo 'No linter configured yet'",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist",
     "generate:types": "openapi-typescript ../../apps/api/openapi.yaml -o src/generated/api-types.ts",
     "generate:effect-httpclient": "node ./scripts/generate-effect-openapi-client.mjs"
@@ -46,9 +46,9 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
+    "@types/node": "^24.10.1",
     "openapi-typescript": "^7.0.0",
-    "typescript": "^5.7.2",
-    "@types/node": "^24.10.1"
+    "typescript": "^5.7.2"
   },
   "peerDependencies": {
     "typescript": "^5"
