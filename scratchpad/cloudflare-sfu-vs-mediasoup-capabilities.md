@@ -14,29 +14,29 @@ mediasoup:
 
 ## Best Fit
 
-| Goal | Better Default |
-| --- | --- |
-| Own Chalk runtime, avoid media infra ops | Cloudflare SFU |
-| Own media topology, routing, and debugging deeply | mediasoup |
-| Start quickly with global reach | Cloudflare SFU |
-| Build a custom realtime-media platform | mediasoup |
-| Keep infra cost predictable at small/mid scale | Cloudflare SFU |
-| Optimize infra cost at very high scale with strong ops | mediasoup |
+| Goal                                                   | Better Default |
+| ------------------------------------------------------ | -------------- |
+| Own Chalk runtime, avoid media infra ops               | Cloudflare SFU |
+| Own media topology, routing, and debugging deeply      | mediasoup      |
+| Start quickly with global reach                        | Cloudflare SFU |
+| Build a custom realtime-media platform                 | mediasoup      |
+| Keep infra cost predictable at small/mid scale         | Cloudflare SFU |
+| Optimize infra cost at very high scale with strong ops | mediasoup      |
 
 ## Cloudflare SFU: Cool Things Chalk Can Do
 
 Cloudflare SFU is useful when Chalk wants low-level control over sessions and tracks without operating the media fleet.
 
-| Capability | Why It Is Useful |
-| --- | --- |
-| Track-level routing | Chalk can decide exactly who receives which audio, video, or data tracks. |
-| No room abstraction | Chalk keeps its own room state, participants, permissions, and lifecycle. |
-| Global edge media path | Users can connect through nearby Cloudflare infrastructure instead of one Chalk-hosted region. |
-| Simulcast support | Publishers can send multiple quality layers; Cloudflare can switch layers automatically or by API preference. |
-| DataChannel fanout | Useful for low-latency ephemeral room events, reactions, cursor hints, lightweight presence, or game-like state. |
-| TURN/SFU bundled model | Chalk has less NAT/firewall infrastructure to own directly. |
-| Media Transport Adapters | Tracks can be bridged to external systems for AI, transcription, recording pipelines, or media processing. |
-| Usage-based pricing | Early and spiky traffic does not require capacity planning. |
+| Capability               | Why It Is Useful                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Track-level routing      | Chalk can decide exactly who receives which audio, video, or data tracks.                                        |
+| No room abstraction      | Chalk keeps its own room state, participants, permissions, and lifecycle.                                        |
+| Global edge media path   | Users can connect through nearby Cloudflare infrastructure instead of one Chalk-hosted region.                   |
+| Simulcast support        | Publishers can send multiple quality layers; Cloudflare can switch layers automatically or by API preference.    |
+| DataChannel fanout       | Useful for low-latency ephemeral room events, reactions, cursor hints, lightweight presence, or game-like state. |
+| TURN/SFU bundled model   | Chalk has less NAT/firewall infrastructure to own directly.                                                      |
+| Media Transport Adapters | Tracks can be bridged to external systems for AI, transcription, recording pipelines, or media processing.       |
+| Usage-based pricing      | Early and spiky traffic does not require capacity planning.                                                      |
 
 Good Chalk shape:
 
@@ -61,27 +61,27 @@ Cloudflare owns:
 
 Cloudflare SFU gives primitives, but not full media-server ownership.
 
-| Limitation | Why It Matters |
-| --- | --- |
-| No custom SFU internals | Chalk cannot patch congestion behavior, RTP forwarding internals, worker scheduling, or packet handling. |
-| No exact topology ownership | Chalk does not choose exact machine placement, cross-region routing, failover internals, or edge behavior. |
-| One-way DataChannel primitive | Bidirectional behavior requires explicit paired channels. |
-| Recording is external | Chalk needs a bot, adapter, or pipeline for recording and composition. |
-| Product-level observability boundary | Chalk sees what Cloudflare exposes, not process-level RTP/worker internals. |
-| Vendor limits apply | API rates, adapter formats, codec support, and feature timing are Cloudflare-owned. |
+| Limitation                           | Why It Matters                                                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| No custom SFU internals              | Chalk cannot patch congestion behavior, RTP forwarding internals, worker scheduling, or packet handling.   |
+| No exact topology ownership          | Chalk does not choose exact machine placement, cross-region routing, failover internals, or edge behavior. |
+| One-way DataChannel primitive        | Bidirectional behavior requires explicit paired channels.                                                  |
+| Recording is external                | Chalk needs a bot, adapter, or pipeline for recording and composition.                                     |
+| Product-level observability boundary | Chalk sees what Cloudflare exposes, not process-level RTP/worker internals.                                |
+| Vendor limits apply                  | API rates, adapter formats, codec support, and feature timing are Cloudflare-owned.                        |
 
 ## mediasoup: Cool Things Chalk Can Do
 
 mediasoup is useful when Chalk wants deep ownership of the media layer itself.
 
-| Capability | Why It Is Useful |
-| --- | --- |
-| Full topology ownership | Chalk decides regions, workers, routers, room placement, failover, draining, and scaling rules. |
-| Deep RTP control | Chalk can inspect producers, consumers, transports, RTP parameters, codecs, bitrate, loss, scores, and layers. |
-| Custom recording pipeline | Plain RTP/SRTP transports can feed FFmpeg, GStreamer, custom workers, or storage pipelines. |
-| Custom media bridges | Chalk can build SIP, RTMP, AI audio, transcription, bot, or analytics bridges in its own architecture. |
-| Private deployment | Can run in Chalk's VPC, on bare metal, near a specific customer, or in a controlled region. |
-| Deep observability | Worker logs, transport stats, bitrate, packet loss, router-level behavior, and custom dashboards are all possible. |
+| Capability                | Why It Is Useful                                                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Full topology ownership   | Chalk decides regions, workers, routers, room placement, failover, draining, and scaling rules.                       |
+| Deep RTP control          | Chalk can inspect producers, consumers, transports, RTP parameters, codecs, bitrate, loss, scores, and layers.        |
+| Custom recording pipeline | Plain RTP/SRTP transports can feed FFmpeg, GStreamer, custom workers, or storage pipelines.                           |
+| Custom media bridges      | Chalk can build SIP, RTMP, AI audio, transcription, bot, or analytics bridges in its own architecture.                |
+| Private deployment        | Can run in Chalk's VPC, on bare metal, near a specific customer, or in a controlled region.                           |
+| Deep observability        | Worker logs, transport stats, bitrate, packet loss, router-level behavior, and custom dashboards are all possible.    |
 | No vendor product ceiling | If the behavior is wrong, Chalk can change its topology, service code, deployment model, or fork/patch deeper layers. |
 
 Good Chalk shape:
@@ -103,15 +103,15 @@ Chalk owns:
 
 mediasoup gives power, not a managed platform.
 
-| Missing By Default | Why It Matters |
-| --- | --- |
-| Global edge network | Chalk must deploy and route media nodes across regions. |
-| Managed TURN | coturn, firewall paths, mobile networks, and corporate NATs become Chalk-owned. |
-| Autoscaling product | Chalk must build node admission, room placement, draining, failover, and capacity planning. |
-| Recording product | Recording is possible, but ingestion, muxing, storage, retries, and sync are Chalk-owned. |
-| Room runtime | This is fine for Chalk, but all signaling/state correctness remains our responsibility. |
-| Built-in SFU-layer abuse shield | Chalk needs admission control, rate limits, DDoS protection, and infra protections. |
-| Simple operational model | More visibility also means more knobs, failure modes, and on-call surface. |
+| Missing By Default              | Why It Matters                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| Global edge network             | Chalk must deploy and route media nodes across regions.                                     |
+| Managed TURN                    | coturn, firewall paths, mobile networks, and corporate NATs become Chalk-owned.             |
+| Autoscaling product             | Chalk must build node admission, room placement, draining, failover, and capacity planning. |
+| Recording product               | Recording is possible, but ingestion, muxing, storage, retries, and sync are Chalk-owned.   |
+| Room runtime                    | This is fine for Chalk, but all signaling/state correctness remains our responsibility.     |
+| Built-in SFU-layer abuse shield | Chalk needs admission control, rate limits, DDoS protection, and infra protections.         |
+| Simple operational model        | More visibility also means more knobs, failure modes, and on-call surface.                  |
 
 ## Performance Framing
 
@@ -165,4 +165,3 @@ My current read:
 Cloudflare SFU is the cleaner product architecture move.
 mediasoup is the deeper infrastructure sovereignty move.
 ```
-

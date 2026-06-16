@@ -86,11 +86,11 @@ selectors, not disconnected event handlers.
 Example selectors:
 
 ```ts
-room.participants
-room.localParticipant.permissions
-room.tracksByParticipant
-room.recording.status
-room.connection.health
+room.participants;
+room.localParticipant.permissions;
+room.tracksByParticipant;
+room.recording.status;
+room.connection.health;
 ```
 
 ### Make platform APIs feel like library APIs
@@ -103,10 +103,10 @@ recovery, and RealtimeKit edge cases.
 Example command shape:
 
 ```ts
-joinRoom({ roomId, token, clientRequestId })
-setLocalTrackPublished({ trackId, kind, desiredState, clientRequestId })
-setParticipantRole({ participantId, role, revisionPrecondition, clientRequestId })
-startRecording({ roomId, clientRequestId })
+joinRoom({ roomId, token, clientRequestId });
+setLocalTrackPublished({ trackId, kind, desiredState, clientRequestId });
+setParticipantRole({ participantId, role, revisionPrecondition, clientRequestId });
+startRecording({ roomId, clientRequestId });
 ```
 
 ### Make commands idempotent and side effects event-driven
