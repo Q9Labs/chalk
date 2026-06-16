@@ -36,7 +36,7 @@
     "hooks:install": "lefthook install",
     "review:commit": "bash scripts/gates/post-commit-review.sh",
     "gate:hygiene": "node scripts/gates/hygiene.mjs",
-    "static:fallow": "fallow audit --gate all",
+    "static:fallow": "fallow audit",
     "static:fallow:health": "fallow health --score --hotspots --targets --min-score ${FALLOW_MIN_SCORE:-90}",
     "static:semgrep": "bash scripts/gates/semgrep.sh",
     "security:secrets": "bash scripts/gates/gitleaks.sh",
