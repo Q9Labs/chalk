@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chalk Media Cost Calculator</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #181b22;
+        --line: #272b34;
+        --text: #e6e8ed;
+        --muted: #9aa1ad;
+        --accent: #5b8cff;
+        --good: #43c59e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+      h1 {
+        font-size: 24px;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
+      }
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px 18px 22px;
+      }
+      section h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 0 0 16px;
+      }
+      .field {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .field label {
+        color: var(--text);
+      }
+      .field small {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      input[type="number"] {
+        width: 120px;
+        background: #0f1218;
+        border: 1px solid var(--line);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 7px 9px;
+        font: inherit;
+        text-align: right;
+      }
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--accent);
+      }
+      .results {
+        margin-top: 28px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      @media (max-width: 760px) {
+        .cards {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 20px;
+      }
+      .card h3 {
+        margin: 0 0 2px;
+        font-size: 15px;
+      }
+      .card .total {
+        font-size: 30px;
+        font-weight: 700;
+        color: var(--good);
+        margin: 8px 0 14px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .row span:last-child {
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Chalk Media Cost Calculator</h1>
+      <p class="sub">Parametric estimate. Adjust usage, room shape, and pricing; totals update live.</p>
+
+      <div class="grid">
+        <section>
+          <h2>Usage &amp; room shape</h2>
+          <div class="field"><label>Room-minutes / month</label><input type="number" id="room_minutes_per_month" value="180000" min="0" step="1000" /></div>
+          <div class="field"><label>Participants / room</label><input type="number" id="participants" value="3" min="1" step="1" /></div>
+          <div class="field"><label>Audio Mbps / person</label><input type="number" id="audio_mbps" value="0.064" min="0" step="0.001" /></div>
+          <div class="field"><label>Active video Mbps</label><input type="number" id="active_video_mbps" value="0.4" min="0" step="0.05" /></div>
+          <div class="field"><label>Screenshare Mbps</label><input type="number" id="screenshare_mbps" value="0.4" min="0" step="0.05" /></div>
+          <div class="field"><label>Video + screenshare together</label><input type="checkbox" id="simultaneous" /></div>
+          <div class="field"><label>Recording on</label><input type="checkbox" id="recording_on" checked /></div>
+          <div class="field"><label>Retention (days)</label><input type="number" id="retention_days" value="30" min="0" step="1" /></div>
+        </section>
+
+        <section>
+          <h2>Pricing inputs</h2>
+          <div class="field"><label>SFU free GB / month</label><input type="number" id="sfu_free_gb" value="1000" min="0" step="100" /></div>
+          <div class="field"><label>SFU $ / GB</label><input type="number" id="sfu_per_gb" value="0.05" min="0" step="0.01" /></div>
+          <div class="field"><label>R2 $ / GB-month</label><input type="number" id="r2_per_gb_month" value="0.015" min="0" step="0.001" /></div>
+          <div class="field"><label>Recorder node $ / month</label><input type="number" id="recorder_compute" value="42" min="0" step="1" /></div>
+          <div class="field"><label>Self-host node base $</label><input type="number" id="droplet_base" value="42" min="0" step="1" /></div>
+          <div class="field"><label>Transfer included (GiB)</label><input type="number" id="transfer_included_gib" value="4000" min="0" step="100" /></div>
+          <div class="field"><label>Transfer overage $ / GiB</label><input type="number" id="transfer_overage_per_gib" value="0.01" min="0" step="0.001" /></div>
+        </section>
+      </div>
+
+      <div class="results">
+        <div class="cards">
+          <div class="card">
+            <h3>Cloudflare SFU direct</h3>
+            <small style="color: var(--muted)">+ custom recorder + R2</small>
+            <div class="total" id="cf_total">$0</div>
+            <div class="row"><span>SFU egress</span><span id="cf_sfu">$0</span></div>
+            <div class="row"><span>R2 storage</span><span id="cf_r2">$0</span></div>
+            <div class="row"><span>Recorder node</span><span id="cf_compute">$0</span></div>
+          </div>
+          <div class="card">
+            <h3>Self-hosted SFU</h3>
+            <small style="color: var(--muted)">single node + local recorder + R2</small>
+            <div class="total" id="do_total">$0</div>
+            <div class="row"><span>Node base</span><span id="do_base">$0</span></div>
+            <div class="row"><span>Transfer overage</span><span id="do_overage">$0</span></div>
+            <div class="row"><span>R2 storage</span><span id="do_r2">$0</span></div>
+          </div>
+        </div>
+        <p class="note" id="volumes"></p>
+      </div>
+    </div>
+
+    <script>
+      const GB_PER_MBPS_HOUR = 0.45;
+      const GIB_PER_GB = 1.073;
+      const ids = [
+        "room_minutes_per_month",
+        "participants",
+        "audio_mbps",
+        "active_video_mbps",
+        "screenshare_mbps",
+        "simultaneous",
+        "recording_on",
+        "retention_days",
+        "sfu_free_gb",
+        "sfu_per_gb",
+        "r2_per_gb_month",
+        "recorder_compute",
+        "droplet_base",
+        "transfer_included_gib",
+        "transfer_overage_per_gib",
+      ];
+
+      const el = (id) => document.getElementById(id);
+      const num = (id) => parseFloat(el(id).value) || 0;
+      const bool = (id) => el(id).checked;
+      const usd = (n) => "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+      function compute() {
+        const room_hours = num("room_minutes_per_month") / 60;
+        const participants = num("participants");
+        const audio = num("audio_mbps");
+        const av = num("active_video_mbps");
+        const ss = num("screenshare_mbps");
+        const video_mbps = bool("simultaneous") ? av + ss : Math.max(av, ss);
+
+        const audio_fanout = participants * Math.max(0, participants - 1) * audio;
+        const media_fanout = Math.max(0, participants - 1) * video_mbps;
+        const live_egress_mbps = audio_fanout + media_fanout;
+
+        const recorder_input_mbps = bool("recording_on") ? participants * audio + video_mbps : 0;
+
+        const live_egress_gb = live_egress_mbps * room_hours * GB_PER_MBPS_HOUR;
+        const recorder_egress_gb = recorder_input_mbps * room_hours * GB_PER_MBPS_HOUR;
+        const recorded_gb = recorder_input_mbps * room_hours * GB_PER_MBPS_HOUR;
+        const stored_gb = recorded_gb * (num("retention_days") / 30);
+
+        const r2_cost = stored_gb * num("r2_per_gb_month");
+
+        // Cloudflare SFU direct
+        const sfu_billable = Math.max(0, live_egress_gb + recorder_egress_gb - num("sfu_free_gb"));
+        const sfu_cost = sfu_billable * num("sfu_per_gb");
+        const cf_compute = bool("recording_on") ? num("recorder_compute") : 0;
+        const cf_total = sfu_cost + r2_cost + cf_compute;
+
+        // Self-hosted SFU
+        const node_outbound_gib = (live_egress_gb + recorded_gb) / GIB_PER_GB;
+        const overage = Math.max(0, node_outbound_gib - num("transfer_included_gib")) * num("transfer_overage_per_gib");
+        const do_total = num("droplet_base") + overage + r2_cost;
+
+        el("cf_sfu").textContent = usd(sfu_cost);
+        el("cf_r2").textContent = usd(r2_cost);
+        el("cf_compute").textContent = usd(cf_compute);
+        el("cf_total").textContent = usd(cf_total);
+
+        el("do_base").textContent = usd(num("droplet_base"));
+        el("do_overage").textContent = usd(overage);
+        el("do_r2").textContent = usd(r2_cost);
+        el("do_total").textContent = usd(do_total);
+
+        el("volumes").textContent = `Live egress ${(live_egress_gb / 1000).toFixed(2)} TB/mo, recorder egress ${(recorder_egress_gb / 1000).toFixed(2)} TB/mo, ` + `stored recordings ${stored_gb.toFixed(0)} GB. Per-room live egress ${live_egress_mbps.toFixed(3)} Mbps.`;
+      }
+
+      ids.forEach((id) => el(id).addEventListener("input", compute));
+      compute();
+    </script>
+  </body>
+</html>

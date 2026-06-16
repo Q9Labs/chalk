@@ -28,26 +28,9 @@ bun run check-types
 bun run generate
 ```
 
-## Ground truth
+## Cost Model
 
-For current behavior, read the owning source directly:
-
-- API: `apps/api/`
-- Web app: `apps/web/`
-- Mobile app: `apps/mobile/`
-- Docs site: `apps/docs/`
-- SDKs: `packages/`
-- Infra: `infrastructure/terraform/`
-- Whisper worker: `infrastructure/whisper-worker/`
-- CI/CD: `.github/workflows/`
-
-## Cost Formulas (Quick Reference)
-
-- RealtimeKit participant-minutes: `participant_minutes = sessions * avg_minutes * avg_participants`
-- RealtimeKit A/V cost: `participant_minutes * 0.002`
-- RealtimeKit audio-only cost: `participant_minutes * 0.0005`
-- SFU egress estimate (GB): `participant_minutes * avg_downlink_mbps * 0.0075`
-- SFU cost: `max(0, sfu_gb - 1000) * 0.05` (1000 GB free pool, then $0.05/GB)
+See [`scratchpad/chalk-media-cost-model-2026-06-15.md`](./scratchpad/chalk-media-cost-model-2026-06-15.md) for the parametric media cost model, or open [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html) in a browser for the live calculator.
 
 ## Notes
 

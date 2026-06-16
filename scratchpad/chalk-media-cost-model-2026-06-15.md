@@ -2,99 +2,100 @@
 
 Last checked: 2026-06-15.
 
-## Baseline
+This model is parametric. Plug your own usage, room shape, and pricing into the
+placeholders below. For a live version, open
+[`chalk-cost-calculator.html`](./chalk-cost-calculator.html) in a browser.
 
-- Usage: 180,000 room-min/month = 3,000 room-hours/month.
-- Room shape: 3 participants.
-- Audio: everyone receives everyone, Opus ~64 kbps.
-- Video: active speaker only.
-- Screenshare: low-res.
-- Recording: always on.
-- Avoid Cloudflare Stream minute-based recording.
+## Inputs
+
+### Usage
+
+- `room_minutes_per_month` — total room-minutes across all meetings.
+- `room_hours = room_minutes_per_month / 60`.
+
+### Room shape
+
+- `participants` — average people per room.
+- `audio_mbps` — per-participant audio bitrate (Opus ~0.064 Mbps).
+- `active_video_mbps` — active-speaker video bitrate (0 to disable).
+- `screenshare_mbps` — screenshare bitrate (0 to disable).
+- `simultaneous` — whether active-speaker video and screenshare are sent at the
+  same time. If false, screenshare replaces active-speaker video.
+
+### Recording
+
+- `recording_on` — whether a hidden recorder subscribes to the room.
+- `retention_days` — how long composite recordings are kept.
+
+### Pricing
+
+- `sfu_free_gb` — free SFU egress per month (Cloudflare: 1,000 GB).
+- `sfu_per_gb` — SFU egress price beyond the free pool (Cloudflare: $0.05/GB).
+- `r2_per_gb_month` — object storage price (Cloudflare R2: $0.015/GB-month).
+- `droplet_base` — self-hosted node base price (DO 2 vCPU / 4 GB: ~$42/month).
+- `transfer_included_gib` — transfer included with the node (DO: ~4,000 GiB).
+- `transfer_overage_per_gib` — overage price (DO: $0.01/GiB).
 
 ## Formulas
 
-- 1 Mbps for 1 hour ~= 0.45 GB.
-- 3-person audio fanout: `3 * 2 * 0.064 Mbps = 0.384 Mbps`.
-- Active speaker video fanout: `2 * active_video_mbps`.
-- Screenshare fanout: `2 * screenshare_mbps`.
-- Recorder subscriber input: `3 * 0.064 + active_video_mbps + screenshare_mbps`.
-- Recorded file size: `recording_output_mbps * 3,000 * 0.45 GB`.
+Bandwidth-to-storage conversion: `1 Mbps for 1 hour ~= 0.45 GB`.
 
-## Pricing Inputs
+### Per-room egress (Mbps)
 
-- Cloudflare Realtime SFU: first 1,000 GB/month free, then $0.05/GB egress to clients.
-- Cloudflare R2 Standard: $0.015/GB-month, free internet egress.
-- DigitalOcean Droplets: outbound transfer included by plan; overage $0.01/GiB; inbound free.
-- DigitalOcean CPU-Optimized 2 vCPU / 4 GB: ~$42/month with 4,000 GiB transfer.
+- `video_mbps = simultaneous ? active_video_mbps + screenshare_mbps : max(active_video_mbps, screenshare_mbps)`
+- `audio_fanout = participants * (participants - 1) * audio_mbps`
+- `media_fanout = (participants - 1) * video_mbps`
+- `live_egress_mbps = audio_fanout + media_fanout`
 
-## Compiled Monthly Totals
+### Recorder
 
-Assume active-speaker video = 0.4 Mbps and screenshare = 0.4 Mbps.
+- `recorder_input_mbps = recording_on ? (participants * audio_mbps + video_mbps) : 0`
+- `recording_output_mbps = recorder_input_mbps`
 
-### Cloudflare SFU Direct + Custom Recorder
+### Monthly volumes (GB)
 
-Screenshare replaces active-speaker video:
+- `live_egress_gb = live_egress_mbps * room_hours * 0.45`
+- `recorder_egress_gb = recorder_input_mbps * room_hours * 0.45`
+- `recorded_gb = recording_output_mbps * room_hours * 0.45`
+- `stored_gb = recorded_gb * (retention_days / 30)`
 
-- Estimated total: ~$110-$140/month.
-- Cloudflare SFU live + recorder egress: ~$70/month.
-- Recorder compute on DigitalOcean Singapore: ~$24-$42/month.
-- R2 storage for 0.8-1.2 Mbps composite, 30-day retention: ~$16-$24/month.
+### Costs
 
-Active-speaker video and screenshare visible together:
+Cloudflare SFU direct + custom recorder:
 
-- Estimated total: ~$190-$220/month.
-- Cloudflare SFU live + recorder egress: ~$151/month.
-- Recorder compute on DigitalOcean Singapore: ~$24-$42/month.
-- R2 storage for 0.8-1.2 Mbps composite, 30-day retention: ~$16-$24/month.
+- `sfu_billable_gb = max(0, live_egress_gb + recorder_egress_gb - sfu_free_gb)`
+- `sfu_cost = sfu_billable_gb * sfu_per_gb`
+- `r2_cost = stored_gb * r2_per_gb_month`
+- `recorder_compute` — fixed node cost for the recorder (`droplet_base` range).
+- `total = sfu_cost + r2_cost + recorder_compute`
 
-### DigitalOcean Singapore Self-Hosted SFU
+Self-hosted SFU on a node (DigitalOcean):
 
-Single-node SFU + local recorder:
+- `node_outbound_gib = (live_egress_gb + recorded_gb) / 1.073` (GB to GiB)
+- `transfer_overage = max(0, node_outbound_gib - transfer_included_gib) * transfer_overage_per_gib`
+- `total = droplet_base + transfer_overage + r2_cost`
 
-- Estimated total: ~$60-$75/month.
-- DigitalOcean CPU-Optimized 2 vCPU / 4 GB Droplet: ~$42/month with 4 TB transfer.
-- Expected transfer overage: ~$0-$5/month in the working scenario.
-- R2 storage for 0.8-1.2 Mbps composite, 30-day retention: ~$16-$24/month.
+## Reference scenario
 
-Safer two-node or small pool:
+Defaults that reproduce the prior baseline:
 
-- Estimated total: ~$100-$115/month.
-- DigitalOcean Droplets: ~$84/month.
-- Expected transfer overage: ~$0-$5/month if transfer allowance pools cleanly.
-- R2 storage for 0.8-1.2 Mbps composite, 30-day retention: ~$16-$24/month.
+- `room_minutes_per_month = 180,000` (3,000 room-hours).
+- `participants = 3`, `audio_mbps = 0.064`.
+- `active_video_mbps = 0.4`, `screenshare_mbps = 0.4`.
+- `recording_on = true`, `retention_days = 30`.
 
-## Audit Details
-
-Cloudflare SFU direct, active-speaker video and screenshare visible together:
-
-- Live media egress: ~2.68 TB/month.
-- Recorder as hidden subscriber receives: `0.192 + 0.4 + 0.4 = 0.992 Mbps`.
-- Recorder extra SFU egress: ~1.34 TB/month.
-- SFU cost with recorder: `max(0, 2678 + 1339 - 1000) * 0.05` ~= $151/month.
-
-Cloudflare SFU direct, screenshare replaces active-speaker video:
-
-- Live media egress: ~1.60 TB/month.
-- Recorder subscriber input: `0.192 + 0.4 = 0.592 Mbps`.
-- SFU cost with recorder: ~$70/month.
-
-DigitalOcean Singapore self-hosted SFU:
-
-- Run SFU plus recorder in Singapore.
-- Live egress to clients, active video + screenshare: ~2.68 TB/month.
-- Upload composite recordings to R2: ~1.08-1.62 TB/month.
-- Total DigitalOcean outbound: ~3.76-4.30 TB/month.
+This lands Cloudflare SFU direct around $110-$220/month depending on
+`simultaneous`, and self-hosted DO around $60-$115/month.
 
 ## Current Read
 
-- Cheapest: DigitalOcean Singapore self-hosted SFU + local recorder + R2 storage.
-- Lower ops: Cloudflare SFU direct + custom recorder on DigitalOcean + R2 storage.
-- Avoid: Cloudflare Stream minute-based storage for always-on meeting recordings.
-- Biggest lever: do not show active-speaker video and screenshare simultaneously unless needed.
-- Presentation preference: show compiled all-in monthly totals first, then put
-  component breakdowns underneath. Avoid fragmented price tables that make the
-  total hard to see.
+- Cheapest: self-hosted SFU + local recorder + R2 storage.
+- Lower ops: Cloudflare SFU direct + custom recorder on a node + R2 storage.
+- Avoid: Cloudflare Stream minute-based storage for always-on recordings.
+- Biggest lever: keep `simultaneous = false` unless active video and screenshare
+  truly need to be shown together.
+- Presentation preference: show the compiled all-in monthly total first, then the
+  component breakdown underneath.
 
 ## Sources
 
