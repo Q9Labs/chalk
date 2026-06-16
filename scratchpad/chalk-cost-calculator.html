@@ -3,195 +3,611 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chalk Media Cost Calculator</title>
+    <title>Chalk · Media Cost Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --bg: #0f1115;
-        --panel: #181b22;
-        --line: #272b34;
-        --text: #e6e8ed;
-        --muted: #9aa1ad;
-        --accent: #5b8cff;
-        --good: #43c59e;
+        --primary: #1bb6a6;
+        --primary-strong: #0f9b8d;
+        --primary-soft: rgba(27, 182, 166, 0.12);
+        --primary-glow: rgba(27, 182, 166, 0.3);
+        --slate-900: #0f172a;
+        --slate-600: #475569;
+        --slate-500: #64748b;
+        --glass: rgba(255, 255, 255, 0.8);
+        --glass-strong: rgba(255, 255, 255, 0.92);
+        --glass-border: rgba(15, 23, 42, 0.08);
+        --line: rgba(15, 23, 42, 0.07);
+        --success: #22c55e;
+        --lavender: #818cf8;
+        --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.12);
+        --shadow-lg: 0 16px 30px rgba(15, 23, 42, 0.14);
+        --shadow-xl: 0 26px 60px rgba(15, 23, 42, 0.18);
+        --r-lg: 0.75rem;
+        --r-xl: 1rem;
+        --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --ease: cubic-bezier(0.16, 1, 0.3, 1);
       }
       * {
         box-sizing: border-box;
       }
+      html {
+        scroll-behavior: smooth;
+      }
       body {
         margin: 0;
-        font:
-          15px/1.5 -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          Roboto,
-          sans-serif;
-        background: var(--bg);
-        color: var(--text);
+        min-height: 100vh;
+        font-family: "Inter", "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+        color: var(--slate-900);
+        -webkit-font-smoothing: antialiased;
+        background: linear-gradient(135deg, #e0f7f4 0%, #e8f4fc 50%, #f0f4ff 100%);
+        background-attachment: fixed;
+        position: relative;
+        overflow-x: hidden;
+      }
+      /* floating lobby orbs for depth */
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(80px);
+        z-index: 0;
+        pointer-events: none;
+      }
+      body::before {
+        width: 420px;
+        height: 420px;
+        top: -120px;
+        left: -80px;
+        background: rgba(27, 182, 166, 0.22);
+      }
+      body::after {
+        width: 380px;
+        height: 380px;
+        bottom: -140px;
+        right: -60px;
+        background: rgba(129, 140, 248, 0.2);
       }
       .wrap {
-        max-width: 920px;
+        position: relative;
+        z-index: 1;
+        max-width: 1060px;
         margin: 0 auto;
-        padding: 32px 20px 64px;
+        padding: 44px 24px 72px;
       }
+
+      /* Header */
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px 10px 12px;
+        background: var(--glass);
+        backdrop-filter: blur(20px) saturate(1.4);
+        -webkit-backdrop-filter: blur(20px) saturate(1.4);
+        border: 1px solid var(--glass-border);
+        border-radius: 999px;
+        box-shadow: var(--shadow-md);
+        margin-bottom: 40px;
+      }
+      .logo {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(145deg, #1bb6a6, #15a394);
+        box-shadow: 0 6px 16px -4px var(--primary-glow);
+        flex: none;
+      }
+      .logo svg {
+        width: 21px;
+        height: 21px;
+      }
+      .brand-name {
+        font-weight: 700;
+        font-size: 16px;
+        letter-spacing: -0.01em;
+      }
+      .brand-name span {
+        color: var(--slate-500);
+        font-weight: 500;
+      }
+      .pill-live {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--primary-strong);
+        background: var(--primary-soft);
+        padding: 6px 13px;
+        border-radius: 999px;
+      }
+      .pill-live .led {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+        animation: led 2s infinite;
+      }
+      @keyframes led {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 0 5px rgba(34, 197, 94, 0);
+        }
+      }
+
       h1 {
-        font-size: 24px;
-        margin: 0 0 4px;
+        font-size: 40px;
+        line-height: 1.08;
+        letter-spacing: -0.03em;
+        margin: 0 0 12px;
+        font-weight: 800;
+      }
+      h1 .grad {
+        background: linear-gradient(120deg, var(--primary), #15a394);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
       .sub {
-        color: var(--muted);
-        margin: 0 0 28px;
+        color: var(--slate-600);
+        margin: 0 0 40px;
+        max-width: 560px;
+        font-size: 16.5px;
       }
-      .grid {
+
+      .layout {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 28px;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 24px;
+        align-items: start;
       }
-      @media (max-width: 760px) {
-        .grid {
+      @media (max-width: 900px) {
+        .layout {
           grid-template-columns: 1fr;
         }
       }
-      section {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 18px 18px 22px;
+
+      .panel {
+        background: var(--glass);
+        backdrop-filter: blur(24px) saturate(1.4);
+        -webkit-backdrop-filter: blur(24px) saturate(1.4);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--r-xl);
+        padding: 22px 22px 12px;
+        box-shadow: var(--shadow-lg);
       }
-      section h2 {
-        font-size: 13px;
+      .panel + .panel {
+        margin-top: 22px;
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .panel-head .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--primary);
+        box-shadow: 0 0 0 4px var(--primary-soft);
+      }
+      .panel-head h2 {
+        font-size: 12.5px;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-        margin: 0 0 16px;
+        letter-spacing: 0.07em;
+        color: var(--slate-500);
+        margin: 0;
+        font-weight: 700;
       }
+
       .field {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: 16px;
+        padding: 11px 0;
+        border-top: 1px solid var(--line);
+      }
+      .field:first-of-type {
+        border-top: none;
       }
       .field label {
-        color: var(--text);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--slate-900);
       }
-      .field small {
+      .field label small {
         display: block;
-        color: var(--muted);
+        color: var(--slate-500);
         font-size: 12px;
+        font-weight: 400;
+        margin-top: 1px;
+      }
+
+      .input-chip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+      }
+      .input-chip .unit {
+        position: absolute;
+        right: 12px;
+        color: var(--slate-500);
+        font-size: 12px;
+        font-weight: 500;
+        pointer-events: none;
       }
       input[type="number"] {
-        width: 120px;
-        background: #0f1218;
-        border: 1px solid var(--line);
-        color: var(--text);
-        border-radius: 8px;
-        padding: 7px 9px;
+        width: 134px;
+        background: var(--glass-strong);
+        border: 1px solid var(--glass-border);
+        color: var(--slate-900);
+        border-radius: 11px;
+        padding: 9px 12px;
         font: inherit;
-        text-align: right;
+        font-weight: 600;
+        text-align: left;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
       }
-      input[type="checkbox"] {
-        width: 18px;
-        height: 18px;
-        accent-color: var(--accent);
+      .input-chip.has-unit input {
+        padding-right: 46px;
       }
+      input[type="number"]:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 4px var(--primary-soft);
+      }
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+
+      /* Toggle switch (control-pill flavored) */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 48px;
+        height: 28px;
+        flex: none;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .track {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.1);
+        border-radius: 999px;
+        transition: 0.25s var(--ease);
+      }
+      .track::before {
+        content: "";
+        position: absolute;
+        height: 22px;
+        width: 22px;
+        left: 3px;
+        top: 3px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 5px rgba(15, 23, 42, 0.25);
+        transition: 0.25s var(--spring);
+      }
+      .switch input:checked + .track {
+        background: var(--primary);
+        box-shadow: 0 4px 14px -2px var(--primary-glow);
+      }
+      .switch input:checked + .track::before {
+        transform: translateX(20px);
+      }
+
+      /* Result cards */
       .results {
-        margin-top: 28px;
-      }
-      .cards {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+        position: sticky;
+        top: 24px;
+        display: flex;
+        flex-direction: column;
         gap: 18px;
       }
-      @media (max-width: 760px) {
-        .cards {
-          grid-template-columns: 1fr;
-        }
-      }
       .card {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 20px;
+        position: relative;
+        background: var(--glass-strong);
+        backdrop-filter: blur(24px) saturate(1.4);
+        -webkit-backdrop-filter: blur(24px) saturate(1.4);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--r-xl);
+        padding: 22px;
+        box-shadow: var(--shadow-lg);
+        transition:
+          transform 0.3s var(--spring),
+          box-shadow 0.3s var(--ease),
+          border-color 0.3s var(--ease);
+      }
+      .card.best {
+        border-color: rgba(27, 182, 166, 0.5);
+        box-shadow:
+          var(--shadow-xl),
+          0 0 0 1px rgba(27, 182, 166, 0.3);
+        transform: translateY(-3px);
+      }
+      .card-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
       }
       .card h3 {
-        margin: 0 0 2px;
-        font-size: 15px;
-      }
-      .card .total {
-        font-size: 30px;
+        margin: 0 0 3px;
+        font-size: 16px;
         font-weight: 700;
-        color: var(--good);
-        margin: 8px 0 14px;
+      }
+      .card .tag {
+        color: var(--slate-500);
+        font-size: 12.5px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #fff;
+        background: linear-gradient(120deg, var(--primary), #15a394);
+        padding: 5px 11px;
+        border-radius: 999px;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px -3px var(--primary-glow);
+      }
+      .badge.hidden {
+        display: none;
+      }
+      .total {
+        font-size: 42px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        margin: 16px 0 2px;
+        color: var(--slate-900);
+      }
+      .total .mo {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--slate-500);
+        margin-left: 5px;
+        letter-spacing: 0;
+      }
+      .stack {
+        display: flex;
+        height: 9px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(15, 23, 42, 0.06);
+        margin: 16px 0;
+        gap: 2px;
+      }
+      .stack i {
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.4s var(--ease);
+      }
+      .seg-1 {
+        background: var(--primary);
+      }
+      .seg-2 {
+        background: #5fd0c3;
+      }
+      .seg-3 {
+        background: var(--lavender);
       }
       .row {
         display: flex;
-        justify-content: space-between;
-        padding: 5px 0;
-        border-top: 1px solid var(--line);
-        color: var(--muted);
+        align-items: center;
+        gap: 10px;
+        padding: 7px 0;
+        font-size: 13.5px;
       }
-      .row span:last-child {
-        color: var(--text);
+      .row .key {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--slate-600);
+        font-weight: 500;
+      }
+      .row .swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        flex: none;
+      }
+      .row .val {
+        margin-left: auto;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--slate-900);
+      }
+      .volumes {
+        background: var(--glass);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--r-xl);
+        padding: 16px 18px;
+        color: var(--slate-600);
+        font-size: 13px;
+        line-height: 1.7;
+        box-shadow: var(--shadow-md);
+      }
+      .volumes b {
+        color: var(--slate-900);
+        font-weight: 700;
         font-variant-numeric: tabular-nums;
       }
-      .note {
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: 18px;
+      .foot {
+        margin-top: 34px;
+        color: var(--slate-500);
+        font-size: 12.5px;
+        text-align: center;
+      }
+      .foot a {
+        color: var(--primary-strong);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .foot code {
+        background: rgba(15, 23, 42, 0.05);
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-size: 11.5px;
       }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <h1>Chalk Media Cost Calculator</h1>
-      <p class="sub">Parametric estimate. Adjust usage, room shape, and pricing; totals update live.</p>
-
-      <div class="grid">
-        <section>
-          <h2>Usage &amp; room shape</h2>
-          <div class="field"><label>Room-minutes / month</label><input type="number" id="room_minutes_per_month" value="180000" min="0" step="1000" /></div>
-          <div class="field"><label>Participants / room</label><input type="number" id="participants" value="3" min="1" step="1" /></div>
-          <div class="field"><label>Audio Mbps / person</label><input type="number" id="audio_mbps" value="0.064" min="0" step="0.001" /></div>
-          <div class="field"><label>Active video Mbps</label><input type="number" id="active_video_mbps" value="0.4" min="0" step="0.05" /></div>
-          <div class="field"><label>Screenshare Mbps</label><input type="number" id="screenshare_mbps" value="0.4" min="0" step="0.05" /></div>
-          <div class="field"><label>Video + screenshare together</label><input type="checkbox" id="simultaneous" /></div>
-          <div class="field"><label>Recording on</label><input type="checkbox" id="recording_on" checked /></div>
-          <div class="field"><label>Retention (days)</label><input type="number" id="retention_days" value="30" min="0" step="1" /></div>
-        </section>
-
-        <section>
-          <h2>Pricing inputs</h2>
-          <div class="field"><label>SFU free GB / month</label><input type="number" id="sfu_free_gb" value="1000" min="0" step="100" /></div>
-          <div class="field"><label>SFU $ / GB</label><input type="number" id="sfu_per_gb" value="0.05" min="0" step="0.01" /></div>
-          <div class="field"><label>R2 $ / GB-month</label><input type="number" id="r2_per_gb_month" value="0.015" min="0" step="0.001" /></div>
-          <div class="field"><label>Recorder node $ / month</label><input type="number" id="recorder_compute" value="42" min="0" step="1" /></div>
-          <div class="field"><label>Self-host node base $</label><input type="number" id="droplet_base" value="42" min="0" step="1" /></div>
-          <div class="field"><label>Transfer included (GiB)</label><input type="number" id="transfer_included_gib" value="4000" min="0" step="100" /></div>
-          <div class="field"><label>Transfer overage $ / GiB</label><input type="number" id="transfer_overage_per_gib" value="0.01" min="0" step="0.001" /></div>
-        </section>
+      <div class="topbar">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2.5" y="4" width="19" height="13" rx="2.5" stroke="#fff" stroke-width="1.6" />
+            <path d="M6 13.5L10 9l3 2.5L18 7" stroke="#bdfff7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M9 20h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="brand-name">Chalk <span>· Cost Calculator</span></div>
+        <div class="pill-live"><span class="led"></span>Live estimate</div>
       </div>
 
-      <div class="results">
-        <div class="cards">
-          <div class="card">
-            <h3>Cloudflare SFU direct</h3>
-            <small style="color: var(--muted)">+ custom recorder + R2</small>
-            <div class="total" id="cf_total">$0</div>
-            <div class="row"><span>SFU egress</span><span id="cf_sfu">$0</span></div>
-            <div class="row"><span>R2 storage</span><span id="cf_r2">$0</span></div>
-            <div class="row"><span>Recorder node</span><span id="cf_compute">$0</span></div>
+      <h1>What does your <span class="grad">video</span> actually cost?</h1>
+      <p class="sub">Plug in your usage, room shape, and pricing. Compare a managed Cloudflare path against fully self-hosted, updated as you type.</p>
+
+      <div class="layout">
+        <!-- Inputs -->
+        <div>
+          <div class="panel">
+            <div class="panel-head"><span class="dot"></span><h2>Usage &amp; room shape</h2></div>
+            <div class="field">
+              <label>Room-minutes / month<small>total across all meetings</small></label>
+              <span class="input-chip"><input type="number" id="room_minutes_per_month" value="180000" min="0" step="1000" /></span>
+            </div>
+            <div class="field">
+              <label>Participants / room</label>
+              <span class="input-chip"><input type="number" id="participants" value="3" min="1" step="1" /></span>
+            </div>
+            <div class="field">
+              <label>Audio per person</label>
+              <span class="input-chip has-unit"><input type="number" id="audio_mbps" value="0.064" min="0" step="0.001" /><span class="unit">Mbps</span></span>
+            </div>
+            <div class="field">
+              <label>Active-speaker video</label>
+              <span class="input-chip has-unit"><input type="number" id="active_video_mbps" value="0.4" min="0" step="0.05" /><span class="unit">Mbps</span></span>
+            </div>
+            <div class="field">
+              <label>Screenshare</label>
+              <span class="input-chip has-unit"><input type="number" id="screenshare_mbps" value="0.4" min="0" step="0.05" /><span class="unit">Mbps</span></span>
+            </div>
+            <div class="field">
+              <label>Video + screenshare together<small>biggest cost lever</small></label>
+              <label class="switch"><input type="checkbox" id="simultaneous" /><span class="track"></span></label>
+            </div>
+            <div class="field">
+              <label>Recording on</label>
+              <label class="switch"><input type="checkbox" id="recording_on" checked /><span class="track"></span></label>
+            </div>
+            <div class="field">
+              <label>Retention</label>
+              <span class="input-chip has-unit"><input type="number" id="retention_days" value="30" min="0" step="1" /><span class="unit">days</span></span>
+            </div>
           </div>
-          <div class="card">
-            <h3>Self-hosted SFU</h3>
-            <small style="color: var(--muted)">single node + local recorder + R2</small>
-            <div class="total" id="do_total">$0</div>
-            <div class="row"><span>Node base</span><span id="do_base">$0</span></div>
-            <div class="row"><span>Transfer overage</span><span id="do_overage">$0</span></div>
-            <div class="row"><span>R2 storage</span><span id="do_r2">$0</span></div>
+
+          <div class="panel">
+            <div class="panel-head"><span class="dot"></span><h2>Pricing inputs</h2></div>
+            <div class="field">
+              <label>SFU free pool<small>Cloudflare: 1,000 GB</small></label>
+              <span class="input-chip has-unit"><input type="number" id="sfu_free_gb" value="1000" min="0" step="100" /><span class="unit">GB</span></span>
+            </div>
+            <div class="field">
+              <label>SFU egress</label>
+              <span class="input-chip has-unit"><input type="number" id="sfu_per_gb" value="0.05" min="0" step="0.01" /><span class="unit">$/GB</span></span>
+            </div>
+            <div class="field">
+              <label>R2 storage</label>
+              <span class="input-chip has-unit"><input type="number" id="r2_per_gb_month" value="0.015" min="0" step="0.001" /><span class="unit">$/GB·mo</span></span>
+            </div>
+            <div class="field">
+              <label>Recorder node</label>
+              <span class="input-chip has-unit"><input type="number" id="recorder_compute" value="42" min="0" step="1" /><span class="unit">$/mo</span></span>
+            </div>
+            <div class="field">
+              <label>Self-host node base</label>
+              <span class="input-chip has-unit"><input type="number" id="droplet_base" value="42" min="0" step="1" /><span class="unit">$/mo</span></span>
+            </div>
+            <div class="field">
+              <label>Transfer included</label>
+              <span class="input-chip has-unit"><input type="number" id="transfer_included_gib" value="4000" min="0" step="100" /><span class="unit">GiB</span></span>
+            </div>
+            <div class="field">
+              <label>Transfer overage</label>
+              <span class="input-chip has-unit"><input type="number" id="transfer_overage_per_gib" value="0.01" min="0" step="0.001" /><span class="unit">$/GiB</span></span>
+            </div>
           </div>
         </div>
-        <p class="note" id="volumes"></p>
+
+        <!-- Results -->
+        <div class="results">
+          <div class="card" id="cf_card">
+            <div class="card-top">
+              <div>
+                <h3>Cloudflare SFU direct</h3>
+                <div class="tag">Managed SFU + custom recorder + R2</div>
+              </div>
+              <span class="badge hidden" id="cf_badge">Cheapest</span>
+            </div>
+            <div class="total" id="cf_total">$0<span class="mo">/mo</span></div>
+            <div class="stack"><i class="seg-1" id="cf_seg1"></i><i class="seg-2" id="cf_seg2"></i><i class="seg-3" id="cf_seg3"></i></div>
+            <div class="row"><span class="key"><span class="swatch seg-1"></span>SFU egress</span><span class="val" id="cf_sfu">$0</span></div>
+            <div class="row"><span class="key"><span class="swatch seg-2"></span>R2 storage</span><span class="val" id="cf_r2">$0</span></div>
+            <div class="row"><span class="key"><span class="swatch seg-3"></span>Recorder node</span><span class="val" id="cf_compute">$0</span></div>
+          </div>
+
+          <div class="card" id="do_card">
+            <div class="card-top">
+              <div>
+                <h3>Self-hosted SFU</h3>
+                <div class="tag">Single node + local recorder + R2</div>
+              </div>
+              <span class="badge hidden" id="do_badge">Cheapest</span>
+            </div>
+            <div class="total" id="do_total">$0<span class="mo">/mo</span></div>
+            <div class="stack"><i class="seg-1" id="do_seg1"></i><i class="seg-2" id="do_seg2"></i><i class="seg-3" id="do_seg3"></i></div>
+            <div class="row"><span class="key"><span class="swatch seg-1"></span>Node base</span><span class="val" id="do_base">$0</span></div>
+            <div class="row"><span class="key"><span class="swatch seg-2"></span>Transfer overage</span><span class="val" id="do_overage">$0</span></div>
+            <div class="row"><span class="key"><span class="swatch seg-3"></span>R2 storage</span><span class="val" id="do_r2">$0</span></div>
+          </div>
+
+          <div class="volumes" id="volumes"></div>
+        </div>
       </div>
+
+      <p class="foot">Estimates only. Verify against current <a href="https://developers.cloudflare.com/realtime/sfu/pricing/" target="_blank" rel="noopener">Cloudflare</a> and provider pricing. Model: <code>chalk-media-cost-model-2026-06-15.md</code></p>
     </div>
 
     <script>
@@ -219,6 +635,11 @@
       const num = (id) => parseFloat(el(id).value) || 0;
       const bool = (id) => el(id).checked;
       const usd = (n) => "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+      function setStack(prefix, parts) {
+        const total = parts.reduce((a, b) => a + b, 0) || 1;
+        parts.forEach((p, i) => (el(prefix + "_seg" + (i + 1)).style.width = (p / total) * 100 + "%"));
+      }
 
       function compute() {
         const room_hours = num("room_minutes_per_month") / 60;
@@ -250,19 +671,30 @@
         // Self-hosted SFU
         const node_outbound_gib = (live_egress_gb + recorded_gb) / GIB_PER_GB;
         const overage = Math.max(0, node_outbound_gib - num("transfer_included_gib")) * num("transfer_overage_per_gib");
-        const do_total = num("droplet_base") + overage + r2_cost;
+        const do_base = num("droplet_base");
+        const do_total = do_base + overage + r2_cost;
 
         el("cf_sfu").textContent = usd(sfu_cost);
         el("cf_r2").textContent = usd(r2_cost);
         el("cf_compute").textContent = usd(cf_compute);
-        el("cf_total").textContent = usd(cf_total);
+        el("cf_total").innerHTML = usd(cf_total) + '<span class="mo">/mo</span>';
+        setStack("cf", [sfu_cost, r2_cost, cf_compute]);
 
-        el("do_base").textContent = usd(num("droplet_base"));
+        el("do_base").textContent = usd(do_base);
         el("do_overage").textContent = usd(overage);
         el("do_r2").textContent = usd(r2_cost);
-        el("do_total").textContent = usd(do_total);
+        el("do_total").innerHTML = usd(do_total) + '<span class="mo">/mo</span>';
+        setStack("do", [do_base, overage, r2_cost]);
 
-        el("volumes").textContent = `Live egress ${(live_egress_gb / 1000).toFixed(2)} TB/mo, recorder egress ${(recorder_egress_gb / 1000).toFixed(2)} TB/mo, ` + `stored recordings ${stored_gb.toFixed(0)} GB. Per-room live egress ${live_egress_mbps.toFixed(3)} Mbps.`;
+        const cfBest = cf_total <= do_total;
+        el("cf_card").classList.toggle("best", cfBest);
+        el("do_card").classList.toggle("best", !cfBest);
+        el("cf_badge").classList.toggle("hidden", !cfBest);
+        el("do_badge").classList.toggle("hidden", cfBest);
+
+        el("volumes").innerHTML =
+          `Live egress <b>${(live_egress_gb / 1000).toFixed(2)} TB</b>/mo · recorder egress <b>${(recorder_egress_gb / 1000).toFixed(2)} TB</b>/mo · ` +
+          `stored recordings <b>${stored_gb.toFixed(0)} GB</b> · per-room live egress <b>${live_egress_mbps.toFixed(3)} Mbps</b>.`;
       }
 
       ids.forEach((id) => el(id).addEventListener("input", compute));
