@@ -23,15 +23,7 @@ import { usePreJoinMedia } from "./prejoin-lobby/usePreJoinMedia";
 import { usePreJoinTheme } from "./prejoin-lobby/usePreJoinTheme";
 import { usePreJoinUiState } from "./prejoin-lobby/usePreJoinUiState";
 
-const JOINING_ROOM_MESSAGES = [
-  "Checking your camera and mic...",
-  "Syncing room settings...",
-  "Testing your connection...",
-  "Preparing your preview...",
-  "Opening a low-latency route...",
-  "Choosing the fastest route...",
-  "Almost there...",
-] as const;
+const JOINING_ROOM_MESSAGES = ["Checking your camera and mic...", "Syncing room settings...", "Testing your connection...", "Preparing your preview...", "Opening a low-latency route...", "Choosing the fastest route...", "Almost there..."] as const;
 const EMPTY_LIST = [] as never[];
 const NOOP = () => {};
 
@@ -290,7 +282,12 @@ function PreJoinLobbyBase({
   const isMobile = useIsMobile();
 
   return (
-    <div data-chalk data-chalk-theme={isDarkMode ? "dark" : "light"} className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)} style={{ "--primary": getParticipantColor(ui.displayName, settings.appearance.profileGradient).primary } as React.CSSProperties}>
+    <div
+      data-chalk
+      data-chalk-theme={isDarkMode ? "dark" : "light"}
+      className={cn("chalk-root min-h-screen flex flex-col overflow-hidden relative", isDarkMode && "dark", className)}
+      style={{ "--primary": getParticipantColor(ui.displayName, settings.appearance.profileGradient).primary } as React.CSSProperties}
+    >
       <div className={cn("absolute inset-0 z-50 transition-all duration-1000 ease-in-out pointer-events-none", isLoading ? "opacity-100 pointer-events-auto" : "opacity-0")}>
         <LoadingScreen message="Joining room..." className="w-full h-full" displayName={ui.displayName} supportingMessages={JOINING_ROOM_MESSAGES} gradientPreference={settings.appearance.profileGradient} />
       </div>

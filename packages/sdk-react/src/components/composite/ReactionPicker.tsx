@@ -48,11 +48,147 @@ const EMOJI_CATEGORIES = {
 } as const;
 
 const EMOJI_KEYWORDS: Record<string, string> = {
-  "😀": "grinning smile happy face", "😃": "smiley happy face big eyes", "😄": "smile happy face", "😁": "grin teeth face", "😅": "sweat smile face", "😂": "cry tears joy laugh face", "🤣": "rofl laughing face", "😊": "blush happy face", "😇": "innocent angel face", "🙂": "slightly smiling happy face", "😉": "wink face", "😌": "relieved face", "😍": "heart eyes love face", "🥰": "hearts love face", "😘": "kissing heart face", "😋": "yum tongue face", "😛": "stuck out tongue face", "🤪": "zany crazy face", "🤨": "raised eyebrow face", "🧐": "monocle inspecting face", "🤓": "nerd glasses face", "😎": "sunglasses cool face", "🥳": "partying face", "😏": "smirk sly face", "😒": "unamused face", "🙄": "roll eyes face", "😬": "grimacing teeth face", "😮": "open mouth surprise face", "😯": "hushed surprise face", "😲": "astonished surprise face", "😳": "flushed embarrassed face", "🥺": "pleading puppy eyes face", "😢": "cry sad face", "😭": "sob crying face", "😤": "triumph steam face", "😠": "angry mad face", "🤯": "exploding head mind blown", "😱": "scream scared face", "🥶": "cold freezing face", "🥵": "hot sweating face",
-  "👋": "wave hello hand", "🤚": "raised back hand", "🖐️": "raised hand fingers splayed", "✋": "raised hand stop", "🖖": "vulcan salute star trek", "👌": "ok perfect hand", "🤌": "pinched fingers italian", "🤏": "pinching small hand", "✌️": "peace victory hand", "🤞": "crossed fingers luck", "🤟": "love you hand", "🤘": "horns rock on hand", "🤙": "call me shaka hand", "👈": "point left hand", "👉": "point right hand", "👆": "point up hand", "👇": "point down hand", "☝️": "point up index", "👍": "thumbs up yes cool", "👎": "thumbs down no", "✊": "fist power", "👊": "fist bump punch", "🤛": "left-facing fist", "🤜": "right-facing fist", "👏": "clap applause hand", "🙌": "raise hands celebrate", "👐": "open hands", "🤲": "palms up together", "🤝": "handshake agree", "🙏": "pray please thank you", "💪": "muscle flex strong", "🦾": "mechanical arm robot",
-  "❤️": "red heart love", "🧡": "orange heart love", "💛": "yellow heart love", "💚": "green heart love", "💙": "blue heart love", "💜": "purple heart love", "🖤": "black heart love", "🤍": "white heart love", "🤎": "brown heart love", "💔": "broken heart sad", "❤️‍🔥": "heart on fire", "❤️‍🩹": "mending heart heal", "💕": "two hearts love", "💞": "revolving hearts love", "💓": "beating heart love", "💗": "growing heart love", "💖": "sparkling heart love", "💘": "heart with arrow love", "💝": "heart with ribbon gift", "💟": "heart decoration love", "♥️": "heart suit card", "😻": "heart eyes cat love",
-  "🎉": "party popper celebrate", "🎊": "confetti ball celebrate", "🎈": "balloon party celebrate", "🎁": "gift present box", "🎀": "ribbon bow pink", "🏆": "trophy win first", "🥇": "1st place medal gold", "🏅": "sports medal win", "⭐": "star yellow shine", "🌟": "glowing star shine", "✨": "sparkles magic shine", "💫": "dizzy shooting star", "🔥": "fire hot lit flame", "💥": "collision explosion boom", "💯": "hundred percent perfect", "🤩": "star struck eyes", "🥂": "clinking glasses cheers", "🍾": "champagne bottle pop", "🎆": "fireworks celebrate night", "🎇": "sparkler firework celebrate", "🪅": "pinata party celebrate", "🎯": "bullseye target hit",
-  "💡": "light bulb idea smart", "📌": "pushpin location pin", "📍": "round pushpin location", "🔔": "bell notification alarm", "🔕": "bell with slash silent", "📢": "loudspeaker announce", "📣": "megaphone cheer announce", "💬": "speech balloon chat", "💭": "thought balloon think", "🗯️": "anger right balloon mad", "✅": "check mark button yes", "❌": "cross mark no wrong", "❓": "question mark ask", "❗": "exclamation mark alert", "💤": "zzz sleep tired", "💢": "anger symbol mad", "💦": "sweat drops water", "💨": "dashing away wind speed", "🕐": "one oclock time clock", "⏰": "alarm clock time", "📅": "calendar date", "📆": "tear-off calendar date", "🔒": "locked lock secure", "🔓": "unlocked lock open", "🔑": "key lock secure"
+  "😀": "grinning smile happy face",
+  "😃": "smiley happy face big eyes",
+  "😄": "smile happy face",
+  "😁": "grin teeth face",
+  "😅": "sweat smile face",
+  "😂": "cry tears joy laugh face",
+  "🤣": "rofl laughing face",
+  "😊": "blush happy face",
+  "😇": "innocent angel face",
+  "🙂": "slightly smiling happy face",
+  "😉": "wink face",
+  "😌": "relieved face",
+  "😍": "heart eyes love face",
+  "🥰": "hearts love face",
+  "😘": "kissing heart face",
+  "😋": "yum tongue face",
+  "😛": "stuck out tongue face",
+  "🤪": "zany crazy face",
+  "🤨": "raised eyebrow face",
+  "🧐": "monocle inspecting face",
+  "🤓": "nerd glasses face",
+  "😎": "sunglasses cool face",
+  "🥳": "partying face",
+  "😏": "smirk sly face",
+  "😒": "unamused face",
+  "🙄": "roll eyes face",
+  "😬": "grimacing teeth face",
+  "😮": "open mouth surprise face",
+  "😯": "hushed surprise face",
+  "😲": "astonished surprise face",
+  "😳": "flushed embarrassed face",
+  "🥺": "pleading puppy eyes face",
+  "😢": "cry sad face",
+  "😭": "sob crying face",
+  "😤": "triumph steam face",
+  "😠": "angry mad face",
+  "🤯": "exploding head mind blown",
+  "😱": "scream scared face",
+  "🥶": "cold freezing face",
+  "🥵": "hot sweating face",
+  "👋": "wave hello hand",
+  "🤚": "raised back hand",
+  "🖐️": "raised hand fingers splayed",
+  "✋": "raised hand stop",
+  "🖖": "vulcan salute star trek",
+  "👌": "ok perfect hand",
+  "🤌": "pinched fingers italian",
+  "🤏": "pinching small hand",
+  "✌️": "peace victory hand",
+  "🤞": "crossed fingers luck",
+  "🤟": "love you hand",
+  "🤘": "horns rock on hand",
+  "🤙": "call me shaka hand",
+  "👈": "point left hand",
+  "👉": "point right hand",
+  "👆": "point up hand",
+  "👇": "point down hand",
+  "☝️": "point up index",
+  "👍": "thumbs up yes cool",
+  "👎": "thumbs down no",
+  "✊": "fist power",
+  "👊": "fist bump punch",
+  "🤛": "left-facing fist",
+  "🤜": "right-facing fist",
+  "👏": "clap applause hand",
+  "🙌": "raise hands celebrate",
+  "👐": "open hands",
+  "🤲": "palms up together",
+  "🤝": "handshake agree",
+  "🙏": "pray please thank you",
+  "💪": "muscle flex strong",
+  "🦾": "mechanical arm robot",
+  "❤️": "red heart love",
+  "🧡": "orange heart love",
+  "💛": "yellow heart love",
+  "💚": "green heart love",
+  "💙": "blue heart love",
+  "💜": "purple heart love",
+  "🖤": "black heart love",
+  "🤍": "white heart love",
+  "🤎": "brown heart love",
+  "💔": "broken heart sad",
+  "❤️‍🔥": "heart on fire",
+  "❤️‍🩹": "mending heart heal",
+  "💕": "two hearts love",
+  "💞": "revolving hearts love",
+  "💓": "beating heart love",
+  "💗": "growing heart love",
+  "💖": "sparkling heart love",
+  "💘": "heart with arrow love",
+  "💝": "heart with ribbon gift",
+  "💟": "heart decoration love",
+  "♥️": "heart suit card",
+  "😻": "heart eyes cat love",
+  "🎉": "party popper celebrate",
+  "🎊": "confetti ball celebrate",
+  "🎈": "balloon party celebrate",
+  "🎁": "gift present box",
+  "🎀": "ribbon bow pink",
+  "🏆": "trophy win first",
+  "🥇": "1st place medal gold",
+  "🏅": "sports medal win",
+  "⭐": "star yellow shine",
+  "🌟": "glowing star shine",
+  "✨": "sparkles magic shine",
+  "💫": "dizzy shooting star",
+  "🔥": "fire hot lit flame",
+  "💥": "collision explosion boom",
+  "💯": "hundred percent perfect",
+  "🤩": "star struck eyes",
+  "🥂": "clinking glasses cheers",
+  "🍾": "champagne bottle pop",
+  "🎆": "fireworks celebrate night",
+  "🎇": "sparkler firework celebrate",
+  "🪅": "pinata party celebrate",
+  "🎯": "bullseye target hit",
+  "💡": "light bulb idea smart",
+  "📌": "pushpin location pin",
+  "📍": "round pushpin location",
+  "🔔": "bell notification alarm",
+  "🔕": "bell with slash silent",
+  "📢": "loudspeaker announce",
+  "📣": "megaphone cheer announce",
+  "💬": "speech balloon chat",
+  "💭": "thought balloon think",
+  "🗯️": "anger right balloon mad",
+  "✅": "check mark button yes",
+  "❌": "cross mark no wrong",
+  "❓": "question mark ask",
+  "❗": "exclamation mark alert",
+  "💤": "zzz sleep tired",
+  "💢": "anger symbol mad",
+  "💦": "sweat drops water",
+  "💨": "dashing away wind speed",
+  "🕐": "one oclock time clock",
+  "⏰": "alarm clock time",
+  "📅": "calendar date",
+  "📆": "tear-off calendar date",
+  "🔒": "locked lock secure",
+  "🔓": "unlocked lock open",
+  "🔑": "key lock secure",
 };
 
 type CategoryKey = keyof typeof EMOJI_CATEGORIES;
@@ -100,7 +236,7 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
   // Search for specific emojis when query exists
   const isSearching = searchQuery.trim() !== "";
   const query = searchQuery.toLowerCase().trim();
-  
+
   const searchResults = useMemo(() => {
     if (!isSearching) return [];
     const results: string[] = [];
@@ -149,7 +285,7 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
                   "flex items-center justify-center rounded-xl transition-all duration-150",
                   size === "mini" ? "w-6 h-6 text-lg" : size === "compact" ? "w-8 h-8 text-xl" : "w-10 h-10 text-2xl",
                   "hover:bg-primary/20 hover:scale-110 active:scale-95",
-                  !prefersReducedMotion && "hover:animate-pulse"
+                  !prefersReducedMotion && "hover:animate-pulse",
                 )}
                 aria-label={`React with ${emoji}`}
               >
@@ -172,65 +308,59 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
             spellCheck={false}
             autoComplete="off"
           />
-          <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/50 bg-background/50 text-[10px] font-medium text-muted-foreground uppercase">
-            Esc
-          </kbd>
+          <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/50 bg-background/50 text-[10px] font-medium text-muted-foreground uppercase">Esc</kbd>
         </div>
 
         {/* Vertical Rail + Matrix */}
         <div className={cn("flex", size === "mini" ? "h-36" : size === "compact" ? "h-48" : "h-64")}>
-           {/* Left Rail - Only show when not searching */}
-            {!isSearching && (
-              <div className={cn("flex flex-col items-center py-2 gap-1 border-r border-border/50 bg-accent/30 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]", size === "mini" ? "w-8" : size === "compact" ? "w-10" : "w-12")}>
-                {categories.map(([key, category]) => (
+          {/* Left Rail - Only show when not searching */}
+          {!isSearching && (
+            <div className={cn("flex flex-col items-center py-2 gap-1 border-r border-border/50 bg-accent/30 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]", size === "mini" ? "w-8" : size === "compact" ? "w-10" : "w-12")}>
+              {categories.map(([key, category]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    void trigger("selection");
+                    setActiveCategory(key);
+                  }}
+                  className={cn(
+                    "rounded-xl flex items-center justify-center transition-all",
+                    size === "mini" ? "w-6 h-6 text-sm" : size === "compact" ? "w-8 h-8 text-base" : "w-9 h-9 text-lg",
+                    activeCategory === key ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25" : "text-muted-foreground hover:bg-black/5 dark:hover:bg-white/5 hover:text-popover-foreground",
+                  )}
+                  aria-label={category.name}
+                  title={category.name}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Emoji Grid */}
+          <div className={cn("flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent", size === "mini" ? "p-1.5" : size === "compact" ? "p-2" : "p-3")}>
+            {isSearching && currentEmojis.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">No emojis found</div>
+            ) : (
+              <div className={cn("grid gap-1", isSearching ? (size === "mini" ? "grid-cols-5" : size === "compact" ? "grid-cols-6" : "grid-cols-7") : size === "mini" ? "grid-cols-5" : size === "compact" ? "grid-cols-5" : "grid-cols-6")}>
+                {currentEmojis.map((emoji, index) => (
                   <button
-                    key={key}
-                    onClick={() => {
-                      void trigger("selection");
-                      setActiveCategory(key);
-                    }}
+                    key={`${emoji}-${index}`}
+                    onClick={() => handleSelect(emoji)}
                     className={cn(
-                      "rounded-xl flex items-center justify-center transition-all",
-                      size === "mini" ? "w-6 h-6 text-sm" : size === "compact" ? "w-8 h-8 text-base" : "w-9 h-9 text-lg",
-                      activeCategory === key 
-                        ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25" 
-                        : "text-muted-foreground hover:bg-black/5 dark:hover:bg-white/5 hover:text-popover-foreground"
+                      size === "mini" ? "w-7 h-7 text-base" : size === "compact" ? "w-8 h-8 text-lg" : "w-10 h-10 text-xl",
+                      "flex items-center justify-center rounded-lg transition-all duration-150",
+                      "hover:bg-primary/20 hover:scale-110 active:scale-95",
+                      !prefersReducedMotion && "hover:animate-pulse",
                     )}
-                    aria-label={category.name}
-                    title={category.name}
+                    aria-label={`React with ${emoji}`}
                   >
-                    {category.label}
+                    {emoji}
                   </button>
                 ))}
               </div>
             )}
-           
-           {/* Emoji Grid */}
-            <div className={cn("flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent", size === "mini" ? "p-1.5" : size === "compact" ? "p-2" : "p-3")}>
-             {isSearching && currentEmojis.length === 0 ? (
-               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                 No emojis found
-               </div>
-             ) : (
-                <div className={cn("grid gap-1", isSearching ? (size === "mini" ? "grid-cols-5" : size === "compact" ? "grid-cols-6" : "grid-cols-7") : (size === "mini" ? "grid-cols-5" : size === "compact" ? "grid-cols-5" : "grid-cols-6"))}>
-                 {currentEmojis.map((emoji, index) => (
-                   <button
-                     key={`${emoji}-${index}`}
-                     onClick={() => handleSelect(emoji)}
-                     className={cn(
-                        size === "mini" ? "w-7 h-7 text-base" : size === "compact" ? "w-8 h-8 text-lg" : "w-10 h-10 text-xl",
-                        "flex items-center justify-center rounded-lg transition-all duration-150",
-                       "hover:bg-primary/20 hover:scale-110 active:scale-95",
-                       !prefersReducedMotion && "hover:animate-pulse"
-                     )}
-                     aria-label={`React with ${emoji}`}
-                   >
-                     {emoji}
-                   </button>
-                 ))}
-               </div>
-             )}
-           </div>
+          </div>
         </div>
       </div>
     </>

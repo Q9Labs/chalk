@@ -50,23 +50,10 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
   return (
     <div className={cn("relative inline-flex shrink-0 rounded-full", className)} style={{ width: pxSize, height: pxSize, ...style }} role="img" aria-label={`Avatar for ${name || "Unknown"}`}>
       {hasUploadedImage ? (
-        <img
-          src={src || ""}
-          alt={name}
-          className="h-full w-full rounded-full object-cover"
-          onError={() => setImageError(true)}
-        />
+        <img src={src || ""} alt={name} className="h-full w-full rounded-full object-cover" onError={() => setImageError(true)} />
       ) : shouldShowGeneratedAvatar ? (
         <div aria-hidden="true" className="h-full w-full overflow-hidden rounded-full">
-          <Facehash
-            name={name || "guest"}
-            size={pxSize}
-            variant="gradient"
-            interactive
-            intensity3d="dramatic"
-            enableBlink
-            colors={[...avatarRecipe.facehashColors]}
-          />
+          <Facehash name={name || "guest"} size={pxSize} variant="gradient" interactive intensity3d="dramatic" enableBlink colors={[...avatarRecipe.facehashColors]} />
         </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center rounded-full text-white font-medium" style={{ fontSize, background: gradient }}>

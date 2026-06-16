@@ -23,7 +23,22 @@ export interface ParticipantRowProps {
   onMenuClose: () => void;
 }
 
-export function ParticipantRow({ participant, variant, canManageParticipants, onMuteParticipant, onRemoveParticipant, onMakeHost, onMakeCoHost, onUpdateDisplayName, participantVolumes, onParticipantVolumeChange, participantGradientPreference, menuOpen, onMenuToggle, onMenuClose }: ParticipantRowProps) {
+export function ParticipantRow({
+  participant,
+  variant,
+  canManageParticipants,
+  onMuteParticipant,
+  onRemoveParticipant,
+  onMakeHost,
+  onMakeCoHost,
+  onUpdateDisplayName,
+  participantVolumes,
+  onParticipantVolumeChange,
+  participantGradientPreference,
+  menuOpen,
+  onMenuToggle,
+  onMenuClose,
+}: ParticipantRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(participant.displayName);
   const inputRef = useRef<HTMLInputElement>(null);

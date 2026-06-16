@@ -50,11 +50,9 @@ export type BuildStructuredDebugReportInput = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SENSITIVE_KEYS = new Set(["authorization", "access_token", "refresh_token", "cookie", "set-cookie", "x-api-key"]);
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+const asRecord = (value: unknown): Record<string, unknown> | null => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
-const asString = (value: unknown) =>
-  typeof value === "string" && value.trim().length > 0 ? value : null;
+const asString = (value: unknown) => (typeof value === "string" && value.trim().length > 0 ? value : null);
 
 const getApiKeyIdentifierPrefix = (value: unknown) => {
   const token = asString(value);
@@ -95,21 +93,13 @@ const parseCookieNames = (cookieValue: unknown) => {
     .filter((value): value is string => Boolean(value));
 };
 
-const getHeaderValue = (
-  headers: Record<string, string> | undefined,
-  ...candidates: string[]
-) => {
+const getHeaderValue = (headers: Record<string, string> | undefined, ...candidates: string[]) => {
   if (!headers) {
     return null;
   }
   const entries = Object.entries(headers);
   for (const candidate of candidates) {
-    const found = entries.find(
-      ([key, value]) =>
-        key.toLowerCase() === candidate.toLowerCase() &&
-        typeof value === "string" &&
-        value.trim().length > 0,
-    );
+    const found = entries.find(([key, value]) => key.toLowerCase() === candidate.toLowerCase() && typeof value === "string" && value.trim().length > 0);
     if (found) {
       return found[1];
     }
@@ -127,10 +117,7 @@ const decodeJwtClaims = (token: string) => {
       .replace(/-/g, "+")
       .replace(/_/g, "/")
       .padEnd(Math.ceil(payloadPart.length / 4) * 4, "=");
-    const json =
-      typeof atob === "function"
-        ? atob(payload)
-        : Buffer.from(payload, "base64").toString("utf8");
+    const json = typeof atob === "function" ? atob(payload) : Buffer.from(payload, "base64").toString("utf8");
     return asRecord(JSON.parse(json));
   } catch {
     return null;
@@ -139,10 +126,7 @@ const decodeJwtClaims = (token: string) => {
 
 const tokenSummary = (token: string, source: string, url: string) => {
   const claims = decodeJwtClaims(token);
-  const exp =
-    typeof claims?.exp === "number"
-      ? new Date(claims.exp * 1000).toISOString()
-      : null;
+  const exp = typeof claims?.exp === "number" ? new Date(claims.exp * 1000).toISOString() : null;
 
   return {
     source,
@@ -166,35 +150,18 @@ const collectTokenSummaries = (fetchRecords: ChalkDebugFetchRecord[]) =>
     }
 
     const responseBody = asRecord(record.responseBody);
-    const accessToken =
-      typeof responseBody?.access_token === "string"
-        ? responseBody.access_token
-        : typeof responseBody?.accessToken === "string"
-          ? responseBody.accessToken
-          : null;
+    const accessToken = typeof responseBody?.access_token === "string" ? responseBody.access_token : typeof responseBody?.accessToken === "string" ? responseBody.accessToken : null;
     if (accessToken) {
-      const source = record.url.includes("/internal/auth/access-token")
-        ? "internal-access-token"
-        : record.url.includes("/join-token/exchange")
-          ? "join-token-exchange"
-          : "response-access-token";
+      const source = record.url.includes("/internal/auth/access-token") ? "internal-access-token" : record.url.includes("/join-token/exchange") ? "join-token-exchange" : "response-access-token";
       candidates.push(tokenSummary(accessToken, source, record.url));
     }
 
     return candidates;
   });
 
-const deriveSdkCoreVersion = (snapshot: ChalkDebugSnapshot) =>
-  [...snapshot.wideEvents]
-    .reverse()
-    .find((event) => typeof event.sdk?.version === "string")
-    ?.sdk?.version ?? null;
+const deriveSdkCoreVersion = (snapshot: ChalkDebugSnapshot) => [...snapshot.wideEvents].reverse().find((event) => typeof event.sdk?.version === "string")?.sdk?.version ?? null;
 
-const deriveSessionId = (snapshot: ChalkDebugSnapshot) =>
-  [...snapshot.wideEvents]
-    .reverse()
-    .find((event) => typeof event.sessionId === "string")
-    ?.sessionId ?? null;
+const deriveSessionId = (snapshot: ChalkDebugSnapshot) => [...snapshot.wideEvents].reverse().find((event) => typeof event.sessionId === "string")?.sessionId ?? null;
 
 const deriveApiKeyIdentifierPrefix = (fetchRecords: ChalkDebugFetchRecord[]) =>
   getApiKeyIdentifierPrefix(
@@ -375,16 +342,7 @@ const deriveIceMediaHints = (logs: ChalkDebugSnapshot) => {
   };
 };
 
-export const buildStructuredDebugReport = ({
-  generatedAt,
-  reportType,
-  app,
-  location,
-  browser,
-  logs,
-  context = {},
-  environment,
-}: BuildStructuredDebugReportInput) => {
+export const buildStructuredDebugReport = ({ generatedAt, reportType, app, location, browser, logs, context = {}, environment }: BuildStructuredDebugReportInput) => {
   const contextualTarget =
     typeof context.roomId === "string"
       ? { targetType: "roomId", rawTarget: context.roomId, source: "consumer-context", entryPoint: "consumer-app" }
@@ -399,12 +357,7 @@ export const buildStructuredDebugReport = ({
   })();
   const sanitizedFetch = sanitizeFetchRecords(logs.fetch);
   const tokenSummaries = collectTokenSummaries(logs.fetch);
-  const activeToken =
-    [...tokenSummaries]
-      .reverse()
-      .find((summary) => summary.tenantId || summary.workspaceId || summary.roomIdClaim || summary.subject) ??
-    tokenSummaries.at(-1) ??
-    null;
+  const activeToken = [...tokenSummaries].reverse().find((summary) => summary.tenantId || summary.workspaceId || summary.roomIdClaim || summary.subject) ?? tokenSummaries.at(-1) ?? null;
   const providerSection = asRecord(logs.sections.chalkProvider);
   const sessionSection = asRecord(logs.sections.chalkSession);
   const providerCache = asRecord(providerSection?.cache);
@@ -415,78 +368,24 @@ export const buildStructuredDebugReport = ({
   const providerSelectedContext = asRecord(providerSection?.selectedContext);
   const reportSessionId = deriveSessionId(logs);
   const activeRoomIdFromProvider = asString(asRecord(providerRoom?.activeRoom)?.id);
-  const apiKeyIdentifierPrefix =
-    asString(context.apiKeyIdentifierPrefix) ??
-    asString(providerAuth?.apiKeyIdentifierPrefix) ??
-    deriveApiKeyIdentifierPrefix(logs.fetch);
-  const selectedTenantId =
-    asString(context.selectedTenantId) ??
-    asString(context.tenantId) ??
-    asString(providerSelectedContext?.selectedTenantId) ??
-    asString(providerSelectedContext?.tenantId) ??
-    activeToken?.tenantId ??
-    null;
-  const selectedWorkspaceId =
-    asString(context.selectedWorkspaceId) ??
-    asString(context.workspaceId) ??
-    asString(providerSelectedContext?.selectedWorkspaceId) ??
-    asString(providerSelectedContext?.workspaceId) ??
-    activeToken?.workspaceId ??
-    null;
-  const selectedClassroomId =
-    asString(context.selectedClassroomId) ??
-    asString(context.classroomId) ??
-    asString(providerSelectedContext?.selectedClassroomId) ??
-    asString(providerSelectedContext?.classroomId) ??
-    null;
-  const selectedClassroomName =
-    asString(context.selectedClassroomName) ??
-    asString(context.classroomName) ??
-    asString(providerSelectedContext?.selectedClassroomName) ??
-    asString(providerSelectedContext?.classroomName) ??
-    null;
-  const selectedSessionId =
-    asString(context.selectedSessionId) ??
-    asString(context.sessionId) ??
-    asString(providerSelectedContext?.selectedSessionId) ??
-    asString(providerSelectedContext?.sessionId) ??
-    reportSessionId ??
-    null;
+  const apiKeyIdentifierPrefix = asString(context.apiKeyIdentifierPrefix) ?? asString(providerAuth?.apiKeyIdentifierPrefix) ?? deriveApiKeyIdentifierPrefix(logs.fetch);
+  const selectedTenantId = asString(context.selectedTenantId) ?? asString(context.tenantId) ?? asString(providerSelectedContext?.selectedTenantId) ?? asString(providerSelectedContext?.tenantId) ?? activeToken?.tenantId ?? null;
+  const selectedWorkspaceId = asString(context.selectedWorkspaceId) ?? asString(context.workspaceId) ?? asString(providerSelectedContext?.selectedWorkspaceId) ?? asString(providerSelectedContext?.workspaceId) ?? activeToken?.workspaceId ?? null;
+  const selectedClassroomId = asString(context.selectedClassroomId) ?? asString(context.classroomId) ?? asString(providerSelectedContext?.selectedClassroomId) ?? asString(providerSelectedContext?.classroomId) ?? null;
+  const selectedClassroomName = asString(context.selectedClassroomName) ?? asString(context.classroomName) ?? asString(providerSelectedContext?.selectedClassroomName) ?? asString(providerSelectedContext?.classroomName) ?? null;
+  const selectedSessionId = asString(context.selectedSessionId) ?? asString(context.sessionId) ?? asString(providerSelectedContext?.selectedSessionId) ?? asString(providerSelectedContext?.sessionId) ?? reportSessionId ?? null;
   const appMeta = {
     ...app,
     sdkCoreVersion: app.sdkCoreVersion ?? deriveSdkCoreVersion(logs),
-    sdkReactVersion:
-      app.sdkReactVersion ??
-      asString(context.sdkReactVersion) ??
-      asString(providerSelectedContext?.sdkReactVersion) ??
-      null,
-    consumerAppName:
-      app.consumerAppName ??
-      asString(context.consumerAppName) ??
-      asString(providerSelectedContext?.consumerAppName) ??
-      null,
-    consumerAppVersion:
-      app.consumerAppVersion ??
-      asString(context.consumerAppVersion) ??
-      asString(providerSelectedContext?.consumerAppVersion) ??
-      null,
-    commitHash:
-      app.commitHash ??
-      asString(context.commitHash) ??
-      asString(providerSelectedContext?.commitHash) ??
-      null,
-    buildTime:
-      app.buildTime ??
-      asString(context.buildTime) ??
-      asString(providerSelectedContext?.buildTime) ??
-      null,
+    sdkReactVersion: app.sdkReactVersion ?? asString(context.sdkReactVersion) ?? asString(providerSelectedContext?.sdkReactVersion) ?? null,
+    consumerAppName: app.consumerAppName ?? asString(context.consumerAppName) ?? asString(providerSelectedContext?.consumerAppName) ?? null,
+    consumerAppVersion: app.consumerAppVersion ?? asString(context.consumerAppVersion) ?? asString(providerSelectedContext?.consumerAppVersion) ?? null,
+    commitHash: app.commitHash ?? asString(context.commitHash) ?? asString(providerSelectedContext?.commitHash) ?? null,
+    buildTime: app.buildTime ?? asString(context.buildTime) ?? asString(providerSelectedContext?.buildTime) ?? null,
   };
   const failingFetch = logs.fetch.find((record) => !record.ok);
   const firstRoomLookup = logs.fetch.find((record) => record.url.includes("/api/v1/rooms/") && record.method === "GET");
-  const joinPost =
-    [...logs.fetch]
-      .reverse()
-      .find((record) => record.url.includes("/api/v1/rooms/") && record.method === "POST" && record.url.includes("/participants")) ?? null;
+  const joinPost = [...logs.fetch].reverse().find((record) => record.url.includes("/api/v1/rooms/") && record.method === "POST" && record.url.includes("/participants")) ?? null;
   const latestIncident = logs.incidents.at(-1) ?? null;
   const latestWideError = [...logs.wideEvents].reverse().find((event) => event.outcome === "error") ?? null;
   const roomIdLooksMutated = typeof routeTarget.rawTarget === "string" && routeTarget.rawTarget.includes("roomName=");
@@ -497,18 +396,8 @@ export const buildStructuredDebugReport = ({
   const rtcJoinSucceeded = logs.wideEvents.some((event) => event.eventType === "room.join.rtk.attempt" && event.outcome === "success");
   const rtcJoinFailed = logs.wideEvents.some((event) => event.eventType === "room.join.rtk.attempt" && event.outcome !== "success");
   const joinAttemptReachedWebsocket = logs.websocket.some((record) => record.event === "open");
-  const tokenTenantMismatchSuspected =
-    Boolean(activeToken?.tenantId) &&
-    Boolean(firstRoomLookup?.status === 404 || joinPost?.status === 404);
-  const failureClass = roomIdLooksMutated
-    ? "room_identifier_mutation"
-    : backendRoomLookupFailedBeforeJoin
-      ? "room_resolution"
-      : joinPost?.status === 404
-        ? "room_join"
-        : rtcJoinFailed
-          ? "rtk_join"
-        : "unknown";
+  const tokenTenantMismatchSuspected = Boolean(activeToken?.tenantId) && Boolean(firstRoomLookup?.status === 404 || joinPost?.status === 404);
+  const failureClass = roomIdLooksMutated ? "room_identifier_mutation" : backendRoomLookupFailedBeforeJoin ? "room_resolution" : joinPost?.status === 404 ? "room_join" : rtcJoinFailed ? "rtk_join" : "unknown";
 
   const headline =
     failureClass === "room_identifier_mutation"
@@ -519,10 +408,8 @@ export const buildStructuredDebugReport = ({
           ? "Participant join failed after room targeting"
           : failureClass === "rtk_join"
             ? "RealtimeKit join or media transport failed after participant creation"
-          : "Debug report captured an unknown failure";
-  const recentConnectedRoomIds = Array.isArray(providerRoom?.recentConnectedRoomIds)
-    ? providerRoom.recentConnectedRoomIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0).slice(-6)
-    : [];
+            : "Debug report captured an unknown failure";
+  const recentConnectedRoomIds = Array.isArray(providerRoom?.recentConnectedRoomIds) ? providerRoom.recentConnectedRoomIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0).slice(-6) : [];
   const previousProviderSession = asRecord(providerRoom?.previousSession);
   const participantJoinResponseBody = asRecord(joinPost?.responseBody);
   const participantJoinRequestInfo = joinPost
@@ -532,19 +419,9 @@ export const buildStructuredDebugReport = ({
         method: joinPost.method,
         path: joinPost.url.replace(/^https?:\/\/[^/]+/, ""),
         durationMs: joinPost.durationMs ?? null,
-        requestId:
-          getHeaderValue(joinPost.responseHeaders, "x-request-id", "request-id", "x-amzn-requestid", "x-amzn-request-id") ??
-          asString(participantJoinResponseBody?.request_id) ??
-          null,
-        correlationId:
-          getHeaderValue(joinPost.responseHeaders, "x-correlation-id", "x-correlationid", "correlation-id") ??
-          asString(participantJoinResponseBody?.correlation_id) ??
-          null,
-        traceId:
-          getHeaderValue(joinPost.responseHeaders, "x-trace-id", "x-traceid", "trace-id", "x-b3-traceid") ??
-          asString(participantJoinResponseBody?.trace_id) ??
-          latestIncident?.traceId ??
-          null,
+        requestId: getHeaderValue(joinPost.responseHeaders, "x-request-id", "request-id", "x-amzn-requestid", "x-amzn-request-id") ?? asString(participantJoinResponseBody?.request_id) ?? null,
+        correlationId: getHeaderValue(joinPost.responseHeaders, "x-correlation-id", "x-correlationid", "correlation-id") ?? asString(participantJoinResponseBody?.correlation_id) ?? null,
+        traceId: getHeaderValue(joinPost.responseHeaders, "x-trace-id", "x-traceid", "trace-id", "x-b3-traceid") ?? asString(participantJoinResponseBody?.trace_id) ?? latestIncident?.traceId ?? null,
         cfRay: getHeaderValue(joinPost.responseHeaders, "cf-ray"),
       }
     : {
@@ -571,15 +448,8 @@ export const buildStructuredDebugReport = ({
         roomId: null,
         subject: null,
       };
-  const activeRoomDiagnostics =
-    asRecord(providerRoomDiagnostics?.activeRoomDiagnostics) ??
-    asRecord(sessionDiagnostics?.activeRoomDiagnostics) ??
-    null;
-  const rtkDiagnostics =
-    asRecord(providerRoomDiagnostics?.rtkDiagnostics) ??
-    asRecord(sessionDiagnostics?.rtkDiagnostics) ??
-    asRecord(activeRoomDiagnostics?.rtk) ??
-    null;
+  const activeRoomDiagnostics = asRecord(providerRoomDiagnostics?.activeRoomDiagnostics) ?? asRecord(sessionDiagnostics?.activeRoomDiagnostics) ?? null;
+  const rtkDiagnostics = asRecord(providerRoomDiagnostics?.rtkDiagnostics) ?? asRecord(sessionDiagnostics?.rtkDiagnostics) ?? asRecord(activeRoomDiagnostics?.rtk) ?? null;
   const recentJoinWideEvents = logs.wideEvents
     .filter((event) => event.eventType.startsWith("room.join") || event.eventType === "ui.join.click" || event.eventType === "ui.join.phase_transition")
     .slice(-16)
@@ -607,7 +477,7 @@ export const buildStructuredDebugReport = ({
       severity: latestIncident?.severity ?? "error",
       supportCode: (typeof context.supportCode === "string" ? context.supportCode : latestIncident?.id) ?? null,
       primaryError: {
-        message: (typeof context.error === "string" ? context.error : latestIncident?.message ?? latestWideError?.error?.message) ?? null,
+        message: (typeof context.error === "string" ? context.error : (latestIncident?.message ?? latestWideError?.error?.message)) ?? null,
         code: latestIncident?.code ?? latestWideError?.error?.code ?? null,
       },
       phase: latestIncident?.phase ?? (typeof context.phase === "string" ? context.phase : null),
@@ -635,10 +505,7 @@ export const buildStructuredDebugReport = ({
     joinContext: {
       targetType: routeTarget.targetType,
       rawTarget: routeTarget.rawTarget,
-      canonicalTarget:
-        typeof context.canonicalRoomId === "string"
-          ? context.canonicalRoomId
-          : routeTarget.rawTarget,
+      canonicalTarget: typeof context.canonicalRoomId === "string" ? context.canonicalRoomId : routeTarget.rawTarget,
       source: routeTarget.source,
       sourceDetail: {
         pathname: location.pathname,
@@ -663,11 +530,7 @@ export const buildStructuredDebugReport = ({
       },
     },
     authContext: {
-      authMode:
-        asString(context.authMode) ??
-        asString(providerAuth?.mode) ??
-        activeToken?.source ??
-        "unknown",
+      authMode: asString(context.authMode) ?? asString(providerAuth?.mode) ?? activeToken?.source ?? "unknown",
       tokenSourcesSeen: [...new Set(tokenSummaries.map((summary) => summary.source))],
       activeToken,
       tokenClaims,
@@ -698,23 +561,13 @@ export const buildStructuredDebugReport = ({
         reusedAt: asString(providerCache?.reusedAt),
       },
       room: {
-        currentRoomId:
-          asString(context.roomId) ??
-          asString(providerRoomDiagnostics?.roomStateRoomId) ??
-          asString(providerRoomDiagnostics?.activeRoomId) ??
-          activeRoomIdFromProvider ??
-          null,
+        currentRoomId: asString(context.roomId) ?? asString(providerRoomDiagnostics?.roomStateRoomId) ?? asString(providerRoomDiagnostics?.activeRoomId) ?? activeRoomIdFromProvider ?? null,
         connectedInputRoomId: asString(providerRoomDiagnostics?.connectedInputRoomId),
         inFlightJoinRoomId: asString(providerRoomDiagnostics?.inFlightJoinRoomId),
         localParticipantId: asString(providerRoomDiagnostics?.localParticipantId),
         roomStateStatus: asString(providerRoomDiagnostics?.roomStateStatus) ?? asString(sessionDiagnostics?.roomStateStatus),
         activeRoomStatus: asString(providerRoomDiagnostics?.activeRoomStatus) ?? asString(sessionDiagnostics?.activeRoomStatus),
-        activeRoomHasRtkMeeting:
-          typeof providerRoomDiagnostics?.activeRoomHasRtkMeeting === "boolean"
-            ? providerRoomDiagnostics.activeRoomHasRtkMeeting
-            : typeof sessionDiagnostics?.activeRoomHasRtkMeeting === "boolean"
-              ? sessionDiagnostics.activeRoomHasRtkMeeting
-              : null,
+        activeRoomHasRtkMeeting: typeof providerRoomDiagnostics?.activeRoomHasRtkMeeting === "boolean" ? providerRoomDiagnostics.activeRoomHasRtkMeeting : typeof sessionDiagnostics?.activeRoomHasRtkMeeting === "boolean" ? sessionDiagnostics.activeRoomHasRtkMeeting : null,
         recentConnectedRoomIds,
         lastDisconnectedReason: asString(providerRoom?.lastDisconnectedReason),
         previousSession: previousProviderSession
@@ -745,12 +598,7 @@ export const buildStructuredDebugReport = ({
       recentJoinEvents: recentJoinWideEvents,
       iceMediaFailureHints,
       publicStateFields: Array.isArray(rtkDiagnostics?.publicStateFields) ? rtkDiagnostics.publicStateFields : [],
-      limitations: Array.isArray(rtkDiagnostics?.limitations)
-        ? rtkDiagnostics.limitations
-        : [
-            "RTK client internals were not available through the current diagnostics snapshot.",
-            "ICE candidate pairs and WebRTC stats are not collected unless RTK exposes public synchronous fields.",
-          ],
+      limitations: Array.isArray(rtkDiagnostics?.limitations) ? rtkDiagnostics.limitations : ["RTK client internals were not available through the current diagnostics snapshot.", "ICE candidate pairs and WebRTC stats are not collected unless RTK exposes public synchronous fields."],
     },
     environment: {
       origin: location.origin,
@@ -805,9 +653,7 @@ export const buildStructuredDebugReport = ({
       },
       rtkJoinAttempts,
       iceMediaFailureHints,
-      firstRoomLookup: firstRoomLookup
-        ? { attempted: true, status: firstRoomLookup.status ?? null }
-        : { attempted: false, status: null },
+      firstRoomLookup: firstRoomLookup ? { attempted: true, status: firstRoomLookup.status ?? null } : { attempted: false, status: null },
       joinTokenRequest: (() => {
         const match = logs.fetch.find((record) => record.url.includes("/join-token"));
         return match ? { attempted: true, status: match.status ?? null } : { attempted: false, status: null };

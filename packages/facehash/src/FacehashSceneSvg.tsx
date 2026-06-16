@@ -1,6 +1,6 @@
 import type * as React from "react";
-import { ensureBlinkKeyframes, getBlinkStyle } from "./blink";
-import type { FacehashScene, Variant } from "./core";
+import { ensureBlinkKeyframes, getBlinkStyle } from "./blink.js";
+import type { FacehashScene, Variant } from "./core/index.js";
 
 type FacehashSceneSvgProps = {
   backgroundColor: string;

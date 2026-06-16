@@ -48,20 +48,7 @@ const settings = {
 };
 
 function renderDialog(overrides: Partial<ComponentProps<typeof SettingsDialog>> = {}) {
-  return render(
-    <SettingsDialog
-      isOpen
-      onClose={() => {}}
-      settings={settings}
-      onUpdateIdentity={() => {}}
-      onUpdateJoin={() => {}}
-      onUpdateAudio={() => {}}
-      onUpdateVideo={() => {}}
-      onUpdateAppearance={() => {}}
-      onUpdateExperience={() => {}}
-      {...overrides}
-    />,
-  );
+  return render(<SettingsDialog isOpen onClose={() => {}} settings={settings} onUpdateIdentity={() => {}} onUpdateJoin={() => {}} onUpdateAudio={() => {}} onUpdateVideo={() => {}} onUpdateAppearance={() => {}} onUpdateExperience={() => {}} {...overrides} />);
 }
 
 function clickSection(getAllByRole: ReturnType<typeof renderDialog>["getAllByRole"], label: string) {

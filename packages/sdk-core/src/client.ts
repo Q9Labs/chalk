@@ -162,10 +162,7 @@ export class ConferenceClient extends EventEmitter<ConferenceClientEvents> {
     });
   }
 
-  private async _joinRealtimeKitWithRetry<TClient extends RetryableRealtimeKitClient>(
-    rtkClientOrFactory: TClient | (() => Promise<TClient>),
-    joinPolicySelection = getRtkJoinPolicyForCurrentCohort(),
-  ): Promise<TClient> {
+  private async _joinRealtimeKitWithRetry<TClient extends RetryableRealtimeKitClient>(rtkClientOrFactory: TClient | (() => Promise<TClient>), joinPolicySelection = getRtkJoinPolicyForCurrentCohort()): Promise<TClient> {
     return joinRealtimeKitWithRetry(rtkClientOrFactory, joinPolicySelection, {
       waitForJoin: async (joinPromise, timeoutMs) => {
         await Effect.runPromise(this._joinRealtimeKitEffect(joinPromise, timeoutMs));

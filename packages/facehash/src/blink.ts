@@ -1,5 +1,5 @@
 import type * as React from "react";
-import type { FacehashBlinkTiming } from "./core";
+import type { FacehashBlinkTiming } from "./core/index.js";
 
 const BLINK_KEYFRAMES = `
 @keyframes facehash-blink {

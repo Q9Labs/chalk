@@ -897,15 +897,14 @@ describe("ConferenceClient", () => {
         token: "chalk_access_token",
       });
       const join = vi.fn(async () => {});
-      const joinEffect = vi.fn(
-        () =>
-          Effect.fail(
-            new TimeoutError({
-              message: "ConferenceSession join timed out after 30000ms",
-              operation: "joinRTKRoom",
-              timeoutMs: 30000,
-            }),
-          ),
+      const joinEffect = vi.fn(() =>
+        Effect.fail(
+          new TimeoutError({
+            message: "ConferenceSession join timed out after 30000ms",
+            operation: "joinRTKRoom",
+            timeoutMs: 30000,
+          }),
+        ),
       );
       (client as any)._joinRealtimeKitEffect = joinEffect;
       const originalSetTimeout = globalThis.setTimeout;
@@ -915,9 +914,7 @@ describe("ConferenceClient", () => {
       }) as any;
 
       try {
-        await expect((client as any)._joinRealtimeKitWithRetry({ join } as any)).rejects.toThrow(
-          "Failed to join room after 5 attempts: ConferenceSession join timed out after 30000ms",
-        );
+        await expect((client as any)._joinRealtimeKitWithRetry({ join } as any)).rejects.toThrow("Failed to join room after 5 attempts: ConferenceSession join timed out after 30000ms");
       } finally {
         globalThis.setTimeout = originalSetTimeout;
       }

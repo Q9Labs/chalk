@@ -166,7 +166,7 @@ const keywords = {
   "📆": "tear-off calendar date",
   "🔒": "locked lock secure",
   "🔓": "unlocked lock open",
-  "🔑": "key lock secure"
+  "🔑": "key lock secure",
 };
 
 let output = "export const EMOJI_KEYWORDS: Record<string, string> = {\n";

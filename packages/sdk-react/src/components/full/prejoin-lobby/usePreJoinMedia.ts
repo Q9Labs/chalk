@@ -32,12 +32,7 @@ const stopOtherTracks = (stream: MediaStream, keepTrack?: MediaStreamTrack) => {
   }
 };
 
-async function getUserMediaWithPreferredDevice(
-  getUserMedia: MediaDevices["getUserMedia"],
-  kind: "audio" | "video",
-  preferredDeviceId: string | undefined,
-  allowDefaultFallback: boolean,
-): Promise<MediaStream> {
+async function getUserMediaWithPreferredDevice(getUserMedia: MediaDevices["getUserMedia"], kind: "audio" | "video", preferredDeviceId: string | undefined, allowDefaultFallback: boolean): Promise<MediaStream> {
   const primaryConstraints = preferredDeviceId
     ? ({
         [kind]: { deviceId: { exact: preferredDeviceId } },

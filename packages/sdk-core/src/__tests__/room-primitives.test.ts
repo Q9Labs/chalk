@@ -93,24 +93,25 @@ describe("room-primitives", () => {
 
   describe("createAuthenticatedRoom", () => {
     it("creates a room using APIClient normalization and returns a RoomResource", async () => {
-      const fetchMock = vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            room_id: "room_uuid_1",
-            tenant_id: "tenant_1",
-            cloudflare_meeting_id: "cf_meeting_1",
-            name: "Team Sync",
-            config: { chat_enabled: true },
-            status: "active",
-            allow_early_join_minutes: 5,
-            created_at: "2026-04-14T10:00:00.000Z",
-            updated_at: "2026-04-14T10:00:00.000Z",
-          }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              room_id: "room_uuid_1",
+              tenant_id: "tenant_1",
+              cloudflare_meeting_id: "cf_meeting_1",
+              name: "Team Sync",
+              config: { chat_enabled: true },
+              status: "active",
+              allow_early_join_minutes: 5,
+              created_at: "2026-04-14T10:00:00.000Z",
+              updated_at: "2026-04-14T10:00:00.000Z",
+            }),
+            {
+              status: 201,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
       );
 
       vi.stubGlobal("fetch", fetchMock);
@@ -158,16 +159,17 @@ describe("room-primitives", () => {
     });
 
     it("surfaces API failure messages from the shared SDK request path", async () => {
-      const fetchMock = vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            error: "invalid token",
-          }),
-          {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: "invalid token",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
       );
 
       vi.stubGlobal("fetch", fetchMock);

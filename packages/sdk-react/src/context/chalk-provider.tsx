@@ -22,10 +22,7 @@ if (import.meta.hot) {
   });
 }
 
-const createRuntimeIdentifier = (prefix: string) =>
-  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? `${prefix}-${crypto.randomUUID()}`
-    : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const createRuntimeIdentifier = (prefix: string) => (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? `${prefix}-${crypto.randomUUID()}` : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
 const getSafeApiKeyIdentifierPrefix = (apiKey: string | undefined) => {
   if (typeof apiKey !== "string") {

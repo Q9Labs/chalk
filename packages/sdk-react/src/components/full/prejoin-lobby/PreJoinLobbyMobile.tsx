@@ -66,10 +66,7 @@ export function PreJoinLobbyMobile({
 
   return (
     <div
-      className={cn(
-        "relative w-full h-full flex flex-col overflow-hidden",
-        isDarkMode ? "dark" : ""
-      )}
+      className={cn("relative w-full h-full flex flex-col overflow-hidden", isDarkMode ? "dark" : "")}
       style={
         {
           "--primary": participantColors.primary,
@@ -77,31 +74,18 @@ export function PreJoinLobbyMobile({
       }
     >
       {/* Video Preview Layer */}
-      <PreJoinMobilePreview
-        videoRef={videoRef}
-        displayName={displayName}
-        isVideoEnabled={isVideoEnabled}
-        isAudioEnabled={isAudioEnabled}
-        audioLevel={audioLevel}
-        participantGradient={participantGradient}
-        participantGradientPreference={participantGradientPreference}
-      />
+      <PreJoinMobilePreview videoRef={videoRef} displayName={displayName} isVideoEnabled={isVideoEnabled} isAudioEnabled={isAudioEnabled} audioLevel={audioLevel} participantGradient={participantGradient} participantGradientPreference={participantGradientPreference} />
 
       {/* UI Overlay Layer */}
       <div className="relative z-10 flex flex-col h-full pointer-events-none">
         {/* Header */}
         <div className="pt-[env(safe-area-inset-top)] pointer-events-auto">
-          <PreJoinHeader
-            roomName={roomName}
-            isDarkMode={isDarkMode}
-            onToggleTheme={onToggleTheme}
-            variant="mobile"
-          />
+          <PreJoinHeader roomName={roomName} isDarkMode={isDarkMode} onToggleTheme={onToggleTheme} variant="mobile" />
         </div>
 
         {/* Controls - Positioned above bottom sheet */}
         <div className="flex-1 pointer-events-none" />
-        
+
         <div className="flex justify-center pb-6 pointer-events-auto">
           <PreJoinMobileControls
             isAudioEnabled={isAudioEnabled}
@@ -120,12 +104,7 @@ export function PreJoinLobbyMobile({
 
         {/* Bottom Join Sheet */}
         <div className="pointer-events-auto">
-          <PreJoinMobileJoinSheet
-            displayName={displayName}
-            isLoading={isLoading}
-            onDisplayNameChange={onDisplayNameChange}
-            onJoin={onJoin}
-          />
+          <PreJoinMobileJoinSheet displayName={displayName} isLoading={isLoading} onDisplayNameChange={onDisplayNameChange} onJoin={onJoin} />
         </div>
       </div>
     </div>

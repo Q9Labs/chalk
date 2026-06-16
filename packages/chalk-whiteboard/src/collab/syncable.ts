@@ -1,5 +1,5 @@
 import { isInvisiblySmallElement } from "@excalidraw/excalidraw";
-import type { OrderedExcalidrawElement } from "./types";
+import type { OrderedExcalidrawElement } from "./types.js";
 
 const TOMBSTONE_RETENTION_MS = 24 * 60 * 60 * 1000;
 

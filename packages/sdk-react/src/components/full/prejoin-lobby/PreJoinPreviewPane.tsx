@@ -35,9 +35,7 @@ export function PreJoinPreviewPane({ videoRef, displayName, isVideoEnabled, isAu
         <video ref={videoRef} autoPlay playsInline muted className={cn("absolute inset-0 w-full h-full object-cover pointer-events-none", isVideoEnabled ? "opacity-100" : "opacity-0")} style={{ transform: "scaleX(-1)" }} />
 
         <div className="absolute top-5 left-5 z-20">
-          <div
-            className="flex items-center gap-3 px-4 py-2.5 rounded-full border bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[20px] shadow-lg"
-          >
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-full border bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[20px] shadow-lg">
             <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all duration-300", isAudioEnabled ? "bg-primary shadow-[0_0_10px_var(--primary)] scale-110" : "bg-muted-foreground/40")} />
             <span className="text-sm font-semibold text-foreground">{displayName || "You"}</span>
 

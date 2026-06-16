@@ -8,4 +8,4 @@
  */
 
 // Re-export collab v2 types for convenience
-export type { AppState, BinaryFileData, BinaryFiles, Collaborator, CollaboratorPointer, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "../collab";
+export type { AppState, BinaryFileData, BinaryFiles, Collaborator, CollaboratorPointer, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "../collab/index.js";

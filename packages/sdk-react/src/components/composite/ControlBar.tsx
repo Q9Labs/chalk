@@ -447,16 +447,10 @@ export const ControlBar = React.memo(
     return (
       <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
         {/* Left: Timer section */}
-        <div
-          className="flex items-center rounded-full px-5 py-2.5 bg-card border border-border shadow-md"
-        >
+        <div className="flex items-center rounded-full px-5 py-2.5 bg-card border border-border shadow-md">
           <div className="flex items-center gap-3">
-            <div
-              className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.4)]"
-            />
-            <span className="text-[14px] font-semibold tracking-wide tabular-nums text-foreground">
-              {formatDuration(meetingDuration)}
-            </span>
+            <div className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.4)]" />
+            <span className="text-[14px] font-semibold tracking-wide tabular-nums text-foreground">{formatDuration(meetingDuration)}</span>
           </div>
         </div>
 

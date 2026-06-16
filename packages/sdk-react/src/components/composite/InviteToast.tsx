@@ -86,7 +86,10 @@ export const InviteToast = memo<InviteToastProps>(({ isVisible, onDismiss, meeti
 
         {/* Action */}
         <div className="px-3 pb-3">
-          <button onClick={handleCopy} className={cn("w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm transition-all", copied ? "bg-green-600/20 text-green-400 border border-green-600/30" : "bg-primary text-primary-foreground hover:opacity-90 shadow-md shadow-primary/20")}>
+          <button
+            onClick={handleCopy}
+            className={cn("w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm transition-all", copied ? "bg-green-600/20 text-green-400 border border-green-600/30" : "bg-primary text-primary-foreground hover:opacity-90 shadow-md shadow-primary/20")}
+          >
             {copied ? (
               <>
                 <Tick01Icon size={18} />

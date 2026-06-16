@@ -122,4 +122,3 @@ export const createAuthenticatedRoom = async ({ apiUrl, accessToken, name, confi
     config,
   });
 };
-

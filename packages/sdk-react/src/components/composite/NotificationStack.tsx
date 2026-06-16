@@ -127,11 +127,7 @@ export const NotificationStack = React.memo<NotificationStackProps>(({ notificat
       toastOptions={{
         unstyled: true,
         classNames: {
-          toast: cn(
-            "group flex items-center gap-3 p-2 pr-3 rounded-xl shadow-2xl min-w-[280px] max-w-md",
-            "bg-card border border-border text-foreground",
-            "chalk-animate-toast-in",
-          ),
+          toast: cn("group flex items-center gap-3 p-2 pr-3 rounded-xl shadow-2xl min-w-[280px] max-w-md", "bg-card border border-border text-foreground", "chalk-animate-toast-in"),
           title: "text-sm font-semibold leading-none",
           description: "text-[11px] text-muted-foreground leading-tight",
           actionButton: "ml-auto px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity",

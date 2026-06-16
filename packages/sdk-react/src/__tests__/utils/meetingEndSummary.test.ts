@@ -1,15 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { MeetingEndData } from "../../components/full/video-conference/types";
-import {
-  MEETING_END_SUMMARY_STORAGE_KEY,
-  buildMeetingEndSummary,
-  clearMeetingEndSummary,
-  consumeMeetingEndSummary,
-  readMeetingEndSummary,
-  writeMeetingEndSummary,
-  writeMeetingEndSummaryFromData,
-} from "../../utils/meetingEndSummary";
+import { MEETING_END_SUMMARY_STORAGE_KEY, buildMeetingEndSummary, clearMeetingEndSummary, consumeMeetingEndSummary, readMeetingEndSummary, writeMeetingEndSummary, writeMeetingEndSummaryFromData } from "../../utils/meetingEndSummary";
 
 function createMemoryStorage(): Storage {
   const store = new Map<string, string>();
@@ -22,7 +14,7 @@ function createMemoryStorage(): Storage {
       store.clear();
     },
     getItem(key: string) {
-      return store.has(key) ? store.get(key) ?? null : null;
+      return store.has(key) ? (store.get(key) ?? null) : null;
     },
     key(index: number) {
       return Array.from(store.keys())[index] ?? null;
@@ -143,7 +135,7 @@ describe("meetingEndSummary", () => {
 
   it("clears malformed payloads to avoid stale leakage", () => {
     const storage = createMemoryStorage();
-    storage.setItem(MEETING_END_SUMMARY_STORAGE_KEY, "{\"bad\":true}");
+    storage.setItem(MEETING_END_SUMMARY_STORAGE_KEY, '{"bad":true}');
 
     expect(readMeetingEndSummary({ storage, nowMs: 1000 })).toBeNull();
     expect(storage.getItem(MEETING_END_SUMMARY_STORAGE_KEY)).toBeNull();

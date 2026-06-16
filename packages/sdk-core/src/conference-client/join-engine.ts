@@ -54,12 +54,7 @@ export const emitRtkJoinAttemptTelemetry = ({ attempt, totalAttempts, timeoutMs,
 
 export const isRetryableRtkJoinError = (error: Error): boolean => RETRYABLE_JOIN_ERROR_PATTERNS.some((pattern) => pattern.test(error.message));
 
-export const createRealtimeKitInitEffect = (
-  authToken: string,
-  audio: boolean,
-  video: boolean,
-  loadRealtimeKitClient: () => Promise<RealtimeKitStatic>,
-) =>
+export const createRealtimeKitInitEffect = (authToken: string, audio: boolean, video: boolean, loadRealtimeKitClient: () => Promise<RealtimeKitStatic>) =>
   Effect.tryPromise({
     try: async () => {
       const realtimeKitClient = await loadRealtimeKitClient();
@@ -116,15 +111,9 @@ const defaultCleanupClient = async (client: RetryableRealtimeKitClient): Promise
   }
 };
 
-const isClientFactory = <TClient extends RetryableRealtimeKitClient>(
-  value: RetryableRealtimeKitClientFactory<TClient> | TClient,
-): value is RetryableRealtimeKitClientFactory<TClient> => typeof value === "function";
+const isClientFactory = <TClient extends RetryableRealtimeKitClient>(value: RetryableRealtimeKitClientFactory<TClient> | TClient): value is RetryableRealtimeKitClientFactory<TClient> => typeof value === "function";
 
-export const joinRealtimeKitWithRetry = async <TClient extends RetryableRealtimeKitClient>(
-  clientOrFactory: RetryableRealtimeKitClientFactory<TClient> | TClient,
-  joinPolicySelection: RtkJoinPolicySelection,
-  deps: JoinRealtimeKitWithRetryDeps,
-): Promise<TClient> => {
+export const joinRealtimeKitWithRetry = async <TClient extends RetryableRealtimeKitClient>(clientOrFactory: RetryableRealtimeKitClientFactory<TClient> | TClient, joinPolicySelection: RtkJoinPolicySelection, deps: JoinRealtimeKitWithRetryDeps): Promise<TClient> => {
   let lastError: Error | null = null;
   const retryDelays = joinPolicySelection.policy.retryDelaysMs;
   const timeoutMs = joinPolicySelection.policy.timeoutMs;

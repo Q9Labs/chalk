@@ -96,11 +96,7 @@ export const decodeIncomingMessage = (raw: string) => {
     };
   }
 
-  const normalizedPayload = envelope.payload === undefined
-    ? undefined
-    : envelope.type === "whiteboard.data" || envelope.type === "whiteboard.snapshot"
-      ? snakeToCamelExcept(envelope.payload, ["elements"])
-      : snakeToCamel(envelope.payload);
+  const normalizedPayload = envelope.payload === undefined ? undefined : envelope.type === "whiteboard.data" || envelope.type === "whiteboard.snapshot" ? snakeToCamelExcept(envelope.payload, ["elements"]) : snakeToCamel(envelope.payload);
   const payload = normalizePayload(envelope.type, normalizedPayload);
 
   if (!isInboundType(envelope.type)) {

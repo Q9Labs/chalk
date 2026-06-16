@@ -67,19 +67,22 @@ export function usePreJoinUiState({ userName, error, initialVideoEnabled, initia
     setShowSettings((previous) => !previous);
   }, []);
 
-  const handleJoin = useCallback((displayNameOverride?: string) => {
-    const trimmedDisplayName = (displayNameOverride ?? displayName).trim();
-    if (!trimmedDisplayName) return;
+  const handleJoin = useCallback(
+    (displayNameOverride?: string) => {
+      const trimmedDisplayName = (displayNameOverride ?? displayName).trim();
+      if (!trimmedDisplayName) return;
 
-    onJoin({
-      displayName: trimmedDisplayName,
-      videoEnabled: isVideoEnabled,
-      audioEnabled: isAudioEnabled,
-      selectedVideoDevice,
-      selectedAudioInput,
-      selectedAudioOutput,
-    });
-  }, [displayName, isVideoEnabled, isAudioEnabled, onJoin, selectedVideoDevice, selectedAudioInput, selectedAudioOutput]);
+      onJoin({
+        displayName: trimmedDisplayName,
+        videoEnabled: isVideoEnabled,
+        audioEnabled: isAudioEnabled,
+        selectedVideoDevice,
+        selectedAudioInput,
+        selectedAudioOutput,
+      });
+    },
+    [displayName, isVideoEnabled, isAudioEnabled, onJoin, selectedVideoDevice, selectedAudioInput, selectedAudioOutput],
+  );
 
   return {
     displayName,

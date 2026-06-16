@@ -180,7 +180,23 @@ function TurnSeparator() {
 }
 
 export const TranscriptionPanel = React.memo(
-  ({ transcripts, isLive = true, showSpeakerNames = true, showTimestamps = true, showConfidence = true, searchable = true, onExport, onCopyAll, onClose, position = "right", variant = "default", localParticipantId, participantColorSeed, participantGradientPreference, className }: TranscriptionPanelProps) => {
+  ({
+    transcripts,
+    isLive = true,
+    showSpeakerNames = true,
+    showTimestamps = true,
+    showConfidence = true,
+    searchable = true,
+    onExport,
+    onCopyAll,
+    onClose,
+    position = "right",
+    variant = "default",
+    localParticipantId,
+    participantColorSeed,
+    participantGradientPreference,
+    className,
+  }: TranscriptionPanelProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0);

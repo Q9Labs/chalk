@@ -4,7 +4,28 @@ import { cn } from "../../../utils/cn";
 import { getParticipantColor, getParticipantGradient, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { Avatar, ControlButton } from "../../atomic";
 import { DeviceControlButton, ReactionPicker } from "../../composite";
-import { HandIcon, Home01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Video01Icon, VideoOffIcon, CallEnd01Icon, ThumbsUpIcon, RefreshIcon, ArrowLeft01Icon, Shield01Icon, WifiOffIcon, InformationCircleIcon, ArrowDown01Icon, ArrowUp01Icon, Copy01Icon, Download01Icon, CheckmarkCircle02Icon } from "../../../utils/icons";
+import {
+  HandIcon,
+  Home01Icon,
+  Microphone01Icon,
+  MicrophoneOff01Icon,
+  Monitor01Icon,
+  MonitorOffIcon,
+  Video01Icon,
+  VideoOffIcon,
+  CallEnd01Icon,
+  ThumbsUpIcon,
+  RefreshIcon,
+  ArrowLeft01Icon,
+  Shield01Icon,
+  WifiOffIcon,
+  InformationCircleIcon,
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  Copy01Icon,
+  Download01Icon,
+  CheckmarkCircle02Icon,
+} from "../../../utils/icons";
 import { useMeetingRoomSettings } from "../../../hooks/useMeetingRoomSettings";
 import { useMeetingRoomTheme } from "../meeting-room/useMeetingRoomTheme";
 import { LoadingScreen } from "../LoadingScreen";
@@ -48,18 +69,10 @@ function isTransparentBoardColor(color: unknown) {
   return normalized === "" || normalized === "transparent" || normalized === "#0000" || normalized === "#00000000" || normalized === "rgba(0,0,0,0)" || normalized === "rgba(0, 0, 0, 0)";
 }
 
-function WhiteboardPictureInPictureStage({
-  snapshot,
-  className,
-}: {
-  snapshot: NonNullable<PictureInPictureSource["whiteboardSnapshot"]>;
-  className?: string;
-}) {
+function WhiteboardPictureInPictureStage({ snapshot, className }: { snapshot: NonNullable<PictureInPictureSource["whiteboardSnapshot"]>; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const backgroundColor = isTransparentBoardColor(snapshot.appState.viewBackgroundColor)
-    ? "#ffffff"
-    : String(snapshot.appState.viewBackgroundColor);
+  const backgroundColor = isTransparentBoardColor(snapshot.appState.viewBackgroundColor) ? "#ffffff" : String(snapshot.appState.viewBackgroundColor);
 
   useEffect(() => {
     let isCancelled = false;
@@ -113,16 +126,7 @@ function getSourceGradientPreference(source: PictureInPictureSource | null, loca
   return source?.isLocal ? localParticipantGradientPreference : undefined;
 }
 
-function PictureInPictureStage({
-  source,
-  className,
-  gradientPreference,
-}: {
-  source: PictureInPictureSource | null;
-  className?: string;
-  hideOverlay?: boolean;
-  gradientPreference?: ParticipantGradientPreference;
-}) {
+function PictureInPictureStage({ source, className, gradientPreference }: { source: PictureInPictureSource | null; className?: string; hideOverlay?: boolean; gradientPreference?: ParticipantGradientPreference }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasVideo = Boolean(source?.videoTrack);
   const { settings } = useMeetingRoomSettings();
@@ -168,15 +172,7 @@ function PictureInPictureStage({
   );
 }
 
-function PictureInPictureTile({
-  source,
-  className,
-  gradientPreference,
-}: {
-  source: PictureInPictureSource | null;
-  className?: string;
-  gradientPreference?: ParticipantGradientPreference;
-}) {
+function PictureInPictureTile({ source, className, gradientPreference }: { source: PictureInPictureSource | null; className?: string; gradientPreference?: ParticipantGradientPreference }) {
   if (!source) {
     return null;
   }
@@ -185,11 +181,7 @@ function PictureInPictureTile({
 
   return (
     <div
-      className={cn(
-        "relative min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-[var(--chalk-bg-tile)] shadow-lg transition-all duration-300",
-        source.isSpeaking && !source.isMuted && "ring-2 ring-emerald-500/80 shadow-[0_0_24px_rgba(16,185,129,0.2)]",
-        className,
-      )}
+      className={cn("relative min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-[var(--chalk-bg-tile)] shadow-lg transition-all duration-300", source.isSpeaking && !source.isMuted && "ring-2 ring-emerald-500/80 shadow-[0_0_24px_rgba(16,185,129,0.2)]", className)}
       role="group"
       aria-label={isPlaceholder ? `PiP overflow ${source.title}` : `PiP tile for ${source.title}`}
       data-testid="pip-tile"
@@ -199,8 +191,7 @@ function PictureInPictureTile({
         <div
           className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
           style={{
-            background:
-              "radial-gradient(circle at top, var(--primary) 0%, transparent 65%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+            background: "radial-gradient(circle at top, var(--primary) 0%, transparent 65%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
           }}
         >
           <p className="text-4xl font-semibold tracking-tight text-white">{source.title}</p>
@@ -289,21 +280,13 @@ function MeetingPictureInPictureLayout({
   const tiles = participantSources.length > 0 ? participantSources : source ? [source] : [];
 
   return (
-    <div
-      className={cn("grid h-full min-h-0 gap-3 overflow-hidden p-3", getMeetingLayoutClass(meetingLayout, tiles.length))}
-      data-testid="pip-layout"
-      data-layout={meetingLayout}
-    >
+    <div className={cn("grid h-full min-h-0 gap-3 overflow-hidden p-3", getMeetingLayoutClass(meetingLayout, tiles.length))} data-testid="pip-layout" data-layout={meetingLayout}>
       {tiles.map((participant, index) => (
         <PictureInPictureTile
           key={getPictureInPictureTileKey(participant, index)}
           source={participant}
           gradientPreference={getSourceGradientPreference(participant, localParticipantGradientPreference)}
-          className={cn(
-            "shadow-xl",
-            meetingLayout === "single" && "col-span-1 row-span-1",
-            meetingLayout === "grid" && tiles.length === 3 && index === 0 && "row-span-2",
-          )}
+          className={cn("shadow-xl", meetingLayout === "single" && "col-span-1 row-span-1", meetingLayout === "grid" && tiles.length === 3 && index === 0 && "row-span-2")}
         />
       ))}
       {meetingLayout === "grid" && tiles.length === 3 && <div key="grid-filler" className="hidden" aria-hidden="true" />}
@@ -421,10 +404,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
     ].filter((btn): btn is Exclude<typeof btn, false | undefined | null> => Boolean(btn));
   }, [controls, onReturnToTab, phase]);
 
-  const participantThemeVariables = useMemo(
-    () => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown", effectiveSourceGradientPreference) as React.CSSProperties & Record<"--primary" | "--primary-foreground", string>,
-    [source?.title, source?.id, effectiveSourceGradientPreference],
-  );
+  const participantThemeVariables = useMemo(() => getParticipantThemeVariables(source?.title ?? source?.id ?? "unknown", effectiveSourceGradientPreference) as React.CSSProperties & Record<"--primary" | "--primary-foreground", string>, [source?.title, source?.id, effectiveSourceGradientPreference]);
   const { settings } = useMeetingRoomSettings();
   const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
   const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
@@ -489,13 +469,15 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
   };
 
   const handleDebugDownload = async () => {
-    const prepared = preparedDebugExport ?? (await prepareFullDebugExport({
-      source: "pip-error-overlay",
-      phase,
-      error: controls.errorMessage ?? null,
-      supportCode: controls.supportCode ?? null,
-      roomName: source?.title ?? null,
-    }));
+    const prepared =
+      preparedDebugExport ??
+      (await prepareFullDebugExport({
+        source: "pip-error-overlay",
+        phase,
+        error: controls.errorMessage ?? null,
+        supportCode: controls.supportCode ?? null,
+        roomName: source?.title ?? null,
+      }));
     setPreparedDebugExport(prepared);
     downloadDebugReport(prepared.report);
     setDebugExportState("downloaded");
@@ -507,34 +489,30 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
     <div className="flex h-screen w-full flex-col bg-background text-foreground chalk-theme-transition relative overflow-hidden" style={participantThemeVariables as React.CSSProperties}>
       {phase !== "joining" && (
         <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "mix-blend-screen" : "mix-blend-multiply")}>
-        {settings.appearance.ambientBackground && (
-          <>
-            <div
-              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkerGradient ? "opacity-10" : "opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
-              style={{
-                background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
-                filter: "blur(60px)",
-              }}
-            />
-            <div
-              className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkerGradient ? "opacity-5" : "opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
-              style={{
-                background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
-                filter: "blur(80px)",
-              }}
-            />
-          </>
-        )}
+          {settings.appearance.ambientBackground && (
+            <>
+              <div
+                className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkerGradient ? "opacity-10" : "opacity-40 dark:opacity-20", !reduceMotion && "animate-[spin_15s_linear_infinite]")}
+                style={{
+                  background: "radial-gradient(ellipse at 40% 40%, var(--primary) 0%, transparent 60%)",
+                  filter: "blur(60px)",
+                }}
+              />
+              <div
+                className={cn("absolute -left-[25vw] -top-[25vh] h-[150vh] w-[150vw] transition-opacity duration-500", isDarkerGradient ? "opacity-5" : "opacity-30 dark:opacity-10", !reduceMotion && "animate-[spin_20s_linear_infinite_reverse]")}
+                style={{
+                  background: "radial-gradient(ellipse at 60% 60%, var(--accent) 0%, transparent 60%)",
+                  filter: "blur(80px)",
+                }}
+              />
+            </>
+          )}
         </div>
       )}
-      
+
       <div className="relative z-10 flex flex-1 flex-col overflow-hidden shadow-2xl transition-all duration-300">
-        {phase === "meeting" && (
-          <MeetingPictureInPictureLayout source={source} participantSources={participantSources ?? []} meetingLayout={meetingLayout} localParticipantGradientPreference={localParticipantGradientPreference} />
-        )}
-        {phase === "prejoin" && (
-          <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={effectiveSourceGradientPreference} />
-        )}
+        {phase === "meeting" && <MeetingPictureInPictureLayout source={source} participantSources={participantSources ?? []} meetingLayout={meetingLayout} localParticipantGradientPreference={localParticipantGradientPreference} />}
+        {phase === "prejoin" && <PictureInPictureStage source={source} className="absolute inset-0 h-full w-full border-0" gradientPreference={effectiveSourceGradientPreference} />}
 
         {phase === "prejoin" && !showErrorOverlay && (
           <div className="absolute inset-x-0 top-12 flex flex-col items-center pointer-events-none z-10">
@@ -544,19 +522,13 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
 
         {phase === "joining" && (
           <div className="absolute inset-0 z-50 bg-background flex items-center justify-center">
-             <LoadingScreen 
-               displayName={source?.title ?? "Chalker"} 
-               className="w-full h-full min-h-0" 
-               message="Joining room..."
-               supportingMessages={controls.loadingMessages}
-               gradientPreference={effectiveSourceGradientPreference}
-             />
+            <LoadingScreen displayName={source?.title ?? "Chalker"} className="w-full h-full min-h-0" message="Joining room..." supportingMessages={controls.loadingMessages} gradientPreference={effectiveSourceGradientPreference} />
           </div>
         )}
 
         {showErrorOverlay && errorInfo && (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/40 backdrop-blur-[6px] p-4 animate-in fade-in duration-500 font-app">
-            <div 
+            <div
               className="relative w-full max-w-[320px] max-h-[100%] overflow-y-auto scrollbar-none overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/72 px-5 pb-5 pt-6 text-center text-white shadow-[0_24px_60px_rgba(2,6,23,0.42)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-500 ease-[cubic-bezier(0.2,0,0,1)]"
               style={{
                 backdropFilter: "blur(40px)",
@@ -575,34 +547,23 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
               </div>
 
               <h2 className="font-display text-xl font-bold tracking-tight text-white mb-3 leading-snug">{errorInfo.title}</h2>
-              <p className="mx-auto mb-6 max-w-[260px] text-xs leading-normal text-white/70">
-                {errorInfo.message}
-              </p>
+              <p className="mx-auto mb-6 max-w-[260px] text-xs leading-normal text-white/70">{errorInfo.message}</p>
 
               <div className="flex flex-col gap-2 w-full mb-5">
                 {controls.onJoin && (
-                  <button
-                    onClick={controls.onJoin}
-                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[13px] font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
-                  >
+                  <button onClick={controls.onJoin} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[13px] font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95">
                     <RefreshIcon size={16} />
                     Try Again
                   </button>
                 )}
-                <button
-                  onClick={onReturnToTab}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] text-[13px] font-semibold text-white transition-all hover:bg-white/[0.06] active:scale-95"
-                >
+                <button onClick={onReturnToTab} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] text-[13px] font-semibold text-white transition-all hover:bg-white/[0.06] active:scale-95">
                   <ArrowLeft01Icon size={16} />
                   Go Back
                 </button>
               </div>
 
               <div className="mb-5 flex w-full flex-wrap justify-center gap-2">
-                <button
-                  onClick={() => void handleDebugExport()}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95"
-                >
+                <button onClick={() => void handleDebugExport()} className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95">
                   {debugExportState === "copied" ? (
                     <>
                       <CheckmarkCircle02Icon size={16} />
@@ -630,10 +591,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                     </>
                   )}
                 </button>
-                <button
-                  onClick={() => void handleDebugDownload()}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95"
-                >
+                <button onClick={() => void handleDebugDownload()} className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[12px] font-semibold text-white transition-all hover:bg-white/[0.08] active:scale-95">
                   <Download01Icon size={16} />
                   Download JSON
                 </button>
@@ -643,12 +601,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
                 <div className="mb-5 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5 text-left">
                   <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Manual copy fallback</p>
                   <p className="mb-2 text-[10px] leading-4 text-white/70">Clipboard write could not be verified. Press Cmd/Ctrl+C on the selected text below.</p>
-                  <textarea
-                    ref={manualCopyRef}
-                    readOnly
-                    value={manualCopyText}
-                    className="h-24 w-full resize-none rounded-xl border border-white/10 bg-slate-950/70 p-2 text-[10px] font-mono leading-4 text-white/88"
-                  />
+                  <textarea ref={manualCopyRef} readOnly value={manualCopyText} className="h-24 w-full resize-none rounded-xl border border-white/10 bg-slate-950/70 p-2 text-[10px] font-mono leading-4 text-white/88" />
                 </div>
               )}
 
@@ -700,9 +653,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
         {phase === "prejoin" && !showErrorOverlay && (
           <div className={cn("absolute inset-x-0 bottom-0 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-center justify-between", phase === "prejoin" ? "p-6 pb-20 pt-12" : "p-4 pb-5 pt-8")}>
             <div className="flex items-center min-w-0">
-              <p className="max-w-[140px] truncate text-[15px] font-medium text-white drop-shadow-md">
-                {phase === "prejoin" ? "" : (source?.title ?? "Waiting for video")}
-              </p>
+              <p className="max-w-[140px] truncate text-[15px] font-medium text-white drop-shadow-md">{phase === "prejoin" ? "" : (source?.title ?? "Waiting for video")}</p>
               {source?.isSpeaking && !source?.isMuted && <Equalizer />}
             </div>
           </div>
@@ -730,12 +681,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
 
         {phase === "prejoin" && !showErrorOverlay && (
           <div className="absolute inset-x-0 bottom-6 flex justify-center items-center px-4 pointer-events-none">
-            <div
-              className={cn(
-                "pointer-events-auto flex items-center gap-1.5 rounded-full border px-1.5 py-1.5 shadow-2xl",
-                isDarkMode ? "dark border-white/10 bg-black/60 backdrop-blur-xl" : "border-black/[0.08] bg-white/80 backdrop-blur-[18px]",
-              )}
-            >
+            <div className={cn("pointer-events-auto flex items-center gap-1.5 rounded-full border px-1.5 py-1.5 shadow-2xl", isDarkMode ? "dark border-white/10 bg-black/60 backdrop-blur-xl" : "border-black/[0.08] bg-white/80 backdrop-blur-[18px]")}>
               <div className="flex items-center gap-1 px-1">
                 <DeviceControlButton
                   type="mic"
@@ -774,7 +720,7 @@ export function PictureInPictureWindow({ phase, source, previewSource, participa
           </div>
         )}
       </div>
-      
+
       {phase === "meeting" && (
         <div className="relative z-10 flex flex-wrap shrink-0 items-center justify-center gap-1.5 pb-2 pt-2 px-2 bg-background border-t border-border shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] overflow-hidden">
           <div className="flex items-center shrink-0 gap-0.5 px-1 py-0.5 bg-muted rounded-full border border-border">

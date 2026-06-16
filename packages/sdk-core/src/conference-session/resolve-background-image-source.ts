@@ -1,5 +1,4 @@
-const isDirectImageSource = (imageUrl: string) =>
-  imageUrl.startsWith("blob:") || imageUrl.startsWith("data:");
+const isDirectImageSource = (imageUrl: string) => imageUrl.startsWith("blob:") || imageUrl.startsWith("data:");
 
 export const resolveBackgroundImageSource = async (imageUrl: string) => {
   if (typeof window === "undefined" || isDirectImageSource(imageUrl)) {

@@ -186,7 +186,7 @@ export const DebugDialog = React.memo(({ isOpen, onClose, application, authExpir
   const websocketStatus = session.chalkClient.websocketConnectionState;
   const systemInfo = useMemo(() => getSystemInfo(), []);
   const authInfo = useMemo(() => getAuthInfo(authExpiresAt, currentTime), [authExpiresAt, currentTime]);
-  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed ?? (resolvedParticipantName !== "N/A" ? resolvedParticipantName : routeRoomId ?? resolvedParticipantId)), [participantColorSeed, resolvedParticipantId, resolvedParticipantName, routeRoomId]);
+  const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed ?? (resolvedParticipantName !== "N/A" ? resolvedParticipantName : (routeRoomId ?? resolvedParticipantId))), [participantColorSeed, resolvedParticipantId, resolvedParticipantName, routeRoomId]);
 
   const applicationRows = [
     application?.name ? { label: "Application", value: application.name } : null,
@@ -317,13 +317,7 @@ export const DebugDialog = React.memo(({ isOpen, onClose, application, authExpir
             className={cn("inline-flex h-11 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium transition-colors", debugExportState === "failed" ? "bg-destructive/10 text-destructive hover:bg-destructive/15" : "bg-primary text-primary-foreground hover:bg-primary/90")}
           >
             <Download01Icon className="h-4 w-4" />
-            {debugExportState === "preparing"
-              ? "Preparing debug"
-              : debugExportState === "downloaded"
-                ? "Downloaded debug"
-                : debugExportState === "failed"
-                  ? "Retry debug export"
-                  : "Download debug TXT"}
+            {debugExportState === "preparing" ? "Preparing debug" : debugExportState === "downloaded" ? "Downloaded debug" : debugExportState === "failed" ? "Retry debug export" : "Download debug TXT"}
           </button>
         </div>
       </div>

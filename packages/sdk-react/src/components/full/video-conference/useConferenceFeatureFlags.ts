@@ -30,17 +30,7 @@ const resolveFeature = (feature: FeatureValue | undefined, ctx: FeatureContext):
 };
 
 export function useConferenceFeatureFlags({ features, participants, localParticipant, participantCount, isRecording }: UseConferenceFeatureFlagsParams): ConferenceFeatureFlags {
-  const {
-    chat: chatFeature,
-    recording: recordingFeature,
-    screenShare: screenShareFeature,
-    whiteboard: whiteboardFeature,
-    reactions: reactionsFeature,
-    handRaise: handRaiseFeature,
-    backgroundEffects: backgroundEffectsFeature,
-    pictureInPicture: pictureInPictureFeature,
-    tour: tourFeature,
-  } = features;
+  const { chat: chatFeature, recording: recordingFeature, screenShare: screenShareFeature, whiteboard: whiteboardFeature, reactions: reactionsFeature, handRaise: handRaiseFeature, backgroundEffects: backgroundEffectsFeature, pictureInPicture: pictureInPictureFeature, tour: tourFeature } = features;
 
   return useMemo(() => {
     const ctx: FeatureContext = {

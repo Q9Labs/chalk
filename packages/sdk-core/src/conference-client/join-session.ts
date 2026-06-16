@@ -17,10 +17,7 @@ interface JoinConferenceSessionDeps {
   isTokenExpired: (token: string) => boolean;
   emitTokenExpired: (error: ChalkError) => void;
   initRealtimeKitClient: (authToken: string, audio: boolean, video: boolean) => Promise<RealtimeKitClient>;
-  joinRealtimeKitWithRetry: (
-    rtkClientOrFactory: RealtimeKitClient | (() => Promise<RealtimeKitClient>),
-    joinPolicySelection: ReturnType<typeof getRtkJoinPolicyForCurrentCohort>,
-  ) => Promise<RealtimeKitClient>;
+  joinRealtimeKitWithRetry: (rtkClientOrFactory: RealtimeKitClient | (() => Promise<RealtimeKitClient>), joinPolicySelection: ReturnType<typeof getRtkJoinPolicyForCurrentCohort>) => Promise<RealtimeKitClient>;
 }
 
 export interface JoinConferenceSessionResult {
@@ -103,17 +100,14 @@ export const joinConferenceSession = async (sessionId: string, config: JoinSessi
     ctx.markPhase("rtk.join");
     const rtkJoinPolicy = getRtkJoinPolicyForCurrentCohort();
     ctx.set("rtkJoinPolicy", rtkJoinPolicy);
-    const rtkClient = await deps.joinRealtimeKitWithRetry(
-      async () => {
-        ctx.markPhase("rtk.init");
-        const nextClient = await deps.initRealtimeKitClient(tokens.rtcToken, config.audio ?? false, config.video ?? false);
-        if (!nextClient) {
-          throw new Error("RealtimeKit init returned null/undefined client");
-        }
-        return nextClient;
-      },
-      rtkJoinPolicy,
-    );
+    const rtkClient = await deps.joinRealtimeKitWithRetry(async () => {
+      ctx.markPhase("rtk.init");
+      const nextClient = await deps.initRealtimeKitClient(tokens.rtcToken, config.audio ?? false, config.video ?? false);
+      if (!nextClient) {
+        throw new Error("RealtimeKit init returned null/undefined client");
+      }
+      return nextClient;
+    }, rtkJoinPolicy);
 
     const session = new ConferenceSession(roomInfo.id, rtkClient, deps.debug, deps.apiClient);
     session._setLocalParticipant(localParticipant);

@@ -1,6 +1,6 @@
 import { CaptureUpdateAction, MIME_TYPES, newElementWith } from "@excalidraw/excalidraw";
 
-import type { BinaryFileData, BinaryFiles, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types";
+import type { BinaryFileData, BinaryFiles, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types.js";
 
 export type WhiteboardFileSyncPhase = "idle" | "uploading" | "awaiting_remote_upload" | "downloading" | "error";
 

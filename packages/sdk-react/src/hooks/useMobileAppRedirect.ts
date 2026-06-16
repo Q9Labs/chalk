@@ -1,19 +1,9 @@
-import {
-  ChalkErrorClass,
-  ErrorCode,
-  type ChalkError,
-} from "@q9labs/chalk-core";
+import { ChalkErrorClass, ErrorCode, type ChalkError } from "@q9labs/chalk-core";
 import { useEffect, useMemo, useState } from "react";
 
 import { useChalkSession } from "../context/chalk-provider";
 import { replaceWindowLocation } from "../utils/browserNavigation";
-import {
-  buildMobileJoinIntent,
-  buildPublicJoinLink,
-  detectMobileJoinPlatform,
-  resolveJoinTokenFromJoinTarget,
-  type MobileJoinPlatform,
-} from "../utils/mobileRedirect";
+import { buildMobileJoinIntent, buildPublicJoinLink, detectMobileJoinPlatform, resolveJoinTokenFromJoinTarget, type MobileJoinPlatform } from "../utils/mobileRedirect";
 
 const MOBILE_REDIRECT_FALLBACK_DEEP_LINK_DELAY_MS = 900;
 const MOBILE_REDIRECT_STORE_FALLBACK_TIMEOUT_MS = 1800;
@@ -35,11 +25,7 @@ export interface UseMobileAppRedirectResult {
   publicInviteLink: string | null;
 }
 
-function createMobileRedirectError(
-  message: string,
-  details: Record<string, unknown>,
-  cause?: unknown,
-) {
+function createMobileRedirectError(message: string, details: Record<string, unknown>, cause?: unknown) {
   return new ChalkErrorClass(ErrorCode.INVALID_REQUEST, message, {
     cause: cause instanceof Error ? cause : undefined,
     details,
@@ -52,25 +38,12 @@ function isChalkErrorLike(error: unknown): error is ChalkError {
   }
 
   const candidate = error as { name?: unknown; message?: unknown; code?: unknown };
-  return (
-    candidate.name === "ChalkError" &&
-    typeof candidate.message === "string" &&
-    typeof candidate.code === "string"
-  );
+  return candidate.name === "ChalkError" && typeof candidate.message === "string" && typeof candidate.code === "string";
 }
 
-export function useMobileAppRedirect({
-  roomId,
-  joinToken,
-  inviteLink,
-  iosStoreUrl,
-  publicAppUrl,
-  onError,
-}: UseMobileAppRedirectOptions): UseMobileAppRedirectResult {
+export function useMobileAppRedirect({ roomId, joinToken, inviteLink, iosStoreUrl, publicAppUrl, onError }: UseMobileAppRedirectOptions): UseMobileAppRedirectResult {
   const { session } = useChalkSession();
-  const [status, setStatus] = useState<UseMobileAppRedirectResult["status"]>(
-    "inactive",
-  );
+  const [status, setStatus] = useState<UseMobileAppRedirectResult["status"]>("inactive");
   const [error, setError] = useState<string | null>(null);
   const [publicInviteLink, setPublicInviteLink] = useState<string | null>(null);
 
@@ -82,10 +55,7 @@ export function useMobileAppRedirect({
     return detectMobileJoinPlatform(navigator.userAgent);
   }, []);
 
-  const directJoinToken = useMemo(
-    () => resolveJoinTokenFromJoinTarget({ inviteLink, joinToken }),
-    [inviteLink, joinToken],
-  );
+  const directJoinToken = useMemo(() => resolveJoinTokenFromJoinTarget({ inviteLink, joinToken }), [inviteLink, joinToken]);
 
   useEffect(() => {
     if (!platform) {
@@ -126,24 +96,18 @@ export function useMobileAppRedirect({
         let nextJoinToken = directJoinToken;
         if (!nextJoinToken) {
           if (!roomId) {
-            throw createMobileRedirectError(
-              "Missing room join target for mobile app redirect.",
-              {
-                stage: "mobile_redirect_resolve_target",
-              },
-            );
+            throw createMobileRedirectError("Missing room join target for mobile app redirect.", {
+              stage: "mobile_redirect_resolve_target",
+            });
           }
 
           const created = await session.createJoinToken(roomId);
           nextJoinToken = created.joinToken?.trim() || null;
           if (!nextJoinToken) {
-            throw createMobileRedirectError(
-              "Could not create a public Chalk join link.",
-              {
-                stage: "mobile_redirect_create_join_token",
-                roomId,
-              },
-            );
+            throw createMobileRedirectError("Could not create a public Chalk join link.", {
+              stage: "mobile_redirect_create_join_token",
+              roomId,
+            });
           }
         }
 
@@ -151,11 +115,7 @@ export function useMobileAppRedirect({
           return;
         }
 
-        const nextPublicInviteLink = buildPublicJoinLink(
-          nextJoinToken,
-          publicAppUrl,
-          typeof window === "undefined" ? undefined : window.location.origin,
-        );
+        const nextPublicInviteLink = buildPublicJoinLink(nextJoinToken, publicAppUrl, typeof window === "undefined" ? undefined : window.location.origin);
         setPublicInviteLink(nextPublicInviteLink);
 
         const mobileJoinIntent = buildMobileJoinIntent({
@@ -184,12 +144,7 @@ export function useMobileAppRedirect({
         };
 
         fallbackDeepLinkTimeoutId = window.setTimeout(() => {
-          if (
-            cancelled ||
-            handoffSucceeded ||
-            attemptedFallbackDeepLink ||
-            !mobileJoinIntent.fallbackDeepLinkUrl
-          ) {
+          if (cancelled || handoffSucceeded || attemptedFallbackDeepLink || !mobileJoinIntent.fallbackDeepLinkUrl) {
             return;
           }
 
@@ -208,20 +163,15 @@ export function useMobileAppRedirect({
           }
 
           fail(
-            createMobileRedirectError(
-              platform === "ios"
-                ? "Chalk could not open because the App Store URL is not configured."
-                : "Chalk could not open in the mobile app.",
-              {
-                stage: "mobile_redirect_store_fallback",
-                platform,
-                roomId,
-                joinToken: nextJoinToken,
-                publicInviteLink: nextPublicInviteLink,
-                deepLinkUrl: mobileJoinIntent.deepLinkUrl,
-                fallbackDeepLinkUrl: mobileJoinIntent.fallbackDeepLinkUrl,
-              },
-            ),
+            createMobileRedirectError(platform === "ios" ? "Chalk could not open because the App Store URL is not configured." : "Chalk could not open in the mobile app.", {
+              stage: "mobile_redirect_store_fallback",
+              platform,
+              roomId,
+              joinToken: nextJoinToken,
+              publicInviteLink: nextPublicInviteLink,
+              deepLinkUrl: mobileJoinIntent.deepLinkUrl,
+              fallbackDeepLinkUrl: mobileJoinIntent.fallbackDeepLinkUrl,
+            }),
           );
         }, MOBILE_REDIRECT_STORE_FALLBACK_TIMEOUT_MS);
 

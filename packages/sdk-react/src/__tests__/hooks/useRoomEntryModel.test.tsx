@@ -5,13 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRoomEntryModel } from "../../hooks/useRoomEntryModel";
 
-const {
-  APIClientMock,
-  createJoinTokenMock,
-  getRoomJoinAvailabilityMock,
-  getRoomMock,
-  isCanonicalRoomIdMock,
-} = vi.hoisted(() => ({
+const { APIClientMock, createJoinTokenMock, getRoomJoinAvailabilityMock, getRoomMock, isCanonicalRoomIdMock } = vi.hoisted(() => ({
   APIClientMock: vi.fn(),
   createJoinTokenMock: vi.fn(),
   getRoomJoinAvailabilityMock: vi.fn(),
@@ -50,7 +44,7 @@ describe("useRoomEntryModel", () => {
       kind: room ? "scheduled" : "open",
       opensAtMs: room ? 1700000000000 : null,
       remainingMs: null,
-      startsAtMs: room ? nowMs ?? 1700000300000 : null,
+      startsAtMs: room ? (nowMs ?? 1700000300000) : null,
     }));
   });
 

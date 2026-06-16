@@ -55,10 +55,12 @@ const safeValue = <T>(read: () => T, fallback: T): T => {
 const storageToObject = (storage: Storage | undefined) => {
   if (!storage) return {};
   try {
-    return Object.fromEntries(Array.from({ length: storage.length }, (_, index) => {
-      const key = storage.key(index) ?? `${index}`;
-      return [key, storage.getItem(key)];
-    }));
+    return Object.fromEntries(
+      Array.from({ length: storage.length }, (_, index) => {
+        const key = storage.key(index) ?? `${index}`;
+        return [key, storage.getItem(key)];
+      }),
+    );
   } catch (error) {
     return {
       __error: error instanceof Error ? error.message : String(error),
@@ -213,13 +215,7 @@ const safeJsonStringify = (value: unknown) => {
   );
 };
 
-export const toDebugClipboardText = (report: unknown) =>
-  [
-    "Chalk Full Debug Report",
-    "=======================",
-    "",
-    safeJsonStringify(report),
-  ].join("\n");
+export const toDebugClipboardText = (report: unknown) => ["Chalk Full Debug Report", "=======================", "", safeJsonStringify(report)].join("\n");
 
 const verifyClipboardText = async (text: string) => {
   const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);

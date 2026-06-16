@@ -1,27 +1,12 @@
 type RecordLike = Record<string, unknown>;
 
-const STATE_FIELD_NAMES = new Set([
-  "connectionState",
-  "iceConnectionState",
-  "iceGatheringState",
-  "signalingState",
-  "transportState",
-  "socketState",
-  "readyState",
-  "state",
-  "status",
-  "joined",
-  "isJoined",
-  "roomJoined",
-]);
+const STATE_FIELD_NAMES = new Set(["connectionState", "iceConnectionState", "iceGatheringState", "signalingState", "transportState", "socketState", "readyState", "state", "status", "joined", "isJoined", "roomJoined"]);
 
 const TRACK_FIELD_NAMES = new Set(["kind", "id", "label", "enabled", "muted", "readyState"]);
 
-const asRecord = (value: unknown): RecordLike | null =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as RecordLike) : null;
+const asRecord = (value: unknown): RecordLike | null => (value && typeof value === "object" && !Array.isArray(value) ? (value as RecordLike) : null);
 
-const isScalar = (value: unknown): value is string | number | boolean | null =>
-  value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+const isScalar = (value: unknown): value is string | number | boolean | null => value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 
 const safeRead = (read: () => unknown): unknown => {
   try {
@@ -141,49 +126,19 @@ export const getRealtimeKitDiagnosticsSnapshot = (rtkClient: unknown): RealtimeK
   const self = getRecordAtPath(client, ["self"]);
   const room = getRecordAtPath(client, ["room"]) ?? getRecordAtPath(client, ["meeting"]);
   const participants = getRecordAtPath(client, ["participants"]);
-  const transport =
-    getRecordAtPath(client, ["transport"]) ??
-    getRecordAtPath(client, ["connection"]) ??
-    getRecordAtPath(client, ["peerConnection"]) ??
-    getRecordAtPath(client, ["socket"]);
+  const transport = getRecordAtPath(client, ["transport"]) ?? getRecordAtPath(client, ["connection"]) ?? getRecordAtPath(client, ["peerConnection"]) ?? getRecordAtPath(client, ["socket"]);
   const media = getRecordAtPath(client, ["media"]) ?? getRecordAtPath(client, ["tracks"]);
 
   const selfSummary = self
     ? {
-        ...readScalarFields(self, [
-          "id",
-          "name",
-          "userId",
-          "participantId",
-          "audioEnabled",
-          "videoEnabled",
-          "screenShareEnabled",
-          "joined",
-          "roomJoined",
-          "connectionState",
-        ]),
+        ...readScalarFields(self, ["id", "name", "userId", "participantId", "audioEnabled", "videoEnabled", "screenShareEnabled", "joined", "roomJoined", "connectionState"]),
         audioTrack: summarizeTrack(safeRead(() => self.audioTrack)),
         videoTrack: summarizeTrack(safeRead(() => self.videoTrack)),
         screenShareTrack: summarizeTrack(safeRead(() => self.screenShareTrack)),
       }
     : null;
 
-  const roomSummary = room
-    ? readScalarFields(room, [
-        "id",
-        "name",
-        "title",
-        "joined",
-        "isJoined",
-        "roomJoined",
-        "state",
-        "status",
-        "connectionState",
-        "iceConnectionState",
-        "iceGatheringState",
-        "signalingState",
-      ])
-    : null;
+  const roomSummary = room ? readScalarFields(room, ["id", "name", "title", "joined", "isJoined", "roomJoined", "state", "status", "connectionState", "iceConnectionState", "iceGatheringState", "signalingState"]) : null;
 
   const participantsSummary = participants
     ? {
@@ -195,32 +150,13 @@ export const getRealtimeKitDiagnosticsSnapshot = (rtkClient: unknown): RealtimeK
 
   const mediaSummary = media
     ? {
-        ...readScalarFields(media, [
-          "state",
-          "status",
-          "connectionState",
-          "iceConnectionState",
-          "iceGatheringState",
-          "signalingState",
-        ]),
+        ...readScalarFields(media, ["state", "status", "connectionState", "iceConnectionState", "iceGatheringState", "signalingState"]),
         audioTrack: summarizeTrack(safeRead(() => media.audioTrack)),
         videoTrack: summarizeTrack(safeRead(() => media.videoTrack)),
       }
     : null;
 
-  const transportSummary = transport
-    ? readScalarFields(transport, [
-        "state",
-        "status",
-        "readyState",
-        "connectionState",
-        "iceConnectionState",
-        "iceGatheringState",
-        "signalingState",
-        "transportState",
-        "socketState",
-      ])
-    : null;
+  const transportSummary = transport ? readScalarFields(transport, ["state", "status", "readyState", "connectionState", "iceConnectionState", "iceGatheringState", "signalingState", "transportState", "socketState"]) : null;
 
   return {
     available: true,
@@ -229,15 +165,7 @@ export const getRealtimeKitDiagnosticsSnapshot = (rtkClient: unknown): RealtimeK
     participants: participantsSummary,
     media: mediaSummary,
     transport: transportSummary,
-    publicStateFields: [
-      ...collectPublicStateFields(self, "rtk.self"),
-      ...collectPublicStateFields(room, "rtk.room"),
-      ...collectPublicStateFields(transport, "rtk.transport"),
-      ...collectPublicStateFields(media, "rtk.media"),
-    ].slice(0, 32),
-    limitations: [
-      "RTK diagnostics only read public enumerable state exposed by the active client.",
-      "ICE candidate pairs and WebRTC stats are not collected unless RTK exposes them synchronously on public fields.",
-    ],
+    publicStateFields: [...collectPublicStateFields(self, "rtk.self"), ...collectPublicStateFields(room, "rtk.room"), ...collectPublicStateFields(transport, "rtk.transport"), ...collectPublicStateFields(media, "rtk.media")].slice(0, 32),
+    limitations: ["RTK diagnostics only read public enumerable state exposed by the active client.", "ICE candidate pairs and WebRTC stats are not collected unless RTK exposes them synchronously on public fields."],
   };
 };

@@ -18,16 +18,7 @@ function participant(id: string, overrides: Record<string, unknown> = {}) {
 
 describe("PictureInPictureWindow", () => {
   it("renders a split layout for two participants", () => {
-    const { getByTestId, getAllByTestId } = render(
-      <PictureInPictureWindow
-        phase="meeting"
-        source={participant("a")}
-        participantSources={[participant("a"), participant("b")]}
-        meetingLayout="split"
-        controls={{}}
-        onReturnToTab={() => {}}
-      />,
-    );
+    const { getByTestId, getAllByTestId } = render(<PictureInPictureWindow phase="meeting" source={participant("a")} participantSources={[participant("a"), participant("b")]} meetingLayout="split" controls={{}} onReturnToTab={() => {}} />);
 
     expect(getByTestId("pip-layout")).toHaveAttribute("data-layout", "split");
     expect(getAllByTestId("pip-tile")).toHaveLength(2);
@@ -35,14 +26,7 @@ describe("PictureInPictureWindow", () => {
 
   it("renders an overflow tile in grid mode", () => {
     const { getByLabelText, getByTestId, getAllByTestId } = render(
-      <PictureInPictureWindow
-        phase="meeting"
-        source={participant("a")}
-        participantSources={[participant("a"), participant("b"), participant("c"), { id: "overflow:2", kind: "placeholder", title: "+2", subtitle: "more" }]}
-        meetingLayout="grid"
-        controls={{}}
-        onReturnToTab={() => {}}
-      />,
+      <PictureInPictureWindow phase="meeting" source={participant("a")} participantSources={[participant("a"), participant("b"), participant("c"), { id: "overflow:2", kind: "placeholder", title: "+2", subtitle: "more" }]} meetingLayout="grid" controls={{}} onReturnToTab={() => {}} />,
     );
 
     expect(getByTestId("pip-layout")).toHaveAttribute("data-layout", "grid");
@@ -52,14 +36,7 @@ describe("PictureInPictureWindow", () => {
 
   it("renders a screen-share layout with side participants", () => {
     const { getByTestId, getAllByTestId } = render(
-      <PictureInPictureWindow
-        phase="meeting"
-        source={{ id: "screen", kind: "screen-share", title: "Teacher", subtitle: "Screen sharing", videoTrack: null }}
-        participantSources={[participant("a"), participant("b")]}
-        meetingLayout="screen-share"
-        controls={{}}
-        onReturnToTab={() => {}}
-      />,
+      <PictureInPictureWindow phase="meeting" source={{ id: "screen", kind: "screen-share", title: "Teacher", subtitle: "Screen sharing", videoTrack: null }} participantSources={[participant("a"), participant("b")]} meetingLayout="screen-share" controls={{}} onReturnToTab={() => {}} />,
     );
 
     expect(getByTestId("pip-layout")).toHaveAttribute("data-layout", "screen-share");
@@ -69,16 +46,7 @@ describe("PictureInPictureWindow", () => {
   it("avoids key warnings when participant sources reuse ids", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const { getAllByTestId } = render(
-      <PictureInPictureWindow
-        phase="meeting"
-        source={participant("teacher")}
-        participantSources={[participant("dup"), participant("dup"), participant("teacher")]}
-        meetingLayout="grid"
-        controls={{}}
-        onReturnToTab={() => {}}
-      />,
-    );
+    const { getAllByTestId } = render(<PictureInPictureWindow phase="meeting" source={participant("teacher")} participantSources={[participant("dup"), participant("dup"), participant("teacher")]} meetingLayout="grid" controls={{}} onReturnToTab={() => {}} />);
 
     expect(getAllByTestId("pip-tile")).toHaveLength(3);
     expect(consoleError.mock.calls.some(([message]) => String(message).includes('Each child in a list should have a unique "key" prop.'))).toBe(false);
@@ -87,14 +55,7 @@ describe("PictureInPictureWindow", () => {
   });
 
   it("shows a join error in prejoin PiP", () => {
-    const { getByText, getAllByText, queryByText } = render(
-      <PictureInPictureWindow
-        phase="prejoin"
-        source={participant("a")}
-        controls={{ errorMessage: "Failed to join room", supportCode: "CHK-123" }}
-        onReturnToTab={() => {}}
-      />,
-    );
+    const { getByText, getAllByText, queryByText } = render(<PictureInPictureWindow phase="prejoin" source={participant("a")} controls={{ errorMessage: "Failed to join room", supportCode: "CHK-123" }} onReturnToTab={() => {}} />);
 
     expect(getByText("Just a small bump in the road")).toBeDefined();
     expect(getAllByText("Failed to join room")).toHaveLength(1);
@@ -107,14 +68,7 @@ describe("PictureInPictureWindow", () => {
 
   it("uses the local participant gradient preference for local PiP surfaces", () => {
     const localParticipantGradientPreference = { mode: "custom" as const, from: "#ff00aa", to: "#7c3aed" };
-    const { container } = render(
-      <PictureInPictureWindow
-        phase="prejoin"
-        source={participant("hasan", { isLocal: true })}
-        controls={{ localParticipantGradientPreference }}
-        onReturnToTab={() => {}}
-      />,
-    );
+    const { container } = render(<PictureInPictureWindow phase="prejoin" source={participant("hasan", { isLocal: true })} controls={{ localParticipantGradientPreference }} onReturnToTab={() => {}} />);
 
     expect(container.firstChild).toHaveStyle({
       "--primary": "#ff00aa",

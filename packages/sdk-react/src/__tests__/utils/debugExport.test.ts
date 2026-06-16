@@ -14,7 +14,7 @@ const makeStorage = (seed: Record<string, string>) => {
       return [...store.keys()][index] ?? null;
     },
     getItem(key: string) {
-      return store.has(key) ? store.get(key) ?? null : null;
+      return store.has(key) ? (store.get(key) ?? null) : null;
     },
     setItem(key: string, value: string) {
       store.set(key, value);
@@ -83,9 +83,7 @@ describe("debugExport", () => {
       microphone: "granted",
       notifications: "prompt",
     });
-    expect(report.browser.devices).toEqual([
-      { deviceId: "cam-1", groupId: "group-1", kind: "videoinput", label: "Camera 1" },
-    ]);
+    expect(report.browser.devices).toEqual([{ deviceId: "cam-1", groupId: "group-1", kind: "videoinput", label: "Camera 1" }]);
     expect(report.browser.storage.full.localStorage).toMatchObject({
       chalk_local_key: "local-value",
     });
@@ -135,4 +133,3 @@ describe("debugExport", () => {
     expect(readText).toHaveBeenCalled();
   });
 });
-

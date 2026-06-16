@@ -91,13 +91,7 @@ describe("picture-in-picture builders", () => {
       displayName: "Hasan",
       isLocal: true,
     });
-    const participants = [
-      localParticipant,
-      createParticipant({ id: "a", displayName: "A", isSpeaking: true }),
-      createParticipant({ id: "b", displayName: "B" }),
-      createParticipant({ id: "c", displayName: "C" }),
-      createParticipant({ id: "d", displayName: "D" }),
-    ];
+    const participants = [localParticipant, createParticipant({ id: "a", displayName: "A", isSpeaking: true }), createParticipant({ id: "b", displayName: "B" }), createParticipant({ id: "c", displayName: "C" }), createParticipant({ id: "d", displayName: "D" })];
 
     const result = buildMeetingPictureInPictureSource({
       participants: participants as any,

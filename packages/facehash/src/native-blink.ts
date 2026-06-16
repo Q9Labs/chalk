@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { EyeAnchor, FacehashBlinkTiming } from "./core";
+import type { EyeAnchor, FacehashBlinkTiming } from "./core/index.js";
 
 const CLOSED_SCALE_Y = 0.05;
 const BLINK_CLOSED_MS = 85;

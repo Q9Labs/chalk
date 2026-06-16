@@ -282,13 +282,7 @@ function MeetingRoomBase({
     const appState = api.getAppState() as Record<string, unknown>;
     const files = (api.getFiles() ?? {}) as Record<string, unknown>;
     const sceneVersion = elements.reduce((total, element) => total + (((element as { version?: number }).version ?? 0) as number), 0);
-    const nextKey = [
-      sceneVersion,
-      appState.scrollX ?? 0,
-      appState.scrollY ?? 0,
-      (appState.zoom as { value?: number } | undefined)?.value ?? 1,
-      Object.keys(files).length,
-    ].join(":");
+    const nextKey = [sceneVersion, appState.scrollX ?? 0, appState.scrollY ?? 0, (appState.zoom as { value?: number } | undefined)?.value ?? 1, Object.keys(files).length].join(":");
 
     if (whiteboardSnapshotKeyRef.current === nextKey) {
       return;
@@ -327,7 +321,12 @@ function MeetingRoomBase({
     };
   }, [captureWhiteboardSnapshot, enablePictureInPicture, enableWhiteboard, isWhiteboardOpen]);
 
-  const { source: pictureInPictureSource, previewSource, participantSources, meetingLayout } = useMemo(
+  const {
+    source: pictureInPictureSource,
+    previewSource,
+    participantSources,
+    meetingLayout,
+  } = useMemo(
     () =>
       buildMeetingPictureInPictureSource({
         participants: allParticipants,
@@ -520,13 +519,11 @@ function MeetingRoomBase({
     onAddPeople?.();
   }, [onAddPeople, ui.setShowInviteModal]);
 
-
   const handleFilmstripToggle = useCallback(() => {
     const nextValue = !ui.isFilmstripOpen;
     ui.setIsFilmstripOpen(nextValue);
     updateAppearanceSettings({ showFilmstrip: nextValue });
   }, [ui.isFilmstripOpen, ui.setIsFilmstripOpen, updateAppearanceSettings]);
-
 
   const handleAudioInputPreference = useCallback(
     (deviceId: string) => {
@@ -574,7 +571,9 @@ function MeetingRoomBase({
       className={cn("chalk-root chalk-theme-transition relative flex h-screen w-full flex-col overflow-hidden bg-background text-foreground", "p-0", className)}
       data-chalk-theme={roomTheme === "system" ? undefined : roomTheme}
       style={getParticipantThemeVariables(participantColorSeed, localParticipantGradientPreference) as React.CSSProperties}
-    >      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "bg-[#050505]" : "bg-background")}>
+    >
+      {" "}
+      <div className={cn("absolute inset-0 pointer-events-none z-0 overflow-hidden", isDarkMode ? "bg-[#050505]" : "bg-background")}>
         {settings.appearance.ambientBackground && (
           <div className={cn("absolute inset-0 transition-opacity duration-1000", settings.appearance.gradient === "darker" ? "opacity-100" : "opacity-100")}>
             {settings.appearance.gradient === "darker" ? (
@@ -624,7 +623,6 @@ function MeetingRoomBase({
           </div>
         )}
       </div>
-
       {!isMobile && (
         <div ref={pillRef} {...pillDragHandlers} className="absolute top-4 left-6 z-30">
           <div className="px-3 py-1 rounded-full bg-muted/80 border border-border select-none shadow-sm">
@@ -632,7 +630,6 @@ function MeetingRoomBase({
           </div>
         </div>
       )}
-
       <div className={cn("relative z-0 flex min-h-0 flex-1 flex-row overflow-hidden", !reduceMotion && "animate-in fade-in duration-1000 ease-out fill-mode-both", isMobile ? "gap-2 px-2 pt-2 pb-0" : "gap-4 px-4 pt-4 pb-4", ui.isExiting && "pointer-events-none")}>
         <MeetingRoomStage
           isMobile={isMobile}
@@ -674,7 +671,6 @@ function MeetingRoomBase({
           localParticipantGradientPreference={localParticipantGradientPreference}
         />
       </div>
-
       <div className={cn("relative z-10 w-full", !reduceMotion && "animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out fill-mode-both delay-300")}>
         <MeetingRoomControls
           isMobile={isMobile}
@@ -729,7 +725,6 @@ function MeetingRoomBase({
           localParticipantGradientPreference={localParticipantGradientPreference}
         />
       </div>
-
       <MeetingRoomOverlays
         connectionState={connectionState}
         onRetryConnection={onRetryConnection}
@@ -749,7 +744,6 @@ function MeetingRoomBase({
         getParticipantVolume={effectiveGetParticipantVolume}
         selectedAudioOutput={selectedAudioOutput ?? settings.audio.selectedOutput}
       />
-
       <SettingsDialog
         isOpen={ui.isSettingsOpen}
         onClose={() => ui.setIsSettingsOpen(false)}

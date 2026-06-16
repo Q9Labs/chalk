@@ -1,7 +1,4 @@
-const hasSecureRandomUuid = (): boolean =>
-  typeof globalThis.crypto !== "undefined" &&
-  typeof globalThis.crypto.getRandomValues === "function" &&
-  typeof globalThis.crypto.randomUUID === "function";
+const hasSecureRandomUuid = (): boolean => typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.getRandomValues === "function" && typeof globalThis.crypto.randomUUID === "function";
 
 const fallbackUuid = (): string =>
   "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {

@@ -280,13 +280,7 @@ describe("VideoConference pre-join devices", () => {
   it("auto-join uses invite links when provided", async () => {
     const joinWithInviteLinkMock = (globalThis as any).__vcJoinWithInviteLinkMock;
 
-    render(
-      <VideoConference
-        inviteLink="https://chalk.q9labs.ai/j/join-token-123"
-        userName="Hasan"
-        autoJoin
-      />,
-    );
+    render(<VideoConference inviteLink="https://chalk.q9labs.ai/j/join-token-123" userName="Hasan" autoJoin />);
 
     await waitFor(() => {
       expect(joinWithInviteLinkMock).toHaveBeenCalledTimes(1);
@@ -524,17 +518,13 @@ describe("VideoConference pre-join devices", () => {
       value: "Mozilla/5.0 (Linux; Android 14; Pixel 8)",
     });
 
-    const { queryByText, getByText } = render(
-      <VideoConference roomId="room-123" userName="Hasan" />,
-    );
+    const { queryByText, getByText } = render(<VideoConference roomId="room-123" userName="Hasan" />);
 
     await waitFor(() => {
       expect(mockCreateJoinToken).toHaveBeenCalledWith("room-123");
     });
     await waitFor(() => {
-      expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith(
-        "chalk://j/join-token-123",
-      );
+      expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith("chalk://j/join-token-123");
     });
 
     expect(getByText("Opening Chalk...")).toBeTruthy();
@@ -550,16 +540,12 @@ describe("VideoConference pre-join devices", () => {
     render(<VideoConference roomId="room-123" userName="Hasan" />);
 
     await waitFor(() => {
-      expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith(
-        "chalk://j/join-token-123",
-      );
+      expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith("chalk://j/join-token-123");
     });
 
     await waitFor(
       () => {
-        expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenLastCalledWith(
-          "https://play.google.com/store/apps/details?id=ai.q9labs.chalk.mobile",
-        );
+        expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenLastCalledWith("https://play.google.com/store/apps/details?id=ai.q9labs.chalk.mobile");
       },
       { timeout: 3000 },
     );
@@ -576,23 +562,17 @@ describe("VideoConference pre-join devices", () => {
       await Promise.resolve();
     });
 
-    expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith(
-      "chalk://j/join-token-123",
-    );
+    expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith("chalk://j/join-token-123");
 
     await waitFor(
       () => {
-        expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith(
-          "ai.q9labs.chalk.mobile://j/join-token-123",
-        );
+        expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenCalledWith("ai.q9labs.chalk.mobile://j/join-token-123");
       },
       { timeout: 3000 },
     );
     await waitFor(
       () => {
-        expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenLastCalledWith(
-          "https://apps.apple.com/app/id6760978704",
-        );
+        expect((globalThis as any).__vcReplaceWindowLocationMock).toHaveBeenLastCalledWith("https://apps.apple.com/app/id6760978704");
       },
       { timeout: 3000 },
     );

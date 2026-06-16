@@ -63,39 +63,27 @@ export function useTranscripts(): UseTranscriptsReturn {
   // Re-run when connection status changes (room becomes available after join)
   useEffect(() => {
     const room = session.room.getRoom();
-    console.log("[useTranscripts] Setting up transcript subscription", { hasRoom: !!room, isConnected });
 
     if (!room || !isConnected) {
-      console.log("[useTranscripts] No room available or not connected");
       return;
     }
 
     // Load existing transcripts
     const existing = room.transcripts;
-    console.log("[useTranscripts] Checking existing transcripts", { count: existing.length });
     if (existing.length > 0) {
-      console.log("[useTranscripts] Loading existing transcripts", { transcripts: existing });
       setTranscripts(existing);
       setIsAvailable(true);
     }
 
     // Listen for new transcripts
     const handleTranscript = (transcript: Transcript) => {
-      console.log("[useTranscripts] Received transcript event", {
-        id: transcript.id,
-        speaker: transcript.speakerName,
-        text: transcript.text?.slice(0, 100),
-        isInterim: transcript.isInterim,
-      });
       setIsAvailable(true);
       setTranscripts((prev) => [...prev, transcript]);
     };
 
-    console.log("[useTranscripts] Subscribing to room transcript event");
     room.on("transcript", handleTranscript);
 
     return () => {
-      console.log("[useTranscripts] Unsubscribing from room transcript event");
       room.off("transcript", handleTranscript);
     };
   }, [session, isConnected]);

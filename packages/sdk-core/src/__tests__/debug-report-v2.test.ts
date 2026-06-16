@@ -61,8 +61,7 @@ describe("buildStructuredDebugReport", () => {
             status: 200,
             ok: true,
             responseBody: {
-              access_token:
-                "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJjaGFsayIsInN1YiI6ImNsYWltOjEyMyIsInRlbmFudF9pZCI6InRlbmFudC0xIiwid29ya3NwYWNlX2lkIjoid29ya3NwYWNlLTEiLCJyb29tX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwicm9sZSI6Imhvc3QiLCJleHAiOjE3NzQ2MDg3OTJ9.c2lnbmF0dXJl",
+              access_token: "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJjaGFsayIsInN1YiI6ImNsYWltOjEyMyIsInRlbmFudF9pZCI6InRlbmFudC0xIiwid29ya3NwYWNlX2lkIjoid29ya3NwYWNlLTEiLCJyb29tX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwicm9sZSI6Imhvc3QiLCJleHAiOjE3NzQ2MDg3OTJ9.c2lnbmF0dXJl",
             },
           },
           {

@@ -44,8 +44,8 @@ describe("MeetingRoom", () => {
     localStorage.clear();
     vibrateSpy.mockClear();
     window.documentPictureInPicture = originalDocumentPictureInPicture;
-    window.requestAnimationFrame = originalRequestAnimationFrame ?? ((callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0)) as typeof window.requestAnimationFrame;
-    window.cancelAnimationFrame = originalCancelAnimationFrame ?? ((handle: number) => window.clearTimeout(handle)) as typeof window.cancelAnimationFrame;
+    window.requestAnimationFrame = originalRequestAnimationFrame ?? (((callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0)) as typeof window.requestAnimationFrame);
+    window.cancelAnimationFrame = originalCancelAnimationFrame ?? (((handle: number) => window.clearTimeout(handle)) as typeof window.cancelAnimationFrame);
     HotkeyManager.resetInstance();
     setNavigatorPlatform("Win32", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
   });
@@ -86,14 +86,7 @@ describe("MeetingRoom", () => {
       screenShareTrack: { kind: "video", readyState: "live" } as MediaStreamTrack,
     };
 
-    const { getByText, queryByText } = render(
-      <MeetingRoom
-        roomName="Test Room"
-        localParticipant={localScreenSharer}
-        participants={[localScreenSharer, { id: "p1", displayName: "Alice" }]}
-        enableTour={false}
-      />,
-    );
+    const { getByText, queryByText } = render(<MeetingRoom roomName="Test Room" localParticipant={localScreenSharer} participants={[localScreenSharer, { id: "p1", displayName: "Alice" }]} enableTour={false} />);
 
     expect(getByText("Preview hidden in this window")).toBeDefined();
     expect(queryByText("Shared by Me")).toBeNull();
@@ -108,9 +101,7 @@ describe("MeetingRoom", () => {
     const dispatchEventSpy = vi.spyOn(window, "dispatchEvent");
 
     try {
-      const { getByRole, getByLabelText } = render(
-        <MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} enableWhiteboard={true} isWhiteboardOpen={true} />,
-      );
+      const { getByRole, getByLabelText } = render(<MeetingRoom roomName="Test Room" localParticipant={localParticipant} participants={participants} enableTour={false} enableWhiteboard={true} isWhiteboardOpen={true} />);
 
       dispatchEventSpy.mockClear();
 

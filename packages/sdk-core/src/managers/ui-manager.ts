@@ -56,13 +56,9 @@ export interface UIManagerEvents {
 
 const NOTIFICATION_DISMISS_MS = 5000;
 
-const canListenToWindowEvents = (): boolean =>
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function" &&
-  typeof window.removeEventListener === "function";
+const canListenToWindowEvents = (): boolean => typeof window !== "undefined" && typeof window.addEventListener === "function" && typeof window.removeEventListener === "function";
 
-const getWindowInnerWidth = (): number | null =>
-  typeof window !== "undefined" && typeof window.innerWidth === "number" ? window.innerWidth : null;
+const getWindowInnerWidth = (): number | null => (typeof window !== "undefined" && typeof window.innerWidth === "number" ? window.innerWidth : null);
 
 /**
  * Manages UI state - layout, panels, notifications

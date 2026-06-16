@@ -15,28 +15,17 @@ interface PreJoinMobilePreviewProps {
   participantGradientPreference?: ParticipantGradientPreference;
 }
 
-export function PreJoinMobilePreview({
-  videoRef,
-  displayName,
-  isVideoEnabled,
-  isAudioEnabled,
-  audioLevel,
-  participantGradient,
-  participantGradientPreference,
-}: PreJoinMobilePreviewProps): React.JSX.Element {
+export function PreJoinMobilePreview({ videoRef, displayName, isVideoEnabled, isAudioEnabled, audioLevel, participantGradient, participantGradientPreference }: PreJoinMobilePreviewProps): React.JSX.Element {
   const participantColors = getParticipantColor(displayName, participantGradientPreference);
 
   return (
-    <div
-      className="absolute inset-0 w-full h-full"
-      style={{ "--primary": participantColors.primary } as React.CSSProperties}
-    >
+    <div className="absolute inset-0 w-full h-full" style={{ "--primary": participantColors.primary } as React.CSSProperties}>
       {/* Base gradient background - always visible */}
       <div
         className="absolute inset-0"
-        style={{ 
+        style={{
           background: participantGradient,
-          opacity: 0.8 
+          opacity: 0.8,
         }}
       />
 
@@ -44,17 +33,7 @@ export function PreJoinMobilePreview({
       <div className="absolute inset-0 bg-black/20" />
 
       {/* Video element */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={cn(
-          "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
-          isVideoEnabled ? "opacity-100" : "opacity-0"
-        )}
-        style={{ transform: "scaleX(-1)" }}
-      />
+      <video ref={videoRef} autoPlay playsInline muted className={cn("absolute inset-0 w-full h-full object-cover transition-opacity duration-300", isVideoEnabled ? "opacity-100" : "opacity-0")} style={{ transform: "scaleX(-1)" }} />
 
       {/* Avatar fallback when video is off */}
       {!isVideoEnabled && (
@@ -81,7 +60,7 @@ export function PreJoinMobilePreview({
               />
             </div>
           )}
-          
+
           {/* Avatar */}
           <Avatar
             name={displayName}

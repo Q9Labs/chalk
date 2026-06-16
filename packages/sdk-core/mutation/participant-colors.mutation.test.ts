@@ -1,14 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  getParticipantAvatarGradient,
-  getParticipantAvatarRecipe,
-  getParticipantBorder,
-  getParticipantGradient,
-  getParticipantInitial,
-  getParticipantInitials,
-  getParticipantThemeVariables,
-  PARTICIPANT_GRADIENT_PRESETS,
-} from "../src/utils/participant-colors.ts";
+import { getParticipantAvatarGradient, getParticipantAvatarRecipe, getParticipantBorder, getParticipantGradient, getParticipantInitial, getParticipantInitials, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../src/utils/participant-colors.ts";
 
 describe("getParticipantAvatarRecipe mutation coverage", () => {
   it("builds the web-preferred initials contract", () => {

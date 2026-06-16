@@ -107,11 +107,13 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
       error,
     });
 
-    const prepared = preparedDebugExport ?? (await prepareFullDebugExport({
-      source: "diagnostic-error-sheet",
-      error,
-      supportCode: supportCode ?? null,
-    }));
+    const prepared =
+      preparedDebugExport ??
+      (await prepareFullDebugExport({
+        source: "diagnostic-error-sheet",
+        error,
+        supportCode: supportCode ?? null,
+      }));
     setPreparedDebugExport(prepared);
     downloadDebugText(prepared.text);
     setDebugExportState("downloaded");
@@ -214,17 +216,11 @@ export const DiagnosticErrorSheet = React.memo<DiagnosticErrorSheetProps>(({ err
               className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-muted/40 px-4 text-[14px] font-semibold text-foreground transition-all hover:bg-muted/60 active:scale-[0.98]"
             >
               <Download01Icon size={18} />
-              {debugExportState === "preparing"
-                ? "Preparing Debug..."
-                : debugExportState === "downloaded"
-                  ? "Downloaded Debug TXT"
-                  : "Download Debug TXT"}
+              {debugExportState === "preparing" ? "Preparing Debug..." : debugExportState === "downloaded" ? "Downloaded Debug TXT" : "Download Debug TXT"}
             </button>
           </div>
 
-          <p className="mb-6 max-w-[320px] text-[12px] leading-normal text-muted-foreground">
-            Download the debug file and share it with your support admin so they can help investigate the issue.
-          </p>
+          <p className="mb-6 max-w-[320px] text-[12px] leading-normal text-muted-foreground">Download the debug file and share it with your support admin so they can help investigate the issue.</p>
 
           {/* Technical Details Accordion */}
           <div className="w-full">

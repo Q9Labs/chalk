@@ -63,11 +63,7 @@ export { createMeetingShortcuts, type KeyboardShortcut, type UseKeyboardShortcut
 export { useIsDesktop, useIsMobile, useIsTablet, useMediaQuery, usePrefersDarkMode, usePrefersReducedMotion } from "./useMediaQuery";
 export { getStoredMeetingRoomSettings, type MeetingRoomSettings, useMeetingRoomSettings } from "./useMeetingRoomSettings";
 export { useRoomEntryModel, type RoomEntryJoinContext, type UseRoomEntryModelOptions, type UseRoomEntryModelResult } from "./useRoomEntryModel";
-export {
-  type UseMobileAppRedirectOptions,
-  type UseMobileAppRedirectResult,
-  useMobileAppRedirect,
-} from "./useMobileAppRedirect";
+export { type UseMobileAppRedirectOptions, type UseMobileAppRedirectResult, useMobileAppRedirect } from "./useMobileAppRedirect";
 // Utilities
 export { type SoundEffect, type UseSoundEffectsOptions, type UseSoundEffectsReturn, useSoundEffects } from "./useSoundEffects";
 export { DEFAULT_MEETING_TOUR_STEPS, type TourStep, type UseTourOptions, type UseTourReturn, useTour } from "./useTour";

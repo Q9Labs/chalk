@@ -46,11 +46,7 @@ function areEqualValues(left: unknown, right: unknown): boolean {
   return false;
 }
 
-function isSameRegistration(
-  current: SharedPictureInPictureRegistration | null,
-  ownerId: string,
-  options: UsePictureInPictureOptions,
-) {
+function isSameRegistration(current: SharedPictureInPictureRegistration | null, ownerId: string, options: UsePictureInPictureOptions) {
   return current?.ownerId === ownerId && areEqualValues(current.options, options);
 }
 

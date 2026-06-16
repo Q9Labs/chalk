@@ -137,7 +137,10 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
   const localGradientPreference = participant.isLocal ? settings.appearance.profileGradient : undefined;
 
   const participantColors = useMemo(() => getParticipantColor(participant.displayName || participant.id, localGradientPreference), [localGradientPreference, participant.displayName, participant.id]);
-  const participantGradient = useMemo(() => (isDarkerGradient ? `linear-gradient(180deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantGradient(participant.displayName || participant.id, localGradientPreference)), [localGradientPreference, participant.displayName, participant.id, isDarkerGradient, participantColors]);
+  const participantGradient = useMemo(
+    () => (isDarkerGradient ? `linear-gradient(180deg, ${participantColors.primary} 0%, ${participantColors.secondary} 100%)` : getParticipantGradient(participant.displayName || participant.id, localGradientPreference)),
+    [localGradientPreference, participant.displayName, participant.id, isDarkerGradient, participantColors],
+  );
 
   return (
     <div
@@ -180,9 +183,7 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
       {/* Compact bottom-left info chip */}
       {(showName || showStatus) && (
         <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
-          <div
-            className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-full bg-zinc-950/80 border border-white/5"
-          >
+          <div className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-full bg-zinc-950/80 border border-white/5">
             {/* Small avatar when video is off */}
             {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" gradientPreference={localGradientPreference} />}
 

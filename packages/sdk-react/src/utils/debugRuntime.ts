@@ -10,8 +10,7 @@ const originalConsole = {
   debug: console.debug.bind(console),
 };
 
-const normalizeHeaders = (headers: Headers) =>
-  Object.fromEntries([...headers.entries()].map(([key, value]) => [key, value]));
+const normalizeHeaders = (headers: Headers) => Object.fromEntries([...headers.entries()].map(([key, value]) => [key, value]));
 
 const parseTextBody = (text: string, contentType: string | null) => {
   if (!text) {
@@ -59,7 +58,7 @@ const installConsoleCapture = () => {
         args,
       });
       originalConsole[level](...args);
-    }) as typeof console[typeof level];
+    }) as (typeof console)[typeof level];
   }
 };
 

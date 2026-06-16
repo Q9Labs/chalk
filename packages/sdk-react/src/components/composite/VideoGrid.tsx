@@ -55,13 +55,7 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant = 
   const visibleParticipants = sortedParticipants.slice(0, mobileMaxVisible);
   const overflowCount = participants.length - visibleParticipants.length;
 
-  const getPrimaryParticipant = useCallback(
-    (candidateParticipants: Participant[]) =>
-      candidateParticipants.find((participant) => !participant.isLocal && participant.isSpeaking) ??
-      candidateParticipants.find((participant) => !participant.isLocal) ??
-      candidateParticipants[0],
-    [],
-  );
+  const getPrimaryParticipant = useCallback((candidateParticipants: Participant[]) => candidateParticipants.find((participant) => !participant.isLocal && participant.isSpeaking) ?? candidateParticipants.find((participant) => !participant.isLocal) ?? candidateParticipants[0], []);
 
   const getGridLayout = (count: number) => {
     if (count <= 1) return { cols: "grid-cols-1", rows: "grid-rows-1" };

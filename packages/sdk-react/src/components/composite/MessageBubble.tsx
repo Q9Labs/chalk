@@ -101,8 +101,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
         try {
           const url = await onResolveAttachmentUrl(attachment.id);
           window.open(url, "_blank", "noopener,noreferrer");
-        } catch (error) {
-          console.error("Failed to resolve attachment URL:", error);
+        } catch {
+          return;
         }
       } else if (attachment.url) {
         window.open(attachment.url, "_blank", "noopener,noreferrer");

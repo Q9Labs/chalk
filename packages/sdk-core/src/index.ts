@@ -143,14 +143,7 @@ export { ChalkSession } from "./session/chalk-session.ts";
 export * as session from "./session/index.ts";
 export * as state from "./state/index.ts";
 export { createFriendlyRoomIdentity, createFriendlyRoomName, humanizeRoomName, type FriendlyRoomIdentity, type FriendlyRoomName } from "./utils/friendly-room-name.ts";
-export {
-  createAuthenticatedRoom,
-  getRoomJoinAvailability,
-  type CreateAuthenticatedRoomInput,
-  type RoomJoinAvailability,
-  type RoomJoinAvailabilityInput,
-  type RoomScheduleMetadata,
-} from "./room-primitives.ts";
+export { createAuthenticatedRoom, getRoomJoinAvailability, type CreateAuthenticatedRoomInput, type RoomJoinAvailability, type RoomJoinAvailabilityInput, type RoomScheduleMetadata } from "./room-primitives.ts";
 // State container base class
 export { StateContainer } from "./state/state-container.ts";
 // Whiteboard types

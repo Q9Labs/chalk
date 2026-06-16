@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import {
-  chalkWebhookMiddleware,
-  chalkWebhookParserErrorMiddleware,
-  normalizeChalkSignatureHeader,
-} from "../webhooks/index.ts";
+import { chalkWebhookMiddleware, chalkWebhookParserErrorMiddleware, normalizeChalkSignatureHeader } from "../webhooks/index.ts";
 
 const SECRET = "whsec_test_secret";
 
@@ -12,9 +8,7 @@ async function createHmacSignature(secret: string, message: string) {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
   const messageData = encoder.encode(message);
-  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, [
-    "sign",
-  ]);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
   return Array.from(new Uint8Array(signature))
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -154,7 +148,11 @@ describe("webhook express adapter", () => {
     });
     const { response, state } = createResponseRecorder();
 
-    await middleware(req, response, vi.fn(() => {}));
+    await middleware(
+      req,
+      response,
+      vi.fn(() => {}),
+    );
 
     expect(state.statusCode).toBe(400);
     expect(state.body).toEqual({
@@ -230,7 +228,11 @@ describe("webhook express adapter", () => {
     });
     const { response, state } = createResponseRecorder();
 
-    await middleware(req, response, vi.fn(() => {}));
+    await middleware(
+      req,
+      response,
+      vi.fn(() => {}),
+    );
 
     expect(state.statusCode).toBe(400);
     expect(state.body).toEqual({
@@ -255,7 +257,11 @@ describe("webhook express adapter", () => {
     });
     const { response, state } = createResponseRecorder();
 
-    await middleware(req, response, vi.fn(() => {}));
+    await middleware(
+      req,
+      response,
+      vi.fn(() => {}),
+    );
 
     expect(state.statusCode).toBe(401);
     expect(state.body).toEqual({
@@ -270,12 +276,7 @@ describe("webhook express adapter", () => {
     const { response, state } = createResponseRecorder();
     const next = vi.fn(() => {});
 
-    middleware(
-      { type: "entity.too.large" },
-      createRequest({ originalUrl: "/webhook/chalk" }),
-      response,
-      next,
-    );
+    middleware({ type: "entity.too.large" }, createRequest({ originalUrl: "/webhook/chalk" }), response, next);
 
     expect(state.statusCode).toBe(413);
     expect(state.body).toEqual({

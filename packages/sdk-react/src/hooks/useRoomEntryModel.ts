@@ -29,15 +29,7 @@ export interface UseRoomEntryModelResult {
 
 const OPEN_ROOM_AVAILABILITY = getRoomJoinAvailability(null);
 
-export function useRoomEntryModel({
-  apiUrl,
-  authMode,
-  joinContext,
-  nowMs = Date.now(),
-  publicAppUrl,
-  roomId,
-  tokenProvider,
-}: UseRoomEntryModelOptions): UseRoomEntryModelResult {
+export function useRoomEntryModel({ apiUrl, authMode, joinContext, nowMs = Date.now(), publicAppUrl, roomId, tokenProvider }: UseRoomEntryModelOptions): UseRoomEntryModelResult {
   const [room, setRoom] = useState<RoomResource | null>(null);
   const [meetingLink, setMeetingLink] = useState("");
   const [error, setError] = useState<Error | null>(null);

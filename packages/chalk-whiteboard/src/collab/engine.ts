@@ -1,10 +1,10 @@
 import { CaptureUpdateAction, getSceneVersion, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
-import { WhiteboardFilesSync } from "./files";
-import type { WhiteboardFileSyncState } from "./files";
-import { WhiteboardPresence } from "./presence";
-import { filterSyncableElements } from "./syncable";
-import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
+import { WhiteboardFilesSync } from "./files.js";
+import type { WhiteboardFileSyncState } from "./files.js";
+import { WhiteboardPresence } from "./presence.js";
+import { filterSyncableElements } from "./syncable.js";
+import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types.js";
 
 const FULL_SYNC_INTERVAL_MS = 20_000;
 const CHANGE_DEBOUNCE_MS = 150;
@@ -12,8 +12,7 @@ const CURSOR_THROTTLE_MS = 16;
 const CURSOR_STALE_MS = 10_000;
 
 const asArray = (value: unknown) => (Array.isArray(value) ? value : []);
-const toReconcileRemoteElements = (elements: readonly OrderedExcalidrawElement[]): Parameters<typeof reconcileElements>[1] =>
-  elements as unknown as Parameters<typeof reconcileElements>[1];
+const toReconcileRemoteElements = (elements: readonly OrderedExcalidrawElement[]): Parameters<typeof reconcileElements>[1] => elements as unknown as Parameters<typeof reconcileElements>[1];
 
 export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;

@@ -1,4 +1,4 @@
-import type { FaceType } from "./facehash-data";
+import type { FaceType } from "./facehash-data.js";
 
 export type EyeAnchor = {
   x: number;

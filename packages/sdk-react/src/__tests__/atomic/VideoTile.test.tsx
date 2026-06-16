@@ -39,5 +39,4 @@ describe("VideoTile", () => {
     // MicOff icon is rendered
     expect(container.querySelector("svg")).toBeDefined();
   });
-
 });

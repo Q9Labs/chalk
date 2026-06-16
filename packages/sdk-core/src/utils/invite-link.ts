@@ -7,11 +7,7 @@ export function extractJoinTokenFromInviteLink(input: string): string | null {
     return null;
   }
 
-  const normalized = trimmed.includes("://")
-    ? trimmed
-    : CHALK_INVITE_HOSTS.some((host) => trimmed.startsWith(`${host}/`))
-      ? `https://${trimmed}`
-      : null;
+  const normalized = trimmed.includes("://") ? trimmed : CHALK_INVITE_HOSTS.some((host) => trimmed.startsWith(`${host}/`)) ? `https://${trimmed}` : null;
 
   if (!normalized) {
     return null;
@@ -19,10 +15,7 @@ export function extractJoinTokenFromInviteLink(input: string): string | null {
 
   try {
     const parsed = new URL(normalized);
-    const pathSegments =
-      CHALK_CUSTOM_PROTOCOLS.has(parsed.protocol)
-        ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)]
-        : parsed.pathname.split("/").filter(Boolean);
+    const pathSegments = CHALK_CUSTOM_PROTOCOLS.has(parsed.protocol) ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)] : parsed.pathname.split("/").filter(Boolean);
     const [head, tail] = pathSegments;
 
     if (head !== "j" || !tail) {
@@ -36,7 +29,5 @@ export function extractJoinTokenFromInviteLink(input: string): string | null {
 }
 
 export function isCanonicalRoomId(roomId: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    roomId.trim(),
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomId.trim());
 }

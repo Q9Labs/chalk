@@ -1,48 +1,6 @@
-const ROOM_FIRST_WORDS = [
-  "Phantom",
-  "Button",
-  "Cable",
-  "Velvet",
-  "Signal",
-  "Paper",
-  "Mango",
-  "Orbit",
-  "Cedar",
-  "Pixel",
-  "Harbor",
-  "Rocket",
-  "Echo",
-  "Copper",
-  "Maple",
-  "Drift",
-  "Solar",
-  "Lucky",
-  "Marble",
-  "Bloom",
-] as const;
+const ROOM_FIRST_WORDS = ["Phantom", "Button", "Cable", "Velvet", "Signal", "Paper", "Mango", "Orbit", "Cedar", "Pixel", "Harbor", "Rocket", "Echo", "Copper", "Maple", "Drift", "Solar", "Lucky", "Marble", "Bloom"] as const;
 
-const ROOM_SECOND_WORDS = [
-  "Tea",
-  "Air",
-  "Delta",
-  "Garden",
-  "Parade",
-  "Canvas",
-  "Bridge",
-  "Comet",
-  "Cove",
-  "Studio",
-  "Harbor",
-  "Signal",
-  "Mirror",
-  "Meadow",
-  "Compass",
-  "Current",
-  "Summit",
-  "Lantern",
-  "Window",
-  "Trail",
-] as const;
+const ROOM_SECOND_WORDS = ["Tea", "Air", "Delta", "Garden", "Parade", "Canvas", "Bridge", "Comet", "Cove", "Studio", "Harbor", "Signal", "Mirror", "Meadow", "Compass", "Current", "Summit", "Lantern", "Window", "Trail"] as const;
 
 export interface FriendlyRoomName {
   label: string;

@@ -177,14 +177,8 @@ export const SettingsDialog = React.memo(
     const profileGradientMode = profileGradient.mode;
     const resolvedProfileFrom = profileGradient.from ?? autoProfileColors.primary;
     const resolvedProfileTo = profileGradient.to ?? autoProfileColors.gradientEnd;
-    const selectedProfileGradientPreset = useMemo(
-      () => PARTICIPANT_GRADIENT_PRESETS.find((preset) => preset.from.toLowerCase() === resolvedProfileFrom.toLowerCase() && preset.to.toLowerCase() === resolvedProfileTo.toLowerCase()) ?? null,
-      [resolvedProfileFrom, resolvedProfileTo],
-    );
-    const profilePreviewRecipe = useMemo(
-      () => getParticipantAvatarRecipe(effectiveParticipantSeed, { mode: profileGradientMode, from: resolvedProfileFrom, to: resolvedProfileTo }),
-      [effectiveParticipantSeed, profileGradientMode, resolvedProfileFrom, resolvedProfileTo],
-    );
+    const selectedProfileGradientPreset = useMemo(() => PARTICIPANT_GRADIENT_PRESETS.find((preset) => preset.from.toLowerCase() === resolvedProfileFrom.toLowerCase() && preset.to.toLowerCase() === resolvedProfileTo.toLowerCase()) ?? null, [resolvedProfileFrom, resolvedProfileTo]);
+    const profilePreviewRecipe = useMemo(() => getParticipantAvatarRecipe(effectiveParticipantSeed, { mode: profileGradientMode, from: resolvedProfileFrom, to: resolvedProfileTo }), [effectiveParticipantSeed, profileGradientMode, resolvedProfileFrom, resolvedProfileTo]);
     const effectiveAudioInputDevices = useMemo(() => mergeDevices(audioInputDevices, detectedDevices.audioinput), [audioInputDevices, detectedDevices.audioinput]);
     const effectiveAudioOutputDevices = useMemo(() => mergeDevices(audioOutputDevices, detectedDevices.audiooutput), [audioOutputDevices, detectedDevices.audiooutput]);
     const effectiveVideoInputDevices = useMemo(() => mergeDevices(videoInputDevices, detectedDevices.videoinput), [detectedDevices.videoinput, videoInputDevices]);
@@ -273,12 +267,29 @@ export const SettingsDialog = React.memo(
           return (
             <div className="space-y-5">
               <SectionCard title="Microphone" description="Choose the live input device and clean up background noise.">
-                <DeviceSelector type="audioinput" devices={effectiveAudioInputDevices} selectedDeviceId={settings.audio.selectedInput} onChange={(deviceId) => onUpdateAudio({ selectedInput: deviceId })} label="Input device" audioLevel={audioLevel} participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
+                <DeviceSelector
+                  type="audioinput"
+                  devices={effectiveAudioInputDevices}
+                  selectedDeviceId={settings.audio.selectedInput}
+                  onChange={(deviceId) => onUpdateAudio({ selectedInput: deviceId })}
+                  label="Input device"
+                  audioLevel={audioLevel}
+                  participantColorSeed={participantColorSeed}
+                  participantGradientPreference={settings.appearance.profileGradient}
+                />
                 <NoiseSuppressionToggle enabled={settings.audio.noiseSuppression} onChange={(enabled) => onUpdateAudio({ noiseSuppression: enabled })} level="medium" />
               </SectionCard>
 
               <SectionCard title="Speakers" description="Route audio where you want it and tune playback volume.">
-                <DeviceSelector type="audiooutput" devices={effectiveAudioOutputDevices} selectedDeviceId={settings.audio.selectedOutput} onChange={(deviceId) => onUpdateAudio({ selectedOutput: deviceId })} label="Output device" participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
+                <DeviceSelector
+                  type="audiooutput"
+                  devices={effectiveAudioOutputDevices}
+                  selectedDeviceId={settings.audio.selectedOutput}
+                  onChange={(deviceId) => onUpdateAudio({ selectedOutput: deviceId })}
+                  label="Output device"
+                  participantColorSeed={participantColorSeed}
+                  participantGradientPreference={settings.appearance.profileGradient}
+                />
                 <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
                     <VolumeHighIcon className="h-4 w-4 text-primary" />
@@ -293,12 +304,29 @@ export const SettingsDialog = React.memo(
           return (
             <div className="space-y-5">
               <SectionCard title="Camera" description="Pick the active camera and confirm the preview before teaching.">
-                <DeviceSelector type="videoinput" devices={effectiveVideoInputDevices} selectedDeviceId={settings.video.selectedInput} onChange={(deviceId) => onUpdateVideo({ selectedInput: deviceId })} label="Camera" previewTrack={videoTrack} participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
+                <DeviceSelector
+                  type="videoinput"
+                  devices={effectiveVideoInputDevices}
+                  selectedDeviceId={settings.video.selectedInput}
+                  onChange={(deviceId) => onUpdateVideo({ selectedInput: deviceId })}
+                  label="Camera"
+                  previewTrack={videoTrack}
+                  participantColorSeed={participantColorSeed}
+                  participantGradientPreference={settings.appearance.profileGradient}
+                />
               </SectionCard>
               {enableBackgroundEffects ? (
                 <SectionCard title="Background Effects" description="Blur distractions or swap in a background locally for this browser.">
                   {isBackgroundEffectsSupported ? (
-                    <BackgroundEffectsPicker effects={[...backgroundEffects]} selectedEffectId={selectedBackgroundEffectId} onSelect={onSelectBackgroundEffect ?? (() => {})} onCustomUpload={onUploadBackgroundEffect} disabled={isApplyingBackgroundEffect} participantColorSeed={participantColorSeed} participantGradientPreference={settings.appearance.profileGradient} />
+                    <BackgroundEffectsPicker
+                      effects={[...backgroundEffects]}
+                      selectedEffectId={selectedBackgroundEffectId}
+                      onSelect={onSelectBackgroundEffect ?? (() => {})}
+                      onCustomUpload={onUploadBackgroundEffect}
+                      disabled={isApplyingBackgroundEffect}
+                      participantColorSeed={participantColorSeed}
+                      participantGradientPreference={settings.appearance.profileGradient}
+                    />
                   ) : (
                     <div className="rounded-2xl border border-border/50 bg-card/60 p-4 text-sm text-muted-foreground">Background effects are not supported in this browser yet.</div>
                   )}
@@ -361,18 +389,12 @@ export const SettingsDialog = React.memo(
               <SectionCard title="Profile Gradient" description="Personalize how you appear to others in the room. Default follows your name.">
                 <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                   <div className="mb-4 flex items-center gap-4">
-                    <div
-                      className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold text-white shadow-lg ring-1 ring-white/20"
-                      style={{ background: profilePreviewRecipe.avatarGradient }}
-                      aria-hidden="true"
-                    >
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold text-white shadow-lg ring-1 ring-white/20" style={{ background: profilePreviewRecipe.avatarGradient }} aria-hidden="true">
                       {profilePreviewRecipe.initials}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-bold text-foreground">{participantColorSeed?.trim() || "You"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {profileGradientMode === "auto" ? "Currently dynamic based on your name" : selectedProfileGradientPreset ? `Using the "${selectedProfileGradientPreset.label}" preset` : "Using a custom pinned colorway"}
-                      </div>
+                      <div className="text-xs text-muted-foreground">{profileGradientMode === "auto" ? "Currently dynamic based on your name" : selectedProfileGradientPreset ? `Using the "${selectedProfileGradientPreset.label}" preset` : "Using a custom pinned colorway"}</div>
                     </div>
                   </div>
 
@@ -408,15 +430,10 @@ export const SettingsDialog = React.memo(
                               onClick={() => selectProfileGradientPreset(preset.from, preset.to)}
                               aria-label={`Use ${preset.label} profile gradient`}
                               aria-pressed={isSelected}
-                              className={cn(
-                                "group relative flex aspect-square w-full items-center justify-center rounded-xl border shadow-sm transition-all",
-                                isSelected ? "border-primary ring-2 ring-primary/30 ring-offset-2 ring-offset-background" : "border-border/60 hover:border-primary/40",
-                              )}
+                              className={cn("group relative flex aspect-square w-full items-center justify-center rounded-xl border shadow-sm transition-all", isSelected ? "border-primary ring-2 ring-primary/30 ring-offset-2 ring-offset-background" : "border-border/60 hover:border-primary/40")}
                               style={{ background: `linear-gradient(135deg, ${preset.from} 0%, ${preset.to} 100%)` }}
                             >
-                              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background opacity-0 transition-opacity group-hover:opacity-100">
-                                {preset.label}
-                              </span>
+                              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background opacity-0 transition-opacity group-hover:opacity-100">{preset.label}</span>
                             </button>
                           );
                         })}
@@ -461,14 +478,7 @@ export const SettingsDialog = React.memo(
                   <label htmlFor="chalk-settings-display-name" className="mb-2 block text-sm font-medium text-foreground">
                     Default display name
                   </label>
-                  <Input
-                    id="chalk-settings-display-name"
-                    value={settings.identity.displayName}
-                    onChange={(event) => onUpdateIdentity({ displayName: event.target.value })}
-                    placeholder="How your name appears when you join"
-                    fullWidth
-                    className="rounded-2xl border-border/50 bg-background/80"
-                  />
+                  <Input id="chalk-settings-display-name" value={settings.identity.displayName} onChange={(event) => onUpdateIdentity({ displayName: event.target.value })} placeholder="How your name appears when you join" fullWidth className="rounded-2xl border-border/50 bg-background/80" />
                   <p className="mt-2 text-xs text-muted-foreground">Used as the starting name in the lobby and settings preview.</p>
                 </div>
                 <ToggleRow title="Join muted" description="Start with your microphone off the next time you enter a room." checked={!settings.join.audioEnabled} onChange={(checked) => onUpdateJoin({ audioEnabled: !checked })} />

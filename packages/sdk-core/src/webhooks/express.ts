@@ -101,26 +101,13 @@ function extractChalkErrorDetails(error: unknown): ChalkErrorDetails {
           };
         };
         const failure = json.cause?.failure;
-        const wrappedMessage =
-          error instanceof Error
-            ? error.message.replace(/^\(FiberFailure\)\s+ChalkError:\s*/, "")
-            : undefined;
+        const wrappedMessage = error instanceof Error ? error.message.replace(/^\(FiberFailure\)\s+ChalkError:\s*/, "") : undefined;
         const details = {
           code: typeof failure?.code === "string" ? failure.code : undefined,
-          message:
-            typeof failure?.message === "string" && failure.message.length > 0
-              ? failure.message
-              : wrappedMessage,
-          recoverable:
-            typeof failure?.recoverable === "boolean"
-              ? failure.recoverable
-              : undefined,
+          message: typeof failure?.message === "string" && failure.message.length > 0 ? failure.message : wrappedMessage,
+          recoverable: typeof failure?.recoverable === "boolean" ? failure.recoverable : undefined,
         };
-        if (
-          typeof details.code === "string" ||
-          typeof details.message === "string" ||
-          typeof details.recoverable === "boolean"
-        ) {
+        if (typeof details.code === "string" || typeof details.message === "string" || typeof details.recoverable === "boolean") {
           return details;
         }
       } catch {
@@ -216,14 +203,8 @@ export function chalkWebhookMiddleware(options: ChalkWebhookExpressOptions) {
     const deliveryId = req.headers["x-chalk-delivery-id"];
     const headerEventType = req.headers["x-chalk-event"];
 
-    req.chalkDeliveryId =
-      typeof deliveryId === "string" && deliveryId.trim().length > 0
-        ? deliveryId.trim()
-        : undefined;
-    req.chalkHeaderEventType =
-      typeof headerEventType === "string" && headerEventType.trim().length > 0
-        ? headerEventType.trim()
-        : undefined;
+    req.chalkDeliveryId = typeof deliveryId === "string" && deliveryId.trim().length > 0 ? deliveryId.trim() : undefined;
+    req.chalkHeaderEventType = typeof headerEventType === "string" && headerEventType.trim().length > 0 ? headerEventType.trim() : undefined;
     req.chalkTimestampHeader = typeof timestamp === "string" ? timestamp : undefined;
 
     if (requireJsonContentType && !req.is("application/json")) {
@@ -257,11 +238,7 @@ export function chalkWebhookMiddleware(options: ChalkWebhookExpressOptions) {
     req.chalkWebhookBodySha256 = await sha256Hex(body);
 
     try {
-      const event = await handler.verify(
-        body,
-        normalizeChalkSignatureHeader(signature),
-        timestamp,
-      );
+      const event = await handler.verify(body, normalizeChalkSignatureHeader(signature), timestamp);
       req.chalkEvent = event;
       next();
     } catch (error) {
@@ -271,9 +248,7 @@ export function chalkWebhookMiddleware(options: ChalkWebhookExpressOptions) {
   };
 }
 
-export function chalkWebhookParserErrorMiddleware(
-  options: ChalkWebhookParserErrorOptions = {},
-): ErrorRequestHandler {
+export function chalkWebhookParserErrorMiddleware(options: ChalkWebhookParserErrorOptions = {}): ErrorRequestHandler {
   const path = options.path ?? DEFAULT_PARSER_PATH;
 
   return (err, req, res, next) => {
@@ -283,14 +258,8 @@ export function chalkWebhookParserErrorMiddleware(
     }
 
     const statusCode = err?.type === "entity.too.large" ? 413 : 400;
-    const errorCode =
-      err?.type === "entity.too.large"
-        ? "WEBHOOK_BODY_TOO_LARGE"
-        : "WEBHOOK_BODY_PARSE_FAILED";
-    const errorMessage =
-      err?.type === "entity.too.large"
-        ? "Webhook payload exceeded configured size limit"
-        : "Webhook body could not be parsed";
+    const errorCode = err?.type === "entity.too.large" ? "WEBHOOK_BODY_TOO_LARGE" : "WEBHOOK_BODY_PARSE_FAILED";
+    const errorMessage = err?.type === "entity.too.large" ? "Webhook payload exceeded configured size limit" : "Webhook body could not be parsed";
 
     res.status(statusCode).json({
       error: errorMessage,

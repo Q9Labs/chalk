@@ -34,19 +34,7 @@ export type {
 } from "./server-events";
 
 // Client events (Client → Server)
-export type {
-  ClientEventMap,
-  ClientEventName,
-  ChatSendPayload,
-  ReactionSendPayload,
-  RoomSyncPayload,
-  PongPayload,
-  WhiteboardUpdatePayload,
-  WhiteboardCursorSendPayload,
-  PermissionGrantPayload,
-  PermissionRevokePayload,
-  WsMessage,
-} from "./client-events";
+export type { ClientEventMap, ClientEventName, ChatSendPayload, ReactionSendPayload, RoomSyncPayload, PongPayload, WhiteboardUpdatePayload, WhiteboardCursorSendPayload, PermissionGrantPayload, PermissionRevokePayload, WsMessage } from "./client-events";
 
 // Message type maps for wire protocol
 export { serverMessageTypeMap, clientMessageTypeMap } from "./client-events";

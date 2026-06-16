@@ -230,7 +230,7 @@
   margin: 0;
 }
 
-:where([data-chalk], .chalk-root) :where(button, [type='button'], [type='reset'], [type='submit']) {
+:where([data-chalk], .chalk-root) :where(button, [type="button"], [type="reset"], [type="submit"]) {
   appearance: none;
   -webkit-appearance: none;
 }

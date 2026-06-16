@@ -93,15 +93,7 @@ function writeDismissedFlag(dismissalKey: string, dismissed: boolean) {
   }
 }
 
-export function usePwaLifecycle({
-  buildMetaTimeoutMs = 1500,
-  dismissalKey = "chalk-pwa-install-dismissed",
-  enabled = true,
-  isInstalled = false,
-  offlineReadyDurationMs = 4000,
-  serviceWorkerPath = "/sw.js",
-  versionTag,
-}: UsePwaLifecycleOptions = {}) {
+export function usePwaLifecycle({ buildMetaTimeoutMs = 1500, dismissalKey = "chalk-pwa-install-dismissed", enabled = true, isInstalled = false, offlineReadyDurationMs = 4000, serviceWorkerPath = "/sw.js", versionTag }: UsePwaLifecycleOptions = {}) {
   const [dismissed, setDismissedState] = useState(() => readDismissedFlag(dismissalKey));
   const [isOfflineReady, setIsOfflineReady] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);

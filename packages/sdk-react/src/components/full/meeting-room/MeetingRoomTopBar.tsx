@@ -61,7 +61,12 @@ export function MeetingRoomTopBar({ isMobile, roomName, activePanel, layout, set
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <button type="button" onClick={() => setLayout("grid")} className="flex items-center justify-center rounded-md w-7 h-7 text-foreground/80 hover:text-foreground hover:bg-muted transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Grid layout">
+                      <button
+                        type="button"
+                        onClick={() => setLayout("grid")}
+                        className="flex items-center justify-center rounded-md w-7 h-7 text-foreground/80 hover:text-foreground hover:bg-muted transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label="Grid layout"
+                      >
                         <LayoutGridIcon className="w-3.5 h-3.5" />
                       </button>
                     }

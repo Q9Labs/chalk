@@ -9,9 +9,7 @@ describe("PreJoinMobileJoinSheet", () => {
     const onDisplayNameChange = vi.fn();
     const onJoin = vi.fn();
     const user = userEvent.setup();
-    const { getByPlaceholderText, getByRole } = render(
-      <PreJoinMobileJoinSheet displayName="" isLoading={false} onDisplayNameChange={onDisplayNameChange} onJoin={onJoin} />,
-    );
+    const { getByPlaceholderText, getByRole } = render(<PreJoinMobileJoinSheet displayName="" isLoading={false} onDisplayNameChange={onDisplayNameChange} onJoin={onJoin} />);
 
     await user.click(getByRole("button", { name: "Your name" }));
 

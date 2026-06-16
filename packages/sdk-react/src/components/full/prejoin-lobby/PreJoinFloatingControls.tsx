@@ -53,48 +53,16 @@ export function PreJoinFloatingControls({
 
   return (
     <div className="absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-3 touch-manipulation">
-      <div
-        className="pointer-events-none flex translate-y-2 gap-4 rounded-full border px-4 py-2 opacity-0 shadow-2xl transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[20px]"
-      >
-        {isAudioEnabled && selectedAudioInputDevice && (
-          <span className="max-w-[160px] truncate text-[11px] font-medium text-foreground">
-            🎤 {selectedAudioInputDevice.label || "Default"}
-          </span>
-        )}
-        {isVideoEnabled && selectedVideoDeviceInfo && (
-          <span className="max-w-[160px] truncate text-[11px] font-medium text-foreground">
-            📹 {selectedVideoDeviceInfo.label || "Default"}
-          </span>
-        )}
+      <div className="pointer-events-none flex translate-y-2 gap-4 rounded-full border px-4 py-2 opacity-0 shadow-2xl transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[20px]">
+        {isAudioEnabled && selectedAudioInputDevice && <span className="max-w-[160px] truncate text-[11px] font-medium text-foreground">🎤 {selectedAudioInputDevice.label || "Default"}</span>}
+        {isVideoEnabled && selectedVideoDeviceInfo && <span className="max-w-[160px] truncate text-[11px] font-medium text-foreground">📹 {selectedVideoDeviceInfo.label || "Default"}</span>}
       </div>
 
-      <div
-        className="relative flex items-center gap-2 rounded-full border p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500 bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[20px]"
-      >
+      <div className="relative flex items-center gap-2 rounded-full border p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500 bg-[var(--chalk-lobby-glass-bg)] border-[var(--chalk-lobby-glass-border)] backdrop-blur-[20px]">
         <div className="flex items-center gap-2 pl-1">
-          <DeviceControlButton
-            type="mic"
-            isActive={isAudioEnabled}
-            onToggle={onToggleAudio}
-            devices={audioDevices}
-            selectedDeviceId={selectedAudioInput}
-            onDeviceChange={onAudioInputChange}
-            className="!pointer-events-auto"
-            haptic="medium"
-            size="sm"
-          />
+          <DeviceControlButton type="mic" isActive={isAudioEnabled} onToggle={onToggleAudio} devices={audioDevices} selectedDeviceId={selectedAudioInput} onDeviceChange={onAudioInputChange} className="!pointer-events-auto" haptic="medium" size="sm" />
 
-          <DeviceControlButton
-            type="video"
-            isActive={isVideoEnabled}
-            onToggle={onToggleVideo}
-            devices={videoDevices}
-            selectedDeviceId={selectedVideoDevice}
-            onDeviceChange={onVideoDeviceChange}
-            className="!pointer-events-auto"
-            haptic="medium"
-            size="sm"
-          />
+          <DeviceControlButton type="video" isActive={isVideoEnabled} onToggle={onToggleVideo} devices={videoDevices} selectedDeviceId={selectedVideoDevice} onDeviceChange={onVideoDeviceChange} className="!pointer-events-auto" haptic="medium" size="sm" />
         </div>
 
         <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />

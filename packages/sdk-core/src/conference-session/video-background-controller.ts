@@ -158,26 +158,27 @@ export const createConferenceSessionVideoBackgroundController = (deps: { getRtkC
     const resolvedTransformer = await getTransformer(rtkClient);
     await removeAllVideoMiddlewares(rtkClient);
 
-    const middleware = effect.mode === "blur"
-      ? await resolvedTransformer.createBackgroundBlurVideoMiddleware(effect.blurStrength ?? DEFAULT_BLUR_STRENGTH)
-      : await (async () => {
-          const resolvedImage = await resolveBackgroundImageSource(effect.imageUrl).catch((error: unknown) => {
-            throw toBackgroundImageLoadError(effect.imageUrl, error);
-          });
-
-          try {
-            const staticMiddleware = await resolvedTransformer.createStaticBackgroundVideoMiddleware(resolvedImage.imageUrl).catch((error: unknown) => {
+    const middleware =
+      effect.mode === "blur"
+        ? await resolvedTransformer.createBackgroundBlurVideoMiddleware(effect.blurStrength ?? DEFAULT_BLUR_STRENGTH)
+        : await (async () => {
+            const resolvedImage = await resolveBackgroundImageSource(effect.imageUrl).catch((error: unknown) => {
               throw toBackgroundImageLoadError(effect.imageUrl, error);
             });
 
-            resetResolvedBackgroundImage();
-            revokeResolvedBackgroundImage = resolvedImage.revoke;
-            return staticMiddleware;
-          } catch (error) {
-            resolvedImage.revoke?.();
-            throw error;
-          }
-        })();
+            try {
+              const staticMiddleware = await resolvedTransformer.createStaticBackgroundVideoMiddleware(resolvedImage.imageUrl).catch((error: unknown) => {
+                throw toBackgroundImageLoadError(effect.imageUrl, error);
+              });
+
+              resetResolvedBackgroundImage();
+              revokeResolvedBackgroundImage = resolvedImage.revoke;
+              return staticMiddleware;
+            } catch (error) {
+              resolvedImage.revoke?.();
+              throw error;
+            }
+          })();
 
     await rtkClient.self.addVideoMiddleware?.(middleware);
     return true;

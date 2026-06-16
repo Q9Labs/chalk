@@ -48,7 +48,7 @@ export function MeetingRoomStage({
   localParticipantColorSeed,
   localParticipantGradientPreference,
 }: MeetingRoomStageProps) {
-  const localParticipantColor = useMemo(() => localParticipantColorSeed ? getParticipantColor(localParticipantColorSeed, localParticipantGradientPreference).primary : undefined, [localParticipantColorSeed, localParticipantGradientPreference]);
+  const localParticipantColor = useMemo(() => (localParticipantColorSeed ? getParticipantColor(localParticipantColorSeed, localParticipantGradientPreference).primary : undefined), [localParticipantColorSeed, localParticipantGradientPreference]);
   const shouldSuppressLocalScreenSharePreview = Boolean(screenSharer?.isLocal && screenSharer.screenShareTrack);
   const screenSharePanel = shouldSuppressLocalScreenSharePreview ? (
     <div className="relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_transparent_38%),linear-gradient(180deg,_color-mix(in_oklab,var(--background)_96%,transparent),_color-mix(in_oklab,var(--background)_88%,var(--secondary)_12%))] p-6 text-center">
@@ -70,10 +70,7 @@ export function MeetingRoomStage({
         <>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {isSplit && screenSharer?.screenShareTrack ? (
-              <SplitStage
-                leftPanel={screenSharePanel}
-                rightPanel={<WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} localParticipantColor={localParticipantColor} />}
-              />
+              <SplitStage leftPanel={screenSharePanel} rightPanel={<WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} localParticipantColor={localParticipantColor} />} />
             ) : enableWhiteboard && isWhiteboardOpen ? (
               <WhiteboardPanel participants={allParticipants} showThumbnails={false} theme={theme === "system" ? "auto" : theme} onExcalidrawApiReady={onWhiteboardExcalidrawApiReady} localParticipantColor={localParticipantColor} />
             ) : (

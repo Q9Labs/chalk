@@ -1,6 +1,6 @@
 import * as React from "react";
-import { createFacehashScene, getColor, type Intensity3D, type Variant } from "./core";
-import { FacehashSceneSvg } from "./FacehashSceneSvg";
+import { createFacehashScene, getColor, type Intensity3D, type Variant } from "./core/index.js";
+import { FacehashSceneSvg } from "./FacehashSceneSvg.js";
 
 export interface FacehashProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
   name: string;

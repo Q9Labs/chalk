@@ -36,7 +36,28 @@ const DISCONNECT_GRACE_MS = 8000;
 const EMPTY_FEATURES: Features = {};
 const EMPTY_DEFAULTS: NonNullable<VideoConferenceProps["defaults"]> = {};
 
-export function useVideoConferenceController({ roomId, joinToken, inviteLink, roomName, meetingLink, userName, autoJoin = false, role, metadata, features, defaults, sounds = true, onJoin, onLeave, onEnd, onError, onAddPeople, onOpenDebug, whiteboard: whiteboardOptions, className }: VideoConferenceProps): VideoConferenceControllerState {
+export function useVideoConferenceController({
+  roomId,
+  joinToken,
+  inviteLink,
+  roomName,
+  meetingLink,
+  userName,
+  autoJoin = false,
+  role,
+  metadata,
+  features,
+  defaults,
+  sounds = true,
+  onJoin,
+  onLeave,
+  onEnd,
+  onError,
+  onAddPeople,
+  onOpenDebug,
+  whiteboard: whiteboardOptions,
+  className,
+}: VideoConferenceProps): VideoConferenceControllerState {
   const resolvedFeatures = features ?? EMPTY_FEATURES;
   const resolvedDefaults = defaults ?? EMPTY_DEFAULTS;
 
