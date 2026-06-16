@@ -5,5 +5,17 @@
   "singleQuote": false,
   "trailingComma": "all",
   "insertFinalNewline": true,
-  "ignorePatterns": ["**/dist/**", "**/coverage/**", "**/.next/**", "**/.turbo/**", "**/tests/results/**", "**/*.snap"]
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/coverage/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "**/tests/results/**",
+    "**/*.snap",
+    "**/routeTree.gen.ts",
+    "apps/web/public/privacy/index.html",
+    "apps/web/public/privacy-policy/index.html",
+    "apps/web/public/terms/index.html",
+    "scratchpad/chalk-cost-calculator.html"
+  ]
 }
