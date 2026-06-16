@@ -42,22 +42,22 @@ importers:
     dependencies:
       '@excalidraw/excalidraw':
         specifier: ^0.18.1
-        version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
+        version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@opentui/core':
         specifier: ^0.2.8
         version: 0.2.8(typescript@5.9.3)(web-tree-sitter@0.25.10)
       '@opentui/react':
         specifier: ^0.2.8
-        version: 0.2.8(react-devtools-core@6.1.5)(react@19.2.6)(typescript@5.9.3)(web-tree-sitter@0.25.10)(ws@8.21.0)
+        version: 0.2.8(react-devtools-core@6.1.5)(react@19.2.4)(typescript@5.9.3)(web-tree-sitter@0.25.10)(ws@8.21.0)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
       framer-motion:
         specifier: ^12.23.26
-        version: 12.38.0(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
+        version: 12.38.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       react:
-        specifier: ^19.2.6
-        version: 19.2.6
+        specifier: 19.2.4
+        version: 19.2.4
       scheduler:
         specifier: ^0.27.0
         version: 0.27.0
@@ -124,16 +124,16 @@ importers:
         version: 3.7.2
       '@astrojs/starlight':
         specifier: ^0.38.4
-        version: 0.38.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+        version: 0.38.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
       '@tailwindcss/vite':
         specifier: ^4.0.6
         version: 4.2.2(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
       alchemy:
         specifier: ^0.83.1
-        version: 0.83.3(@cloudflare/vite-plugin@1.30.2(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1)))(@opentelemetry/api@1.9.1)(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1))
+        version: 0.83.3(@cloudflare/vite-plugin@1.30.2(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1)))(@opentelemetry/api@1.9.1)(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1))
       astro:
         specifier: ^6.2.2
-        version: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+        version: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
       sharp:
         specifier: ^0.33.0
         version: 0.33.5
@@ -8880,10 +8880,6 @@ packages:
     resolution: {integrity: sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==}
     engines: {node: '>=0.10.0'}
 
-  react@19.2.6:
-    resolution: {integrity: sha512-sfWGGfavi0xr8Pg0sVsyHMAOziVYKgPLNrS7ig+ivMNb3wbCBw3KxtflsGBAwD3gYQlE/AEZsTLgToRrSCjb0Q==}
-    engines: {node: '>=0.10.0'}
-
   react@19.2.7:
     resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
     engines: {node: '>=0.10.0'}
@@ -10615,12 +10611,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@astrojs/mdx@5.0.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
+  '@astrojs/mdx@5.0.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
       '@astrojs/markdown-remark': 7.1.1
       '@mdx-js/mdx': 3.1.1
       acorn: 8.16.0
-      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
       es-module-lexer: 2.0.0
       estree-util-visit: 2.0.0
       hast-util-to-html: 9.0.5
@@ -10644,17 +10640,17 @@ snapshots:
       stream-replace-string: 2.0.0
       zod: 4.3.6
 
-  '@astrojs/starlight@0.38.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
+  '@astrojs/starlight@0.38.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
       '@astrojs/markdown-remark': 7.1.1
-      '@astrojs/mdx': 5.0.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+      '@astrojs/mdx': 5.0.4(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
       '@astrojs/sitemap': 3.7.2
       '@pagefind/default-ui': 1.4.0
       '@types/hast': 3.0.4
       '@types/js-yaml': 4.0.9
       '@types/mdast': 4.0.4
-      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
-      astro-expressive-code: 0.41.7(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+      astro-expressive-code: 0.41.7(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
       bcp-47: 2.1.0
       hast-util-from-html: 2.0.3
       hast-util-select: 6.0.4
@@ -12408,46 +12404,6 @@ snapshots:
       - '@types/react-dom'
       - immer
 
-  '@excalidraw/excalidraw@0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@braintree/sanitize-url': 6.0.2
-      '@excalidraw/laser-pointer': 1.3.1
-      '@excalidraw/mermaid-to-excalidraw': 2.2.2
-      '@excalidraw/random-username': 1.1.0
-      '@radix-ui/react-popover': 1.1.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-tabs': 1.0.2(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      browser-fs-access: 0.29.1
-      canvas-roundrect-polyfill: 0.0.1
-      clsx: 1.1.1
-      cross-env: 7.0.3
-      es6-promise-pool: 2.5.0
-      fractional-indexing: 3.2.0
-      fuzzy: 0.1.3
-      image-blob-reduce: 3.0.1
-      jotai: 2.11.0(@types/react@19.2.14)(react@19.2.6)
-      jotai-scope: 0.7.2(jotai@2.11.0(@types/react@19.2.14)(react@19.2.6))(react@19.2.6)
-      lodash.debounce: 4.0.8
-      lodash.throttle: 4.1.1
-      nanoid: 3.3.11
-      open-color: 1.9.1
-      pako: 2.0.3
-      perfect-freehand: 1.2.0
-      pica: 7.1.1
-      png-chunk-text: 1.0.0
-      png-chunks-encode: 1.0.0
-      png-chunks-extract: 1.0.0
-      points-on-curve: 1.0.1
-      pwacompat: 2.0.17
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-      roughjs: 4.6.4
-      sass: 1.51.0
-      tunnel-rat: 0.1.2(@types/react@19.2.14)(react@19.2.6)
-    transitivePeerDependencies:
-      - '@types/react'
-      - '@types/react-dom'
-      - immer
-
   '@excalidraw/excalidraw@0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@braintree/sanitize-url': 6.0.2
@@ -12654,82 +12610,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-    optional: true
-
-  '@expo/cli@55.0.19(@expo/dom-webview@55.0.3)(expo-constants@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3))(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(expo@55.0.9)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)':
-    dependencies:
-      '@expo/code-signing-certificates': 0.0.6
-      '@expo/config': 55.0.11(typescript@5.9.3)
-      '@expo/config-plugins': 55.0.7
-      '@expo/devcert': 1.2.1
-      '@expo/env': 2.1.1
-      '@expo/image-utils': 0.8.12
-      '@expo/json-file': 10.0.12
-      '@expo/log-box': 55.0.8(@expo/dom-webview@55.0.3)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      '@expo/metro': 54.2.0
-      '@expo/metro-config': 55.0.11(expo@55.0.9)(typescript@5.9.3)
-      '@expo/osascript': 2.4.2
-      '@expo/package-manager': 1.10.3
-      '@expo/plist': 0.5.2
-      '@expo/prebuild-config': 55.0.11(expo@55.0.9)(typescript@5.9.3)
-      '@expo/require-utils': 55.0.3(typescript@5.9.3)
-      '@expo/router-server': 55.0.11(expo-constants@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3))(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(expo-server@55.0.6)(expo@55.0.9)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)
-      '@expo/schema-utils': 55.0.2
-      '@expo/spawn-async': 1.7.2
-      '@expo/ws-tunnel': 1.0.6
-      '@expo/xcpretty': 4.4.1
-      '@react-native/dev-middleware': 0.83.4
-      accepts: 1.3.8
-      arg: 5.0.2
-      better-opn: 3.0.2
-      bplist-creator: 0.1.0
-      bplist-parser: 0.3.2
-      chalk: 4.1.2
-      ci-info: 3.9.0
-      compression: 1.8.1
-      connect: 3.7.0
-      debug: 4.4.3(supports-color@10.2.2)
-      dnssd-advertise: 1.1.4
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      expo-server: 55.0.6
-      fetch-nodeshim: 0.4.10
-      getenv: 2.0.0
-      glob: 13.0.6
-      lan-network: 0.2.0
-      multitars: 0.2.4
-      node-forge: 1.4.0
-      npm-package-arg: 11.0.3
-      ora: 3.4.0
-      picomatch: 4.0.4
-      pretty-format: 29.7.0
-      progress: 2.0.3
-      prompts: 2.4.2
-      resolve-from: 5.0.0
-      semver: 7.7.4
-      send: 0.19.2
-      slugify: 1.6.8
-      source-map-support: 0.5.21
-      stacktrace-parser: 0.1.11
-      structured-headers: 0.4.1
-      terminal-link: 2.1.1
-      toqr: 0.1.1
-      wrap-ansi: 7.0.0
-      ws: 8.21.0
-      zod: 3.25.76
-    optionalDependencies:
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
-    transitivePeerDependencies:
-      - '@expo/dom-webview'
-      - '@expo/metro-runtime'
-      - bufferutil
-      - expo-constants
-      - expo-font
-      - react
-      - react-dom
-      - react-server-dom-webpack
-      - supports-color
-      - typescript
-      - utf-8-validate
 
   '@expo/code-signing-certificates@0.0.6':
     dependencies:
@@ -12792,14 +12672,6 @@ snapshots:
     optionalDependencies:
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
-
-  '@expo/devtools@55.0.2(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      chalk: 4.1.2
-    optionalDependencies:
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
 
   '@expo/dom-webview@55.0.3(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
     dependencies:
@@ -12812,13 +12684,6 @@ snapshots:
       expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
-
-  '@expo/dom-webview@55.0.3(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
 
   '@expo/env@2.1.1':
     dependencies:
@@ -12884,16 +12749,6 @@ snapshots:
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
       stacktrace-parser: 0.1.11
-    optional: true
-
-  '@expo/log-box@55.0.8(@expo/dom-webview@55.0.3)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@expo/dom-webview': 55.0.3(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      anser: 1.4.10
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
-      stacktrace-parser: 0.1.11
 
   '@expo/metro-config@55.0.11(expo@55.0.9)(typescript@5.9.3)':
     dependencies:
@@ -12917,7 +12772,7 @@ snapshots:
       postcss: 8.5.14
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
+      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -12973,7 +12828,7 @@ snapshots:
       '@expo/json-file': 10.0.12
       '@react-native/normalize-colors': 0.83.4
       debug: 4.4.3(supports-color@10.2.2)
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
+      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       resolve-from: 5.0.0
       semver: 7.7.4
       xml2js: 0.6.0
@@ -13016,20 +12871,6 @@ snapshots:
       react-dom: 19.2.4(react@19.2.4)
     transitivePeerDependencies:
       - supports-color
-    optional: true
-
-  '@expo/router-server@55.0.11(expo-constants@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3))(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(expo-server@55.0.6)(expo@55.0.9)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      debug: 4.4.3(supports-color@10.2.2)
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      expo-constants: 55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3)
-      expo-font: 55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      expo-server: 55.0.6
-      react: 19.2.7
-    optionalDependencies:
-      react-dom: 19.2.4(react@19.2.7)
-    transitivePeerDependencies:
-      - supports-color
 
   '@expo/schema-utils@55.0.2': {}
 
@@ -13052,13 +12893,6 @@ snapshots:
       expo-font: 55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
-
-  '@expo/vector-icons@15.1.1(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      expo-font: 55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
 
   '@expo/ws-tunnel@1.0.6': {}
 
@@ -13131,12 +12965,6 @@ snapshots:
       '@floating-ui/dom': 1.7.6
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-
-  '@floating-ui/react-dom@2.1.8(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@floating-ui/dom': 1.7.6
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
 
   '@floating-ui/react-dom@2.1.8(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
@@ -13866,12 +13694,12 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@opentui/react@0.2.8(react-devtools-core@6.1.5)(react@19.2.6)(typescript@5.9.3)(web-tree-sitter@0.25.10)(ws@8.21.0)':
+  '@opentui/react@0.2.8(react-devtools-core@6.1.5)(react@19.2.4)(typescript@5.9.3)(web-tree-sitter@0.25.10)(ws@8.21.0)':
     dependencies:
       '@opentui/core': 0.2.8(typescript@5.9.3)(web-tree-sitter@0.25.10)
-      react: 19.2.6
+      react: 19.2.4
       react-devtools-core: 6.1.5
-      react-reconciler: 0.33.0(react@19.2.6)
+      react-reconciler: 0.33.0(react@19.2.4)
       ws: 8.21.0
     transitivePeerDependencies:
       - typescript
@@ -14054,15 +13882,6 @@ snapshots:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
-  '@radix-ui/react-arrow@1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
   '@radix-ui/react-arrow@1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)
@@ -14082,16 +13901,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@radix-ui/react-collection@1.0.1(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/react-compose-refs': 1.0.0(react@19.2.6)
-      '@radix-ui/react-context': 1.0.0(react@19.2.6)
-      '@radix-ui/react-primitive': 1.0.1(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-slot': 1.0.1(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-
   '@radix-ui/react-collection@1.0.1(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14107,11 +13916,6 @@ snapshots:
       '@babel/runtime': 7.29.2
       react: 19.2.4
 
-  '@radix-ui/react-compose-refs@1.0.0(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      react: 19.2.6
-
   '@radix-ui/react-compose-refs@1.0.0(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14120,12 +13924,6 @@ snapshots:
   '@radix-ui/react-compose-refs@1.1.1(@types/react@19.2.14)(react@19.2.4)':
     dependencies:
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-compose-refs@1.1.1(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -14140,11 +13938,6 @@ snapshots:
       '@babel/runtime': 7.29.2
       react: 19.2.4
 
-  '@radix-ui/react-context@1.0.0(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      react: 19.2.6
-
   '@radix-ui/react-context@1.0.0(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14153,12 +13946,6 @@ snapshots:
   '@radix-ui/react-context@1.1.1(@types/react@19.2.14)(react@19.2.4)':
     dependencies:
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-context@1.1.1(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -14172,11 +13959,6 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.2
       react: 19.2.4
-
-  '@radix-ui/react-direction@1.0.0(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      react: 19.2.6
 
   '@radix-ui/react-direction@1.0.0(react@19.2.7)':
     dependencies:
@@ -14192,19 +13974,6 @@ snapshots:
       '@radix-ui/react-use-escape-keydown': 1.1.0(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
-  '@radix-ui/react-dismissable-layer@1.1.5(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/primitive': 1.1.1
-      '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-use-escape-keydown': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -14228,12 +13997,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  '@radix-ui/react-focus-guards@1.1.1(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      react: 19.2.6
-    optionalDependencies:
-      '@types/react': 19.2.14
-
   '@radix-ui/react-focus-guards@1.1.1(@types/react@19.2.14)(react@19.2.7)':
     dependencies:
       react: 19.2.7
@@ -14247,17 +14010,6 @@ snapshots:
       '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
-  '@radix-ui/react-focus-scope@1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -14279,12 +14031,6 @@ snapshots:
       '@radix-ui/react-use-layout-effect': 1.0.0(react@19.2.4)
       react: 19.2.4
 
-  '@radix-ui/react-id@1.0.0(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/react-use-layout-effect': 1.0.0(react@19.2.6)
-      react: 19.2.6
-
   '@radix-ui/react-id@1.0.0(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14295,13 +14041,6 @@ snapshots:
     dependencies:
       '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-id@1.1.0(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -14331,29 +14070,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
       react-remove-scroll: 2.7.2(@types/react@19.2.14)(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
-  '@radix-ui/react-popover@1.1.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/primitive': 1.1.1
-      '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-context': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-dismissable-layer': 1.1.5(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-focus-guards': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-focus-scope': 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-id': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-popper': 1.2.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-portal': 1.1.4(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-presence': 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-slot': 1.1.2(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-use-controllable-state': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      aria-hidden: 1.2.6
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-      react-remove-scroll: 2.7.2(@types/react@19.2.14)(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -14399,24 +14115,6 @@ snapshots:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
-  '@radix-ui/react-popper@1.2.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@floating-ui/react-dom': 2.1.8(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-arrow': 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-context': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-use-rect': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-use-size': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/rect': 1.1.0
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
   '@radix-ui/react-popper@1.2.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@floating-ui/react-dom': 2.1.8(react-dom@19.2.4(react@19.2.7))(react@19.2.7)
@@ -14445,16 +14143,6 @@ snapshots:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
-  '@radix-ui/react-portal@1.1.4(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
   '@radix-ui/react-portal@1.1.4(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@radix-ui/react-primitive': 2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.7))(react@19.2.7)
@@ -14473,14 +14161,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@radix-ui/react-presence@1.0.0(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/react-compose-refs': 1.0.0(react@19.2.6)
-      '@radix-ui/react-use-layout-effect': 1.0.0(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-
   '@radix-ui/react-presence@1.0.0(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14495,16 +14175,6 @@ snapshots:
       '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
-  '@radix-ui/react-presence@1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -14526,13 +14196,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@radix-ui/react-primitive@1.0.1(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/react-slot': 1.0.1(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-
   '@radix-ui/react-primitive@1.0.1(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14545,15 +14208,6 @@ snapshots:
       '@radix-ui/react-slot': 1.1.2(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
-  '@radix-ui/react-primitive@2.0.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-slot': 1.1.2(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -14582,21 +14236,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@radix-ui/react-roving-focus@1.0.2(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/primitive': 1.0.0
-      '@radix-ui/react-collection': 1.0.1(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-compose-refs': 1.0.0(react@19.2.6)
-      '@radix-ui/react-context': 1.0.0(react@19.2.6)
-      '@radix-ui/react-direction': 1.0.0(react@19.2.6)
-      '@radix-ui/react-id': 1.0.0(react@19.2.6)
-      '@radix-ui/react-primitive': 1.0.1(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-use-callback-ref': 1.0.0(react@19.2.6)
-      '@radix-ui/react-use-controllable-state': 1.0.0(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-
   '@radix-ui/react-roving-focus@1.0.2(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14618,12 +14257,6 @@ snapshots:
       '@radix-ui/react-compose-refs': 1.0.0(react@19.2.4)
       react: 19.2.4
 
-  '@radix-ui/react-slot@1.0.1(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/react-compose-refs': 1.0.0(react@19.2.6)
-      react: 19.2.6
-
   '@radix-ui/react-slot@1.0.1(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14634,13 +14267,6 @@ snapshots:
     dependencies:
       '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-slot@1.1.2(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -14665,20 +14291,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@radix-ui/react-tabs@1.0.2(react-dom@19.2.4(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/primitive': 1.0.0
-      '@radix-ui/react-context': 1.0.0(react@19.2.6)
-      '@radix-ui/react-direction': 1.0.0(react@19.2.6)
-      '@radix-ui/react-id': 1.0.0(react@19.2.6)
-      '@radix-ui/react-presence': 1.0.0(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-primitive': 1.0.1(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-roving-focus': 1.0.2(react-dom@19.2.4(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-use-controllable-state': 1.0.0(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
-
   '@radix-ui/react-tabs@1.0.2(react-dom@19.2.4(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14698,11 +14310,6 @@ snapshots:
       '@babel/runtime': 7.29.2
       react: 19.2.4
 
-  '@radix-ui/react-use-callback-ref@1.0.0(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      react: 19.2.6
-
   '@radix-ui/react-use-callback-ref@1.0.0(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14711,12 +14318,6 @@ snapshots:
   '@radix-ui/react-use-callback-ref@1.1.0(@types/react@19.2.14)(react@19.2.4)':
     dependencies:
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-use-callback-ref@1.1.0(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -14732,12 +14333,6 @@ snapshots:
       '@radix-ui/react-use-callback-ref': 1.0.0(react@19.2.4)
       react: 19.2.4
 
-  '@radix-ui/react-use-controllable-state@1.0.0(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@radix-ui/react-use-callback-ref': 1.0.0(react@19.2.6)
-      react: 19.2.6
-
   '@radix-ui/react-use-controllable-state@1.0.0(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14748,13 +14343,6 @@ snapshots:
     dependencies:
       '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-use-controllable-state@1.1.0(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -14772,13 +14360,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  '@radix-ui/react-use-escape-keydown@1.1.0(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
-    optionalDependencies:
-      '@types/react': 19.2.14
-
   '@radix-ui/react-use-escape-keydown@1.1.0(@types/react@19.2.14)(react@19.2.7)':
     dependencies:
       '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.2.14)(react@19.2.7)
@@ -14791,11 +14372,6 @@ snapshots:
       '@babel/runtime': 7.29.2
       react: 19.2.4
 
-  '@radix-ui/react-use-layout-effect@1.0.0(react@19.2.6)':
-    dependencies:
-      '@babel/runtime': 7.29.2
-      react: 19.2.6
-
   '@radix-ui/react-use-layout-effect@1.0.0(react@19.2.7)':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -14804,12 +14380,6 @@ snapshots:
   '@radix-ui/react-use-layout-effect@1.1.0(@types/react@19.2.14)(react@19.2.4)':
     dependencies:
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-use-layout-effect@1.1.0(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -14826,13 +14396,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  '@radix-ui/react-use-rect@1.1.0(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      '@radix-ui/rect': 1.1.0
-      react: 19.2.6
-    optionalDependencies:
-      '@types/react': 19.2.14
-
   '@radix-ui/react-use-rect@1.1.0(@types/react@19.2.14)(react@19.2.7)':
     dependencies:
       '@radix-ui/rect': 1.1.0
@@ -14844,13 +14407,6 @@ snapshots:
     dependencies:
       '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@radix-ui/react-use-size@1.1.0(@types/react@19.2.14)(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-use-layout-effect': 1.1.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -16647,7 +16203,7 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alchemy@0.83.3(@cloudflare/vite-plugin@1.30.2(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1)))(@opentelemetry/api@1.9.1)(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1)):
+  alchemy@0.83.3(@cloudflare/vite-plugin@1.30.2(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1)))(@opentelemetry/api@1.9.1)(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1)):
     dependencies:
       '@aws-sdk/credential-providers': 3.1019.0
       '@cloudflare/unenv-preset': 2.7.7(unenv@2.0.0-rc.21)(workerd@1.20260611.1)
@@ -16657,7 +16213,7 @@ snapshots:
       '@smithy/node-config-provider': 4.3.12
       '@smithy/types': 4.13.1
       aws4fetch: 1.0.20
-      drizzle-orm: 0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))
+      drizzle-orm: 0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))
       env-paths: 3.0.0
       esbuild: 0.28.1
       execa: 9.6.1
@@ -16681,7 +16237,7 @@ snapshots:
       yaml: 2.8.3
     optionalDependencies:
       '@cloudflare/vite-plugin': 1.30.2(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260329.1))
-      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
       vite: 7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@aws-sdk/client-rds-data'
@@ -16791,12 +16347,12 @@ snapshots:
 
   astring@1.9.0: {}
 
-  astro-expressive-code@0.41.7(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)):
+  astro-expressive-code@0.41.7(astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)):
     dependencies:
-      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+      astro: 6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
       rehype-expressive-code: 0.41.7
 
-  astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0):
+  astro@6.2.2(@types/node@24.12.0)(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0):
     dependencies:
       '@astrojs/compiler': 4.0.0
       '@astrojs/internal-helpers': 0.9.0
@@ -16846,7 +16402,7 @@ snapshots:
       ultrahtml: 1.6.0
       unifont: 0.7.4
       unist-util-visit: 5.1.0
-      unstorage: 1.17.5(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))))
+      unstorage: 1.17.5(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))))
       vfile: 6.0.3
       vite: 7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
       vitefu: 1.1.2(vite@7.3.5(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
@@ -17035,7 +16591,7 @@ snapshots:
       resolve-from: 5.0.0
     optionalDependencies:
       '@babel/runtime': 7.29.2
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
+      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -17858,11 +17414,6 @@ snapshots:
     optionalDependencies:
       drizzle-orm: 0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))
 
-  db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))):
-    optionalDependencies:
-      drizzle-orm: 0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))
-    optional: true
-
   debug@2.6.9:
     dependencies:
       ms: 2.0.0
@@ -17980,13 +17531,6 @@ snapshots:
       '@cloudflare/workers-types': 4.20260329.1
       '@opentelemetry/api': 1.9.1
       expo-sqlite: 55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)
-    optional: true
-
-  drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)):
-    optionalDependencies:
-      '@cloudflare/workers-types': 4.20260329.1
-      '@opentelemetry/api': 1.9.1
-      expo-sqlite: 55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
 
   dset@3.1.4: {}
 
@@ -18246,18 +17790,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
-    optional: true
-
-  expo-asset@55.0.10(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3):
-    dependencies:
-      '@expo/image-utils': 0.8.12
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      expo-constants: 55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3)
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
 
   expo-audio@55.0.9(expo-asset@55.0.10(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
@@ -18294,17 +17826,6 @@ snapshots:
       '@expo/env': 2.1.1
       expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
-    optional: true
-
-  expo-constants@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3):
-    dependencies:
-      '@expo/config': 55.0.11(typescript@5.9.3)
-      '@expo/env': 2.1.1
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
     transitivePeerDependencies:
       - supports-color
       - typescript
@@ -18349,12 +17870,6 @@ snapshots:
     dependencies:
       expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
-
-  expo-file-system@55.0.12(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)):
-    dependencies:
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
 
   expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
@@ -18369,14 +17884,6 @@ snapshots:
       fontfaceobserver: 2.3.0
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
-
-  expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7):
-    dependencies:
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      fontfaceobserver: 2.3.0
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
 
   expo-json-utils@55.0.0: {}
 
@@ -18389,12 +17896,6 @@ snapshots:
     dependencies:
       expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react: 19.2.4
-    optional: true
-
-  expo-keep-awake@55.0.4(expo@55.0.9)(react@19.2.7):
-    dependencies:
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      react: 19.2.7
 
   expo-linking@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3):
     dependencies:
@@ -18437,13 +17938,6 @@ snapshots:
       invariant: 2.2.4
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
-
-  expo-modules-core@55.0.18(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7):
-    dependencies:
-      invariant: 2.2.4
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
 
   expo-secure-store@55.0.9(expo@55.0.9):
     dependencies:
@@ -18472,14 +17966,6 @@ snapshots:
       expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       react: 19.2.4
       react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4)
-    optional: true
-
-  expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7):
-    dependencies:
-      await-lock: 2.2.2
-      expo: 55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
     optional: true
 
   expo-status-bar@55.0.4(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
@@ -18561,47 +18047,6 @@ snapshots:
       whatwg-url-minimum: 0.1.1
     optionalDependencies:
       '@expo/dom-webview': 55.0.3(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)
-    transitivePeerDependencies:
-      - '@babel/core'
-      - bufferutil
-      - expo-router
-      - expo-widgets
-      - react-dom
-      - react-server-dom-webpack
-      - supports-color
-      - typescript
-      - utf-8-validate
-    optional: true
-
-  expo@55.0.9(@babel/core@7.29.7)(@expo/dom-webview@55.0.3)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3):
-    dependencies:
-      '@babel/runtime': 7.29.2
-      '@expo/cli': 55.0.19(@expo/dom-webview@55.0.3)(expo-constants@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3))(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(expo@55.0.9)(react-dom@19.2.4(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      '@expo/config': 55.0.11(typescript@5.9.3)
-      '@expo/config-plugins': 55.0.7
-      '@expo/devtools': 55.0.2(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      '@expo/fingerprint': 0.16.6
-      '@expo/local-build-cache-provider': 55.0.7(typescript@5.9.3)
-      '@expo/log-box': 55.0.8(@expo/dom-webview@55.0.3)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      '@expo/metro': 54.2.0
-      '@expo/metro-config': 55.0.11(expo@55.0.9)(typescript@5.9.3)
-      '@expo/vector-icons': 15.1.1(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      '@ungap/structured-clone': 1.3.0
-      babel-preset-expo: 55.0.13(@babel/core@7.29.7)(@babel/runtime@7.29.2)(expo@55.0.9)(react-refresh@0.14.2)
-      expo-asset: 55.0.10(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
-      expo-constants: 55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(typescript@5.9.3)
-      expo-file-system: 55.0.12(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))
-      expo-font: 55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      expo-keep-awake: 55.0.4(expo@55.0.9)(react@19.2.7)
-      expo-modules-autolinking: 55.0.12(typescript@5.9.3)
-      expo-modules-core: 55.0.18(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
-      pretty-format: 29.7.0
-      react: 19.2.7
-      react-native: 0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7)
-      react-refresh: 0.14.2
-      whatwg-url-minimum: 0.1.1
-    optionalDependencies:
-      '@expo/dom-webview': 55.0.3(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)
     transitivePeerDependencies:
       - '@babel/core'
       - bufferutil
@@ -18838,14 +18283,14 @@ snapshots:
 
   fractional-indexing@3.2.0: {}
 
-  framer-motion@12.38.0(react-dom@19.2.4(react@19.2.6))(react@19.2.6):
+  framer-motion@12.38.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
       motion-dom: 12.38.0
       motion-utils: 12.36.0
       tslib: 2.8.1
     optionalDependencies:
-      react: 19.2.6
-      react-dom: 19.2.4(react@19.2.6)
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
 
   fresh@0.5.2: {}
 
@@ -19545,11 +18990,6 @@ snapshots:
       jotai: 2.11.0(@types/react@19.2.14)(react@19.2.4)
       react: 19.2.4
 
-  jotai-scope@0.7.2(jotai@2.11.0(@types/react@19.2.14)(react@19.2.6))(react@19.2.6):
-    dependencies:
-      jotai: 2.11.0(@types/react@19.2.14)(react@19.2.6)
-      react: 19.2.6
-
   jotai-scope@0.7.2(jotai@2.11.0(@types/react@19.2.14)(react@19.2.7))(react@19.2.7):
     dependencies:
       jotai: 2.11.0(@types/react@19.2.14)(react@19.2.7)
@@ -19559,11 +18999,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
       react: 19.2.4
-
-  jotai@2.11.0(@types/react@19.2.14)(react@19.2.6):
-    optionalDependencies:
-      '@types/react': 19.2.14
-      react: 19.2.6
 
   jotai@2.11.0(@types/react@19.2.14)(react@19.2.7):
     optionalDependencies:
@@ -21530,11 +20965,6 @@ snapshots:
       react: 19.2.4
       scheduler: 0.27.0
 
-  react-dom@19.2.4(react@19.2.6):
-    dependencies:
-      react: 19.2.6
-      scheduler: 0.27.0
-
   react-dom@19.2.4(react@19.2.7):
     dependencies:
       react: 19.2.7
@@ -21758,9 +21188,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  react-reconciler@0.33.0(react@19.2.6):
+  react-reconciler@0.33.0(react@19.2.4):
     dependencies:
-      react: 19.2.6
+      react: 19.2.4
       scheduler: 0.27.0
 
   react-refresh@0.14.2: {}
@@ -21771,14 +21201,6 @@ snapshots:
     dependencies:
       react: 19.2.4
       react-style-singleton: 2.2.3(@types/react@19.2.14)(react@19.2.4)
-      tslib: 2.8.1
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  react-remove-scroll-bar@2.3.8(@types/react@19.2.14)(react@19.2.6):
-    dependencies:
-      react: 19.2.6
-      react-style-singleton: 2.2.3(@types/react@19.2.14)(react@19.2.6)
       tslib: 2.8.1
     optionalDependencies:
       '@types/react': 19.2.14
@@ -21799,17 +21221,6 @@ snapshots:
       tslib: 2.8.1
       use-callback-ref: 1.3.3(@types/react@19.2.14)(react@19.2.4)
       use-sidecar: 1.1.3(@types/react@19.2.14)(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  react-remove-scroll@2.7.2(@types/react@19.2.14)(react@19.2.6):
-    dependencies:
-      react: 19.2.6
-      react-remove-scroll-bar: 2.3.8(@types/react@19.2.14)(react@19.2.6)
-      react-style-singleton: 2.2.3(@types/react@19.2.14)(react@19.2.6)
-      tslib: 2.8.1
-      use-callback-ref: 1.3.3(@types/react@19.2.14)(react@19.2.6)
-      use-sidecar: 1.1.3(@types/react@19.2.14)(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -21837,14 +21248,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  react-style-singleton@2.2.3(@types/react@19.2.14)(react@19.2.6):
-    dependencies:
-      get-nonce: 1.0.1
-      react: 19.2.6
-      tslib: 2.8.1
-    optionalDependencies:
-      '@types/react': 19.2.14
-
   react-style-singleton@2.2.3(@types/react@19.2.14)(react@19.2.7):
     dependencies:
       get-nonce: 1.0.1
@@ -21856,8 +21259,6 @@ snapshots:
   react@19.2.0: {}
 
   react@19.2.4: {}
-
-  react@19.2.6: {}
 
   react@19.2.7: {}
 
@@ -22890,14 +22291,6 @@ snapshots:
       - immer
       - react
 
-  tunnel-rat@0.1.2(@types/react@19.2.14)(react@19.2.6):
-    dependencies:
-      zustand: 4.5.7(@types/react@19.2.14)(react@19.2.6)
-    transitivePeerDependencies:
-      - '@types/react'
-      - immer
-      - react
-
   tunnel-rat@0.1.2(@types/react@19.2.14)(react@19.2.7):
     dependencies:
       zustand: 4.5.7(@types/react@19.2.14)(react@19.2.7)
@@ -23077,7 +22470,7 @@ snapshots:
       picomatch: 4.0.4
       webpack-virtual-modules: 0.6.2
 
-  unstorage@1.17.5(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)))):
+  unstorage@1.17.5(aws4fetch@1.0.20)(crossws@0.4.6(srvx@0.11.16))(db0@0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)))):
     dependencies:
       anymatch: 3.1.3
       chokidar: 5.0.0
@@ -23089,7 +22482,7 @@ snapshots:
       ufo: 1.6.3
     optionalDependencies:
       aws4fetch: 1.0.20
-      db0: 0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.7))(react@19.2.7)))
+      db0: 0.3.4(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260329.1)(@opentelemetry/api@1.9.1)(expo-sqlite@55.0.11(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)))
     transitivePeerDependencies:
       - crossws
 
@@ -23118,13 +22511,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  use-callback-ref@1.3.3(@types/react@19.2.14)(react@19.2.6):
-    dependencies:
-      react: 19.2.6
-      tslib: 2.8.1
-    optionalDependencies:
-      '@types/react': 19.2.14
-
   use-callback-ref@1.3.3(@types/react@19.2.14)(react@19.2.7):
     dependencies:
       react: 19.2.7
@@ -23140,14 +22526,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  use-sidecar@1.1.3(@types/react@19.2.14)(react@19.2.6):
-    dependencies:
-      detect-node-es: 1.1.0
-      react: 19.2.6
-      tslib: 2.8.1
-    optionalDependencies:
-      '@types/react': 19.2.14
-
   use-sidecar@1.1.3(@types/react@19.2.14)(react@19.2.7):
     dependencies:
       detect-node-es: 1.1.0
@@ -23159,10 +22537,6 @@ snapshots:
   use-sync-external-store@1.6.0(react@19.2.4):
     dependencies:
       react: 19.2.4
-
-  use-sync-external-store@1.6.0(react@19.2.6):
-    dependencies:
-      react: 19.2.6
 
   use-sync-external-store@1.6.0(react@19.2.7):
     dependencies:
@@ -23665,13 +23039,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
       react: 19.2.4
-
-  zustand@4.5.7(@types/react@19.2.14)(react@19.2.6):
-    dependencies:
-      use-sync-external-store: 1.6.0(react@19.2.6)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      react: 19.2.6
 
   zustand@4.5.7(@types/react@19.2.14)(react@19.2.7):
     dependencies:
