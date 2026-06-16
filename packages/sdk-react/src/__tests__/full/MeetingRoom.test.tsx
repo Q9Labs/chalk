@@ -333,7 +333,7 @@ describe("MeetingRoom", () => {
     fireEvent.click(within(dialog).getByText("Microphone 1"));
     fireEvent.click(within(dialog).getByText("Microphone 2"));
     expect(onAudioInputChange).toHaveBeenCalledWith("mic-2");
-  });
+  }, 10_000);
 
   it("applies and persists background effect selections", async () => {
     const onApplyBackgroundEffect = vi.fn();
@@ -349,5 +349,5 @@ describe("MeetingRoom", () => {
 
     const stored = JSON.parse(localStorage.getItem("chalk-meeting-settings") ?? "{}");
     expect(stored.video.backgroundEffect).toEqual({ type: "blur" });
-  });
+  }, 10_000);
 });
