@@ -22,27 +22,87 @@ A real-time video conferencing platform that is flexible at its core. It runs **
 
 - **Flexible deployment.** The same product runs in our managed cloud _or_ self-hosted by a customer.
 - **Two front doors.** A standalone app _and_ an embeddable SDK — both first-class.
-- **Swappable media plane.** CF SFU / RealtimeKit / OSS SFU / our own — all plug into one contract. The rest of the system neither knows nor cares which is underneath.
+- **Swappable media plane.** CF SFU / self-hosted OSS SFU / our own — all plug into one contract. The rest of the system neither knows nor cares which is underneath.
 - **Cross-platform.** Web, desktop, mobile, and future surfaces.
-- **Scales by grant, not by rebuild.** The same room serves a 2-person call and a webinar. The difference is permissions, not architecture.
+- **Scales by grant, not by rebuild.** One room shape serves a 2-person call today; webinars (deferred) slot onto the same shape later via grants, not a rebuild.
 - **Carries its feature surface.** Recordings, transcripts, chat, webhooks, audit — preserved through the redesign, not regressed.
 
 ---
 
 ## Constraints — the lines we don't cross (this is what stops drift)
 
-1. **Self-host is a v1 requirement.** So the portable core depends on **nothing proprietary**. The durable store is **standard Postgres** — no vendor-specific DB features.
-2. **Swappable applies to BOTH planes.** The _media_ plane and the _real-time / coordination_ plane each sit behind an interface. Cloudflare Durable Objects (or any vendor) may be an optional adapter — **never the foundation**.
+1. **Self-host is a v1 requirement — in two tiers.** _v1 (app-tier self-host):_ the customer self-hosts the **app tier** (API + WS sync + Redis + Postgres) and embeds the SDK; media still flows through CF SFU via the MediaPlane adapter. _Later (full self-host):_ Cloudflare-free, including the media plane (DigitalOcean SFU adapter). Either way the portable core depends on **nothing proprietary** — the durable store is **standard Postgres**, no vendor-specific DB features. _Don't block v1 launch waiting on the fully-self-hosted media tier._
+2. **Swappable applies to BOTH planes — two ports.** **MediaPlane** (primary: `CloudflareMediaPlaneAdapter`, CF SFU direct; later: DigitalOcean self-hosted SFU) and **SyncEngine** (primary: custom WebSocket sync + Redis; later: `DurableObjectSyncAdapter`). Vendor specifics live in adapters — **never the foundation**. Stack details: `scratchpad/chalk-architecture-decision-2026-06-16.md`.
 3. **No provider details in core tables.** Rooms / sessions / participants store only opaque provider refs + a provider enum + provider metadata. Cloudflare IDs never sit in core columns.
 4. **Real-time state never touches Postgres.** Presence, active-speaker, track up/down live in the coordination plane. Postgres holds durable facts only.
 5. **Token-asserted external identity is the primitive.** The embedding customer signs a token asserting _who / which room / what grants_. Native Chalk accounts are **additive** (the dashboard/host path), not the center of gravity.
 6. **Anonymous-first joining.** A joiner needs no account. Authentication is an _upgrade_, never a gate.
 7. **One tenancy root.** A single entity = the customer / deployment (and the billing + isolation boundary). Not "org AND tenant." Team / workspace grouping is optional, additive, and works the same for every tenant.
 8. **Two model invariants.** **Room ≠ Session** (a durable room hosts many sessions over time) and **Participant ≠ User** (a participant is per-session presence that may _point at_ a user). Never collapse either.
-9. **Permissions ride the token.** `canPublish` / `canSubscribe` / `canPublishData` / `isHost`. This is how 2-person and webinar share one shape.
+9. **Permissions ride the token.** `canPublish` / `canSubscribe` / `canPublishData` / `isHost`. The grant seam that lets webinars slot in later (deferred) without a rebuild.
+10. **Clean break.** No migration, no backward-compat with today's schema — design the ideal model; we owe the old tables nothing.
+11. **Retention is tenant-configurable.** Each tenant sets retention per artifact (recordings / transcripts / chat). Two fixed guardrails: hard-delete-on-request always overrides retention and truly **purges**; a plan quota may cap the configurable maximum.
+12. **Tenants sign their own participant tokens** with **per-tenant, rotatable** keys (overlapping keys during rotation, zero downtime). Chalk never accepts client-asserted identity without a valid signature.
+
+---
+
+## Tenancy & identity
+
+Internal names: **Tenant** (the root) and **User** (the person). "Org / account / workspace / team" are UI words mapped onto these — never new tables.
+
+- **Tenant** _(UI: Organization)_ — the root: isolation + billing boundary; holds API keys / token-signing creds + media config. **Required** — every tenant-scoped resource belongs to exactly one. SDK customer, self-host install, and one person's personal space are all the same Tenant, distinguished by `kind`.
+- **User** _(UI: Account)_ — a native authenticated person; a **global** identity (one per human/email) belonging to 0..N tenants via Membership. **Optional** — SDK and anonymous paths never need one. _The one exception to "everything belongs to a tenant": identity sits above tenancy._
+- **Workspace** _(UI: Team)_ — optional sub-grouping inside a tenant; a tenant may have zero.
+- **Membership** — binds a User into a Tenant (and optionally a Workspace) with an **org role** (owner / admin / member). No membership = a floating identity.
+
+**Two identity planes, never mixed:** a **User** is who you are _to Chalk_ (global, optional); a **Participant** is who you are _in one meeting_ (per-session; token-asserted claim is the primitive; may link to a User; may be anonymous). A participant may point at a user — it is never the same row.
+
+---
+
+## Roles & permissions
+
+**Two role planes, independent:** _org roles_ (on Membership — power over the tenant) vs _meeting roles_ (on the participant/token, per session — power inside a call). A tenant-owner is **not** automatically host of someone else's meeting.
+
+**Identity ⊥ role:** anonymous / user / external-identity is _who you are_; host / co-host / participant is _what you can do_. A guest can be a host; a logged-in user can be a plain participant. "Guest" is never a role.
+
+**v1 meeting roles** (webinars deferred → no viewer tier):
+
+- **Host** — admit, remove, mute anyone, lock room, end-for-all, manage recording, promote/demote, transfer ownership.
+- **Co-host / moderator** — delegated moderation; _not_ delete/transfer the room.
+- **Participant** — publish A/V/screen, subscribe, chat, react, raise hand.
+
+**Mechanics:** a role is a named **preset over a capability set**; the **token carries resolved capabilities**, not the role name, and **MediaPlane / SyncEngine enforce capabilities server-side** — never trusted from the client. Webinar roles slot in later as new presets without touching enforcement.
+
+**Capabilities:** `publishAudio/Video/Screen` · `subscribe` · `sendChat` · `react` · `raiseHand` · `muteOthers` · `removeParticipant` · `admitFromLobby` · `lockRoom` · `endMeeting` · `manageRecording` · `promoteDemote` · `grantDraw`.
+
+**Decided for v1:** **lobby / waiting room** (adds a `pending → admitted` participant state); **screen-share open to all, restrictable** by host/tenant; a **no-account guest can be host** (caps come from the token, not identity); **host succession** — host leaves → auto-promote a co-host, else the longest-present participant; a meeting never dies on host-drop.
+
+---
+
+## Performance budget (the SLOs)
+
+**The rule: every state _signal_ is sync-plane and near-instant; only audio/video _media_ is physics-bound.**
+
+- **Join funnel** (the money path): click-join → media flowing **< 1s p50 / < 2.5s p95** — token + session lookup/create < 100ms p95 · ICE/DTLS to SFU < 500ms p95 · first frame = remainder.
+- **Sync / control plane — < 100ms p95** (aim ~50ms in-region): mute, hand-raise, reactions, active-speaker, presence, chat & data, screen-share signals. _(Active-speaker carries an intentional ~150ms detection debounce on top — UX, not latency.)_
+- **Media plane — physics-bound:** glass-to-glass < 200ms same-region; a newly-published track renders for others < 500ms.
+- **Dashboard / API reads — < 200ms p95** (aim < 100ms).
+- **Recording / transcript ready — _not_ a latency SLO:** a durability + eventual-availability guarantee (never silently lost; soft target ≤ ~1× media duration; gated on external providers).
+
+---
+
+## Sync correctness (value #2, made concrete)
+
+- **Stateholder = single source of truth** (Redis or an equivalent fast store): atomic per-room writes + a change stream.
+- **WS nodes are stateless fanout.** A connection is _sticky_ to its node, but the node owns no authoritative state (only a rebuildable projection). **Node loss = client reconnects + re-snapshots; zero authoritative state lost.**
+- **One authoritative writer per room** — live-state mutations are serialized per room (no split-brain). A room's connections may scatter across many nodes; only the _write authority_ is single.
+- **Reconnect = full snapshot from the stateholder, then resume.**
 
 ---
 
 ## Deliberately NOT doing in v1 (so we don't gold-plate)
 
 - **End-to-end encryption.** Privacy matters, but E2E is out of scope for v1. _Guardrail:_ don't build anything that forecloses it — the server never needs to see plaintext media.
+- **Webinars** — and with them the **viewer / audience (watch-only) role** and any broadcast / cascade tier. The `canPublish` / `canSubscribe` grants stay as the seam so it's additive, not foreclosed.
+- **SSO / SAML / OIDC** — native auth stays email/OAuth-simple; don't foreclose it.
+- **Legal hold** (compliance block-on-deletion, the inverse of retention) — later, enterprise.
