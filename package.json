@@ -79,11 +79,11 @@
     "turbo": "^2.9.14",
     "typescript": "^5.7.2",
     "vitest": "^4.1.8",
-    "wrangler": "^4.77.0",
+    "wrangler": "^4.103.0",
     "yaml": "^2.8.2"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "packageManager": "pnpm@10.26.2",
   "pnpm": {
