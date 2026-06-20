@@ -252,8 +252,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       lucide-react:
-        specifier: ^0.561.0
-        version: 0.561.0(react@19.2.4)
+        specifier: ^1.21.0
+        version: 1.21.0(react@19.2.4)
       nitro:
         specifier: latest
         version: 3.0.260610-beta(chokidar@5.0.0)(dotenv@17.4.2)(jiti@2.7.0)(lru-cache@11.5.1)(miniflare@4.20260617.1)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(wrangler@4.103.0(@cloudflare/workers-types@4.20260620.1))
@@ -6649,8 +6649,8 @@ packages:
     peerDependencies:
       react: 19.2.4
 
-  lucide-react@0.561.0:
-    resolution: {integrity: sha512-Y59gMY38tl4/i0qewcqohPdEbieBy7SovpBL9IFebhc2mDd8x4PZSOsiFRkpPcOq6bj1r/mjH/Rk73gSlIJP2A==}
+  lucide-react@1.21.0:
+    resolution: {integrity: sha512-reEZMXq8Qdd5jg5XYkQ5TR1fB/GiQ7ih4vcrthYDtgjSDwh0i6/YLiGjsWsIwgN49gpAnd4J2elSNzncMEEUUQ==}
     peerDependencies:
       react: 19.2.4
 
@@ -15610,7 +15610,7 @@ snapshots:
     dependencies:
       react: 19.2.4
 
-  lucide-react@0.561.0(react@19.2.4):
+  lucide-react@1.21.0(react@19.2.4):
     dependencies:
       react: 19.2.4
 
