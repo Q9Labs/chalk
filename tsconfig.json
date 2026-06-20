@@ -31,14 +31,13 @@
     "noPropertyAccessFromIndexSignature": false,
 
     // Path aliases for monorepo
-    "baseUrl": ".",
     "paths": {
-      "@q9labs/facehash": ["packages/facehash/src/index.ts"],
-      "@q9labs/facehash/react-native": ["packages/facehash/src/index.native.ts"],
-      "@q9labs/chalk-core": ["packages/sdk-core/src/index.ts"],
-      "@q9labs/chalk-react": ["packages/sdk-react/src/index.ts"],
-      "@q9labs/chalk-react-native": ["packages/sdk-react-native/src/index.ts"],
-      "@q9labs/chalk-ui": ["packages/ui/src/index.ts"]
+      "@q9labs/facehash": ["./packages/facehash/src/index.ts"],
+      "@q9labs/facehash/react-native": ["./packages/facehash/src/index.native.ts"],
+      "@q9labs/chalk-core": ["./packages/sdk-core/src/index.ts"],
+      "@q9labs/chalk-react": ["./packages/sdk-react/src/index.ts"],
+      "@q9labs/chalk-react-native": ["./packages/sdk-react-native/src/index.ts"],
+      "@q9labs/chalk-ui": ["./packages/ui/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist", "**/dist/**"]

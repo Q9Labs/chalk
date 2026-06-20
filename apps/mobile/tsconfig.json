@@ -3,7 +3,6 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "types": ["node", "expo/types"],
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@q9labs/chalk-core": ["../../packages/sdk-core/src/index.ts"],

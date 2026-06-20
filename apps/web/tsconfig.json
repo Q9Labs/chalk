@@ -13,7 +13,6 @@
     "noUncheckedSideEffectImports": true,
 
     /* Path aliases - must redeclare since paths don't merge */
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@q9labs/chalk-core": ["../../packages/sdk-core/src/index.ts"],

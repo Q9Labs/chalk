@@ -158,7 +158,7 @@ const installWebSocketCapture = () => {
     });
 
     const originalSend = socket.send.bind(socket);
-    socket.send = ((payload: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+    socket.send = ((payload: Parameters<WebSocket["send"]>[0]) => {
       chalkDebugCollector.recordWebSocket({
         id: chalkDebugCollector.nextId(),
         timestamp: new Date().toISOString(),
