@@ -14,7 +14,7 @@
 import { getStoredMeetingRoomSettings, useRoomEntryModel, useWhiteboard, VideoConference, writeMeetingEndSummaryFromData } from "@q9labs/chalk-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import z from "zod";
+import * as v from "valibot";
 import { createWebTokenProvider, getApiUrl, getJoinContext } from "../../lib/webMeeting";
 import { ChalkLogo } from "../../components/ChalkLogo";
 import { WebChalkRuntime } from "../../components/WebChalkRuntime";
@@ -44,14 +44,25 @@ function getStoredJoinDefaults() {
   };
 }
 
+const optionalBooleanSearchParam = v.optional(
+  v.pipe(
+    v.unknown(),
+    v.transform((value) => value === true || value === "true"),
+  ),
+);
+
+const roomParamsSchema = v.object({
+  roomId: v.string(),
+});
+
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
-  params: z.object({
-    roomId: z.string(),
-  }),
-  validateSearch: z.object({
-    roomName: z.string().optional(),
-    autoJoin: z.coerce.boolean().optional(),
+  params: {
+    parse: (params) => v.parse(roomParamsSchema, params),
+  },
+  validateSearch: v.object({
+    roomName: v.optional(v.string()),
+    autoJoin: optionalBooleanSearchParam,
   }),
 });
 

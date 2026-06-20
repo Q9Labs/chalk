@@ -1,17 +1,21 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import z from "zod";
+import * as v from "valibot";
 import { exchangeJoinToken, getApiUrl, setJoinContext } from "../../lib/webMeeting";
 import { buildMobileJoinIntent, type MobileJoinPlatform } from "../../lib/mobileJoinRedirect";
 
 const MOBILE_REDIRECT_FALLBACK_DEEP_LINK_DELAY_MS = 900;
 const MOBILE_REDIRECT_STORE_FALLBACK_TIMEOUT_MS = 1800;
 
+const joinParamsSchema = v.object({
+  joinToken: v.string(),
+});
+
 export const Route = createFileRoute("/j/$joinToken")({
   component: JoinLinkPage,
-  params: z.object({
-    joinToken: z.string(),
-  }),
+  params: {
+    parse: (params) => v.parse(joinParamsSchema, params),
+  },
 });
 
 function JoinLinkPage() {

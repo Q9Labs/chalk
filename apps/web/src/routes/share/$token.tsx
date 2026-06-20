@@ -1,13 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import z from "zod";
+import * as v from "valibot";
 import { getApiUrl } from "../../lib/webMeeting";
+
+const shareParamsSchema = v.object({
+  token: v.string(),
+});
 
 export const Route = createFileRoute("/share/$token")({
   component: SharePage,
-  params: z.object({
-    token: z.string(),
-  }),
+  params: {
+    parse: (params) => v.parse(shareParamsSchema, params),
+  },
 });
 
 type ShareResponse = {
