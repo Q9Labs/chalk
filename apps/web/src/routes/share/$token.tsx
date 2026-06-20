@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import z from "zod";
-import { getApiUrl } from "../../lib/internalAuth";
+import { getApiUrl } from "../../lib/webMeeting";
 
 export const Route = createFileRoute("/share/$token")({
   component: SharePage,

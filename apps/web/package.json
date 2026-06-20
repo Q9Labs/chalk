@@ -24,13 +24,11 @@
     "@q9labs/chalk-ui": "workspace:*",
     "@q9labs/chalk-whiteboard": "workspace:*",
     "@tailwindcss/vite": "^4.0.6",
-    "@tanstack/react-devtools": "^0.7.0",
-    "@tanstack/react-query": "^5.99.0",
-    "@tanstack/react-router": "^1.132.0",
-    "@tanstack/react-router-devtools": "^1.132.0",
-    "@tanstack/react-router-ssr-query": "^1.131.7",
-    "@tanstack/react-start": "^1.132.0",
-    "@tanstack/router-plugin": "^1.132.0",
+    "@tanstack/react-query": "5.101.0",
+    "@tanstack/react-router": "1.170.16",
+    "@tanstack/react-router-ssr-query": "1.167.1",
+    "@tanstack/react-start": "1.168.26",
+    "@tanstack/router-plugin": "1.168.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.561.0",
@@ -50,7 +48,6 @@
     "@cloudflare/workers-types": "^4.20260210.0",
     "@stryker-mutator/core": "^9.6.0",
     "@stryker-mutator/vitest-runner": "^9.6.0",
-    "@tanstack/devtools-vite": "^0.3.11",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.10.2",
@@ -59,10 +56,8 @@
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^4.1.8",
     "jsdom": "^27.0.0",
-    "react-grab": "^0.0.98",
     "typescript": "^5.7.2",
     "vite": "^7.3.2",
-    "vitest": "^4.1.8",
-    "web-vitals": "^5.1.0"
+    "vitest": "^4.1.8"
   }
 }

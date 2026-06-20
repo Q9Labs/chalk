@@ -8,7 +8,6 @@ const errors = [];
 
 const packageJsonPaths = [
   "package.json",
-  "apps/docs/package.json",
   "apps/mobile/package.json",
   "apps/web/package.json",
   "infrastructure/cloudflare-ops-monitor/package.json",

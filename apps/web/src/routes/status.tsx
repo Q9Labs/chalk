@@ -5,7 +5,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { ChalkLogo } from "../components/ChalkLogo";
 import { useTheme } from "../context/theme";
-import { getApiUrl } from "../lib/internalAuth";
+import { getApiUrl } from "../lib/webMeeting";
 import { getPublicAppUrl } from "../lib/publicUrl";
 import { EdgeDiagnostics } from "../components/EdgeDiagnostics";
 

@@ -4,7 +4,7 @@ const exchangeJoinTokenMock = vi.fn();
 const getApiUrlMock = vi.fn(() => "https://chalk-api.q9labs.ai");
 const setJoinContextMock = vi.fn();
 
-vi.mock("./internalAuth", () => ({
+vi.mock("./webMeeting", () => ({
   exchangeJoinToken: exchangeJoinTokenMock,
   getApiUrl: getApiUrlMock,
   setJoinContext: setJoinContextMock,

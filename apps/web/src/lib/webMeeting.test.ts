@@ -1,22 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  clearStoredChalkTokens,
-  createWebTokenProvider,
-  createRoomJoinLink,
-  fetchInternalAccessToken,
-  fetchInternalSession,
-  getAccessTokenExpiryMs,
-  getChalkSessionCacheKey,
-  getJoinContext,
-  getOrCreateLocalClientId,
-  logoutInternalSession,
-  resolveApiUrl,
-  setJoinContext,
-  shouldPrimeTokenCache,
-  shouldUseInternalRoomAuth,
-  shouldUseRoomScopedTokenProvider,
-  signInWithGoogleCode,
-} from "./internalAuth";
+import { createWebTokenProvider, fetchWebAccessToken, getAccessTokenExpiryMs, getChalkSessionCacheKey, getJoinContext, getOrCreateLocalClientId, resolveApiUrl, setJoinContext, shouldPrimeTokenCache, shouldUseRoomScopedTokenProvider } from "./webMeeting";
 
 const originalWindow = globalThis.window;
 const originalLocalStorage = globalThis.localStorage;
@@ -115,22 +98,22 @@ describe("resolveApiUrl", () => {
   });
 });
 
-describe("fetchInternalAccessToken", () => {
+describe("fetchWebAccessToken", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     restoreBrowserEnv();
   });
 
   it("sends a stable bootstrap header on localhost", async () => {
-    installBrowserEnv("http://localhost:3070/dashboard");
+    installBrowserEnv("http://localhost:3070/room/abc");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ access_token: "token-123" }),
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
 
-    const first = await fetchInternalAccessToken("http://localhost:8080");
-    const second = await fetchInternalAccessToken("http://localhost:8080");
+    const first = await fetchWebAccessToken("http://localhost:8080");
+    const second = await fetchWebAccessToken("http://localhost:8080");
 
     expect(first).toBe("token-123");
     expect(second).toBe("token-123");
@@ -147,15 +130,15 @@ describe("fetchInternalAccessToken", () => {
   });
 
   it("sends a stable bootstrap header on hosted origins too", async () => {
-    installBrowserEnv("https://chalkmeet.com/dashboard");
+    installBrowserEnv("https://chalkmeet.com/room/abc");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ access_token: "token-123" }),
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
 
-    const first = await fetchInternalAccessToken("https://chalk-api.q9labs.ai");
-    const second = await fetchInternalAccessToken("https://chalk-api.q9labs.ai");
+    const first = await fetchWebAccessToken("https://chalk-api.q9labs.ai");
+    const second = await fetchWebAccessToken("https://chalk-api.q9labs.ai");
 
     expect(first).toBe("token-123");
     expect(second).toBe("token-123");
@@ -183,81 +166,12 @@ describe("getAccessTokenExpiryMs", () => {
   });
 });
 
-describe("internal session helpers", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("returns null for an unauthenticated session lookup", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok: false,
-      status: 401,
-    } as Response);
-
-    await expect(fetchInternalSession("https://chalk-api.q9labs.ai")).resolves.toBeNull();
-  });
-
-  it("posts the google auth code for sign-in", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true, user: { email: "hasan@q9labs.ai" } }),
-    });
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
-
-    await expect(signInWithGoogleCode("https://chalk-api.q9labs.ai", "oauth-code")).resolves.toEqual({ ok: true, user: { email: "hasan@q9labs.ai" } });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://chalk-api.q9labs.ai/api/v1/internal/auth/google",
-      expect.objectContaining({
-        body: JSON.stringify({ code: "oauth-code" }),
-        credentials: "include",
-        method: "POST",
-        headers: expect.objectContaining({
-          "X-Requested-With": "XMLHttpRequest",
-        }),
-      }),
-    );
-  });
-
-  it("posts logout with credentials", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
-
-    await logoutInternalSession("https://chalk-api.q9labs.ai");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://chalk-api.q9labs.ai/api/v1/internal/auth/logout",
-      expect.objectContaining({
-        credentials: "include",
-        method: "POST",
-      }),
-    );
-  });
-});
-
-describe("createRoomJoinLink", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    restoreBrowserEnv();
-  });
-
-  it("defaults hosted share links to the canonical chalkmeet origin", async () => {
-    installBrowserEnv("https://chalk.q9labs.ai/dashboard");
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ join_token: "join-token-123" }),
-    });
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock as typeof fetch);
-
-    await expect(createRoomJoinLink("https://chalk-api.q9labs.ai", "room-123", "access-123")).resolves.toBe("https://chalkmeet.com/j/join-token-123");
-  });
-});
-
 describe("getJoinContext", () => {
   afterEach(() => {
     restoreBrowserEnv();
   });
 
-  it("returns internal room auth context on the matching room route", () => {
+  it("returns room token context on the matching room route", () => {
     installBrowserEnv("http://localhost:3070/room/2f0b302b-2449-43f5-ae3b-de57decb9f09");
     setJoinContext({
       roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
@@ -306,65 +220,28 @@ describe("shouldPrimeTokenCache", () => {
     expect(shouldPrimeTokenCache("/j/join-token-123")).toBe(false);
   });
 
-  it("skips eager token warmup on dashboard routes", () => {
-    expect(shouldPrimeTokenCache("/dashboard")).toBe(false);
-  });
-
   it("allows eager token warmup on room routes", () => {
     expect(shouldPrimeTokenCache("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09")).toBe(true);
   });
 });
 
 describe("shouldUseRoomScopedTokenProvider", () => {
-  it("uses room-scoped auth on room routes", () => {
+  it("uses room-scoped token providers on room routes", () => {
     expect(shouldUseRoomScopedTokenProvider("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09")).toBe(true);
   });
 
-  it("uses room-scoped auth on join-link routes", () => {
+  it("uses room-scoped token providers on join-link routes", () => {
     expect(shouldUseRoomScopedTokenProvider("/j/join-token-123")).toBe(true);
-  });
-
-  it("uses internal auth on dashboard routes", () => {
-    expect(shouldUseRoomScopedTokenProvider("/dashboard")).toBe(true);
   });
 });
 
 describe("getChalkSessionCacheKey", () => {
-  it("isolates dashboard session state from the generic app cache", () => {
-    expect(getChalkSessionCacheKey("/dashboard", "")).toBe("dashboard");
+  it("isolates room session state from the generic app cache", () => {
+    expect(getChalkSessionCacheKey("/room/abc", "")).toBe('room:/room/abc:""');
   });
 
-  it("keeps room session state keyed by room path and search", () => {
-    expect(getChalkSessionCacheKey("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "?auth=internal")).toBe('room:/room/2f0b302b-2449-43f5-ae3b-de57decb9f09:"?auth=internal"');
-  });
-});
-
-describe("shouldUseInternalRoomAuth", () => {
-  it("uses internal auth for dashboard room links flagged with auth=internal", () => {
-    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "?auth=internal")).toBe(true);
-  });
-
-  it("does not force internal auth for regular room links", () => {
-    expect(shouldUseInternalRoomAuth("/room/2f0b302b-2449-43f5-ae3b-de57decb9f09", "")).toBe(false);
-  });
-});
-
-describe("clearStoredChalkTokens", () => {
-  afterEach(() => {
-    restoreBrowserEnv();
-  });
-
-  it("removes sdk tokens from both browser stores", () => {
-    const env = installBrowserEnv("https://chalkmeet.com/dashboard");
-    env.localStorage.setItem("chalk_access_token", "abc");
-    env.sessionStorage.setItem("chalk_refresh_token", "xyz");
-    env.localStorage.setItem("chalk_token_expires", "123");
-
-    clearStoredChalkTokens();
-
-    expect(env.localStorage.getItem("chalk_access_token")).toBeNull();
-    expect(env.sessionStorage.getItem("chalk_refresh_token")).toBeNull();
-    expect(env.localStorage.getItem("chalk_token_expires")).toBeNull();
+  it("keeps join route session state keyed by path", () => {
+    expect(getChalkSessionCacheKey("/j/join-token-123", "")).toBe("join:/j/join-token-123");
   });
 });
 
@@ -374,8 +251,8 @@ describe("createWebTokenProvider", () => {
     restoreBrowserEnv();
   });
 
-  it("reuses a fresh internal room token for the current room", async () => {
-    installBrowserEnv("https://chalkmeet.com/room/2f0b302b-2449-43f5-ae3b-de57decb9f09?auth=internal");
+  it("reuses a fresh room token for the current room", async () => {
+    installBrowserEnv("https://chalkmeet.com/room/2f0b302b-2449-43f5-ae3b-de57decb9f09");
     setJoinContext({
       roomId: "2f0b302b-2449-43f5-ae3b-de57decb9f09",
       accessToken: "access-123",
@@ -395,7 +272,7 @@ describe("getOrCreateLocalClientId", () => {
   });
 
   it("keeps a stable client id on localhost", () => {
-    installBrowserEnv("http://localhost:3070/dashboard");
+    installBrowserEnv("http://localhost:3070/room/abc");
 
     const first = getOrCreateLocalClientId();
     const second = getOrCreateLocalClientId();
@@ -405,7 +282,7 @@ describe("getOrCreateLocalClientId", () => {
   });
 
   it("keeps a stable client id on hosted origins", () => {
-    installBrowserEnv("https://chalkmeet.com/dashboard");
+    installBrowserEnv("https://chalkmeet.com/room/abc");
     const first = getOrCreateLocalClientId();
     const second = getOrCreateLocalClientId();
     expect(first).toBeTruthy();

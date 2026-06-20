@@ -1,8 +1,8 @@
 import { createAuthenticatedRoom } from "@q9labs/chalk-core";
-import { fetchInternalAccessToken, getAccessTokenExpiryMs } from "./internalAuth";
+import { fetchWebAccessToken, getAccessTokenExpiryMs } from "./webMeeting";
 
-export async function createInternalMeeting(apiUrl: string, roomName = "New meeting") {
-  const accessToken = await fetchInternalAccessToken(apiUrl);
+export async function createWebMeeting(apiUrl: string, roomName = "New meeting") {
+  const accessToken = await fetchWebAccessToken(apiUrl);
   const room = await createAuthenticatedRoom({
     apiUrl,
     accessToken,

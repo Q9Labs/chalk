@@ -4,7 +4,7 @@ import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { isLegacyDocsPath, redirectToExternalDocs } from "../lib/docsRedirect";
-import { createWebTokenProvider, getApiUrl, shouldPrimeTokenCache } from "../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, shouldPrimeTokenCache } from "../lib/webMeeting";
 import { getPublicAppUrl } from "../lib/publicUrl";
 
 // SSR check - ChalkProvider requires browser APIs
@@ -16,6 +16,9 @@ installChunkLoadAutoReload();
 
 // import "../../../../packages/sdk-react/src/styles/base.css";
 import appCss from "../styles.css?url";
+
+const APP_TITLE = "Chalk";
+const APP_DESCRIPTION = "Ultra low-latency video meetings with edge-routed audio and video, private rooms, and no downloads required.";
 
 export const Route = createRootRoute({
   notFoundComponent: () => {
@@ -56,7 +59,35 @@ export const Route = createRootRoute({
           content: "width=device-width, initial-scale=1",
         },
         {
-          title: "Chalk",
+          title: APP_TITLE,
+        },
+        {
+          name: "description",
+          content: APP_DESCRIPTION,
+        },
+        {
+          property: "og:title",
+          content: APP_TITLE,
+        },
+        {
+          property: "og:description",
+          content: APP_DESCRIPTION,
+        },
+        {
+          property: "og:type",
+          content: "website",
+        },
+        {
+          name: "twitter:card",
+          content: "summary",
+        },
+        {
+          name: "twitter:title",
+          content: APP_TITLE,
+        },
+        {
+          name: "twitter:description",
+          content: APP_DESCRIPTION,
         },
       ],
       links: [
@@ -72,6 +103,10 @@ export const Route = createRootRoute({
         {
           rel: "apple-touch-icon",
           href: "/brand/chalk/apple-touch-icon.png",
+        },
+        {
+          rel: "manifest",
+          href: "/manifest.json",
         },
         {
           rel: "stylesheet",
@@ -126,7 +161,7 @@ function RootComponent() {
     if (isServer || !shouldPrimeTokenCache(location.pathname)) return;
     const apiUrl = getApiUrl();
     const tokenProvider = createWebTokenProvider(apiUrl);
-    // Prime token cache so first Join click avoids auth round-trip; fail-open by design.
+    // Prime token cache so first Join click avoids a token round-trip; fail-open by design.
     void tokenProvider().catch(() => {});
   }, [location.pathname]);
 

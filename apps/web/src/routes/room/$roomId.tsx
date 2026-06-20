@@ -15,7 +15,7 @@ import { getStoredMeetingRoomSettings, useRoomEntryModel, useWhiteboard, VideoCo
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import z from "zod";
-import { createWebTokenProvider, getApiUrl, getJoinContext } from "../../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, getJoinContext } from "../../lib/webMeeting";
 import { ChalkLogo } from "../../components/ChalkLogo";
 import { WebChalkRuntime } from "../../components/WebChalkRuntime";
 import { cn } from "../../lib/utils";
@@ -52,7 +52,6 @@ export const Route = createFileRoute("/room/$roomId")({
   validateSearch: z.object({
     roomName: z.string().optional(),
     autoJoin: z.coerce.boolean().optional(),
-    auth: z.enum(["internal"]).optional(),
   }),
 });
 
@@ -60,7 +59,7 @@ function RoomPage() {
   const { roomId } = Route.useParams() as {
     roomId: string;
   };
-  const { roomName, autoJoin, auth } = Route.useSearch();
+  const { roomName, autoJoin } = Route.useSearch();
   const navigate = useNavigate();
   const apiUrl = useMemo(() => getApiUrl(), []);
   const webTokenProvider = useMemo(() => createWebTokenProvider(apiUrl), [apiUrl]);
@@ -75,10 +74,8 @@ function RoomPage() {
     meetingLink,
     role,
     room,
-    shouldForceInternalAuth,
   } = useRoomEntryModel({
     apiUrl,
-    authMode: auth,
     joinContext: joinCtx,
     nowMs: now,
     publicAppUrl: getPublicAppOrigin(),
@@ -91,19 +88,6 @@ function RoomPage() {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    if (!shouldForceInternalAuth) {
-      return;
-    }
-
-    void navigate({
-      to: "/room/$roomId",
-      params: { roomId },
-      search: (prev) => ({ ...prev, auth: "internal" }),
-      replace: true,
-    });
-  }, [navigate, roomId, shouldForceInternalAuth]);
 
   // Load username and defaults from storage after mount
   useEffect(() => {

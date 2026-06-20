@@ -8,13 +8,13 @@ _Goals & constraints for the ground-up redesign. Read this when a decision feels
 
 A real-time video conferencing platform that is flexible at its core. It runs **standalone or embedded** (via our SDK), and **managed or self-hosted**. The media engine is a **swappable component** — Cloudflare today, something else tomorrow — sitting behind one stable contract.
 
-## The three values (these win every tie-break)
+## The three values (these win every tie-break, in this order)
 
-1. **Fast** — everything feels instant.
-2. **Correct** — sync is robust and never breaks. Non-negotiable.
-3. **Low latency** — joining and streaming are low-latency end to end.
+1. **Correct** — sync is robust and never breaks. **Non-negotiable; gates first.** A faster or simpler design that weakens correctness loses outright.
+2. **Fast** — perceived responsiveness. Every state signal feels instant; the join funnel and media are low-latency end to end.
+3. **Flexible** — the swappable planes and dual front doors stay swappable. We don't buy speed with lock-in.
 
-> When two designs compete, the one that better serves **Fast + Correct + Low-latency** wins.
+> Read top-down, not as a sum. Correct gates: if a design is less correct, it loses no matter how fast. Among correct designs, the faster one wins; Flexible breaks remaining ties.
 
 ---
 
@@ -22,6 +22,7 @@ A real-time video conferencing platform that is flexible at its core. It runs **
 
 - **Flexible deployment.** The same product runs in our managed cloud _or_ self-hosted by a customer.
 - **Two front doors.** A standalone app _and_ an embeddable SDK — both first-class.
+- **Polyglot SDKs.** The embeddable SDK ships in **many languages**, not just TypeScript — TS today, then Swift / Kotlin / Python / Go and beyond. The client↔server contract is therefore **language-neutral by construction**: no SDK language is privileged, and the server's own language is an internal implementation detail decoupled from any SDK's. One schema source of truth generates every SDK _and_ the server's contract types — adding a language is a new generation target, never a protocol fork.
 - **Swappable media plane.** CF SFU / self-hosted OSS SFU / our own — all plug into one contract. The rest of the system neither knows nor cares which is underneath.
 - **Cross-platform.** Web, desktop, mobile, and future surfaces.
 - **Scales by grant, not by rebuild.** One room shape serves a 2-person call today; webinars (deferred) slot onto the same shape later via grants, not a rebuild.
@@ -43,6 +44,7 @@ A real-time video conferencing platform that is flexible at its core. It runs **
 10. **Clean break.** No migration, no backward-compat with today's schema — design the ideal model; we owe the old tables nothing.
 11. **Retention is tenant-configurable.** Each tenant sets retention per artifact (recordings / transcripts / chat). Two fixed guardrails: hard-delete-on-request always overrides retention and truly **purges**; a plan quota may cap the configurable maximum.
 12. **Tenants sign their own participant tokens** with **per-tenant, rotatable** keys (overlapping keys during rotation, zero downtime). Chalk never accepts client-asserted identity without a valid signature.
+13. **Media-egress cost is a first-class constraint.** The dominant cost is media egress, and it never gets to hide. The **MediaPlane contract must expose usage signal** (egress GB, participant-minutes) so cost is measurable per tenant / session and a ceiling can be enforced — no adapter may bury it. Cost never overrides **Correct**, but among correct designs it is a real input, not an afterthought (see media cost calculator).
 
 ---
 

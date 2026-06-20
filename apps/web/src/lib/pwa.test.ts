@@ -30,7 +30,7 @@ describe("pwa helpers", () => {
   it("suppresses pwa prompts on immersive routes", () => {
     expect(shouldHidePwaPrompt("/room/algebra")).toBe(true);
     expect(shouldHidePwaPrompt("/share/token-123")).toBe(true);
-    expect(shouldHidePwaPrompt("/dashboard")).toBe(false);
+    expect(shouldHidePwaPrompt("/")).toBe(false);
   });
 
   it("formats install copy for native and manual install surfaces", () => {
@@ -84,7 +84,7 @@ describe("pwa helpers", () => {
 
     expect(manifest.icons.map((icon) => icon.src)).toEqual(["/favicon.ico", "/brand/chalk/chalk-icon-192.png", "/brand/chalk/chalk-icon-512.png", "/brand/chalk/chalk-icon-maskable-192.png", "/brand/chalk/chalk-icon-maskable-512.png"]);
     expect(manifest.icons.map((icon) => icon.purpose ?? "default")).toEqual(["default", "any", "any", "maskable", "maskable"]);
-    expect(manifest.shortcuts.flatMap((shortcut) => shortcut.icons.map((icon) => icon.src))).toEqual(["/brand/chalk/shortcut-new-192.png", "/brand/chalk/shortcut-dashboard-192.png"]);
+    expect(manifest.shortcuts.flatMap((shortcut) => shortcut.icons.map((icon) => icon.src))).toEqual(["/brand/chalk/shortcut-new-192.png"]);
     expect(rootRouteSource).toContain('href: "/brand/chalk/apple-touch-icon.png"');
     expect(rootRouteSource).not.toContain('href: "/logo192.png"');
   });

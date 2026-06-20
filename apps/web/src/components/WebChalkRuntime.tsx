@@ -2,7 +2,7 @@ import { createTokenProvider } from "@q9labs/chalk-core";
 import { ChalkProvider, DebugDialog, createHttpIncidentReporter, useWhatsNew, WhatsNewDialog, WhatsNewTrigger } from "@q9labs/chalk-react";
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { createWebTokenProvider, getApiUrl, getChalkSessionCacheKey, isLocalHost, shouldUseRoomScopedTokenProvider } from "../lib/internalAuth";
+import { createWebTokenProvider, getApiUrl, getChalkSessionCacheKey, isLocalHost, shouldUseRoomScopedTokenProvider } from "../lib/webMeeting";
 
 const isServer = typeof window === "undefined";
 

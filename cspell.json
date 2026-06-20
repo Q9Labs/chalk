@@ -10,7 +10,6 @@
     ".turbo/**",
     ".private/**",
     "docs/**",
-    "apps/docs/**",
     "apps/mobile/**",
     "apps/web/public/**",
     "apps/web/reports/**",

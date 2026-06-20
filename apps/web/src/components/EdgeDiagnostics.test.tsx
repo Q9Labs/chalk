@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EdgeDiagnostics } from "./EdgeDiagnostics";
 
-vi.mock("../lib/internalAuth", () => ({
+vi.mock("../lib/webMeeting", () => ({
   getApiUrl: () => "http://localhost:8080",
 }));
 

@@ -54,12 +54,7 @@ const LEGAL_DOCUMENTS = {
           "<p>We keep data for as long as needed to provide Chalk, comply with legal obligations, resolve disputes, enforce agreements, and maintain security and operational records. Local session data stored on your device can be cleared by uninstalling the app or clearing app storage. For deletion or privacy requests, contact us using the details below so we can review the request in context.</p>",
       },
       {
-        title: "7. Google API Services Usage",
-        bodyHtml:
-          '<p>Chalk\'s use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>',
-      },
-      {
-        title: "8. Contact Us",
+        title: "7. Contact Us",
         bodyHtml: '<p>Questions, requests, or concerns about this policy may be sent to <a href="mailto:privacy@chalk.com">privacy@chalk.com</a>.</p>',
       },
     ],
@@ -91,20 +86,16 @@ const LEGAL_DOCUMENTS = {
         `.trim(),
       },
       {
-        title: "4. Account Registration via Google OAuth",
-        bodyHtml: "<p>To use certain features of the Service, you may be required to register using your Google account. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.</p>",
-      },
-      {
-        title: "5. Intellectual Property",
+        title: "4. Intellectual Property",
         bodyHtml: "<p>The Service and its original content, features, and functionality are and will remain the exclusive property of Q9 Labs and its licensors. The Service is protected by copyright, trademark, and other laws.</p>",
       },
       {
-        title: "6. Limitation of Liability",
+        title: "5. Limitation of Liability",
         bodyHtml:
           "<p>In no event shall Q9 Labs, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability to access or use the Service.</p>",
       },
       {
-        title: "7. Contact Information",
+        title: "6. Contact Information",
         bodyHtml: '<p>For any questions about these Terms, please contact us at <a href="mailto:support@example.com">support@example.com</a>.</p>',
       },
     ],

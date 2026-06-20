@@ -18,8 +18,6 @@
 /tanstack-word-logo-white.svg /brand/tanstack/tanstack-word-logo-white.svg 301
 /logo192.png /brand/legacy/logo192.png 301
 /logo512.png /brand/legacy/logo512.png 301
-/shortcut-dashboard-192.png /brand/chalk/shortcut-dashboard-192.png 301
-/shortcut-dashboard.svg /brand/chalk/shortcut-dashboard.svg 301
 /shortcut-new-192.png /brand/chalk/shortcut-new-192.png 301
 /shortcut-new.svg /brand/chalk/shortcut-new.svg 301
 /docs https://docs.chalk.q9labs.ai 301
@@ -30,6 +28,4 @@
 /room/* /index.html 200
 /share/* /index.html 200
 /j/* /index.html 200
-/dashboard /index.html 200
-/auth/* /index.html 200
 /* /index.html 200

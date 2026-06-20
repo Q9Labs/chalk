@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Activity, Video, Mic, ShieldCheck, RefreshCw, Sliders } from "lucide-react";
-import { getApiUrl } from "../lib/internalAuth";
+import { getApiUrl } from "../lib/webMeeting";
 
 type TabType = "network" | "media" | "simulation";
 

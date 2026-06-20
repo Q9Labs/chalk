@@ -17,6 +17,6 @@ describe("docsRedirect", () => {
   });
 
   it("ignores unrelated paths", () => {
-    expect(isLegacyDocsPath("/dashboard")).toBe(false);
+    expect(isLegacyDocsPath("/room/abc")).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import z from "zod";
-import { exchangeJoinToken, getApiUrl, setJoinContext } from "../../lib/internalAuth";
+import { exchangeJoinToken, getApiUrl, setJoinContext } from "../../lib/webMeeting";
 import { buildMobileJoinIntent, type MobileJoinPlatform } from "../../lib/mobileJoinRedirect";
 
 const MOBILE_REDIRECT_FALLBACK_DEEP_LINK_DELAY_MS = 900;

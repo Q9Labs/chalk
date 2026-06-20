@@ -31,8 +31,8 @@ function App() {
               <a href={DOCS_BASE_URL} className="text-muted-foreground hover:text-foreground transition-colors">
                 Documentation
               </a>
-              <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-                Dashboard
+              <Link to="/room/$roomId" params={{ roomId: "abc" }} className="text-muted-foreground hover:text-foreground transition-colors">
+                Room
               </Link>
               <Link to="/status" className="text-muted-foreground hover:text-foreground transition-colors">
                 Status
@@ -53,7 +53,23 @@ function App() {
           {/* Background Illustration / Image */}
           <div className="absolute inset-0 z-0 pointer-events-none flex items-start justify-center pt-20">
             <div className="relative w-full max-w-[1200px] flex items-center justify-center opacity-40 dark:opacity-60 transition-opacity duration-700 blur-[2px]">
-              <img src="/images/marketing/hero-1.png" alt="" className="w-full h-auto object-cover mask-image-gradient" style={{ WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 20%, rgba(0,0,0,0) 100%)" }} />
+              <picture className="block w-full">
+                <source
+                  type="image/webp"
+                  srcSet="/images/marketing/hero-1-640.webp 640w, /images/marketing/hero-1-960.webp 960w, /images/marketing/hero-1-1280.webp 1280w, /images/marketing/hero-1-1920.webp 1920w"
+                  sizes="(min-width: 1200px) 1200px, 100vw"
+                />
+                <img
+                  src="/images/marketing/hero-1.png"
+                  alt=""
+                  width={2560}
+                  height={1476}
+                  fetchPriority="high"
+                  decoding="async"
+                  className="w-full h-auto object-cover mask-image-gradient"
+                  style={{ WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 20%, rgba(0,0,0,0) 100%)" }}
+                />
+              </picture>
             </div>
           </div>
 
@@ -128,8 +144,8 @@ function App() {
             <span>© {new Date().getFullYear()} Chalk</span>
           </div>
           <nav className="flex gap-6 md:gap-8 text-sm font-medium text-muted-foreground">
-            <Link to="/dashboard" className="hover:text-foreground transition-colors">
-              Dashboard
+            <Link to="/room/$roomId" params={{ roomId: "abc" }} className="hover:text-foreground transition-colors">
+              Room
             </Link>
             <a href="/privacy" className="hover:text-foreground transition-colors">
               Privacy

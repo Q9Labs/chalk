@@ -90,8 +90,8 @@ function MeetingEndPage() {
           </Link>
           <div className="flex items-center gap-6">
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-              <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-                Dashboard
+              <Link to="/room/$roomId" params={{ roomId: "abc" }} className="text-muted-foreground hover:text-foreground transition-colors">
+                Room
               </Link>
               <a href={DOCS_BASE_URL} className="text-muted-foreground hover:text-foreground transition-colors">
                 Documentation
@@ -199,8 +199,8 @@ function MeetingEndPage() {
             <span>© {new Date().getFullYear()} Chalk</span>
           </div>
           <nav className="flex gap-8 text-sm text-muted-foreground">
-            <Link to="/dashboard" className="hover:text-foreground transition-colors">
-              Dashboard
+            <Link to="/room/$roomId" params={{ roomId: "abc" }} className="hover:text-foreground transition-colors">
+              Room
             </Link>
             <a href={DOCS_BASE_URL} className="hover:text-foreground transition-colors">
               Documentation

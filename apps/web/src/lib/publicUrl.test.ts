@@ -35,7 +35,7 @@ describe("publicUrl helpers", () => {
   });
 
   it("uses the active browser origin on localhost", () => {
-    installBrowserEnv("http://localhost:3070/dashboard");
+    installBrowserEnv("http://localhost:3070/room/abc");
 
     expect(getPublicAppOrigin()).toBe("http://localhost:3070");
     expect(getPublicAppUrl("/j/join-token-123")).toBe("http://localhost:3070/j/join-token-123");

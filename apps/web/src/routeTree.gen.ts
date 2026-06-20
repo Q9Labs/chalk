@@ -13,13 +13,11 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as NewRouteImport } from './routes/new'
-import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShareTokenRouteImport } from './routes/share/$token'
 import { Route as RoomEndRouteImport } from './routes/room/end'
 import { Route as RoomRoomIdRouteImport } from './routes/room/$roomId'
 import { Route as JJoinTokenRouteImport } from './routes/j/$joinToken'
-import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -39,11 +37,6 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -71,20 +64,13 @@ const JJoinTokenRoute = JJoinTokenRouteImport.update({
   path: '/j/$joinToken',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthCallbackRoute = AuthCallbackRouteImport.update({
-  id: '/auth/callback',
-  path: '/auth/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
@@ -92,12 +78,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
@@ -106,12 +90,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/j/$joinToken': typeof JJoinTokenRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/room/end': typeof RoomEndRoute
@@ -121,12 +103,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/dashboard'
     | '/new'
     | '/privacy'
     | '/status'
     | '/terms'
-    | '/auth/callback'
     | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
@@ -134,12 +114,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/dashboard'
     | '/new'
     | '/privacy'
     | '/status'
     | '/terms'
-    | '/auth/callback'
     | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
@@ -147,12 +125,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/dashboard'
     | '/new'
     | '/privacy'
     | '/status'
     | '/terms'
-    | '/auth/callback'
     | '/j/$joinToken'
     | '/room/$roomId'
     | '/room/end'
@@ -161,12 +137,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardRoute: typeof DashboardRoute
   NewRoute: typeof NewRoute
   PrivacyRoute: typeof PrivacyRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
-  AuthCallbackRoute: typeof AuthCallbackRoute
   JJoinTokenRoute: typeof JJoinTokenRoute
   RoomRoomIdRoute: typeof RoomRoomIdRoute
   RoomEndRoute: typeof RoomEndRoute
@@ -201,13 +175,6 @@ declare module '@tanstack/react-router' {
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof NewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -245,24 +212,15 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JJoinTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/callback': {
-      id: '/auth/callback'
-      path: '/auth/callback'
-      fullPath: '/auth/callback'
-      preLoaderRoute: typeof AuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRoute,
   NewRoute: NewRoute,
   PrivacyRoute: PrivacyRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
-  AuthCallbackRoute: AuthCallbackRoute,
   JJoinTokenRoute: JJoinTokenRoute,
   RoomRoomIdRoute: RoomRoomIdRoute,
   RoomEndRoute: RoomEndRoute,

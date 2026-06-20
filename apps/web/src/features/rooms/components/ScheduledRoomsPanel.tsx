@@ -4,7 +4,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { RefreshCcw } from "lucide-react";
-import { GmailIcon } from "../../../components/GmailIcon";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Dialog, DialogClose, DialogContent } from "@q9labs/chalk-ui";
 import { getPublicAppOrigin } from "../../../lib/publicUrl";
 
@@ -115,22 +114,6 @@ export function ScheduledRoomsPanel({ client, rooms, isLoading, error, onRefresh
 
       await navigator.clipboard.writeText(message);
       toast.success("Invitation link copied");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create invite link");
-    }
-  }
-
-  async function sendGmailInvite(room: RoomResource) {
-    try {
-      const response = await client.createJoinToken(room.id);
-      const inviteUrl = `${getPublicAppOrigin()}/j/${response.joinToken}`;
-
-      const timeStr = room.scheduledStartAt ? new Date(room.scheduledStartAt).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" }) : "now";
-
-      const subject = encodeURIComponent(`Invitation: ${room.name || "Chalk Room"}`);
-      const body = encodeURIComponent(`Hi there,\n\nYou're invited to a Chalk room.\n\nTopic: ${room.name || "Untitled room"}\nTime: ${timeStr}\n\nJoin with Chalk\n${inviteUrl}\n\n—\nSent via Chalk`);
-
-      window.open(`https://mail.google.com/mail/?view=cm&fs=1&tf=1&su=${subject}&body=${body}`, "_blank", "noopener,noreferrer");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create invite link");
     }
@@ -276,10 +259,7 @@ export function ScheduledRoomsPanel({ client, rooms, isLoading, error, onRefresh
                       <HugeiconsIcon icon={Share01Icon} size={12} className="mr-1.5" />
                       Copy Invite
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => void sendGmailInvite(room)} className="h-8 w-8 rounded-lg p-0 border-border/50 bg-background hover:bg-secondary shrink-0 flex items-center justify-center group/gmail" aria-label="Send invite via Gmail">
-                      <GmailIcon size={14} className="group-hover/gmail:scale-110 transition-transform" />
-                    </Button>
-                    <Button disabled={!canEnter} onClick={() => window.open(`/room/${encodeURIComponent(room.id)}?auth=internal`, "_blank", "noopener,noreferrer")} size="sm" className="flex-1 h-8 rounded-lg font-bold text-[11px] shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all">
+                    <Button disabled={!canEnter} onClick={() => window.open(`/room/${encodeURIComponent(room.id)}`, "_blank", "noopener,noreferrer")} size="sm" className="flex-1 h-8 rounded-lg font-bold text-[11px] shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all">
                       <HugeiconsIcon icon={Video01Icon} size={12} className="mr-1.5" />
                       {room.status === "active" ? "Join Now" : "Enter Room"}
                     </Button>

@@ -33,7 +33,7 @@ export function syncThemeColor(theme: string) {
 }
 
 export function shouldHidePwaPrompt(pathname: string) {
-  return pathname.startsWith("/room/") || pathname.startsWith("/share/") || pathname.startsWith("/j/") || pathname.startsWith("/auth/");
+  return pathname.startsWith("/room/") || pathname.startsWith("/share/") || pathname.startsWith("/j/");
 }
 
 export function getPwaInstallPromptContent({ hasNativePrompt, installPlatform, requiresManualInstall }: { hasNativePrompt: boolean; installPlatform: PwaInstallPlatform; requiresManualInstall: boolean }): PwaInstallPromptContent {
