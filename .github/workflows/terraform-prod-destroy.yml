@@ -356,8 +356,8 @@ jobs:
                   echo "Cloudflare worker ${script_name} delete status ${status}"
                   return 0
                   ;;
-                403)
-                  echo "Cloudflare worker ${script_name} delete with ${token_names[$i]} token returned 403"
+                401|403)
+                  echo "Cloudflare worker ${script_name} delete with ${token_names[$i]} token returned ${status}"
                   ;;
                 *)
                   echo "Cloudflare worker ${script_name} delete failed with status ${status}" >&2
