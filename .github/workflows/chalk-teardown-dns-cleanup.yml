@@ -1,0 +1,96 @@
+name: Chalk Teardown DNS Cleanup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dns:
+    name: Remove Chalk DNS records
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN_FALLBACK: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Delete stale DNS records
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          token="${CLOUDFLARE_API_TOKEN:-$CLOUDFLARE_API_TOKEN_FALLBACK}"
+          if [[ -z "$token" ]]; then
+            echo "::error::Cloudflare token secret is not configured"
+            exit 1
+          fi
+
+          api() {
+            local method="$1"
+            local path="$2"
+            shift 2
+            curl -fsS \
+              -X "$method" \
+              -H "Authorization: Bearer $token" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4${path}" \
+              "$@"
+          }
+
+          account_query=""
+          if [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+            account_query="?account.id=${CLOUDFLARE_ACCOUNT_ID}&per_page=50"
+          fi
+
+          zones="$(api GET "/zones${account_query:-?per_page=50}")"
+
+          delete_records_for_zone() {
+            local zone_name="$1"
+            local matcher="$2"
+            local zone_id
+            zone_id="$(jq -r --arg name "$zone_name" '.result[]? | select(.name == $name) | .id' <<<"$zones" | head -n 1)"
+
+            if [[ -z "$zone_id" ]]; then
+              echo "zone ${zone_name}: absent"
+              return
+            fi
+
+            local records
+            records="$(api GET "/zones/${zone_id}/dns_records?per_page=200")"
+
+            local ids
+            ids="$(jq -r "$matcher | .id" <<<"$records")"
+
+            if [[ -z "$ids" ]]; then
+              echo "zone ${zone_name}: no stale Chalk DNS records"
+              return
+            fi
+
+            while IFS= read -r id; do
+              [[ -n "$id" ]] || continue
+              name="$(jq -r --arg id "$id" '.result[] | select(.id == $id) | .name' <<<"$records")"
+              type="$(jq -r --arg id "$id" '.result[] | select(.id == $id) | .type' <<<"$records")"
+              api DELETE "/zones/${zone_id}/dns_records/${id}" >/dev/null
+              echo "deleted ${type} ${name}"
+            done <<<"$ids"
+          }
+
+          delete_records_for_zone "q9labs.ai" '
+            .result[]?
+            | select(
+                (.name | test("(^|\\.)(chalk|api|ws)\\.q9labs\\.ai$"; "i"))
+                or (.content | test("chalk|pages\\.dev"; "i"))
+              )
+          '
+
+          delete_records_for_zone "chalkmeet.com" '
+            .result[]?
+            | select(
+                (.type | test("^(A|AAAA|CNAME)$"))
+                and (
+                  (.name | test("(^|\\.)(chalk|api|ws|www)\\.chalkmeet\\.com$|^chalkmeet\\.com$"; "i"))
+                  or (.content | test("chalk|pages\\.dev"; "i"))
+                )
+              )
+          '
