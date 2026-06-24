@@ -22,6 +22,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  aws-cleanup:
+    name: Delete leftover Chalk AWS resources
+    if: ${{ inputs.confirm == 'cleanup-chalk-aws' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Delete Terraform lock table
+        run: |
+          set -euo pipefail
+          table_name="chalk-terraform-locks"
+          if aws dynamodb describe-table --region us-east-1 --table-name "$table_name" >/dev/null 2>&1; then
+            aws dynamodb delete-table --region us-east-1 --table-name "$table_name" >/dev/null
+            aws dynamodb wait table-not-exists --region us-east-1 --table-name "$table_name"
+            echo "Deleted DynamoDB table: $table_name"
+          else
+            echo "DynamoDB table already absent: $table_name"
+          fi
+
   destroy:
     name: Destroy prod infrastructure
     if: ${{ inputs.confirm == 'destroy-prod-chalk' }}
