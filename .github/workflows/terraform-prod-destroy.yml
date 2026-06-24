@@ -367,7 +367,9 @@ jobs:
             done
             if [ "$wrangler_oauth_available" = "true" ]; then
               local output_file="$RUNNER_TEMP/cloudflare-worker-wrangler-delete-${script_name}.txt"
-              if pnpm exec wrangler delete "$script_name" --force >"$output_file" 2>&1; then
+              if env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
+                CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
+                pnpm exec wrangler delete "$script_name" --force >"$output_file" 2>&1; then
                 echo "Cloudflare worker ${script_name} deleted via Wrangler OAuth"
                 return 0
               fi
@@ -429,7 +431,9 @@ jobs:
               return 1
             done
             if [ "$wrangler_oauth_available" = "true" ]; then
-              if bash -c 'printf "y\n" | pnpm exec wrangler queues delete "$1"' _ "$queue_name" >"$output_file" 2>&1; then
+              if env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
+                CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
+                bash -c 'printf "y\n" | pnpm exec wrangler queues delete "$1"' _ "$queue_name" >"$output_file" 2>&1; then
                 echo "Cloudflare queue deleted or absent via Wrangler OAuth: $queue_name"
                 return 0
               fi
