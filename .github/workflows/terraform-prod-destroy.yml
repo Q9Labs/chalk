@@ -100,6 +100,7 @@ jobs:
       TF_VAR_whisper_gpu_metrics_enabled: "false"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}
+      CLOUDFLARE_WORKER_API_TOKEN: ${{ secrets.POST_MEETING_CLOUDFLARE_API_TOKEN }}
 
     steps:
       - name: Checkout
@@ -169,14 +170,28 @@ jobs:
             exit 0
           fi
 
-          role_id="$(terraform -chdir=infrastructure/terraform/environments/prod state show -no-color "$address" | awk -F' = ' '$1 ~ /^ *id$/ { gsub(/"/, "", $2); print $2; exit }')"
-          if [ -z "$role_id" ]; then
-            echo "Could not read PlanetScale role id from Terraform state" >&2
+          roles_url="https://api.planetscale.com/v1/organizations/${TF_VAR_planetscale_organization}/databases/${TF_VAR_planetscale_database}/branches/${TF_VAR_planetscale_branch}/roles?per_page=100&q=api"
+          auth_header="${TF_VAR_planetscale_service_token_id}:${TF_VAR_planetscale_service_token}"
+          roles_response_file="$RUNNER_TEMP/planetscale-roles.json"
+          roles_status="$(
+            curl -sS -o "$roles_response_file" -w '%{http_code}' \
+              --request GET \
+              --url "$roles_url" \
+              --header "Authorization: ${auth_header}" || true
+          )"
+          if [ "$roles_status" != "200" ]; then
+            echo "PlanetScale role list failed with status ${roles_status}" >&2
             exit 1
           fi
 
+          role_id="$(jq -r '.data[]? | select(.name == "api") | .id' "$roles_response_file" | head -n 1)"
+          if [ -z "$role_id" ]; then
+            echo "PlanetScale API role named api is already absent; removing stale Terraform state"
+            terraform -chdir=infrastructure/terraform/environments/prod state rm "$address"
+            exit 0
+          fi
+
           role_url="https://api.planetscale.com/v1/organizations/${TF_VAR_planetscale_organization}/databases/${TF_VAR_planetscale_database}/branches/${TF_VAR_planetscale_branch}/roles/${role_id}"
-          auth_header="${TF_VAR_planetscale_service_token_id}:${TF_VAR_planetscale_service_token}"
           response_file="$RUNNER_TEMP/planetscale-role-delete-response.json"
 
           reassign_status="$(
@@ -253,26 +268,129 @@ jobs:
         run: |
           set -euo pipefail
           api_root="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}"
+          token_names=()
+          token_values=()
+          if [ -n "${CLOUDFLARE_WORKER_API_TOKEN:-}" ]; then
+            token_names+=("worker")
+            token_values+=("$CLOUDFLARE_WORKER_API_TOKEN")
+          fi
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            token_names+=("terraform")
+            token_values+=("$CLOUDFLARE_API_TOKEN")
+          fi
+
+          if [ "${#token_values[@]}" -eq 0 ]; then
+            echo "No Cloudflare API tokens are available for worker cleanup" >&2
+            exit 1
+          fi
+
           scripts_json="$RUNNER_TEMP/cloudflare-worker-scripts.json"
-          curl -fsS \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "$api_root/workers/scripts" >"$scripts_json"
-          jq -r '.result[]?.id // empty' "$scripts_json" | grep -Ei 'chalk' >"$RUNNER_TEMP/chalk-worker-scripts.txt" || true
+          : >"$RUNNER_TEMP/chalk-worker-scripts.txt"
+          for i in "${!token_values[@]}"; do
+            list_status="$(
+              curl -sS -o "$scripts_json" -w '%{http_code}' \
+                -H "Authorization: Bearer ${token_values[$i]}" \
+                -H "Content-Type: application/json" \
+                "$api_root/workers/scripts" || true
+            )"
+            if [ "$list_status" = "200" ]; then
+              jq -r '.result[]?.id // empty' "$scripts_json" | grep -Ei 'chalk' >>"$RUNNER_TEMP/chalk-worker-scripts.txt" || true
+              break
+            fi
+            echo "Cloudflare worker list with ${token_names[$i]} token returned status ${list_status}"
+          done
+          printf '%s\n' \
+            chalk-transcription \
+            chalk-post-meeting-transcription \
+            chalk-cloudflare-worker \
+            cloudflare-worker \
+            >>"$RUNNER_TEMP/chalk-worker-scripts.txt"
+          sort -u "$RUNNER_TEMP/chalk-worker-scripts.txt" -o "$RUNNER_TEMP/chalk-worker-scripts.txt"
+
+          delete_worker_script() {
+            local script_name="$1"
+            local response_file="$RUNNER_TEMP/cloudflare-worker-delete-${script_name}.json"
+            local status
+            for i in "${!token_values[@]}"; do
+              status="$(
+                curl -sS -o "$response_file" -w '%{http_code}' \
+                  --request DELETE \
+                  -H "Authorization: Bearer ${token_values[$i]}" \
+                  -H "Content-Type: application/json" \
+                  "$api_root/workers/scripts/$script_name" || true
+              )"
+              case "$status" in
+                200|202|204|404)
+                  echo "Cloudflare worker ${script_name} delete status ${status}"
+                  return 0
+                  ;;
+                403)
+                  echo "Cloudflare worker ${script_name} delete with ${token_names[$i]} token returned 403"
+                  ;;
+                *)
+                  echo "Cloudflare worker ${script_name} delete failed with status ${status}" >&2
+                  return 1
+                  ;;
+              esac
+            done
+            echo "No available Cloudflare token could delete or verify worker ${script_name}" >&2
+            return 1
+          }
+
           while IFS= read -r script_name; do
             [ -n "$script_name" ] || continue
-            pnpm exec wrangler delete "$script_name" --force
+            delete_worker_script "$script_name"
           done <"$RUNNER_TEMP/chalk-worker-scripts.txt"
 
           queues_json="$RUNNER_TEMP/cloudflare-queues.json"
-          curl -fsS \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "$api_root/queues" >"$queues_json"
-          jq -r '.result[]? | (.queue_name // .name // empty) | select(test("chalk"; "i"))' "$queues_json" >"$RUNNER_TEMP/chalk-queues.txt"
+          : >"$RUNNER_TEMP/chalk-queues.txt"
+          for i in "${!token_values[@]}"; do
+            queue_list_status="$(
+              curl -sS -o "$queues_json" -w '%{http_code}' \
+                -H "Authorization: Bearer ${token_values[$i]}" \
+                -H "Content-Type: application/json" \
+                "$api_root/queues" || true
+            )"
+            if [ "$queue_list_status" = "200" ]; then
+              jq -r '.result[]? | (.queue_name // .name // empty) | select(test("chalk"; "i"))' "$queues_json" >>"$RUNNER_TEMP/chalk-queues.txt"
+              break
+            fi
+            echo "Cloudflare queue list with ${token_names[$i]} token returned status ${queue_list_status}"
+          done
+          printf '%s\n' \
+            chalk-post-meeting-transcription \
+            chalk-post-meeting-transcription-dlq \
+            >>"$RUNNER_TEMP/chalk-queues.txt"
+          sort -u "$RUNNER_TEMP/chalk-queues.txt" -o "$RUNNER_TEMP/chalk-queues.txt"
+
+          delete_queue() {
+            local queue_name="$1"
+            local output_file="$RUNNER_TEMP/cloudflare-queue-delete-${queue_name}.txt"
+            for i in "${!token_values[@]}"; do
+              if env CLOUDFLARE_API_TOKEN="${token_values[$i]}" CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
+                bash -c 'printf "y\n" | pnpm exec wrangler queues delete "$1"' _ "$queue_name" >"$output_file" 2>&1; then
+                echo "Cloudflare queue deleted or absent: $queue_name"
+                return 0
+              fi
+              if grep -Eiq 'not found|does not exist|could not find' "$output_file"; then
+                echo "Cloudflare queue already absent: $queue_name"
+                return 0
+              fi
+              if grep -Eiq '403|permission|auth|unauthorized|forbidden' "$output_file"; then
+                echo "Cloudflare queue ${queue_name} delete with ${token_names[$i]} token was not authorized"
+                continue
+              fi
+              echo "Cloudflare queue ${queue_name} delete failed" >&2
+              sed -n '1,20p' "$output_file" >&2
+              return 1
+            done
+            echo "No available Cloudflare token could delete or verify queue ${queue_name}" >&2
+            return 1
+          }
+
           while IFS= read -r queue_name; do
             [ -n "$queue_name" ] || continue
-            printf 'y\n' | pnpm exec wrangler queues delete "$queue_name"
+            delete_queue "$queue_name"
           done <"$RUNNER_TEMP/chalk-queues.txt"
 
       - name: Upload teardown evidence
