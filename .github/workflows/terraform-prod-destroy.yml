@@ -160,6 +160,87 @@ jobs:
             fi
           done
 
+      - name: Drop PlanetScale role with successor
+        run: |
+          set -euo pipefail
+          address='planetscale_postgres_branch_role.api'
+          if ! terraform -chdir=infrastructure/terraform/environments/prod state list | grep -Fxq "$address"; then
+            echo "PlanetScale role state address not present: $address"
+            exit 0
+          fi
+
+          role_id="$(terraform -chdir=infrastructure/terraform/environments/prod state show -no-color "$address" | awk -F' = ' '$1 ~ /^ *id$/ { gsub(/"/, "", $2); print $2; exit }')"
+          if [ -z "$role_id" ]; then
+            echo "Could not read PlanetScale role id from Terraform state" >&2
+            exit 1
+          fi
+
+          role_url="https://api.planetscale.com/v1/organizations/${TF_VAR_planetscale_organization}/databases/${TF_VAR_planetscale_database}/branches/${TF_VAR_planetscale_branch}/roles/${role_id}"
+          auth_header="${TF_VAR_planetscale_service_token_id}:${TF_VAR_planetscale_service_token}"
+          response_file="$RUNNER_TEMP/planetscale-role-delete-response.json"
+
+          reassign_status="$(
+            curl -sS -o "$RUNNER_TEMP/planetscale-role-reassign-response.json" -w '%{http_code}' \
+              --request POST \
+              --url "${role_url}/reassign" \
+              --header "Authorization: ${auth_header}" \
+              --header "Content-Type: application/json" \
+              --data '{"successor":"postgres"}' || true
+          )"
+          echo "PlanetScale role reassign status: ${reassign_status}"
+
+          delete_status="$(
+            curl -sS -o "$response_file" -w '%{http_code}' \
+              --request DELETE \
+              --url "${role_url}?successor=postgres" \
+              --header "Authorization: ${auth_header}" || true
+          )"
+          case "$delete_status" in
+            200|202|204|404)
+              echo "PlanetScale role delete status: ${delete_status}"
+              terraform -chdir=infrastructure/terraform/environments/prod state rm "$address"
+              ;;
+            *)
+              echo "PlanetScale role delete failed with status ${delete_status}" >&2
+              cat "$response_file" >&2 || true
+              exit 1
+              ;;
+          esac
+
+      - name: Empty ECR repositories
+        run: |
+          set -euo pipefail
+          addresses=(
+            'module.ecr.aws_ecr_repository.api'
+            'module.ecr.aws_ecr_repository.whisper'
+          )
+          for address in "${addresses[@]}"; do
+            if ! terraform -chdir=infrastructure/terraform/environments/prod state list | grep -Fxq "$address"; then
+              echo "ECR repository state address not present: $address"
+              continue
+            fi
+
+            repository_name="$(terraform -chdir=infrastructure/terraform/environments/prod state show -no-color "$address" | awk -F' = ' '$1 ~ /^ *name$/ { gsub(/"/, "", $2); print $2; exit }')"
+            if [ -z "$repository_name" ]; then
+              echo "Could not read ECR repository name from Terraform state address $address" >&2
+              exit 1
+            fi
+
+            image_ids_file="$RUNNER_TEMP/${repository_name}-image-ids.json"
+            aws ecr list-images --repository-name "$repository_name" --query 'imageIds' --output json >"$image_ids_file"
+            if [ "$(jq length "$image_ids_file")" -eq 0 ]; then
+              echo "ECR repository already empty: $repository_name"
+              continue
+            fi
+
+            batch_file="$RUNNER_TEMP/${repository_name}-image-batch.json"
+            jq -c '. as $ids | range(0; length; 100) as $i | $ids[$i:$i+100]' "$image_ids_file" |
+              while IFS= read -r batch; do
+                printf '%s\n' "$batch" >"$batch_file"
+                aws ecr batch-delete-image --repository-name "$repository_name" --image-ids "file://$batch_file" >/dev/null
+              done
+          done
+
       - name: Destroy Terraform-managed infrastructure
         run: terraform -chdir=infrastructure/terraform/environments/prod destroy -auto-approve -input=false -lock-timeout=10m
 
@@ -168,6 +249,7 @@ jobs:
         run: terraform -chdir=infrastructure/terraform/environments/prod state list | tee "$RUNNER_TEMP/terraform-state-after.txt"
 
       - name: Delete Chalk Cloudflare workers and queues
+        if: always()
         run: |
           set -euo pipefail
           api_root="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}"

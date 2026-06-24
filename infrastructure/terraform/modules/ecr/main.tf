@@ -21,6 +21,7 @@ locals {
 resource "aws_ecr_repository" "api" {
   name                 = "${local.name}-api"
   image_tag_mutability = var.image_tag_mutability
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -82,6 +83,7 @@ resource "aws_ecr_repository_policy" "api" {
 resource "aws_ecr_repository" "whisper" {
   name                 = "${local.name}-whisper"
   image_tag_mutability = "MUTABLE" # Mutable for latest tag updates
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
