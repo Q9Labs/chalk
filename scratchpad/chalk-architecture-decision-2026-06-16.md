@@ -14,7 +14,8 @@ Each has a primary adapter now and named alternatives kept viable for later.
 ## Initial Architecture
 
 - **Media:** Cloudflare SFU, direct, via `CloudflareMediaPlaneAdapter`.
-- **Recording:** custom recorder writing to **R2**. Not Cloudflare Stream minute-based recording.
+- **Recording:** custom recorder writing to **R2**. Not Cloudflare Stream minute-based recording. Preserve existing R2 data through the teardown.
+- **Transcription:** rebuild as a first-class post-meeting artifact pipeline, not an afterthought. It needs provider adapters, queue/retry/DLQ semantics, callback verification, transcript lookup by recording, language/provider metadata, and future summary hooks.
 - **Sync/API:** custom **WebSocket sync server + Redis**.
 - **Region:** Singapore, single-region.
 - **Runtime:** one small app server bundling API, WebSocket sync, background workers, and local Redis.
@@ -45,3 +46,14 @@ Durable Objects not primary now, but must stay possible.
 - `DurableObjectSyncAdapter` as sync path.
 - External/shared Redis once WS scales past one node.
 - Multi-region beyond Singapore.
+
+## Teardown Reset — 2026-06-24
+
+Decision: delete the current Go API, Terraform prod stack, whisper worker, and Cloudflare post-meeting worker implementation before the clean rebuild. Production infrastructure should be destroyed from CI while the Terraform code still exists, because CI has the provider credentials. R2 data is the explicit carve-out and should remain available for later inspection/recovery.
+
+The rebuild should not inherit old schema, Terraform modules, or worker code by default. Use the old system only as a feature inventory and failure-mode archive:
+
+- API/control plane: rebuild around Room, Session, Participant, ParticipantSession, artifacts, webhooks, tenant config, and ops as deliberate bounded contexts.
+- Infra: rebuild from a clean Terraform/IaC baseline after product boundaries settle; keep provider-specific resources behind adapters.
+- Workers: replace ad hoc Whisper/Cloudflare worker paths with a provider-neutral artifact-processing pipeline.
+- Contracts: generate SDKs and server contract types from one language-neutral schema source.

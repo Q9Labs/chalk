@@ -26,7 +26,30 @@ A real-time video conferencing platform that is flexible at its core. It runs **
 - **Swappable media plane.** CF SFU / self-hosted OSS SFU / our own — all plug into one contract. The rest of the system neither knows nor cares which is underneath.
 - **Cross-platform.** Web, desktop, mobile, and future surfaces.
 - **Scales by grant, not by rebuild.** One room shape serves a 2-person call today; webinars (deferred) slot onto the same shape later via grants, not a rebuild.
-- **Carries its feature surface.** Recordings, transcripts, chat, webhooks, audit — preserved through the redesign, not regressed.
+- **Carries its feature surface.** Recordings, transcripts, chat, webhooks, audit, whiteboard, files, diagnostics, and public status — preserved through the redesign, not regressed.
+
+---
+
+## Rebuild memory — do not forget these surfaces
+
+The old API and Terraform stack are being torn down. This is the product/control-plane memory to carry forward into the clean rebuild.
+
+- **Meeting core:** create, schedule, list, update, end, and reuse rooms through the stricter **Room -> Session -> ParticipantSession** model; anonymous join stays first-class.
+- **Join/admission:** token-asserted external identity, signed public join links, host-created invite tokens, lobby/waiting room, capacity limits, duplicate external-user handling, reconnect grace, and explicit admission failure reasons.
+- **Roles/capabilities:** org roles stay separate from meeting capabilities; host/co-host/participant presets resolve to server-enforced capability bits.
+- **Live sync:** WebSocket/control-plane state for presence, active speaker, media signals, hand raise, reactions, chat, recording state, whiteboard grants, snapshots, reconnect/resume, and room-end signals.
+- **Media plane:** Cloudflare SFU adapter first, but provider references stay opaque and the MediaPlane contract exposes usage/cost signals.
+- **Recordings:** host-controlled start/stop, one active recording per session, provider webhook/reconciliation, stalled-recording recovery, download/share links, archival/retention, hard delete, and R2-backed artifact storage.
+- **Transcription:** this must survive the rewrite. Include live transcript persistence, post-meeting transcription queueing, provider registry, callback verification, retry/dead-letter semantics, transcript lookup by recording, status/progress, language/provider metadata, and future summarization hooks.
+- **Chat and files:** durable room chat, read state, attachments, whiteboard file upload/download, storage access through presigned URLs, and tenant retention rules.
+- **Whiteboard:** collaboration state, persisted snapshots, file assets, draw grants, and multi-instance-safe permission enforcement.
+- **Tenant/admin:** tenant root, API key rotation, token-signing key rotation, tenant config, allowed origins/CORS management, workspace/team grouping, usage and artifact retention.
+- **Internal app:** native Chalk user sessions, Google sign-in path, access-token refresh, internal meetings list, share pages, and first-party hosted app auth.
+- **Webhooks:** customer-facing post-meeting and recording webhooks with signed delivery, retries, idempotency, delivery history, and auditability.
+- **Ops/diagnostics:** health/debug endpoints, client incident intake, public status page/card, ops ingest, maintenance/incidents, and enough debug export context for SDK/mobile support.
+- **Security/privacy:** audit logs, scoped tokens, revocation/kick semantics that immediately affect REST and WS, no raw logs/secrets in public repo, tenant isolation, retention caps, hard-delete override.
+
+Non-goal for the rebuild: preserve today's tables, route shapes, Terraform modules, or worker implementations. Preserve the product behavior and hard-won lessons, not the old code.
 
 ---
 

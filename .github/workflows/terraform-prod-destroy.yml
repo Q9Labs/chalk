@@ -1,0 +1,206 @@
+name: Terraform Prod Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type destroy-prod-chalk to destroy Chalk prod infra
+        required: true
+        type: string
+      preserve_r2:
+        description: Preserve Terraform-managed R2 bucket/data by removing R2 resources from state before destroy
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-prod-destroy
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    name: Destroy prod infrastructure
+    if: ${{ inputs.confirm == 'destroy-prod-chalk' }}
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+      TF_VAR_cloudflare_zone_name: q9labs.ai
+      TF_VAR_api_subdomain: chalk-api
+      TF_VAR_ws_subdomain: chalk-ws
+      TF_VAR_cloudflare_proxy_enabled: "false"
+      TF_VAR_manage_dns_records: "true"
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}
+      TF_VAR_r2_access_key_id: ${{ secrets.R2_ACCESS_KEY_ID }}
+      TF_VAR_r2_secret_access_key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      TF_VAR_upstash_email: ${{ secrets.UPSTASH_EMAIL }}
+      TF_VAR_upstash_api_key: ${{ secrets.UPSTASH_API_KEY }}
+      TF_VAR_upstash_region: us-east-1
+      TF_VAR_upstash_database_name: chalk
+      TF_VAR_upstash_tls: "true"
+      TF_VAR_upstash_eviction: "false"
+      TF_VAR_planetscale_service_token_id: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}
+      TF_VAR_planetscale_service_token: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+      TF_VAR_planetscale_organization: ${{ secrets.PLANETSCALE_ORGANIZATION }}
+      TF_VAR_planetscale_database: ${{ secrets.PLANETSCALE_DATABASE }}
+      TF_VAR_planetscale_database_name: postgres
+      TF_VAR_planetscale_branch: ${{ secrets.PLANETSCALE_BRANCH }}
+      TF_VAR_cloudflare_app_id: ${{ secrets.CLOUDFLARE_APP_ID }}
+      TF_VAR_cloudflare_app_token: ${{ secrets.CLOUDFLARE_REALTIME_API_TOKEN }}
+      TF_VAR_post_meeting_cloudflare_api_token: ${{ secrets.POST_MEETING_CLOUDFLARE_API_TOKEN }}
+      TF_VAR_post_meeting_cloudflare_worker_url: https://chalk-transcription.q9labs.ai
+      TF_VAR_post_meeting_cloudflare_worker_dispatch_secret: ${{ secrets.CHALK_TRANSCRIPTION_DISPATCH_SECRET }}
+      TF_VAR_post_meeting_cloudflare_worker_callback_secret: ${{ secrets.CHALK_TRANSCRIPTION_CALLBACK_SECRET }}
+      TF_VAR_jwt_signing_key: ${{ secrets.JWT_SIGNING_KEY }}
+      TF_VAR_admin_secret: ${{ secrets.ADMIN_SECRET }}
+      TF_VAR_auth_link_signing_key: ${{ secrets.AUTH_LINK_SIGNING_KEY }}
+      TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
+      TF_VAR_resend_from_email: ""
+      TF_VAR_internal_app_url: https://chalkmeet.com
+      TF_VAR_internal_app_urls: https://chalkmeet.com,https://chalk.q9labs.ai
+      TF_VAR_auth_cookie_domain: chalkmeet.com
+      TF_VAR_axiom_token: ${{ secrets.AXIOM_TOKEN }}
+      TF_VAR_axiom_dataset: chalk-api-prod
+      TF_VAR_axiom_traces_dataset: chalk-prod-traces
+      TF_VAR_github_token: ""
+      TF_VAR_github_owner: Q9Labs
+      TF_VAR_github_repo: chalk
+      TF_VAR_openrouter_api_key: ""
+      TF_VAR_groq_api_key: ""
+      TF_VAR_cloudflare_webhook_secret: ${{ secrets.CLOUDFLARE_WEBHOOK_SECRET }}
+      TF_VAR_ops_ingest_token: ${{ secrets.OPS_INGEST_TOKEN }}
+      TF_VAR_ops_whatsapp_enabled: "false"
+      TF_VAR_ops_twilio_account_sid: ""
+      TF_VAR_ops_twilio_auth_token: ""
+      TF_VAR_ops_twilio_whatsapp_from: ""
+      TF_VAR_ops_whatsapp_to_critical: ""
+      TF_VAR_ops_whatsapp_to_major: ""
+      TF_VAR_ops_public_status_base_url: https://chalkmeet.com/status
+      TF_VAR_admin_allowed_ips: ""
+      TF_VAR_db_max_conns: "12"
+      TF_VAR_db_min_conns: "1"
+      TF_VAR_ssm_parameter_path: /chalk/prod/api
+      TF_VAR_instance_type: t4g.micro
+      TF_VAR_alert_actions: "[]"
+      TF_VAR_ssh_ingress_cidrs: "[]"
+      TF_VAR_whisper_enabled: "false"
+      TF_VAR_whisper_instance_type: c7i.xlarge
+      TF_VAR_whisper_use_spot: "true"
+      TF_VAR_whisper_ssm_parameter_path: /chalk/prod/api
+      TF_VAR_whisper_log_level: INFO
+      TF_VAR_whisper_device: cpu
+      TF_VAR_whisper_compute_type: int8
+      TF_VAR_whisper_cpu_threads: "4"
+      TF_VAR_whisper_gpu_metrics_enabled: "false"
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install JS tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Write backend config
+        run: |
+          cat >"$RUNNER_TEMP/prod.backend.hcl" <<'BACKEND'
+          ${{ secrets.CHALK_TERRAFORM_PROD_BACKEND_HCL }}
+          BACKEND
+
+      - name: Terraform init
+        run: terraform -chdir=infrastructure/terraform/environments/prod init -input=false -backend-config="$RUNNER_TEMP/prod.backend.hcl"
+
+      - name: Capture state before destroy
+        run: terraform -chdir=infrastructure/terraform/environments/prod state list | tee "$RUNNER_TEMP/terraform-state-before.txt"
+
+      - name: Preserve R2 state entries
+        if: ${{ inputs.preserve_r2 }}
+        run: |
+          set -euo pipefail
+          mapfile -t state_addresses < <(terraform -chdir=infrastructure/terraform/environments/prod state list)
+          addresses=(
+            'module.cloudflare.cloudflare_r2_bucket.recordings[0]'
+            'module.cloudflare.cloudflare_r2_bucket_cors.recordings[0]'
+            'module.cloudflare.cloudflare_r2_bucket_lifecycle.recordings[0]'
+          )
+          for address in "${addresses[@]}"; do
+            if printf '%s\n' "${state_addresses[@]}" | grep -Fxq "$address"; then
+              terraform -chdir=infrastructure/terraform/environments/prod state rm "$address"
+            else
+              echo "R2 state address not present: $address"
+            fi
+          done
+
+      - name: Destroy Terraform-managed infrastructure
+        run: terraform -chdir=infrastructure/terraform/environments/prod destroy -auto-approve -input=false -lock-timeout=10m
+
+      - name: Capture state after destroy
+        if: always()
+        run: terraform -chdir=infrastructure/terraform/environments/prod state list | tee "$RUNNER_TEMP/terraform-state-after.txt"
+
+      - name: Delete Chalk Cloudflare workers and queues
+        run: |
+          set -euo pipefail
+          api_root="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}"
+          scripts_json="$RUNNER_TEMP/cloudflare-worker-scripts.json"
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "$api_root/workers/scripts" >"$scripts_json"
+          jq -r '.result[]?.id // empty' "$scripts_json" | grep -Ei 'chalk' >"$RUNNER_TEMP/chalk-worker-scripts.txt" || true
+          while IFS= read -r script_name; do
+            [ -n "$script_name" ] || continue
+            pnpm exec wrangler delete "$script_name" --force
+          done <"$RUNNER_TEMP/chalk-worker-scripts.txt"
+
+          queues_json="$RUNNER_TEMP/cloudflare-queues.json"
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "$api_root/queues" >"$queues_json"
+          jq -r '.result[]? | (.queue_name // .name // empty) | select(test("chalk"; "i"))' "$queues_json" >"$RUNNER_TEMP/chalk-queues.txt"
+          while IFS= read -r queue_name; do
+            [ -n "$queue_name" ] || continue
+            printf 'y\n' | pnpm exec wrangler queues delete "$queue_name"
+          done <"$RUNNER_TEMP/chalk-queues.txt"
+
+      - name: Upload teardown evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-prod-destroy-evidence
+          path: |
+            ${{ runner.temp }}/terraform-state-before.txt
+            ${{ runner.temp }}/terraform-state-after.txt
+            ${{ runner.temp }}/chalk-worker-scripts.txt
+            ${{ runner.temp }}/chalk-queues.txt
+          if-no-files-found: ignore
