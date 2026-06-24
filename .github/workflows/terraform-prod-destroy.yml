@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: Type destroy-prod-chalk to destroy Chalk prod infra
+        description: Type destroy-prod-chalk for Terraform teardown or cleanup-chalk-aws for leftover AWS cleanup
         required: true
         type: string
       preserve_r2:
