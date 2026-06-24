@@ -252,19 +252,17 @@ jobs:
               exit 1
             fi
 
-            image_ids_file="$RUNNER_TEMP/${repository_name}-image-ids.json"
-            aws ecr list-images --repository-name "$repository_name" --query 'imageIds' --output json >"$image_ids_file"
-            if [ "$(jq length "$image_ids_file")" -eq 0 ]; then
-              echo "ECR repository already empty: $repository_name"
-              continue
+            delete_error_file="$RUNNER_TEMP/${repository_name}-delete-error.txt"
+            if aws ecr delete-repository --repository-name "$repository_name" --force >/dev/null 2>"$delete_error_file"; then
+              echo "Deleted ECR repository: $repository_name"
+            elif grep -q 'RepositoryNotFoundException' "$delete_error_file"; then
+              echo "ECR repository already absent: $repository_name"
+            else
+              echo "Failed to delete ECR repository: $repository_name" >&2
+              sed -n '1,20p' "$delete_error_file" >&2
+              exit 1
             fi
-
-            batch_file="$RUNNER_TEMP/${repository_name}-image-batch.json"
-            jq -c '. as $ids | range(0; length; 100) as $i | $ids[$i:$i+100]' "$image_ids_file" |
-              while IFS= read -r batch; do
-                printf '%s\n' "$batch" >"$batch_file"
-                aws ecr batch-delete-image --repository-name "$repository_name" --image-ids "file://$batch_file" >/dev/null
-              done
+            terraform -chdir=infrastructure/terraform/environments/prod state rm "$address"
           done
 
       - name: Destroy Terraform-managed infrastructure
@@ -294,12 +292,23 @@ jobs:
             token_values+=("$CLOUDFLARE_API_TOKEN")
           fi
 
+          wrangler_config_content=""
           wrangler_oauth_available=false
           if [ -n "${CLOUDFLARE_WRANGLER_OAUTH_CONFIG:-}" ]; then
             wrangler_oauth_available=true
+            wrangler_config_content="$(printf '%b' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG")"
             mkdir -p "$HOME/.wrangler/config" "$HOME/.config/.wrangler/config"
-            printf '%s' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG" >"$HOME/.wrangler/config/default.toml"
-            printf '%s' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG" >"$HOME/.config/.wrangler/config/default.toml"
+            printf '%s' "$wrangler_config_content" >"$HOME/.wrangler/config/default.toml"
+            printf '%s' "$wrangler_config_content" >"$HOME/.config/.wrangler/config/default.toml"
+
+            oauth_token="$(
+              printf '%s' "$wrangler_config_content" | jq -r '.oauth_token // .access_token // empty' 2>/dev/null ||
+                printf '%s' "$wrangler_config_content" | sed -nE 's/.*(oauth_token|access_token)[[:space:]]*=[[:space:]]*"([^"]+)".*/\2/p' | head -n 1
+            )"
+            if [ -n "${oauth_token:-}" ]; then
+              token_names+=("wrangler-oauth")
+              token_values+=("$oauth_token")
+            fi
           fi
 
           if [ "${#token_values[@]}" -eq 0 ] && [ "$wrangler_oauth_available" != "true" ]; then
@@ -366,6 +375,7 @@ jobs:
                 echo "Cloudflare worker already absent: ${script_name}"
                 return 0
               fi
+              sed -n '1,20p' "$output_file" >&2
             fi
             echo "No available Cloudflare token could delete or verify worker ${script_name}" >&2
             return 1
@@ -427,6 +437,7 @@ jobs:
                 echo "Cloudflare queue already absent: $queue_name"
                 return 0
               fi
+              sed -n '1,20p' "$output_file" >&2
             fi
             echo "No available Cloudflare token could delete or verify queue ${queue_name}" >&2
             return 1
