@@ -100,7 +100,9 @@ jobs:
       TF_VAR_whisper_gpu_metrics_enabled: "false"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_TERRAFORM_API_TOKEN }}
+      CLOUDFLARE_GENERAL_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_WORKER_API_TOKEN: ${{ secrets.POST_MEETING_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_WRANGLER_OAUTH_CONFIG: ${{ secrets.CLOUDFLARE_WRANGLER_OAUTH_CONFIG }}
 
     steps:
       - name: Checkout
@@ -225,6 +227,8 @@ jobs:
       - name: Empty ECR repositories
         run: |
           set -euo pipefail
+          state_file="$RUNNER_TEMP/terraform-state-ecr.json"
+          terraform -chdir=infrastructure/terraform/environments/prod state pull >"$state_file"
           addresses=(
             'module.ecr.aws_ecr_repository.api'
             'module.ecr.aws_ecr_repository.whisper'
@@ -235,9 +239,16 @@ jobs:
               continue
             fi
 
-            repository_name="$(terraform -chdir=infrastructure/terraform/environments/prod state show -no-color "$address" | awk -F' = ' '$1 ~ /^ *name$/ { gsub(/"/, "", $2); print $2; exit }')"
+            resource_name="${address##*.}"
+            repository_name="$(
+              jq -r --arg resource_name "$resource_name" '
+                .resources[]?
+                | select(.module == "module.ecr" and .type == "aws_ecr_repository" and .name == $resource_name)
+                | .instances[0].attributes.name // empty
+              ' "$state_file" | head -n 1
+            )"
             if [ -z "$repository_name" ]; then
-              echo "Could not read ECR repository name from Terraform state address $address" >&2
+              echo "Could not read ECR repository name from Terraform state JSON for $address" >&2
               exit 1
             fi
 
@@ -274,13 +285,25 @@ jobs:
             token_names+=("worker")
             token_values+=("$CLOUDFLARE_WORKER_API_TOKEN")
           fi
+          if [ -n "${CLOUDFLARE_GENERAL_API_TOKEN:-}" ]; then
+            token_names+=("general")
+            token_values+=("$CLOUDFLARE_GENERAL_API_TOKEN")
+          fi
           if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
             token_names+=("terraform")
             token_values+=("$CLOUDFLARE_API_TOKEN")
           fi
 
-          if [ "${#token_values[@]}" -eq 0 ]; then
-            echo "No Cloudflare API tokens are available for worker cleanup" >&2
+          wrangler_oauth_available=false
+          if [ -n "${CLOUDFLARE_WRANGLER_OAUTH_CONFIG:-}" ]; then
+            wrangler_oauth_available=true
+            mkdir -p "$HOME/.wrangler/config" "$HOME/.config/.wrangler/config"
+            printf '%s' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG" >"$HOME/.wrangler/config/default.toml"
+            printf '%s' "$CLOUDFLARE_WRANGLER_OAUTH_CONFIG" >"$HOME/.config/.wrangler/config/default.toml"
+          fi
+
+          if [ "${#token_values[@]}" -eq 0 ] && [ "$wrangler_oauth_available" != "true" ]; then
+            echo "No Cloudflare credentials are available for worker cleanup" >&2
             exit 1
           fi
 
@@ -333,6 +356,17 @@ jobs:
                   ;;
               esac
             done
+            if [ "$wrangler_oauth_available" = "true" ]; then
+              local output_file="$RUNNER_TEMP/cloudflare-worker-wrangler-delete-${script_name}.txt"
+              if pnpm exec wrangler delete "$script_name" --force >"$output_file" 2>&1; then
+                echo "Cloudflare worker ${script_name} deleted via Wrangler OAuth"
+                return 0
+              fi
+              if grep -Eiq 'not found|does not exist|could not find' "$output_file"; then
+                echo "Cloudflare worker already absent: ${script_name}"
+                return 0
+              fi
+            fi
             echo "No available Cloudflare token could delete or verify worker ${script_name}" >&2
             return 1
           }
@@ -384,6 +418,16 @@ jobs:
               sed -n '1,20p' "$output_file" >&2
               return 1
             done
+            if [ "$wrangler_oauth_available" = "true" ]; then
+              if bash -c 'printf "y\n" | pnpm exec wrangler queues delete "$1"' _ "$queue_name" >"$output_file" 2>&1; then
+                echo "Cloudflare queue deleted or absent via Wrangler OAuth: $queue_name"
+                return 0
+              fi
+              if grep -Eiq 'not found|does not exist|could not find' "$output_file"; then
+                echo "Cloudflare queue already absent: $queue_name"
+                return 0
+              fi
+            fi
             echo "No available Cloudflare token could delete or verify queue ${queue_name}" >&2
             return 1
           }
