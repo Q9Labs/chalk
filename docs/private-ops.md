@@ -29,34 +29,11 @@ Committed examples may name required environment variables, but must not include
 real password-manager item paths, secret values, account IDs, tenant IDs, or
 production credentials.
 
-## Terraform With 1Password
+## Retired Terraform Notes
 
-Use 1Password as the source for environment values and Terraform remote state as
-the source for state. Commit safe Terraform environment composition, but do not
-commit resolved tfvars, backend config, local plans, state files, account IDs, or
-production values.
-
-Create a local env file from `infrastructure/terraform/op.env.example`:
-
-```bash
-cp infrastructure/terraform/op.env.example .private/chalk-terraform.env
-```
-
-Then replace placeholders with `op://...` references from the dedicated project
-vault. Keep item paths private when they reveal account or deployment topology.
-
-Run Terraform through the wrapper:
-
-```bash
-pnpm run infra:tf -- init
-pnpm run infra:tf -- plan
-pnpm run infra:tf -- apply
-```
-
-The wrapper defaults to `infrastructure/terraform/environments/prod`,
-`.private/chalk-terraform.env`, and `.private/terraform/prod.backend.hcl`.
-It does not write resolved secrets to disk. Use `CHALK_OP_ACCOUNT` when the local
-machine has more than one 1Password account configured.
+The legacy Chalk Terraform stack was removed during the 2026 rebuild reset.
+Keep any private teardown evidence, backend fragments, and production account
+notes outside the tracked tree under `.private/`.
 
 ## Public Memory
 

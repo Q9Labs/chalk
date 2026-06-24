@@ -1,1 +1,0 @@
-"""Whisper worker package."""

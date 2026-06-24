@@ -2,5 +2,4 @@ packages:
   - "packages/*"
   - "apps/mobile"
   - "apps/web"
-  - "infrastructure/cloudflare-worker"
   - "infrastructure/cloudflare-ops-monitor"

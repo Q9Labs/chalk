@@ -6,7 +6,6 @@
     "packages/*",
     "apps/mobile",
     "apps/web",
-    "infrastructure/cloudflare-worker",
     "infrastructure/cloudflare-ops-monitor"
   ],
   "type": "module",
@@ -18,9 +17,6 @@
     "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
     "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
     "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL or run pnpm run mobile:connect.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",
-    "infra:tf": "bash scripts/terraform-op.sh",
-    "infra:plan": "bash scripts/terraform-op.sh plan",
-    "infra:apply": "bash scripts/terraform-op.sh apply",
     "incident:tui": "bun scripts/ops-tui.tsx",
     "mobile:sync-local-env": "pnpm exec tsx scripts/sync-local-mobile-env.ts",
     "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run start'",
@@ -44,17 +40,12 @@
     "lint:spelling": "cspell .",
     "test:presence": "node scripts/gates/test-presence.mjs",
     "test:coverage": "turbo test -- --coverage",
-    "openapi:no-stubs": "node scripts/gates/openapi-no-stubs.mjs",
     "package:publint": "pnpm --filter './packages/*' exec publint",
     "package:attw": "pnpm --filter './packages/*' exec attw --pack --ignore-rules cjs-resolves-to-esm internal-resolution-error --exclude-entrypoints './styles.css' './src/styles.css' './dist/styles/*' './styles/*'",
-    "go:vulncheck": "cd apps/api && GOTOOLCHAIN=go1.25.11 go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...",
     "test": "turbo test",
     "lint": "turbo lint",
     "check-types": "turbo check-types",
-    "clean": "turbo clean && rm -rf node_modules",
-    "generate:openapi": "node apps/api/scripts/generate-openapi-from-router.mjs && node apps/api/scripts/enrich-openapi-contracts.mjs",
-    "generate:openapi:check": "node apps/api/scripts/generate-openapi-from-router.mjs --check",
-    "generate": "pnpm run generate:openapi && turbo run generate:types"
+    "clean": "turbo clean && rm -rf node_modules"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
@@ -79,8 +70,7 @@
     "turbo": "^2.9.14",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8",
-    "wrangler": "^4.103.0",
-    "yaml": "^2.8.2"
+    "wrangler": "^4.103.0"
   },
   "engines": {
     "node": ">=22"

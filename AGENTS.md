@@ -1,8 +1,8 @@
 # Chalk
 
 Ultra low-latency video conferencing built on Cloudflare RealtimeKit. This is a
-monorepo for the public SDK packages, demo apps, API, docs, and infrastructure
-templates.
+monorepo for the public SDK packages, demo apps, docs, and selected support
+tooling.
 
 ## Commands
 
@@ -13,8 +13,6 @@ pnpm build
 pnpm test
 pnpm lint
 pnpm check-types
-pnpm generate
-cd apps/api && go run ./cmd/main.go
 ```
 
 ## Quality Gate
@@ -54,11 +52,11 @@ Packages are the source of truth; demo apps should stay thin.
   bridges.
 - `packages/chalk-whiteboard`: whiteboard collaboration features.
 - `packages/ui`: shared UI primitives.
-- `apps/api`: Go backend API.
 - `apps/web`: Chalk web app and local verification surface.
 - `apps/docs`: public documentation.
 - `apps/mobile`: native demo and release verification app.
-- `infrastructure`: deployable infrastructure examples and workers.
+- `infrastructure`: deployable support tooling that remains after the API and
+  Terraform teardown.
 
 For product behavior, networking, auth, observability, SDK APIs, retries,
 diagnostics, or error handling, implement the owned package first and wire demo

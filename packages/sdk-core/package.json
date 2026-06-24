@@ -33,9 +33,7 @@
     "test:mutation:participant-avatar-recipe": "../../apps/web/node_modules/.bin/stryker run stryker.participant-avatar.config.json",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
-    "clean": "rm -rf dist",
-    "generate:types": "openapi-typescript ../../apps/api/openapi.yaml -o src/generated/api-types.ts",
-    "generate:effect-httpclient": "node ./scripts/generate-effect-openapi-client.mjs"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@cloudflare/realtimekit": "^1.2.4",
@@ -47,7 +45,6 @@
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^24.10.1",
-    "openapi-typescript": "^7.0.0",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {

@@ -1,7 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parse } from "yaml";
-import { findOpenApiStubs } from "./lib/openapi-stubs.mjs";
 
 const repoRoot = process.cwd();
 const errors = [];
@@ -11,7 +9,6 @@ const packageJsonPaths = [
   "apps/mobile/package.json",
   "apps/web/package.json",
   "infrastructure/cloudflare-ops-monitor/package.json",
-  "infrastructure/cloudflare-worker/package.json",
   "packages/chalk-whiteboard/package.json",
   "packages/facehash/package.json",
   "packages/sdk-core/package.json",
@@ -57,42 +54,6 @@ for (const [taskName, task] of Object.entries(turboConfig.tasks ?? {})) {
   const serialized = JSON.stringify(task);
   if (serialized.includes("<NONEXISTENT>")) {
     errors.push(`turbo.json task "${taskName}" resolves to <NONEXISTENT>`);
-  }
-}
-
-const openapiPath = path.join(repoRoot, "apps/api/openapi.yaml");
-if (existsSync(openapiPath)) {
-  const contract = parse(readFileSync(openapiPath, "utf8"));
-  const stubs = findOpenApiStubs(contract);
-  if (stubs.length > 0) {
-    errors.push(`apps/api/openapi.yaml contains generated OpenAPI stubs: ${stubs.join(", ")}`);
-  }
-}
-
-const generatedDirs = ["packages/sdk-core/src/generated", "packages/sdk-core/openapi-generated"];
-
-function walkFiles(relativeDir) {
-  const absoluteDir = path.join(repoRoot, relativeDir);
-  if (!existsSync(absoluteDir)) return [];
-
-  const files = [];
-  for (const entry of readdirSync(absoluteDir, { withFileTypes: true })) {
-    const childRelativePath = path.join(relativeDir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...walkFiles(childRelativePath));
-    } else if (entry.isFile()) {
-      files.push(childRelativePath);
-    }
-  }
-  return files;
-}
-
-for (const relativeDir of generatedDirs) {
-  for (const file of walkFiles(relativeDir)) {
-    const content = readFileSync(path.join(repoRoot, file), "utf8");
-    if (content.includes("TODO: document") || content.includes("x-generated-stub")) {
-      errors.push(`${file} contains generated OpenAPI stub markers`);
-    }
   }
 }
 

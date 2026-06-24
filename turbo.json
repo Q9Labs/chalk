@@ -31,10 +31,6 @@
     },
     "clean": {
       "cache": false
-    },
-    "generate:types": {
-      "inputs": ["../../apps/api/openapi.yaml"],
-      "outputs": ["src/generated/api-types.ts"]
     }
   }
 }

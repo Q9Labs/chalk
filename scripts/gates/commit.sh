@@ -19,9 +19,6 @@ pnpm run security:secrets
 # Scan dependency manifests and lockfiles for known vulnerabilities across supported ecosystems.
 pnpm run security:osv
 
-# Run Go's reachability-aware vulnerability scanner for the API code.
-pnpm run go:vulncheck
-
 # Enforce package.json dependency/version policy across the monorepo.
 pnpm run deps:syncpack
 
@@ -33,12 +30,6 @@ pnpm run test:presence
 
 # Check formatting without modifying files.
 pnpm run format:check
-
-# Verify generated OpenAPI contracts are up to date with Gin routes.
-pnpm run generate:openapi:check
-
-# Reject generated OpenAPI placeholder operations and TODO documentation stubs.
-pnpm run openapi:no-stubs
 
 # Typecheck the monorepo through Turbo.
 pnpm run check-types

@@ -51,7 +51,7 @@ jobs:
       - name: Obvious secret pattern scan
         run: |
           set -euo pipefail
-          if git grep -n -I -E 'AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|-----BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9_]{36,}|xox[baprs]-[A-Za-z0-9-]+' -- ':!pnpm-lock.yaml' ':!apps/docs/src/content/docs/api/authentication.mdx' ':!apps/api/internal/infrastructure/storage/s3_test.go' ':!packages/sdk-react/src/assets/sound-data.ts'; then
+          if git grep -n -I -E 'AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|-----BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9_]{36,}|xox[baprs]-[A-Za-z0-9-]+' -- ':!pnpm-lock.yaml' ':!apps/docs/src/content/docs/api/authentication.mdx' ':!packages/sdk-react/src/assets/sound-data.ts'; then
             echo "::error::secret-like value found"
             exit 1
           fi
@@ -79,9 +79,6 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: OpenAPI is current
-        run: pnpm run generate:openapi:check
-
       - name: Build package entries
         run: |
           pnpm --filter @q9labs/chalk-whiteboard build
@@ -93,22 +90,4 @@ jobs:
           pnpm --filter @q9labs/chalk-react test
           pnpm --filter @q9labs/facehash test
           pnpm --filter web test
-          pnpm --filter @chalk/cloudflare-worker test
           pnpm --filter @chalk/cloudflare-ops-monitor test
-
-  go:
-    name: Go API
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
-
-      - name: Test
-        working-directory: apps/api
-        run: go test ./...

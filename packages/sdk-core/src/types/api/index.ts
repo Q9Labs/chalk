@@ -1,10 +1,12 @@
 /**
- * API type exports for Chalk SDK
+ * Legacy API contract compatibility exports for Chalk SDK.
  *
- * Generated from OpenAPI specification at apps/api/openapi.yaml
+ * The old generated OpenAPI contract was removed with the legacy API rebuild.
+ * This namespace remains so existing `types.api` imports fail softly during the
+ * transition instead of breaking module resolution.
  *
  * @packageDocumentation
  * @module @q9labs/chalk-core/types/api
  */
 
-export type * from "../../generated/api-types";
+export type LegacyApiContractRemoved = never;
