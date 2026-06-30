@@ -33,7 +33,8 @@
     "framer-motion",
     "scheduler",
     "@q9labs/chalk-core",
-    "@tanstack/devtools-vite"
+    "@tanstack/devtools-vite",
+    "typescript-7"
   ],
   "duplicates": {
     "ignore": [
