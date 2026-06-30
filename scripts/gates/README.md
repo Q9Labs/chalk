@@ -26,8 +26,8 @@ scripts, and test helpers by explicit Chalk policy. Set
 `TEST_PRESENCE_BASE_REF` or `TEST_PRESENCE_FILES` to change the comparison
 scope.
 
-The gate also runs Fallow, Semgrep, Gitleaks, OSV-Scanner, Syncpack, CSpell,
-OpenAPI drift/stub checks, TypeScript, lint, tests, coverage, build, publint,
-Are The Types Wrong, and Go `govulncheck`. Gitleaks scans the commit delta from
-`origin/master` by default; set `GITLEAKS_BASE_REF` or `GITLEAKS_LOG_OPTS` to
-change that range.
+The gate also runs Fallow, Semgrep, Gitleaks, OSV-Scanner, the focused
+`apps/api` Go gate when present, Syncpack, CSpell, OpenAPI drift/stub checks,
+TypeScript, lint, tests, coverage, build, publint, and Are The Types Wrong.
+Gitleaks scans the commit delta from `origin/master` by default; set
+`GITLEAKS_BASE_REF` or `GITLEAKS_LOG_OPTS` to change that range.

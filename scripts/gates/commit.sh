@@ -19,6 +19,11 @@ pnpm run security:secrets
 # Scan dependency manifests and lockfiles for known vulnerabilities across supported ecosystems.
 pnpm run security:osv
 
+# Run the focused Go API gate when the API app is present.
+if [[ -x apps/api/scripts/gate.sh ]]; then
+  apps/api/scripts/gate.sh
+fi
+
 # Enforce package.json dependency/version policy across the monorepo.
 pnpm run deps:syncpack
 

@@ -23,6 +23,10 @@ pnpm check-types
   behavior.
 - Hooks are non-mutating: do not rely on them to format, fix, stage, regenerate,
   stash, reset, or revert files.
+- Go API work under `apps/api` has its own focused gate:
+  `apps/api/scripts/gate.sh`. Run it after touching Go API code. It uses an
+  explicit patched Go toolchain, checks formatting without mutating, and runs
+  tests, `go vet`, Staticcheck, and `govulncheck`.
 
 ## Database Migrations
 
@@ -55,6 +59,13 @@ Packages are the source of truth; demo apps should stay thin.
 - `apps/web`: Chalk web app and local verification surface.
 - `apps/docs`: public documentation.
 - `apps/mobile`: native demo and release verification app.
+- `apps/api`: Go control-plane API. Keep `cmd/main.go` thin; put router,
+  response helpers, middleware, and domain packages under `internal/*`. Follow
+  `docs/redesign/north-star.md`: composable hexagonal boundaries, swappable
+  `MediaPlane` / `SyncEngine` ports, provider details in adapters, and public
+  REST routes under one `/v1` boundary while operational routes like `/healthz`
+  stay unversioned. First API patterns are being designed manually before
+  broader endpoint fill-in.
 - `infrastructure`: deployable support tooling that remains after the API and
   Terraform teardown.
 

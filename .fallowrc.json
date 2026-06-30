@@ -1,5 +1,12 @@
 {
-  "entry": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+  "entry": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "apps/api/docs/app.js",
+    "apps/api/scripts/smoke-lifecycle.mjs"
+  ],
   "publicPackages": ["@q9labs/chalk-core", "@q9labs/chalk-react", "@q9labs/chalk-react-native", "@q9labs/chalk-ui", "@q9labs/chalk-whiteboard", "@q9labs/facehash"],
   "ignoreDependencies": [
     "@arethetypeswrong/cli",
@@ -54,6 +61,7 @@
       "scripts/gates/**",
       "scratchpad/**",
       "docs/**",
+      "apps/api/docs/**",
       "apps/docs/**",
       "apps/mobile/**",
       "apps/web/**",
