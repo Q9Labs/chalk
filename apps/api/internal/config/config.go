@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 const (
-	APIAddress = "CHALK_API_ADDR"
+	APIAddress   = "CHALK_API_ADDR"
+	APIPprof     = "CHALK_API_PPROF"
+	APITraceLogs = "CHALK_API_TRACE_LOGS"
 
 	DatabaseURL      = "CHALK_DATABASE_URL"
 	DatabaseMaxConns = "CHALK_DATABASE_MAX_CONNS"
@@ -29,9 +32,15 @@ type DatabaseConfig struct {
 	MinConns int32
 }
 
+type ObservabilityConfig struct {
+	Pprof     bool
+	TraceLogs bool
+}
+
 type Config struct {
-	API      APIConfig
-	Database DatabaseConfig
+	API           APIConfig
+	Database      DatabaseConfig
+	Observability ObservabilityConfig
 }
 
 func Load() (Config, error) {
@@ -64,6 +73,10 @@ func Load() (Config, error) {
 			MaxConns: maxConns,
 			MinConns: minConns,
 		},
+		Observability: ObservabilityConfig{
+			Pprof:     envBool(APIPprof),
+			TraceLogs: envBool(APITraceLogs),
+		},
 	}, nil
 }
 
@@ -88,4 +101,18 @@ func envInt32(name string, fallback int32) (int32, error) {
 	}
 
 	return int32(parsed), nil
+}
+
+func envBool(name string) bool {
+	value, ok := os.LookupEnv(name)
+	if !ok || value == "" {
+		return false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

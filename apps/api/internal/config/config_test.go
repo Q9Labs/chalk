@@ -24,6 +24,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Database.MinConns != config.DefaultDBMinConns {
 		t.Fatalf("database min conns = %d, want %d", cfg.Database.MinConns, config.DefaultDBMinConns)
 	}
+	if cfg.Observability.Pprof {
+		t.Fatal("pprof = true, want false")
+	}
+	if cfg.Observability.TraceLogs {
+		t.Fatal("trace logs = true, want false")
+	}
 }
 
 func TestLoadAPIAddress(t *testing.T) {
@@ -66,6 +72,23 @@ func TestLoadDatabasePoolSettings(t *testing.T) {
 	}
 	if cfg.Database.MinConns != 5 {
 		t.Fatalf("database min conns = %d, want 5", cfg.Database.MinConns)
+	}
+}
+
+func TestLoadObservability(t *testing.T) {
+	t.Setenv(config.APIPprof, "true")
+	t.Setenv(config.APITraceLogs, "1")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if !cfg.Observability.Pprof {
+		t.Fatal("pprof = false, want true")
+	}
+	if !cfg.Observability.TraceLogs {
+		t.Fatal("trace logs = false, want true")
 	}
 }
 

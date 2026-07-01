@@ -12,6 +12,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/postgres"
 	postgresdb "github.com/q9labs/chalk/apps/api/internal/postgres/db"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -30,6 +31,11 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	diagnostics := observability.New(observability.Config{
+		Pprof:     cfg.Observability.Pprof,
+		TraceLogs: cfg.Observability.TraceLogs,
+	}, os.Stdout)
+
 	pool, err := postgres.Open(context.Background(), cfg.Database)
 	if err != nil {
 		return fmt.Errorf("open postgres: %w", err)
@@ -37,13 +43,16 @@ func run() error {
 	defer pool.Close()
 
 	queries := postgresdb.New(pool)
-	tenantStore := postgres.NewTenantStore(queries)
+	tenantStore := postgres.NewTenantStore(diagnostics.Queries(queries))
 	tenantService := tenants.NewService(tenantStore)
 
-	handler := httpapi.NewRouter(httpapi.Options{
+	routerOptions := httpapi.Options{
 		Readiness: postgres.Readiness{Pool: pool},
 		Tenants:   tenantService,
-	})
+	}
+	diagnostics.ApplyHTTP(&routerOptions)
+
+	handler := httpapi.NewRouter(routerOptions)
 
 	server := &http.Server{
 		Addr:              cfg.API.Address,

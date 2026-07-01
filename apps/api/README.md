@@ -50,6 +50,29 @@ a running API. `smoke-lifecycle.mjs` builds the binary, waits for `/healthz`,
 sends `SIGTERM`, and verifies the process exits cleanly within configurable
 startup/shutdown budgets.
 
+## Local Observability And Performance
+
+Observability hooks are opt-in and intended for local diagnostics:
+
+```bash
+CHALK_API_TRACE_LOGS=1 CHALK_API_PPROF=1 go run ./cmd
+```
+
+`CHALK_API_TRACE_LOGS=1` emits JSON request and Postgres query timing events to
+stdout with shared `X-Request-Id` / `X-Trace-Id` values. `CHALK_API_PPROF=1`
+mounts Go profiling handlers under `/debug/pprof`.
+
+For an end-to-end local performance pass:
+
+```bash
+apps/api/scripts/perf-local.sh
+```
+
+The script verifies local Postgres, applies migrations, builds the API and perf
+runner, measures startup/shutdown, samples process footprint, and runs weighted
+load against the implemented endpoints. Raw logs stay under `.private/`; the
+sanitized Markdown and HTML summaries are written to `scratchpad/`.
+
 ## gopls MCP
 
 `gopls MCP` is semantic assistance for Codex sessions. It is useful for

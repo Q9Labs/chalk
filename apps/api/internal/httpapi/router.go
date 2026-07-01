@@ -13,12 +13,17 @@ type ReadinessChecker interface {
 }
 
 type Options struct {
-	Readiness ReadinessChecker
-	Tenants   TenantGetter
+	Debug      http.Handler
+	Middleware []func(http.Handler) http.Handler
+	Readiness  ReadinessChecker
+	Tenants    TenantGetter
 }
 
 func NewRouter(options Options) http.Handler {
 	r := chi.NewRouter()
+	if len(options.Middleware) > 0 {
+		r.Use(options.Middleware...)
+	}
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Route not found")
@@ -35,6 +40,9 @@ func NewRouter(options Options) http.Handler {
 func mountOperationalRoutes(r chi.Router, options Options) {
 	r.Get("/healthz", handleHealth)
 	r.Get("/readyz", handleReady(options.Readiness))
+	if options.Debug != nil {
+		r.Mount("/debug", options.Debug)
+	}
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {

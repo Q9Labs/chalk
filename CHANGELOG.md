@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - MIT license metadata across the workspace.
+- Opt-in Go API observability hooks and local performance harness for request,
+  database, lifecycle, and footprint profiling.
 - Public-safe scratchpad structure for architecture decisions, debugging
   lessons, deployment lessons, and summarized session memory.
 - Public repository hygiene guidance for keeping raw logs, generated debug
