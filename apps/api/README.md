@@ -13,6 +13,9 @@ unversioned:
 - `/healthz`: process liveness.
 - `/readyz`: dependency readiness, currently Postgres.
 
+For the endpoint design and implementation loop, see
+[`docs/route-workflow.md`](docs/route-workflow.md).
+
 ## Gate
 
 Learn about the gate by running:

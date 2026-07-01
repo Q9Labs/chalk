@@ -11,10 +11,16 @@ import (
 )
 
 type Querier interface {
+	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error)
+	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
+	ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]Membership, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
+	UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (Membership, error)
 }
 
 var _ Querier = (*Queries)(nil)

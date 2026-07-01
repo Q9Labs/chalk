@@ -12,10 +12,12 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/postgres"
 	postgresdb "github.com/q9labs/chalk/apps/api/internal/postgres/db"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/users"
 )
 
 func main() {
@@ -65,12 +67,18 @@ func run() error {
 	operationQueries := diagnostics.Queries(queries)
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	tenantService := tenants.NewService(tenantRepository)
+	userRepository := postgres.NewUserRepository(operationQueries)
+	userService := users.NewService(userRepository)
+	membershipRepository := postgres.NewMembershipRepository(operationQueries)
+	membershipService := memberships.NewService(membershipRepository)
 	routerOptions := httpapi.Options{
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 		},
-		Readiness: postgres.Readiness{Pool: pool},
-		Tenants:   tenantService,
+		Readiness:   postgres.Readiness{Pool: pool},
+		Memberships: membershipService,
+		Tenants:     tenantService,
+		Users:       userService,
 	}
 	diagnostics.ApplyHTTP(&routerOptions)
 

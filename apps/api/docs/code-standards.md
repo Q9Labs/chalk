@@ -26,6 +26,8 @@ we want future work to preserve.
 
 - Keep `cmd/main.go` as the composition root. It should wire config, adapters,
   services, router, and lifecycle, not own domain behavior.
+- Keep each API slice's chain explicit:
+  `HTTP route -> service interface -> service -> repository interface -> Postgres adapter -> sqlc query`.
 - HTTP handlers translate transport concerns into service inputs. Business
   decisions belong in services; database-driver details belong in adapters.
 - Parse and validate request-shaped data as close to the HTTP edge as practical.
@@ -56,3 +58,6 @@ we want future work to preserve.
 - Adapter helpers should make crossing a boundary explicit. If a helper converts
   domain values into Postgres values, keep it in the Postgres adapter unless
   multiple adapters need it.
+- Repository adapters should depend on tiny local query interfaces instead of
+  the full generated `db.Querier`, so unrelated sqlc additions do not break
+  focused tests.

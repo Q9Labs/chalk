@@ -14,10 +14,17 @@ import (
 )
 
 type TenantRepository struct {
-	queries db.Querier
+	queries tenantQuerier
 }
 
-func NewTenantRepository(queries db.Querier) TenantRepository {
+type tenantQuerier interface {
+	CreateTenant(ctx context.Context, arg db.CreateTenantParams) (db.Tenant, error)
+	GetTenant(ctx context.Context, id pgtype.UUID) (db.Tenant, error)
+	ListTenants(ctx context.Context, arg db.ListTenantsParams) ([]db.Tenant, error)
+	UpdateTenant(ctx context.Context, arg db.UpdateTenantParams) (db.Tenant, error)
+}
+
+func NewTenantRepository(queries tenantQuerier) TenantRepository {
 	return TenantRepository{queries: queries}
 }
 

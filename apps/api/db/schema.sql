@@ -19,6 +19,7 @@ create table users (
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );
+create index users_created_at_id_idx on users(created_at desc, id desc);
 
 create table memberships (
     id uuid primary key,
@@ -30,6 +31,8 @@ create table memberships (
     created_at timestamptz not null default now(),
     unique(tenant_id, user_id)
 );
+create index memberships_tenant_created_at_id_idx on memberships(tenant_id, created_at desc, id desc);
+create index memberships_user_id_idx on memberships(user_id);
 
 create table auth_identities (
     id uuid primary key,

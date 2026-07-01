@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/users"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -30,6 +32,60 @@ type tenantService struct {
 	getTenant        func(context.Context, utilities.ID) (tenants.Tenant, error)
 	listTenants      func(context.Context, pagination.PageRequest) (tenants.TenantList, error)
 	updateTenant     func(context.Context, utilities.ID, tenants.UpdateTenantInput) (tenants.Tenant, error)
+}
+
+type userService struct {
+	createUser func(context.Context, users.CreateUserInput) (users.User, error)
+	getUser    func(context.Context, utilities.ID) (users.User, error)
+	listUsers  func(context.Context, pagination.PageRequest) (users.UserList, error)
+}
+
+func (s userService) CreateUser(ctx context.Context, input users.CreateUserInput) (users.User, error) {
+	if s.createUser == nil {
+		return users.User{}, errors.New("unexpected create user call")
+	}
+	return s.createUser(ctx, input)
+}
+
+func (s userService) GetUser(ctx context.Context, id utilities.ID) (users.User, error) {
+	if s.getUser == nil {
+		return users.User{}, errors.New("unexpected get user call")
+	}
+	return s.getUser(ctx, id)
+}
+
+func (s userService) ListUsers(ctx context.Context, page pagination.PageRequest) (users.UserList, error) {
+	if s.listUsers == nil {
+		return users.UserList{}, errors.New("unexpected list users call")
+	}
+	return s.listUsers(ctx, page)
+}
+
+type membershipService struct {
+	createMembership       func(context.Context, memberships.CreateMembershipInput) (memberships.Membership, error)
+	listTenantMemberships  func(context.Context, utilities.ID, pagination.PageRequest) (memberships.MembershipList, error)
+	updateTenantMembership func(context.Context, utilities.ID, utilities.ID, memberships.UpdateMembershipInput) (memberships.Membership, error)
+}
+
+func (s membershipService) CreateMembership(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
+	if s.createMembership == nil {
+		return memberships.Membership{}, errors.New("unexpected create membership call")
+	}
+	return s.createMembership(ctx, input)
+}
+
+func (s membershipService) ListTenantMemberships(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (memberships.MembershipList, error) {
+	if s.listTenantMemberships == nil {
+		return memberships.MembershipList{}, errors.New("unexpected list tenant memberships call")
+	}
+	return s.listTenantMemberships(ctx, tenantID, page)
+}
+
+func (s membershipService) UpdateTenantMembership(ctx context.Context, tenantID utilities.ID, membershipID utilities.ID, input memberships.UpdateMembershipInput) (memberships.Membership, error) {
+	if s.updateTenantMembership == nil {
+		return memberships.Membership{}, errors.New("unexpected update tenant membership call")
+	}
+	return s.updateTenantMembership(ctx, tenantID, membershipID, input)
 }
 
 func (s tenantService) AvailableRegions(ctx context.Context) ([]regions.Region, error) {
@@ -651,6 +707,285 @@ func TestListRegions(t *testing.T) {
 	}
 	if body.Regions[0].Code != "us" || body.Regions[1].Code != "sg" {
 		t.Fatalf("regions = %#v, want us and sg", body.Regions)
+	}
+}
+
+func TestCreateUser(t *testing.T) {
+	const userID = "22222222-2222-2222-2222-222222222222"
+
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/users", `{"name":"Hasan","email":"hasan@example.com"}`, httpapi.Options{
+		Users: userService{
+			createUser: func(ctx context.Context, input users.CreateUserInput) (users.User, error) {
+				if input.Name != "Hasan" {
+					t.Fatalf("user name = %q, want Hasan", input.Name)
+				}
+				if input.Email != "hasan@example.com" {
+					t.Fatalf("user email = %q, want hasan@example.com", input.Email)
+				}
+
+				return users.User{
+					ID:    mustTenantID(t, userID),
+					Name:  input.Name,
+					Email: input.Email,
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	var body struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.ID != userID {
+		t.Fatalf("user id = %q, want %q", body.ID, userID)
+	}
+	if body.Email != "hasan@example.com" {
+		t.Fatalf("email = %q, want hasan@example.com", body.Email)
+	}
+}
+
+func TestGetUserRejectsInvalidID(t *testing.T) {
+	called := false
+	res := requestWithOptions(t, http.MethodGet, "/v1/users/not-a-uuid", httpapi.Options{
+		Users: userService{
+			getUser: func(context.Context, utilities.ID) (users.User, error) {
+				called = true
+				return users.User{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	if called {
+		t.Fatal("user service was called")
+	}
+	assertErrorCode(t, res, "invalid_user_id")
+}
+
+func TestListUsers(t *testing.T) {
+	createdAt := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+
+	res := requestWithOptions(t, http.MethodGet, "/v1/users?page_size=10", httpapi.Options{
+		Users: userService{
+			listUsers: func(ctx context.Context, page pagination.PageRequest) (users.UserList, error) {
+				if page.Size() != 10 {
+					t.Fatalf("page size = %d, want 10", page.Size())
+				}
+
+				return users.UserList{
+					Users: []users.User{
+						{
+							ID:        mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+							Name:      "Hasan",
+							Email:     "hasan@example.com",
+							CreatedAt: createdAt,
+							UpdatedAt: createdAt,
+						},
+					},
+					Page: pagination.Page{PageSize: page.Size()},
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		Users []struct {
+			Name  string `json:"name"`
+			Email string `json:"email"`
+		} `json:"users"`
+		Pagination struct {
+			PageSize int `json:"page_size"`
+		} `json:"pagination"`
+	}
+	decodeJSON(t, res, &body)
+
+	if len(body.Users) != 1 {
+		t.Fatalf("user count = %d, want 1", len(body.Users))
+	}
+	if body.Users[0].Email != "hasan@example.com" {
+		t.Fatalf("user email = %q, want hasan@example.com", body.Users[0].Email)
+	}
+	if body.Pagination.PageSize != 10 {
+		t.Fatalf("page size = %d, want 10", body.Pagination.PageSize)
+	}
+}
+
+func TestCreateMembership(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const userID = "22222222-2222-2222-2222-222222222222"
+	const membershipID = "33333333-3333-3333-3333-333333333333"
+
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/memberships", `{"user_id":"`+userID+`","role":"admin"}`, httpapi.Options{
+		Memberships: membershipService{
+			createMembership: func(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
+				if input.TenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", input.TenantID.String(), tenantID)
+				}
+				if input.UserID.String() != userID {
+					t.Fatalf("user id = %q, want %q", input.UserID.String(), userID)
+				}
+				if input.Role != memberships.RoleAdmin {
+					t.Fatalf("role = %q, want admin", input.Role)
+				}
+
+				return memberships.Membership{
+					ID:       mustTenantID(t, membershipID),
+					TenantID: input.TenantID,
+					UserID:   input.UserID,
+					Role:     input.Role,
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	var body struct {
+		ID       string `json:"id"`
+		TenantID string `json:"tenant_id"`
+		UserID   string `json:"user_id"`
+		Role     string `json:"role"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.ID != membershipID {
+		t.Fatalf("membership id = %q, want %q", body.ID, membershipID)
+	}
+	if body.Role != "admin" {
+		t.Fatalf("role = %q, want admin", body.Role)
+	}
+}
+
+func TestCreateMembershipRejectsInvalidUserID(t *testing.T) {
+	called := false
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", `{"user_id":"not-a-uuid","role":"admin"}`, httpapi.Options{
+		Memberships: membershipService{
+			createMembership: func(context.Context, memberships.CreateMembershipInput) (memberships.Membership, error) {
+				called = true
+				return memberships.Membership{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	if called {
+		t.Fatal("membership service was called")
+	}
+	assertErrorCode(t, res, "invalid_user_id")
+}
+
+func TestListTenantMemberships(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const membershipID = "33333333-3333-3333-3333-333333333333"
+	const userID = "22222222-2222-2222-2222-222222222222"
+
+	res := requestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/memberships?page_size=10", httpapi.Options{
+		Memberships: membershipService{
+			listTenantMemberships: func(ctx context.Context, id utilities.ID, page pagination.PageRequest) (memberships.MembershipList, error) {
+				if id.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", id.String(), tenantID)
+				}
+				if page.Size() != 10 {
+					t.Fatalf("page size = %d, want 10", page.Size())
+				}
+
+				return memberships.MembershipList{
+					Memberships: []memberships.Membership{
+						{
+							ID:       mustTenantID(t, membershipID),
+							TenantID: id,
+							UserID:   mustTenantID(t, userID),
+							Role:     memberships.RoleViewer,
+						},
+					},
+					Page: pagination.Page{PageSize: page.Size()},
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		Memberships []struct {
+			UserID string `json:"user_id"`
+			Role   string `json:"role"`
+		} `json:"memberships"`
+		Pagination struct {
+			PageSize int `json:"page_size"`
+		} `json:"pagination"`
+	}
+	decodeJSON(t, res, &body)
+
+	if len(body.Memberships) != 1 {
+		t.Fatalf("membership count = %d, want 1", len(body.Memberships))
+	}
+	if body.Memberships[0].UserID != userID {
+		t.Fatalf("user id = %q, want %q", body.Memberships[0].UserID, userID)
+	}
+	if body.Memberships[0].Role != "viewer" {
+		t.Fatalf("role = %q, want viewer", body.Memberships[0].Role)
+	}
+	if body.Pagination.PageSize != 10 {
+		t.Fatalf("page size = %d, want 10", body.Pagination.PageSize)
+	}
+}
+
+func TestUpdateTenantMembership(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const membershipID = "33333333-3333-3333-3333-333333333333"
+
+	res := requestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID+"/memberships/"+membershipID, `{"role":"member"}`, httpapi.Options{
+		Memberships: membershipService{
+			updateTenantMembership: func(ctx context.Context, tenant utilities.ID, membership utilities.ID, input memberships.UpdateMembershipInput) (memberships.Membership, error) {
+				if tenant.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", tenant.String(), tenantID)
+				}
+				if membership.String() != membershipID {
+					t.Fatalf("membership id = %q, want %q", membership.String(), membershipID)
+				}
+				if input.Role != memberships.RoleMember {
+					t.Fatalf("role = %q, want member", input.Role)
+				}
+
+				return memberships.Membership{
+					ID:       membership,
+					TenantID: tenant,
+					Role:     input.Role,
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		Role string `json:"role"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.Role != "member" {
+		t.Fatalf("role = %q, want member", body.Role)
 	}
 }
 
