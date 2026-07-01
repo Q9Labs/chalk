@@ -9,7 +9,7 @@ import (
 
 func TestPrincipalHasScope(t *testing.T) {
 	principal := authentication.Principal{
-		Kind: authentication.PrincipalKindAPIKey,
+		Kind: authentication.PrincipalAPIKey,
 		Scopes: []authentication.Scope{
 			authentication.ScopeTenantsRead,
 			authentication.ScopeRoomsWrite,
@@ -25,14 +25,14 @@ func TestPrincipalHasScope(t *testing.T) {
 }
 
 func TestPrincipalContext(t *testing.T) {
-	principal := authentication.Principal{Kind: authentication.PrincipalKindUser}
+	principal := authentication.Principal{Kind: authentication.PrincipalUser}
 	ctx := authentication.ContextWithPrincipal(context.Background(), principal)
 
 	got, ok := authentication.PrincipalFromContext(ctx)
 	if !ok {
 		t.Fatal("principal missing from context")
 	}
-	if got.Kind != authentication.PrincipalKindUser {
+	if got.Kind != authentication.PrincipalUser {
 		t.Fatalf("principal kind = %q, want user", got.Kind)
 	}
 }

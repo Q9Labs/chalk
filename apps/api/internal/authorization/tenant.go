@@ -42,11 +42,11 @@ func (p TenantPolicy) AuthorizeTenant(ctx context.Context, principal authenticat
 	}
 
 	switch principal.Kind {
-	case authentication.PrincipalKindSystem:
+	case authentication.PrincipalSystem:
 		return nil
-	case authentication.PrincipalKindAPIKey:
+	case authentication.PrincipalAPIKey:
 		return authorizeTenantAPIKey(principal, tenantID, permission.Scope)
-	case authentication.PrincipalKindUser:
+	case authentication.PrincipalUser:
 		return p.authorizeTenantUser(ctx, principal, tenantID, permission.MinimumRole)
 	default:
 		return ErrUnauthenticated

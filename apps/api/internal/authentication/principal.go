@@ -5,9 +5,9 @@ import "github.com/q9labs/chalk/apps/api/internal/utilities"
 type PrincipalKind string
 
 const (
-	PrincipalKindUser   PrincipalKind = "user"
-	PrincipalKindAPIKey PrincipalKind = "api_key"
-	PrincipalKindSystem PrincipalKind = "system"
+	PrincipalUser   PrincipalKind = "user"
+	PrincipalAPIKey PrincipalKind = "api_key"
+	PrincipalSystem PrincipalKind = "system"
 )
 
 // Principal is the authenticated caller accepted at the HTTP edge. It can
@@ -32,5 +32,5 @@ func (p Principal) HasScope(scope Scope) bool {
 }
 
 func (p Principal) IsAuthenticated() bool {
-	return p.Kind == PrincipalKindUser || p.Kind == PrincipalKindAPIKey || p.Kind == PrincipalKindSystem
+	return p.Kind == PrincipalUser || p.Kind == PrincipalAPIKey || p.Kind == PrincipalSystem
 }

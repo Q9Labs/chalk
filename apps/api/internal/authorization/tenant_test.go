@@ -17,7 +17,7 @@ func TestTenantPolicyAllowsAPIKeyWithTenantScope(t *testing.T) {
 	policy := authorization.NewTenantPolicy(nil)
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
-		Kind:     authentication.PrincipalKindAPIKey,
+		Kind:     authentication.PrincipalAPIKey,
 		TenantID: tenantID,
 		APIKeyID: apiKeyID,
 		Scopes:   []authentication.Scope{authentication.ScopeRoomsWrite},
@@ -35,7 +35,7 @@ func TestTenantPolicyRejectsAPIKeyWithoutScope(t *testing.T) {
 	policy := authorization.NewTenantPolicy(nil)
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
-		Kind:     authentication.PrincipalKindAPIKey,
+		Kind:     authentication.PrincipalAPIKey,
 		TenantID: tenantID,
 		APIKeyID: apiKeyID,
 		Scopes:   []authentication.Scope{authentication.ScopeRoomsRead},
@@ -54,7 +54,7 @@ func TestTenantPolicyRejectsAPIKeyForDifferentTenant(t *testing.T) {
 	policy := authorization.NewTenantPolicy(nil)
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
-		Kind:     authentication.PrincipalKindAPIKey,
+		Kind:     authentication.PrincipalAPIKey,
 		TenantID: otherTenantID,
 		APIKeyID: apiKeyID,
 		Scopes:   []authentication.Scope{authentication.ScopeRoomsWrite},
@@ -73,7 +73,7 @@ func TestTenantPolicyAllowsUserWithEnoughRole(t *testing.T) {
 	policy := authorization.NewTenantPolicy(reader)
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
-		Kind:   authentication.PrincipalKindUser,
+		Kind:   authentication.PrincipalUser,
 		UserID: userID,
 	}, tenantID, authorization.TenantPermission{
 		MinimumRole: memberships.RoleMember,
@@ -95,7 +95,7 @@ func TestTenantPolicyRejectsUserWithWeakRole(t *testing.T) {
 	policy := authorization.NewTenantPolicy(&membershipReader{role: memberships.RoleViewer})
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
-		Kind:   authentication.PrincipalKindUser,
+		Kind:   authentication.PrincipalUser,
 		UserID: userID,
 	}, tenantID, authorization.TenantPermission{
 		MinimumRole: memberships.RoleAdmin,
@@ -110,7 +110,7 @@ func TestTenantPolicyAllowsSystemPrincipal(t *testing.T) {
 	policy := authorization.NewTenantPolicy(nil)
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
-		Kind: authentication.PrincipalKindSystem,
+		Kind: authentication.PrincipalSystem,
 	}, tenantID, authorization.TenantPermission{
 		Scope:       authentication.ScopeTenantsDelete,
 		MinimumRole: memberships.RoleOwner,

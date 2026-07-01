@@ -1,5 +1,7 @@
 package authentication
 
+import "slices"
+
 type Scope string
 
 const (
@@ -73,11 +75,5 @@ var AllScopes = []Scope{
 }
 
 func ValidScope(scope Scope) bool {
-	for _, candidate := range AllScopes {
-		if candidate == scope {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(AllScopes, scope)
 }
